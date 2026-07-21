@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions & discussion
+    url: https://github.com/BarterX-Tech/dossierx/discussions
+    about: For usage questions and general discussion, please use GitHub Discussions instead of an issue.
+  - name: Security vulnerability
+    url: https://github.com/BarterX-Tech/dossierx/security/advisories/new
+    about: Please report security vulnerabilities privately — see SECURITY.md. Do not open a public issue.

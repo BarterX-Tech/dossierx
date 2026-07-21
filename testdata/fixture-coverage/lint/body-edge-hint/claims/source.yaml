@@ -1,0 +1,14 @@
+id: bodyhintmod.contract.source
+facet: contract
+module: bodyhintmod
+status: draft
+layout: card
+body: |
+  This claim's prose mentions bodyhintmod.contract.target in passing, but
+  never declares it under mirrors, rests_on, or governed_by -- exactly the
+  forgotten-edge shape the body-edge-hint lint exists to catch.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - bodyhintmod.contract.hub

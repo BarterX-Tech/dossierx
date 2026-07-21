@@ -1,0 +1,26 @@
+# Go build output
+/dossierx
+/dossierx.exe
+*.exe
+/dist/
+
+# Test/coverage output
+*.out
+coverage.html
+
+# Editor / OS cruft
+.vscode/
+.idea/
+.DS_Store
+
+# Sensitive / local-only files
+.env
+.env.*
+*.pem
+*.key
+*id_rsa*
+secrets/
+*.secrets.yaml
+go.work
+go.work.sum
+go.mod.local

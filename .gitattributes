@@ -1,0 +1,4 @@
+* text=auto eol=lf
+
+# Generated viewer HTML — don't count it in language stats/diffs on GitHub.
+testdata/**/viewer/index.html linguist-generated=true

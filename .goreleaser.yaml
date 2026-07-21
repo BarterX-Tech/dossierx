@@ -1,0 +1,60 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: dossierx
+    main: ./cmd/dossierx
+    binary: dossierx
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/BarterX-Tech/dossierx/cmd/dossierx.version={{.Version}}
+      - -X github.com/BarterX-Tech/dossierx/cmd/dossierx.commit={{.Commit}}
+      - -X github.com/BarterX-Tech/dossierx/cmd/dossierx.date={{.Date}}
+
+archives:
+  - id: dossierx
+    ids:
+      - dossierx
+    name_template: >-
+      {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  groups:
+    - title: "Features"
+      regexp: '^.*?feat(\([[:word:]]+\))??!?:.+$'
+      order: 0
+    - title: "Bug fixes"
+      regexp: '^.*?fix(\([[:word:]]+\))??!?:.+$'
+      order: 1
+    - title: "Other changes"
+      order: 999
+  filters:
+    exclude:
+      - "^chore:"
+      - "^docs:"
+
+release:
+  github:
+    owner: BarterX-Tech
+    name: dossierx
+  draft: false
+  prerelease: auto

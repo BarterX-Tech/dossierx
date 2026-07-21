@@ -1,0 +1,41 @@
+{{/* mockup.html — default render for layout: mockup claims. This is the
+     one deliberate, lint-gated exception to every other component's
+     "auto-escape everything" rule: .RawHTML is emitted unescaped, via the
+     "rawHTML" template func (a bare string -> template.HTML cast, see
+     components.go), rather than the "markdown" func every other body-
+     shaped field goes through, inside .claim-mockup-body — a wrapper the
+     .gcp- / .mockup- prefixed shared CSS (see viewer/template/style.css)
+     and any future project's own mockup content can target. This is safe
+     only because
+     internal/lint/raw_html_scope.go's "raw-html-scope" lint hard-fails a
+     claim before it can ever lock unless: layout is exactly mockup (so
+     RawHTML can never be smuggled into a card/table/list/steps/banner
+     body), Module is in the project's mockup_modules allowlist, RawHTML's
+     markup uses only the div/span/b/br/img tag allowlist — class on any of
+     them (only gcp- / mockup- prefixed tokens), plus relative-only src and
+     free-text alt on img (e.g. a static diagram/flowchart image) — and
+     RawHTMLReviewed is true. Do not copy this rawHTML (auto-escaping bypass)
+     pattern into any
+     other component — every other claim field stays covered by
+     html/template's normal escaping.
+
+     Body renders first, through the same "markdown" func card.html uses
+     (auto-escaped prose, fences-to-<pre><code> and all) — a mockup claim's
+     surrounding prose (the query text, an explanation of what the mockup
+     shows, ...) is ordinary claim content, not raw markup, and belongs in
+     Body rather than RawHTML; skipping it here would silently drop that
+     prose from the rendered viewer the same way an unrouted Rows/Steps
+     field would (see layout-shape-mismatch's doc comment for that
+     precedent). RawHTML, the trusted visual mockup, renders below it.
+
+     The claim-head/edges shape matches every other component partial
+     (docs' "<div class="k">TITLE <span class="pill ...">...</span></div>"
+     convention, computed via components.go's pillClass) so a mockup claim
+     still reads as an ordinary claim record in the surrounding document —
+     only its body differs. */}}
+<section class="claim claim-mockup card" id="{{.ID}}" data-status="{{.Status}}">
+  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
+  {{if .RawHTML}}<div class="claim-mockup-body">{{rawHTML .RawHTML}}</div>{{else if not .Body}}<p class="claim-empty">No mockup content.</p>{{end}}
+  {{edges .}}
+</section>

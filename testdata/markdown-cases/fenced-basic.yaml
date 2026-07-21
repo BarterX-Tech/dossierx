@@ -1,0 +1,15 @@
+id: widget.markdown-cases.fenced-basic
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A short fenced example, no info string on the opening fence:
+
+  ```
+  first line
+  second line
+  ```
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

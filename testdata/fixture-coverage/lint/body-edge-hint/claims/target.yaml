@@ -1,0 +1,12 @@
+id: bodyhintmod.contract.target
+facet: contract
+module: bodyhintmod
+status: draft
+layout: card
+body: |
+  Plain target claim with no cross-references in its own prose.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - bodyhintmod.contract.hub

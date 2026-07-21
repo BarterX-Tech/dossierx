@@ -1,0 +1,9 @@
+id: governedmod.contract.missing-type
+facet: contract
+module: governedmod
+status: draft
+layout: card
+body: |
+  A claim that omits governed_by.type entirely.
+rests_on:
+  - governedmod.contract.helper

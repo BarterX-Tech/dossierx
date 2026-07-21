@@ -1,0 +1,11 @@
+id: governedmod.contract.blank-reason
+facet: contract
+module: governedmod
+status: draft
+layout: card
+body: |
+  A claim with governed_by.type: none but no reason given.
+rests_on:
+  - governedmod.contract.helper
+governed_by:
+  type: none

@@ -1,0 +1,10 @@
+{{/* banner.html — default render for layout: banner claims. Structurally
+     identical to card.html (same "card"/"k"/"claim-body"/"pill" classes,
+     so box model, padding, font sizes, and the draft/review_pending/locked
+     status pill are shared, not reimplemented) — the .claim-banner
+     modifier class in style.css changes only the background/border
+     color. */}}
+<section class="claim claim-banner card" id="{{.ID}}" data-status="{{.Status}}">
+  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+</section>

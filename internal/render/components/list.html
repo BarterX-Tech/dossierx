@@ -1,0 +1,35 @@
+{{/* list.html — default render for layout: list claims. Body is routed
+     through the shared internal/render/markdown package (the "markdown"
+     template func), the same renderer card/table/banner/steps use, rather
+     than the old bodyLines() naive-newline-split: markdown.Render already
+     understands "-"/"*"/"N." markers, folds wrapped continuation lines into
+     the item they belong to instead of tearing them into separate <li>s,
+     and handles inline code spans and fenced examples inside a list item —
+     none of which bodyLines ever did.
+
+     class="card" (the reference docs stylesheet's .card) is added alongside the
+     existing claim/claim-list classes so the shared CSS applies. The
+     reference docs viewer this styling was ported from has no separate
+     "list" component distinct from a card of bulleted lines — every
+     module's own explainer tabs render list-like content as .li paragraphs
+     inside a .card, never as a standalone <ul> component — and the only
+     literal <ul> those tabs ever used was a tab-local enum-value style, not
+     part of the shared explainer.css or a general list convention. So
+     list.html wraps markdown.Render's output in the existing
+     claim-list-items container rather than inventing a fourth markup
+     shape, reusing that reference viewer's .li
+     text-sizing (font-size 13px, margin 4px 0 — see style.css's
+     .claim-list-items li) for each rendered item, wherever markdown.Render
+     places it in its own <ul>/<ol>. The head is a single .k line with an
+     inline status pill — docs' "<div class="k">TITLE <span class="pill
+     ps">...</span></div>" shape — per the shared claim-head convention
+     every component partial follows (see components.go's pillClass). */}}
+<section class="claim claim-list card" id="{{.ID}}" data-status="{{.Status}}">
+  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  {{if .Body}}
+  <div class="claim-list-items">{{markdown .Body}}</div>
+  {{else}}
+  <p class="claim-empty">No items.</p>
+  {{end}}
+  {{edges .}}
+</section>

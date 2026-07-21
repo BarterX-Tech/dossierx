@@ -1,0 +1,16 @@
+id: codeorphanmod.contract.main
+facet: contract
+module: codeorphanmod
+status: draft
+layout: card
+body: |
+  Overview prose with no claim references of its own.
+
+  ```yaml
+  see_also: codeorphanmod.contract.nonexistent
+  ```
+rests_on:
+  - codeorphanmod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

@@ -1,0 +1,11 @@
+id: beacon.spec.overview
+facet: spec
+module: beacon
+status: draft
+layout: card
+body: |
+  A beacon is a tiny portability-fixture concept used only to prove the engine
+  has zero hardcoded assumptions about facet/module naming or doctrine gating.
+governed_by:
+  type: none
+  reason: portability fixture claim, not backed by any real doctrine

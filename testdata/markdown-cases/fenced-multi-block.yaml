@@ -1,0 +1,22 @@
+id: widget.markdown-cases.fenced-multi-block
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Before.
+
+  ```
+  block one
+  ```
+
+  Middle text.
+
+  ```
+  block two
+  ```
+
+  After.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

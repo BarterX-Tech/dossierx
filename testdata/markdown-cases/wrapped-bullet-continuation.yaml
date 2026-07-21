@@ -1,0 +1,14 @@
+id: widget.markdown-cases.wrapped-bullet-continuation
+facet: contract
+module: widget
+status: draft
+layout: list
+body: |
+  - The primary sink is the destination for all
+    current cloud-enabled logs, regardless of `APP_ENV`.
+  - A secondary local sink mirrors every record to disk
+    for offline debugging when the network is unavailable.
+  - A third bullet with no continuation line at all.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

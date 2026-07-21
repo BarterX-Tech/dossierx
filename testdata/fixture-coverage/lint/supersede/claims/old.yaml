@@ -1,0 +1,11 @@
+id: supersedemod.contract.old
+facet: contract
+module: supersedemod
+status: draft
+layout: card
+body: |
+  The old claim, which -- per the fixture's whole point -- was never
+  actually removed even though a successor claims to have migrated from it.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

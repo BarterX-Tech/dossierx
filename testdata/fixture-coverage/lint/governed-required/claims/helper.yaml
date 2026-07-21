@@ -1,0 +1,12 @@
+id: governedmod.contract.helper
+facet: contract
+module: governedmod
+status: draft
+layout: card
+body: |
+  Helper claim with a fully valid governed_by, only present so the two
+  broken claims below have an incoming edge and aren't also flagged by the
+  separate orphan lint.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

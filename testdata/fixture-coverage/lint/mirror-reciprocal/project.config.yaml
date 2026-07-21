@@ -1,0 +1,7 @@
+schema_version: 1
+facets:
+  - contract
+  - internals
+modules:
+  - mirrecipmod
+claims_dir: claims

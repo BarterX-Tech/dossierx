@@ -1,0 +1,19 @@
+{{/* tree.html — default render for layout: tree claims. Body is expected to
+     carry its own nesting (e.g. indented markdown-style bullets); it is
+     rendered inside a <pre> so whitespace/indentation is preserved exactly,
+     rather than this engine guessing at a project-specific tree shape.
+
+     claim-head follows the shared docs-ported convention every component
+     partial in this set uses: id/title and status pill sit inline on one
+     ".k" line — not a separate header block — matching docs'
+     <div class="k">TITLE <span class="pill ...">...</span></div> shape.
+     Pill class computed via components.go's pillClass (draft -> pv amber,
+     locked+review_pending -> pw warn, locked otherwise -> ps accent). See
+     viewer/template/style.css's .k/.pill rules, ported verbatim from
+     the reference docs stylesheet. claim-tree-body's font/background there
+     already ride --font-mono and --card-bg, matching this same token set. */}}
+<section class="claim claim-tree" id="{{.ID}}" data-status="{{.Status}}">
+  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  {{if .Body}}<pre class="claim-tree-body">{{.Body}}</pre>{{else}}<p class="claim-empty">No tree content.</p>{{end}}
+  {{edges .}}
+</section>

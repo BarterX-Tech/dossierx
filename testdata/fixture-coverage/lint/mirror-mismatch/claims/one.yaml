@@ -1,0 +1,12 @@
+id: mirmismod.contract.one
+facet: contract
+module: mirmismod
+status: draft
+layout: card
+body: |
+  Version one of this mirrored fact.
+mirrors:
+  - mirmismod.internals.two
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

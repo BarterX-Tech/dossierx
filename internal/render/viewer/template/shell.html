@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <style>{{.CSS}}</style>
+  <style>{{.ThemeCSS}}</style>
+</head>
+<body class="shell-body">
+  <div class="layout">
+    <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false">☰ <span>Sections</span></button>
+    <button id="navOverlay" class="nav-overlay" type="button" aria-label="Close documentation navigation" tabindex="-1"></button>
+    <aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+      <div class="sidebar-header">
+        <div class="top">
+          <div class="logo"><span></span></div>
+          <div><h1>{{.Title}}</h1>{{if .Eyebrow}}<div class="eyebrow">{{.Eyebrow}}</div>{{end}}</div>
+        </div>
+      </div>
+      <nav id="nav">
+        {{range .ModuleGroups}}
+          <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+        {{end}}
+      </nav>
+    </aside>
+    <main class="content-area">
+      {{if .ModuleGroups}}
+        {{range .ModuleGroups}}
+          <section class="module-section" id="{{.ID}}" hidden>
+            {{if .HasSubNav}}
+              <div class="sub-nav">
+                {{range .Facets}}
+                  <button class="subtab" data-target="#{{.ID}}">{{.TabLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+                {{end}}
+              </div>
+            {{end}}
+            {{range .Facets}}
+              <section class="claim-group" id="{{.ID}}" hidden>
+                {{range .Claims}}{{.}}
+                {{end}}
+              </section>
+            {{end}}
+            {{if .BuildOrderHTML}}{{.BuildOrderHTML}}{{end}}
+          </section>
+        {{end}}
+      {{else}}
+        <p class="claims-empty">No claims.</p>
+      {{end}}
+    </main>
+  </div>
+
+  <script>
+    (function () {
+      // Two-level show/hide: one .module-section per sidebar .sec-tab, and
+      // (when a module has more than one facet) one .claim-group per
+      // .subtab inside that module's .sub-nav. A single-facet module still
+      // has exactly one .claim-group child, it just has no .sub-nav strip
+      // to click — showModuleFacet still needs to show that lone facet.
+      var moduleSections = document.querySelectorAll('.module-section');
+      var moduleTabs = document.querySelectorAll('.sec-tab');
+
+      // facetToModule maps every facet (.claim-group) id to its owning
+      // module-section id; moduleDefaultFacet maps a module-section id to
+      // its first facet's id (shown by default when the module tab itself,
+      // rather than a specific subtab, is what got clicked/hashed to).
+      var facetToModule = {};
+      var moduleDefaultFacet = {};
+      moduleSections.forEach(function (sec) {
+        var facets = sec.querySelectorAll('.claim-group');
+        facets.forEach(function (g, i) {
+          facetToModule[g.id] = sec.id;
+          if (i === 0) { moduleDefaultFacet[sec.id] = g.id; }
+        });
+      });
+      var firstModuleID = moduleSections.length ? moduleSections[0].id : '';
+
+      // claimToFacet maps every individual claim card's own id (card.html
+      // etc. render the card's root element id as the full claim id, e.g.
+      // "widget.doctrine.foo") to its owning .claim-group (facet) id, so an
+      // edges-footer link (`href="#<claim-id>"`, written by
+      // components.writeIDList) can resolve to a specific card instead of
+      // falling through to the unknown-hash fallback. A banner claim has no
+      // edges footer and is therefore never a rests_on/mirrors link target
+      // in practice, but it still gets an entry here for consistency.
+      var claimToFacet = {};
+      document.querySelectorAll('.claim-group').forEach(function (g) {
+        g.querySelectorAll('.claim[id]').forEach(function (c) {
+          claimToFacet[c.id] = g.id;
+        });
+      });
+
+      // resolve maps an arbitrary hash fragment to a {module, facet, claim}
+      // triple. Three cases, checked in this order: a claim id resolves to
+      // its own card's facet + module, with claim set so the caller can
+      // scroll to it; a facet id resolves to its own module + itself; a
+      // bare module id resolves to that module + its default facet.
+      // Anything else (empty/unknown) falls back to the first module + its
+      // default facet.
+      function resolve(id) {
+        if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
+          var facetID = claimToFacet[id];
+          return { module: facetToModule[facetID], facet: facetID, claim: id };
+        }
+        if (Object.prototype.hasOwnProperty.call(facetToModule, id)) {
+          return { module: facetToModule[id], facet: id };
+        }
+        if (Object.prototype.hasOwnProperty.call(moduleDefaultFacet, id)) {
+          return { module: id, facet: moduleDefaultFacet[id] };
+        }
+        return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
+      }
+
+      function showModuleFacet(moduleID, facetID, opts) {
+        if (!moduleID) { return; }
+
+        moduleSections.forEach(function (sec) {
+          sec.hidden = (sec.id !== moduleID);
+        });
+        moduleTabs.forEach(function (b) {
+          b.classList.toggle('on', b.dataset.target === '#' + moduleID);
+        });
+
+        var activeSection = document.getElementById(moduleID);
+        if (activeSection) {
+          if (!facetID || facetToModule[facetID] !== moduleID) {
+            facetID = moduleDefaultFacet[moduleID];
+          }
+          activeSection.querySelectorAll('.claim-group').forEach(function (g) {
+            g.hidden = (g.id !== facetID);
+          });
+          activeSection.querySelectorAll('.subtab').forEach(function (b) {
+            b.classList.toggle('on', b.dataset.target === '#' + facetID);
+          });
+        }
+
+        // A resolved claim id keeps the full claim id as the hash target
+        // (not just its facet) so the URL stays deep-linkable/shareable and
+        // a page refresh lands back on the same card, not just the tab.
+        var claimID = opts && opts.claim;
+        var hashTarget = claimID || facetID || moduleID;
+        if (!(opts && opts.skipHash) && window.location.hash !== '#' + hashTarget) {
+          history.replaceState(null, '', '#' + hashTarget);
+        }
+
+        if (claimID) {
+          var target = document.getElementById(claimID);
+          if (target) {
+            target.scrollIntoView({ block: 'start' });
+            target.classList.add('claim-target-highlight');
+            window.setTimeout(function () {
+              target.classList.remove('claim-target-highlight');
+            }, 2000);
+          }
+        }
+      }
+
+      function hashId() {
+        return decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+      }
+
+      function showFromHash(opts) {
+        var target = resolve(hashId());
+        var merged = Object.assign({}, opts, { claim: target.claim });
+        showModuleFacet(target.module, target.facet, merged);
+      }
+
+      moduleTabs.forEach(function (b) {
+        b.addEventListener('click', function () {
+          var moduleID = (b.dataset.target || '').replace(/^#/, '');
+          var facetID = (b.dataset.defaultTarget || '').replace(/^#/, '');
+          showModuleFacet(moduleID, facetID);
+          setDrawer(false);
+        });
+      });
+
+      document.querySelectorAll('.subtab').forEach(function (b) {
+        b.addEventListener('click', function () {
+          var facetID = (b.dataset.target || '').replace(/^#/, '');
+          var moduleID = facetToModule[facetID];
+          showModuleFacet(moduleID, facetID);
+          setDrawer(false);
+        });
+      });
+
+      window.addEventListener('hashchange', function () {
+        showFromHash({ skipHash: true });
+      });
+
+      // Responsive off-canvas drawer (below 860px).
+      var navToggle = document.getElementById('navToggle');
+      var navOverlay = document.getElementById('navOverlay');
+
+      function setDrawer(open) {
+        document.body.classList.toggle('nav-open', open);
+        if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+      }
+
+      if (navToggle) {
+        navToggle.addEventListener('click', function () {
+          setDrawer(!document.body.classList.contains('nav-open'));
+        });
+      }
+      if (navOverlay) {
+        navOverlay.addEventListener('click', function () { setDrawer(false); });
+      }
+      window.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') { setDrawer(false); }
+      });
+
+      // Initial render. This script tag sits at the end of <body>, so the
+      // DOM is already parsed by the time this IIFE runs — no need to wait
+      // for DOMContentLoaded here.
+      showFromHash({ skipHash: true });
+    })();
+  </script>
+</body>
+</html>

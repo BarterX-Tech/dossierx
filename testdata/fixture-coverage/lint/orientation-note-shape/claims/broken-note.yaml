@@ -1,0 +1,14 @@
+id: orinshapemod.overview.broken-note
+facet: overview
+module: orinshapemod
+status: draft
+layout: card
+body: |
+  Living under the reserved "overview" facet makes this an orientation-note
+  claim (EffectiveKind) whether or not kind is set explicitly, but it uses
+  layout: card instead of the required layout: banner.
+rests_on:
+  - orinshapemod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

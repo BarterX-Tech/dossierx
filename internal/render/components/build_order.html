@@ -1,0 +1,38 @@
+{{/* build_order.html — read-only Build Order viewer partial: renders one
+     module's LOCKED internal/buildorder.Artifact as a sequence of phase
+     headings, each followed by one card per claim (id, source file,
+     rests_on, and a pill). Wired in by internal/render's
+     attachBuildOrders, which already filters to locked-only artifacts and
+     never attaches this at all for a module with none (see that
+     function's doc comment for the graceful-degradation contract this
+     partial relies on): by the time this template executes, .Artifact is
+     always non-nil and .Artifact.Locked is always true.
+
+     Every claim card gets the same "ps" (accent) pill every other locked
+     claim already uses elsewhere in the viewer, rather than a distinct
+     color per phase: this task's instructions require reusing the exact
+     existing card/k/pill CSS token vocabulary in style.css and inventing
+     no new hardcoded colors, and "ps" already means "locked", which is
+     exactly what being a member of a locked build-order artifact is. The
+     phase itself is shown as its own section-heading label instead, so
+     phase identity is still visually obvious without a new color. */}}
+<section class="claim-group build-order-module">
+  <h3 class="section-heading">{{.ModuleLabel}} — build order</h3>
+  {{range .Artifact.Phases}}
+    <h4 class="section-heading build-order-phase">{{.Phase}}</h4>
+    {{range .Claims}}
+      <section class="claim claim-card card" id="build-order-{{.ID}}">
+        <div class="k">{{.ID}} <span class="pill ps">locked</span></div>
+        <div class="claim-edges">
+          <div class="claim-file">file: <code>{{.File}}</code></div>
+          {{if .RestsOn}}
+            <div class="claim-rests-on">rests_on: {{range $i, $r := .RestsOn}}{{if $i}}, {{end}}<a href="#{{$r}}">{{$r}}</a>{{end}}</div>
+          {{end}}
+        </div>
+      </section>
+    {{end}}
+  {{end}}
+  {{if .Artifact.Excluded}}
+    <p class="claim-empty">excluded (build_role: out-of-scope): {{range $i, $e := .Artifact.Excluded}}{{if $i}}, {{end}}{{$e}}{{end}}</p>
+  {{end}}
+</section>

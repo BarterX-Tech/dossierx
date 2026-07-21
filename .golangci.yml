@@ -1,0 +1,95 @@
+run:
+  timeout: 5m
+
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - errcheck
+    - ineffassign
+    - unused
+    - gofmt
+    - goimports
+    - misspell
+    - revive
+    - gocritic
+    - unconvert
+    - depguard
+    - errorlint
+    - wrapcheck
+
+linters-settings:
+  depguard:
+    rules:
+      # internal/model and internal/config are dependency-free leaves: every
+      # other package in the engine depends on the shapes they define, so
+      # they must never depend back on anything else under internal/.
+      model-and-config-are-leaves:
+        list-mode: strict
+        files:
+          - "**/internal/model/**"
+          - "**/internal/config/**"
+        allow:
+          - $gostd
+          - gopkg.in/yaml.v3
+        deny:
+          - pkg: github.com/BarterX-Tech/dossierx/internal
+            desc: "internal/model and internal/config are dependency-free leaves and must not import any other internal/... package"
+
+      # internal/lint must never import internal/lock: the correct edge
+      # runs the other way (lock imports lint, gating a lock operation on a
+      # clean lint run). It also must not import render, reaudit, or
+      # buildorder, none of which lint has any business depending on.
+      lint-must-not-import-lock-and-friends:
+        list-mode: lax
+        files:
+          - "**/internal/lint/**"
+        deny:
+          - pkg: github.com/BarterX-Tech/dossierx/internal/lock
+            desc: "internal/lint must never import internal/lock — lock imports lint, not the other way around"
+          - pkg: github.com/BarterX-Tech/dossierx/internal/render
+            desc: "internal/lint must never import internal/render — render is top-of-stack"
+          - pkg: github.com/BarterX-Tech/dossierx/internal/reaudit
+            desc: "internal/lint must never import internal/reaudit"
+          - pkg: github.com/BarterX-Tech/dossierx/internal/buildorder
+            desc: "internal/lint must never import internal/buildorder"
+
+      # render is a top-of-stack sink: it may import other internal/...
+      # packages, but nothing under internal/{lint,catalog,lock,loader,
+      # implink} may import render in return.
+      render-is-top-of-stack:
+        list-mode: lax
+        files:
+          - "**/internal/lint/**"
+          - "**/internal/catalog/**"
+          - "**/internal/lock/**"
+          - "**/internal/loader/**"
+          - "**/internal/implink/**"
+        deny:
+          - pkg: github.com/BarterX-Tech/dossierx/internal/render
+            desc: "internal/render is top-of-stack; nothing under internal/{lint,catalog,lock,loader,implink} may import it"
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  revive:
+    confidence: 0.8
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+
+  wrapcheck:
+    ignoreSigs:
+      - .Errorf(
+      - errors.New(
+      - errors.Unwrap(
+      - errors.Join(
+
+issues:
+  exclude-dirs:
+    - testdata

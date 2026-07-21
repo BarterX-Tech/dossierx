@@ -1,0 +1,17 @@
+id: widget.markdown-cases.ordered-list-lettered-subitems
+facet: contract
+module: widget
+status: draft
+layout: list
+body: |
+  1. First item covers lifecycle and propagation of state.
+     - 1a. sub-item covers detail one
+     - 1b. sub-item covers detail two
+     - 1c. sub-item covers detail three
+     - 1d. sub-item covers detail four
+  2. Second item covers state immutability guarantees.
+  3. Third item is a plain top-level entry.
+  4. Fourth item closes out the list.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

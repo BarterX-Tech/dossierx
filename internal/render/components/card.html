@@ -1,0 +1,22 @@
+{{/* card.html — default render for layout: card claims. The plainest
+     component: an id/status header, free-form Body prose, and the shared
+     edges footer (facet/module/governed_by/mirrors/rests_on/etc).
+
+     class="card" (the reference docs stylesheet's .card) is added alongside the
+     existing claim/claim-card classes so the shared CSS applies; id and
+     data-status stay put since they're the engine's own hook, not a CSS
+     concern. The head is a single .k line with an inline status pill —
+     docs' "<div class="k">TITLE <span class="pill ps">...</span></div>"
+     shape, not a separate header block — per the shared claim-head
+     convention every component partial follows (see components.go's
+     pillClass). A claim with Emphasis set (the docs "hard boundary" card
+     precedent) gets the claim-card--warn modifier class. Body is routed
+     through the shared internal/render/markdown package (exposed as the
+     "markdown" template func) rather than shown raw, so any
+     ```fenced``` span in a claim's prose renders as a real
+     <pre><code>...</code></pre> element instead of literal backticks. */}}
+<section class="claim claim-card card{{if .Emphasis}} claim-card--warn{{end}}" id="{{.ID}}" data-status="{{.Status}}">
+  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+  {{edges .}}
+</section>

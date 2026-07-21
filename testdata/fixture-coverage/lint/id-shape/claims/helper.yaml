@@ -1,0 +1,13 @@
+id: idshapemod.contract.helper
+facet: contract
+module: idshapemod
+status: draft
+layout: card
+body: |
+  Helper claim that rests_on the malformed-id claim below, so that claim
+  has an incoming edge and isn't also flagged by the separate orphan lint.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - idshapemod.badid

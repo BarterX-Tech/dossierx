@@ -1,0 +1,14 @@
+id: widget.markdown-cases.fenced-html-injection
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Raw payload sample, content that must be HTML-escaped verbatim inside the fence:
+
+  ```
+  <script>alert(1)</script> & "quoted" & 'val'
+  ```
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

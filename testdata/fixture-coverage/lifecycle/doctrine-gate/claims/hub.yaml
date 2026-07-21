@@ -1,0 +1,12 @@
+id: dgatemod.doctrine.hub
+facet: doctrine
+module: dgatemod
+status: draft
+layout: card
+body: |
+  identical shared content for a reciprocal mirrors pair.
+mirrors:
+  - dgatemod.contract.child
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

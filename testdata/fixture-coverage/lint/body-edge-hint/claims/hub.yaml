@@ -1,0 +1,10 @@
+id: bodyhintmod.contract.hub
+facet: contract
+module: bodyhintmod
+status: draft
+layout: card
+body: |
+  Plain hub claim with no cross-references in its own prose.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

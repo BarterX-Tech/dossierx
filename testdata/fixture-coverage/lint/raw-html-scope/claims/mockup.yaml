@@ -1,0 +1,16 @@
+id: rawhtmlmod.contract.mockup
+facet: contract
+module: rawhtmlmod
+status: draft
+layout: mockup
+body: |
+  Plain-text description alongside the raw_html blob below, so this claim
+  also has ordinary content and isn't additionally flagged by the separate
+  layout-shape-mismatch lint's "claim has no content" check.
+raw_html: '<div class="mockup-box"><span class="mockup-badge">OK</span></div>'
+raw_html_reviewed: true
+rests_on:
+  - rawhtmlmod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

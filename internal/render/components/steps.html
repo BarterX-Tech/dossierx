@@ -1,0 +1,29 @@
+{{/* steps.html — default render for layout: steps claims. .Steps is an
+     ordered array of free-form markdown strings, rendered as docs' numbered
+     .step/.snum/.sbody bubbles (1-indexed) rather than a native <ol>/<li>,
+     matching the reference docs stylesheet's steps convention. Each step's text
+     is routed through the shared internal/render/markdown package (the
+     "markdown" template func) — the same renderer card/table/banner/list
+     use — instead of a raw {{$s}} auto-escape-only dump, so a step
+     containing a fenced example or inline code renders identically to
+     everywhere else Body-shaped text appears. class="card" (the reference
+     stylesheet's .card) is added alongside the existing claim/claim-steps
+     classes so a steps claim shares the same box model (12px radius / 13-15px
+     padding / 11px margin) as card/table/list claims instead of falling
+     through to the old, pre-redesign .claim-only rule. The head is a single
+     .k line with an inline status pill — docs' "<div class="k">TITLE <span
+     class="pill ps">...</span></div>" shape — per the shared claim-head
+     convention every component partial follows (see components.go's
+     pillClass). */}}
+<section class="claim claim-steps card" id="{{.ID}}" data-status="{{.Status}}">
+  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
+  {{if .Steps}}
+  {{range $i, $s := .Steps}}
+  <div class="step"><div class="snum">{{inc $i}}</div><div class="sbody">{{markdown $s}}</div></div>
+  {{end}}
+  {{else}}
+  <p class="claim-empty">No steps.</p>
+  {{end}}
+  {{edges .}}
+</section>

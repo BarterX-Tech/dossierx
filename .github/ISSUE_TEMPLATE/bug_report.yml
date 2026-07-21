@@ -1,0 +1,80 @@
+name: Bug report
+description: Report something that isn't working as expected.
+title: "[bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out as much of this
+        as you can — it makes reproducing and fixing the issue much faster.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, including what you expected instead.
+      placeholder: Tell us what you saw, and what you expected to see.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The minimal command(s) and config/claim files needed to reproduce this.
+      placeholder: |
+        1. `project.config.yaml` containing ...
+        2. `dossierx lint`
+        3. Observed ...
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: DossierX version
+      description: Output of `dossierx --version`, or the git commit if built from source.
+      placeholder: v0.0.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux
+        - macOS
+        - Windows
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go version
+      description: Output of `go version`.
+      placeholder: go1.26.0
+    validations:
+      required: false
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant output
+      description: Any command output, stack trace, or log that shows the failure.
+      render: shell
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and this hasn't already been reported.
+          required: true

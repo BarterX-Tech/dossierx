@@ -1,0 +1,14 @@
+id: orinordermod.contract.note
+facet: contract
+module: orinordermod
+status: draft
+layout: banner
+kind: orientation-note
+order: 2
+body: |
+  An orientation-note claim that the viewer's own ordering (model.OrderClaims)
+  places AFTER the fact claim above, in the same module+facet group -- the
+  violation orientation-note-order exists to catch.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

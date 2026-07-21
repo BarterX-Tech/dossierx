@@ -1,0 +1,12 @@
+id: validmod.contract.main
+facet: contract
+module: validmod
+status: draft
+layout: card
+body: |
+  A claim whose governed_by names a doctrine claim id with no matching
+  claim anywhere in this claim set.
+rests_on:
+  - validmod.contract.helper
+governed_by:
+  type: validmod.doctrine.ghost-hub

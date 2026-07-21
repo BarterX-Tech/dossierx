@@ -1,0 +1,63 @@
+name: Feature request
+description: Suggest an idea or improvement for DossierX.
+title: "[feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. Please describe the problem you're trying to
+        solve, not just the solution — it helps us evaluate alternatives.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: What are you trying to do that DossierX currently makes hard or impossible?
+      placeholder: I'm trying to ... but currently I have to ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see happen? Sketch a CLI flag, config field, or behavior change if you have one in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches or workarounds you've tried or considered.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of DossierX does this mostly affect?
+      options:
+        - CLI commands
+        - Claim schema / model
+        - Lint rules
+        - Viewer / render output
+        - Config (project.config.yaml)
+        - Lock / reaudit lifecycle
+        - Build order
+        - Code links (implink)
+        - Claude Code skills (skills/)
+        - Other / not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and this hasn't already been requested.
+          required: true

@@ -1,0 +1,10 @@
+id: codeorphanmod.contract.helper
+facet: contract
+module: codeorphanmod
+status: draft
+layout: card
+body: |
+  Plain helper claim, referenced by the main claim's rests_on edge only.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

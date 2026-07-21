@@ -1,0 +1,13 @@
+id: buildrolemod.contract.other
+facet: contract
+module: buildrolemod
+status: locked
+layout: card
+build_role: schema
+body: |
+  A properly build_role-tagged, already-locked claim -- its presence is
+  what makes this module "adopted" build_role, which is the precondition
+  the sibling claim below needs to actually trip this lint.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

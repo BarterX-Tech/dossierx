@@ -1,0 +1,14 @@
+id: buildrolemod.contract.broken
+facet: contract
+module: buildrolemod
+status: locked
+layout: card
+body: |
+  A locked claim in a build_role-adopting module that never set its own
+  build_role -- the exact case build-role-required-for-locked exists to
+  catch.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - buildrolemod.contract.other

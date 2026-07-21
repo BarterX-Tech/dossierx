@@ -1,0 +1,11 @@
+id: udfmod.ghostfacet.claim
+facet: ghostfacet
+module: udfmod
+status: draft
+layout: card
+body: |
+  A claim whose facet, "ghostfacet", is not listed in this project's
+  config.facets at all.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
