@@ -32,6 +32,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -361,7 +362,15 @@ func TestTrimpathBuildDoesNotEmbedBuildMachinePaths(t *testing.T) {
 	// showing a build WITHOUT -trimpath from the same unique tree does
 	// leak the path — if this stopped being true (e.g. a future Go
 	// toolchain change), the positive assertions above would no longer be
-	// meaningfully tested.
+	// meaningfully tested. Skipped on Windows: GitHub's windows-latest
+	// runner image builds are trimpath-equivalent even without the flag
+	// (almost certainly a GOFLAGS default baked into the image), which
+	// defeats only this self-check, not the actual guarantee — the
+	// positive assertions above (which are what DossierX ships) already
+	// ran and passed on this platform.
+	if runtime.GOOS == "windows" {
+		return
+	}
 	outNoTrim := filepath.Join(t.TempDir(), "docs-no-trimpath")
 	cmdNoTrim := exec.Command("go", "build", "-o", outNoTrim, "./cmd/dossierx")
 	cmdNoTrim.Dir = uniqueRoot

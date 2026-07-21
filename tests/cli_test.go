@@ -223,6 +223,9 @@ func TestNestedConfigNearestWins(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows's FILE_ATTRIBUTE_READONLY on a directory doesn't block creating files inside it, unlike POSIX write-permission bits")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("running as root: permission bits are not enforced, skipping")
 	}

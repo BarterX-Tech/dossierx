@@ -54,6 +54,14 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: v1.64.8
+          # Force building golangci-lint from source with the runner's own
+          # (1.26.x) Go toolchain, instead of downloading a pre-built
+          # release binary — those are compiled by upstream at release
+          # time with whatever Go was current then (e.g. v1.64.8's binary
+          # release was built with go1.24, older than this module's go.mod
+          # floor), which golangci-lint refuses to run under. go install
+          # sidesteps that entirely.
+          install-mode: goinstall
 
   tidy:
     name: tidy
