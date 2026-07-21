@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-07-22
+
+### Added
+- The rendered viewer's sidebar now shows a "Generated <timestamp>" footer,
+  the same render-time timestamp already stamped into the leading
+  generated-by HTML comment, so a reviewer can tell how fresh the page is
+  without needing to view source.
+
 ## [0.0.2] - 2026-07-22
 
 First real CI run (Linux/Windows/macOS matrix, `-race`, gofmt, golangci-lint) surfaced gaps
@@ -52,6 +60,7 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.3
 [0.0.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.2
 [0.0.1]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.1
