@@ -12,15 +12,15 @@ import (
 // scanTestConfig mirrors testConfig but additionally sets source_dirs to a
 // "src" subdirectory it creates, since Scan (unlike Set) needs a real,
 // validated cfg.SourceDirs to have anything to walk.
-func scanTestConfig(t *testing.T, modules ...string) (*config.Config, string) {
+func scanTestConfig(t *testing.T, modules ...string) (cfg *config.Config, srcDir string) {
 	t.Helper()
 	dir := t.TempDir()
 	claimsDir := filepath.Join(dir, "claims")
-	srcDir := filepath.Join(dir, "src")
+	src := filepath.Join(dir, "src")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
 		t.Fatalf("mkdir claims dir: %v", err)
 	}
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+	if err := os.MkdirAll(src, 0o755); err != nil {
 		t.Fatalf("mkdir src dir: %v", err)
 	}
 	modYAML := ""
@@ -33,11 +33,11 @@ func scanTestConfig(t *testing.T, modules ...string) (*config.Config, string) {
 	if err := os.WriteFile(cfgPath, []byte(cfgYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
-	cfg, err := config.LoadConfig(cfgPath)
+	loaded, err := config.LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	return cfg, srcDir
+	return loaded, src
 }
 
 func writeScanFile(t *testing.T, srcDir, rel, content string) {

@@ -67,7 +67,11 @@ claims_dir: claims
 	if err := os.Chdir(otherDir); err != nil {
 		t.Fatal(err)
 	}
-	defer os.Chdir(oldWd)
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Logf("restore cwd: %v", err)
+		}
+	}()
 
 	cfg, err := LoadConfig(p)
 	if err != nil {
