@@ -60,7 +60,11 @@ func TestResolveConfigPathWalksUpward(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	defer os.Chdir(origWD)
+	defer func() {
+		if err := os.Chdir(origWD); err != nil {
+			t.Logf("restore cwd: %v", err)
+		}
+	}()
 	if err := os.Chdir(deep); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
@@ -96,7 +100,11 @@ func TestResolveConfigPathNotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("getwd: %v", err)
 	}
-	defer os.Chdir(origWD)
+	defer func() {
+		if err := os.Chdir(origWD); err != nil {
+			t.Logf("restore cwd: %v", err)
+		}
+	}()
 	if err := os.Chdir(isolated); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}

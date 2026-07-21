@@ -16,12 +16,27 @@ package tests
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+// exeSuffix returns ".exe" on Windows and "" everywhere else. A binary
+// built via `go build -o <path>` with no extension is still a valid,
+// readable executable file on Windows, but os/exec's CreateProcess-backed
+// lookup requires the .exe suffix to actually launch it — omitting this
+// suffix is what makes exec.Command(binPath, ...) fail with "executable
+// file not found in %PATH%" on Windows even though the file exists.
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
 
 // binPath is set once by TestMain to the path of a "dossierx" binary built from
 // this module's cmd/dossierx, so every test in this package execs the real CLI
@@ -34,9 +49,7 @@ func TestMain(m *testing.M) {
 	if err != nil {
 		panic(err)
 	}
-	defer os.RemoveAll(dir)
-
-	binPath = filepath.Join(dir, "dossierx")
+	binPath = filepath.Join(dir, "dossierx"+exeSuffix())
 	moduleRoot, err := filepath.Abs("..")
 	if err != nil {
 		panic(err)
@@ -47,7 +60,9 @@ func TestMain(m *testing.M) {
 		panic("building docs binary for CLI tests: " + err.Error() + "\n" + string(out))
 	}
 
-	os.Exit(m.Run())
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // run execs the built docs binary with args, in dir, and returns combined
@@ -64,7 +79,8 @@ func run(t *testing.T, dir string, args ...string) (stdout, stderr string, exitC
 	err := cmd.Run()
 	code := 0
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			code = exitErr.ExitCode()
 		} else {
 			t.Fatalf("running docs binary: %v", err)
@@ -207,6 +223,9 @@ func TestNestedConfigNearestWins(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows's FILE_ATTRIBUTE_READONLY on a directory doesn't block creating files inside it, unlike POSIX write-permission bits")
+	}
 	if os.Getuid() == 0 {
 		t.Skip("running as root: permission bits are not enforced, skipping")
 	}
@@ -221,7 +240,11 @@ func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
 	if err := os.Chmod(root, 0o555); err != nil {
 		t.Fatalf("chmod root read-only: %v", err)
 	}
-	t.Cleanup(func() { os.Chmod(root, 0o755) })
+	t.Cleanup(func() {
+		if err := os.Chmod(root, 0o755); err != nil {
+			t.Logf("restore permissions: %v", err)
+		}
+	})
 
 	stdout, stderr, code := run(t, root, "catalog")
 	if code == 0 {

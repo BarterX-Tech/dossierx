@@ -71,7 +71,7 @@ func stripMarkup(s string) string {
 // claim that is currently locked AND flagged review_pending; ProposeDiff
 // enforces that precondition itself (rather than leaving it to the CLI) so
 // every caller gets it for free. The CLI maps this error to exit code 2.
-func ProposeDiff(claim model.Claim, changedDep model.Claim) (Diff, error) {
+func ProposeDiff(claim, changedDep model.Claim) (Diff, error) {
 	if claim.ID == "" {
 		return Diff{}, fmt.Errorf("reaudit: claim has no id")
 	}

@@ -111,7 +111,10 @@ func TestFlagStore_SaveLoadRoundTrip(t *testing.T) {
 
 func TestFlagStore_DeleteThenSave(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".docs-flag-store.json")
-	store, _ := LoadFlagStore(path)
+	store, err := LoadFlagStore(path)
+	if err != nil {
+		t.Fatalf("LoadFlagStore: %v", err)
+	}
 	store.Flags["widget.contract.main"] = PendingFlag{ClaimSays: "a", NowDoes: "b", Reason: "c"}
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)

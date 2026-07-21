@@ -48,7 +48,7 @@ import (
 //
 // Two known, deliberate scope notes carried over unchanged from the
 // original:
-//   - A same-line span like `` ```x``` `` is technically matched too (the
+//   - A same-line span like “ ```x``` “ is technically matched too (the
 //     regex doesn't require a newline before the closing fence), but the
 //     corpus never writes fences that way — every real fence is a
 //     multi-line block, opening and closing markers each on their own

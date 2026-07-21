@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -461,12 +462,20 @@ func TestOverrideFile_EmptyDirReturnsNotFoundNoError(t *testing.T) {
 }
 
 func TestOverrideFile_UnreadableFileIsHardError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX permission bits (0o000) don't block reads on Windows's ACL-based permission model")
+	}
+
 	dir := t.TempDir()
 	path := filepath.Join(dir, "card.html")
 	if err := os.WriteFile(path, []byte("x"), 0o000); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(path, 0o644) }) // let t.TempDir() clean up.
+	t.Cleanup(func() {
+		if err := os.Chmod(path, 0o644); err != nil {
+			t.Logf("restore permissions: %v", err)
+		}
+	}) // let t.TempDir() clean up.
 
 	if os.Getuid() == 0 {
 		t.Skip("running as root: file permissions do not block reads")
