@@ -53,7 +53,7 @@ func extractCandidateIDs(text string, cfg *config.Config) []string {
 // code blocks and the remaining prose (fences stripped out), so lints can
 // scan each half separately (code-orphan looks inside fences,
 // body-edge-hint looks outside them).
-func splitFencedAndProse(body string) (fenced string, prose string) {
+func splitFencedAndProse(body string) (fenced, prose string) {
 	var fencedParts []string
 	for _, m := range codeFence.FindAllString(body, -1) {
 		fencedParts = append(fencedParts, m)

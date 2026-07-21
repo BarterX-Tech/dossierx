@@ -4,8 +4,10 @@
 // is authoritative), so every claim sharing a duplicated id is reported.
 package lint
 
-import "github.com/BarterX-Tech/dossierx/internal/config"
-import "github.com/BarterX-Tech/dossierx/internal/model"
+import (
+	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/model"
+)
 
 func init() {
 	Registry = append(Registry, AmbiguousLint{})
