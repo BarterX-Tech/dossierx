@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2026-07-22
+
+First real CI run (Linux/Windows/macOS matrix, `-race`, gofmt, golangci-lint) surfaced gaps
+that only local macOS testing had missed:
+
+### Fixed
+- Two files had minor gofmt drift.
+- The CLI-integration test harness built the `dossierx` test binary without a `.exe` suffix on
+  Windows, so `os/exec` couldn't launch it.
+- Two POSIX-permission-based tests (unreadable file, read-only directory) don't apply under
+  Windows's ACL model; skipped there.
+- A concurrency test's non-trimpath "negative control" assertion is inconclusive on GitHub's
+  windows-latest image (trimpath-equivalent by default); skipped there, the actual positive
+  guarantee (a `-trimpath` build doesn't leak paths) is unaffected and still runs everywhere.
+- **Real bug:** running many `dossierx lock` invocations concurrently against the same
+  `claims_dir` could fail on Windows with a transient "being used by another process" error —
+  Windows's mandatory file locking can collide a concurrent atomic rename with a concurrent
+  read of the same claim file, unlike POSIX's atomic rename semantics. Both the read and write
+  paths in `internal/loader` now retry a few times with a short backoff, Windows-only.
+- `golangci-lint` config/version pinning tightened so CI's linter binary matches this module's
+  actual `go 1.26` floor.
+
 ## [0.0.1] - 2026-07-21
 
 DossierX is a config-driven CLI that turns YAML "claims" — atomic, reviewable facts about a
@@ -30,5 +52,6 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.0.1...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.0.2...HEAD
+[0.0.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.2
 [0.0.1]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.1
