@@ -60,10 +60,10 @@ func loadClaim(t *testing.T, dir, rel string) claimYAML {
 func assertTagBalance(t *testing.T, out string) {
 	t.Helper()
 	for _, tag := range []string{"p", "pre", "code", "ul", "ol", "li"} {
-		open := strings.Count(out, "<"+tag+">")
-		close := strings.Count(out, "</"+tag+">")
-		if open != close {
-			t.Errorf("tag balance: <%s> open=%d close=%d in output:\n%s", tag, open, close, out)
+		openCount := strings.Count(out, "<"+tag+">")
+		closeCount := strings.Count(out, "</"+tag+">")
+		if openCount != closeCount {
+			t.Errorf("tag balance: <%s> open=%d close=%d in output:\n%s", tag, openCount, closeCount, out)
 		}
 	}
 }
@@ -391,7 +391,10 @@ func TestFencedClaimsListIsComplete(t *testing.T) {
 			return err
 		}
 		if fenceRe.Match(data) {
-			rel, _ := filepath.Rel(dir, path)
+			rel, relErr := filepath.Rel(dir, path)
+			if relErr != nil {
+				return relErr
+			}
 			found = append(found, filepath.ToSlash(rel))
 		}
 		return nil

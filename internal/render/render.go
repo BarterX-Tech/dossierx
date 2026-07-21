@@ -38,10 +38,10 @@ const (
 	styleFileName = "style.css"
 )
 
-// shellTemplatePath and styleTemplatePath are the embedded paths backing the
-// go:embed directive above; embed.FS.ReadFile/ParseFS calls below reference
-// these constants (viewer/template/ + the corresponding *FileName constant)
-// instead of repeating the path as a separate literal.
+// shellTemplatePath and styleTemplatePath are the embedded paths backing
+// the embed directive above; embed.FS.ReadFile/ParseFS calls below
+// reference these constants (viewer/template/ + the corresponding
+// *FileName constant) instead of repeating the path as a separate literal.
 const (
 	shellTemplatePath = "viewer/template/" + shellFileName
 	styleTemplatePath = "viewer/template/" + styleFileName

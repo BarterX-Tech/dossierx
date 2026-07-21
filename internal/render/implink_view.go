@@ -53,4 +53,3 @@ func buildImplinkLookup(cfg *config.Config) map[string][]implink.ViewFile {
 	}
 	return out
 }
-
