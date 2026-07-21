@@ -10,8 +10,10 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -48,7 +50,7 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 			return nil
 		}
 
-		raw, err := os.ReadFile(path)
+		raw, err := readFileWithRetry(path)
 		if err != nil {
 			return fmt.Errorf("loader: read %s: %w", path, err)
 		}
@@ -69,6 +71,36 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 
 	sort.Slice(claims, func(i, j int) bool { return claims[i].SourcePath < claims[j].SourcePath })
 	return claims, nil
+}
+
+// readFileWithRetry is os.ReadFile with a short, bounded retry loop on
+// Windows only. atomicWriteFile's rename-over-path is atomic on POSIX (a
+// concurrent reader always sees either the old or new complete file, never
+// an error), but Windows's mandatory file locking can make the rename
+// itself transiently collide with a concurrent open-for-read on the same
+// path (ERROR_SHARING_VIOLATION) — a real gap surfaced by
+// TestConcurrentLocksDoNotLoseStoreUpdates running many "docs lock"
+// processes against the same claims_dir simultaneously. The window is a
+// single rename syscall, not a slow operation, so a handful of short
+// retries resolves it without meaningfully slowing down the common,
+// uncontended case (which never retries at all).
+func readFileWithRetry(path string) ([]byte, error) {
+	if runtime.GOOS != "windows" {
+		return os.ReadFile(path)
+	}
+	const attempts = 5
+	var raw []byte
+	var err error
+	for i := 0; i < attempts; i++ {
+		raw, err = os.ReadFile(path)
+		if err == nil {
+			return raw, nil
+		}
+		if i < attempts-1 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	return raw, err
 }
 
 // SaveClaim writes c back to its SourcePath as YAML. It is used by the
@@ -123,7 +155,29 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	if err := os.Chmod(tmpPath, perm); err != nil {
 		return err
 	}
-	return os.Rename(tmpPath, path)
+	return renameWithRetry(tmpPath, path)
+}
+
+// renameWithRetry is os.Rename with the same short, bounded Windows-only
+// retry as readFileWithRetry, for the symmetric direction of the same
+// race: a rename-over-path can transiently collide with another process
+// currently holding path open for read (ERROR_SHARING_VIOLATION).
+func renameWithRetry(oldpath, newpath string) error {
+	if runtime.GOOS != "windows" {
+		return os.Rename(oldpath, newpath)
+	}
+	const attempts = 5
+	var err error
+	for i := 0; i < attempts; i++ {
+		err = os.Rename(oldpath, newpath)
+		if err == nil {
+			return nil
+		}
+		if i < attempts-1 {
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	return err
 }
 
 // FindByID returns the claim with the given id, if present.
