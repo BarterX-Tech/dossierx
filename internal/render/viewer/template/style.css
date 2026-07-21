@@ -689,6 +689,19 @@ body.shell-body {
   padding: 6px 0 24px;
 }
 
+/* Render timestamp, pinned to the bottom of the sidebar by #nav's flex:1
+   above absorbing the remaining space. Small and muted deliberately — a
+   staleness cue a reviewer glances at, not a headline. */
+.sidebar-footer {
+  flex-shrink: 0;
+  padding: 8px 14px 12px;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--muted);
+  letter-spacing: .02em;
+}
+
 .nav-toggle, .nav-overlay {
   display: none;
 }

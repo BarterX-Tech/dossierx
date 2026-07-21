@@ -23,6 +23,7 @@
           <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
         {{end}}
       </nav>
+      {{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
     </aside>
     <main class="content-area">
       {{if .ModuleGroups}}
