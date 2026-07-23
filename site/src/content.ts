@@ -578,7 +578,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Five tagged releases trace the engine's public extraction, cross-platform hardening, a viewer freshness cue, the docs→dossierx naming rebrand, and a steps number/text alignment fix in the default viewer. The current release is **v0.1.1**.",
+        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.1.1** — see the full history below for what's shipped since the engine's public extraction.",
       data: {
         releases: [
           {
