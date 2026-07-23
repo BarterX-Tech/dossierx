@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-24
+
+### Fixed
+- `layout: steps` claims rendered a numbered circle (`.snum`) that sat visibly higher than the
+  first line of step text. Step text is routed through the shared markdown renderer, which wraps
+  it in a `<p>`; the `<p>`'s default browser top margin pushed the text down inside the
+  `display:flex` step row while the fixed-height number circle stayed flush at the top. The
+  default viewer stylesheet now resets step-body block margins (first-child top / last-child
+  bottom) so the number and first line align. Affects every `layout: steps` claim in any project
+  using the default viewer theme; a project overriding `style.css` is unaffected.
+
 ## [0.1.0] - 2026-07-23
 
 ### Changed
@@ -74,7 +85,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.1
 [0.1.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.0
 [0.0.3]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.3
 [0.0.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.2

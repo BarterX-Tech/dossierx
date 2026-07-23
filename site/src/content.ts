@@ -71,7 +71,7 @@ export const contentSpec: ContentSpec = {
           "Go 1.26",
           "cobra + yaml.v3 only",
           "CLI-only, no public API",
-          "v0.1.0",
+          "v0.1.1",
           "github.com/BarterX-Tech/dossierx",
         ],
         pipeline: ["lint", "catalog", "render", "check"],
@@ -578,7 +578,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Four tagged releases trace the engine's public extraction, cross-platform hardening, a viewer freshness cue, and the docs→dossierx naming rebrand. The current release is **v0.1.0**.",
+        "Five tagged releases trace the engine's public extraction, cross-platform hardening, a viewer freshness cue, the docs→dossierx naming rebrand, and a steps number/text alignment fix in the default viewer. The current release is **v0.1.1**.",
       data: {
         releases: [
           {
@@ -623,11 +623,22 @@ export const contentSpec: ContentSpec = {
             version: "v0.1.0",
             date: "2026-07-23",
             title: "docs → dossierx naming rebrand",
-            tag: "Latest release · PR #7",
+            tag: "Previous release",
             highlights: [
               "Every generic 'docs' placeholder — CLI-invocation examples, the docs-claim: source tag (including the real Go regex), docs-v1 naming in skill docs, the default viewer title, and the on-disk store filenames — is renamed to the tool's actual name, dossierx.",
               "BREAKING: .docs-lock-store.json and .docs-flag-store.json are renamed to .dossierx-lock-store.json and .dossierx-flag-store.json, with no migration. An existing project's lock/flag store will not be found after upgrading past this release.",
               "Minor version bump (v0.0.3 → v0.1.0), not a patch, to signal the breaking on-disk change under pre-1.0 semver.",
+            ],
+          },
+          {
+            version: "v0.1.1",
+            date: "2026-07-24",
+            title: "Steps number/text alignment fix",
+            tag: "Latest release",
+            highlights: [
+              "Fixes a rendering bug in the default viewer's layout: steps claims: because each step's text is routed through the shared markdown renderer, it was wrapped in a <p> whose default browser top margin pushed the first line down relative to the step's fixed-size number circle, leaving the number visibly misaligned above the text.",
+              "The viewer stylesheet now resets the step body's <p> margins — a 0.5rem inter-block rhythm with the first block's top and last block's bottom margin zeroed — so the number circle sits flush with the first line of step text.",
+              "Purely a default-viewer CSS fix: no schema_version, on-disk store, API, or config change, so it lands as a patch bump (v0.1.0 → v0.1.1) under pre-1.0 semver.",
             ],
           },
         ],
