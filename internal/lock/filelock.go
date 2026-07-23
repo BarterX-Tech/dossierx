@@ -16,11 +16,11 @@ var (
 // AcquireFileLock creates an exclusive, cross-process advisory lock next to
 // the Store at storePath (storePath+".lock"), so concurrent CLI invocations
 // that each load-mutate-save the same Store never lose one process's update
-// to another's. Without this, two concurrent "docs lock <id>" runs (on two
+// to another's. Without this, two concurrent "dossierx lock <id>" runs (on two
 // different claims, sharing one project-wide store file) each load the same
 // on-disk snapshot, mutate their own in-memory copy, and whichever Save
 // happens last silently discards the other's LockedAt/Hashes entries — a
-// classic lost-update race, reproducible by running "docs lock" on several
+// classic lost-update race, reproducible by running "dossierx lock" on several
 // claims in parallel against a fresh project.
 //
 // This is a plain, portable mechanism (os.O_EXCL on a sentinel file — no

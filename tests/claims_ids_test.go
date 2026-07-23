@@ -1,5 +1,5 @@
 // This file covers the "Claims & IDs" edge-case category end-to-end at the
-// CLI level: how "docs lint"/"docs check" behave for malformed, duplicate,
+// CLI level: how "dossierx lint"/"dossierx check" behave for malformed, duplicate,
 // empty, or oddly-shaped claim ids and claim content. It reuses the
 // binPath/run/writeFixtureProject scaffolding from cli_test.go in this same
 // package.

@@ -2,10 +2,10 @@
 // category end to end via the built "docs" binary (see cli_test.go's
 // TestMain/run/binPath, reused here rather than redeclared):
 //
-//  1. "docs lock" on a claim that still fails lint -> refused
+//  1. "dossierx lock" on a claim that still fails lint -> refused
 //  2. a locked claim's dependency changes later -> flips to
-//     locked+review_pending on the next "docs check", never auto-unlocks
-//  3. "docs reaudit" on a claim that is not review_pending -> exit 2
+//     locked+review_pending on the next "dossierx check", never auto-unlocks
+//  3. "dossierx reaudit" on a claim that is not review_pending -> exit 2
 //  4. reaudit concludes the claim still holds -> diff-free confirmation;
 //     confirming clears review_pending, appends an audit note, stays locked
 //  5. (see internal/reaudit's own tests for the mark-rendering contract;
@@ -14,9 +14,9 @@
 //  7. confirming strips markup, refreshes the lock timestamp + dependency
 //     hash, clears review_pending, and status stays locked (never draft)
 //  8. multiple dependents go review_pending from one upstream change ->
-//     "docs stale" lists all of them; "docs reaudit" only ever processes
+//     "dossierx stale" lists all of them; "dossierx reaudit" only ever processes
 //     the one id it was given
-//  9. "docs stale" with nothing locked at all -> reports "nothing locked"
+//  9. "dossierx stale" with nothing locked at all -> reports "nothing locked"
 //
 // 10. doctrine facet configured, hub not locked -> hub-gating blocks
 // 11. doctrine facet not configured at all -> hub-gating does not run
@@ -110,7 +110,7 @@ func llReadFile(t *testing.T, path string) string {
 }
 
 // ---------------------------------------------------------------------
-// Row 1: docs lock refused on a lint failure; claim stays untouched.
+// Row 1: dossierx lock refused on a lint failure; claim stays untouched.
 // ---------------------------------------------------------------------
 
 func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
@@ -140,7 +140,7 @@ func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
 
 // ---------------------------------------------------------------------
 // Row 2: a locked claim's dependency changes -> flips to
-// locked+review_pending on the next "docs check", never reverts to draft.
+// locked+review_pending on the next "dossierx check", never reverts to draft.
 // ---------------------------------------------------------------------
 
 func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
@@ -165,7 +165,7 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 	}
 
 	if _, stderr, code := run(t, root, "--config", cfgPath, "check"); code != 0 {
-		t.Fatalf("docs check failed after dependency changed: %s", stderr)
+		t.Fatalf("dossierx check failed after dependency changed: %s", stderr)
 	}
 
 	mainAfter := llReadFile(t, mainPath)
@@ -178,15 +178,15 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 
 	staleOut, _, staleCode := run(t, root, "--config", cfgPath, "stale")
 	if staleCode != 0 {
-		t.Fatalf("docs stale exited non-zero: %d", staleCode)
+		t.Fatalf("dossierx stale exited non-zero: %d", staleCode)
 	}
 	if !strings.Contains(staleOut, "widget.contract.main") {
-		t.Fatalf("expected docs stale to list widget.contract.main, got: %s", staleOut)
+		t.Fatalf("expected dossierx stale to list widget.contract.main, got: %s", staleOut)
 	}
 }
 
 // ---------------------------------------------------------------------
-// Row 3: docs reaudit on a claim that is not review_pending -> exit 2.
+// Row 3: dossierx reaudit on a claim that is not review_pending -> exit 2.
 // ---------------------------------------------------------------------
 
 func TestLockLifecycle_ReauditRefusedWhenNotPending(t *testing.T) {
@@ -276,7 +276,7 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 
 // ---------------------------------------------------------------------
 // Row 8: multiple dependents go review_pending from one upstream change;
-// docs stale lists all of them; docs reaudit only ever touches the one id
+// dossierx stale lists all of them; dossierx reaudit only ever touches the one id
 // it is given, never batch-applies the rest.
 // ---------------------------------------------------------------------
 
@@ -308,7 +308,7 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 		t.Fatalf("stale exited %d", staleCode)
 	}
 	if !strings.Contains(staleOut, "widget.contract.maina") || !strings.Contains(staleOut, "widget.contract.mainb") {
-		t.Fatalf("expected docs stale to list both dependents, got: %s", staleOut)
+		t.Fatalf("expected dossierx stale to list both dependents, got: %s", staleOut)
 	}
 
 	if _, stderr, code := run(t, root, "--config", cfgPath, "reaudit", "widget.contract.maina", "--confirm"); code != 0 {
@@ -326,7 +326,7 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 }
 
 // ---------------------------------------------------------------------
-// Row 9: docs stale with nothing locked yet -> "nothing locked", exit 0.
+// Row 9: dossierx stale with nothing locked yet -> "nothing locked", exit 0.
 // ---------------------------------------------------------------------
 
 func TestLockLifecycle_StaleReportsNothingLockedYet(t *testing.T) {

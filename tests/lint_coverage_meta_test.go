@@ -1,7 +1,7 @@
 // lint_coverage_meta_test.go is the regression gate for the whole
 // testdata/fixture-coverage corpus: TestEveryRegisteredLintHasACoverageFixture
 // iterates internal/lint's actual Registry (not a hardcoded rule-name list,
-// so a future lint rule is picked up automatically), runs "docs lint --json"
+// so a future lint rule is picked up automatically), runs "dossierx lint --json"
 // against every directory under testdata/fixture-coverage/lint/* and
 // testdata/fixture-coverage/lifecycle/*, unions every lint rule name that
 // fired anywhere across that whole set, and fails with a clear message

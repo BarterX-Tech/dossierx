@@ -1,4 +1,4 @@
-// build_order.go wires internal/buildorder into the CLI as "docs
+// build_order.go wires internal/buildorder into the CLI as "dossierx
 // build-order propose|status|lock", split out of main.go (already ~660
 // lines before this feature) purely for file size — the construction
 // pattern (newXCmd() *cobra.Command, added to newRootCmd()'s AddCommand
@@ -14,7 +14,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 )
 
-// newBuildOrderCmd is the "docs build-order" command group: propose, status,
+// newBuildOrderCmd is the "dossierx build-order" command group: propose, status,
 // and lock, one subcommand each, all operating on a single --module.
 func newBuildOrderCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -30,7 +30,7 @@ func newBuildOrderCmd() *cobra.Command {
 }
 
 // requireModuleFlag validates the shared --module flag every build-order
-// subcommand takes: it must be set, since (unlike "docs lock <id>", which
+// subcommand takes: it must be set, since (unlike "dossierx lock <id>", which
 // names one claim) a build order is always computed for one whole module
 // at a time.
 func requireModuleFlag(module string) error {
@@ -97,7 +97,7 @@ func newBuildOrderStatusCmd() *cobra.Command {
 			artifact, err := buildorder.Status(path, claims)
 			if err != nil {
 				if errors.Is(err, buildorder.ErrNotProposed) {
-					fmt.Fprintf(out, "build-order status: %s: not proposed yet (run \"docs build-order propose --module %s\")\n", module, module)
+					fmt.Fprintf(out, "build-order status: %s: not proposed yet (run \"dossierx build-order propose --module %s\")\n", module, module)
 					return nil
 				}
 				return fmt.Errorf("build-order status: %w", err)

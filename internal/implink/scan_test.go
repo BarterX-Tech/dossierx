@@ -66,7 +66,7 @@ func TestScan_NoSourceDirs_IsANoOp(t *testing.T) {
 func TestScan_ValidTag_ReconcilesALink(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
-	writeScanFile(t, srcDir, "main.py", "# docs-claim: widget.contract.main\ndef do_thing():\n    pass\n")
+	writeScanFile(t, srcDir, "main.py", "# dossierx-claim: widget.contract.main\ndef do_thing():\n    pass\n")
 
 	report, err := Scan(claims, cfg)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestScan_ValidTag_ReconcilesALink(t *testing.T) {
 func TestScan_UnknownClaimID_IsAScanError(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
-	writeScanFile(t, srcDir, "main.py", "# docs-claim: widget.contract.mian\ndef do_thing():\n    pass\n")
+	writeScanFile(t, srcDir, "main.py", "# dossierx-claim: widget.contract.mian\ndef do_thing():\n    pass\n")
 
 	report, err := Scan(claims, cfg)
 	if err != nil {
@@ -116,7 +116,7 @@ func TestScan_UnknownClaimID_IsAScanError(t *testing.T) {
 func TestScan_DraftClaim_IsAScanError(t *testing.T) {
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{{ID: "widget.contract.main", Module: "widget", Status: model.StatusDraft}}
-	writeScanFile(t, srcDir, "main.py", "# docs-claim: widget.contract.main\ndef do_thing():\n    pass\n")
+	writeScanFile(t, srcDir, "main.py", "# dossierx-claim: widget.contract.main\ndef do_thing():\n    pass\n")
 
 	report, err := Scan(claims, cfg)
 	if err != nil {
@@ -137,9 +137,9 @@ func TestScan_MultipleTagsAcrossFiles(t *testing.T) {
 		lockedClaim("widget.contract.b", "widget", model.BuildRoleBehavior),
 		lockedClaim("widget.contract.c", "widget", model.BuildRoleVerification),
 	}
-	writeScanFile(t, srcDir, "a.go", "// docs-claim: widget.contract.a\nfunc doA() {}\n")
+	writeScanFile(t, srcDir, "a.go", "// dossierx-claim: widget.contract.a\nfunc doA() {}\n")
 	writeScanFile(t, srcDir, "sub/b.go",
-		"// docs-claim: widget.contract.b\nfunc doB() {}\n\n// docs-claim: widget.contract.c\nfunc doC() {}\n")
+		"// dossierx-claim: widget.contract.b\nfunc doB() {}\n\n// dossierx-claim: widget.contract.c\nfunc doC() {}\n")
 
 	report, err := Scan(claims, cfg)
 	if err != nil {
@@ -156,7 +156,7 @@ func TestScan_MultipleTagsAcrossFiles(t *testing.T) {
 func TestScan_GoModuleImportPathNeverMistakenForATag(t *testing.T) {
 	// Regression guard: this package's own source imports
 	// "github.com/BarterX-Tech/dossierx/internal/..." all over the place; Scan must
-	// never confuse an ordinary import line for a docs-claim tag just
+	// never confuse an ordinary import line for a dossierx-claim tag just
 	// because both are lines of text in a source file.
 	cfg, srcDir := scanTestConfig(t, "widget")
 	claims := []model.Claim{lockedClaim("widget.contract.main", "widget", model.BuildRoleBehavior)}
@@ -167,6 +167,6 @@ func TestScan_GoModuleImportPathNeverMistakenForATag(t *testing.T) {
 		t.Fatalf("Scan: %v", err)
 	}
 	if len(report.Matches) != 0 || len(report.Errors) != 0 {
-		t.Fatalf("expected zero matches/errors for a file with no docs-claim tag, got matches=%+v errors=%+v", report.Matches, report.Errors)
+		t.Fatalf("expected zero matches/errors for a file with no dossierx-claim tag, got matches=%+v errors=%+v", report.Matches, report.Errors)
 	}
 }

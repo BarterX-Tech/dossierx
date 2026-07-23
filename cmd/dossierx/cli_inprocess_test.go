@@ -13,7 +13,7 @@
 // kill this test binary, so only tests/'s subprocess model can exercise
 // them. What belongs here instead is coverage of the command wiring itself
 // (each subcommand's happy path, in-process, cheap, no subprocess build
-// step) — including "docs coverage", which tests/ does not exercise at
+// step) — including "dossierx coverage", which tests/ does not exercise at
 // all.
 package main
 

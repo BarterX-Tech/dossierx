@@ -1,4 +1,4 @@
-// flag.go implements "docs flag <id> --claim-says --now-does --reason":
+// flag.go implements "dossierx flag <id> --claim-says --now-does --reason":
 // the agent-initiated trigger for internal/reaudit's second proposal
 // source (see internal/reaudit/flagstore.go's doc comment). Split out of
 // main.go for the same file-size reason build_order.go and implink.go are
@@ -26,7 +26,7 @@ import (
 // resolved relative to the config file's own directory (never cwd) — the
 // same convention storePath/catalogPath/renderOutPath already follow.
 func flagStorePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".docs-flag-store.json")
+	return filepath.Join(cfg.Dir(), ".dossierx-flag-store.json")
 }
 
 func newFlagCmd() *cobra.Command {
@@ -50,14 +50,14 @@ func newFlagCmd() *cobra.Command {
 				return fmt.Errorf("flag: claim %q not found", id)
 			}
 			// Any locked claim may be (re-)flagged, review_pending or not —
-			// unlike "docs reaudit", which only ever runs against an
+			// unlike "dossierx reaudit", which only ever runs against an
 			// already-pending claim, flagging is what PUTS a claim into
 			// review_pending in the first place.
 			if claim.Status != model.StatusLocked {
 				return fmt.Errorf("flag: claim %q is not locked (status %q); only a locked claim can be flagged", id, claim.Status)
 			}
 
-			// Serializes against any concurrent "docs flag"/"docs reaudit
+			// Serializes against any concurrent "dossierx flag"/"dossierx reaudit
 			// --confirm" invocation touching this project's flag store file
 			// — same reasoning and pattern as newLockCmd's use of
 			// AcquireFileLock over internal/lock.Store's shared file.

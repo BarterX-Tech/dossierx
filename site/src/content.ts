@@ -239,31 +239,31 @@ export const contentSpec: ContentSpec = {
           {
             from: "draft",
             to: "locked",
-            trigger: "docs lock <id>",
+            trigger: "dossierx lock <id>",
             note: "Human-initiated. Refused on any lint error. Hub-gating enforced.",
           },
           {
             from: "locked",
             to: "review_pending",
             trigger: "DetectStale (auto)",
-            note: "A mirrors/rests_on dependency's content hash changed. Persisted back to the claim file by docs check.",
+            note: "A mirrors/rests_on dependency's content hash changed. Persisted back to the claim file by dossierx check.",
           },
           {
             from: "locked",
             to: "review_pending",
-            trigger: "docs flag <id>",
+            trigger: "dossierx flag <id>",
             note: "Agent asserts code drifted. Requires --claim-says --now-does --reason, all non-empty. Locked-only.",
           },
           {
             from: "review_pending",
             to: "locked",
-            trigger: "docs reaudit <id> --confirm",
+            trigger: "dossierx reaudit <id> --confirm",
             note: "The ONLY way to clear the flag. Prints diff first; writes only on --confirm. Appends audit_notes.",
           },
           {
             from: "locked",
             to: "draft",
-            trigger: "docs unlock <id>",
+            trigger: "dossierx unlock <id>",
             note: "Manual escape hatch. No lint gate — you may need to unlock precisely to fix what lint complains about.",
           },
         ],
@@ -312,15 +312,15 @@ export const contentSpec: ContentSpec = {
         ],
         subcommands: [
           {
-            cmd: "docs build-order propose --module <name>",
+            cmd: "dossierx build-order propose --module <name>",
             desc: "Derive the sequence, write .build-order.<module>.json (locked:false). Refused unless every claim in the module is locked; fails on same-phase cycle.",
           },
           {
-            cmd: "docs build-order status --module <name>",
+            cmd: "dossierx build-order status --module <name>",
             desc: "Reports proposed / locked / stale plus coverage (N of M covered, K excluded).",
           },
           {
-            cmd: "docs build-order lock --module <name>",
+            cmd: "dossierx build-order lock --module <name>",
             desc: "Freeze the proposed sequence, snapshotting a content-hash baseline. Human confirms first.",
           },
         ],
@@ -331,21 +331,21 @@ export const contentSpec: ContentSpec = {
       title: "Code links — closing the loop between docs and code.",
       kind: "narrative",
       contentMd:
-        "DossierX keeps a drift-checked map from every locked claim to the source that implements it. A `docs-claim: <id>` marker lets `docs check` link code automatically; unknown or unlocked ids fail the check, and later file changes surface as drift.\n\nThe human gate stays separate: re-tag code when meaning is unchanged; use `docs flag` when implementation and claim now disagree. That sends the claim through the same visible `review_pending → reaudit` path instead of silently rewriting either side.",
+        "DossierX keeps a drift-checked map from every locked claim to the source that implements it. A `dossierx-claim: <id>` marker lets `dossierx check` link code automatically; unknown or unlocked ids fail the check, and later file changes surface as drift.\n\nThe human gate stays separate: re-tag code when meaning is unchanged; use `dossierx flag` when implementation and claim now disagree. That sends the claim through the same visible `review_pending → reaudit` path instead of silently rewriting either side.",
       codeExamples: [
         {
           title: "Channel B — the everyday case (any comment syntax works)",
           lang: "python",
-          code: "# docs-claim: widget.internals.queue-saturation-policy\ndef _drop_for_saturation(self):\n    ...\n# Run `docs check`: Scan finds this marker in source_dirs, looks up the\n# claim's module, and auto-links the file. Only the literal marker matters.",
+          code: "# dossierx-claim: widget.internals.queue-saturation-policy\ndef _drop_for_saturation(self):\n    ...\n# Run `dossierx check`: Scan finds this marker in source_dirs, looks up the\n# claim's module, and auto-links the file. Only the literal marker matters.",
         },
         {
           title:
             "Manual fallback when scanning can't reach (no source_dirs, generated files)",
           lang: "bash",
-          code: "docs implink set --module widget --claim widget.internals.queue-saturation-policy \\\n  --file src/widget/queue.py --symbol _drop_for_saturation\n\ndocs implink status --module widget   # read-only: drift + coverage",
+          code: "dossierx implink set --module widget --claim widget.internals.queue-saturation-policy \\\n  --file src/widget/queue.py --symbol _drop_for_saturation\n\ndocs implink status --module widget   # read-only: drift + coverage",
         },
         {
-          title: "The impl-links status block emitted inside `docs check`",
+          title: "The impl-links status block emitted inside `dossierx check`",
           lang: "text",
           code: "impl-links: scanned 214 file(s), found 37 tag(s), reconciled 37 link(s) (0 error(s))\ncheck: OK\nimpl-links: 35 linked, 1 drifted, 2 unlinked-in-schema/behavior/api/verification-phases\n  drifted: widget.behavior.retry src/widget/retry.py: file changed since linked at 2026-05-01T...\n  unlinked: widget.api.enqueue",
         },
@@ -355,7 +355,7 @@ export const contentSpec: ContentSpec = {
           {
             channel: "A — spec is wrong",
             about: "The locked claim itself needs revisiting",
-            owner: "Human, via docs flag → docs reaudit",
+            owner: "Human, via dossierx flag → dossierx reaudit",
             trigger: "Meaning changed vs. what's locked",
           },
           {
@@ -414,9 +414,9 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "The routine CI/pre-commit command — does more than lint+catalog+render.",
                 detail:
-                  "1) DetectStale flips drifted locked claims to review_pending and persists the flag to each file. 2) lint → catalog → render, stopping at first failure. 3) Scans source_dirs for docs-claim tags (unknown/unlocked tag = HARD failure). 4) Prints non-blocking orientation-note counts, impl-link drift, and a next-steps block.",
+                  "1) DetectStale flips drifted locked claims to review_pending and persists the flag to each file. 2) lint → catalog → render, stopping at first failure. 3) Scans source_dirs for dossierx-claim tags (unknown/unlocked tag = HARD failure). 4) Prints non-blocking orientation-note counts, impl-link drift, and a next-steps block.",
                 example:
-                  '$ dossierx check\ncheck: OK\nnext steps:\n  4 claim(s) still draft -> docs lock <id>\n  module "logger" fully locked, no build order -> docs build-order propose --module logger',
+                  '$ dossierx check\ncheck: OK\nnext steps:\n  4 claim(s) still draft -> dossierx lock <id>\n  module "logger" fully locked, no build order -> dossierx build-order propose --module logger',
               },
             ],
           },
@@ -466,7 +466,7 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "Agent-initiated reaudit trigger for code that drifted from a claim.",
                 detail:
-                  "All three flags required and non-empty. Only a LOCKED claim can be flagged. Writes a one-shot PendingFlag to .docs-flag-store.json and sets review_pending=true.",
+                  "All three flags required and non-empty. Only a LOCKED claim can be flagged. Writes a one-shot PendingFlag to .dossierx-flag-store.json and sets review_pending=true.",
                 example:
                   '$ dossierx flag logger.internals.dispatch \\\n  --claim-says "dispatch is synchronous" \\\n  --now-does   "dispatch runs on a worker pool" \\\n  --reason     "concurrency added in PR #42"',
               },
@@ -537,7 +537,7 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "Manually link code to a claim — immediate, no confirm step.",
                 detail:
-                  "The manual counterpart to check's automatic docs-claim scan. Validates: claim exists → belongs to module → is locked → file resolves project-relative (absolute paths and .. escapes refused). Snapshots the file's sha256 as drift baseline.",
+                  "The manual counterpart to check's automatic dossierx-claim scan. Validates: claim exists → belongs to module → is locked → file resolves project-relative (absolute paths and .. escapes refused). Snapshots the file's sha256 as drift baseline.",
                 example:
                   "$ dossierx implink set --module logger \\\n  --claim logger.internals.dispatch \\\n  --file internal/logger/dispatch.go --symbol Dispatcher.Run",
               },

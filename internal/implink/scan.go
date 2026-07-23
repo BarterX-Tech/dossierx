@@ -1,7 +1,7 @@
 // scan.go implements the automatic, tag-driven half of claim-to-code
-// linking: instead of an agent (or human) explicitly running "docs implink
+// linking: instead of an agent (or human) explicitly running "dossierx implink
 // set" once per claim, Scan walks a project's declared cfg.SourceDirs
-// looking for a "docs-claim: <id>" comment anywhere in a text file and, for
+// looking for a "dossierx-claim: <id>" comment anywhere in a text file and, for
 // every one it finds, calls the exact same Set logic every explicit link
 // already goes through — same validation, same artifact, same drift
 // detection. Nothing about Set or the on-disk artifact format changes for
@@ -10,7 +10,7 @@
 // Design intent (this is the point the whole feature exists for): a tag
 // written in source, alone, is meant to be sufficient for the
 // documentation to know about it. No separate command to remember to run
-// per claim — Scan is meant to be invoked as part of "docs check", the one
+// per claim — Scan is meant to be invoked as part of "dossierx check", the one
 // command a project runs routinely, so code and docs cannot silently drift
 // apart from each other over the following six months or a year the way a
 // manually-invoked-only linking step eventually would.
@@ -37,12 +37,12 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// tagPattern matches a "docs-claim: <id>" marker anywhere in a line,
+// tagPattern matches a "dossierx-claim: <id>" marker anywhere in a line,
 // regardless of what comment syntax (//, #, --, /* */, ...) surrounds it —
 // Scan never looks at comment syntax at all, only at this literal marker
 // string, which is what keeps it working identically across any source
 // language a project happens to use.
-var tagPattern = regexp.MustCompile(`docs-claim:\s*([A-Za-z0-9_.\-]+)`)
+var tagPattern = regexp.MustCompile(`dossierx-claim:\s*([A-Za-z0-9_.\-]+)`)
 
 // symbolPatterns is a small, deliberately shallow set of "the next line
 // looks like it declares a named symbol" heuristics across a handful of
@@ -68,7 +68,7 @@ var symbolPatterns = []*regexp.Regexp{
 // cfg.SourceDirs; a real source file is never this large in practice.
 const maxScanFileSize = 5 << 20 // 5 MiB
 
-// ScanMatch is one "docs-claim: <id>" tag Scan found, whether or not it
+// ScanMatch is one "dossierx-claim: <id>" tag Scan found, whether or not it
 // resolved to a valid, linkable claim (see ScanReport.Errors for the
 // invalid ones).
 type ScanMatch struct {
@@ -107,7 +107,7 @@ func (r *ScanReport) Summary() string {
 	)
 }
 
-// Scan walks every directory in cfg.SourceDirs, finds every "docs-claim:
+// Scan walks every directory in cfg.SourceDirs, finds every "dossierx-claim:
 // <id>" tag in every text file under them, and — for each tag naming a
 // claim that exists and is locked — calls Set with that claim's own Module
 // (never a caller-supplied one: a scanned tag names only a claim id, so its

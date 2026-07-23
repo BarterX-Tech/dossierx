@@ -107,7 +107,7 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 | `title` | string | no | The viewer's display name — used in `<title>`, the header, and the sidebar heading. Defaults to a generic fallback when unset. |
 | `eyebrow` | string | no | A one-line subtitle rendered under the title in the sidebar header. No line is rendered when unset. |
 | `doctrine_facet` | string | no | Names one of `facets` as the project's doctrine facet, enabling hub-gating. Must be a facet the project actually declares. |
-| `source_dirs` | []string | no | Directories (relative to the config file) scanned for `docs-claim: <id>` source comments — the code side of claim-to-code linking. Unset means "do not scan." |
+| `source_dirs` | []string | no | Directories (relative to the config file) scanned for `dossierx-claim: <id>` source comments — the code side of claim-to-code linking. Unset means "do not scan." |
 | `mockup_modules` | []string | no | The allowlist of modules permitted to author `layout: mockup` claims. Every entry must also appear in `modules`. Unset/empty means no module may. |
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
 | `viewer.theme` | map[string]string | no | CSS custom-property overrides. Keys must be drawn from the fixed allowlist below (without the leading `--`); values are validated defensively before being injected into a generated stylesheet. |

@@ -62,7 +62,7 @@ type StatusReport struct {
 }
 
 // Summary returns a one-line human-readable roll-up of r, in the exact
-// wording both "docs check"'s non-blocking impl-links step and "docs
+// wording both "dossierx check"'s non-blocking impl-links step and "dossierx
 // implink status" print, so the two call sites can never drift apart on
 // phrasing.
 func (r *StatusReport) Summary() string {
@@ -83,7 +83,7 @@ func (r *StatusReport) Summary() string {
 //
 // A missing artifact (module has never called Set) returns an error
 // wrapping ErrNoArtifact; callers that want to treat that as "nothing to
-// report" (e.g. "docs check"'s silent-when-unused wiring) should check for
+// report" (e.g. "dossierx check"'s silent-when-unused wiring) should check for
 // it via errors.Is.
 func Status(claims []model.Claim, cfg *config.Config, module string) (*StatusReport, error) {
 	if cfg == nil {

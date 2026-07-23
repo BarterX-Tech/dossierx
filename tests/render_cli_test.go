@@ -70,7 +70,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Row 5: "docs render" always overwrites viewer/index.html, even if
+// Row 5: "dossierx render" always overwrites viewer/index.html, even if
 // hand-edited since the last render — no diff-and-prompt, the generated
 // header is the only warning.
 // ---------------------------------------------------------------------

@@ -2,7 +2,7 @@
 // thorough engineer would still expect the engine to handle correctly,
 // found while auditing the existing test suite for completeness:
 //
-//  1. concurrent "docs lock" invocations on different claims, sharing one
+//  1. concurrent "dossierx lock" invocations on different claims, sharing one
 //     project-wide lock store, must not lose each other's store updates
 //     (a real lost-update race found and fixed in internal/lock; see
 //     internal/lock/filelock.go and filelock_test.go for the unit-level
@@ -23,7 +23,7 @@ import (
 )
 
 // ---------------------------------------------------------------------
-// Concurrent "docs lock" invocations must not lose store updates.
+// Concurrent "dossierx lock" invocations must not lose store updates.
 // ---------------------------------------------------------------------
 
 func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
@@ -84,7 +84,7 @@ func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
 	// load-modify-save race would silently drop (whichever store.Save()
 	// happened last would win, discarding every earlier concurrent
 	// writer's LockedAt entry).
-	storeRaw, err := os.ReadFile(filepath.Join(root, ".docs-lock-store.json"))
+	storeRaw, err := os.ReadFile(filepath.Join(root, ".dossierx-lock-store.json"))
 	if err != nil {
 		t.Fatalf("read lock store: %v", err)
 	}

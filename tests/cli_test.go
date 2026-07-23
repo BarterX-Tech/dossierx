@@ -45,7 +45,7 @@ func exeSuffix() string {
 var binPath string
 
 func TestMain(m *testing.M) {
-	dir, err := os.MkdirTemp("", "docs-cli-test-bin-")
+	dir, err := os.MkdirTemp("", "dossierx-cli-test-bin-")
 	if err != nil {
 		panic(err)
 	}
@@ -57,7 +57,7 @@ func TestMain(m *testing.M) {
 	build := exec.Command("go", "build", "-o", binPath, "./cmd/dossierx")
 	build.Dir = moduleRoot
 	if out, err := build.CombinedOutput(); err != nil {
-		panic("building docs binary for CLI tests: " + err.Error() + "\n" + string(out))
+		panic("building dossierx binary for CLI tests: " + err.Error() + "\n" + string(out))
 	}
 
 	code := m.Run()
@@ -65,7 +65,7 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// run execs the built docs binary with args, in dir, and returns combined
+// run execs the built dossierx binary with args, in dir, and returns combined
 // stdout, stderr, and the process exit code (0 if it exited cleanly).
 func run(t *testing.T, dir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
@@ -83,7 +83,7 @@ func run(t *testing.T, dir string, args ...string) (stdout, stderr string, exitC
 		if errors.As(err, &exitErr) {
 			code = exitErr.ExitCode()
 		} else {
-			t.Fatalf("running docs binary: %v", err)
+			t.Fatalf("running dossierx binary: %v", err)
 		}
 	}
 	return outBuf.String(), errBuf.String(), code

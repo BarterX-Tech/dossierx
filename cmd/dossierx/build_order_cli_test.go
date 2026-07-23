@@ -1,4 +1,4 @@
-// build_order_cli_test.go exercises "docs build-order propose|status|lock"
+// build_order_cli_test.go exercises "dossierx build-order propose|status|lock"
 // in-process (see cli_inprocess_test.go's package doc comment for why
 // in-process is the right model here: none of these RunE closures call
 // os.Exit directly, unlike newDepsCmd/newReauditCmd, so there is nothing

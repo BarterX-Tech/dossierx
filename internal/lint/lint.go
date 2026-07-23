@@ -18,8 +18,8 @@ import (
 // This field did not exist on the scaffolded Finding struct; it was added
 // here (internal/lint, where Finding actually lives — not internal/model)
 // by the second lint-implementation phase because the "orphan" lint is
-// spec'd as a WARNING, not an error, and callers (docs lint's exit code,
-// "docs lock"'s lint gate in internal/lock.Lock) need a way to tell the two
+// spec'd as a WARNING, not an error, and callers (dossierx lint's exit code,
+// "dossierx lock"'s lint gate in internal/lock.Lock) need a way to tell the two
 // apart. Any lint that doesn't set Severity explicitly reports as
 // SeverityError, preserving the original all-findings-are-failures
 // behavior for the lints that came before this field existed.
@@ -47,7 +47,7 @@ type Lint interface {
 
 // Registry is the set of all lints the CLI runs. It is empty until each
 // rule's file registers itself (typically via an init() that appends to
-// Registry). "docs lint" against zero claims and an empty Registry must
+// Registry). "dossierx lint" against zero claims and an empty Registry must
 // still exit 0 with zero findings.
 var Registry []Lint
 

@@ -1,4 +1,4 @@
-// implink.go wires internal/implink into the CLI as "docs implink
+// implink.go wires internal/implink into the CLI as "dossierx implink
 // set|status", split out of main.go for the same file-size reason
 // build_order.go is its own file — the construction pattern (newXCmd()
 // *cobra.Command, added to newRootCmd()'s AddCommand list) is identical to
@@ -15,7 +15,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 )
 
-// newImplinkCmd is the "docs implink" command group: set (the one and only
+// newImplinkCmd is the "dossierx implink" command group: set (the one and only
 // write action — takes effect immediately, no confirm step) and status
 // (read-only drift/coverage reporting), each operating on a single
 // --module.
@@ -49,7 +49,7 @@ func newImplinkSetCmd() *cobra.Command {
 				return err
 			}
 
-			// Serializes concurrent "docs implink set" invocations that
+			// Serializes concurrent "dossierx implink set" invocations that
 			// share this module's artifact file — same reasoning and
 			// pattern as newLockCmd's use of AcquireFileLock over
 			// internal/lock.Store's shared file, applied here to
@@ -101,7 +101,7 @@ func newImplinkStatusCmd() *cobra.Command {
 			report, err := implink.Status(claims, cfg, module)
 			if err != nil {
 				if errors.Is(err, implink.ErrNoArtifact) {
-					fmt.Fprintf(out, "implink status: %s: nothing linked yet (run \"docs implink set --module %s ...\")\n", module, module)
+					fmt.Fprintf(out, "implink status: %s: nothing linked yet (run \"dossierx implink set --module %s ...\")\n", module, module)
 					return nil
 				}
 				return fmt.Errorf("implink status: %w", err)

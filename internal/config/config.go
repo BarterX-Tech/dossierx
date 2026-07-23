@@ -110,7 +110,7 @@ type Config struct {
 	SchemaVersion int `yaml:"schema_version"`
 	// Title is the project's display name, used as the viewer's <title>,
 	// header, and sidebar heading. Optional; internal/render falls back to
-	// a generic default ("docs viewer") when unset, so existing configs
+	// a generic default ("dossierx viewer") when unset, so existing configs
 	// that predate this field keep working unchanged.
 	Title string `yaml:"title,omitempty"`
 	// Eyebrow is an optional one-line subtitle rendered directly under the
@@ -127,8 +127,8 @@ type Config struct {
 
 	// SourceDirs is the optional list of directories (relative to this
 	// config file's own directory, like ClaimsDir) the engine scans for
-	// "docs-claim: <id>" comments — the code side of internal/implink's
-	// claim-to-code linking. Unset/empty means "do not scan" — "docs
+	// "dossierx-claim: <id>" comments — the code side of internal/implink's
+	// claim-to-code linking. Unset/empty means "do not scan" — "dossierx
 	// check" behaves exactly as it did before this field existed, the same
 	// zero-cost-when-unused contract every other optional feature in this
 	// engine follows (mockup_modules, viewer.template_overrides, ...). A
@@ -218,7 +218,7 @@ func LoadConfig(path string) (*Config, error) {
 
 	// A configured-and-missing source_dirs entry is a hard load-time error,
 	// same as viewer.template_overrides above: a project that names a
-	// source root gets an early, clear failure rather than "docs check"
+	// source root gets an early, clear failure rather than "dossierx check"
 	// silently scanning zero files and reporting nothing.
 	for _, sd := range cfg.SourceDirs {
 		info, err := os.Stat(sd)

@@ -9,19 +9,19 @@
 //  3. empty-claims: a valid config with an empty claims_dir lints clean,
 //     exit 0, via testdata/fixture-coverage/lifecycle/empty-claims.
 //  4. dependency content-hash drift: locking B (rests_on A) then editing
-//     A's body flips B to locked+review_pending on "docs check", built
+//     A's body flips B to locked+review_pending on "dossierx check", built
 //     programmatically (reusing writeRestOnLockedFixture from
 //     edge_lints_test.go) rather than as a static fixture, since it
 //     mutates state across multiple CLI invocations.
-//  5. an explicit "docs flag" trigger: flags a locked claim, proves it
-//     shows up in "docs stale", and that "docs reaudit" (without
+//  5. an explicit "dossierx flag" trigger: flags a locked claim, proves it
+//     shows up in "dossierx stale", and that "dossierx reaudit" (without
 //     --confirm) proposes a real, non-stub diff -- built programmatically
 //     (reusing llWriteConfig/llWriteClaim from lock_lifecycle_test.go) for
 //     the same reason as scenario 4.
 //
 // Scenarios 1-3 use static, checked-in testdata fixtures (per the task
 // brief); scenarios 4-5 build their own throwaway t.TempDir() project,
-// since the "docs lock"/"docs flag"/"docs check" commands they exercise
+// since the "dossierx lock"/"dossierx flag"/"dossierx check" commands they exercise
 // mutate claim files and write lock-store/catalog/viewer artifacts, which
 // must never happen against a checked-in testdata directory.
 package tests
@@ -205,9 +205,9 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// 5. An explicit "docs flag" trigger: lock A, "docs flag A --claim-says
+// 5. An explicit "dossierx flag" trigger: lock A, "dossierx flag A --claim-says
 //    ... --now-does ... --reason ...", then confirm A shows up in
-//    "docs stale" and that "docs reaudit A" (propose-only) prints a real,
+//    "dossierx stale" and that "dossierx reaudit A" (propose-only) prints a real,
 //    non-stub diff carrying the flagged content. Built programmatically
 //    via llWriteConfig/llWriteClaim (lock_lifecycle_test.go).
 // ---------------------------------------------------------------------
@@ -243,7 +243,7 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 		t.Fatalf("expected claim to remain locked after being flagged, got:\n%s", afterFlag)
 	}
 	if !strings.Contains(afterFlag, "review_pending: true") {
-		t.Fatalf("expected \"docs flag\" to set review_pending: true, got:\n%s", afterFlag)
+		t.Fatalf("expected \"dossierx flag\" to set review_pending: true, got:\n%s", afterFlag)
 	}
 
 	staleOut, staleErr, staleCode := run(t, root, "stale")
@@ -251,10 +251,10 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 		t.Fatalf("stale: %s", staleErr)
 	}
 	if !strings.Contains(staleOut, "flagmod.contract.a") {
-		t.Fatalf("expected \"docs stale\" to list the flagged claim, got: %s", staleOut)
+		t.Fatalf("expected \"dossierx stale\" to list the flagged claim, got: %s", staleOut)
 	}
 
-	// "docs reaudit" (propose-only, no --confirm) must produce a real diff
+	// "dossierx reaudit" (propose-only, no --confirm) must produce a real diff
 	// sourced from the flag -- not ProposeDiff's dependency-diff stub.
 	reauditOut, reauditErr, reauditCode := run(t, root, "reaudit", "flagmod.contract.a")
 	if reauditCode != 0 {

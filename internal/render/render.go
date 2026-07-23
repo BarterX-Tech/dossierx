@@ -263,7 +263,7 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 // buildorder.ArtifactPath(cfg, module) + buildorder.LoadArtifact), leaving
 // it "" (the zero value) for every other module — this is the optional
 // Build Order viewer tab's entire graceful-degradation contract: a project
-// that has never run "docs build-order propose"/"lock" for a module (which
+// that has never run "dossierx build-order propose"/"lock" for a module (which
 // is every project that hasn't adopted model.BuildRole at all, and every
 // module of a project that has adopted it but not finished locking it)
 // sees Render produce byte-for-byte the same output it always has, because
@@ -341,7 +341,7 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 	// Optional, graceful-degradation-by-default extensions of the shared
 	// edges footer — see implink_view.go and depended_by_view.go's doc
 	// comments for why this is a no-op for a project that has never
-	// called "docs implink set" and has no claim any other claim rests
+	// called "dossierx implink set" and has no claim any other claim rests
 	// on.
 	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), buildDependedByLookup(cat))
 
@@ -474,7 +474,7 @@ func buildShellData(cat *catalog.Catalog, cfg *config.Config, css []byte, render
 	moduleGroups := buildModuleGroups(groups)
 	moduleGroups = attachBuildOrders(moduleGroups, cfg, buildOrderTmpl)
 
-	title := "docs viewer"
+	title := "dossierx viewer"
 	eyebrow := ""
 	if cfg != nil {
 		if strings.TrimSpace(cfg.Title) != "" {

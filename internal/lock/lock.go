@@ -11,8 +11,8 @@
 //
 // Store is a small JSON-file-backed table of per-claim content hashes,
 // used to detect when a claim a locked claim depends on (via Mirrors or
-// RestsOn) has changed underneath it. This is load-bearing: docs check's
-// staleness detection and docs lock's baseline-recording both go through
+// RestsOn) has changed underneath it. This is load-bearing: dossierx check's
+// staleness detection and dossierx lock's baseline-recording both go through
 // it, so its file format is considered part of the engine's on-disk
 // contract, not an implementation detail.
 package lock
@@ -43,7 +43,7 @@ type Store struct {
 	Hashes map[string]string `json:"hashes"`
 
 	// LockedAt maps a locked claim's own ID -> the RFC3339Nano timestamp of
-	// its most recent "docs lock" or confirmed "docs reaudit". Per
+	// its most recent "dossierx lock" or confirmed "dossierx reaudit". Per
 	// FORMAT.md, a confirmed reaudit refreshes this alongside the
 	// dependency content hash, even when the proposal was a no-change
 	// confirmation.
@@ -54,7 +54,7 @@ type Store struct {
 
 // LoadStore reads the hash store from path. A missing file is not an
 // error: it is treated as an empty, freshly-initialized store (the common
-// case for a project's first "docs lock").
+// case for a project's first "dossierx lock").
 func LoadStore(path string) (*Store, error) {
 	s := &Store{Hashes: map[string]string{}, LockedAt: map[string]string{}, path: path}
 
@@ -83,7 +83,7 @@ func LoadStore(path string) (*Store, error) {
 // The write is atomic (temp file in the same directory, then rename) rather
 // than a direct os.WriteFile, for the same reason as loader.SaveClaim: a
 // reader of the store outside AcquireFileLock's critical section (e.g. a
-// future read-only "docs status") could otherwise observe a truncated file
+// future read-only "dossierx status") could otherwise observe a truncated file
 // mid-write. Rename is atomic within one directory/filesystem, so any
 // concurrent reader only ever sees the old complete file or the new
 // complete file.
@@ -152,7 +152,7 @@ func ContentHash(c model.Claim) string {
 
 // Lock transitions claim from draft to locked. It is refused (with a
 // non-nil error) if running the full lint suite against claims produces
-// any error-severity finding — matching "docs lint"/"docs check"'s own
+// any error-severity finding — matching "dossierx lint"/"dossierx check"'s own
 // pass/fail semantics (see reportLintFindings in cmd/dossierx/main.go), where
 // warning-severity findings (e.g. "orphan") are reported but never fail
 // the command. A claim with only warning-level findings against it is
