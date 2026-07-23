@@ -71,7 +71,7 @@ export const contentSpec: ContentSpec = {
           "Go 1.26",
           "cobra + yaml.v3 only",
           "CLI-only, no public API",
-          "v0.0.3",
+          "v0.1.0",
           "github.com/BarterX-Tech/dossierx",
         ],
         pipeline: ["lint", "catalog", "render", "check"],
@@ -578,7 +578,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Three tagged releases trace the engine's public extraction, cross-platform hardening, and a viewer freshness cue. The current release is **v0.0.3**.",
+        "Four tagged releases trace the engine's public extraction, cross-platform hardening, a viewer freshness cue, and the docs→dossierx naming rebrand. The current release is **v0.1.0**.",
       data: {
         releases: [
           {
@@ -612,11 +612,22 @@ export const contentSpec: ContentSpec = {
             version: "v0.0.3",
             date: "2026-07-22",
             title: "Viewer freshness cue",
-            tag: "Latest release",
+            tag: "Previous release",
             highlights: [
               "The rendered viewer's sidebar now shows a 'Generated <timestamp>' footer, surfacing the same render-time timestamp already embedded in the leading generated-by HTML comment.",
               "A reviewer can tell at a glance how fresh or stale a documentation page is without viewing page source.",
               "Small, purely additive usability improvement.",
+            ],
+          },
+          {
+            version: "v0.1.0",
+            date: "2026-07-23",
+            title: "docs → dossierx naming rebrand",
+            tag: "Latest release · PR #7",
+            highlights: [
+              "Every generic 'docs' placeholder — CLI-invocation examples, the docs-claim: source tag (including the real Go regex), docs-v1 naming in skill docs, the default viewer title, and the on-disk store filenames — is renamed to the tool's actual name, dossierx.",
+              "BREAKING: .docs-lock-store.json and .docs-flag-store.json are renamed to .dossierx-lock-store.json and .dossierx-flag-store.json, with no migration. An existing project's lock/flag store will not be found after upgrading past this release.",
+              "Minor version bump (v0.0.3 → v0.1.0), not a patch, to signal the breaking on-disk change under pre-1.0 semver.",
             ],
           },
         ],

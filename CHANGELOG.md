@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-07-23
+
+### Changed
+- Renamed every generic "docs" placeholder to the tool's actual name, `dossierx`: CLI-invocation
+  examples across comments, tests, README/ROADMAP/FORMAT, and the website; the `docs-claim:`
+  source tag (including the real Go regex in `internal/implink/scan.go`); `docs-v1` naming in
+  the skill docs; and the default viewer title (`"docs viewer"` → `"dossierx viewer"`).
+
+### Breaking
+- `.docs-lock-store.json` and `.docs-flag-store.json` are renamed to `.dossierx-lock-store.json`
+  and `.dossierx-flag-store.json`, with no migration. An existing project's lock/flag store will
+  not be found after upgrading past this release — hence the minor version bump rather than a
+  patch, under pre-1.0 semver.
+
 ## [0.0.3] - 2026-07-22
 
 ### Added
@@ -60,7 +74,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.0.3...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.0
 [0.0.3]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.3
 [0.0.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.2
 [0.0.1]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.1
