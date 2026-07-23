@@ -20,7 +20,7 @@ func (failingLint) Check(claims []model.Claim, cfg *config.Config) []lint.Findin
 
 // warningOnlyLint is a test-only lint.Lint that always reports a single
 // warning-severity finding, used to prove Lock's gate only refuses on
-// error-severity findings — matching "docs lint"/"docs check"'s own
+// error-severity findings — matching "dossierx lint"/"dossierx check"'s own
 // pass/fail semantics (see reportLintFindings in cmd/dossierx/main.go) —
 // rather than refusing on any finding at all regardless of severity.
 type warningOnlyLint struct{}
@@ -73,9 +73,9 @@ func TestLockFailsOnLintError(t *testing.T) {
 }
 
 // TestLockSucceedsWithOnlyWarningFindings proves Lock's lint gate mirrors
-// "docs lint"/"docs check"'s own pass/fail semantics: a claim with only
+// "dossierx lint"/"dossierx check"'s own pass/fail semantics: a claim with only
 // warning-severity findings against it (e.g. the real "orphan" lint) must
-// still be lockable, exactly as "docs lint" would exit 0 for it. Before
+// still be lockable, exactly as "dossierx lint" would exit 0 for it. Before
 // the fix, Lock refused on len(findings) > 0 regardless of severity, so
 // this test fails against that code (any warning-only finding blocked
 // every lock forever).

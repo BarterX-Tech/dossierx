@@ -5,7 +5,7 @@
 // order once every claim in it carries a valid BuildRole — so this lint
 // enforces that requirement at the one lifecycle point that matters:
 // locking. A claim that locks without ever setting build_role would
-// otherwise silently defeat "docs build-order propose"'s completeness gate
+// otherwise silently defeat "dossierx build-order propose"'s completeness gate
 // (it would look "fully locked" yet be unplaceable), so this is caught here
 // instead, the same way governed-required catches a locked claim missing
 // governed_by.

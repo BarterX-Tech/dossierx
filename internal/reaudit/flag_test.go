@@ -73,7 +73,7 @@ func TestProposeFlagDiff_ThenApply_ReplacesBodyWithNowDoes(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestFlagStore_LoadMissingFile_IsEmptyNotError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".docs-flag-store.json")
+	path := filepath.Join(t.TempDir(), ".dossierx-flag-store.json")
 	store, err := LoadFlagStore(path)
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)
@@ -84,7 +84,7 @@ func TestFlagStore_LoadMissingFile_IsEmptyNotError(t *testing.T) {
 }
 
 func TestFlagStore_SaveLoadRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".docs-flag-store.json")
+	path := filepath.Join(t.TempDir(), ".dossierx-flag-store.json")
 	store, err := LoadFlagStore(path)
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)
@@ -110,7 +110,7 @@ func TestFlagStore_SaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestFlagStore_DeleteThenSave(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".docs-flag-store.json")
+	path := filepath.Join(t.TempDir(), ".dossierx-flag-store.json")
 	store, err := LoadFlagStore(path)
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)

@@ -38,12 +38,12 @@ const TREE: TreeNode[] = [
     note: "deterministic, alphabetical-by-id — reviewable in a diff",
   },
   {
-    name: ".docs-lock-store.json",
+    name: ".dossierx-lock-store.json",
     kind: "engine-file",
     note: "content-hash baseline for DetectStale",
   },
   {
-    name: ".docs-flag-store.json",
+    name: ".dossierx-flag-store.json",
     kind: "engine-file",
     note: "agent-initiated docs-flag drift notes",
   },

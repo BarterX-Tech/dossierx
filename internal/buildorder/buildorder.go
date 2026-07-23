@@ -128,7 +128,7 @@ func (a *Artifact) ClaimIDs() []string {
 // non-nil error rather than silently producing a broken or partial order:
 //
 //  1. Completeness gate — every claim belonging to module (across every
-//     facet) must be model.StatusLocked. This makes "docs build-order
+//     facet) must be model.StatusLocked. This makes "dossierx build-order
 //     propose" a once-a-module's-docs-are-fully-locked operation: the
 //     resulting error lists every still-non-locked claim id, so a reviewer
 //     knows exactly what's left.
@@ -242,7 +242,7 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 		ordered, cyclic := layeredTopoSort(stableDisplayOrder(bucket))
 		if len(cyclic) > 0 {
 			return nil, fmt.Errorf(
-				"buildorder: phase %q: rests_on cycle detected among %d claim(s): %s (run \"docs lint\" for the full cycle path)",
+				"buildorder: phase %q: rests_on cycle detected among %d claim(s): %s (run \"dossierx lint\" for the full cycle path)",
 				phase, len(cyclic), strings.Join(cyclic, ", "),
 			)
 		}

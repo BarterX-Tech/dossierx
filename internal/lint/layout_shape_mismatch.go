@@ -54,7 +54,7 @@ func (layoutShapeMismatchLint) Name() string { return "layout-shape-mismatch" }
 // claim.Layout outside this set can never be rendered — without this check
 // that would only surface at render time (internal/render.Render returns
 // an "unsupported layout" error) instead of at claim-load/lint time; this
-// lint is what "docs lint"/"docs lock" need to catch it before render ever
+// lint is what "dossierx lint"/"dossierx lock" need to catch it before render ever
 // sees it. LayoutMockup is included here for the same reason as the other
 // six — components.fileForLayout already renders it (mockup.html) — its
 // own additional constraints (raw_html only legal here, module allowlist,

@@ -1,4 +1,4 @@
-// Package reaudit implements the "docs reaudit <id>" flow: proposing a
+// Package reaudit implements the "dossierx reaudit <id>" flow: proposing a
 // diff for a locked+review_pending claim whose dependency changed
 // underneath it, and — only on explicit human confirmation — applying it.
 //
@@ -67,7 +67,7 @@ func stripMarkup(s string) string {
 // the CLI's --confirm flag. This stub returns a placeholder Diff that
 // flags NoChange so a naive caller never mistakes it for a real proposal.
 //
-// Per FORMAT.md, "docs reaudit <id>" is only ever valid against a
+// Per FORMAT.md, "dossierx reaudit <id>" is only ever valid against a
 // claim that is currently locked AND flagged review_pending; ProposeDiff
 // enforces that precondition itself (rather than leaving it to the CLI) so
 // every caller gets it for free. The CLI maps this error to exit code 2.
@@ -89,7 +89,7 @@ func ProposeDiff(claim, changedDep model.Claim) (Diff, error) {
 	}, nil
 }
 
-// ProposeFlagDiff proposes a reaudit diff sourced from an agent's "docs
+// ProposeFlagDiff proposes a reaudit diff sourced from an agent's "dossierx
 // flag" call (see PendingFlag) — the second reaudit trigger source
 // alongside ProposeDiff's dependency-content-change path, and CLI-selected
 // (see cmd/dossierx/main.go's newReauditCmd): a claim with a pending flag in

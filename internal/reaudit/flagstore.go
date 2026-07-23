@@ -1,5 +1,5 @@
-// flagstore.go persists the pending claim-says/now-does/reason data "docs
-// flag" records for a locked claim, so a later "docs reaudit <id>" — the
+// flagstore.go persists the pending claim-says/now-does/reason data "dossierx
+// flag" records for a locked claim, so a later "dossierx reaudit <id>" — the
 // existing, unchanged confirm-before-write flow — can read it back and
 // produce a real diff instead of ProposeDiff's dependency-diff stub
 // placeholder.
@@ -7,11 +7,11 @@
 // This is a second, independent trigger source for the exact same
 // lifecycle transition internal/lock.DetectStale already drives
 // (locked -> locked+review_pending): DetectStale flips ReviewPending when a
-// dependency's content changes underneath a claim; "docs flag" flips the
+// dependency's content changes underneath a claim; "dossierx flag" flips the
 // very same field when an agent asserts the claim itself is now wrong,
 // based on something it just observed (e.g. its own code change) rather
 // than a tracked mirrors/rests_on edge. Both paths converge on the same
-// boolean field and the same confirm-before-write "docs reaudit --confirm"
+// boolean field and the same confirm-before-write "dossierx reaudit --confirm"
 // gate — there is deliberately no second lifecycle state, and no second
 // ReviewPending-shaped flag.
 package reaudit
@@ -23,10 +23,10 @@ import (
 	"path/filepath"
 )
 
-// PendingFlag is one claim's outstanding "docs flag" trigger: the agent's
+// PendingFlag is one claim's outstanding "dossierx flag" trigger: the agent's
 // own account of what the claim currently (wrongly) asserts, what is
 // actually true now, and why. It stays parked in FlagStore until a
-// confirmed "docs reaudit <id> --confirm" consumes it (see
+// confirmed "dossierx reaudit <id> --confirm" consumes it (see
 // cmd/dossierx/main.go's newReauditCmd), at which point the CLI deletes this
 // entry — a flag is a one-shot trigger, not a durable record. (AuditNotes,
 // appended to the claim itself by Apply, is the durable trail a flag
@@ -39,10 +39,10 @@ type PendingFlag struct {
 }
 
 // FlagStore is the on-disk (JSON) table of every locked claim's pending
-// "docs flag" trigger, keyed by claim id. Like internal/lock.Store, it is a
+// "dossierx flag" trigger, keyed by claim id. Like internal/lock.Store, it is a
 // single project-wide shared file (not one per module or per claim), so
 // callers writing to it are expected to serialize concurrent access via
-// internal/lock.AcquireFileLock, the same way "docs lock"/"docs reaudit
+// internal/lock.AcquireFileLock, the same way "dossierx lock"/"dossierx reaudit
 // --confirm" already do for internal/lock.Store — see cmd/dossierx/flag.go and
 // cmd/dossierx/main.go's newReauditCmd for that usage.
 type FlagStore struct {
@@ -53,7 +53,7 @@ type FlagStore struct {
 
 // LoadFlagStore reads the flag store from path. A missing file is not an
 // error — it is the common, expected case for any claim or project that has
-// never used "docs flag" — and is treated as an empty, freshly-initialized
+// never used "dossierx flag" — and is treated as an empty, freshly-initialized
 // store, mirroring internal/lock.LoadStore's same "missing file is a fresh
 // store, not a failure" contract.
 func LoadFlagStore(path string) (*FlagStore, error) {

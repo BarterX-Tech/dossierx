@@ -108,7 +108,7 @@ claim in that module is locked.
   dependencies are out of scope for one module's own build sequence.
 
 See `internal/buildorder`'s package doc comment for the full propose /
-status / lock lifecycle (`docs build-order propose|status|lock`), which
+status / lock lifecycle (`dossierx build-order propose|status|lock`), which
 mirrors `internal/lock`'s own draft→locked→stale lifecycle for claims.
 
 ### `section` and in-content headings
@@ -127,12 +127,12 @@ schema field instead of a path convention.
 ### `status` and the lock lifecycle
 
 - `draft` — freely editable, not yet reviewed.
-- `locked` — has passed human review via `docs lock`; also carries an
+- `locked` — has passed human review via `dossierx lock`; also carries an
   engine-managed `review_pending` bool, which is `true` only while a
   dependency's content has drifted since the claim was last locked or
   reaudited, and is otherwise `false`. A locked claim's `status` never
   reverts to `draft` on its own — `review_pending` is the only automatic
-  transition, and only a human-confirmed `docs reaudit --confirm` clears
+  transition, and only a human-confirmed `dossierx reaudit --confirm` clears
   it. See the engine's `internal/lock` and `internal/reaudit` packages for
   the full lifecycle.
 
@@ -163,7 +163,7 @@ edge, each with a different meaning:
 schema_version: 1              # engine refuses to run on an unknown version
 title: string                    # optional; viewer <title>, header, and
                                    # sidebar heading. Falls back to a generic
-                                   # "docs viewer" default when unset.
+                                   # "dossierx viewer" default when unset.
 eyebrow: string                  # optional one-line subtitle rendered under
                                    # the sidebar heading (e.g. "user-intelligence
                                    # service"). No fallback — unset renders no

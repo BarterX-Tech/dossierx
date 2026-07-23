@@ -8,7 +8,7 @@
 //     ever removed. No additional test needed here; see that file for the
 //     row-1 proof.
 //  2. a second toy project, with entirely different facet/module names and
-//     count than testdata/fixture-basic, passes "docs check" with zero
+//     count than testdata/fixture-basic, passes "dossierx check" with zero
 //     engine source changes -> TestSecondToyProjectDifferentFacetsChecksClean
 //  3. the binary cross-compiles via GOOS/GOARCH for linux and windows, and
 //     the engine is free of OS-specific syscalls/hardcoded path separators
@@ -106,7 +106,7 @@ func copyEngineTree(t *testing.T, dst string) {
 
 // ---------------------------------------------------------------------
 // Row 2: a second toy project, with facet/module names and a facet COUNT
-// entirely different from testdata/fixture-basic, must pass "docs check"
+// entirely different from testdata/fixture-basic, must pass "dossierx check"
 // against the already-built binary — no engine source touched to get
 // there.
 // ---------------------------------------------------------------------
@@ -334,7 +334,7 @@ func TestTrimpathBuildDoesNotEmbedBuildMachinePaths(t *testing.T) {
 	}
 	copyEngineTree(t, uniqueRoot)
 
-	out := filepath.Join(t.TempDir(), "docs-trimpath")
+	out := filepath.Join(t.TempDir(), "dossierx-trimpath")
 	cmd := exec.Command("go", "build", "-trimpath", "-o", out, "./cmd/dossierx")
 	cmd.Dir = uniqueRoot
 	if outBytes, err := cmd.CombinedOutput(); err != nil {
@@ -371,7 +371,7 @@ func TestTrimpathBuildDoesNotEmbedBuildMachinePaths(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		return
 	}
-	outNoTrim := filepath.Join(t.TempDir(), "docs-no-trimpath")
+	outNoTrim := filepath.Join(t.TempDir(), "dossierx-no-trimpath")
 	cmdNoTrim := exec.Command("go", "build", "-o", outNoTrim, "./cmd/dossierx")
 	cmdNoTrim.Dir = uniqueRoot
 	if outBytes, err := cmdNoTrim.CombinedOutput(); err != nil {

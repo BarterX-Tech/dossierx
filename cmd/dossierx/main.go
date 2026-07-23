@@ -154,16 +154,16 @@ func loadConfigAndClaims() (*config.Config, []model.Claim, error) {
 // resolved relative to the config file's own directory (never cwd), same
 // convention as claims_dir and viewer.template_overrides.
 func storePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".docs-lock-store.json")
+	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
 }
 
-// catalogPath is where "docs catalog" (and "docs check") writes the built
+// catalogPath is where "dossierx catalog" (and "dossierx check") writes the built
 // catalog.
 func catalogPath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".catalog.json")
 }
 
-// renderOutPath is where "docs render" (and "docs check") writes the
+// renderOutPath is where "dossierx render" (and "dossierx check") writes the
 // generated viewer.
 func renderOutPath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), "viewer", "index.html")
@@ -313,7 +313,7 @@ func newCheckCmd() *cobra.Command {
 			// mirrors/rests_on content has changed since the last lock or
 			// confirmed reaudit to locked+review_pending. Persist the flag
 			// change back to the claim's own file so it survives to the
-			// next run and shows up in "docs stale".
+			// next run and shows up in "dossierx stale".
 			store, err := lock.LoadStore(storePath(cfg))
 			if err != nil {
 				return fmt.Errorf("check: %w", err)
@@ -341,9 +341,9 @@ func newCheckCmd() *cobra.Command {
 
 			// Fourth step, and the one exception to "everything past this
 			// point is non-blocking reporting": scan cfg.SourceDirs for
-			// "docs-claim: <id>" comments and reconcile each valid one into
+			// "dossierx-claim: <id>" comments and reconcile each valid one into
 			// internal/implink's artifact automatically (same Set logic any
-			// explicit "docs implink set" call already goes through — see
+			// explicit "dossierx implink set" call already goes through — see
 			// implink.Scan's doc comment). A tag naming an unknown or
 			// not-yet-locked claim is a hard check FAILURE, not a warning —
 			// the whole point of this step is that an unbacked or stale tag
@@ -356,7 +356,7 @@ func newCheckCmd() *cobra.Command {
 			}
 			if len(scanReport.Errors) > 0 {
 				for _, e := range scanReport.Errors {
-					fmt.Fprintf(cmd.ErrOrStderr(), "impl-links: scan error in %s:%d: docs-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
+					fmt.Fprintf(cmd.ErrOrStderr(), "impl-links: scan error in %s:%d: dossierx-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
 				}
 				return fmt.Errorf("check: %d impl-link scan error(s)", len(scanReport.Errors))
 			}
@@ -402,7 +402,7 @@ func (c *orientationCounts) orderedFacets() []string {
 // reportOrientationNotes prints one non-blocking line per module that has
 // at least one orientation-note claim (module.overview.* and/or
 // kind: orientation-note claims in a regular facet), broken down by
-// facet — so "docs check" alone is enough to confirm an orientation set
+// facet — so "dossierx check" alone is enough to confirm an orientation set
 // exists for a module before diving into its other claims, per this
 // engine's "the one command you run routinely" contract.
 func reportOrientationNotes(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) {
@@ -442,7 +442,7 @@ func reportOrientationNotes(cmd *cobra.Command, cfg *config.Config, claims []mod
 // module with no build-order artifact gets nothing extra rendered, either).
 // Any error other than "no artifact yet" is reported to stderr but never
 // turns into a non-nil return from newCheckCmd's RunE — this step is purely
-// additional reporting, never a reason "docs check" itself fails.
+// additional reporting, never a reason "dossierx check" itself fails.
 // reportImplinkStatus prints the per-module drift/unlinked report (as
 // before) and additionally returns one "next steps" hint line per drifted
 // entry and per module with any unlinked claims, so newCheckCmd's final
@@ -463,20 +463,20 @@ func reportImplinkStatus(cmd *cobra.Command, cfg *config.Config, claims []model.
 		fmt.Fprintln(out, report.Summary())
 		for _, d := range report.Drifted {
 			fmt.Fprintf(out, "  drifted: %s %s: %s\n", d.ClaimID, d.File, d.Reason)
-			hints = append(hints, fmt.Sprintf("%s is drifted -> re-tag or docs implink set --module %s --claim %s --file %s", d.ClaimID, module, d.ClaimID, d.File))
+			hints = append(hints, fmt.Sprintf("%s is drifted -> re-tag or dossierx implink set --module %s --claim %s --file %s", d.ClaimID, module, d.ClaimID, d.File))
 		}
 		for _, id := range report.UnlinkedIDs {
 			fmt.Fprintf(out, "  unlinked: %s\n", id)
 		}
 		if len(report.UnlinkedIDs) > 0 {
-			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a docs-claim tag or docs implink set", len(report.UnlinkedIDs), module))
+			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim tag or dossierx implink set", len(report.UnlinkedIDs), module))
 		}
 	}
 	return hints
 }
 
 // reportNextSteps prints a short, always-present-when-non-empty "what to
-// run next" block at the very end of "docs check" — the answer to "I don't
+// run next" block at the very end of "dossierx check" — the answer to "I don't
 // want to have to remember which of several commands applies": run check,
 // read this block, do what it says, run check again. It is derived
 // entirely from state check already computed (draft/review_pending claims,
@@ -497,10 +497,10 @@ func reportNextSteps(cmd *cobra.Command, cfg *config.Config, claims []model.Clai
 		}
 	}
 	if len(draftIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> docs lock <id> (e.g. %s)", len(draftIDs), draftIDs[0]))
+		hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx lock <id> (e.g. %s)", len(draftIDs), draftIDs[0]))
 	}
 	if len(reviewPendingIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending -> docs reaudit <id> (e.g. %s)", len(reviewPendingIDs), reviewPendingIDs[0]))
+		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending -> dossierx reaudit <id> (e.g. %s)", len(reviewPendingIDs), reviewPendingIDs[0]))
 	}
 	hints = append(hints, implinkHints...)
 
@@ -524,7 +524,7 @@ func reportNextSteps(cmd *cobra.Command, cfg *config.Config, claims []model.Clai
 			continue
 		}
 		if _, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module)); errors.Is(err, buildorder.ErrNotProposed) {
-			hints = append(hints, fmt.Sprintf("module %q is fully locked with no build order yet -> docs build-order propose --module %s", module, module))
+			hints = append(hints, fmt.Sprintf("module %q is fully locked with no build order yet -> dossierx build-order propose --module %s", module, module))
 		}
 	}
 
@@ -696,7 +696,7 @@ func newLockCmd() *cobra.Command {
 				return fmt.Errorf("lock: claim %q not found", id)
 			}
 
-			// Serialize concurrent "docs lock"/"docs reaudit --confirm"
+			// Serialize concurrent "dossierx lock"/"dossierx reaudit --confirm"
 			// invocations that share this project's store file: each does
 			// LoadStore -> mutate -> Save, and without this lock two
 			// concurrent runs (e.g. locking two different claims in
@@ -785,7 +785,7 @@ func newReauditCmd() *cobra.Command {
 			}
 
 			// See newLockCmd's comment: serializes against any concurrent
-			// "docs lock"/"docs reaudit --confirm" invocation touching the
+			// "dossierx lock"/"dossierx reaudit --confirm" invocation touching the
 			// same store file, so a confirmed reaudit's store.Save() below
 			// never races another process's load-mutate-save on the same
 			// Hashes/LockedAt map.
@@ -815,10 +815,10 @@ func newReauditCmd() *cobra.Command {
 			}
 
 			// Two trigger sources converge here: a claim with a pending
-			// "docs flag" entry gets the real, ready-to-review diff
+			// "dossierx flag" entry gets the real, ready-to-review diff
 			// ProposeFlagDiff builds from it; every other review_pending
 			// claim (the pre-existing, and still only, case for a project
-			// that has never used "docs flag") keeps going through
+			// that has never used "dossierx flag") keeps going through
 			// ProposeDiff's dependency-diff stub exactly as before.
 			pendingFlag, flagged := flagStore.Flags[id]
 			var diff reaudit.Diff

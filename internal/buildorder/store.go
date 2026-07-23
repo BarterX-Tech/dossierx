@@ -10,8 +10,8 @@
 // description explicitly allows either shape — made for two reasons: (1)
 // it matches the "Lock(artifactPath, claims)" signature this task
 // specifies, which names a single artifact rather than an artifact-plus-
-// module-key; (2) it keeps concurrent "docs build-order lock --module a"
-// and "docs build-order lock --module b" invocations from ever touching
+// module-key; (2) it keeps concurrent "dossierx build-order lock --module a"
+// and "dossierx build-order lock --module b" invocations from ever touching
 // the same file, the same isolation internal/lock.Store's single shared
 // file does NOT have (that file's callers serialize instead, via
 // lock.AcquireFileLock) — a per-module file sidesteps needing that same
@@ -41,7 +41,7 @@ var nowFunc = time.Now
 // ErrNotProposed is returned (wrapped) by LoadArtifact and therefore by
 // Status/Lock whenever no artifact file exists yet at the given path. It
 // lets callers (the CLI) distinguish "nothing proposed yet" — a normal,
-// expected state before a module's first "docs build-order propose" — from
+// expected state before a module's first "dossierx build-order propose" — from
 // a genuine read/parse failure, the same way config.ErrNotFound lets the
 // CLI special-case "no project.config.yaml" instead of reporting a generic
 // file error.
@@ -133,7 +133,7 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 			// module (it references a file/id that's gone), so this is
 			// stale too, not "nothing to hash-compare". Treating a
 			// deletion as silently fine was the actual bug: it let
-			// "docs build-order status" report stale:false for an
+			// "dossierx build-order status" report stale:false for an
 			// artifact whose own coverage count no longer matched the
 			// module's real claim count.
 			staleIDs = append(staleIDs, id)
@@ -151,7 +151,7 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 // Status loads the build-order artifact at path and returns it with
 // Stale/StaleIDs freshly recomputed against claims' current content — a
 // read-only operation (unlike Lock, it never writes path back out), so
-// "docs build-order status" can be run at any time without side effects.
+// "dossierx build-order status" can be run at any time without side effects.
 func Status(path string, claims []model.Claim) (*Artifact, error) {
 	a, err := LoadArtifact(path)
 	if err != nil {
@@ -167,7 +167,7 @@ func Status(path string, claims []model.Claim) (*Artifact, error) {
 // baseline, mirroring internal/lock.Lock's own dependency-hash snapshot.
 //
 // It refuses (returns a non-nil error, path left untouched) in exactly two
-// cases: no artifact exists yet at path (ErrNotProposed — run "docs
+// cases: no artifact exists yet at path (ErrNotProposed — run "dossierx
 // build-order propose" first), or the artifact is already locked AND not
 // currently stale (nothing to relock — re-locking an unchanged, already-
 // locked artifact would just be busywork with no observable effect). An

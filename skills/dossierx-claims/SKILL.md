@@ -32,10 +32,10 @@ The other two build on top of it once a module is fully locked:
 
 - Creating a new claim (a fact that belongs in the claims system) for any module/facet.
 - Editing an existing claim's `body`, `rows`, `layout`, `build_role`, or edges.
-- Running `docs lint` / `docs catalog` / `docs render` / `docs check` to validate and
+- Running `dossierx lint` / `dossierx catalog` / `dossierx render` / `dossierx check` to validate and
   rebuild the viewer.
-- Locking a claim, or handling a claim that `docs stale` reports as `review_pending`.
-- Running `docs reaudit <id>` after an upstream dependency changed, or after `docs flag`
+- Locking a claim, or handling a claim that `dossierx stale` reports as `review_pending`.
+- Running `dossierx reaudit <id>` after an upstream dependency changed, or after `dossierx flag`
   (see dossierx-code-links) marked a claim's own meaning as drifted.
 
 ## Claim basics
@@ -43,7 +43,7 @@ The other two build on top of it once a module is fully locked:
 A claim is one YAML entry with:
 
 - `id: module.FACET.slug` — FACET must be one of the project's configured facets.
-- `status: draft | locked` — set by hand only via `docs lock`/`docs unlock`, never edited
+- `status: draft | locked` — set by hand only via `dossierx lock`/`dossierx unlock`, never edited
   directly in the YAML.
 - `layout: card | table | list | steps | tree | banner | mockup` — optional; if omitted, the
   engine infers it from shape (`rows` present → `table`, `steps` array → `steps`, else →
@@ -60,7 +60,7 @@ A claim is one YAML entry with:
   instead until that module has real claims), `governed_by` (`{type, reason}` — `reason` is
   required when `type: none`).
 
-Run `docs lint` after writing or editing a claim, before moving to the next one — don't
+Run `dossierx lint` after writing or editing a claim, before moving to the next one — don't
 batch several claims and lint at the end. A failing lint on claim A is easiest to fix while
 claim A is still the thing you're looking at.
 
@@ -80,7 +80,7 @@ Before reading any other claim in a module: read that module's
 `module.overview.*` claims first (they render on every one of that
 module's facet tabs, not just one), then the `kind: orientation-note`
 claims pinned at the top of whichever facet tab you're actually there
-for. `docs lint`'s `orientation-note-order` rule guarantees these always
+for. `dossierx lint`'s `orientation-note-order` rule guarantees these always
 sort ahead of every fact claim in their facet, so "read top to bottom" is
 always equivalent to "read orientation notes first" — you never have to
 hunt for them.
@@ -90,24 +90,24 @@ plain, non-bold text at natural weight — the banner's own red/warn tint
 is the visual signal, so don't lean on bold or a long inline id to make a
 banner stand out further; keep `body` prose readable on its own.
 
-`docs check` reports a non-blocking `orientation notes: module "...": N
+`dossierx check` reports a non-blocking `orientation notes: module "...": N
 (...)` line per module that has any, so their existence is visible
 without a separate command.
 
 ## The pipeline
 
 ```
-claim.yaml  →  docs catalog  →  .catalog.json  →  docs render  →  viewer/index.html
+claim.yaml  →  dossierx catalog  →  .catalog.json  →  dossierx render  →  viewer/index.html
 ```
 
-`docs check` runs lint → catalog → render in one shot, then (non-blocking) reports Code
+`dossierx check` runs lint → catalog → render in one shot, then (non-blocking) reports Code
 Links status and always ends with a **next steps** block — the derived list of exactly what
 to run next (which claims to lock, which to reaudit, which module is ready for a build
-order, which code links have drifted). Treat `docs check` as the one command you run
+order, which code links have drifted). Treat `dossierx check` as the one command you run
 routinely; every other command below is a one-time decision gate you reach for only at the
 specific moment that decision applies — never something to remember on a schedule.
 
-`docs render` always overwrites `viewer/index.html` (it carries a "generated — do not edit"
+`dossierx render` always overwrites `viewer/index.html` (it carries a "generated — do not edit"
 header); never hand-edit the generated viewer file.
 
 ## Lock lifecycle — what to do with a `review_pending` claim
@@ -115,9 +115,9 @@ header); never hand-edit the generated viewer file.
 A locked claim's status **never** silently drops back to `draft`. `review_pending` has two
 independent triggers, both resolved the same way:
 
-1. A dependency's content changed underneath it (`docs check` detects this automatically via
+1. A dependency's content changed underneath it (`dossierx check` detects this automatically via
    a stored content hash).
-2. An agent explicitly ran `docs flag <id> --claim-says --now-does --reason` because
+2. An agent explicitly ran `dossierx flag <id> --claim-says --now-does --reason` because
    implementing or maintaining the code revealed the claim's own stated meaning no longer
    matches reality (see **[[dossierx-code-links]]** — this is the only place a human comes
    back into that skill's otherwise-autonomous flow).
@@ -126,17 +126,17 @@ Do not hand-edit a `review_pending` claim's YAML directly as the default move �
 the reaudit flow so the change is visible and reviewable first, regardless of which trigger
 fired it:
 
-1. `docs stale` — lists every claim currently `review_pending`.
-2. `docs reaudit <id>` — proposes a diff, rendered with git-diff-style `<mark>`
+1. `dossierx stale` — lists every claim currently `review_pending`.
+2. `dossierx reaudit <id>` — proposes a diff, rendered with git-diff-style `<mark>`
    highlighting: green add (`<mark style="background:#b7ebb0">…</mark>`), red strikethrough
    remove (`<mark style="background:#f7c2c2;text-decoration:line-through">…</mark>`). For a
    dependency-drift trigger this is a stubbed no-change proposal (no live LLM backend wired
-   in yet — treat any content diff there as illustrative). For a `docs flag`-sourced trigger
+   in yet — treat any content diff there as illustrative). For a `dossierx flag`-sourced trigger
    this is real and precise: the flag's `--claim-says` renders as the removal, `--now-does`
    as the addition. Either way, this step writes nothing to disk by itself.
 3. **Present the proposed diff and wait for explicit confirmation** — same review-before-
    apply discipline used throughout this workflow. Do not auto-apply.
-4. On confirmation, run `docs reaudit <id> --confirm` — this strips the markup, applies the
+4. On confirmation, run `dossierx reaudit <id> --confirm` — this strips the markup, applies the
    edit, refreshes the lock timestamp + dependency hash, clears `review_pending`, and (for a
    flag-sourced proposal) consumes the pending flag so it never re-fires. The claim stays
    `locked` throughout; it is never demoted to `draft` by this flow.

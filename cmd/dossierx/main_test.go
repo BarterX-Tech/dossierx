@@ -270,7 +270,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	if got, want := storePath(cfg), filepath.Join(root, ".docs-lock-store.json"); got != want {
+	if got, want := storePath(cfg), filepath.Join(root, ".dossierx-lock-store.json"); got != want {
 		t.Fatalf("storePath: got %q, want %q", got, want)
 	}
 	if got, want := catalogPath(cfg), filepath.Join(root, ".catalog.json"); got != want {

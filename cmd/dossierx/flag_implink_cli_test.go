@@ -1,7 +1,7 @@
 // flag_implink_cli_test.go covers the CLI wiring for the two Channel
-// A/B additions: "docs flag <id> --claim-says --now-does --reason" (which
+// A/B additions: "dossierx flag <id> --claim-says --now-does --reason" (which
 // extends the existing reaudit lifecycle with a second, agent-sourced
-// trigger) and "docs implink set|status" (the fully agent-autonomous
+// trigger) and "dossierx implink set|status" (the fully agent-autonomous
 // implementation-link feature). Mirrors TestCLI_LockCheckStaleReauditUnlockFlow's
 // style: one on-disk fixture project, driven end to end through execCLI.
 package main
@@ -26,7 +26,7 @@ func writeLockedFixtureClaim(t *testing.T, claimsDir, id, module, body string) s
 }
 
 // ---------------------------------------------------------------------
-// docs flag <id> --claim-says --now-does --reason
+// dossierx flag <id> --claim-says --now-does --reason
 // ---------------------------------------------------------------------
 
 func TestCLI_Flag_RequiresAllThreeFlags(t *testing.T) {
@@ -70,7 +70,7 @@ func TestCLI_Flag_RefusesUnknownClaim(t *testing.T) {
 
 // TestCLI_FlagThenReauditConfirm_EndToEnd exercises the full Channel A
 // lifecycle: flag a locked claim, confirm it's now review_pending, run
-// "docs reaudit --confirm" and check the claim's body became exactly
+// "dossierx reaudit --confirm" and check the claim's body became exactly
 // --now-does (per ProposeFlagDiff's doc comment: a flag replaces the whole
 // body, it isn't a surgical in-place edit), review_pending cleared, and an
 // audit note recorded the flag's reason.
@@ -148,8 +148,8 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 
 func TestCLI_Flag_AnyLockedClaimCanBeReflagged(t *testing.T) {
 	// A claim that is locked but NOT yet review_pending may still be
-	// flagged (unlike "docs reaudit", which requires review_pending
-	// already true) — this is the whole point of "docs flag": it is what
+	// flagged (unlike "dossierx reaudit", which requires review_pending
+	// already true) — this is the whole point of "dossierx flag": it is what
 	// PUTS a claim into review_pending.
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
@@ -169,7 +169,7 @@ func TestCLI_Flag_AnyLockedClaimCanBeReflagged(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// docs implink set / status
+// dossierx implink set / status
 // ---------------------------------------------------------------------
 
 func TestCLI_ImplinkSet_ThenStatus(t *testing.T) {
@@ -238,8 +238,8 @@ func TestCLI_ImplinkStatus_NothingLinkedYet(t *testing.T) {
 	}
 }
 
-// TestCLI_Check_ImplinkLine_ZeroCostWhenUnused proves "docs check" prints
-// no impl-links line at all for a project that has never called "docs
+// TestCLI_Check_ImplinkLine_ZeroCostWhenUnused proves "dossierx check" prints
+// no impl-links line at all for a project that has never called "dossierx
 // implink set" — the zero-cost/silent-when-unused contract this step must
 // uphold, mirroring build_order's own graceful-degradation precedent.
 func TestCLI_Check_ImplinkLine_ZeroCostWhenUnused(t *testing.T) {
@@ -305,7 +305,7 @@ func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// docs-claim source scanning (source_dirs) — folded into "docs check"
+// dossierx-claim source scanning (source_dirs) — folded into "dossierx check"
 // ---------------------------------------------------------------------
 
 // icWriteScanFixtureProject writes a project.config.yaml with source_dirs
@@ -331,14 +331,14 @@ func icWriteScanFixtureProject(t *testing.T, root, module, claimID string) (cfgP
 	return cfgPath, srcDir
 }
 
-// TestCLI_Check_ScansSourceDirs_ReconcilesValidTag proves a "docs-claim:"
-// comment alone — no "docs implink set" call at all — is enough for "docs
+// TestCLI_Check_ScansSourceDirs_ReconcilesValidTag proves a "dossierx-claim:"
+// comment alone — no "dossierx implink set" call at all — is enough for "dossierx
 // check" to record the link and show it in impl-links reporting.
 func TestCLI_Check_ScansSourceDirs_ReconcilesValidTag(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, srcDir := icWriteScanFixtureProject(t, root, "widget", "widget.contract.main")
 	if err := os.WriteFile(filepath.Join(srcDir, "main.py"),
-		[]byte("# docs-claim: widget.contract.main\ndef do_thing():\n    pass\n"), 0o644); err != nil {
+		[]byte("# dossierx-claim: widget.contract.main\ndef do_thing():\n    pass\n"), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
 	}
 
@@ -358,19 +358,19 @@ func TestCLI_Check_ScansSourceDirs_ReconcilesValidTag(t *testing.T) {
 }
 
 // TestCLI_Check_ScansSourceDirs_UnknownClaimIsHardFailure proves an
-// unbacked/typo'd docs-claim tag fails "docs check" outright rather than
+// unbacked/typo'd dossierx-claim tag fails "dossierx check" outright rather than
 // being a silent or soft-warned note.
 func TestCLI_Check_ScansSourceDirs_UnknownClaimIsHardFailure(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, srcDir := icWriteScanFixtureProject(t, root, "widget", "widget.contract.main")
 	if err := os.WriteFile(filepath.Join(srcDir, "main.py"),
-		[]byte("# docs-claim: widget.contract.mian\ndef do_thing():\n    pass\n"), 0o644); err != nil {
+		[]byte("# dossierx-claim: widget.contract.mian\ndef do_thing():\n    pass\n"), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
 	}
 
 	out, errOut, err := execCLI(t, "--config", cfgPath, "check")
 	if err == nil {
-		t.Fatalf("expected check to fail for a docs-claim tag naming an unknown claim, got success (out: %s)", out)
+		t.Fatalf("expected check to fail for a dossierx-claim tag naming an unknown claim, got success (out: %s)", out)
 	}
 	if !strings.Contains(errOut, "widget.contract.mian") {
 		t.Fatalf("expected the error to name the bad claim id, got stderr: %s", errOut)
@@ -391,7 +391,7 @@ func TestCLI_Check_NextSteps_ListsDraftAndUnlinkedHints(t *testing.T) {
 	if !strings.Contains(out, "next steps:") {
 		t.Fatalf("expected a next steps block, got: %s", out)
 	}
-	if !strings.Contains(out, "claim(s) still draft -> docs lock <id>") {
+	if !strings.Contains(out, "claim(s) still draft -> dossierx lock <id>") {
 		t.Fatalf("expected a draft-claims hint, got: %s", out)
 	}
 }

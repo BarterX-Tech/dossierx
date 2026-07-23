@@ -1,22 +1,22 @@
 ---
 name: dossierx-build-order
 description: >-
-  Workflow for deriving and following a docs-v1 module's Build Order — the
+  Workflow for deriving and following a dossierx-v1 module's Build Order — the
   dependency-ordered sequence (orientation → schema → behavior → api →
   verification) an implementing agent should actually build a fully-locked
   module in, as opposed to the unrelated human "reading order" the viewer
-  displays claims in. Use this WHENEVER a docs-v1 module has just become
+  displays claims in. Use this WHENEVER a dossierx-v1 module has just become
   fully locked and you are about to implement code from it, or whenever you
-  are about to write code against docs-v1 claims and want to know what
+  are about to write code against dossierx-v1 claims and want to know what
   order to build them in. Covers the completeness gate, the topological
   sort within behavior/api, the propose→lock review step, and what to do
   when the build order goes stale. Requires the dossierx-claims skill's
   claim/lock basics first.
 ---
 
-# docs-v1 Build Order — implementation sequencing
+# dossierx-v1 Build Order — implementation sequencing
 
-Once every claim in a docs-v1 module is `status: locked`, Build Order derives the sequence
+Once every claim in a dossierx-v1 module is `status: locked`, Build Order derives the sequence
 an implementing agent should actually follow — not the same thing as the viewer's reading
 order (`section`/`order`), which exists purely for a human browsing the spec top to bottom
 and has no bearing on what to build first.
@@ -28,7 +28,7 @@ claim schema and lock lifecycle, in particular `build_role`.
 
 - A module you're about to implement has just had its last claim locked.
 - You're mid-implementation and unsure which claim to build next.
-- `docs check`'s "next steps" block says a module is fully locked with no build order yet.
+- `dossierx check`'s "next steps" block says a module is fully locked with no build order yet.
 - A locked build order started reporting `stale` (a covered claim changed or was deleted).
 
 ## The five build_role phases
@@ -62,9 +62,9 @@ entirely (it's reachable only via the reserved `overview` facet or a regular fac
 ## Commands
 
 ```
-docs build-order propose --module <name>   # derive the sequence, write .build-order.<module>.json
-docs build-order status  --module <name>   # proposed / locked / stale + N of M claims covered
-docs build-order lock    --module <name>   # freeze the proposed sequence (human confirms)
+dossierx build-order propose --module <name>   # derive the sequence, write .build-order.<module>.json
+dossierx build-order status  --module <name>   # proposed / locked / stale + N of M claims covered
+dossierx build-order lock    --module <name>   # freeze the proposed sequence (human confirms)
 ```
 
 `propose` is a completeness gate: it refuses outright, listing every non-locked claim, unless
@@ -74,12 +74,12 @@ claim by construction, nothing skipped.
 
 ## The review step
 
-1. `docs build-order propose --module <name>` — writes the proposed sequence. Writes
+1. `dossierx build-order propose --module <name>` — writes the proposed sequence. Writes
    nothing if the module isn't fully locked, or if a same-phase cycle makes the sequence
    invalid (both cases print exactly what's blocking it).
 2. **Present the proposed sequence and wait for explicit confirmation** before locking —
-   same review discipline as any other docs-v1 gate.
-3. `docs build-order lock --module <name>` — freezes it. Refuses if nothing was proposed
+   same review discipline as any other dossierx-v1 gate.
+3. `dossierx build-order lock --module <name>` — freezes it. Refuses if nothing was proposed
    yet, or if it's already locked and not stale (nothing to relock).
 
 ## Following the sequence as an implementing agent
@@ -96,7 +96,7 @@ sequence.
 
 ## When the build order goes stale
 
-`docs build-order status --module <name>` reports `stale: true` if a covered claim's content
+`dossierx build-order status --module <name>` reports `stale: true` if a covered claim's content
 changed or was deleted since the sequence was locked. Re-run `propose` (produces a fresh
 diff against the current claim set) then `lock` again — same review-before-lock discipline
 as the first time. Never treat a stale build order as still authoritative; re-derive it.
@@ -105,5 +105,5 @@ as the first time. Never treat a stale build order as still authoritative; re-de
 
 Nothing about Build Order is project-specific — the phase sequence, the completeness gate,
 and the topological sort all operate purely on `build_role`/`rests_on`/`status`, fields every
-docs-v1 project already has via `project.config.yaml`. No new config surface is needed for
+dossierx-v1 project already has via `project.config.yaml`. No new config surface is needed for
 this skill beyond what dossierx-claims already requires.

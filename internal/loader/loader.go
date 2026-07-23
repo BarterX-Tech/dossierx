@@ -79,7 +79,7 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 // an error), but Windows's mandatory file locking can make the rename
 // itself transiently collide with a concurrent open-for-read on the same
 // path (ERROR_SHARING_VIOLATION) — a real gap surfaced by
-// TestConcurrentLocksDoNotLoseStoreUpdates running many "docs lock"
+// TestConcurrentLocksDoNotLoseStoreUpdates running many "dossierx lock"
 // processes against the same claims_dir simultaneously. The window is a
 // single rename syscall, not a slow operation, so a handful of short
 // retries resolves it without meaningfully slowing down the common,
@@ -110,7 +110,7 @@ func readFileWithRetry(path string) ([]byte, error) {
 // The write is atomic (temp file in the same directory, then rename) rather
 // than a direct os.WriteFile. os.WriteFile truncates the destination before
 // writing its new bytes, leaving a window where the file is empty or
-// partially written; a concurrent LoadClaims (every "docs lock" invocation
+// partially written; a concurrent LoadClaims (every "dossierx lock" invocation
 // starts by loading the *entire* claims_dir, including files other
 // in-flight processes are saving) can land its read inside that window and
 // see a truncated file, failing YAML decode with a bare EOF. Writing to a
