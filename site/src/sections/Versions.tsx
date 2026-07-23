@@ -1,23 +1,22 @@
 import { AnimatedReveal } from "../components/AnimatedReveal";
 import { SectionContainer } from "../components/SectionContainer";
 import { SectionHeader } from "../components/SectionHeader";
+import { ReleaseTimeline, type Release } from "../components/ReleaseTimeline";
 import { getSection } from "./section-utils";
 
-interface Release {
-  version: string;
-  date: string;
-  title: string;
-  tag: string;
-  highlights: string[];
-}
 interface VersionsData {
   releases: Release[];
 }
 
+/**
+ * Landing-page teaser: the latest release only, plus a CTA to the full
+ * release-history page (releases.html) — the complete timeline used to live
+ * here but was pulled out to its own page so the landing page stays a pitch,
+ * not a changelog.
+ */
 export function Versions() {
   const section = getSection("versions");
   const data = section.data as unknown as VersionsData;
-  const latest = data.releases.length - 1;
 
   return (
     <SectionContainer id={section.id} alt>
@@ -27,34 +26,16 @@ export function Versions() {
         contentMd={section.contentMd}
       />
 
-      <ol className="timeline">
-        {data.releases.map((r, i) => (
-          <li
-            key={r.version}
-            className={`tl-item${i === latest ? " tl-item--latest" : ""}`}
-          >
-            <span className="tl-item__dot" aria-hidden="true" />
-            <AnimatedReveal delay={0.04 * i} y={16}>
-              <div className="release">
-                <div className="release__head">
-                  <span className="release__version">{r.version}</span>
-                  <time className="release__date">{r.date}</time>
-                  {i === latest && (
-                    <span className="release__latest">latest</span>
-                  )}
-                </div>
-                <h3 className="release__title">{r.title}</h3>
-                <p className="release__tag">{r.tag}</p>
-                <ul className="release__highlights">
-                  {r.highlights.map((h, hi) => (
-                    <li key={hi}>{h}</li>
-                  ))}
-                </ul>
-              </div>
-            </AnimatedReveal>
-          </li>
-        ))}
-      </ol>
+      <ReleaseTimeline releases={data.releases} limit={1} />
+
+      <AnimatedReveal className="versions__cta-row" delay={0.08} y={16}>
+        <a
+          className="button button--ghost"
+          href={`${import.meta.env.BASE_URL}releases.html`}
+        >
+          See the full release history →
+        </a>
+      </AnimatedReveal>
     </SectionContainer>
   );
 }

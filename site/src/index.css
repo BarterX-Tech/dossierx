@@ -1985,6 +1985,56 @@ svg [tabindex]:focus-visible rect {
   margin-bottom: 0.5rem;
 }
 
+.versions__cta-row {
+  margin-top: 2rem;
+}
+
+/* Releases page (releases.html) — a standalone static entry point, not part
+   of the single-scroll Nav, so it gets its own minimal header instead of
+   the section-anchor Nav component. */
+.releases-header {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(16px);
+}
+
+.releases-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: var(--nav-h);
+}
+
+.releases-header__brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  color: var(--text);
+  font-family: var(--display);
+  font-size: 1.18rem;
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.releases-header__brand:hover {
+  text-decoration: none;
+}
+
+.releases-header__mark {
+  transform: rotate(-1.5deg);
+}
+
+.releases-header__back {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.releases-header__back:hover {
+  color: var(--accent-2);
+}
+
 /* Comparison */
 .compare {
   min-width: 760px;

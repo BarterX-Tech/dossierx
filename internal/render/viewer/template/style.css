@@ -402,6 +402,27 @@ th {
   line-height: 1.55;
 }
 
+/* Step bodies route each step's text through the shared markdown renderer
+   (steps.html's {{markdown $s}}), which wraps the text in a <p> (and any
+   list/fence in its own block). The default UA <p> margin would push the
+   first line of text down relative to .snum's fixed 24px circle — which,
+   because .step is display:flex, sits flush at the top of the row — leaving
+   the number visibly misaligned above the text. Match the 0.5rem inter-block
+   rhythm used elsewhere in this file, then zero the first block's top and the
+   last block's bottom margin so the first line sits flush with .snum and the
+   gap to the next step is controlled solely by .step's own margin. */
+.sbody p {
+  margin: 0.5rem 0;
+}
+
+.sbody > :first-child {
+  margin-top: 0;
+}
+
+.sbody > :last-child {
+  margin-bottom: 0;
+}
+
 /* ---- mockup component (layout: mockup) --------------------------------
    .claim-mockup-body is mockup.html's wrapper for a claim's unescaped
    .RawHTML content (see that template's doc comment and
