@@ -91,17 +91,40 @@
         });
       });
 
+      // buildOrderToModule maps each Build Order section's own id — and each
+      // of its claim-card ids — to its owning module-section id. The Build
+      // Order section is deliberately NOT a facet .claim-group (it renders
+      // below the active facet and stays visible on every facet of its
+      // module), so it is absent from facetToModule/claimToFacet above; this
+      // separate map lets a "#build-order-..." deep-link still switch to the
+      // owning module and scroll to the card.
+      var buildOrderToModule = {};
+      moduleSections.forEach(function (sec) {
+        sec.querySelectorAll('.build-order-module').forEach(function (bo) {
+          if (bo.id) { buildOrderToModule[bo.id] = sec.id; }
+          bo.querySelectorAll('.claim[id]').forEach(function (c) {
+            buildOrderToModule[c.id] = sec.id;
+          });
+        });
+      });
+
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
-      // triple. Three cases, checked in this order: a claim id resolves to
-      // its own card's facet + module, with claim set so the caller can
-      // scroll to it; a facet id resolves to its own module + itself; a
-      // bare module id resolves to that module + its default facet.
-      // Anything else (empty/unknown) falls back to the first module + its
-      // default facet.
+      // triple. Cases, checked in this order: a claim id resolves to its own
+      // card's facet + module, with claim set so the caller can scroll to
+      // it; a Build Order section/card id resolves to its owning module + the
+      // module's default facet, with claim set to scroll (the Build Order
+      // section is always visible for its module, so any facet works); a
+      // facet id resolves to its own module + itself; a bare module id
+      // resolves to that module + its default facet. Anything else
+      // (empty/unknown) falls back to the first module + its default facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
           return { module: facetToModule[facetID], facet: facetID, claim: id };
+        }
+        if (Object.prototype.hasOwnProperty.call(buildOrderToModule, id)) {
+          var boModule = buildOrderToModule[id];
+          return { module: boModule, facet: moduleDefaultFacet[boModule], claim: id };
         }
         if (Object.prototype.hasOwnProperty.call(facetToModule, id)) {
           return { module: facetToModule[id], facet: id };

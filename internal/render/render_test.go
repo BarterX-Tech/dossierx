@@ -964,3 +964,48 @@ func TestBuildGroups_OverviewFacetNeverBecomesItsOwnGroup(t *testing.T) {
 		}
 	}
 }
+
+// TestRender_OverviewCanonicalIDAppearsExactlyOnce covers DX-AUD-16: a
+// module's overview/orientation claim is injected into every facet group of
+// its module (so the note stays visible on every facet tab — desired), but
+// the canonical claim id must be stamped on exactly ONE copy so the rendered
+// document has no duplicate ids and a #<claim-id> deep-link is unambiguous.
+func TestRender_OverviewCanonicalIDAppearsExactlyOnce(t *testing.T) {
+	overview := model.Claim{
+		ID:     "widget.overview.router",
+		Module: "widget",
+		Facet:  "overview",
+		Status: model.StatusDraft,
+		Layout: model.LayoutCard,
+		Body:   "ORIENTATION-NOTE-BODY",
+		Governed: model.Governed{
+			Type:   string(model.GovernedNone),
+			Reason: "test fixture",
+		},
+	}
+	claims := []model.Claim{
+		overview,
+		groupedClaim("widget.contract.a", "widget", "contract", model.StatusDraft),
+		groupedClaim("widget.internals.b", "widget", "internals", model.StatusDraft),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// Exactly one canonical id in the whole document (valid HTML, resolvable
+	// deep-link) even though the note renders on both facet tabs.
+	if got := strings.Count(out, `id="widget.overview.router"`); got != 1 {
+		t.Fatalf("overview canonical id appears %d times, want exactly 1:\n%s", got, out)
+	}
+	// The orientation note's visible body must still render once per facet
+	// (two facets => two copies): the duplicate copies are id-less, not gone.
+	if got := strings.Count(out, "ORIENTATION-NOTE-BODY"); got != 2 {
+		t.Fatalf("overview body appears %d times, want 2 (one per facet):\n%s", got, out)
+	}
+}

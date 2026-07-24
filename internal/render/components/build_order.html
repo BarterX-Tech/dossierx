@@ -16,7 +16,7 @@
      exactly what being a member of a locked build-order artifact is. The
      phase itself is shown as its own section-heading label instead, so
      phase identity is still visually obvious without a new color. */}}
-<section class="claim-group build-order-module">
+<section class="build-order-module" id="build-order-{{.ModuleID}}">
   <h3 class="section-heading">{{.ModuleLabel}} — build order</h3>
   {{range .Artifact.Phases}}
     <h4 class="section-heading build-order-phase">{{.Phase}}</h4>

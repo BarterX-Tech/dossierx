@@ -211,7 +211,13 @@ type ModuleGroup struct {
 // claims-nav shape.
 type buildOrderView struct {
 	ModuleLabel string
-	Artifact    *buildorder.Artifact
+	// ModuleID is the module's slug (ModuleGroup.ID) — build_order.html
+	// stamps it into the Build Order section's own id ("build-order-<id>"),
+	// giving that section a real, unique id and a class distinct from the
+	// facet .claim-group, so shell.html's facet hide-loop no longer treats
+	// it as a facet to hide on load and after every nav (DX-AUD-15).
+	ModuleID string
+	Artifact *buildorder.Artifact
 }
 
 // buildModuleGroups folds buildGroups' flat, facet-level Groups into the
@@ -296,7 +302,7 @@ func attachBuildOrders(groups []ModuleGroup, cfg *config.Config, buildOrderTmpl 
 			continue
 		}
 
-		view := buildOrderView{ModuleLabel: groups[i].ModuleLabel, Artifact: artifact}
+		view := buildOrderView{ModuleLabel: groups[i].ModuleLabel, ModuleID: groups[i].ID, Artifact: artifact}
 		var buf bytes.Buffer
 		if err := buildOrderTmpl.Execute(&buf, view); err != nil {
 			continue // never fail Render over a build-order rendering hiccup.
@@ -577,8 +583,18 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 
 	var groups []Group
 	for _, m := range orderedNames(declaredModules, moduleSeen) {
-		overviewHTML := renderOverviewHTML(model.OrderClaims(overviewByModule[m]), renderedByID)
-		for _, f := range orderedNames(declaredFacets, facetSeenByModule[m]) {
+		overview := model.OrderClaims(overviewByModule[m])
+		// The overview note renders on every facet tab of its module, but a
+		// given claim id may appear only once in a valid document: the first
+		// (default) facet keeps the canonical, id-bearing copy, every other
+		// facet gets an id-less, purely-presentational copy (DX-AUD-16).
+		canonicalOverview := renderOverviewHTML(overview, renderedByID)
+		idlessOverview := stripOverviewIDs(canonicalOverview, overview)
+		for fi, f := range orderedNames(declaredFacets, facetSeenByModule[m]) {
+			overviewHTML := idlessOverview
+			if fi == 0 {
+				overviewHTML = canonicalOverview
+			}
 			groups = append(groups, newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID, overviewHTML))
 		}
 	}
@@ -604,6 +620,34 @@ func renderOverviewHTML(overview []model.Claim, renderedByID map[string]template
 	out := make([]template.HTML, 0, len(overview))
 	for _, c := range overview {
 		out = append(out, renderedByID[c.ID])
+	}
+	return out
+}
+
+// stripOverviewIDs returns copies of a module's already-rendered overview
+// HTML (canonical, from renderOverviewHTML) with each claim's root
+// id="<claim-id>" attribute removed — one entry per input, in the same
+// order (canonical and overview are index-aligned, both built from the same
+// ordered claim slice). buildGroups injects a module's overview claims into
+// every one of that module's facet groups so the orientation note stays
+// visible on every facet tab (see newGroup); but a given id may appear only
+// once in a valid document, so only the module's first/default facet keeps
+// the canonical (id-bearing) copy and every other facet gets these id-less,
+// purely-presentational copies (DX-AUD-16). Only the exact ` id="<claim-id>"`
+// attribute — and only its first occurrence, the root element's — is
+// removed, so the visible content (including the .k header that shows the
+// claim id as text) is untouched: a #<claim-id> deep-link resolves to the
+// single canonical copy while the note still renders identically on every
+// tab. Claim ids are constrained to [A-Za-z0-9_.-] (internal/lint's
+// id-shape lint), none of which html/template escapes in a double-quoted
+// attribute value, so the literal match is exact.
+func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []template.HTML {
+	if len(canonical) == 0 {
+		return nil
+	}
+	out := make([]template.HTML, len(canonical))
+	for i, h := range canonical {
+		out[i] = template.HTML(strings.Replace(string(h), ` id="`+overview[i].ID+`"`, "", 1))
 	}
 	return out
 }
