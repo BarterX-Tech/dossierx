@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
@@ -80,5 +81,27 @@ func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLo
 	}
 	for _, tmpl := range partials {
 		tmpl.Funcs(template.FuncMap{"edges": edges})
+	}
+}
+
+// attachMockupOverride rebinds every partial's "mockupHTML" template func to a
+// closure over the project's mockup_modules allowlist (cfg.MockupModules), so
+// mockup.html's defense-in-depth gate (components.MockupHTML — see DX-AUD-08)
+// can actually check module membership at Execute time. Unlike
+// attachEdgesOverride this always rebinds: the default components.mockupHTML
+// binding has no config and therefore treats NO module as allowlisted (it
+// always escapes), so a mockup claim would never render live without this
+// override supplying the real allowlist. A nil cfg leaves the allowlist empty,
+// which keeps that always-escape behavior — the safe default.
+func attachMockupOverride(partials map[model.Layout]*template.Template, cfg *config.Config) {
+	var allowlist []string
+	if cfg != nil {
+		allowlist = cfg.MockupModules
+	}
+	mockupHTML := func(c model.Claim) template.HTML {
+		return components.MockupHTML(c, allowlist)
+	}
+	for _, tmpl := range partials {
+		tmpl.Funcs(template.FuncMap{"mockupHTML": mockupHTML})
 	}
 }

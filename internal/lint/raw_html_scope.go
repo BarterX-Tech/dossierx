@@ -76,18 +76,6 @@ func (RawHTMLScope) Name() string { return "raw-html-scope" }
 // allowlist-based checkRawHTML below instead.
 var rawHTMLPattern = regexp.MustCompile(`(?i)</?(script|style|iframe|object|embed|form|link|meta)\b[^>]*>|\bon[a-z]+\s*=`)
 
-// mockupTagPattern matches one HTML start or end tag in a RawHTML blob,
-// capturing whether it is a closing tag, the (lowercased-by-regexp-flag)
-// tag name, and its raw attribute text (empty for closing tags).
-var mockupTagPattern = regexp.MustCompile(`(?i)<(/?)([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)>`)
-
-// mockupAttrPattern pulls out double-quoted name="value" attribute pairs
-// from a start tag's captured attribute text. RawHTML is hand-authored
-// project content (never templated from external input), so this
-// intentionally does not need to handle every HTML attribute-quoting
-// edge case general-purpose HTML does.
-var mockupAttrPattern = regexp.MustCompile(`([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*"([^"]*)"`)
-
 // mockupOnAttrPattern matches an inline event-handler attribute name
 // (onclick, onerror, ...), case-insensitively.
 var mockupOnAttrPattern = regexp.MustCompile(`(?i)^on[a-zA-Z]+$`)
@@ -172,6 +160,31 @@ func (RawHTMLScope) Check(claims []model.Claim, cfg *config.Config) []Finding {
 	return findings
 }
 
+// MockupGateFindings runs ONLY the RawHTML mockup gate (checkMockupGate) over
+// claims and returns its error-severity findings, with Severity normalized the
+// same way RunAll does. It is the subset internal render/catalog enforce as a
+// security gate before ever emitting .RawHTML into the client-shared viewer
+// (DX-AUD-08) — deliberately NOT the full RunAll suite, whose warning-severity
+// relationship lints (orphan, body-edge-hint) must not block a plain
+// render/catalog during draft authoring. A clean project (no mockup claims, or
+// only gate-passing ones) yields a nil slice.
+func MockupGateFindings(claims []model.Claim, cfg *config.Config) []Finding {
+	var findings []Finding
+	for _, c := range claims {
+		findings = append(findings, checkMockupGate(c, cfg)...)
+	}
+	var errs []Finding
+	for _, f := range findings {
+		if f.Severity == "" {
+			f.Severity = SeverityError
+		}
+		if f.Severity != SeverityWarning {
+			errs = append(errs, f)
+		}
+	}
+	return errs
+}
+
 // checkMockupGate applies the five-part round-3 "hardening issue 9" gate
 // to one claim's RawHTML field. A claim with an empty RawHTML has nothing
 // to check here and is skipped entirely (mockup claims with genuinely
@@ -215,10 +228,170 @@ func checkMockupGate(c model.Claim, cfg *config.Config) []Finding {
 	return findings
 }
 
+// mockupAttr is one parsed HTML attribute: its raw (case-preserved) name,
+// its value, and whether a value was present at all. A valueless attribute
+// (hasValue == false, e.g. a bare "hidden" or "onerror") is a distinct case
+// from an empty-valued one (class="") — the DX-AUD-07 fix must reject the
+// former by default rather than ignore it the way the old double-quote-only
+// regex silently did.
+type mockupAttr struct {
+	name     string
+	value    string
+	hasValue bool
+}
+
+// mockupTag is one parsed HTML tag: whether it is a closing tag, its
+// (case-preserved) name, its attributes, and — for a tag whose text could
+// not be reduced to clean name/value pairs (an unterminated tag or quoted
+// value) — a malformed flag and human-readable reason.
+type mockupTag struct {
+	closing   bool
+	name      string
+	attrs     []mockupAttr
+	malformed bool
+	malfMsg   string
+}
+
+// scanMockupTags is a hand-rolled (no golang.org/x/net/html) HTML tag
+// scanner for RawHTML content. Unlike the old double-quoted-only regex it
+// replaces (DX-AUD-07), it recognizes attribute values in every quote form —
+// double-quoted, single-quoted, unquoted, and valueless — and it tracks the
+// active quote character while looking for a tag's terminating ">", so a ">"
+// embedded inside a quoted value never truncates the scan and hides a
+// trailing attribute (e.g. an onerror after alt="a > b"). The caller
+// (checkMockupMarkup) then DEFAULT-DENIES: any parsed attribute that isn't an
+// explicitly-permitted (name,value) pair is a finding. A bare "<" not
+// followed by a tag-name letter is treated as literal text (matching how the
+// old regex simply didn't match it), not a tag.
+func scanMockupTags(raw string) []mockupTag {
+	var tags []mockupTag
+	n := len(raw)
+	i := 0
+	for i < n {
+		lt := strings.IndexByte(raw[i:], '<')
+		if lt < 0 {
+			break
+		}
+		start := i + lt
+		j := start + 1
+		closing := false
+		if j < n && raw[j] == '/' {
+			closing = true
+			j++
+		}
+		// A tag name must start with an ASCII letter; anything else means
+		// this "<" is literal text, so skip past it and keep scanning.
+		if j >= n || !isMockupLetter(raw[j]) {
+			i = start + 1
+			continue
+		}
+		nameStart := j
+		for j < n && isMockupNameChar(raw[j]) {
+			j++
+		}
+		name := raw[nameStart:j]
+
+		attrs, end, malformed, malfMsg := scanMockupAttrs(raw, j)
+		tags = append(tags, mockupTag{
+			closing:   closing,
+			name:      name,
+			attrs:     attrs,
+			malformed: malformed,
+			malfMsg:   malfMsg,
+		})
+		if malformed {
+			// The tag never reached a clean terminating ">"; there is no
+			// reliable resume point after it, so stop scanning entirely
+			// (the malformed finding already condemns the whole blob).
+			break
+		}
+		i = end + 1 // resume just past the terminating ">"
+	}
+	return tags
+}
+
+// scanMockupAttrs parses the attribute region of a tag starting at j (just
+// past the tag name) up to the terminating unquoted ">", returning the parsed
+// attributes, the index of that ">", and — if the region can't be reduced to
+// clean pairs before end-of-input — a malformed flag and reason. Every path
+// advances j, so this cannot loop forever.
+func scanMockupAttrs(raw string, j int) (attrs []mockupAttr, end int, malformed bool, malfMsg string) {
+	n := len(raw)
+	for {
+		for j < n && isMockupSpace(raw[j]) {
+			j++
+		}
+		if j >= n {
+			return attrs, n, true, "tag is not terminated with '>'"
+		}
+		switch raw[j] {
+		case '>':
+			return attrs, j, false, ""
+		case '/':
+			// Self-closing slash (e.g. <br/> or <img .../>): tolerate it and
+			// keep scanning for the terminating ">".
+			j++
+			continue
+		}
+		nameStart := j
+		for j < n && !isMockupSpace(raw[j]) && raw[j] != '=' && raw[j] != '>' && raw[j] != '/' {
+			j++
+		}
+		attrName := raw[nameStart:j]
+		for j < n && isMockupSpace(raw[j]) {
+			j++
+		}
+		if j < n && raw[j] == '=' {
+			j++ // consume '='
+			for j < n && isMockupSpace(raw[j]) {
+				j++
+			}
+			if j >= n {
+				return append(attrs, mockupAttr{name: attrName, hasValue: true}), n, true, "attribute value is not terminated before '>'"
+			}
+			q := raw[j]
+			if q == '"' || q == '\'' {
+				j++ // consume opening quote
+				valStart := j
+				for j < n && raw[j] != q {
+					j++
+				}
+				if j >= n {
+					return append(attrs, mockupAttr{name: attrName, value: raw[valStart:], hasValue: true}), n, true, "quoted attribute value is not terminated before '>'"
+				}
+				attrs = append(attrs, mockupAttr{name: attrName, value: raw[valStart:j], hasValue: true})
+				j++ // consume closing quote
+			} else {
+				valStart := j
+				for j < n && !isMockupSpace(raw[j]) && raw[j] != '>' {
+					j++
+				}
+				attrs = append(attrs, mockupAttr{name: attrName, value: raw[valStart:j], hasValue: true})
+			}
+		} else {
+			attrs = append(attrs, mockupAttr{name: attrName, hasValue: false})
+		}
+	}
+}
+
+func isMockupLetter(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
+}
+
+func isMockupNameChar(b byte) bool {
+	return isMockupLetter(b) || (b >= '0' && b <= '9')
+}
+
+func isMockupSpace(b byte) bool {
+	return b == ' ' || b == '\t' || b == '\n' || b == '\r' || b == '\f'
+}
+
 // checkMockupMarkup scans raw for tags outside mockupAllowedTags, attributes
-// other than a single, allowlisted-class-valued "class", inline event
-// handlers, style attributes, and non-relative URLs — the tag/attribute and
-// CSS-class allowlist legs of the mockup gate.
+// other than a single, allowlisted-class-valued "class" (plus relative src /
+// free-text alt on img), inline event handlers, style attributes, and
+// non-relative URLs — the tag/attribute and CSS-class allowlist legs of the
+// mockup gate. It DEFAULT-DENIES (DX-AUD-07): every parsed attribute, in any
+// quote form, must reduce to an explicitly-permitted pair or it is a finding.
 func checkMockupMarkup(claimID, raw string) []Finding {
 	var findings []Finding
 	add := func(msg string) {
@@ -229,50 +402,72 @@ func checkMockupMarkup(claimID, raw string) []Finding {
 		})
 	}
 
-	for _, tag := range mockupTagPattern.FindAllStringSubmatch(raw, -1) {
-		closing := tag[1] == "/"
-		name := strings.ToLower(tag[2])
-		attrText := tag[3]
-
+	for _, tag := range scanMockupTags(raw) {
+		if tag.malformed {
+			add(fmt.Sprintf("raw_html contains malformed markup at tag <%s>: %s", tag.name, tag.malfMsg))
+			continue
+		}
+		name := strings.ToLower(tag.name)
 		if !mockupAllowedTags[name] {
-			add(fmt.Sprintf("raw_html contains disallowed tag <%s%s> (only div, span, b, br, img are allowed)", tag[1], name))
-			continue
-		}
-		if closing {
-			continue
-		}
-
-		for _, attr := range mockupAttrPattern.FindAllStringSubmatch(attrText, -1) {
-			attrName := strings.ToLower(attr[1])
-			attrValue := attr[2]
-
-			switch {
-			case mockupOnAttrPattern.MatchString(attrName):
-				add(fmt.Sprintf("raw_html <%s> has disallowed inline event-handler attribute %q", name, attr[1]))
-			case attrName == "style":
-				add(fmt.Sprintf("raw_html <%s> has a disallowed style attribute (RawHTML markup must be style-free)", name))
-			case attrName == "class":
-				for _, token := range strings.Fields(attrValue) {
-					if !mockupClassTokenPattern.MatchString(token) {
-						add(fmt.Sprintf("raw_html <%s> class %q is not in the .gcp-*/.mockup-* CSS-class allowlist", name, token))
-					}
-				}
-			case name == "img" && attrName == "alt":
-				// Free-text alt description; no allowlist beyond the
-				// shared event-handler/style checks above.
-			case attrName == "href" || attrName == "src":
-				if name != "img" || attrName != "src" {
-					add(fmt.Sprintf("raw_html <%s> has disallowed attribute %q (only class is permitted on div/span/b/br)", name, attr[1]))
-					continue
-				}
-				if mockupAbsoluteURLPattern.MatchString(attrValue) {
-					add(fmt.Sprintf("raw_html <%s> %s=%q is a non-relative URL, which is disallowed", name, attrName, attrValue))
-				}
-			default:
-				add(fmt.Sprintf("raw_html <%s> has disallowed attribute %q (only class is permitted on div/span/b/br)", name, attr[1]))
+			slash := ""
+			if tag.closing {
+				slash = "/"
 			}
+			add(fmt.Sprintf("raw_html contains disallowed tag <%s%s> (only div, span, b, br, img are allowed)", slash, name))
+			continue
+		}
+		if tag.closing {
+			if len(tag.attrs) > 0 {
+				add(fmt.Sprintf("raw_html closing tag </%s> must not carry attributes", name))
+			}
+			continue
+		}
+		for _, attr := range tag.attrs {
+			checkMockupAttr(name, attr, add)
 		}
 	}
 
 	return findings
+}
+
+// checkMockupAttr applies the per-attribute allowlist for a start tag. Only
+// class (allowlisted-token-valued) on any allowed tag, and src (relative-only)
+// / alt (free text) on img, are permitted; every other attribute name — and
+// any of these carried without a value — is a hard finding, so an event
+// handler, style, external src, or unknown attribute cannot slip through in
+// any quote form.
+func checkMockupAttr(tagName string, attr mockupAttr, add func(string)) {
+	name := strings.ToLower(attr.name)
+	switch {
+	case name == "":
+		add(fmt.Sprintf("raw_html <%s> has a malformed, nameless attribute", tagName))
+	case mockupOnAttrPattern.MatchString(name):
+		add(fmt.Sprintf("raw_html <%s> has disallowed inline event-handler attribute %q", tagName, attr.name))
+	case name == "style":
+		add(fmt.Sprintf("raw_html <%s> has a disallowed style attribute (RawHTML markup must be style-free)", tagName))
+	case name == "class":
+		if !attr.hasValue {
+			add(fmt.Sprintf("raw_html <%s> has a valueless class attribute", tagName))
+			return
+		}
+		for _, token := range strings.Fields(attr.value) {
+			if !mockupClassTokenPattern.MatchString(token) {
+				add(fmt.Sprintf("raw_html <%s> class %q is not in the .gcp-*/.mockup-* CSS-class allowlist", tagName, token))
+			}
+		}
+	case tagName == "img" && name == "alt":
+		if !attr.hasValue {
+			add("raw_html <img> has a valueless alt attribute")
+		}
+	case tagName == "img" && name == "src":
+		if !attr.hasValue {
+			add("raw_html <img> has a valueless src attribute")
+			return
+		}
+		if mockupAbsoluteURLPattern.MatchString(attr.value) {
+			add(fmt.Sprintf("raw_html <img> src=%q is a non-relative URL, which is disallowed", attr.value))
+		}
+	default:
+		add(fmt.Sprintf("raw_html <%s> has disallowed attribute %q (only class is permitted on div/span/b; img also allows relative src and alt)", tagName, attr.name))
+	}
 }

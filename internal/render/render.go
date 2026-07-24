@@ -351,6 +351,11 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 	// on.
 	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), buildDependedByLookup(cat))
 
+	// Rebind mockup.html's "mockupHTML" func with the project's
+	// mockup_modules allowlist so its defense-in-depth gate (DX-AUD-08) can
+	// verify module membership; the default binding always escapes.
+	attachMockupOverride(tmpl.partials, cfg)
+
 	renderedByID, err := renderClaims(cat, tmpl.partials)
 	if err != nil {
 		return "", err

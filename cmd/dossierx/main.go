@@ -361,7 +361,30 @@ func newCatalogCmd() *cobra.Command {
 	}
 }
 
+// enforceMockupGate runs the raw-html-scope mockup gate (the checkMockupGate
+// subset — error-severity findings only, deliberately NOT the full lint suite,
+// so draft-authoring relationship WARNINGS still never block a plain
+// render/catalog) and returns a non-nil error when any claim's RawHTML fails
+// it. render and catalog both call this before doing their work so neither
+// ever publishes live HTML/JS from a draft, unreviewed, or non-allowlisted
+// mockup into the client-shared viewer (DX-AUD-08). Callers wrap the returned
+// error with their own "render:"/"catalog:" prefix; findings are printed to
+// stderr so the failure is self-explanatory.
+func enforceMockupGate(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) error {
+	findings := lint.MockupGateFindings(claims, cfg)
+	if len(findings) == 0 {
+		return nil
+	}
+	for _, f := range findings {
+		fmt.Fprintf(cmd.ErrOrStderr(), "[%s] %s: %s: %s\n", f.Severity, f.LintName, f.ClaimID, f.Message)
+	}
+	return fmt.Errorf("%d raw_html mockup-gate error(s); review, allowlist, and lock the mockup before rendering", len(findings))
+}
+
 func runCatalog(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) error {
+	if err := enforceMockupGate(cmd, cfg, claims); err != nil {
+		return fmt.Errorf("catalog: %w", err)
+	}
 	cat, err := catalog.Build(claims, cfg)
 	if err != nil {
 		return fmt.Errorf("catalog: build: %w", err)
@@ -393,6 +416,9 @@ func newRenderCmd() *cobra.Command {
 }
 
 func runRender(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) error {
+	if err := enforceMockupGate(cmd, cfg, claims); err != nil {
+		return fmt.Errorf("render: %w", err)
+	}
 	cat, err := catalog.Build(claims, cfg)
 	if err != nil {
 		return fmt.Errorf("render: build catalog: %w", err)

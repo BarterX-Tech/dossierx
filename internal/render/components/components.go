@@ -52,10 +52,10 @@ var funcMap = template.FuncMap{
 	"markdown":  markdown.Render,
 	"cell":      cell,
 	"edges":     edgesHTML,
-	"inc":       inc,
-	"pillClass": pillClass,
-	"colClass":  colClass,
-	"rawHTML":   rawHTML,
+	"inc":        inc,
+	"pillClass":  pillClass,
+	"colClass":   colClass,
+	"mockupHTML": mockupHTML,
 }
 
 // Load parses the default embedded partial for every known layout and
@@ -365,15 +365,44 @@ func colClass(key string) string {
 	return colClassByKey[strings.ToLower(key)]
 }
 
-// rawHTML casts a plain string to template.HTML, bypassing html/template's
-// automatic escaping. It exists solely for mockup.html's .RawHTML field —
-// see that template's doc comment and internal/lint/raw_html_scope.go for
-// the allowlist gate that makes doing so safe there. No other component
-// template uses this func; every other body-shaped field goes through the
-// "markdown" func instead, which auto-escapes and then selectively
-// re-marks up fenced/inline code.
-func rawHTML(s string) template.HTML {
-	return template.HTML(s)
+// mockupHTML is mockup.html's render-time gate on emitting .RawHTML
+// unescaped, the defense-in-depth companion to internal/lint's raw-html-scope
+// lint (DX-AUD-08). This is the DEFAULT (parse-time) binding, which has no
+// project config and therefore no mockup_modules allowlist to consult, so it
+// treats NO module as allowlisted and always escapes — the auto-escaping
+// bypass is never reached from the default binding. internal/render rebinds
+// this func name (see that package's attachMockupOverride) to a closure over
+// cfg.MockupModules for the real render path, which is the only place a
+// genuinely locked + reviewed + allowlisted mockup's markup is emitted live.
+// No other component template uses this func; every other body-shaped field
+// goes through the "markdown" func, which always auto-escapes.
+func mockupHTML(c model.Claim) template.HTML {
+	return MockupHTML(c, nil)
+}
+
+// MockupHTML returns c.RawHTML as trusted (unescaped) template.HTML only when
+// c is locked, RawHTMLReviewed, and c.Module appears in allowlist (the
+// project's mockup_modules); in every other case it returns the HTML-escaped
+// text, so a draft, unreviewed, or non-allowlisted mockup can never inject
+// live markup into the viewer even if it reached render — the raw-html-scope
+// lint gate should already have stopped it, this is the second layer. Exported
+// so internal/render can bind it with the project's allowlist.
+func MockupHTML(c model.Claim, allowlist []string) template.HTML {
+	trusted := c.Status == model.StatusLocked && c.RawHTMLReviewed && stringInSlice(allowlist, c.Module)
+	if trusted {
+		return template.HTML(c.RawHTML)
+	}
+	return template.HTML(html.EscapeString(c.RawHTML))
+}
+
+// stringInSlice reports whether s is present in ss.
+func stringInSlice(ss []string, s string) bool {
+	for _, x := range ss {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // cell renders one table.html cell value through the shared inline markdown

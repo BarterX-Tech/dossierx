@@ -211,6 +211,89 @@ func TestRawHTMLScope_Mockup(t *testing.T) {
 	}
 }
 
+// TestRawHTMLScope_Mockup_DefaultDeny is the DX-AUD-07 regression: the
+// mockup attribute gate must DEFAULT-DENY across every HTML quote form, not
+// just double-quoted name="value" pairs. Before the fix, single-quoted,
+// unquoted, and valueless attributes — and any attribute hidden behind a ">"
+// embedded inside a quoted value — bypassed the allowlist entirely, so an
+// onerror/style/external-src smuggled in any of those forms linted clean,
+// locked, and rendered live (stored XSS on the blessed path). Each wantFind
+// case below is exactly one such bypass; the wantFind==false cases prove the
+// hand-rolled scanner does not false-positive on legitimate single-quoted
+// markup or a ">" that is genuinely part of an attribute value.
+func TestRawHTMLScope_Mockup_DefaultDeny(t *testing.T) {
+	cases := []struct {
+		name     string
+		rawHTML  string
+		wantFind bool
+	}{
+		{
+			name:     "single-quoted event handler bypasses double-quote-only gate",
+			rawHTML:  `<img class="mockup-diagram" src='../diagrams/x.svg' onerror='alert(1)'>`,
+			wantFind: true,
+		},
+		{
+			name:     "unquoted attributes bypass the gate",
+			rawHTML:  `<img class="mockup-diagram" src=x onerror=alert(1)>`,
+			wantFind: true,
+		},
+		{
+			name:     "single-quoted external/absolute img src bypasses the gate",
+			rawHTML:  `<img class="mockup-diagram" src='//evil.example/x.svg'>`,
+			wantFind: true,
+		},
+		{
+			name:     "a > embedded in a quoted value must not truncate the tag scan",
+			rawHTML:  `<img class="mockup-diagram" src="../diagrams/x.svg" alt="a > b" onerror="alert(1)">`,
+			wantFind: true,
+		},
+		{
+			name:     "valueless event-handler attribute bypasses the gate",
+			rawHTML:  `<img class="mockup-diagram" src="../diagrams/x.svg" onerror>`,
+			wantFind: true,
+		},
+		{
+			name:     "valueless non-allowlisted attribute is denied by default",
+			rawHTML:  `<div class="gcp-row" hidden>boom</div>`,
+			wantFind: true,
+		},
+		{
+			name:     "unquoted disallowed class token is caught",
+			rawHTML:  `<div class=not-allowlisted>boom</div>`,
+			wantFind: true,
+		},
+		{
+			name:     "legitimate > inside a quoted alt value with no smuggled attr is allowed",
+			rawHTML:  `<img class="mockup-diagram" src="../diagrams/x.svg" alt="a > b">`,
+			wantFind: false,
+		},
+		{
+			name:     "single-quoted allowed class/src/alt on img stays valid",
+			rawHTML:  `<img class='mockup-diagram' src='../diagrams/x.svg' alt='ok'>`,
+			wantFind: false,
+		},
+		{
+			name:     "single-quoted allowed classes on div/span/b stay valid",
+			rawHTML:  `<div class='gcp-row'><span class='mockup-badge'>ERROR</span><b>boom</b></div>`,
+			wantFind: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := validMockupClaim()
+			c.RawHTML = tc.rawHTML
+			got := RawHTMLScope{}.Check([]model.Claim{c}, mockupTestConfig())
+			if tc.wantFind && len(got) == 0 {
+				t.Fatalf("expected at least one finding for %q, got none", tc.rawHTML)
+			}
+			if !tc.wantFind && len(got) != 0 {
+				t.Fatalf("expected no findings for %q, got: %+v", tc.rawHTML, got)
+			}
+		})
+	}
+}
+
 // TestRawHTMLScope_Mockup_LockGate confirms which layer enforces the
 // raw_html_reviewed gate: it is this lint (raw-html-scope), not
 // internal/lock itself — internal/lock.Lock refuses to lock any claim
