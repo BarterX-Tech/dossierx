@@ -371,7 +371,7 @@ export const contentSpec: ContentSpec = {
     },
     {
       id: "cli",
-      title: "The CLI — 17 commands, zero hardcoded project.",
+      title: "The CLI — 18 commands, zero hardcoded project.",
       kind: "cli-explorer",
       contentMd:
         "One binary serves any project through `project.config.yaml`, discovered from the working tree or supplied with `--config`. Use the explorer below for the full command surface; `check` is the CI entry point that detects drift, validates claims, renders the viewer, and verifies code links.",
@@ -383,7 +383,7 @@ export const contentSpec: ContentSpec = {
               {
                 name: "lint",
                 usage: "dossierx lint [--json]",
-                summary: "Run all 21 lints in isolation and across the set.",
+                summary: "Run all 22 lints in isolation and across the set.",
                 detail:
                   "Warnings (e.g. orphan) print but don't fail; any error-severity finding returns exit 1. --json emits findings as indented JSON.",
                 example:
@@ -492,6 +492,15 @@ export const contentSpec: ContentSpec = {
                   "Migration provenance — NOT the code-link report. That surfaces via the impl-links status block.",
                 example:
                   "$ dossierx coverage\ncoverage: 0/186 claim(s) carry migrated_from (0.0%)",
+              },
+              {
+                name: "version",
+                usage: "dossierx version",
+                summary: "Print the binary's version, commit, and build date.",
+                detail:
+                  "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
+                example:
+                  "$ dossierx version\ndossierx v0.1.1\n  commit: 9adc453\n  date:   2026-07-24",
               },
             ],
           },
