@@ -50,6 +50,7 @@ var fileForLayout = map[model.Layout]string{
 var funcMap = template.FuncMap{
 	"rowKeys":   rowKeys,
 	"markdown":  markdown.Render,
+	"cell":      cell,
 	"edges":     edgesHTML,
 	"inc":       inc,
 	"pillClass": pillClass,
@@ -373,6 +374,26 @@ func colClass(key string) string {
 // re-marks up fenced/inline code.
 func rawHTML(s string) template.HTML {
 	return template.HTML(s)
+}
+
+// cell renders one table.html cell value through the shared inline markdown
+// renderer, so a <td> shows code spans and links (markdown.RenderInline's
+// subset) rather than the literal `code`/[text](url) source table.html used
+// to emit with a raw {{index $row .}} (DX-AUD-02). It is the inline
+// counterpart to the "markdown" func card/list/steps/banner bodies use — no
+// <p> wrapper, because a table cell wants inline content, not a block.
+//
+// A model.Row is a map[string]any, so a cell value can be any YAML scalar
+// (string, number, bool) or, for an absent column in a ragged row, nil. nil
+// renders as the empty string; every other value is stringified with
+// fmt.Sprint before inline rendering, so a non-string cell renders its value
+// instead of failing template execution the way passing a non-string to a
+// string-typed renderer would.
+func cell(v any) template.HTML {
+	if v == nil {
+		return ""
+	}
+	return markdown.RenderInline(fmt.Sprint(v))
 }
 
 // writeIDListItems renders ids as a nested <ul> of <li><a href="#id">id</a>
