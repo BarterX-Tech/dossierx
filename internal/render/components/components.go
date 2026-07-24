@@ -48,10 +48,10 @@ var fileForLayout = map[model.Layout]string{
 // alike — so an override partial can use the same generic helpers as the
 // built-in ones.
 var funcMap = template.FuncMap{
-	"rowKeys":   rowKeys,
-	"markdown":  markdown.Render,
-	"cell":      cell,
-	"edges":     edgesHTML,
+	"rowKeys":    rowKeys,
+	"markdown":   markdown.Render,
+	"cell":       cell,
+	"edges":      edgesHTML,
 	"inc":        inc,
 	"pillClass":  pillClass,
 	"colClass":   colClass,
