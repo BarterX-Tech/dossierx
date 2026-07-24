@@ -40,7 +40,9 @@ The other two build on top of it once a module is fully locked:
 
 ## Claim basics
 
-A claim is one YAML entry with:
+A claim is one YAML entry, one claim per file (a file with a second `---`-separated YAML
+document is a hard load error, not a silent drop — split extra claims into their own files),
+with:
 
 - `id: module.FACET.slug` — FACET must be one of the project's configured facets.
 - `status: draft | locked` — set by hand only via `dossierx lock`/`dossierx unlock`, never edited
@@ -54,7 +56,11 @@ A claim is one YAML entry with:
   set). Classifies the claim for Build Order (see that skill) — it has nothing to do with
   this claim's reading position in the viewer (that's `section`/`order`).
 - `body` (prose, not lint-checked as data) and/or `rows` (structured, lint-checked for
-  consistent columns) — a claim needs at least one.
+  consistent columns *and* for every cell being an authored string — a number/bool/list/map
+  cell is a `rows-shape` error, so quote it) — a claim needs at least one. In both `body`
+  and `rows` cells, backtick code spans and `[text](url)` links now render as `<code>`/`<a>`
+  (link URLs are limited to `http`/`https`/`mailto`/relative/`#`; `javascript:`/`data:` are
+  neutralized to inert text). Bare URLs are not autolinked — write `[text](url)` explicitly.
 - Edges: `mirrors` (deterministic value equality — both sides must declare it), `rests_on`
   (semantic dependency — target must exist, never point at an unmigrated module; use prose
   instead until that module has real claims), `governed_by` (`{type, reason}` — `reason` is

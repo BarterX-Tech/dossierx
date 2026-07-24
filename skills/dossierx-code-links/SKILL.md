@@ -93,6 +93,13 @@ behavior?
   *only* place a human re-enters this otherwise fully autonomous workflow — flagging a
   genuine mismatch, never routine linking.
 
+  **`dossierx flag` works only on body-rendered claims** (`card`/`banner`/`list`/`tree`). It
+  is refused on a structured layout — `table`, `steps`, or `mockup` — because a flag-sourced
+  reaudit rewrites only the claim body and would leave the rows/steps/raw HTML stale while
+  clearing `review_pending`. When a code change means a `table`/`steps`/`mockup` claim's
+  meaning is now wrong, take it through **unlock → edit the rows/steps/raw_html directly →
+  relock** instead (see **[[dossierx-claims]]**).
+
 ## Portability note
 
 `source_dirs` is the one new, opt-in `project.config.yaml` field this skill depends on for
