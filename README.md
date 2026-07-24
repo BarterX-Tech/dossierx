@@ -79,6 +79,7 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 | `dossierx flag <id> --claim-says --now-does --reason` | Flag a locked claim whose stated behavior no longer matches reality, marking it `review_pending`. |
 | `dossierx implink set --module --claim --file [--symbol]` | Manually record that a claim is implemented in a source file (for links scanning can't reach). |
 | `dossierx implink status --module <name>` | Report which claims in a module are linked to code and which are drifted or unlinked. |
+| `dossierx version` | Print the binary's version, commit, and build date. Also available as the `--version` flag. |
 
 ### Exit codes
 

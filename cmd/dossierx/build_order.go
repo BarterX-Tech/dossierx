@@ -53,6 +53,9 @@ func newBuildOrderProposeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("build-order propose: %w", err)
+			}
 
 			artifact, err := buildorder.Propose(claims, cfg, module)
 			if err != nil {
@@ -90,6 +93,9 @@ func newBuildOrderStatusCmd() *cobra.Command {
 			cfg, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return err
+			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("build-order status: %w", err)
 			}
 
 			out := cmd.OutOrStdout()
@@ -144,6 +150,9 @@ func newBuildOrderLockCmd() *cobra.Command {
 			cfg, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return err
+			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("build-order lock: %w", err)
 			}
 
 			path := buildorder.ArtifactPath(cfg, module)

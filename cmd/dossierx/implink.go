@@ -48,6 +48,9 @@ func newImplinkSetCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("implink set: %w", err)
+			}
 
 			// Serializes concurrent "dossierx implink set" invocations that
 			// share this module's artifact file — same reasoning and
@@ -95,6 +98,9 @@ func newImplinkStatusCmd() *cobra.Command {
 			cfg, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return err
+			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("implink status: %w", err)
 			}
 
 			out := cmd.OutOrStdout()

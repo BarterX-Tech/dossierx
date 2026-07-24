@@ -59,5 +59,19 @@ func RunAll(claims []model.Claim, cfg *config.Config) []Finding {
 	for _, l := range Registry {
 		findings = append(findings, l.Check(claims, cfg)...)
 	}
+	// Normalize severity once, here, rather than in each of the ~dozen
+	// lints that omit it. Roughly half the lints build Finding values
+	// without setting Severity, implicitly relying on "an unset severity
+	// means error". But the zero value of Severity is "" (not
+	// SeverityError), which text reports print as "[]" and JSON reports
+	// emit as Severity:"". Filling every empty Severity with SeverityError
+	// at this single choke point makes that implicit contract explicit for
+	// every downstream consumer (text/JSON reporting, exit-code counting in
+	// reportLintFindings and internal/lock.Lock) without touching each lint.
+	for i := range findings {
+		if findings[i].Severity == "" {
+			findings[i].Severity = SeverityError
+		}
+	}
 	return findings
 }

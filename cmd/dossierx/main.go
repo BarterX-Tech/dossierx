@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -28,6 +29,30 @@ import (
 
 var configPath string
 
+// version, commit, and date are stamped in at release time by goreleaser's
+// -X ldflags (see .goreleaser.yaml, which targets these exact
+// package-qualified names). A plain "go build"/"go install" sets no ldflags,
+// leaving them empty; resolveVersionInfo falls back to
+// runtime/debug.ReadBuildInfo in that case so the binary always reports
+// something sensible instead of blank.
+var (
+	version string
+	commit  string
+	date    string
+)
+
+// errClaimNotFound and errWrongState are sentinels the lock/unlock/flag
+// subcommands wrap into their not-found / wrong-state errors so main() can
+// map both to exit code 2 — the documented "not found / not in the right
+// state" family (see README's exit-codes table). deps/reaudit reach exit 2
+// via a direct os.Exit(2) instead; lock/unlock/flag hold deferred
+// file-lock releases that a bare os.Exit would skip, so they signal through
+// these sentinels and let RunE unwind cleanly.
+var (
+	errClaimNotFound = errors.New("claim not found")
+	errWrongState    = errors.New("claim not in the required state")
+)
+
 // main, and the os.Exit(2) calls inside newDepsCmd/newReauditCmd's "not
 // found" / "not locked+review_pending" branches, are deliberately not
 // exercised by this package's own tests: calling any of them in-process
@@ -41,10 +66,16 @@ var configPath string
 // and cli_inprocess_test.go.
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
-		// A missing config file is its own exit code (2) distinct from
-		// other failures (1), so scripts/CI can tell "nothing to load"
-		// apart from "loaded but invalid" or "ran but failed".
-		if errors.Is(err, config.ErrNotFound) {
+		// Exit 2 is the "not found / not in the right state" family: a
+		// missing config file, a claim id that doesn't exist, or a claim
+		// that isn't in the state a command requires. Everything else
+		// (lint errors, validation failures, write errors) is exit 1, so
+		// scripts/CI can tell "nothing/nobody there" apart from "loaded
+		// but failed". deps/reaudit reach exit 2 via their own os.Exit(2);
+		// lock/unlock/flag wrap errClaimNotFound/errWrongState instead.
+		if errors.Is(err, config.ErrNotFound) ||
+			errors.Is(err, errClaimNotFound) ||
+			errors.Is(err, errWrongState) {
 			os.Exit(2)
 		}
 		os.Exit(1)
@@ -57,6 +88,11 @@ func newRootCmd() *cobra.Command {
 		Short:        "Render claims into a static HTML viewer",
 		SilenceUsage: true,
 	}
+	// Setting Version is what makes cobra wire up the built-in --version
+	// flag on the root command. The resolved value (ldflag-stamped, or a
+	// debug.ReadBuildInfo fallback) is used so --version never prints blank.
+	v, _, _ := resolveVersionInfo()
+	root.Version = v
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to project.config.yaml (default: search upward from the current directory, like git finds .git)")
 
 	root.AddCommand(
@@ -74,8 +110,81 @@ func newRootCmd() *cobra.Command {
 		newFlagCmd(),
 		newImplinkCmd(),
 		newSkillsCmd(),
+		newVersionCmd(),
 	)
 	return root
+}
+
+// resolveVersionInfo returns the version, commit, and build date to report.
+// It prefers the values stamped in by goreleaser's -X ldflags and falls back
+// to runtime/debug.ReadBuildInfo for plain "go build"/"go install" builds
+// (which set no ldflags): a module version if one was recorded (e.g. a
+// "go install ...@v1.2.3" build), otherwise "dev"; and the VCS
+// revision/time Go embeds by default. Empty leftovers become "unknown" so no
+// field is ever reported blank.
+func resolveVersionInfo() (v, c, d string) {
+	v, c, d = version, commit, date
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				if c == "" {
+					c = s.Value
+				}
+			case "vcs.time":
+				if d == "" {
+					d = s.Value
+				}
+			}
+		}
+		if v == "" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			v = info.Main.Version
+		}
+	}
+
+	if v == "" {
+		v = "dev"
+	}
+	if c == "" {
+		c = "unknown"
+	}
+	if d == "" {
+		d = "unknown"
+	}
+	return v, c, d
+}
+
+// newVersionCmd prints the binary's version, commit, and build date. Unlike
+// every other subcommand it never loads a project config — it describes the
+// binary itself, so it works from anywhere, with or without a project.
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the dossierx version, commit, and build date",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			v, c, d := resolveVersionInfo()
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "dossierx %s\n", v)
+			fmt.Fprintf(out, "  commit: %s\n", c)
+			fmt.Fprintf(out, "  date:   %s\n", d)
+			return nil
+		},
+	}
+}
+
+// requireKnownModule validates a --module against the modules this project
+// actually declares (cfg.Modules). Every build-order/implink subcommand
+// takes a --module, and an unknown or typo'd one would otherwise silently
+// report an empty "not proposed yet"/"nothing linked yet" state and exit 0 —
+// a success-looking result for a module that does not exist. A valid but
+// unused module passes this check and still reaches its normal report.
+func requireKnownModule(cfg *config.Config, module string) error {
+	if containsStr(cfg.Modules, module) {
+		return nil
+	}
+	return fmt.Errorf("unknown module %q; known: %s", module, strings.Join(cfg.Modules, ", "))
 }
 
 // ---------------------------------------------------------------------
@@ -195,6 +304,14 @@ func newLintCmd() *cobra.Command {
 // error (for a nonzero exit code) if any error-severity finding is
 // present. Warnings are reported but do not fail the command.
 func reportLintFindings(cmd *cobra.Command, findings []lint.Finding, asJSON bool) error {
+	// A nil findings slice JSON-encodes as "null"; coerce it to an empty
+	// slice so "dossierx lint --json" always emits a JSON array — "[]" for a
+	// clean run — which is what machine consumers parse. (Text output is
+	// unaffected: len(nil) and len([]) are both 0.)
+	if findings == nil {
+		findings = []lint.Finding{}
+	}
+
 	errCount := 0
 	for _, f := range findings {
 		if f.Severity != lint.SeverityWarning {
@@ -693,7 +810,7 @@ func newLockCmd() *cobra.Command {
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
-				return fmt.Errorf("lock: claim %q not found", id)
+				return fmt.Errorf("lock: claim %q not found: %w", id, errClaimNotFound)
 			}
 
 			// Serialize concurrent "dossierx lock"/"dossierx reaudit --confirm"
@@ -742,7 +859,7 @@ func newUnlockCmd() *cobra.Command {
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
-				return fmt.Errorf("unlock: claim %q not found", id)
+				return fmt.Errorf("unlock: claim %q not found: %w", id, errClaimNotFound)
 			}
 
 			updated := lock.Unlock(claim)

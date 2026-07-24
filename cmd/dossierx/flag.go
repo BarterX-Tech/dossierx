@@ -47,14 +47,16 @@ func newFlagCmd() *cobra.Command {
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
-				return fmt.Errorf("flag: claim %q not found", id)
+				return fmt.Errorf("flag: claim %q not found: %w", id, errClaimNotFound)
 			}
 			// Any locked claim may be (re-)flagged, review_pending or not —
 			// unlike "dossierx reaudit", which only ever runs against an
 			// already-pending claim, flagging is what PUTS a claim into
-			// review_pending in the first place.
+			// review_pending in the first place. A non-locked claim is the
+			// exit-2 "not in the right state" case (like reaudit's non-pending
+			// refusal), so it wraps errWrongState.
 			if claim.Status != model.StatusLocked {
-				return fmt.Errorf("flag: claim %q is not locked (status %q); only a locked claim can be flagged", id, claim.Status)
+				return fmt.Errorf("flag: claim %q is not locked (status %q); only a locked claim can be flagged: %w", id, claim.Status, errWrongState)
 			}
 
 			// Serializes against any concurrent "dossierx flag"/"dossierx reaudit
