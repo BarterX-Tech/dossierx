@@ -8,8 +8,12 @@ specific project, module, or facet. All project-specific vocabulary
 
 ## Claim
 
-A claim is one atomic YAML fact, one file per claim (recommended but not
-enforced by this doc), under the project's configured `claims_dir`.
+A claim is one atomic YAML fact, one claim per file, under the project's
+configured `claims_dir`. This is enforced: a claim file must contain exactly
+one YAML document. Stacking a second `---`-separated document into the same
+file is a hard load error (the engine rewrites a claim's file as a single
+document when it locks or reaudits it, so a second document in that file
+would be silently clobbered). Split multiple claims into separate files.
 
 ```yaml
 id: module.facet.slug          # e.g. widget.contract.overview

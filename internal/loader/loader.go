@@ -6,7 +6,9 @@
 package loader
 
 import (
+	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -60,6 +62,18 @@ func LoadClaims(dir string) ([]model.Claim, error) {
 		dec.KnownFields(true)
 		if err := dec.Decode(&c); err != nil {
 			return fmt.Errorf("loader: parse %s: %w", path, err)
+		}
+		// One claim per file is required, not merely recommended. A second
+		// YAML document (--- separated) in the same file must be a hard
+		// error rather than silently dropped: SaveClaim rewrites a claim's
+		// file as a single document, so a later lock/reaudit would clobber
+		// any file-siblings stacked behind the first. A clean single-
+		// document file leaves the decoder at io.EOF on the next Decode;
+		// anything else (another document, even an empty or malformed one)
+		// means more than one document is present.
+		var extra yaml.Node
+		if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+			return fmt.Errorf("loader: %s contains more than one YAML document; exactly one claim per file is required", path)
 		}
 		c.SourcePath = path
 		claims = append(claims, c)

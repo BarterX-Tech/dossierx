@@ -145,6 +145,43 @@ func TestLoadClaims_ValidYAMLWrongTopLevelShape(t *testing.T) {
 	}
 }
 
+// TestLoadClaims_MultiDocumentIsError covers a file that stacks more than
+// one YAML document (---separated) into a single claim file. LoadClaims
+// previously read only the first document and silently dropped the rest;
+// because SaveClaim rewrites a claim's file as a single document, a later
+// lock/reaudit would clobber those dropped file-siblings. This must now be
+// a hard error naming the offending file, while a legitimate one-document
+// file (even with a leading/trailing document marker) still loads.
+func TestLoadClaims_MultiDocumentIsError(t *testing.T) {
+	t.Run("two documents in one file is an error naming the file", func(t *testing.T) {
+		dir := t.TempDir()
+		p := writeFile(t, dir, "two.yaml",
+			"id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n"+
+				"---\n"+
+				"id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim b\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		_, err := LoadClaims(dir)
+		if err == nil {
+			t.Fatal("expected an error for a file with two YAML documents, got nil")
+		}
+		if !strings.Contains(err.Error(), p) {
+			t.Errorf("expected error to name the offending file %q, got: %v", p, err)
+		}
+	})
+
+	t.Run("a single document still loads exactly as before", func(t *testing.T) {
+		dir := t.TempDir()
+		writeFile(t, dir, "one.yaml",
+			"---\nid: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		claims, err := LoadClaims(dir)
+		if err != nil {
+			t.Fatalf("LoadClaims on a single-document file: unexpected error: %v", err)
+		}
+		if len(claims) != 1 || claims[0].ID != "widget.contract.a" {
+			t.Fatalf("expected exactly one claim widget.contract.a, got %+v", claims)
+		}
+	})
+}
+
 func TestSaveClaim_RoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	p := writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: original\ngoverned_by:\n  type: none\n  reason: fixture\n")
