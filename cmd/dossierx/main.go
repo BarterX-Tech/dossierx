@@ -853,13 +853,41 @@ func newUnlockCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			_, claims, err := loadConfigAndClaims()
+			cfg, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return err
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
 				return fmt.Errorf("unlock: claim %q not found: %w", id, errClaimNotFound)
+			}
+
+			// Unlocking must also drop any pending "dossierx flag" trigger for
+			// this claim (DX-AUD-10): a flag records an agent's before/after
+			// assertion against the claim's currently-locked body, and once the
+			// claim is unlocked and (presumably) edited, that stale assertion
+			// must not survive to be silently applied by a later
+			// drift-triggered "dossierx reaudit --confirm" after the claim is
+			// relocked. Serialize against concurrent flag/reaudit invocations
+			// on the shared flag-store file, the same way newLockCmd and
+			// newReauditCmd do (AcquireFileLock). Shared lock.Store.Hashes
+			// entries are deliberately NOT touched here — they belong to
+			// co-dependents and are harmlessly overwritten on the next relock.
+			release, err := lock.AcquireFileLock(flagStorePath(cfg))
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
+			}
+			defer release()
+
+			flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
+			}
+			if _, flagged := flagStore.Flags[id]; flagged {
+				delete(flagStore.Flags, id)
+				if err := flagStore.Save(); err != nil {
+					return fmt.Errorf("unlock: %w", err)
+				}
 			}
 
 			updated := lock.Unlock(claim)
@@ -1003,7 +1031,7 @@ func pickChangedDependency(claim model.Claim, claims []model.Claim, store *lock.
 		if !ok {
 			continue
 		}
-		if stored, known := store.Hashes[dep]; known && stored != lock.ContentHash(depClaim) {
+		if stored, known := store.Baseline(claim.ID, dep); known && stored != lock.ContentHash(depClaim) {
 			return depClaim
 		}
 	}

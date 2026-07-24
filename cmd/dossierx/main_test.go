@@ -145,9 +145,11 @@ func TestPickChangedDependencyPrefersStaleHash(t *testing.T) {
 	claim := model.Claim{ID: "m.contract.main", RestsOn: []string{"m.contract.fresh", "m.contract.stale"}}
 	claims := []model.Claim{claim, fresh, stale}
 
-	store := &lock.Store{Hashes: map[string]string{
-		"m.contract.fresh": lock.ContentHash(fresh),
-		"m.contract.stale": "stale-hash-that-no-longer-matches",
+	store := &lock.Store{Hashes: map[string]map[string]string{
+		claim.ID: {
+			"m.contract.fresh": lock.ContentHash(fresh),
+			"m.contract.stale": "stale-hash-that-no-longer-matches",
+		},
 	}}
 
 	got := pickChangedDependency(claim, claims, store)
@@ -161,7 +163,7 @@ func TestPickChangedDependencyFallsBackToFirstDep(t *testing.T) {
 	claim := model.Claim{ID: "m.contract.main", Mirrors: []string{"m.contract.dep"}}
 	claims := []model.Claim{claim, dep}
 
-	store := &lock.Store{Hashes: map[string]string{}}
+	store := &lock.Store{Hashes: map[string]map[string]string{}}
 
 	got := pickChangedDependency(claim, claims, store)
 	if got.ID != dep.ID {
@@ -171,7 +173,7 @@ func TestPickChangedDependencyFallsBackToFirstDep(t *testing.T) {
 
 func TestPickChangedDependencyNoDepsReturnsZeroValue(t *testing.T) {
 	claim := model.Claim{ID: "m.contract.lonely"}
-	store := &lock.Store{Hashes: map[string]string{}}
+	store := &lock.Store{Hashes: map[string]map[string]string{}}
 
 	got := pickChangedDependency(claim, []model.Claim{claim}, store)
 	if got.ID != "" {

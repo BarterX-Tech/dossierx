@@ -54,7 +54,7 @@ func TestConfirmAppliesAndClearsFlag(t *testing.T) {
 		Body:          "Widget supports old behavior.",
 	}
 	claims := []model.Claim{claim, dep}
-	store := &lock.Store{Hashes: map[string]string{dep.ID: "stale-hash"}}
+	store := &lock.Store{Hashes: map[string]map[string]string{claim.ID: {dep.ID: "stale-hash"}}}
 
 	diff := Diff{
 		ClaimID:  claim.ID,
@@ -89,7 +89,7 @@ func TestConfirmAppliesAndClearsFlag(t *testing.T) {
 	if cleared.Status != model.StatusLocked {
 		t.Fatalf("expected status to remain locked, got %q", cleared.Status)
 	}
-	if store.Hashes[dep.ID] != lock.ContentHash(dep) {
+	if h, ok := store.Baseline(claim.ID, dep.ID); !ok || h != lock.ContentHash(dep) {
 		t.Fatalf("expected dependency baseline hash refreshed after confirmed reaudit")
 	}
 }

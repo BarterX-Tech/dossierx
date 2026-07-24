@@ -9,12 +9,14 @@
 // is the only automatic transition, and it is one-directional until a
 // human confirms a reaudit.
 //
-// Store is a small JSON-file-backed table of per-claim content hashes,
-// used to detect when a claim a locked claim depends on (via Mirrors or
-// RestsOn) has changed underneath it. This is load-bearing: dossierx check's
-// staleness detection and dossierx lock's baseline-recording both go through
-// it, so its file format is considered part of the engine's on-disk
-// contract, not an implementation detail.
+// Store is a small JSON-file-backed table of dependency content hashes,
+// keyed per-dependent (Hashes[dependentID][depID]), used to detect when a
+// claim a locked claim depends on (via Mirrors or RestsOn) has changed
+// underneath it. This is load-bearing: dossierx check's staleness detection
+// and dossierx lock's baseline-recording both go through it, so its file
+// format is considered part of the engine's on-disk contract, not an
+// implementation detail — and is versioned (see storeSchemaVersion) so a
+// format change like the per-dependent re-keying stays migratable.
 package lock
 
 import (
@@ -35,12 +37,32 @@ import (
 // refreshes can be asserted deterministically instead of racing real time.
 var nowFunc = time.Now
 
-// Store is the on-disk (JSON) record of content hashes, keyed by claim ID,
-// as of each claim's most recent lock or confirmed reaudit.
+// storeSchemaVersion is the on-disk schema version of the lock hash store.
+//
+// Version 1 introduced PER-DEPENDENT hash baselines: Hashes became
+// map[dependentID]map[depID]hash, so each locked claim records its own
+// snapshot of every dependency it rests on. A store file carrying no
+// "version" field (Version == 0 after decode) predates that change and holds
+// the legacy flat map[depID]hash; LoadStore migrates it — see LoadStore.
+const storeSchemaVersion = 1
+
+// Store is the on-disk (JSON) record of dependency content hashes as of each
+// locked claim's most recent lock or confirmed reaudit.
 type Store struct {
-	// Hashes maps claim ID -> ContentHash(claim) at the time it was last
-	// locked or reaudited-and-confirmed.
-	Hashes map[string]string `json:"hashes"`
+	// Version is the store's on-disk schema version (see storeSchemaVersion).
+	// It is written on every Save and read on every Load so a format change
+	// like the per-dependent re-keying stays migratable rather than a silent,
+	// unversioned break.
+	Version int `json:"version"`
+
+	// Hashes records dependency baselines keyed PER DEPENDENT:
+	// Hashes[dependentID][depID] is ContentHash(dep) as observed the last
+	// time dependentID itself was locked or reaudited-and-confirmed. Keying
+	// per-dependent (rather than by dependency id alone) is load-bearing: two
+	// locked claims that share a dependency each keep their OWN baseline for
+	// it, so locking/reauditing one never overwrites the other's baseline and
+	// masks real drift the other should have flipped review_pending on.
+	Hashes map[string]map[string]string `json:"hashes"`
 
 	// LockedAt maps a locked claim's own ID -> the RFC3339Nano timestamp of
 	// its most recent "dossierx lock" or confirmed "dossierx reaudit". Per
@@ -52,11 +74,53 @@ type Store struct {
 	path string
 }
 
+// Baseline returns the recorded content hash of dependency depID as of the
+// last time dependent dependentID was locked or reaudited-and-confirmed, and
+// whether such a baseline exists. Baselines are keyed per-dependent (see
+// Store.Hashes' doc comment).
+func (s *Store) Baseline(dependentID, depID string) (string, bool) {
+	deps, ok := s.Hashes[dependentID]
+	if !ok {
+		return "", false
+	}
+	h, ok := deps[depID]
+	return h, ok
+}
+
+// recordBaseline records dep's content hash under the dependent claim's own
+// id, allocating the per-dependent sub-map on first use.
+func (s *Store) recordBaseline(dependentID, depID, hash string) {
+	if s.Hashes == nil {
+		s.Hashes = map[string]map[string]string{}
+	}
+	if s.Hashes[dependentID] == nil {
+		s.Hashes[dependentID] = map[string]string{}
+	}
+	s.Hashes[dependentID][depID] = hash
+}
+
 // LoadStore reads the hash store from path. A missing file is not an
 // error: it is treated as an empty, freshly-initialized store (the common
 // case for a project's first "dossierx lock").
+//
+// On-load migration: a store predating per-dependent baselines carries no
+// "version" field (so its decoded Version is 0) and a legacy flat
+// map[depID]hash under "hashes". Those flat baselines cannot be attributed
+// to a specific dependent — the whole reason DX-AUD-09 was a bug — so
+// re-keying them per-dependent would mean fabricating baselines, which could
+// SUPPRESS real drift (a dependent whose dependency actually changed since
+// its own lock would be handed a fresh-looking baseline it never recorded).
+// The safe migration is therefore to DROP the legacy flat hashes entirely
+// and let every locked claim re-baseline on its next lock/reaudit. Until
+// then DetectStale simply finds no baseline for those dependents and reports
+// no drift — never a crash, never a spurious review_pending.
 func LoadStore(path string) (*Store, error) {
-	s := &Store{Hashes: map[string]string{}, LockedAt: map[string]string{}, path: path}
+	s := &Store{
+		Version:  storeSchemaVersion,
+		Hashes:   map[string]map[string]string{},
+		LockedAt: map[string]string{},
+		path:     path,
+	}
 
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -65,16 +129,39 @@ func LoadStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lock: read store %s: %w", path, err)
 	}
-	if err := json.Unmarshal(raw, s); err != nil {
+
+	// Decode in two phases so a legacy flat "hashes" (map[depID]hash) can
+	// never make json.Unmarshal fail against the new nested
+	// map[dependentID]map[depID]hash shape: capture "hashes" as raw bytes
+	// first, decide by schema version whether to keep or drop it, and only
+	// then decode the ones we keep.
+	var onDisk struct {
+		Version  int               `json:"version"`
+		Hashes   json.RawMessage   `json:"hashes"`
+		LockedAt map[string]string `json:"locked_at"`
+	}
+	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
 	}
-	if s.Hashes == nil {
-		s.Hashes = map[string]string{}
+	if onDisk.LockedAt != nil {
+		s.LockedAt = onDisk.LockedAt
 	}
-	if s.LockedAt == nil {
-		s.LockedAt = map[string]string{}
+
+	// Legacy (pre-versioning) store: drop its flat hashes, keep LockedAt, and
+	// present it to callers as an already-migrated current-version store.
+	if onDisk.Version < storeSchemaVersion {
+		return s, nil
 	}
-	s.path = path
+
+	if len(onDisk.Hashes) > 0 {
+		var nested map[string]map[string]string
+		if err := json.Unmarshal(onDisk.Hashes, &nested); err != nil {
+			return nil, fmt.Errorf("lock: parse store %s hashes: %w", path, err)
+		}
+		if nested != nil {
+			s.Hashes = nested
+		}
+	}
 	return s, nil
 }
 
@@ -191,7 +278,7 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 
 	for _, dep := range dependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
-			store.Hashes[dep] = ContentHash(depClaim)
+			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
 		}
 	}
 	if store.LockedAt == nil {
@@ -229,7 +316,7 @@ func DetectStale(claims []model.Claim, store *Store) []model.Claim {
 			if !ok {
 				continue
 			}
-			if stored, known := store.Hashes[dep]; known && stored != ContentHash(depClaim) {
+			if stored, known := store.Baseline(c.ID, dep); known && stored != ContentHash(depClaim) {
 				out[i].ReviewPending = true
 				break
 			}
@@ -245,7 +332,7 @@ func ClearReviewPending(claim model.Claim, claims []model.Claim, store *Store) m
 	claim.ReviewPending = false
 	for _, dep := range dependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
-			store.Hashes[dep] = ContentHash(depClaim)
+			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
 		}
 	}
 	if store.LockedAt == nil {
