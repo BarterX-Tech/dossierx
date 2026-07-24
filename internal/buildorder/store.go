@@ -104,14 +104,29 @@ func LoadArtifact(path string) (*Artifact, error) {
 }
 
 // recomputeStale refreshes a.Stale/a.StaleIDs in place against claims'
-// current content, by comparing each of a.ClaimIDs() against a.Hashes (the
-// snapshot taken at the artifact's last Lock). It never mutates a.Hashes
-// itself — only Lock ever updates that baseline — mirroring
-// internal/lock.DetectStale (read-only re-check) vs internal/lock.Lock
-// (the only thing that writes a new baseline).
+// current content. It never mutates a.Hashes itself — only Lock ever updates
+// that baseline — mirroring internal/lock.DetectStale (read-only re-check)
+// vs internal/lock.Lock (the only thing that writes a new baseline).
 //
 // A not-yet-locked artifact (a.Hashes empty) is never stale: staleness is
 // only meaningful relative to a hash baseline that Lock hasn't taken yet.
+//
+// Three independent drifts all count as staleness, so a frozen artifact can
+// never silently stop describing its module's real claim set:
+//
+//   - content change — a covered claim's lock.ContentHash no longer matches
+//     the snapshot taken at the last Lock.
+//   - deletion — a claim this artifact covers no longer exists at all in the
+//     current claim set (it references an id that's gone).
+//   - addition — a claim now locked into this module that the frozen artifact
+//     neither placed in a phase (a.ClaimIDs()) nor recorded as excluded
+//     (a.Excluded). This was the actual FIX-12 bug: locking a brand-new claim
+//     into an already-covered module left stale:false while the artifact
+//     silently omitted it. The a.ClaimIDs() UNION a.Excluded set is what
+//     keeps a legitimately out-of-scope claim (already in Excluded) from
+//     false-positiving here, and the check is scoped to the module's CURRENT
+//     locked claims (symmetric with deletion: an artifact only ever exists
+//     once its module was fully locked).
 func recomputeStale(a *Artifact, claims []model.Claim) {
 	if len(a.Hashes) == 0 {
 		a.Stale = false
@@ -124,24 +139,41 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 		byID[c.ID] = c
 	}
 
-	var staleIDs []string
+	staleSet := make(map[string]bool)
+
+	// Content change + deletion, over the artifact's frozen coverage.
 	for _, id := range a.ClaimIDs() {
 		c, ok := byID[id]
 		if !ok {
-			// A claim this artifact covers no longer exists at all — the
-			// artifact can no longer be trusted to describe the current
-			// module (it references a file/id that's gone), so this is
-			// stale too, not "nothing to hash-compare". Treating a
-			// deletion as silently fine was the actual bug: it let
-			// "dossierx build-order status" report stale:false for an
-			// artifact whose own coverage count no longer matched the
-			// module's real claim count.
-			staleIDs = append(staleIDs, id)
+			staleSet[id] = true // deletion
 			continue
 		}
 		if stored, known := a.Hashes[id]; known && stored != lock.ContentHash(c) {
-			staleIDs = append(staleIDs, id)
+			staleSet[id] = true // content change
 		}
+	}
+
+	// Addition — any locked claim now in this module that the artifact
+	// neither placed in a phase nor recorded as excluded.
+	covered := make(map[string]bool)
+	for _, id := range a.ClaimIDs() {
+		covered[id] = true
+	}
+	for _, id := range a.Excluded {
+		covered[id] = true
+	}
+	for _, c := range claims {
+		if c.Module != a.Module || c.Status != model.StatusLocked {
+			continue
+		}
+		if !covered[c.ID] {
+			staleSet[c.ID] = true
+		}
+	}
+
+	staleIDs := make([]string, 0, len(staleSet))
+	for id := range staleSet {
+		staleIDs = append(staleIDs, id)
 	}
 	sort.Strings(staleIDs)
 	a.StaleIDs = staleIDs
@@ -166,15 +198,25 @@ func Status(path string, claims []model.Claim) (*Artifact, error) {
 // covered by its Phases (a.ClaimIDs()) into a.Hashes — the new staleness
 // baseline, mirroring internal/lock.Lock's own dependency-hash snapshot.
 //
-// It refuses (returns a non-nil error, path left untouched) in exactly two
-// cases: no artifact exists yet at path (ErrNotProposed — run "dossierx
-// build-order propose" first), or the artifact is already locked AND not
-// currently stale (nothing to relock — re-locking an unchanged, already-
-// locked artifact would just be busywork with no observable effect). An
-// already-locked-but-stale artifact IS relockable: that is exactly the
-// "someone edited a covered claim after the fact" case this whole
-// staleness mechanism exists to let a reviewer resolve, by re-running lock
-// once they've confirmed the drift is fine.
+// It refuses (returns a non-nil error, path left untouched) in three cases:
+//
+//   - no artifact exists yet at path (ErrNotProposed — run "dossierx
+//     build-order propose" first).
+//   - the artifact is stale (a covered claim changed, was deleted, or a new
+//     claim was locked into the module). A bare relock here is UNSAFE: Lock
+//     only refreshes hashes/flags and never recomputes Phases, so relocking a
+//     stale artifact would freeze the now-outdated order (e.g. after a
+//     rests_on edit) while silently reporting it fresh. The safe resolution
+//     is to re-propose (which recomputes the order against the current claim
+//     set) and then lock the freshly-proposed artifact — the re-propose-then-
+//     lock flow the dossierx-build-order SKILL documents. Lock returns an
+//     error saying exactly that rather than freezing a wrong order.
+//   - the artifact is already locked and not stale (nothing to relock —
+//     re-locking an unchanged, already-locked artifact would be busywork with
+//     no observable effect).
+//
+// A freshly-proposed artifact (never locked, so no hash baseline) is never
+// stale and is the normal thing Lock acts on.
 func Lock(path string, claims []model.Claim) (*Artifact, error) {
 	a, err := LoadArtifact(path)
 	if err != nil {
@@ -182,7 +224,13 @@ func Lock(path string, claims []model.Claim) (*Artifact, error) {
 	}
 
 	recomputeStale(a, claims)
-	if a.Locked && !a.Stale {
+	if a.Stale {
+		return nil, fmt.Errorf(
+			"buildorder: %q's build order is stale (%d claim(s) changed, added, or removed: %v); a bare relock would freeze an outdated order, so re-run \"dossierx build-order propose --module %s\" first, then lock",
+			a.Module, len(a.StaleIDs), a.StaleIDs, a.Module,
+		)
+	}
+	if a.Locked {
 		return nil, fmt.Errorf("buildorder: %q is already locked and not stale; nothing to relock", a.Module)
 	}
 

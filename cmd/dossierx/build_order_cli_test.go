@@ -210,16 +210,29 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 		t.Fatalf("expected the mutated claim id named in stale output, got: %s", statusAfterMutate)
 	}
 
-	// Relock is now allowed (stale) and clears staleness.
+	// A bare relock of the stale artifact is refused (FIX-13): it would
+	// otherwise freeze the OLD phase order while clearing staleness. The
+	// refusal points at re-proposing first.
+	if bareRelock, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget"); err == nil {
+		t.Fatalf("expected a bare relock of a stale artifact to be refused (out: %s)", bareRelock)
+	} else if !strings.Contains(err.Error(), "propose") {
+		t.Fatalf("expected the stale-relock refusal to direct a re-propose, got: %v", err)
+	}
+
+	// Re-propose regenerates the order against the mutated claims, then lock
+	// succeeds and clears staleness — the SKILL's re-propose-then-lock flow.
+	if reproposeOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("re-propose after going stale: %v (out: %s)", err, reproposeOut)
+	}
 	relockOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget")
 	if err != nil {
-		t.Fatalf("expected relock to succeed once stale, got: %v (out: %s)", err, relockOut)
+		t.Fatalf("expected lock to succeed after re-propose, got: %v (out: %s)", err, relockOut)
 	}
 	statusAfterRelock, _, err := execCLI(t, "--config", cfgPath, "build-order", "status", "--module", "widget")
 	if err != nil {
 		t.Fatalf("status after relock: %v", err)
 	}
 	if !strings.Contains(statusAfterRelock, "stale:    false") {
-		t.Fatalf("expected stale: false after relock, got: %s", statusAfterRelock)
+		t.Fatalf("expected stale: false after re-propose + lock, got: %s", statusAfterRelock)
 	}
 }

@@ -29,7 +29,8 @@ claim schema and lock lifecycle, in particular `build_role`.
 - A module you're about to implement has just had its last claim locked.
 - You're mid-implementation and unsure which claim to build next.
 - `dossierx check`'s "next steps" block says a module is fully locked with no build order yet.
-- A locked build order started reporting `stale` (a covered claim changed or was deleted).
+- A locked build order started reporting `stale` (a covered claim changed, was deleted, or a
+  new claim was locked into the module).
 
 ## The five build_role phases
 
@@ -50,14 +51,26 @@ reordered or interleaved:
 `out-of-scope` claims (deferred/future-scope) are never placed in the sequence, but are
 always still reported as `excluded` — never silently dropped from view.
 
-**Don't confuse `build_role: orientation` with `kind: orientation-note`.** They're
-unrelated axes that happen to share a word. `build_role: orientation` is this skill's
-phase 1 — a context/process *fact* claim, still ordered and built like any other claim,
-just first. `kind: orientation-note` (see [[dossierx-claims]]) is a claim that *isn't* a
-fact at all — reading guidance rendered as a pinned banner, invisible to Build Order
-entirely (it's reachable only via the reserved `overview` facet or a regular facet with
-`kind` set, never a `build_role`). A claim can be `build_role: orientation` without being
-`kind: orientation-note`, and vice versa.
+**`build_role: orientation` and `kind: orientation-note` are different axes — but both
+participate in Build Order.** `build_role` classifies *where in the build sequence* a claim
+sits (this section's five phases); `kind` classifies *what a claim is* — a fact about the
+system (the default) versus reading guidance about the rest of the module
+(`kind: orientation-note`, or the reserved `overview` facet, which implies it — see
+[[dossierx-claims]]). They are orthogonal, but a `kind: orientation-note` claim is **not**
+invisible to Build Order and **does** carry a `build_role`:
+
+- Every claim in a module must be locked before `propose` runs (the completeness gate), and
+  once a module adopts `build_role` the `build-role-required-for-locked` lint hard-fails
+  locking *any* claim — orientation-note claims included — without a valid `build_role`.
+- `propose` likewise rejects a locked claim with no `build_role` set, so an orientation-note
+  claim reaches the build order carrying one.
+- An orientation-note claim's natural `build_role` is **`orientation`** (phase 1): it is
+  read for background — "read Contract, never Internals" — and never itself built from, so
+  it renders in the orientation phase alongside `build_role: orientation` fact claims.
+
+So a claim can be `kind: orientation-note` **and** `build_role: orientation` at once (the
+common case), or either one on its own — but neither one lets a locked claim skip having a
+`build_role` once its module uses the feature.
 
 ## Commands
 
@@ -80,7 +93,8 @@ claim by construction, nothing skipped.
 2. **Present the proposed sequence and wait for explicit confirmation** before locking —
    same review discipline as any other dossierx-v1 gate.
 3. `dossierx build-order lock --module <name>` — freezes it. Refuses if nothing was proposed
-   yet, or if it's already locked and not stale (nothing to relock).
+   yet, if the order is **stale** (a bare relock would freeze an outdated sequence — re-run
+   `propose` first, see below), or if it's already locked and not stale (nothing to relock).
 
 ## Following the sequence as an implementing agent
 
@@ -96,10 +110,14 @@ sequence.
 
 ## When the build order goes stale
 
-`dossierx build-order status --module <name>` reports `stale: true` if a covered claim's content
-changed or was deleted since the sequence was locked. Re-run `propose` (produces a fresh
-diff against the current claim set) then `lock` again — same review-before-lock discipline
-as the first time. Never treat a stale build order as still authoritative; re-derive it.
+`dossierx build-order status --module <name>` reports `stale: true` if, since the sequence was
+locked, a covered claim's content changed, a covered claim was deleted, or a new claim was
+locked into the module (coverage the frozen order silently omits). `lock` refuses a stale
+artifact outright — a bare relock would only refresh hashes/flags without recomputing the
+order, freezing an outdated sequence (e.g. after a `rests_on` edit). Re-run `propose`
+(recomputes the order against the current claim set) then `lock` again — same
+review-before-lock discipline as the first time. Never treat a stale build order as still
+authoritative; re-derive it.
 
 ## Portability note
 
