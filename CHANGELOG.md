@@ -7,6 +7,71 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-24
+
+Consolidated audit-fix release: a deep audit against a real 202-claim consumer project
+surfaced 25 confirmed defects, fixed together here rather than as a stream of point
+releases. Despite adding user-facing capabilities this is a patch bump — `internal/` is not
+importable, there are no breaking CLI changes, and the lock-store migrates automatically.
+
+### Added
+- `dossierx version` subcommand and a `--version` flag (previously the binary could not
+  report its own version, and the release-time `-X` ldflags targeted variables that did not
+  exist).
+- Markdown `[text](url)` links now render as anchors in claim bodies **and** in `table`
+  cells; backtick code spans now render inside table cells too. Link URL schemes are
+  allowlisted (`http`, `https`, `mailto`, relative, `#`-fragment); `javascript:`, `data:`,
+  and `vbscript:` are neutralized to inert text. Bare URLs are not autolinked.
+- New `status-shape` lint: `status` must be exactly `draft` or `locked`.
+- `rows-shape` now flags any non-string table cell (number/bool/list/map) instead of letting
+  it render as Go-native text (e.g. an unquoted `1.0` silently becoming `1`).
+
+### Fixed
+- A YAML file containing a second `---`-separated document silently dropped all but the first
+  claim; it is now a hard load error (one claim per file is enforced).
+- `lint --json` printed `null` instead of `[]` when there were no findings, and
+  error-severity findings serialized with an empty severity; both now emit correct JSON.
+- `lock` / `unlock` / `flag` returned exit code 1 for an unknown claim id; they now return
+  exit 2, matching the documented exit-code contract (as `deps` / `reaudit` already did).
+- `build-order status` and `implink status` accepted an unknown `--module` and exited 0; they
+  now reject it.
+- The invalid-`layout` lint message omitted `mockup`; it now lists all seven layouts.
+- Dependency-hash baselines were keyed by dependency id alone and shared across dependents,
+  so locking or reauditing one claim erased another's drift baseline and that claim would
+  never flip to `review_pending` when the shared dependency changed. Baselines are now keyed
+  per-dependent; the on-disk lock-store is versioned and migrates automatically.
+- `unlock` left a claim's pending flag in the flag-store, so a later dependency-drift reaudit
+  could silently re-apply stale pre-unlock content; `unlock` now clears the flag entry.
+- `flag` on a `table` / `steps` / `mockup` claim rewrote only the body, leaving the rendered
+  rows/steps/raw HTML stale while clearing `review_pending`; `flag` is now refused on those
+  structured layouts (use unlock → edit → relock).
+- Build-order staleness ignored newly-added claims (an artifact could silently omit a claim);
+  additions now flag the artifact stale, symmetric with deletions.
+- `build-order lock` re-blessed a stale artifact without recomputing its order; it now refuses
+  a stale artifact and directs you to re-propose first.
+- The Build Order section was emitted without an id and hidden by the facet-tab logic on every
+  view, making the feature unreachable; it now renders visibly and its cards are deep-linkable.
+- A module overview/router claim was injected into every facet with the same id, producing
+  duplicate ids (invalid HTML) and broken deep-links; the canonical id is now stamped on a
+  single copy while the overview stays visible in every facet.
+- The offline-guarantee test walked the whole repo including built site bundles, so it went
+  red locally after a site build while passing on a clean CI checkout; it is now scoped to the
+  engine directories with a positive control.
+
+### Security
+- The `raw_html` mockup allowlist only inspected double-quoted attributes, so single-quoted,
+  unquoted, and valueless event handlers, styles, and external `src` bypassed it. It is
+  replaced with a default-deny parser covering every quote form, and an entity-encoded `img`
+  `src` (e.g. `&#47;&#47;host`) is now decoded before the relative-only check.
+- `render` and `catalog` never ran the `raw_html` gate (only `lock` did), so they could
+  publish unreviewed or non-allowlisted mockup HTML into the viewer; both now enforce the gate
+  and fail on a violation.
+
+### Docs
+- Corrected the build-order skill (orientation-note/overview claims do carry a `build_role`
+  and render in the orientation phase). Updated the claims and code-links skills, `FORMAT.md`,
+  and the marketing site to reflect the behavior above.
+
 ## [0.1.1] - 2026-07-24
 
 ### Fixed
