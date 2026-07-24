@@ -52,6 +52,7 @@ package lint
 
 import (
 	"fmt"
+	"html"
 	"regexp"
 	"strings"
 
@@ -464,7 +465,10 @@ func checkMockupAttr(tagName string, attr mockupAttr, add func(string)) {
 			add("raw_html <img> has a valueless src attribute")
 			return
 		}
-		if mockupAbsoluteURLPattern.MatchString(attr.value) {
+		// Entity-decode before the relative-only check: mockupAbsoluteURLPattern
+		// matches raw bytes, so an encoded absolute/protocol-relative URL such as
+		// src="&#47;&#47;host/x" would otherwise slip past it and load externally.
+		if mockupAbsoluteURLPattern.MatchString(html.UnescapeString(attr.value)) {
 			add(fmt.Sprintf("raw_html <img> src=%q is a non-relative URL, which is disallowed", attr.value))
 		}
 	default:

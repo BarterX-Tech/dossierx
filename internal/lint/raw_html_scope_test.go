@@ -243,6 +243,16 @@ func TestRawHTMLScope_Mockup_DefaultDeny(t *testing.T) {
 			wantFind: true,
 		},
 		{
+			name:     "decimal-entity-encoded protocol-relative img src is caught",
+			rawHTML:  `<img class="mockup-diagram" src="&#47;&#47;evil.example/x.svg">`,
+			wantFind: true,
+		},
+		{
+			name:     "hex-entity-encoded absolute img src is caught",
+			rawHTML:  `<img class="mockup-diagram" src="http&#x3a;//evil.example/x.svg">`,
+			wantFind: true,
+		},
+		{
 			name:     "a > embedded in a quoted value must not truncate the tag scan",
 			rawHTML:  `<img class="mockup-diagram" src="../diagrams/x.svg" alt="a > b" onerror="alert(1)">`,
 			wantFind: true,
