@@ -259,6 +259,13 @@
 
       var mounted = false;          // true once /api/ping confirms a live serve
       var currentClaimID = null;    // claim id of the open panel, or null
+      // part-b skip state: the claim id + JSON signature of the threads currently
+      // rendered in the rail. A reload whose freshly-fetched threads match this
+      // signature (e.g. an SSE "changed" for a DIFFERENT claim, or a no-op tick)
+      // skips the destructive rebuild, so unsent composer/reply/edit text and the
+      // reader's focus survive. Only ever read/written in renderPanelFromAPI.
+      var lastRenderedClaimID = null;
+      var lastRenderedThreadsJSON = null;
       var rail = document.getElementById('commentsPanel');
       var railBody = document.getElementById('commentsRailBody');
       var railTitle = document.getElementById('commentsRailTitle');
@@ -481,7 +488,24 @@
           var threads = ((data && data.comments) || []).filter(function (c) {
             return c.claim_id === claimID;
           });
-          buildPanel(claimID, threads);
+          // A JSON signature of exactly what buildPanel would render for this
+          // claim. The server serializes deterministically, so two fetches of an
+          // unchanged claim produce byte-identical signatures.
+          var sig = JSON.stringify(threads);
+          // sameClaimRendered: the rail currently shows THIS claim's threads (not a
+          // different claim we just switched from, and not an error/loading state).
+          var sameClaimRendered = (lastRenderedClaimID === claimID &&
+            !!railBody.querySelector('.comments-threads'));
+          // (part b) Nothing this claim shows has changed -> skip the destructive
+          // rebuild entirely, preserving any dirty draft and the reader's focus.
+          if (sameClaimRendered && lastRenderedThreadsJSON === sig) { return; }
+          // (part a) A rebuild is needed. Capture dirty drafts to restore across it
+          // — but ONLY when the rail already shows this claim, never on a claim
+          // switch (that would leak one claim's draft into another's panel).
+          var drafts = sameClaimRendered ? captureDirtyDrafts() : emptyDrafts();
+          lastRenderedClaimID = claimID;
+          lastRenderedThreadsJSON = sig;
+          buildPanel(claimID, threads, drafts);
         }).catch(function () {
           if (currentClaimID !== claimID) { return; }
           railBody.textContent = '';
@@ -490,40 +514,74 @@
         });
       }
 
-      function buildPanel(claimID, threads) {
+      // ---- dirty-draft capture (part a) -------------------------------
+      // A "draft" is user-typed, non-empty text sitting in the composer, a reply
+      // composer, or an open inline edit form when a rebuild is about to wipe the
+      // rail. captureDirtyDrafts snapshots those values keyed so buildPanel can
+      // put each one back on the freshly-built node it belongs to. Reply drafts key
+      // by owning thread id; edit drafts key by (thread id, reply id) so a root
+      // edit and a reply edit never collide. The three source classes are disjoint
+      // (.comment-composer / .comment-reply-composer / .comment-edit-form), so a
+      // textarea is captured into exactly one bucket.
+      function emptyDrafts() { return { composer: null, replies: {}, edits: {} }; }
+      function editKey(threadID, replyID) { return String(threadID) + '\n' + String(replyID || ''); }
+      function captureDirtyDrafts() {
+        var drafts = emptyDrafts();
+        if (!railBody) { return drafts; }
+        var comp = railBody.querySelector('.comment-composer .comment-composer-input');
+        if (comp && comp.value.trim()) { drafts.composer = comp.value; }
+        railBody.querySelectorAll('.comment-reply-composer .comment-composer-input').forEach(function (ta) {
+          if (!ta.value.trim()) { return; }
+          var thread = ta.closest('.comment-thread');
+          if (thread) { drafts.replies[thread.getAttribute('data-thread-id')] = ta.value; }
+        });
+        railBody.querySelectorAll('.comment-edit-form .comment-composer-input').forEach(function (ta) {
+          if (!ta.value.trim()) { return; }
+          var thread = ta.closest('.comment-thread');
+          var reply = ta.closest('.comment-reply');
+          var tid = thread ? thread.getAttribute('data-thread-id') : '';
+          var rid = reply ? reply.getAttribute('data-reply-id') : '';
+          drafts.edits[editKey(tid, rid)] = ta.value;
+        });
+        return drafts;
+      }
+
+      function buildPanel(claimID, threads, drafts) {
+        drafts = drafts || emptyDrafts();
         railBody.textContent = '';
         var open = threads.filter(function (t) { return t.status === 'open'; });
         var resolved = threads.filter(function (t) { return t.status !== 'open'; });
         var list = el('div', 'comments-threads');
-        open.forEach(function (t) { list.appendChild(buildThread(claimID, t)); });
+        open.forEach(function (t) { list.appendChild(buildThread(claimID, t, drafts)); });
         if (resolved.length) {
           var details = el('details', 'comments-resolved');
           details.appendChild(textEl('summary', null, resolved.length + ' resolved'));
-          resolved.forEach(function (t) { details.appendChild(buildThread(claimID, t)); });
+          resolved.forEach(function (t) { details.appendChild(buildThread(claimID, t, drafts)); });
           list.appendChild(details);
         }
         if (!open.length && !resolved.length) {
           list.appendChild(textEl('p', 'comments-empty', 'No comments yet.'));
         }
         railBody.appendChild(list);
-        railBody.appendChild(buildComposer(claimID));
+        railBody.appendChild(buildComposer(claimID, drafts.composer));
         updateChips(claimID, open.length, threads.length);
       }
 
-      function buildThread(claimID, t) {
+      function buildThread(claimID, t, drafts) {
+        drafts = drafts || emptyDrafts();
         var art = el('article', 'comment-thread' + (t.status !== 'open' ? ' comment-thread--resolved' : ''));
         art.setAttribute('data-thread-id', t.id);
-        art.appendChild(buildMessage(claimID, t.id, '', t));
+        art.appendChild(buildMessage(claimID, t.id, '', t, drafts));
         (t.replies || []).forEach(function (r) {
           var rep = el('div', 'comment-reply');
           rep.setAttribute('data-reply-id', r.id);
-          rep.appendChild(buildMessage(claimID, t.id, r.id, r));
+          rep.appendChild(buildMessage(claimID, t.id, r.id, r, drafts));
           art.appendChild(rep);
         });
         if (mounted) {
           art.appendChild(buildThreadActions(claimID, t));
           if (t.status === 'open') {
-            art.appendChild(buildReplyComposer(claimID, t.id));
+            art.appendChild(buildReplyComposer(claimID, t.id, drafts.replies[t.id]));
           }
         }
         return art;
@@ -534,7 +592,7 @@
       // delete controls mount only in serve mode and only on own-role (human)
       // messages — the browser composer's actor is fixed to human; the server
       // enforces the same rights and is the real backstop.
-      function buildMessage(claimID, threadID, replyID, m) {
+      function buildMessage(claimID, threadID, replyID, m, drafts) {
         var wrap = el('div', 'comment-message');
         var meta = el('div', 'comment-meta');
         meta.appendChild(textEl('span', 'comment-role comment-role--' + m.author, m.author));
@@ -557,6 +615,13 @@
         var body = el('div', 'comment-body');
         setBodyHTML(body, m.body_html);
         wrap.appendChild(body);
+        // (part a) Restore an in-progress edit: if this message had a dirty edit
+        // draft when the rebuild started, re-open its inline editor prefilled with
+        // that draft (only own-role human messages ever carry an editor).
+        var editDraft = drafts && drafts.edits ? drafts.edits[editKey(threadID, replyID)] : undefined;
+        if (mounted && m.author === 'human' && editDraft != null) {
+          startEdit(claimID, threadID, replyID, m, body, editDraft);
+        }
         return wrap;
       }
 
@@ -593,13 +658,14 @@
         ta.addEventListener('input', grow);
       }
 
-      function buildComposer(claimID) {
+      function buildComposer(claimID, draftValue) {
         var form = el('form', 'comment-composer');
         var ta = el('textarea', 'comment-composer-input');
         ta.setAttribute('aria-label', 'Add a comment');
         ta.rows = 1;
         ta.placeholder = 'Add a comment…';
         autoGrow(ta);
+        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent draft across a rebuild
         var btn = textEl('button', 'comment-composer-submit', 'Comment');
         btn.type = 'submit';
         form.appendChild(ta);
@@ -613,13 +679,14 @@
         return form;
       }
 
-      function buildReplyComposer(claimID, threadID) {
+      function buildReplyComposer(claimID, threadID, draftValue) {
         var form = el('form', 'comment-reply-composer');
         var ta = el('textarea', 'comment-composer-input');
         ta.setAttribute('aria-label', 'Reply to thread');
         ta.rows = 1;
         ta.placeholder = 'Reply…';
         autoGrow(ta);
+        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent reply across a rebuild
         var btn = textEl('button', 'comment-composer-submit', 'Reply');
         btn.type = 'submit';
         form.appendChild(ta);
@@ -669,6 +736,10 @@
           .catch(function (err) {
             if (placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
             recomputeChipsFromPanel(claimID);
+            // The input was cleared optimistically when the placeholder went in;
+            // a failed write must restore the user's text, never discard it.
+            ta.value = body;
+            ta.style.height = 'auto';
             toast(errMsg('Could not add comment', err));
           });
       }
@@ -688,6 +759,10 @@
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
+            // Restore the user's text (cleared optimistically above) so a failed
+            // reply is not silently lost.
+            ta.value = body;
+            ta.style.height = 'auto';
             toast(errMsg('Could not reply', err));
           });
       }
@@ -755,12 +830,14 @@
       // startEdit swaps a message body for an inline textarea prefilled with the
       // RAW body (server-provided m.body), and PATCHes on save. Cancel restores
       // the original rendered body node; a successful save rebuilds the panel.
-      function startEdit(claimID, tid, rid, m, bodyNode) {
+      function startEdit(claimID, tid, rid, m, bodyNode, initialValue) {
         if (!bodyNode || !bodyNode.parentNode) { return; }
         var form = el('form', 'comment-edit-form');
         var ta = el('textarea', 'comment-composer-input');
         ta.setAttribute('aria-label', 'Edit comment');
-        ta.value = m.body || '';
+        // Prefill with an explicit initialValue when re-opening after a rebuild
+        // (part a — the captured in-progress draft), else the message's raw body.
+        ta.value = (initialValue != null ? initialValue : (m.body || ''));
         autoGrow(ta);
         var save = textEl('button', 'comment-composer-submit', 'Save');
         save.type = 'submit';
@@ -779,9 +856,16 @@
           var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
           if (rid) { path += '?reply=' + encodeURIComponent(rid); }
           apiSend('PATCH', path, { as: 'human', body: newBody })
-            .then(function () { renderPanelFromAPI(claimID); })
+            .then(function () {
+              // Close the editor BEFORE the authoritative rebuild so the rebuild's
+              // draft-capture does not mistake a just-saved edit for one still in
+              // progress and re-open it; the rebuild renders the saved body.
+              if (form.parentNode) { form.replaceWith(bodyNode); }
+              renderPanelFromAPI(claimID);
+            })
             .catch(function (err) {
-              form.replaceWith(bodyNode);
+              // Keep the edit form open with the user's revision (do NOT revert to
+              // the rendered body) so a failed edit does not discard the text.
               toast(errMsg('Could not edit', err));
             });
         });
@@ -881,7 +965,19 @@
         document.body.classList.add('comments-livereload');
         openSSE();
         document.addEventListener('visibilitychange', function () {
-          if (document.visibilityState === 'hidden') { closeSSE(); } else { openSSE(); }
+          if (document.visibilityState === 'hidden') {
+            closeSSE();
+          } else {
+            // Re-open the stream AND catch up. While hidden the stream was closed,
+            // so any change in that window was broadcast to no subscriber, and the
+            // reconnect below replays nothing (the server only re-sends
+            // ": connected" on subscribe). Fire one onServerChanged() to re-fetch
+            // /api/fragment and fold in whatever changed while we were away — a
+            // fragment fetch always reads the freshest render, so this is a full
+            // catch-up regardless of the (now closed) SSE having missed the signal.
+            openSSE();
+            onServerChanged();
+          }
         });
         // pagehide fires on navigation-away / bfcache entry; drop the stream so a
         // backgrounded page stops holding one of the six per-host connections.

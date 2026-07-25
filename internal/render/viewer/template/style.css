@@ -483,19 +483,20 @@ th {
 }
 
 /* ---- interactive comment UI (Phase 5, serve + file://) -----------------
-   The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop,
-   a modal bottom sheet on mobile. It has its OWN backdrop (#commentsOverlay)
-   and body scroll-lock (body.comments-open), deliberately distinct from the
-   sidebar's #navOverlay / body.nav-open — opening one overlay closes the other.
-   Colours are the inverting theme tokens from :root; the few genuinely per-mode
-   values (shadows, backdrop dim) get their light values in the media query at
-   the end of this block, matching the dark-base / light-override convention the
-   rest of this stylesheet uses. */
+   The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop
+   (role=complementary), a modal bottom sheet on mobile. Its backdrop
+   (#commentsOverlay) and body scroll-lock (body.comments-open) are the MODAL
+   half, so they are scoped to the <= 860px bottom-sheet breakpoint (in the media
+   query below) — above it the desktop rail shows neither. They stay deliberately
+   distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
+   closes the other. Colours are the inverting theme tokens from :root; the few
+   genuinely per-mode values (shadows, backdrop dim) get their light values in the
+   media query at the end of this block, matching the dark-base / light-override
+   convention the rest of this stylesheet uses. */
 
-/* Its own scroll-lock — never reuse body.nav-open. */
-body.comments-open {
-  overflow: hidden;
-}
+/* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
+   the media query below); it stays a plain open-state marker on desktop. Never
+   reuse body.nav-open. */
 
 .comments-overlay {
   display: none;
@@ -509,9 +510,8 @@ body.comments-open {
   cursor: pointer;
 }
 
-.comments-overlay:not([hidden]) {
-  display: block;
-}
+/* .comments-overlay stays display:none above 860px (the desktop rail is
+   non-modal); the mobile media query below re-enables it as :not([hidden]). */
 
 .comments-rail {
   position: fixed;
@@ -729,8 +729,17 @@ body.comments-open {
   }
 }
 
-/* Mobile: the rail becomes a bottom sheet with an internal scroll cap. */
+/* Mobile: the rail becomes a modal bottom sheet — the dimming backdrop and the
+   body scroll-lock are the MODAL half of the panel and apply ONLY at this
+   breakpoint, so the > 860px desktop rail stays a non-modal complementary panel
+   with neither (Escape still closes it, from the shell.html keydown handler). */
 @media (max-width: 860px) {
+  body.comments-open {
+    overflow: hidden;
+  }
+  .comments-overlay:not([hidden]) {
+    display: block;
+  }
   .comments-rail {
     top: auto;
     left: 0;
