@@ -111,13 +111,29 @@ func LoadArtifact(path string) (*Artifact, error) {
 // A not-yet-locked artifact (a.Hashes empty) is never stale: staleness is
 // only meaningful relative to a hash baseline that Lock hasn't taken yet.
 //
-// Three independent drifts all count as staleness, so a frozen artifact can
-// never silently stop describing its module's real claim set:
+// Five independent drifts all count as staleness, so a frozen artifact can
+// never silently stop describing its module's real claim set — nor silently
+// describe a different BUILD ORDER than a fresh propose would now compute:
 //
 //   - content change — a covered claim's lock.ContentHash no longer matches
 //     the snapshot taken at the last Lock.
-//   - deletion — a claim this artifact covers no longer exists at all in the
-//     current claim set (it references an id that's gone).
+//   - build_role (phase) change — a covered claim's CURRENT build_role no
+//     longer matches the phase block the artifact placed it in. A claim's
+//     phase is derived from its build_role, so editing it (e.g. schema ->
+//     orientation) is an order-affecting change a fresh propose would honor —
+//     yet lock.ContentHash deliberately EXCLUDES build_role (that hash is
+//     shared with internal/lock's dependency-drift detection, where a
+//     build_role edit must NOT flag a claim's DEPENDENTS for review), so the
+//     content-hash check above can never catch it. Comparing the claim's
+//     current build_role against a.Phases' recorded phase is a build-order-
+//     local signal that needs no stored-format change or artifact migration:
+//     the placed phase is already in the artifact.
+//   - deletion — a covered claim no longer exists at all in the current claim
+//     set (it references an id that's gone).
+//   - excluded-claim deletion — an id the artifact recorded as out-of-scope
+//     (a.Excluded) no longer exists in the current claim set. Symmetric with
+//     covered deletion: leaving it unflagged would keep a phantom id in the
+//     "N excluded" count for a claim that's gone.
 //   - addition — a claim now locked into this module that the frozen artifact
 //     neither placed in a phase (a.ClaimIDs()) nor recorded as excluded
 //     (a.Excluded). This was the actual FIX-12 bug: locking a brand-new claim
@@ -141,15 +157,32 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 
 	staleSet := make(map[string]bool)
 
-	// Content change + deletion, over the artifact's frozen coverage.
-	for _, id := range a.ClaimIDs() {
-		c, ok := byID[id]
-		if !ok {
-			staleSet[id] = true // deletion
-			continue
+	// Content change + deletion + build_role (phase) change, over the
+	// artifact's frozen coverage. Iterating a.Phases directly (rather than
+	// a.ClaimIDs()) keeps each covered claim's recorded phase — the block it
+	// was placed in — in hand for the build_role comparison.
+	for _, p := range a.Phases {
+		for _, entry := range p.Claims {
+			id := entry.ID
+			c, ok := byID[id]
+			if !ok {
+				staleSet[id] = true // deletion
+				continue
+			}
+			if stored, known := a.Hashes[id]; known && stored != lock.ContentHash(c) {
+				staleSet[id] = true // content change
+			}
+			if string(c.BuildRole) != p.Phase {
+				staleSet[id] = true // build_role (phase) change
+			}
 		}
-		if stored, known := a.Hashes[id]; known && stored != lock.ContentHash(c) {
-			staleSet[id] = true // content change
+	}
+
+	// Excluded-claim deletion — an out-of-scope id the artifact recorded that
+	// no longer exists among the current claims.
+	for _, id := range a.Excluded {
+		if _, ok := byID[id]; !ok {
+			staleSet[id] = true // deletion of an excluded claim
 		}
 	}
 

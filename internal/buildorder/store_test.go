@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -310,6 +311,117 @@ func TestRecomputeStale_AddedOutOfScopeClaim_NoFalsePositive(t *testing.T) {
 	}
 	if st.Stale {
 		t.Fatalf("expected an unchanged artifact with an excluded claim to stay non-stale, got stale_claim_ids=%v", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_CoveredClaimBuildRoleChanged_IsStale is the GAP-3a
+// regression test: a covered claim's PHASE is derived from its build_role,
+// but recomputeStale previously compared only lock.ContentHash, which
+// deliberately EXCLUDES build_role. So changing a covered locked claim's
+// build_role (e.g. schema -> orientation) silently changed what a fresh
+// propose would order while the artifact still reported stale:false — the
+// same silently-wrong-order class as the deletion/addition gaps. A build_role
+// change on a covered claim must be surfaced as staleness even though the
+// content hash is unchanged.
+func TestRecomputeStale_CoveredClaimBuildRoleChanged_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Change one covered claim's build_role only (schema -> orientation).
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.schema" {
+			mutated[i].BuildRole = model.BuildRoleOrientation
+		}
+	}
+	// Guard: the mutation is build_role-only, so lock.ContentHash (which
+	// excludes build_role) is unchanged — a passing test therefore proves the
+	// phase check, not the content-hash check, is what surfaces the staleness.
+	if lock.ContentHash(claims[0]) != lock.ContentHash(mutated[0]) {
+		t.Fatalf("test setup error: a build_role change must not alter lock.ContentHash")
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after changing a covered claim's build_role, got %+v", st)
+	}
+	found := false
+	for _, id := range st.StaleIDs {
+		if id == "widget.contract.schema" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected stale_claim_ids to include the build_role-changed claim %q, got %v", "widget.contract.schema", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_ExcludedClaimDeleted_IsStale is the GAP-3b regression
+// test: recomputeStale's deletion loop only iterated the artifact's in-phase
+// coverage (a.ClaimIDs()) and never a.Excluded, so deleting a claim recorded
+// as out-of-scope left stale:false while a.Excluded still listed the gone id
+// (a phantom "N excluded" count). Deleting an excluded claim must be surfaced
+// as staleness, symmetric with the covered-deletion case.
+func TestRecomputeStale_ExcludedClaimDeleted_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if len(a.Excluded) != 1 || a.Excluded[0] != "widget.contract.future" {
+		t.Fatalf("expected the out-of-scope claim recorded as excluded, got %v", a.Excluded)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// The excluded (out-of-scope) claim is deleted entirely from the claim set.
+	remaining := []model.Claim{claims[0]}
+
+	st, err := Status(path, remaining)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true when an excluded claim has been deleted, got %+v", st)
+	}
+	found := false
+	for _, id := range st.StaleIDs {
+		if id == "widget.contract.future" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected stale_claim_ids to include the deleted excluded claim %q, got %v", "widget.contract.future", st.StaleIDs)
 	}
 }
 
