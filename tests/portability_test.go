@@ -395,42 +395,79 @@ func TestTrimpathBuildDoesNotEmbedBuildMachinePaths(t *testing.T) {
 // connection).
 // ---------------------------------------------------------------------
 
+// networkRefPattern matches any CDN/remote-fetch/telemetry-shaped reference
+// that would violate the fully-offline requirement. It is shared by the
+// engine-source scan below and its positive-control self-test so the two can
+// never drift apart.
+var networkRefPattern = regexp.MustCompile(`(?i)https?://|cdn\.|fonts\.googleapis|fonts\.gstatic|analytics|telemetry|sentry|segment\.io`)
+
+// scanForNetworkRefs returns one "label:line: text" entry for every line in
+// content that matches networkRefPattern. label is a human-readable source
+// identifier (a file path in the real scan; a synthetic name in the test).
+func scanForNetworkRefs(label, content string) []string {
+	var offenders []string
+	for i, line := range strings.Split(content, "\n") {
+		if networkRefPattern.MatchString(line) {
+			offenders = append(offenders, label+":"+itoa(i+1)+": "+strings.TrimSpace(line))
+		}
+	}
+	return offenders
+}
+
 func TestNoNetworkReferencesAnywhereInEngine(t *testing.T) {
 	root := moduleRoot(t)
-	forbidden := regexp.MustCompile(`(?i)https?://|cdn\.|fonts\.googleapis|fonts\.gstatic|analytics|telemetry|sentry|segment\.io`)
 
+	// Scope the scan to the engine's own source trees ONLY (cmd/ and
+	// internal/), skipping *_test.go — matching scanForPatterns above. This
+	// permanently excludes site/ (the marketing website, including its
+	// gitignored dist/ build bundles, which legitimately reference external
+	// URLs/CDNs), node_modules, and testdata/ (fixtures that legitimately
+	// carry example URLs). Walking the whole module root instead made this
+	// test red locally after a `site` build yet falsely green on a clean CI
+	// checkout where dist/ is absent.
 	exts := map[string]bool{".go": true, ".html": true, ".css": true, ".js": true}
 	var offenders []string
-	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+	scan := func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if info.IsDir() {
-			if info.Name() == ".git" || info.Name() == "tests" {
-				return filepath.SkipDir
-			}
 			return nil
 		}
 		if !exts[filepath.Ext(path)] {
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
 		data, rerr := os.ReadFile(path)
 		if rerr != nil {
 			return rerr
 		}
-		for i, line := range strings.Split(string(data), "\n") {
-			if forbidden.MatchString(line) {
-				offenders = append(offenders, path+":"+itoa(i+1)+": "+strings.TrimSpace(line))
-			}
-		}
+		offenders = append(offenders, scanForNetworkRefs(path, string(data))...)
 		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk engine tree: %v", err)
+	}
+	for _, dir := range []string{"cmd", "internal"} {
+		if err := filepath.Walk(filepath.Join(root, dir), scan); err != nil {
+			t.Fatalf("walk %s/: %v", dir, err)
+		}
 	}
 	if len(offenders) > 0 {
 		t.Fatalf("found network-shaped references, violating the offline requirement:\n%s", strings.Join(offenders, "\n"))
 	}
+
+	// Positive control: the scoped walk above must not have weakened
+	// detection. Run the very same scan predicate against synthetic
+	// in-memory content carrying a genuine external URL and assert it IS
+	// flagged — proving the scanner still catches a real offline-requirement
+	// leak (a scoped walk that scanned nothing would silently pass forever).
+	t.Run("positive_control_detects_real_leak", func(t *testing.T) {
+		content := "const ok = 1;\nfetch(\"https://evil.example/x\");\n"
+		hits := scanForNetworkRefs("synthetic.js", content)
+		if len(hits) == 0 {
+			t.Fatalf("positive control: scanner failed to detect a real external URL in %q", content)
+		}
+	})
 }
 
 func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {

@@ -17,10 +17,12 @@
 // never itself be a mismatch and is skipped here rather than guessed at.
 //
 // Separately (and regardless of Layout), a claim carrying none of body,
-// rows, or steps has no renderable content in any component — card.html
-// has nothing to show, table.html falls back to "No rows.", etc. That is
-// always a shape problem, so it is checked unconditionally rather than
-// under the Layout=="" guard above.
+// rows, steps, or raw_html has no renderable content in any component —
+// card.html has nothing to show, table.html falls back to "No rows.", etc.
+// That is always a shape problem, so it is checked unconditionally rather
+// than under the Layout=="" guard above. raw_html counts as content because
+// mockup.html renders it: a layout: mockup claim's documented primary use is
+// a body-less markup blob, so requiring a body there would be wrong.
 //
 // rows is deliberately checked for presence (c.Rows != nil), not for
 // having entries (len(c.Rows) > 0), when deciding whether a table claim
@@ -36,6 +38,7 @@ package lint
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -49,25 +52,49 @@ type layoutShapeMismatchLint struct{}
 
 func (layoutShapeMismatchLint) Name() string { return "layout-shape-mismatch" }
 
-// validLayouts is the fixed set of seven layouts internal/render/components
-// knows how to render (see that package's map lookup on Layout). A
-// claim.Layout outside this set can never be rendered — without this check
-// that would only surface at render time (internal/render.Render returns
-// an "unsupported layout" error) instead of at claim-load/lint time; this
-// lint is what "dossierx lint"/"dossierx lock" need to catch it before render ever
-// sees it. LayoutMockup is included here for the same reason as the other
-// six — components.fileForLayout already renders it (mockup.html) — its
-// own additional constraints (raw_html only legal here, module allowlist,
-// markup allowlist, review gate) are enforced separately by the
-// raw-html-scope lint, not by this shape check.
-var validLayouts = map[model.Layout]bool{
-	model.LayoutCard:   true,
-	model.LayoutTable:  true,
-	model.LayoutList:   true,
-	model.LayoutSteps:  true,
-	model.LayoutTree:   true,
-	model.LayoutBanner: true,
-	model.LayoutMockup: true,
+// allLayouts is the fixed, ordered list of every layout
+// internal/render/components knows how to render (see that package's map
+// lookup on Layout). It is the single source of truth for both validLayouts
+// (the membership set this lint checks against) and the human-readable list
+// in the invalid-layout message below, so the two can never drift out of
+// sync — and so the message is deterministic (a ranged map would order it
+// randomly). LayoutMockup belongs here for the same reason as every other
+// entry — components.fileForLayout already renders it (mockup.html); its own
+// additional constraints (raw_html only legal here, module allowlist, markup
+// allowlist, review gate) are enforced separately by the raw-html-scope
+// lint, not by this shape check.
+var allLayouts = []model.Layout{
+	model.LayoutCard,
+	model.LayoutTable,
+	model.LayoutList,
+	model.LayoutSteps,
+	model.LayoutTree,
+	model.LayoutBanner,
+	model.LayoutMockup,
+}
+
+// validLayouts is allLayouts as a membership set. A claim.Layout outside it
+// can never be rendered — without this check that would only surface at
+// render time (internal/render.Render returns an "unsupported layout" error)
+// instead of at claim-load/lint time; this lint is what "dossierx
+// lint"/"dossierx lock" need to catch it before render ever sees it.
+var validLayouts = func() map[model.Layout]bool {
+	m := make(map[model.Layout]bool, len(allLayouts))
+	for _, l := range allLayouts {
+		m[l] = true
+	}
+	return m
+}()
+
+// layoutsList renders allLayouts as a comma-separated string for use in the
+// invalid-layout message, derived from the same slice as validLayouts so the
+// message can never omit or misorder a layout.
+func layoutsList() string {
+	names := make([]string, len(allLayouts))
+	for i, l := range allLayouts {
+		names[i] = string(l)
+	}
+	return strings.Join(names, ", ")
 }
 
 func (layoutShapeMismatchLint) Check(claims []model.Claim, _ *config.Config) []Finding {
@@ -77,7 +104,12 @@ func (layoutShapeMismatchLint) Check(claims []model.Claim, _ *config.Config) []F
 		hasRows := len(c.Rows) > 0
 		hasSteps := len(c.Steps) > 0
 
-		if c.Body == "" && !rowsPresent && !hasSteps {
+		// RawHTML is renderable content for a layout: mockup claim (its
+		// documented primary use is a body-less markup blob rendered by
+		// mockup.html — see internal/render/components and the raw-html-scope
+		// lint), so a claim carrying RawHTML is not content-less even with an
+		// empty body/rows/steps.
+		if c.Body == "" && !rowsPresent && !hasSteps && c.RawHTML == "" {
 			findings = append(findings, mismatchFinding(c.ID, "claim has no content: body, rows, and steps are all empty"))
 		}
 
@@ -86,7 +118,7 @@ func (layoutShapeMismatchLint) Check(claims []model.Claim, _ *config.Config) []F
 		}
 
 		if !validLayouts[c.Layout] {
-			findings = append(findings, mismatchFinding(c.ID, fmt.Sprintf("layout %q is not one of the six allowed layouts (card, table, list, steps, tree, banner)", c.Layout)))
+			findings = append(findings, mismatchFinding(c.ID, fmt.Sprintf("layout %q is not one of the allowed layouts (%s)", c.Layout, layoutsList())))
 			continue
 		}
 

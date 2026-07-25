@@ -1,0 +1,14 @@
+id: statusmod.contract.broken
+facet: contract
+module: statusmod
+status: published
+layout: card
+body: |
+  A claim whose status is neither draft nor locked -- "published" was
+  borrowed from some other system. This is the exact case the status-shape
+  lint exists to catch.
+rests_on:
+  - statusmod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

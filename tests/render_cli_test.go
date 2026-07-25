@@ -122,6 +122,102 @@ func TestRenderCLI_AlwaysOverwritesHandEditedOutput(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
+// DX-AUD-08: `render` and `catalog` must run the raw-html-scope mockup gate
+// (error-severity findings only) and fail non-zero on a draft/unreviewed or
+// non-allowlisted mockup carrying live HTML/JS, so neither command ever
+// publishes stored XSS into the client-shared viewer. A fully valid locked +
+// reviewed + allowlisted mockup with safe markup still renders unescaped.
+// ---------------------------------------------------------------------
+
+// writeMockupProject writes a project with one layout: mockup claim under
+// root. allowlisted controls whether the module is in mockup_modules; the
+// remaining fields let each test break exactly one gate requirement.
+func writeMockupProject(t *testing.T, root string, allowlisted, locked, reviewed bool, rawHTML string) {
+	t.Helper()
+	claimsDir := filepath.Join(root, "claims")
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatalf("mkdir claims dir: %v", err)
+	}
+
+	cfg := "schema_version: 1\nfacets:\n  - internals\nmodules:\n  - widget\nclaims_dir: claims\n"
+	if allowlisted {
+		cfg += "mockup_modules:\n  - widget\n"
+	}
+	if err := os.WriteFile(filepath.Join(root, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write project.config.yaml: %v", err)
+	}
+
+	status := "draft"
+	if locked {
+		status = "locked"
+	}
+	claim := "id: widget.internals.console-mockup\n" +
+		"facet: internals\nmodule: widget\nstatus: " + status + "\nlayout: mockup\n" +
+		"body: A console mockup.\n" +
+		"raw_html: '" + rawHTML + "'\n" +
+		"raw_html_reviewed: " + boolStr(reviewed) + "\n" +
+		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+	if err := os.WriteFile(filepath.Join(claimsDir, "mockup.yaml"), []byte(claim), 0o644); err != nil {
+		t.Fatalf("write mockup claim: %v", err)
+	}
+}
+
+func boolStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func TestRenderCLI_FailsOnUnreviewedMockupWithHandler(t *testing.T) {
+	root := t.TempDir()
+	// Allowlisted module, but raw_html_reviewed: false AND an inline
+	// event-handler in the markup — the exact draft-authoring stored-XSS
+	// scenario `render` must refuse to publish.
+	writeMockupProject(t, root, true, false, false, `<div class="gcp-row" onclick="steal()">boom</div>`)
+
+	stdout, stderr, code := run(t, root, "render")
+	if code == 0 {
+		t.Fatalf("render must fail (non-zero) on an unreviewed mockup with an inline handler, got exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, "viewer", "index.html")); err == nil {
+		t.Fatalf("render must not have written viewer/index.html for a gate-failing mockup")
+	}
+}
+
+func TestCatalogCLI_FailsOnNonAllowlistedMockupWithScript(t *testing.T) {
+	root := t.TempDir()
+	// Module NOT in mockup_modules, and a <script> tag in the markup — even
+	// reviewed, `catalog` must fail rather than bless a non-allowlisted
+	// mockup that carries live JS.
+	writeMockupProject(t, root, false, true, true, `<div class="gcp-row"><script>steal()</script></div>`)
+
+	stdout, stderr, code := run(t, root, "catalog")
+	if code == 0 {
+		t.Fatalf("catalog must fail (non-zero) on a non-allowlisted mockup carrying a script tag, got exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
+	}
+}
+
+func TestRenderCLI_ValidLockedReviewedAllowlistedMockupRenders(t *testing.T) {
+	root := t.TempDir()
+	// Fully valid: allowlisted module, locked, reviewed, safe markup.
+	writeMockupProject(t, root, true, true, true, `<div class="gcp-row"><span class="mockup-badge">ERROR</span></div>`)
+
+	stdout, stderr, code := run(t, root, "render")
+	if code != 0 {
+		t.Fatalf("render of a fully valid mockup must succeed, got exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+
+	content, err := os.ReadFile(filepath.Join(root, "viewer", "index.html"))
+	if err != nil {
+		t.Fatalf("read rendered output: %v", err)
+	}
+	if !strings.Contains(string(content), `<span class="mockup-badge">ERROR</span>`) {
+		t.Fatalf("valid locked+reviewed+allowlisted mockup should render its markup live/unescaped:\n%s", content)
+	}
+}
+
+// ---------------------------------------------------------------------
 // Row 4: rendered viewer/index.html must carry a "generated - do not edit"
 // header, proven against the actual file on disk (not just Render()'s
 // in-memory return value, which internal/render/render_test.go already

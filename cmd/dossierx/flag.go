@@ -47,14 +47,26 @@ func newFlagCmd() *cobra.Command {
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
-				return fmt.Errorf("flag: claim %q not found", id)
+				return fmt.Errorf("flag: claim %q not found: %w", id, errClaimNotFound)
 			}
 			// Any locked claim may be (re-)flagged, review_pending or not —
 			// unlike "dossierx reaudit", which only ever runs against an
 			// already-pending claim, flagging is what PUTS a claim into
-			// review_pending in the first place.
+			// review_pending in the first place. A non-locked claim is the
+			// exit-2 "not in the right state" case (like reaudit's non-pending
+			// refusal), so it wraps errWrongState.
 			if claim.Status != model.StatusLocked {
-				return fmt.Errorf("flag: claim %q is not locked (status %q); only a locked claim can be flagged", id, claim.Status)
+				return fmt.Errorf("flag: claim %q is not locked (status %q); only a locked claim can be flagged: %w", id, claim.Status, errWrongState)
+			}
+			// DX-AUD-11: a flag-sourced reaudit rewrites only claim.Body (see
+			// internal/reaudit.ProposeFlagDiff/Apply). For a claim whose
+			// rendered content lives outside Body — table rows, steps, or a
+			// raw-HTML mockup — that would clear review_pending while leaving
+			// the actual rendered content stale. Such claims must not be
+			// flagged at all; the correct workflow is to unlock, edit the
+			// rows/steps/raw_html directly, and relock.
+			if lay := flagStructuredLayout(claim); lay != "" {
+				return fmt.Errorf("flag: claim %q has a %s layout whose rendered content (rows/steps/raw HTML) a flag-sourced reaudit cannot update; unlock the claim, edit it directly, then relock instead", id, lay)
 			}
 
 			// Serializes against any concurrent "dossierx flag"/"dossierx reaudit
@@ -94,4 +106,29 @@ func newFlagCmd() *cobra.Command {
 	cmd.Flags().StringVar(&nowDoes, "now-does", "", "what is actually true now (required)")
 	cmd.Flags().StringVar(&reason, "reason", "", "why this claim is being flagged (required)")
 	return cmd
+}
+
+// flagStructuredLayout returns the non-body ("structured") layout a claim
+// renders with — table, steps, or mockup — or "" if the claim is body-only
+// (card/banner/list/tree). It mirrors internal/catalog.inferLayout's
+// shape-based inference so a claim that omits an explicit layout but carries
+// rows/steps (or raw HTML) is still caught, since that is exactly what a
+// flag-sourced, Body-only reaudit would leave stale (DX-AUD-11).
+func flagStructuredLayout(c model.Claim) model.Layout {
+	layout := c.Layout
+	if layout == "" {
+		switch {
+		case len(c.Rows) > 0:
+			layout = model.LayoutTable
+		case len(c.Steps) > 0:
+			layout = model.LayoutSteps
+		case c.RawHTML != "":
+			layout = model.LayoutMockup
+		}
+	}
+	switch layout {
+	case model.LayoutTable, model.LayoutSteps, model.LayoutMockup:
+		return layout
+	}
+	return ""
 }

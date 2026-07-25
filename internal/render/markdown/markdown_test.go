@@ -144,6 +144,124 @@ func TestRender_InlineBacktickCode(t *testing.T) {
 	}
 }
 
+// --- inline links (DX-AUD-03) ------------------------------------------
+//
+// RenderInline is the inline pass in isolation (no <p>/list block wrapping),
+// so these assert its exact output byte-for-byte: link grammar, the scheme
+// allowlist's neutralization of dangerous schemes, attribute/text escaping,
+// and composition with backtick code spans in a single left-to-right scan.
+
+func TestRenderInline_Links(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "http",
+			in:   "see [docs](http://example.com/a) now",
+			want: `see <a href="http://example.com/a">docs</a> now`,
+		},
+		{
+			name: "https",
+			in:   "[Home](https://a.b/c)",
+			want: `<a href="https://a.b/c">Home</a>`,
+		},
+		{
+			name: "mailto",
+			in:   "[mail](mailto:a@b.com)",
+			want: `<a href="mailto:a@b.com">mail</a>`,
+		},
+		{
+			name: "relative path resolves",
+			in:   "[up](../widget/run.go)",
+			want: `<a href="../widget/run.go">up</a>`,
+		},
+		{
+			name: "fragment resolves",
+			in:   "[sec](#widget.contract.x)",
+			want: `<a href="#widget.contract.x">sec</a>`,
+		},
+		{
+			name: "url and text html-escaped",
+			in:   `[<b> & "q"](http://x/?a=1&b=2)`,
+			want: `<a href="http://x/?a=1&amp;b=2">&lt;b&gt; &amp; &#34;q&#34;</a>`,
+		},
+		{
+			name: "javascript scheme neutralized",
+			in:   "[click](javascript:alert(1))",
+			want: `[click](javascript:alert(1))`,
+		},
+		{
+			name: "data scheme neutralized",
+			in:   "[x](data:text/html,<script>)",
+			want: `[x](data:text/html,&lt;script&gt;)`,
+		},
+		{
+			name: "vbscript scheme neutralized",
+			in:   "[x](vbscript:msgbox(1))",
+			want: `[x](vbscript:msgbox(1))`,
+		},
+		{
+			name: "javascript with leading space neutralized",
+			in:   "[x]( javascript:alert(1))",
+			want: `[x]( javascript:alert(1))`,
+		},
+		{
+			name: "javascript with embedded tab neutralized",
+			in:   "[x](java\tscript:alert(1))",
+			want: "[x](java\tscript:alert(1))",
+		},
+		{
+			name: "unclosed link no paren falls through",
+			in:   "[text](http://x",
+			want: "[text](http://x",
+		},
+		{
+			name: "bracket without paren falls through",
+			in:   "see [text] here",
+			want: "see [text] here",
+		},
+		{
+			name: "link inside code span stays literal",
+			in:   "`[a](http://evil)`",
+			want: "<code>[a](http://evil)</code>",
+		},
+		{
+			name: "code span then link then pipe",
+			in:   "use `get()` see [d](http://x/a?b=1&c=2) | end",
+			want: `use <code>get()</code> see <a href="http://x/a?b=1&amp;c=2">d</a> | end`,
+		},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(RenderInline(tc.in))
+			if got != tc.want {
+				t.Errorf("RenderInline(%q):\n got: %s\nwant: %s", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestRender_BodyLinkInParagraph(t *testing.T) {
+	out := string(Render("See [docs](http://example.com) for more."))
+	assertTagBalance(t, out)
+	want := `<p>See <a href="http://example.com">docs</a> for more.</p>`
+	if out != want {
+		t.Errorf("body-level link:\n got: %s\nwant: %s", out, want)
+	}
+}
+
+func TestRender_BodyLinkInBulletFolds(t *testing.T) {
+	out := string(Render("- see [docs](#widget.contract.x) here"))
+	assertTagBalance(t, out)
+	want := `<ul><li>see <a href="#widget.contract.x">docs</a> here</li></ul>`
+	if out != want {
+		t.Errorf("link in a list item:\n got: %s\nwant: %s", out, want)
+	}
+}
+
 func TestRender_WrappedBulletContinuationFolds(t *testing.T) {
 	dir := markdownCasesDir(t)
 	c := loadClaim(t, dir, "wrapped-bullet-continuation.yaml")

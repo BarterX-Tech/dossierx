@@ -71,7 +71,7 @@ export const contentSpec: ContentSpec = {
           "Go 1.26",
           "cobra + yaml.v3 only",
           "CLI-only, no public API",
-          "v0.1.1",
+          "v0.1.2",
           "github.com/BarterX-Tech/dossierx",
         ],
         pipeline: ["lint", "catalog", "render", "check"],
@@ -371,7 +371,7 @@ export const contentSpec: ContentSpec = {
     },
     {
       id: "cli",
-      title: "The CLI — 17 commands, zero hardcoded project.",
+      title: "The CLI — 18 commands, zero hardcoded project.",
       kind: "cli-explorer",
       contentMd:
         "One binary serves any project through `project.config.yaml`, discovered from the working tree or supplied with `--config`. Use the explorer below for the full command surface; `check` is the CI entry point that detects drift, validates claims, renders the viewer, and verifies code links.",
@@ -383,7 +383,7 @@ export const contentSpec: ContentSpec = {
               {
                 name: "lint",
                 usage: "dossierx lint [--json]",
-                summary: "Run all 21 lints in isolation and across the set.",
+                summary: "Run all 22 lints in isolation and across the set.",
                 detail:
                   "Warnings (e.g. orphan) print but don't fail; any error-severity finding returns exit 1. --json emits findings as indented JSON.",
                 example:
@@ -493,6 +493,15 @@ export const contentSpec: ContentSpec = {
                 example:
                   "$ dossierx coverage\ncoverage: 0/186 claim(s) carry migrated_from (0.0%)",
               },
+              {
+                name: "version",
+                usage: "dossierx version",
+                summary: "Print the binary's version, commit, and build date.",
+                detail:
+                  "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
+                example:
+                  "$ dossierx version\ndossierx v0.1.2\n  commit: 71eecf9\n  date:   2026-07-25",
+              },
             ],
           },
           {
@@ -578,7 +587,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.1.1** — see the full history below for what's shipped since the engine's public extraction.",
+        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.1.2** — see the full history below for what's shipped since the engine's public extraction.",
       data: {
         releases: [
           {
@@ -634,11 +643,25 @@ export const contentSpec: ContentSpec = {
             version: "v0.1.1",
             date: "2026-07-24",
             title: "Steps number/text alignment fix",
-            tag: "Latest release",
+            tag: "Previous release",
             highlights: [
               "Fixes a rendering bug in the default viewer's layout: steps claims: because each step's text is routed through the shared markdown renderer, it was wrapped in a <p> whose default browser top margin pushed the first line down relative to the step's fixed-size number circle, leaving the number visibly misaligned above the text.",
               "The viewer stylesheet now resets the step body's <p> margins — a 0.5rem inter-block rhythm with the first block's top and last block's bottom margin zeroed — so the number circle sits flush with the first line of step text.",
               "Purely a default-viewer CSS fix: no schema_version, on-disk store, API, or config change, so it lands as a patch bump (v0.1.0 → v0.1.1) under pre-1.0 semver.",
+            ],
+          },
+          {
+            version: "v0.1.2",
+            date: "2026-07-25",
+            title: "Consolidated audit-fix release",
+            tag: "Latest release",
+            highlights: [
+              "A deep audit against a real 202-claim consumer project found 25 confirmed defects, fixed together as one patch rather than a stream of point releases.",
+              "Markdown [text](url) links now render as anchors in claim bodies AND structured table cells (scheme-allowlisted; javascript:/data: neutralized); backtick code spans render in cells too.",
+              "Lifecycle data integrity: dependency-hash baselines are keyed per-dependent (with an automatic, re-arming lock-store migration), unlock clears pending flags, and flag is refused on structured layouts.",
+              "Security: the raw_html mockup gate is now default-deny across every attribute quote form (control-char and entity evasions closed) and enforced by render and catalog, not just lock.",
+              "Build-order staleness is now structural — status re-derives the order a fresh propose would compute and flags any divergence (reordered, re-roled, promoted, renamed, added, or deleted claims); the Build Order viewer section is visible; new dossierx version command; lint --json emits valid arrays.",
+              "Patch bump despite new capabilities: internal/ is not importable, no breaking CLI changes, and the lock-store migrates automatically.",
             ],
           },
         ],

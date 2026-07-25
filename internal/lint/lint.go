@@ -1,9 +1,10 @@
-// Package lint defines the Lint interface every one of the 21 lints
+// Package lint defines the Lint interface every one of the 22 lints
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, governed-required,
 // mirror-mismatch, mirror-unanchored, mirror-reciprocal, rows-shape,
 // supersede, raw-html-scope, roll-up, validated-on-missing, body-edge-hint,
-// code-orphan, orphan, layout-shape-mismatch, build-role-required,
-// orientation-note-order, orientation-note-shape) implements, one per file
+// code-orphan, orphan, layout-shape-mismatch, build-role-required-for-locked,
+// orientation-note-order, orientation-note-shape, status-shape) implements,
+// one per file
 // in this package. This file only defines the contract and the registry;
 // individual lint implementations are a later phase and Registry starts
 // empty on purpose.
@@ -58,6 +59,20 @@ func RunAll(claims []model.Claim, cfg *config.Config) []Finding {
 	var findings []Finding
 	for _, l := range Registry {
 		findings = append(findings, l.Check(claims, cfg)...)
+	}
+	// Normalize severity once, here, rather than in each of the ~dozen
+	// lints that omit it. Roughly half the lints build Finding values
+	// without setting Severity, implicitly relying on "an unset severity
+	// means error". But the zero value of Severity is "" (not
+	// SeverityError), which text reports print as "[]" and JSON reports
+	// emit as Severity:"". Filling every empty Severity with SeverityError
+	// at this single choke point makes that implicit contract explicit for
+	// every downstream consumer (text/JSON reporting, exit-code counting in
+	// reportLintFindings and internal/lock.Lock) without touching each lint.
+	for i := range findings {
+		if findings[i].Severity == "" {
+			findings[i].Severity = SeverityError
+		}
 	}
 	return findings
 }

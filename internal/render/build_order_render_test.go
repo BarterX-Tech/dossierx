@@ -132,7 +132,7 @@ func TestRender_BuildOrderTab_PresentWhenLockedArtifactExists(t *testing.T) {
 	if err := buildorder.WriteArtifact(artifact, path); err != nil {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
-	if _, err := buildorder.Lock(path, claims); err != nil {
+	if _, err := buildorder.Lock(path, claims, cfg); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -195,7 +195,7 @@ func TestRender_BuildOrderTab_OtherModuleUnaffected(t *testing.T) {
 	if err := buildorder.WriteArtifact(artifact, path); err != nil {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
-	if _, err := buildorder.Lock(path, widgetClaims); err != nil {
+	if _, err := buildorder.Lock(path, widgetClaims, cfg); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -218,5 +218,55 @@ func TestRender_BuildOrderTab_OtherModuleUnaffected(t *testing.T) {
 	// not gain a "Gadget — build order" heading.
 	if strings.Contains(out, "Gadget — build order") {
 		t.Fatalf("expected no Build Order section for gadget (never proposed), got:\n%s", out)
+	}
+}
+
+// TestRender_BuildOrderSectionVisibleNotAFacetGroup covers DX-AUD-15: the
+// Build Order section must carry its OWN real id and a DISTINCT class (never
+// the facet .claim-group class the tab JS's hide loop keys on), so it is no
+// longer hidden on load and after every facet nav (a dead feature), and its
+// cards stay deep-linkable via a dedicated resolver map in shell.html.
+func TestRender_BuildOrderSectionVisibleNotAFacetGroup(t *testing.T) {
+	module := "widget"
+	cfg := buildOrderTestConfig(t, module)
+	claims := buildOrderTestClaims(module)
+
+	artifact, err := buildorder.Propose(claims, cfg, module)
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	path := buildorder.ArtifactPath(cfg, module)
+	if err := buildorder.WriteArtifact(artifact, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	if _, err := buildorder.Lock(path, claims, cfg); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	cat, err := catalog.Build(claims, cfg)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// The section must no longer be a .claim-group (that class made the tab
+	// JS hide it on load and on every nav — the whole DX-AUD-15 bug).
+	if strings.Contains(out, "claim-group build-order-module") {
+		t.Fatalf("Build Order section still tagged .claim-group (hide loop would keep it hidden):\n%s", out)
+	}
+	// It must carry its own real, distinct id + class.
+	if !strings.Contains(out, `<section class="build-order-module" id="build-order-`+module+`">`) {
+		t.Fatalf("Build Order section missing its own id / distinct class:\n%s", out)
+	}
+	// Its cards must be deep-linkable, and shell.html must ship the resolver
+	// that maps a #build-order-... hash to the owning module.
+	if !strings.Contains(out, `id="build-order-`+module+`.contract.schema"`) {
+		t.Fatalf("Build Order card missing a deep-linkable id:\n%s", out)
+	}
+	if !strings.Contains(out, "buildOrderToModule") {
+		t.Fatalf("shell.html missing buildOrderToModule deep-link resolver:\n%s", out)
 	}
 }

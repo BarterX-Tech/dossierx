@@ -19,7 +19,14 @@
      optional per-column semantic class (.key/.ty/.en/.ex) via colClass
      when that column's name matches a known convention (e.g. "type" ->
      .ty, "enum" -> .en) — see components.go's colClassByKey for the exact,
-     closed list of recognized column names. */}}
+     closed list of recognized column names.
+
+     Each cell value is rendered through the `cell` helper (components.go),
+     the inline half of the shared markdown renderer, so a cell's code spans
+     and [text](url) links render like a card/list body's do instead of as
+     literal source — inline only, no <p> wrapper inside a <td>. `cell` also
+     stringifies non-string cell values (numbers/bools) and maps a nil/absent
+     cell to "", so a ragged row never breaks template execution. */}}
 <section class="claim claim-table card" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
@@ -32,7 +39,7 @@
     <tbody>
       {{range .Rows}}
       {{$row := .}}
-      <tr>{{range $keys}}{{$cls := colClass .}}<td{{if $cls}} class="{{$cls}}"{{end}}>{{index $row .}}</td>{{end}}</tr>
+      <tr>{{range $keys}}{{$cls := colClass .}}<td{{if $cls}} class="{{$cls}}"{{end}}>{{cell (index $row .)}}</td>{{end}}</tr>
       {{end}}
     </tbody>
   </table>

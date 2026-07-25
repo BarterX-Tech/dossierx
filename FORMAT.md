@@ -8,19 +8,25 @@ specific project, module, or facet. All project-specific vocabulary
 
 ## Claim
 
-A claim is one atomic YAML fact, one file per claim (recommended but not
-enforced by this doc), under the project's configured `claims_dir`.
+A claim is one atomic YAML fact, one claim per file, under the project's
+configured `claims_dir`. This is enforced: a claim file must contain exactly
+one YAML document. Stacking a second `---`-separated document into the same
+file is a hard load error (the engine rewrites a claim's file as a single
+document when it locks or reaudits it, so a second document in that file
+would be silently clobbered). Split multiple claims into separate files.
 
 ```yaml
 id: module.facet.slug          # e.g. widget.contract.overview
 facet: string                  # must be in project.config.yaml's facets[]
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
-layout: card | table | list | steps | tree | banner   # optional
+layout: card | table | list | steps | tree | banner | mockup  # optional
 build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
 body: markdown string          # optional, illustrative prose
-rows: [ { ... } ]              # optional, structured data
+rows: [ { ... } ]              # optional, table rows; each cell must be a string
 steps: [ string ]              # optional, ordered steps
+raw_html: string               # optional, layout: mockup only (review-gated)
+raw_html_reviewed: bool        # optional, human-set gate for raw_html
 section: string                # optional, in-content section heading (see below)
 mirrors: [ id, ... ]
 rests_on: [ id, ... ]
@@ -48,8 +54,21 @@ When `layout` is omitted, it is inferred from the claim's shape:
 2. Otherwise, `steps` is non-empty → `steps`.
 3. Otherwise → `card`.
 
-`list`, `tree`, and `banner` are never inferred; a claim must set them
-explicitly.
+`list`, `tree`, `banner`, and `mockup` are never inferred; a claim must set
+them explicitly. `mockup` renders a project-authored `raw_html` blob instead
+of markdown/rows/steps and carries its own human review gate — see the
+`raw-html-scope` lint for the full constraints.
+
+### `rows` cells
+
+Every value in a `rows` cell must be an authored **string**. A non-string
+cell — a number, bool, list, or map — is a `rows-shape` lint error:
+`table.html` renders each cell as-is, so an unquoted `1.0` would silently
+become `"1"` and a list/map would render as Go-native junk. Quote such values
+in the YAML. Cells flow through the same inline renderer as `body` prose, so a
+cell's `code` spans and `[text](url)` links render as HTML (URL schemes are
+allowlisted — http, https, mailto, `#`-fragment, and relative only; others are
+neutralized to literal text); all other markdown in a cell stays literal.
 
 ### `order` and viewer sequencing
 
@@ -178,11 +197,13 @@ viewer:
   template_overrides: path        # optional override dir; resolved relative
                                     # to this file's own directory. Eligible
                                     # for override, by filename, inside it:
-                                    # the 6 per-layout component partials
+                                    # the 7 per-layout component partials
                                     # (card.html, table.html, list.html,
-                                    # steps.html, tree.html, banner.html)
-                                    # plus the outer shell (shell.html) and
-                                    # base stylesheet (style.css). Missing
+                                    # steps.html, tree.html, banner.html,
+                                    # mockup.html), the Build Order partial
+                                    # (build_order.html), plus the outer shell
+                                    # (shell.html) and base stylesheet
+                                    # (style.css). Missing
                                     # individual files inside it fall back
                                     # to engine defaults per-file; a
                                     # configured-and-missing directory itself

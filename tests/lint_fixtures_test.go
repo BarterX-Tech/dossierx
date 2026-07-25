@@ -65,8 +65,8 @@ func TestLintRuleCoverageFixtures(t *testing.T) {
 		t.Fatalf("read %s: %v", root, err)
 	}
 
-	if len(entries) != 21 {
-		t.Fatalf("expected exactly 21 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
+	if len(entries) != 22 {
+		t.Fatalf("expected exactly 22 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
 	}
 
 	for _, e := range entries {

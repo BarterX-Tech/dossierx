@@ -1,6 +1,7 @@
 package lock
 
 import (
+	"os"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -119,8 +120,8 @@ func TestLockSucceedsWithEmptyLintRegistry(t *testing.T) {
 	if got.ReviewPending {
 		t.Fatalf("expected review_pending false on fresh lock")
 	}
-	if store.Hashes[dep.ID] != ContentHash(dep) {
-		t.Fatalf("expected store to record dependency baseline hash")
+	if h, ok := store.Baseline(claim.ID, dep.ID); !ok || h != ContentHash(dep) {
+		t.Fatalf("expected store to record dependency baseline hash under the dependent claim's own id")
 	}
 }
 
@@ -128,7 +129,7 @@ func TestDependencyChangeFlipsToReviewPendingNeverDraft(t *testing.T) {
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "original body"}
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
 
-	store := &Store{Hashes: map[string]string{dep.ID: ContentHash(dep)}, path: t.TempDir() + "/store.json"}
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{claim.ID: {dep.ID: ContentHash(dep)}}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
 
 	// Dependency content changes underneath the locked claim.
 	dep.Body = "changed body"
@@ -157,7 +158,7 @@ func TestDependencyChangeFlipsToReviewPendingNeverDraft(t *testing.T) {
 func TestDetectStaleLeavesUnaffectedClaimsAlone(t *testing.T) {
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "stable"}
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
-	store := &Store{Hashes: map[string]string{dep.ID: ContentHash(dep)}, path: t.TempDir() + "/store.json"}
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{claim.ID: {dep.ID: ContentHash(dep)}}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
 
 	claims := []model.Claim{claim, dep}
 	out := DetectStale(claims, store)
@@ -272,7 +273,7 @@ func TestClearReviewPendingRefreshesHashesAndKeepsLocked(t *testing.T) {
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "v2 body"}
 	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true, RestsOn: []string{dep.ID}}
 
-	store := &Store{Hashes: map[string]string{dep.ID: "stale-hash"}, path: t.TempDir() + "/store.json"}
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{claim.ID: {dep.ID: "stale-hash"}}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
 	claims := []model.Claim{claim, dep}
 
 	got := ClearReviewPending(claim, claims, store)
@@ -283,8 +284,62 @@ func TestClearReviewPendingRefreshesHashesAndKeepsLocked(t *testing.T) {
 	if got.Status != model.StatusLocked {
 		t.Fatalf("expected status to remain locked, got %q", got.Status)
 	}
-	if store.Hashes[dep.ID] != ContentHash(dep) {
+	if h, ok := store.Baseline(claim.ID, dep.ID); !ok || h != ContentHash(dep) {
 		t.Fatalf("expected store baseline hash refreshed to current dependency content")
+	}
+}
+
+// TestPerDependentBaselineNotSharedAcrossDependents is the DX-AUD-09
+// regression: two locked claims A and B both rest_on the same dependency D.
+// A locks against D's v1 content; D then drifts to v2; B locks against v2.
+// Because baselines are keyed PER DEPENDENT, B's lock must NOT overwrite A's
+// baseline for D, so a later DetectStale still flips A (whose recorded D
+// content is stale) while leaving B (which baselined against the current D)
+// alone. Under the old shared-key store (store.Hashes[depID] alone) B's lock
+// clobbered the single D baseline and A never flipped — the masked bug this
+// test pins. It uses only Lock/DetectStale/LoadStore (never the store's
+// internal representation) so it compiles against, and fails on, the pre-fix
+// code too.
+func TestPerDependentBaselineNotSharedAcrossDependents(t *testing.T) {
+	withRegistry(t) // empty registry: lint always passes
+
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
+	a := model.Claim{ID: "widget.contract.a", Facet: "contract", Module: "widget", Status: model.StatusDraft, RestsOn: []string{dep.ID}}
+	b := model.Claim{ID: "widget.contract.b", Facet: "contract", Module: "widget", Status: model.StatusDraft, RestsOn: []string{dep.ID}}
+
+	store, err := LoadStore(t.TempDir() + "/store.json")
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	// A locks against D v1.
+	lockedA, err := Lock(a, []model.Claim{dep, a, b}, testConfig(), store)
+	if err != nil {
+		t.Fatalf("lock A: %v", err)
+	}
+
+	// D drifts to v2, then B locks against v2.
+	dep.Body = "dep v2"
+	lockedB, err := Lock(b, []model.Claim{dep, lockedA, b}, testConfig(), store)
+	if err != nil {
+		t.Fatalf("lock B: %v", err)
+	}
+
+	out := DetectStale([]model.Claim{dep, lockedA, lockedB}, store)
+	var gotA, gotB model.Claim
+	for _, c := range out {
+		switch c.ID {
+		case a.ID:
+			gotA = c
+		case b.ID:
+			gotB = c
+		}
+	}
+	if !gotA.ReviewPending {
+		t.Fatalf("expected A to flip review_pending: its shared dependency drifted after A locked, and B's later lock must not have overwritten A's baseline")
+	}
+	if gotB.ReviewPending {
+		t.Fatalf("expected B to stay clean: it baselined against the current dependency content")
 	}
 }
 
@@ -297,8 +352,11 @@ func TestStoreSaveAndLoadRoundTrip(t *testing.T) {
 	if len(store.Hashes) != 0 {
 		t.Fatalf("expected empty store for missing file")
 	}
+	if store.Version != storeSchemaVersion {
+		t.Fatalf("expected a fresh store to carry the current schema version %d, got %d", storeSchemaVersion, store.Version)
+	}
 
-	store.Hashes["widget.contract.dep"] = "abc123"
+	store.recordBaseline("widget.contract.main", "widget.contract.dep", "abc123")
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -307,7 +365,193 @@ func TestStoreSaveAndLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore (reload): %v", err)
 	}
-	if reloaded.Hashes["widget.contract.dep"] != "abc123" {
-		t.Fatalf("expected reloaded store to contain saved hash, got %v", reloaded.Hashes)
+	if reloaded.Version != storeSchemaVersion {
+		t.Fatalf("expected reloaded store to carry the current schema version, got %d", reloaded.Version)
+	}
+	if h, ok := reloaded.Baseline("widget.contract.main", "widget.contract.dep"); !ok || h != "abc123" {
+		t.Fatalf("expected reloaded store to contain saved per-dependent hash, got %v", reloaded.Hashes)
+	}
+}
+
+// TestLoadStoreMigratesLegacyFlatFormat is the DX-AUD-09 migration
+// regression: an existing (pre-versioning) store file carries no "version"
+// field and a legacy flat map[depID]hash. LoadStore must not crash on it, must
+// present it as an already-migrated current-version store, must DROP the
+// legacy flat hashes (they can't be safely re-keyed per-dependent), and must
+// preserve locked_at. A subsequent DetectStale must therefore report NO
+// spurious review_pending for a dependent whose (legacy-recorded) dependency
+// has since drifted — the safe outcome per LoadStore's migration doc.
+func TestLoadStoreMigratesLegacyFlatFormat(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "dep v2 (already drifted from what the legacy store recorded)"}
+	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+
+	// Hand-write a legacy flat-format store: no "version", "hashes" keyed by
+	// dependency id alone, with a hash that no longer matches dep's content.
+	path := t.TempDir() + "/store.json"
+	legacy := `{
+  "hashes": {
+    "widget.contract.dep": "legacy-hash-recorded-at-mains-lock"
+  },
+  "locked_at": {
+    "widget.contract.main": "2020-01-01T00:00:00Z"
+  }
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("write legacy store: %v", err)
+	}
+
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore must not error on a legacy flat store: %v", err)
+	}
+	if store.Version != storeSchemaVersion {
+		t.Fatalf("expected legacy store migrated to current schema version %d, got %d", storeSchemaVersion, store.Version)
+	}
+	if len(store.Hashes) != 0 {
+		t.Fatalf("expected legacy flat hashes dropped on migration, got %v", store.Hashes)
+	}
+	if store.LockedAt["widget.contract.main"] == "" {
+		t.Fatalf("expected locked_at preserved across migration, got %v", store.LockedAt)
+	}
+
+	out := DetectStale([]model.Claim{main, dep}, store)
+	for _, c := range out {
+		if c.ID == main.ID && c.ReviewPending {
+			t.Fatalf("expected NO spurious review_pending after migrating a legacy store (baseline was dropped; the claim re-baselines on its next lock)")
+		}
+	}
+}
+
+// TestMigrateLegacyStoreReArmsBaselines is the DEFERRED-1 regression: after
+// LoadStore drops a legacy store's un-attributable flat hashes, every
+// already-locked claim is left with no baseline, so DX-AUD-09 drift detection
+// is down for the project's existing locks. MigrateLegacyStore must re-arm each
+// locked claim's per-dependent baseline from CURRENT dependency content:
+// DetectStale immediately after reports NO drift (bar a), while a dependency
+// edited AFTER migration flips its dependent to review_pending (bar b).
+func TestMigrateLegacyStoreReArmsBaselines(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
+	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+
+	// Hand-write a legacy flat store: no "version", flat map[depID]hash whose
+	// value no longer matches dep's content.
+	path := t.TempDir() + "/store.json"
+	legacy := `{
+  "hashes": {
+    "widget.contract.dep": "stale-legacy-hash"
+  },
+  "locked_at": {
+    "widget.contract.main": "2020-01-01T00:00:00Z"
+  }
+}`
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("write legacy store: %v", err)
+	}
+
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if len(store.Hashes) != 0 {
+		t.Fatalf("precondition: expected LoadStore to drop the legacy flat hashes, got %v", store.Hashes)
+	}
+
+	claims := []model.Claim{main, dep}
+	if changed := MigrateLegacyStore(store, claims); !changed {
+		t.Fatalf("expected MigrateLegacyStore to re-arm baselines and report changed=true")
+	}
+	if store.Version != storeSchemaVersion {
+		t.Fatalf("expected store stamped schema version %d, got %d", storeSchemaVersion, store.Version)
+	}
+	if h, ok := store.Baseline(main.ID, dep.ID); !ok || h != ContentHash(dep) {
+		t.Fatalf("expected per-dependent baseline Hashes[%s][%s] re-armed to current dep content", main.ID, dep.ID)
+	}
+
+	// (a) No spurious drift immediately after migration.
+	for _, c := range DetectStale(claims, store) {
+		if c.ID == main.ID && c.ReviewPending {
+			t.Fatalf("expected NO drift immediately after migration (current == re-armed baseline)")
+		}
+	}
+
+	// (b) A dependency edited AFTER migration flips its dependent stale.
+	dep.Body = "dep v2"
+	var flipped bool
+	for _, c := range DetectStale([]model.Claim{main, dep}, store) {
+		if c.ID == main.ID {
+			flipped = c.ReviewPending
+		}
+	}
+	if !flipped {
+		t.Fatalf("expected main to flip review_pending after its dependency was edited post-migration")
+	}
+}
+
+// TestMigrateLegacyStoreIdempotent proves the migration runs once (bar d):
+// after the first re-arm populates baselines, a second call is a no-op
+// (changed=false) that leaves the recorded baselines untouched.
+func TestMigrateLegacyStoreIdempotent(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
+	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	claims := []model.Claim{main, dep}
+
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+
+	if changed := MigrateLegacyStore(store, claims); !changed {
+		t.Fatalf("first MigrateLegacyStore should re-arm and report changed=true")
+	}
+	first, ok := store.Baseline(main.ID, dep.ID)
+	if !ok {
+		t.Fatalf("expected a baseline recorded on first migration")
+	}
+
+	if changed := MigrateLegacyStore(store, claims); changed {
+		t.Fatalf("second MigrateLegacyStore must be a no-op (changed=false) once baselines are present")
+	}
+	if again, _ := store.Baseline(main.ID, dep.ID); again != first {
+		t.Fatalf("second migration must not alter an existing baseline")
+	}
+}
+
+// TestMigrateLegacyStorePreservesExistingReviewPending is correctness bar (c):
+// a claim already review_pending before the upgrade stays so. Migration re-arms
+// the baseline to current content (so DetectStale sees no NEW drift), but
+// DetectStale only ever SETS review_pending, never clears it, so a pre-existing
+// flag — which lives in the claim YAML, never the store — survives untouched.
+func TestMigrateLegacyStorePreservesExistingReviewPending(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
+	main := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true, RestsOn: []string{dep.ID}}
+	claims := []model.Claim{main, dep}
+
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	MigrateLegacyStore(store, claims)
+
+	var got model.Claim
+	for _, c := range DetectStale(claims, store) {
+		if c.ID == main.ID {
+			got = c
+		}
+	}
+	if !got.ReviewPending {
+		t.Fatalf("expected a pre-upgrade review_pending claim to stay review_pending after migration")
+	}
+}
+
+// TestMigrateLegacyStoreSkipsDraftClaims proves migration re-arms baselines
+// only for LOCKED claims: DetectStale only inspects locked claims, so a draft
+// claim's dependencies are irrelevant and must not be recorded.
+func TestMigrateLegacyStoreSkipsDraftClaims(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
+	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft, RestsOn: []string{dep.ID}}
+	claims := []model.Claim{draft, dep}
+
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	changed := MigrateLegacyStore(store, claims)
+
+	if _, ok := store.Baseline(draft.ID, dep.ID); ok {
+		t.Fatalf("expected no baseline recorded for a draft claim")
+	}
+	if changed {
+		t.Fatalf("expected changed=false when no locked claim has a dependency to re-arm")
 	}
 }

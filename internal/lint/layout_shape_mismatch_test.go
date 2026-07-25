@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -38,6 +39,19 @@ func TestLayoutShapeMismatch(t *testing.T) {
 		{
 			name:    "passing: unset layout never mismatches",
 			claim:   model.Claim{ID: "widget.contract.unset", Rows: []model.Row{{"field": "id"}}},
+			wantErr: false,
+		},
+		{
+			// A layout: mockup claim's renderable content lives in RawHTML,
+			// not Body/Rows/Steps — that is its documented primary use (a
+			// body-less markup blob). The no-content check must count RawHTML
+			// as content, or such a claim wrongly fails lint and can never
+			// lock.
+			name: "passing: mockup layout with only raw_html is content",
+			claim: model.Claim{
+				ID: "widget.internals.console-mockup", Layout: model.LayoutMockup,
+				RawHTML: `<div class="gcp-row">mock</div>`,
+			},
 			wantErr: false,
 		},
 		{
@@ -84,7 +98,7 @@ func TestLayoutShapeMismatch(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "failing: layout value outside the six allowed types is a lint error, not a render panic",
+			name: "failing: layout value outside the allowed set is a lint error, not a render panic",
 			claim: model.Claim{
 				ID: "widget.contract.bogus-layout", Layout: model.Layout("carousel"), Body: "hi",
 			},
@@ -105,5 +119,36 @@ func TestLayoutShapeMismatch(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestLayoutShapeMismatch_InvalidLayoutMessageListsAllLayouts guards
+// DX-AUD-22: the invalid-layout message used to hardcode "six allowed
+// layouts (card, table, list, steps, tree, banner)", silently omitting the
+// valid seventh layout (mockup). The message must be built from the same
+// fixed-order layout list that backs the validity check, so it can never
+// drift, and must include every renderable layout — mockup included.
+func TestLayoutShapeMismatch_InvalidLayoutMessageListsAllLayouts(t *testing.T) {
+	findings := layoutShapeMismatchLint{}.Check([]model.Claim{
+		{ID: "widget.contract.bogus", Layout: model.Layout("carousel"), Body: "hi"},
+	}, nil)
+	if len(findings) != 1 {
+		t.Fatalf("expected exactly one finding for an unrenderable layout, got: %+v", findings)
+	}
+	msg := findings[0].Message
+	if !strings.Contains(msg, "mockup") {
+		t.Fatalf("invalid-layout message must list mockup, got: %q", msg)
+	}
+	for _, l := range []model.Layout{
+		model.LayoutCard, model.LayoutTable, model.LayoutList,
+		model.LayoutSteps, model.LayoutTree, model.LayoutBanner, model.LayoutMockup,
+	} {
+		if !strings.Contains(msg, string(l)) {
+			t.Errorf("invalid-layout message must list %q, got: %q", l, msg)
+		}
+	}
+	// The stale hardcoded count word must be gone.
+	if strings.Contains(msg, "six") {
+		t.Errorf("invalid-layout message must not hardcode a count word, got: %q", msg)
 	}
 }

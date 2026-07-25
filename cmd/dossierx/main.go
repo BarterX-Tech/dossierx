@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strings"
 
@@ -28,6 +29,30 @@ import (
 
 var configPath string
 
+// version, commit, and date are stamped in at release time by goreleaser's
+// -X ldflags (see .goreleaser.yaml, which targets these exact
+// package-qualified names). A plain "go build"/"go install" sets no ldflags,
+// leaving them empty; resolveVersionInfo falls back to
+// runtime/debug.ReadBuildInfo in that case so the binary always reports
+// something sensible instead of blank.
+var (
+	version string
+	commit  string
+	date    string
+)
+
+// errClaimNotFound and errWrongState are sentinels the lock/unlock/flag
+// subcommands wrap into their not-found / wrong-state errors so main() can
+// map both to exit code 2 — the documented "not found / not in the right
+// state" family (see README's exit-codes table). deps/reaudit reach exit 2
+// via a direct os.Exit(2) instead; lock/unlock/flag hold deferred
+// file-lock releases that a bare os.Exit would skip, so they signal through
+// these sentinels and let RunE unwind cleanly.
+var (
+	errClaimNotFound = errors.New("claim not found")
+	errWrongState    = errors.New("claim not in the required state")
+)
+
 // main, and the os.Exit(2) calls inside newDepsCmd/newReauditCmd's "not
 // found" / "not locked+review_pending" branches, are deliberately not
 // exercised by this package's own tests: calling any of them in-process
@@ -41,10 +66,16 @@ var configPath string
 // and cli_inprocess_test.go.
 func main() {
 	if err := newRootCmd().Execute(); err != nil {
-		// A missing config file is its own exit code (2) distinct from
-		// other failures (1), so scripts/CI can tell "nothing to load"
-		// apart from "loaded but invalid" or "ran but failed".
-		if errors.Is(err, config.ErrNotFound) {
+		// Exit 2 is the "not found / not in the right state" family: a
+		// missing config file, a claim id that doesn't exist, or a claim
+		// that isn't in the state a command requires. Everything else
+		// (lint errors, validation failures, write errors) is exit 1, so
+		// scripts/CI can tell "nothing/nobody there" apart from "loaded
+		// but failed". deps/reaudit reach exit 2 via their own os.Exit(2);
+		// lock/unlock/flag wrap errClaimNotFound/errWrongState instead.
+		if errors.Is(err, config.ErrNotFound) ||
+			errors.Is(err, errClaimNotFound) ||
+			errors.Is(err, errWrongState) {
 			os.Exit(2)
 		}
 		os.Exit(1)
@@ -57,6 +88,11 @@ func newRootCmd() *cobra.Command {
 		Short:        "Render claims into a static HTML viewer",
 		SilenceUsage: true,
 	}
+	// Setting Version is what makes cobra wire up the built-in --version
+	// flag on the root command. The resolved value (ldflag-stamped, or a
+	// debug.ReadBuildInfo fallback) is used so --version never prints blank.
+	v, _, _ := resolveVersionInfo()
+	root.Version = v
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to project.config.yaml (default: search upward from the current directory, like git finds .git)")
 
 	root.AddCommand(
@@ -74,8 +110,81 @@ func newRootCmd() *cobra.Command {
 		newFlagCmd(),
 		newImplinkCmd(),
 		newSkillsCmd(),
+		newVersionCmd(),
 	)
 	return root
+}
+
+// resolveVersionInfo returns the version, commit, and build date to report.
+// It prefers the values stamped in by goreleaser's -X ldflags and falls back
+// to runtime/debug.ReadBuildInfo for plain "go build"/"go install" builds
+// (which set no ldflags): a module version if one was recorded (e.g. a
+// "go install ...@v1.2.3" build), otherwise "dev"; and the VCS
+// revision/time Go embeds by default. Empty leftovers become "unknown" so no
+// field is ever reported blank.
+func resolveVersionInfo() (v, c, d string) {
+	v, c, d = version, commit, date
+
+	if info, ok := debug.ReadBuildInfo(); ok {
+		for _, s := range info.Settings {
+			switch s.Key {
+			case "vcs.revision":
+				if c == "" {
+					c = s.Value
+				}
+			case "vcs.time":
+				if d == "" {
+					d = s.Value
+				}
+			}
+		}
+		if v == "" && info.Main.Version != "" && info.Main.Version != "(devel)" {
+			v = info.Main.Version
+		}
+	}
+
+	if v == "" {
+		v = "dev"
+	}
+	if c == "" {
+		c = "unknown"
+	}
+	if d == "" {
+		d = "unknown"
+	}
+	return v, c, d
+}
+
+// newVersionCmd prints the binary's version, commit, and build date. Unlike
+// every other subcommand it never loads a project config — it describes the
+// binary itself, so it works from anywhere, with or without a project.
+func newVersionCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "version",
+		Short: "Print the dossierx version, commit, and build date",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			v, c, d := resolveVersionInfo()
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "dossierx %s\n", v)
+			fmt.Fprintf(out, "  commit: %s\n", c)
+			fmt.Fprintf(out, "  date:   %s\n", d)
+			return nil
+		},
+	}
+}
+
+// requireKnownModule validates a --module against the modules this project
+// actually declares (cfg.Modules). Every build-order/implink subcommand
+// takes a --module, and an unknown or typo'd one would otherwise silently
+// report an empty "not proposed yet"/"nothing linked yet" state and exit 0 —
+// a success-looking result for a module that does not exist. A valid but
+// unused module passes this check and still reaches its normal report.
+func requireKnownModule(cfg *config.Config, module string) error {
+	if containsStr(cfg.Modules, module) {
+		return nil
+	}
+	return fmt.Errorf("unknown module %q; known: %s", module, strings.Join(cfg.Modules, ", "))
 }
 
 // ---------------------------------------------------------------------
@@ -157,6 +266,34 @@ func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
 }
 
+// loadStoreForRead loads the lock content-hash store for a read-mostly command
+// (currently "check"), first re-arming per-dependent baselines if the store
+// predates them (a legacy migration — see lock.MigrateLegacyStore) and
+// persisting that one-time re-arm. The load/migrate/Save runs under the same
+// cross-process file lock "dossierx lock"/"dossierx reaudit" take, so the
+// migration Save can never race their load-mutate-save on the shared store
+// file. The returned store is safe to read (e.g. lock.DetectStale) after the
+// lock is released: DetectStale only consults the already-loaded in-memory
+// store, never the file again.
+func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, error) {
+	release, err := lock.AcquireFileLock(storePath(cfg))
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil {
+		return nil, err
+	}
+	if lock.MigrateLegacyStore(store, claims) {
+		if err := store.Save(); err != nil {
+			return nil, err
+		}
+	}
+	return store, nil
+}
+
 // catalogPath is where "dossierx catalog" (and "dossierx check") writes the built
 // catalog.
 func catalogPath(cfg *config.Config) string {
@@ -195,6 +332,14 @@ func newLintCmd() *cobra.Command {
 // error (for a nonzero exit code) if any error-severity finding is
 // present. Warnings are reported but do not fail the command.
 func reportLintFindings(cmd *cobra.Command, findings []lint.Finding, asJSON bool) error {
+	// A nil findings slice JSON-encodes as "null"; coerce it to an empty
+	// slice so "dossierx lint --json" always emits a JSON array — "[]" for a
+	// clean run — which is what machine consumers parse. (Text output is
+	// unaffected: len(nil) and len([]) are both 0.)
+	if findings == nil {
+		findings = []lint.Finding{}
+	}
+
 	errCount := 0
 	for _, f := range findings {
 		if f.Severity != lint.SeverityWarning {
@@ -244,7 +389,30 @@ func newCatalogCmd() *cobra.Command {
 	}
 }
 
+// enforceMockupGate runs the raw-html-scope mockup gate (the checkMockupGate
+// subset — error-severity findings only, deliberately NOT the full lint suite,
+// so draft-authoring relationship WARNINGS still never block a plain
+// render/catalog) and returns a non-nil error when any claim's RawHTML fails
+// it. render and catalog both call this before doing their work so neither
+// ever publishes live HTML/JS from a draft, unreviewed, or non-allowlisted
+// mockup into the client-shared viewer (DX-AUD-08). Callers wrap the returned
+// error with their own "render:"/"catalog:" prefix; findings are printed to
+// stderr so the failure is self-explanatory.
+func enforceMockupGate(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) error {
+	findings := lint.MockupGateFindings(claims, cfg)
+	if len(findings) == 0 {
+		return nil
+	}
+	for _, f := range findings {
+		fmt.Fprintf(cmd.ErrOrStderr(), "[%s] %s: %s: %s\n", f.Severity, f.LintName, f.ClaimID, f.Message)
+	}
+	return fmt.Errorf("%d raw_html mockup-gate error(s); review, allowlist, and lock the mockup before rendering", len(findings))
+}
+
 func runCatalog(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) error {
+	if err := enforceMockupGate(cmd, cfg, claims); err != nil {
+		return fmt.Errorf("catalog: %w", err)
+	}
 	cat, err := catalog.Build(claims, cfg)
 	if err != nil {
 		return fmt.Errorf("catalog: build: %w", err)
@@ -276,6 +444,9 @@ func newRenderCmd() *cobra.Command {
 }
 
 func runRender(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) error {
+	if err := enforceMockupGate(cmd, cfg, claims); err != nil {
+		return fmt.Errorf("render: %w", err)
+	}
 	cat, err := catalog.Build(claims, cfg)
 	if err != nil {
 		return fmt.Errorf("render: build catalog: %w", err)
@@ -314,7 +485,13 @@ func newCheckCmd() *cobra.Command {
 			// confirmed reaudit to locked+review_pending. Persist the flag
 			// change back to the claim's own file so it survives to the
 			// next run and shows up in "dossierx stale".
-			store, err := lock.LoadStore(storePath(cfg))
+			//
+			// loadStoreForRead also re-arms a legacy (pre-versioning) store's
+			// per-dependent baselines from current content on the first run
+			// after upgrade, so already-locked claims regain drift detection
+			// immediately (no manual re-lock) without any spurious
+			// review_pending — see lock.MigrateLegacyStore.
+			store, err := loadStoreForRead(cfg, claims)
 			if err != nil {
 				return fmt.Errorf("check: %w", err)
 			}
@@ -693,7 +870,7 @@ func newLockCmd() *cobra.Command {
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
-				return fmt.Errorf("lock: claim %q not found", id)
+				return fmt.Errorf("lock: claim %q not found: %w", id, errClaimNotFound)
 			}
 
 			// Serialize concurrent "dossierx lock"/"dossierx reaudit --confirm"
@@ -711,6 +888,18 @@ func newLockCmd() *cobra.Command {
 			store, err := lock.LoadStore(storePath(cfg))
 			if err != nil {
 				return fmt.Errorf("lock: %w", err)
+			}
+
+			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
+			// from current content before recording this claim's own, so an
+			// upgrade caught mid-lock still restores drift detection for every
+			// already-locked claim (not just this one) — see
+			// lock.MigrateLegacyStore. Persisted here rather than relying on the
+			// Save below so the re-arm survives even a subsequently refused lock.
+			if lock.MigrateLegacyStore(store, claims) {
+				if err := store.Save(); err != nil {
+					return fmt.Errorf("lock: %w", err)
+				}
 			}
 
 			updated, err := lock.Lock(claim, claims, cfg, store)
@@ -736,13 +925,50 @@ func newUnlockCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			_, claims, err := loadConfigAndClaims()
+			cfg, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return err
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
-				return fmt.Errorf("unlock: claim %q not found", id)
+				return fmt.Errorf("unlock: claim %q not found: %w", id, errClaimNotFound)
+			}
+
+			// Unlocking must also drop any pending "dossierx flag" trigger for
+			// this claim (DX-AUD-10): a flag records an agent's before/after
+			// assertion against the claim's currently-locked body, and once the
+			// claim is unlocked and (presumably) edited, that stale assertion
+			// must not survive to be silently applied by a later
+			// drift-triggered "dossierx reaudit --confirm" after the claim is
+			// relocked. Serialize against concurrent flag/reaudit invocations
+			// on the shared flag-store file, the same way newLockCmd and
+			// newReauditCmd do (AcquireFileLock). Shared lock.Store.Hashes
+			// entries are deliberately NOT touched here — they belong to
+			// co-dependents and are harmlessly overwritten on the next relock.
+			release, err := lock.AcquireFileLock(flagStorePath(cfg))
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
+			}
+			defer release()
+
+			// Clearing the pending flag is best-effort: unlock is the recovery
+			// escape hatch ("get this claim back to draft so I can fix things")
+			// and must never be blocked by an unrelated broken flag-store file.
+			// A missing store is already the empty-store case (LoadFlagStore
+			// treats it as fresh — nothing to clear, silently). An existing but
+			// unparseable/unreadable store is warned about on stderr and skipped
+			// rather than fatal, so the status revert below still happens. Only a
+			// failing Save of a store we DID read + mutate is a hard error (that
+			// is a real write failure, not the corruption case this tolerates).
+			// The lock-acquire above is still fatal on error: that is contention,
+			// not corruption.
+			if flagStore, ferr := reaudit.LoadFlagStore(flagStorePath(cfg)); ferr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read flag store (%v); a pending flag for %s was not cleared\n", ferr, id)
+			} else if _, flagged := flagStore.Flags[id]; flagged {
+				delete(flagStore.Flags, id)
+				if err := flagStore.Save(); err != nil {
+					return fmt.Errorf("unlock: %w", err)
+				}
 			}
 
 			updated := lock.Unlock(claim)
@@ -808,6 +1034,15 @@ func newReauditCmd() *cobra.Command {
 			store, err := lock.LoadStore(storePath(cfg))
 			if err != nil {
 				return fmt.Errorf("reaudit: %w", err)
+			}
+			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
+			// from current content — see lock.MigrateLegacyStore. Persisted here
+			// (not only on the --confirm path below) so a mere propose still
+			// restores drift detection for the project's already-locked claims.
+			if lock.MigrateLegacyStore(store, claims) {
+				if err := store.Save(); err != nil {
+					return fmt.Errorf("reaudit: %w", err)
+				}
 			}
 			flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
 			if err != nil {
@@ -886,7 +1121,7 @@ func pickChangedDependency(claim model.Claim, claims []model.Claim, store *lock.
 		if !ok {
 			continue
 		}
-		if stored, known := store.Hashes[dep]; known && stored != lock.ContentHash(depClaim) {
+		if stored, known := store.Baseline(claim.ID, dep); known && stored != lock.ContentHash(depClaim) {
 			return depClaim
 		}
 	}

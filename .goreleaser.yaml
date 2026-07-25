@@ -18,10 +18,15 @@ builds:
       - amd64
       - arm64
     ldflags:
+      # The version/commit/date vars live in package main (cmd/dossierx). The
+      # linker names a main-package symbol "main.<name>", not by its directory
+      # import path, so -X must target "main.version" etc. — the full import
+      # path form silently no-ops for a main package, leaving the binary to
+      # fall back to its debug.ReadBuildInfo default.
       - -s -w
-      - -X github.com/BarterX-Tech/dossierx/cmd/dossierx.version={{.Version}}
-      - -X github.com/BarterX-Tech/dossierx/cmd/dossierx.commit={{.Commit}}
-      - -X github.com/BarterX-Tech/dossierx/cmd/dossierx.date={{.Date}}
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
 
 archives:
   - id: dossierx

@@ -436,6 +436,109 @@ func TestEdgesHTMLWithLinks_NilDependedBy_OmitsLine(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
+// table.html cell rendering (DX-AUD-02): each <td> routes its value through
+// the shared inline markdown renderer via the cell helper, so code spans and
+// links render (not literal), and a non-string cell value doesn't break
+// template execution.
+// ---------------------------------------------------------------------
+
+func TestTablePartial_CellRendersInlineMarkdown(t *testing.T) {
+	partials, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	tbl := partials[model.LayoutTable]
+
+	// A single cell carrying a backtick code span, a link, and a literal
+	// pipe char — the exact shape BUG-02 rendered literally in every Chitta
+	// table claim.
+	row := decodeRowForTest(t, "name: id\nnotes: \"use `get()` see [d](http://x/a?b=1&c=2) | end\"\n")
+	claim := model.Claim{
+		ID:     "widget.contract.t",
+		Status: model.StatusLocked,
+		Rows:   []model.Row{row},
+	}
+
+	var buf bytes.Buffer
+	if err := tbl.Execute(&buf, claim); err != nil {
+		t.Fatalf("execute table partial: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "<code>get()</code>") {
+		t.Errorf("expected a rendered <code> span in a table cell, got:\n%s", out)
+	}
+	if !strings.Contains(out, `<a href="http://x/a?b=1&amp;c=2">d</a>`) {
+		t.Errorf("expected a rendered anchor in a table cell, got:\n%s", out)
+	}
+	if strings.Contains(out, "`") {
+		t.Errorf("literal backtick token leaked into table output (cell not routed through the inline renderer):\n%s", out)
+	}
+	if !strings.Contains(out, "| end") {
+		t.Errorf("expected the literal pipe char preserved in the cell, got:\n%s", out)
+	}
+}
+
+func TestTablePartial_RejectedSchemeCellRendersInert(t *testing.T) {
+	partials, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	tbl := partials[model.LayoutTable]
+
+	row := decodeRowForTest(t, "name: id\nnotes: \"[click](javascript:alert(1))\"\n")
+	claim := model.Claim{
+		ID:     "widget.contract.j",
+		Status: model.StatusLocked,
+		Rows:   []model.Row{row},
+	}
+
+	var buf bytes.Buffer
+	if err := tbl.Execute(&buf, claim); err != nil {
+		t.Fatalf("execute table partial: %v", err)
+	}
+	out := buf.String()
+
+	if strings.Contains(out, "<a ") {
+		t.Errorf("a javascript: link in a table cell must not become an anchor, got:\n%s", out)
+	}
+	if !strings.Contains(out, "[click](javascript:alert(1))") {
+		t.Errorf("expected the rejected link rendered as inert literal text, got:\n%s", out)
+	}
+}
+
+func TestTablePartial_NonStringCellDoesNotCrash(t *testing.T) {
+	partials, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	tbl := partials[model.LayoutTable]
+
+	// int/bool/nil cell values: fmt.Sprint inside the cell helper defuses
+	// what would otherwise be a template-execution failure when a
+	// string-typed inline renderer receives a non-string cell.
+	row := model.Row{"count": 42, "ok": true, "missing": nil}
+	claim := model.Claim{
+		ID:     "widget.contract.n",
+		Status: model.StatusLocked,
+		Rows:   []model.Row{row},
+	}
+
+	var buf bytes.Buffer
+	if err := tbl.Execute(&buf, claim); err != nil {
+		t.Fatalf("execute table partial with non-string cells: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "42") {
+		t.Errorf("expected int cell rendered as 42, got:\n%s", out)
+	}
+	if !strings.Contains(out, "true") {
+		t.Errorf("expected bool cell rendered as true, got:\n%s", out)
+	}
+}
+
+// ---------------------------------------------------------------------
 // loadOne / OverrideFile: the override-present-but-invalid and
 // permission-error branches TestLoad_* above doesn't reach.
 // ---------------------------------------------------------------------

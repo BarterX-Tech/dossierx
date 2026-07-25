@@ -53,6 +53,9 @@ func newBuildOrderProposeCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("build-order propose: %w", err)
+			}
 
 			artifact, err := buildorder.Propose(claims, cfg, module)
 			if err != nil {
@@ -91,10 +94,13 @@ func newBuildOrderStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("build-order status: %w", err)
+			}
 
 			out := cmd.OutOrStdout()
 			path := buildorder.ArtifactPath(cfg, module)
-			artifact, err := buildorder.Status(path, claims)
+			artifact, err := buildorder.Status(path, claims, cfg)
 			if err != nil {
 				if errors.Is(err, buildorder.ErrNotProposed) {
 					fmt.Fprintf(out, "build-order status: %s: not proposed yet (run \"dossierx build-order propose --module %s\")\n", module, module)
@@ -145,9 +151,12 @@ func newBuildOrderLockCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			if err := requireKnownModule(cfg, module); err != nil {
+				return fmt.Errorf("build-order lock: %w", err)
+			}
 
 			path := buildorder.ArtifactPath(cfg, module)
-			artifact, err := buildorder.Lock(path, claims)
+			artifact, err := buildorder.Lock(path, claims, cfg)
 			if err != nil {
 				return fmt.Errorf("build-order lock: %w", err)
 			}

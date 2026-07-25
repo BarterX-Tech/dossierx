@@ -182,16 +182,57 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 		)
 	}
 
+	// 2. Phase-order validation + 3. cycle gate + the split/order derivation
+	// all live in computePhases, the pure routine store.go's recomputeStale
+	// also calls so a locked artifact can never silently describe a different
+	// order than a fresh Propose would now compute.
+	phaseBlocks, excluded, err := computePhases(claims, cfg, module)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Artifact{
+		Module:   module,
+		Locked:   false,
+		Excluded: excluded,
+		Phases:   phaseBlocks,
+	}, nil
+}
+
+// computePhases is the pure, deterministic phase/order/excluded/File
+// derivation extracted from Propose so Propose and store.go's recomputeStale
+// share ONE routine and can never diverge on what order a given claim set
+// produces — the whole point of the staleness re-derivation (a locked artifact
+// must never silently describe a different build order than a fresh propose
+// would now compute). It takes the FULL claim set (not pre-filtered to module —
+// it filters itself, so it can still see other modules' claims for the
+// same-module-vs-cross-module edge distinction below), cfg (for displayPath's
+// project-relative ClaimEntry.File), and the target module.
+//
+// It deliberately performs NONE of Propose's side effects or preconditions —
+// the completeness gate (error-on-unlocked), the empty-module check, and
+// artifact writing all remain in Propose/store.go. It DOES keep the
+// derivation's own structural validation (build_role classification,
+// phase-order, cycle), returning a descriptive error rather than emitting a
+// broken order, since both callers must fail loudly on a claim set with no
+// valid order at all.
+func computePhases(claims []model.Claim, cfg *config.Config, module string) ([]PhaseBlock, []string, error) {
 	byID := make(map[string]model.Claim, len(claims))
 	for _, c := range claims {
 		byID[c.ID] = c
+	}
+	var moduleClaims []model.Claim
+	for _, c := range claims {
+		if c.Module == module {
+			moduleClaims = append(moduleClaims, c)
+		}
 	}
 
 	// Split into excluded (out-of-scope) and per-phase buckets, validating
 	// every claim's BuildRole is one of the 6 known values as we go (the
 	// build-role-required-for-locked lint is the review-time version of
-	// this same check; Propose re-checks defensively since it must never
-	// trust an unlinted claim set).
+	// this same check; we re-check defensively since we must never trust an
+	// unlinted claim set).
 	excluded := make([]string, 0)
 	phaseClaims := make(map[model.BuildRole][]model.Claim, len(Phases))
 	for _, c := range moduleClaims {
@@ -199,16 +240,16 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 		case c.BuildRole == model.BuildRoleOutOfScope:
 			excluded = append(excluded, c.ID)
 		case c.BuildRole == "":
-			return nil, fmt.Errorf("buildorder: claim %q is locked but has no build_role set", c.ID)
+			return nil, nil, fmt.Errorf("buildorder: claim %q is locked but has no build_role set", c.ID)
 		case isKnownPhase(c.BuildRole):
 			phaseClaims[c.BuildRole] = append(phaseClaims[c.BuildRole], c)
 		default:
-			return nil, fmt.Errorf("buildorder: claim %q has invalid build_role %q", c.ID, c.BuildRole)
+			return nil, nil, fmt.Errorf("buildorder: claim %q has invalid build_role %q", c.ID, c.BuildRole)
 		}
 	}
 	sort.Strings(excluded)
 
-	// 2. Phase-order validation (same-module edges only).
+	// Phase-order validation (same-module edges only).
 	for _, c := range moduleClaims {
 		if c.BuildRole == model.BuildRoleOutOfScope || c.BuildRole == "" {
 			continue
@@ -224,7 +265,7 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 				continue // target is out-of-scope (or, defensively, unset) — not part of the phase sequence.
 			}
 			if tPhase > cPhase {
-				return nil, fmt.Errorf(
+				return nil, nil, fmt.Errorf(
 					"buildorder: phase-order violation: claim %q (phase %q) rests_on %q (phase %q), which comes later in the fixed phase sequence %v",
 					c.ID, c.BuildRole, dep, target.BuildRole, Phases,
 				)
@@ -241,7 +282,7 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 		}
 		ordered, cyclic := layeredTopoSort(stableDisplayOrder(bucket))
 		if len(cyclic) > 0 {
-			return nil, fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"buildorder: phase %q: rests_on cycle detected among %d claim(s): %s (run \"dossierx lint\" for the full cycle path)",
 				phase, len(cyclic), strings.Join(cyclic, ", "),
 			)
@@ -257,12 +298,7 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 		phaseBlocks = append(phaseBlocks, PhaseBlock{Phase: string(phase), Claims: entries})
 	}
 
-	return &Artifact{
-		Module:   module,
-		Locked:   false,
-		Excluded: excluded,
-		Phases:   phaseBlocks,
-	}, nil
+	return phaseBlocks, excluded, nil
 }
 
 // isKnownPhase reports whether role is one of Phases' 5 in-sequence
