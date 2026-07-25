@@ -2,7 +2,7 @@
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, governed-required,
 // mirror-mismatch, mirror-unanchored, mirror-reciprocal, rows-shape,
 // supersede, raw-html-scope, roll-up, validated-on-missing, body-edge-hint,
-// code-orphan, orphan, layout-shape-mismatch, build-role-required,
+// code-orphan, orphan, layout-shape-mismatch, build-role-required-for-locked,
 // orientation-note-order, orientation-note-shape, status-shape) implements,
 // one per file
 // in this package. This file only defines the contract and the registry;

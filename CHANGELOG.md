@@ -50,9 +50,12 @@ importable, there are no breaking CLI changes, and the lock-store migrates autom
 - `flag` on a `table` / `steps` / `mockup` claim rewrote only the body, leaving the rendered
   rows/steps/raw HTML stale while clearing `review_pending`; `flag` is now refused on those
   structured layouts (use unlock → edit → relock).
-- Build-order staleness now also flags an artifact stale when a covered claim's `build_role`
-  changes (which reorders its phase) or when an excluded, out-of-scope claim is deleted —
-  previously only content changes, in-phase deletions, and additions were detected.
+- Build-order staleness now flags an artifact stale on every order-affecting change, not just
+  content edits, in-phase deletions, and additions: a covered claim's `build_role` change
+  (which reorders its phase), an excluded out-of-scope claim being deleted, and an excluded
+  claim being *promoted* into a real build phase (or edited to an empty/invalid role, mirroring
+  what `propose` would now reject). Staleness also runs for a locked module that covers only
+  out-of-scope claims, which previously escaped every check and could not be relocked.
 - Build-order staleness ignored newly-added claims (an artifact could silently omit a claim);
   additions now flag the artifact stale, symmetric with deletions.
 - `build-order lock` re-blessed a stale artifact without recomputing its order; it now refuses
@@ -69,8 +72,10 @@ importable, there are no breaking CLI changes, and the lock-store migrates autom
 ### Security
 - The `raw_html` mockup allowlist only inspected double-quoted attributes, so single-quoted,
   unquoted, and valueless event handlers, styles, and external `src` bypassed it. It is
-  replaced with a default-deny parser covering every quote form, and an entity-encoded `img`
-  `src` (e.g. `&#47;&#47;host`) is now decoded before the relative-only check.
+  replaced with a default-deny parser covering every quote form, and an `img` `src` is now
+  HTML-entity-decoded and stripped of ASCII control bytes before the relative-only check, so
+  neither an entity-encoded (`&#47;&#47;host`) nor a control-char-obfuscated (`ht&#9;tp://host`)
+  absolute/external URL can slip past it.
 - `render` and `catalog` never ran the `raw_html` gate (only `lock` did), so they could
   publish unreviewed or non-allowlisted mockup HTML into the viewer; both now enforce the gate
   and fail on a violation.
