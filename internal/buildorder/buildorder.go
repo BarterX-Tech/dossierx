@@ -124,7 +124,7 @@ func (a *Artifact) ClaimIDs() []string {
 // distinction below). It performs no I/O; store.go's WriteArtifact persists
 // the result, mirroring catalog.Build/catalog.WriteJSON's split.
 //
-// Propose enforces three gates, in order, each returning a descriptive,
+// Propose enforces four gates, in order, each returning a descriptive,
 // non-nil error rather than silently producing a broken or partial order:
 //
 //  1. Completeness gate — every claim belonging to module (across every
@@ -132,7 +132,14 @@ func (a *Artifact) ClaimIDs() []string {
 //     propose" a once-a-module's-docs-are-fully-locked operation: the
 //     resulting error lists every still-non-locked claim id, so a reviewer
 //     knows exactly what's left.
-//  2. Phase-order validation — if a claim in phase P rests_on another claim
+//  2. Open-comment-thread gate — no claim in module may carry an unresolved
+//     (status: open) comment thread. A thread is unreviewed discussion about
+//     content an implementer would otherwise treat as settled, so even a
+//     fully-locked module is not build-ready until every thread is resolved.
+//     This gates on c.Comments directly (not c.ReviewPending — a claim can be
+//     review_pending for an already-accepted dependency drift, which does not
+//     block a build order), and the error lists every offending claim id.
+//  3. Phase-order validation — if a claim in phase P rests_on another claim
 //     IN THE SAME MODULE whose BuildRole is a later phase than P, that is a
 //     modeling error (the dependency graph doesn't respect the fixed phase
 //     sequence), and is reported by name (both claim ids and both phases)
@@ -141,7 +148,7 @@ func (a *Artifact) ClaimIDs() []string {
 //     scope for this module's own build sequence (they may belong to a
 //     module whose own build order hasn't even been proposed yet), so they
 //     never block placement or count as a phase-order violation.
-//  3. Cycle gate — Propose does not require (or itself invoke) the "cycle"
+//  4. Cycle gate — Propose does not require (or itself invoke) the "cycle"
 //     lint to have run first, so it cannot simply trust that the rests_on
 //     graph is acyclic. Each phase's bucket is layered via a same-module/
 //     same-phase-restricted topological sort (see layeredTopoSort); if that
@@ -179,6 +186,30 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 		return nil, fmt.Errorf(
 			"buildorder: module %q is not fully locked yet; %d claim(s) still non-locked: %s",
 			module, len(notLocked), strings.Join(notLocked, ", "),
+		)
+	}
+
+	// 1b. Open-comment-thread gate. Even a fully-locked module is not
+	// build-ready while any of its claims carries an UNRESOLVED comment thread:
+	// the thread is unreviewed discussion about content an implementer would
+	// otherwise treat as settled. This gates on c.Comments directly (an open
+	// thread), not c.ReviewPending — a claim can be review_pending for a
+	// drifted dependency the reviewer has accepted, which does not block a
+	// build order, whereas an open thread does until it is resolved. Like the
+	// completeness gate, it lives in Propose ONLY (not computePhases), because
+	// a locked artifact's staleness re-derivation must not re-run this
+	// propose-time precondition.
+	var commented []string
+	for _, c := range moduleClaims {
+		if c.HasOpenThreads() {
+			commented = append(commented, c.ID)
+		}
+	}
+	if len(commented) > 0 {
+		sort.Strings(commented)
+		return nil, fmt.Errorf(
+			"buildorder: module %q has %d claim(s) with unresolved comment thread(s): %s — resolve them (dossierx comment resolve <id> <thread-id>) before proposing a build order",
+			module, len(commented), strings.Join(commented, ", "),
 		)
 	}
 

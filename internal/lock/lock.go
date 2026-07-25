@@ -1,13 +1,25 @@
 // Package lock implements the claim lock lifecycle described in
 // FORMAT.md:
 //
-//	draft -> locked            via Lock (human-initiated, refused on lint failure)
-//	locked -> locked+pending   via DetectStale, when a dependency's content hash changes
-//	locked+pending -> locked   only via a confirmed internal/reaudit apply (ClearReviewPending)
+//	draft -> locked            via Lock (human-initiated; refused on any
+//	                           error-severity lint finding, on hub gating, OR
+//	                           on an unresolved comment thread)
+//	locked -> locked+pending   on ANY of three independent triggers — a
+//	                           dependency's content hash drifts (DetectStale),
+//	                           a "dossierx flag" records a spec mismatch, or a
+//	                           comment thread is opened on the locked claim
+//	locked+pending -> locked   once EVERY trigger is gone, via ANY of three
+//	                           clearers — a human-confirmed "dossierx reaudit
+//	                           --confirm" (drift/flag), "dossierx unlock" then
+//	                           re-lock, or resolving/deleting the last open
+//	                           comment thread while no drift or flag still stands
 //
-// A locked claim's Status never reverts to draft on its own; review_pending
-// is the only automatic transition, and it is one-directional until a
-// human confirms a reaudit.
+// review_pending is set automatically but never cleared automatically: every
+// clearer above is either human-initiated (unlock) or gated on a human-confirmed
+// reaudit / an explicit comment resolution, so a locked claim's Status never
+// reverts to draft on its own. The three-trigger recomputation itself lives in
+// internal/comments (PendingTriggers/Recompute) so drift, flag, and open-thread
+// state can never diverge across the lock gate, the reaudit path, and check.
 //
 // Store is a small JSON-file-backed table of dependency content hashes,
 // keyed per-dependent (Hashes[dependentID][depID]), used to detect when a
@@ -311,6 +323,14 @@ func ContentHash(c model.Claim) string {
 // hash as the new baseline for every claim it depends on, and returns the
 // updated claim (Status=locked, ReviewPending=false).
 //
+// Beyond the lint gate, Lock has two further, candidate-scoped refusal paths:
+// hub gating (checkHubGating — a dependency in the doctrine facet must itself
+// be locked first) and the comment gate (a claim carrying an unresolved
+// comment thread cannot lock; the refusal names the open thread ids). The
+// comment gate is the real enforcement — the comments-unresolved lint is only
+// a non-blocking warning — and it reads only THIS claim's own threads, so an
+// unrelated claim's open thread never blocks locking a thread-free one.
+//
 // The lint suite runs against claims with claim's own entry replaced by
 // its about-to-be-locked (Status=locked) form, not against claim's
 // still-draft entry in claims. Lints that key off a claim's own Status —
@@ -335,6 +355,17 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 
 	if err := checkHubGating(claim, claims, cfg); err != nil {
 		return claim, err
+	}
+
+	// Third refusal path (after the lint gate and hub gating): a claim cannot
+	// lock while it carries an unresolved comment thread. THIS is the lock
+	// gate; the comments-unresolved lint is only a non-blocking warning (a
+	// project-wide error-lint would freeze all locking and take render/check
+	// down with it). It is candidate-scoped — it inspects only THIS claim's own
+	// threads via the pure model predicate — so an unrelated locked claim's
+	// open thread never blocks locking a different, thread-free claim.
+	if open := claim.OpenThreadIDs(); len(open) > 0 {
+		return claim, fmt.Errorf("lock: refused, claim %q has %d unresolved comment thread(s) %v — resolve them first, e.g. \"dossierx comment resolve %s %s\"", claim.ID, len(open), open, claim.ID, open[0])
 	}
 
 	claim.Status = model.StatusLocked
@@ -389,11 +420,21 @@ func DetectStale(claims []model.Claim, store *Store) []model.Claim {
 	return out
 }
 
-// ClearReviewPending is called only by a confirmed internal/reaudit apply.
-// It refreshes claim's dependency hashes in store and clears
-// ReviewPending; Status remains locked throughout.
-func ClearReviewPending(claim model.Claim, claims []model.Claim, store *Store) model.Claim {
-	claim.ReviewPending = false
+// RefreshBaseline re-records claim's dependency content hashes in store and
+// refreshes its LockedAt stamp — the "re-snapshot the dependencies I rest on
+// as of now" half of a confirmed reaudit. It deliberately does NOT touch
+// claim.ReviewPending: whether the claim is still review_pending AFTER a
+// re-baseline is a whole-claim verdict the caller computes from every trigger
+// (see internal/comments.Recompute), because a re-baseline only clears the
+// DRIFT trigger — a claim can still carry an independent open-comment-thread
+// trigger that a dependency re-baseline must not silently clear.
+//
+// Do NOT call RefreshBaseline (or ClearReviewPending) from internal/comments'
+// comment ops: re-baselining dependency hashes is only ever correct after a
+// human-confirmed reaudit has reviewed the drifted dependency, never as a side
+// effect of resolving a comment thread (which must leave the drift baseline
+// exactly as it was so genuine dependency drift stays detected).
+func RefreshBaseline(claim model.Claim, claims []model.Claim, store *Store) {
 	for _, dep := range dependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
 			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
@@ -403,6 +444,20 @@ func ClearReviewPending(claim model.Claim, claims []model.Claim, store *Store) m
 		store.LockedAt = map[string]string{}
 	}
 	store.LockedAt[claim.ID] = nowFunc().UTC().Format(time.RFC3339Nano)
+}
+
+// ClearReviewPending re-baselines claim's dependency hashes (via
+// RefreshBaseline) and unconditionally clears ReviewPending, returning the
+// updated claim; Status remains locked throughout. It is the simple primitive
+// for a caller that KNOWS a re-baseline fully clears the claim's pending state
+// (no other trigger stands). The reaudit CLI no longer calls it directly — it
+// uses RefreshBaseline and then recomputes ReviewPending from all three
+// triggers, so a claim that still has an open comment thread stays
+// review_pending even after its drifted dependency is confirmed. Like
+// RefreshBaseline, it must not be called from internal/comments.
+func ClearReviewPending(claim model.Claim, claims []model.Claim, store *Store) model.Claim {
+	RefreshBaseline(claim, claims, store)
+	claim.ReviewPending = false
 	return claim
 }
 

@@ -291,6 +291,83 @@ func TestClearReviewPendingRefreshesHashesAndKeepsLocked(t *testing.T) {
 	}
 }
 
+// TestRefreshBaselineRefreshesHashesWithoutTouchingReviewPending pins the
+// ClearReviewPending split: RefreshBaseline does the re-baseline + LockedAt
+// stamp half and NOTHING to the claim's ReviewPending — that verdict is the
+// caller's to compute, so a claim with an independent open-comment-thread
+// trigger can stay review_pending after a confirmed reaudit re-baselines it.
+func TestRefreshBaselineRefreshesHashesWithoutTouchingReviewPending(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "v2 body"}
+	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true, RestsOn: []string{dep.ID}}
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{claim.ID: {dep.ID: "stale-hash"}}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	claims := []model.Claim{claim, dep}
+
+	RefreshBaseline(claim, claims, store)
+
+	if h, ok := store.Baseline(claim.ID, dep.ID); !ok || h != ContentHash(dep) {
+		t.Fatalf("expected RefreshBaseline to re-record the dependency baseline to current content")
+	}
+	if _, ok := store.LockedAt[claim.ID]; !ok {
+		t.Fatalf("expected RefreshBaseline to stamp LockedAt")
+	}
+}
+
+// TestLockRefusedOnOpenCommentThread is the comment lock gate: a claim cannot
+// transition draft -> locked while it carries an unresolved comment thread, and
+// the refusal names the open thread id(s). The empty registry isolates this
+// gate from the (warning-only) comments-unresolved lint.
+func TestLockRefusedOnOpenCommentThread(t *testing.T) {
+	withRegistry(t)
+
+	claim := model.Claim{
+		ID: "widget.contract.overview", Facet: "contract", Module: "widget", Status: model.StatusDraft,
+		Comments: []model.Comment{{ID: "c-aaa111", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "clarify"}},
+	}
+	claims := []model.Claim{claim}
+	store, err := LoadStore(t.TempDir() + "/store.json")
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	got, err := Lock(claim, claims, testConfig(), store)
+	if err == nil {
+		t.Fatalf("expected Lock to be refused for a claim with an open comment thread")
+	}
+	if !strings.Contains(err.Error(), "c-aaa111") {
+		t.Fatalf("expected the refusal to name the open thread id, got: %v", err)
+	}
+	if got.Status != model.StatusDraft {
+		t.Fatalf("expected claim to remain draft on refused lock, got %q", got.Status)
+	}
+}
+
+// TestLockAllowedWhenUnrelatedLockedClaimHasOpenThread proves the gate is
+// CANDIDATE-scoped: locking a clean claim B succeeds even though an unrelated
+// already-locked claim A in the same project carries an open thread. A
+// project-wide open-thread check would freeze all locking; this one must not.
+func TestLockAllowedWhenUnrelatedLockedClaimHasOpenThread(t *testing.T) {
+	withRegistry(t)
+
+	a := model.Claim{
+		ID: "widget.contract.a", Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true,
+		Comments: []model.Comment{{ID: "c-aaa111", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "clarify"}},
+	}
+	b := model.Claim{ID: "widget.contract.b", Facet: "contract", Module: "widget", Status: model.StatusDraft}
+	claims := []model.Claim{a, b}
+	store, err := LoadStore(t.TempDir() + "/store.json")
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	got, err := Lock(b, claims, testConfig(), store)
+	if err != nil {
+		t.Fatalf("expected Lock of B to succeed while unrelated locked A has an open thread, got: %v", err)
+	}
+	if got.Status != model.StatusLocked {
+		t.Fatalf("expected B to be locked, got %q", got.Status)
+	}
+}
+
 // TestPerDependentBaselineNotSharedAcrossDependents is the DX-AUD-09
 // regression: two locked claims A and B both rest_on the same dependency D.
 // A locks against D's v1 content; D then drifts to v2; B locks against v2.

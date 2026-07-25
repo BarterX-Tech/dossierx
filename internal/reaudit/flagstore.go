@@ -10,10 +10,20 @@
 // dependency's content changes underneath a claim; "dossierx flag" flips the
 // very same field when an agent asserts the claim itself is now wrong,
 // based on something it just observed (e.g. its own code change) rather
-// than a tracked mirrors/rests_on edge. Both paths converge on the same
+// than a tracked mirrors/rests_on edge. Both these paths converge on the same
 // boolean field and the same confirm-before-write "dossierx reaudit --confirm"
-// gate — there is deliberately no second lifecycle state, and no second
-// ReviewPending-shaped flag.
+// gate.
+//
+// A THIRD trigger — an unresolved comment thread on a locked claim — flips the
+// very same review_pending field but deliberately does NOT route through
+// reaudit: a thread is discussion, not a proposed content edit to
+// diff-and-confirm, so it is cleared by resolving/deleting the thread (via
+// internal/comments), never by "reaudit --confirm" (which refuses a
+// comment-only review_pending claim with exit 2 — nothing to propose). There is
+// still exactly one lifecycle state (locked+review_pending) and one
+// ReviewPending-shaped field, now with three independent triggers (drift, flag,
+// open thread) and three matching clearers — see internal/lock's package doc and
+// internal/comments.PendingTriggers/Recompute.
 package reaudit
 
 import (

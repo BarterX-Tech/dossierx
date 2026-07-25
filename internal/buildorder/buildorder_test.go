@@ -55,6 +55,37 @@ func TestPropose_UnknownModule_Errors(t *testing.T) {
 	}
 }
 
+// TestPropose_OpenCommentThreadGate is the second completeness accumulator: a
+// module whose claims are all locked but where one still carries an OPEN
+// comment thread is not build-ready — the thread is unreviewed discussion — so
+// Propose is refused and names the offending claim, then succeeds once the
+// thread is resolved. The gate reads c.Comments directly (an open thread on a
+// locked claim, not its review_pending flag) and lives in Propose only, never
+// in computePhases (a locked artifact's re-derivation must not re-run this
+// propose-time precondition).
+func TestPropose_OpenCommentThreadGate(t *testing.T) {
+	commented := mc("m.contract.behavior", "m", model.BuildRoleBehavior, "m.contract.schema")
+	commented.Comments = []model.Comment{{ID: "c-open01", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "revisit before build"}}
+	claims := []model.Claim{
+		mc("m.contract.schema", "m", model.BuildRoleSchema),
+		commented,
+	}
+
+	_, err := Propose(claims, nil, "m")
+	if err == nil {
+		t.Fatalf("expected Propose to be refused for a fully-locked module carrying an open comment thread")
+	}
+	if !strings.Contains(err.Error(), "m.contract.behavior") {
+		t.Fatalf("expected the refusal to name the offending claim id, got: %v", err)
+	}
+
+	// Resolving the thread clears the only blocker; Propose now succeeds.
+	claims[1].Comments[0].Status = model.CommentStatusResolved
+	if _, err := Propose(claims, nil, "m"); err != nil {
+		t.Fatalf("expected Propose to succeed once the open thread is resolved, got: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------
 // BuildRole validation
 // ---------------------------------------------------------------------

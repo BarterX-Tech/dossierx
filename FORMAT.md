@@ -187,14 +187,23 @@ schema field instead of a path convention.
 ### `status` and the lock lifecycle
 
 - `draft` — freely editable, not yet reviewed.
-- `locked` — has passed human review via `dossierx lock`; also carries an
-  engine-managed `review_pending` bool, which is `true` only while a
-  dependency's content has drifted since the claim was last locked or
-  reaudited, and is otherwise `false`. A locked claim's `status` never
-  reverts to `draft` on its own — `review_pending` is the only automatic
-  transition, and only a human-confirmed `dossierx reaudit --confirm` clears
-  it. See the engine's `internal/lock` and `internal/reaudit` packages for
-  the full lifecycle.
+- `locked` — has passed human review via `dossierx lock` (refused if lint has
+  any error-level finding, if doctrine hub-gating blocks it, or if the claim
+  still carries an unresolved comment thread); also carries an engine-managed
+  `review_pending` bool. `review_pending` is `true` while ANY of three
+  independent triggers stands: a dependency's content has drifted since the
+  claim was last locked or reaudited; a `dossierx flag` has recorded a spec
+  mismatch; or the claim carries an unresolved (`status: open`) comment thread.
+  It is set automatically but never cleared automatically — a locked claim's
+  `status` never reverts to `draft` on its own, and `review_pending` clears
+  only once EVERY trigger is gone, via one of three matching clearers: a
+  human-confirmed `dossierx reaudit --confirm` (drift/flag), `dossierx unlock`,
+  or resolving/deleting the last open comment thread with `dossierx comment
+  resolve` (while no drift or flag still stands). A claim cannot lock while it
+  has an unresolved comment thread, and `dossierx reaudit` refuses a claim that
+  is `review_pending` only because of an open thread (there is no content diff
+  to confirm — resolve the thread instead). See the engine's `internal/lock`,
+  `internal/reaudit`, and `internal/comments` packages for the full lifecycle.
 
 ## Edge types
 

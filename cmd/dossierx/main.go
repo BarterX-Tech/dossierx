@@ -17,6 +17,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
@@ -107,6 +108,7 @@ func newRootCmd() *cobra.Command {
 		newUnlockCmd(),
 		newReauditCmd(),
 		newBuildOrderCmd(),
+		newCommentCmd(),
 		newFlagCmd(),
 		newImplinkCmd(),
 		newSkillsCmd(),
@@ -499,10 +501,13 @@ func runRender(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) err
 // reconcileReviewPending runs "check"'s only claim-file-writing phase under
 // the project-wide claims sentinel: it loads claims, flips every locked claim
 // whose mirrors/rests_on content has drifted since its last lock or confirmed
-// reaudit to locked+review_pending, and persists each flip back to the claim's
+// reaudit — OR that carries an unresolved comment thread — to
+// locked+review_pending, and persists each flip back to the claim's
 // own file so it survives to the next run and shows up in "dossierx stale". It
 // returns the reconciled claims for the caller's (non-writing)
-// lint/catalog/render/scan pipeline.
+// lint/catalog/render/scan pipeline. Like DetectStale it only ever SETS
+// review_pending; clearing it is reaudit --confirm / unlock / resolving the
+// last open thread's job.
 //
 // The claims sentinel is taken FIRST — before loadStoreForRead's own
 // lock-store sentinel, preserving the global claims -> lock-store order — and
@@ -533,6 +538,15 @@ func reconcileReviewPending(cfg *config.Config) ([]model.Claim, error) {
 	}
 	updated := lock.DetectStale(claims, store)
 	for i := range updated {
+		// Third review_pending trigger, reconciled alongside dependency drift:
+		// a LOCKED claim carrying an open comment thread is review_pending too.
+		// The lock gate forbids locking WITH an open thread, but a thread can
+		// be opened on an already-locked claim (or hand-authored into its
+		// YAML), so check reconciles it here. Purely additive — like
+		// DetectStale it only SETS the flag, never clears one.
+		if updated[i].Status == model.StatusLocked && updated[i].HasOpenThreads() {
+			updated[i].ReviewPending = true
+		}
 		if updated[i].ReviewPending != claims[i].ReviewPending {
 			if err := loader.SaveClaim(updated[i]); err != nil {
 				return nil, fmt.Errorf("persist review_pending for %q: %w", updated[i].ID, err)
@@ -601,6 +615,7 @@ func newCheckCmd() *cobra.Command {
 			fmt.Fprintln(cmd.OutOrStdout(), "check: OK")
 
 			reportOrientationNotes(cmd, cfg, claims)
+			reportOpenComments(cmd, cfg, claims)
 
 			// Remaining steps are purely additional, non-blocking reporting
 			// — the same relationship lint WARNINGS already have to a
@@ -682,6 +697,39 @@ func reportOrientationNotes(cmd *cobra.Command, cfg *config.Config, claims []mod
 // entry and per module with any unlinked claims, so newCheckCmd's final
 // summary can point at exactly what to run next instead of a reader having
 // to infer it from the raw report above.
+// reportOpenComments prints one non-blocking line per module that has at least
+// one claim carrying an unresolved (status: open) comment thread, with that
+// module's total open-thread count:
+//
+//	open comments: module "widget": 3
+//
+// It is the comment analogue of reportOrientationNotes — a per-module summary
+// "dossierx check" surfaces so a reviewer sees at a glance where review
+// discussion is still outstanding, without failing the command (an open thread
+// is a warning-severity lint plus a lock/build-order gate, never a check
+// failure). Modules with no open threads print nothing; output is sorted by
+// module for determinism.
+func reportOpenComments(cmd *cobra.Command, _ *config.Config, claims []model.Claim) {
+	counts := map[string]int{}
+	for _, c := range claims {
+		if n := len(c.OpenThreadIDs()); n > 0 {
+			counts[c.Module] += n
+		}
+	}
+	if len(counts) == 0 {
+		return
+	}
+	modules := make([]string, 0, len(counts))
+	for m := range counts {
+		modules = append(modules, m)
+	}
+	sort.Strings(modules)
+	out := cmd.OutOrStdout()
+	for _, module := range modules {
+		fmt.Fprintf(out, "open comments: module %q: %d\n", module, counts[module])
+	}
+}
+
 func reportImplinkStatus(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) []string {
 	out := cmd.OutOrStdout()
 	var hints []string
@@ -713,28 +761,54 @@ func reportImplinkStatus(cmd *cobra.Command, cfg *config.Config, claims []model.
 // run next" block at the very end of "dossierx check" — the answer to "I don't
 // want to have to remember which of several commands applies": run check,
 // read this block, do what it says, run check again. It is derived
-// entirely from state check already computed (draft/review_pending claims,
-// implinkHints from reportImplinkStatus above, and per-module Build Order
-// readiness) rather than requiring a human to cross-reference several
-// separate reports by hand.
+// entirely from state check already computed (draft claims; review_pending
+// claims partitioned by TRIGGER via comments.PendingTriggers — an open comment
+// thread routes to "dossierx comment resolve", drift/flag to "dossierx
+// reaudit", since reaudit refuses a comment-only pending; implinkHints from
+// reportImplinkStatus above; and per-module Build Order readiness) rather than
+// requiring a human to cross-reference several separate reports by hand.
 func reportNextSteps(cmd *cobra.Command, cfg *config.Config, claims []model.Claim, implinkHints []string) {
 	var hints []string
 
+	// Load the two trigger stores read-only so review_pending claims can be
+	// partitioned by WHY they are pending (open comment thread vs. dependency
+	// drift / "dossierx flag") and pointed at the right remedy — reaudit refuses
+	// a comment-only pending claim, so pointing it at reaudit would be a dead
+	// end. Best-effort: a load error degrades gracefully (PendingTriggers treats
+	// a nil store as no drift/flag) and never blocks the advisory block.
+	store, _ := lock.LoadStore(storePath(cfg))
+	flagStore, _ := reaudit.LoadFlagStore(flagStorePath(cfg))
+
 	var draftIDs []string
-	var reviewPendingIDs []string
+	var commentPending []model.Claim // review_pending with >=1 open thread
+	var reauditPending []string      // review_pending from drift/flag
 	for _, c := range claims {
 		switch {
 		case c.Status == model.StatusDraft:
 			draftIDs = append(draftIDs, c.ID)
 		case c.Status == model.StatusLocked && c.ReviewPending:
-			reviewPendingIDs = append(reviewPendingIDs, c.ID)
+			drift, flag, open := comments.PendingTriggers(c, claims, store, flagStore)
+			if open > 0 {
+				commentPending = append(commentPending, c)
+			}
+			if drift || flag {
+				reauditPending = append(reauditPending, c.ID)
+			}
 		}
 	}
 	if len(draftIDs) > 0 {
 		hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx lock <id> (e.g. %s)", len(draftIDs), draftIDs[0]))
 	}
-	if len(reviewPendingIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending -> dossierx reaudit <id> (e.g. %s)", len(reviewPendingIDs), reviewPendingIDs[0]))
+	// Comment-resolution hint comes FIRST: a claim pending on BOTH an open
+	// thread and drift/flag is listed here AND under reaudit, comment first,
+	// because the thread must be resolved before the claim can lock/build and
+	// reaudit refuses a comment-only pending outright.
+	if len(commentPending) > 0 {
+		example := commentPending[0]
+		hints = append(hints, fmt.Sprintf("%d claim(s) with open comment thread(s) -> dossierx comment resolve <id> <thread-id> (e.g. %s %s)", len(commentPending), example.ID, example.OpenThreadIDs()[0]))
+	}
+	if len(reauditPending) > 0 {
+		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. %s)", len(reauditPending), reauditPending[0]))
 	}
 	hints = append(hints, implinkHints...)
 
@@ -749,7 +823,10 @@ func reportNextSteps(cmd *cobra.Command, cfg *config.Config, claims []model.Clai
 		}
 		fullyLocked := true
 		for _, c := range mClaims {
-			if c.Status != model.StatusLocked || c.ReviewPending {
+			// Same predicate as the buildorder Propose gate: an open comment
+			// thread makes a module not build-ready even if every claim is
+			// locked, so it must not be reported "fully locked, propose now".
+			if c.Status != model.StatusLocked || c.ReviewPending || c.HasOpenThreads() {
 				fullyLocked = false
 				break
 			}
@@ -1191,6 +1268,21 @@ func newReauditCmd() *cobra.Command {
 			// that has never used "dossierx flag") keeps going through
 			// ProposeDiff's dependency-diff stub exactly as before.
 			pendingFlag, flagged := flagStore.Flags[id]
+
+			// A claim whose ONLY pending trigger is an open comment thread has
+			// nothing for reaudit to do: reaudit reviews a proposed CONTENT
+			// change (a drifted dependency, or a "dossierx flag"), and a comment
+			// thread is discussion, not an edit to diff-and-confirm. Refuse with
+			// exit 2 BEFORE proposing or writing anything. Crucially this point
+			// is PAST both file locks (store + flag, acquired above), so it must
+			// NOT os.Exit(2) — that skips the deferred releases and leaks the
+			// two held locks. Returning a wrapped errWrongState lets the defers
+			// run and main() map it to exit 2. The remedy is to resolve the
+			// thread, which clears review_pending on its own.
+			if drift, flag, open := comments.PendingTriggers(claim, claims, store, flagStore); !drift && !flag && open > 0 {
+				return fmt.Errorf("reaudit: claim %q is review_pending only because of %d open comment thread(s); resolve them with \"dossierx comment resolve %s <thread-id>\" — nothing to reaudit: %w", id, open, id, errWrongState)
+			}
+
 			var diff reaudit.Diff
 			if flagged {
 				diff, err = reaudit.ProposeFlagDiff(claim, pendingFlag)
@@ -1218,7 +1310,22 @@ func newReauditCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("reaudit: %w", err)
 			}
-			applied = lock.ClearReviewPending(applied, claims, store)
+			// Re-baseline this claim's dependency hashes and refresh its lock
+			// timestamp — the drift-clearing half of the old ClearReviewPending.
+			// review_pending is deliberately NOT hard-cleared here: it becomes
+			// the Recompute verdict below, so a claim still carrying an
+			// independent open comment thread stays review_pending even though
+			// this confirmed reaudit cleared the drift/flag that prompted it
+			// (a comment is a third trigger reaudit does not resolve).
+			lock.RefreshBaseline(applied, claims, store)
+			if flagged {
+				// A flag is a one-shot trigger (see PendingFlag's doc comment):
+				// remove it BEFORE recomputing so the verdict sees it cleared,
+				// and so a future dependency-drift reaudit on this same claim
+				// doesn't mistake a stale flag for a still-pending one.
+				delete(flagStore.Flags, id)
+			}
+			applied.ReviewPending = comments.Recompute(applied, claims, store, flagStore)
 			if err := loader.SaveClaimIfUnchanged(applied, token); err != nil {
 				return fmt.Errorf("reaudit: %w", err)
 			}
@@ -1226,16 +1333,15 @@ func newReauditCmd() *cobra.Command {
 				return fmt.Errorf("reaudit: %w", err)
 			}
 			if flagged {
-				// A flag is a one-shot trigger (see PendingFlag's doc
-				// comment): once its reaudit is confirmed, remove it so a
-				// future dependency-drift reaudit on this same claim
-				// doesn't mistake a stale flag for a still-pending one.
-				delete(flagStore.Flags, id)
 				if err := flagStore.Save(); err != nil {
 					return fmt.Errorf("reaudit: %w", err)
 				}
 			}
-			fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
+			if applied.ReviewPending {
+				fmt.Fprintf(out, "reaudit: %s applied; review_pending retained (open comment thread(s) remain — resolve them to clear)\n", id)
+			} else {
+				fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
+			}
 			return nil
 		},
 	}

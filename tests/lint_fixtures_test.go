@@ -50,12 +50,13 @@ var coFiresWith = map[string][]string{
 }
 
 // lintFixtureExpectedExit is the exit code "dossierx lint" must produce for a
-// given rule's fixture: 0 for the two WARNING-severity rules (orphan,
-// body-edge-hint -- see their own doc comments in internal/lint), 1 (a
-// lint failure) for every ERROR-severity rule.
+// given rule's fixture: 0 for the three WARNING-severity rules (orphan,
+// body-edge-hint, comments-unresolved -- see their own doc comments in
+// internal/lint), 1 (a lint failure) for every ERROR-severity rule.
 var lintFixtureExpectedExit = map[string]int{
-	"orphan":         0,
-	"body-edge-hint": 0,
+	"orphan":              0,
+	"body-edge-hint":      0,
+	"comments-unresolved": 0,
 }
 
 func TestLintRuleCoverageFixtures(t *testing.T) {
@@ -65,8 +66,8 @@ func TestLintRuleCoverageFixtures(t *testing.T) {
 		t.Fatalf("read %s: %v", root, err)
 	}
 
-	if len(entries) != 22 {
-		t.Fatalf("expected exactly 22 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
+	if len(entries) != 23 {
+		t.Fatalf("expected exactly 23 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
 	}
 
 	for _, e := range entries {
