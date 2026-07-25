@@ -1,9 +1,10 @@
-// Package lint defines the Lint interface every one of the 21 lints
+// Package lint defines the Lint interface every one of the 22 lints
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, governed-required,
 // mirror-mismatch, mirror-unanchored, mirror-reciprocal, rows-shape,
 // supersede, raw-html-scope, roll-up, validated-on-missing, body-edge-hint,
 // code-orphan, orphan, layout-shape-mismatch, build-role-required,
-// orientation-note-order, orientation-note-shape) implements, one per file
+// orientation-note-order, orientation-note-shape, status-shape) implements,
+// one per file
 // in this package. This file only defines the contract and the registry;
 // individual lint implementations are a later phase and Registry starts
 // empty on purpose.

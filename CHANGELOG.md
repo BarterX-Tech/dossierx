@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.2] - 2026-07-24
+## [0.1.2] - 2026-07-25
 
 Consolidated audit-fix release: a deep audit against a real 202-claim consumer project
 surfaced 25 confirmed defects, fixed together here rather than as a stream of point
@@ -158,7 +158,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.2
 [0.1.1]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.1
 [0.1.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.0
 [0.0.3]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.0.3
