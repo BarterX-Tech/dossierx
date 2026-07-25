@@ -42,6 +42,19 @@ func TestLayoutShapeMismatch(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// A layout: mockup claim's renderable content lives in RawHTML,
+			// not Body/Rows/Steps — that is its documented primary use (a
+			// body-less markup blob). The no-content check must count RawHTML
+			// as content, or such a claim wrongly fails lint and can never
+			// lock.
+			name: "passing: mockup layout with only raw_html is content",
+			claim: model.Claim{
+				ID: "widget.internals.console-mockup", Layout: model.LayoutMockup,
+				RawHTML: `<div class="gcp-row">mock</div>`,
+			},
+			wantErr: false,
+		},
+		{
 			name: "failing: table layout with no rows",
 			claim: model.Claim{
 				ID: "widget.internals.empty-table", Layout: model.LayoutTable,

@@ -17,10 +17,12 @@
 // never itself be a mismatch and is skipped here rather than guessed at.
 //
 // Separately (and regardless of Layout), a claim carrying none of body,
-// rows, or steps has no renderable content in any component — card.html
-// has nothing to show, table.html falls back to "No rows.", etc. That is
-// always a shape problem, so it is checked unconditionally rather than
-// under the Layout=="" guard above.
+// rows, steps, or raw_html has no renderable content in any component —
+// card.html has nothing to show, table.html falls back to "No rows.", etc.
+// That is always a shape problem, so it is checked unconditionally rather
+// than under the Layout=="" guard above. raw_html counts as content because
+// mockup.html renders it: a layout: mockup claim's documented primary use is
+// a body-less markup blob, so requiring a body there would be wrong.
 //
 // rows is deliberately checked for presence (c.Rows != nil), not for
 // having entries (len(c.Rows) > 0), when deciding whether a table claim
@@ -102,7 +104,12 @@ func (layoutShapeMismatchLint) Check(claims []model.Claim, _ *config.Config) []F
 		hasRows := len(c.Rows) > 0
 		hasSteps := len(c.Steps) > 0
 
-		if c.Body == "" && !rowsPresent && !hasSteps {
+		// RawHTML is renderable content for a layout: mockup claim (its
+		// documented primary use is a body-less markup blob rendered by
+		// mockup.html — see internal/render/components and the raw-html-scope
+		// lint), so a claim carrying RawHTML is not content-less even with an
+		// empty body/rows/steps.
+		if c.Body == "" && !rowsPresent && !hasSteps && c.RawHTML == "" {
 			findings = append(findings, mismatchFinding(c.ID, "claim has no content: body, rows, and steps are all empty"))
 		}
 

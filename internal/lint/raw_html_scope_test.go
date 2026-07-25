@@ -304,6 +304,82 @@ func TestRawHTMLScope_Mockup_DefaultDeny(t *testing.T) {
 	}
 }
 
+// TestRawHTMLScope_Mockup_ControlCharSchemeEvasion is the DX-AUD-07/08
+// regression for control-char scheme smuggling in an <img src>. The
+// relative-only check html.UnescapeString(value)s the src and then matches
+// mockupAbsoluteURLPattern, whose scheme class ([a-zA-Z][a-zA-Z0-9+.-]*:)
+// only tolerates LEADING whitespace and excludes control bytes — so a
+// control char (tab, newline, or a non-\s control like NUL/SOH) embedded
+// inside or ahead of the scheme breaks the scheme run, the pattern misses,
+// and the value is treated as a relative path that lints clean, locks, and
+// renders live — yet a browser strips the control byte and loads the
+// external URL. The gate must strip every ASCII control byte and whitespace
+// (mirroring the markdown renderer's schemeOf) before testing, so each
+// wantFind case below is FLAGGED while a legitimate relative src still
+// passes.
+func TestRawHTMLScope_Mockup_ControlCharSchemeEvasion(t *testing.T) {
+	cases := []struct {
+		name     string
+		rawHTML  string
+		wantFind bool
+	}{
+		{
+			name:     "decimal tab entity inside the scheme is caught",
+			rawHTML:  `<img class="mockup-diagram" src="ht&#9;tp://evil.example/x.svg">`,
+			wantFind: true,
+		},
+		{
+			name:     "decimal newline entity inside the scheme is caught",
+			rawHTML:  `<img class="mockup-diagram" src="http&#10;://evil.example/x.svg">`,
+			wantFind: true,
+		},
+		{
+			name:     "hex tab entity inside the scheme is caught",
+			rawHTML:  `<img class="mockup-diagram" src="ht&#x9;tp://evil.example/x.svg">`,
+			wantFind: true,
+		},
+		{
+			name:     "literal embedded tab inside the scheme is caught",
+			rawHTML:  "<img class=\"mockup-diagram\" src=\"ht\ttp://evil.example/x.svg\">",
+			wantFind: true,
+		},
+		{
+			name:     "leading non-whitespace control byte before a protocol-relative URL is caught",
+			rawHTML:  "<img class=\"mockup-diagram\" src=\"\x01//evil.example/x.svg\">",
+			wantFind: true,
+		},
+		{
+			name:     "legitimate relative diagram src still passes",
+			rawHTML:  `<img class="mockup-diagram" src="../diagrams/x.svg" alt="ok">`,
+			wantFind: false,
+		},
+		{
+			name:     "dot-slash relative src still passes",
+			rawHTML:  `<img class="mockup-diagram" src="./x.png" alt="ok">`,
+			wantFind: false,
+		},
+		{
+			name:     "bare filename relative src still passes",
+			rawHTML:  `<img class="mockup-diagram" src="x.svg" alt="ok">`,
+			wantFind: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := validMockupClaim()
+			c.RawHTML = tc.rawHTML
+			got := RawHTMLScope{}.Check([]model.Claim{c}, mockupTestConfig())
+			if tc.wantFind && len(got) == 0 {
+				t.Fatalf("expected at least one finding for %q, got none", tc.rawHTML)
+			}
+			if !tc.wantFind && len(got) != 0 {
+				t.Fatalf("expected no findings for %q, got: %+v", tc.rawHTML, got)
+			}
+		})
+	}
+}
+
 // TestRawHTMLScope_Mockup_LockGate confirms which layer enforces the
 // raw_html_reviewed gate: it is this lint (raw-html-scope), not
 // internal/lock itself — internal/lock.Lock refuses to lock any claim

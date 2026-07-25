@@ -375,6 +375,24 @@ func scanMockupAttrs(raw string, j int) (attrs []mockupAttr, end int, malformed 
 	}
 }
 
+// stripCtrlAndSpace removes every ASCII control byte and whitespace/space
+// (code point <= 0x20, plus DEL 0x7f) from s. It mirrors the markdown
+// renderer's schemeOf normalization (internal/render/markdown) so the img-src
+// relative-only gate and the markdown anchor scheme gate defend the same class
+// of control-char scheme evasion (e.g. "ht\ttp://host", "\x01//host") the same
+// way. A browser strips these bytes before resolving a URL, so the lint must
+// too before deciding whether a value is relative.
+func stripCtrlAndSpace(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c > 0x20 && c != 0x7f {
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
 func isMockupLetter(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
@@ -465,10 +483,16 @@ func checkMockupAttr(tagName string, attr mockupAttr, add func(string)) {
 			add("raw_html <img> has a valueless src attribute")
 			return
 		}
-		// Entity-decode before the relative-only check: mockupAbsoluteURLPattern
-		// matches raw bytes, so an encoded absolute/protocol-relative URL such as
-		// src="&#47;&#47;host/x" would otherwise slip past it and load externally.
-		if mockupAbsoluteURLPattern.MatchString(html.UnescapeString(attr.value)) {
+		// Entity-decode AND strip ASCII control/whitespace bytes before the
+		// relative-only check. mockupAbsoluteURLPattern matches raw bytes and its
+		// scheme class excludes control chars while it only tolerates *leading*
+		// whitespace, so without this an encoded absolute URL (src="&#47;&#47;host")
+		// OR a control byte smuggled inside/ahead of the scheme
+		// (src="ht&#9;tp://host", a literal embedded tab, a leading NUL/SOH) would
+		// slip past it as a "relative" path — yet a browser strips those bytes and
+		// loads the external URL. stripCtrlAndSpace mirrors the markdown renderer's
+		// schemeOf normalization so both boundaries default-deny the same class.
+		if mockupAbsoluteURLPattern.MatchString(stripCtrlAndSpace(html.UnescapeString(attr.value))) {
 			add(fmt.Sprintf("raw_html <img> src=%q is a non-relative URL, which is disallowed", attr.value))
 		}
 	default:
