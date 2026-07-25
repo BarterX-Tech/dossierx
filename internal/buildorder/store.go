@@ -118,50 +118,41 @@ func LoadArtifact(path string) (*Artifact, error) {
 // content-hash loop below still no-ops safely when a.Hashes is empty (its
 // `stored, known := a.Hashes[id]` guard skips ids it has no baseline for).
 //
-// Six independent drifts all count as staleness, so a frozen artifact can
-// never silently stop describing its module's real claim set — nor silently
+// Staleness is decided by two complementary mechanisms, so a frozen artifact
+// can never silently stop describing its module's real claim set — nor silently
 // describe a different BUILD ORDER than a fresh propose would now compute:
 //
-//   - content change — a covered claim's lock.ContentHash no longer matches
-//     the snapshot taken at the last Lock.
-//   - build_role (phase) change — a covered claim's CURRENT build_role no
-//     longer matches the phase block the artifact placed it in. A claim's
-//     phase is derived from its build_role, so editing it (e.g. schema ->
-//     orientation) is an order-affecting change a fresh propose would honor —
-//     yet lock.ContentHash deliberately EXCLUDES build_role (that hash is
-//     shared with internal/lock's dependency-drift detection, where a
-//     build_role edit must NOT flag a claim's DEPENDENTS for review), so the
-//     content-hash check above can never catch it. Comparing the claim's
-//     current build_role against a.Phases' recorded phase is a build-order-
-//     local signal that needs no stored-format change or artifact migration:
-//     the placed phase is already in the artifact.
-//   - deletion — a covered claim no longer exists at all in the current claim
-//     set (it references an id that's gone).
-//   - excluded-claim deletion — an id the artifact recorded as out-of-scope
-//     (a.Excluded) no longer exists in the current claim set. Symmetric with
-//     covered deletion: leaving it unflagged would keep a phantom id in the
-//     "N excluded" count for a claim that's gone.
-//   - excluded-claim reclassification — an id the artifact recorded as
-//     out-of-scope (a.Excluded) still exists but its CURRENT build_role is no
-//     longer the out-of-scope value, so a fresh propose would no longer
-//     classify it excluded — it would place it in a build phase (a silently
-//     different order) or ERROR on an empty or invalid/typo role. This mirrors
-//     Propose's sole excluded predicate (build_role == out-of-scope) EXACTLY,
-//     rather than only catching an in-phase role, so the loop cannot silently
-//     diverge from the covered build_role check, which flags the same drift.
-//     Symmetric with that covered case: neither the a.Phases loop (it was never
-//     a covered claim) nor the addition loop (a.Excluded ids are folded into
-//     the "already covered" set) would otherwise examine it at all.
-//   - addition — a claim now locked into this module that the frozen artifact
-//     neither placed in a phase (a.ClaimIDs()) nor recorded as excluded
-//     (a.Excluded). This was the actual FIX-12 bug: locking a brand-new claim
-//     into an already-covered module left stale:false while the artifact
-//     silently omitted it. The a.ClaimIDs() UNION a.Excluded set is what
-//     keeps a legitimately out-of-scope claim (already in Excluded) from
-//     false-positiving here, and the check is scoped to the module's CURRENT
-//     locked claims (symmetric with deletion: an artifact only ever exists
-//     once its module was fully locked).
-func recomputeStale(a *Artifact, claims []model.Claim) {
+//   - Structural re-derivation (the order/coverage guarantee). recomputeStale
+//     re-runs computePhases — the very routine Propose uses to build the order —
+//     over the module's CURRENT locked claims and flags stale if the re-derived
+//     structure differs from the stored artifact in ANY order-determining
+//     dimension: a claim's phase, its within-phase position, its ClaimEntry.File,
+//     or the excluded set. This SUBSUMES build_role changes, order: edits,
+//     source-file renames, rests_on-driven reordering, additions, deletions, and
+//     excluded promotions in ONE comparison instead of a growing pile of
+//     per-input checks — in particular it catches the two inputs no per-input
+//     check could ever see, because lock.ContentHash excludes both: a claim's
+//     Order (which stableDisplayOrder reads to sequence a phase) and its
+//     SourcePath (which ClaimEntry.File is derived from). Because Propose and
+//     recomputeStale now share computePhases, the two can never diverge on what
+//     order a given claim set produces.
+//
+//   - Retained per-claim checks (content refresh + error-safe attribution).
+//     The content-hash check still flags a covered claim whose body/rows/steps/
+//     etc. changed WITHOUT affecting its order, so the frozen snapshot is kept
+//     honest for those too (lock.ContentHash is the same hash internal/lock's
+//     dependency-drift detection uses, which is why it deliberately excludes
+//     build_role/Order/SourcePath). The covered- and excluded-claim build_role
+//     and deletion checks additionally name the precise culprit even when the
+//     current claim set has NO valid order at all — an excluded claim edited to
+//     an empty or invalid build_role makes a fresh propose ERROR, so the
+//     structural re-derivation cannot run — mirroring Propose's sole excluded
+//     predicate (build_role == out-of-scope) EXACTLY.
+//
+// Only LOCKED claims are re-derived (matching the addition check's Status==
+// Locked guard): a fresh propose refuses a module with any non-locked claim, so
+// a still-draft claim is not yet part of the build order.
+func recomputeStale(a *Artifact, claims []model.Claim, cfg *config.Config) {
 	// Only a LOCKED artifact can be stale (see this function's doc comment).
 	// This must NOT key on len(a.Hashes): a locked all-out-of-scope module has
 	// an empty Hashes map yet is still subject to every drift check below.
@@ -240,6 +231,40 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 		}
 	}
 
+	// Structural re-derivation — the order-determining inputs no per-input
+	// check above can see (see this function's doc comment). A fresh propose
+	// over the module's CURRENT locked claims must reproduce the stored
+	// artifact's per-phase ordered id sequence, each ClaimEntry.File, and the
+	// excluded set; any divergence means the frozen artifact no longer describes
+	// what a fresh propose would now compute. Only LOCKED module claims are
+	// re-derived: a fresh propose refuses a module with any non-locked claim
+	// (Propose's completeness gate), so a still-draft claim is not yet part of
+	// the build order — this mirrors the addition loop's guard and keeps
+	// computePhases from erroring on an incomplete draft.
+	var derivable []model.Claim
+	for _, c := range claims {
+		if c.Module == a.Module && c.Status != model.StatusLocked {
+			continue
+		}
+		derivable = append(derivable, c)
+	}
+	if phases, excluded, err := computePhases(derivable, cfg, a.Module); err == nil {
+		markStructuralDrift(a, phases, excluded, staleSet)
+	} else if len(staleSet) == 0 {
+		// A fresh propose would ERROR (an invalid/empty build_role, a
+		// phase-order violation, or a cycle among the current claims): it
+		// cannot produce an order at all, so the frozen one certainly is not
+		// what it would compute. In every realistic case a per-input check
+		// above already named the offending claim (a covered/excluded
+		// build_role change, or a rests_on edit the content hash caught), so
+		// staleSet is already non-empty; this fallback only fires if nothing
+		// else did, flagging the whole frozen coverage rather than ever
+		// silently reporting stale:false for an unproposable claim set.
+		for _, id := range a.ClaimIDs() {
+			staleSet[id] = true
+		}
+	}
+
 	staleIDs := make([]string, 0, len(staleSet))
 	for id := range staleSet {
 		staleIDs = append(staleIDs, id)
@@ -249,16 +274,72 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 	a.Stale = len(staleIDs) > 0
 }
 
+// markStructuralDrift compares a fresh derivation (phases/excluded from
+// computePhases over the current claims) against the stored artifact a and adds
+// every claim id whose placement diverges to staleSet. It compares exactly the
+// three order-determining dimensions Propose records — each claim's phase and
+// within-phase position, its ClaimEntry.File, and the excluded set — and
+// deliberately NOT ClaimEntry.RestsOn (a verbatim echo that never affects
+// placement and whose edits lock.ContentHash already catches).
+func markStructuralDrift(a *Artifact, phases []PhaseBlock, excluded []string, staleSet map[string]bool) {
+	stored := phaseSignatures(a.Phases)
+	fresh := phaseSignatures(phases)
+	for id, sig := range stored {
+		if fresh[id] != sig {
+			staleSet[id] = true // moved phase/position, renamed File, or dropped
+		}
+	}
+	for id, sig := range fresh {
+		if stored[id] != sig {
+			staleSet[id] = true // newly placed, or moved into view
+		}
+	}
+
+	storedEx := make(map[string]bool, len(a.Excluded))
+	for _, id := range a.Excluded {
+		storedEx[id] = true
+	}
+	freshEx := make(map[string]bool, len(excluded))
+	for _, id := range excluded {
+		freshEx[id] = true
+	}
+	for id := range storedEx {
+		if !freshEx[id] {
+			staleSet[id] = true // no longer excluded by a fresh propose
+		}
+	}
+	for id := range freshEx {
+		if !storedEx[id] {
+			staleSet[id] = true // newly excluded by a fresh propose
+		}
+	}
+}
+
+// phaseSignatures maps each placed claim id to a signature capturing the three
+// things a fresh propose must reproduce for it: which phase it sits in, its
+// ordered position within that phase, and its recorded source File. Two
+// derivations agree on a claim IFF its signature is byte-identical in both; the
+// NUL separators keep phase/position/File from ever colliding across fields.
+func phaseSignatures(phases []PhaseBlock) map[string]string {
+	sigs := make(map[string]string)
+	for _, p := range phases {
+		for i, e := range p.Claims {
+			sigs[e.ID] = fmt.Sprintf("%s\x00%d\x00%s", p.Phase, i, e.File)
+		}
+	}
+	return sigs
+}
+
 // Status loads the build-order artifact at path and returns it with
 // Stale/StaleIDs freshly recomputed against claims' current content — a
 // read-only operation (unlike Lock, it never writes path back out), so
 // "dossierx build-order status" can be run at any time without side effects.
-func Status(path string, claims []model.Claim) (*Artifact, error) {
+func Status(path string, claims []model.Claim, cfg *config.Config) (*Artifact, error) {
 	a, err := LoadArtifact(path)
 	if err != nil {
 		return nil, err
 	}
-	recomputeStale(a, claims)
+	recomputeStale(a, claims, cfg)
 	return a, nil
 }
 
@@ -286,13 +367,13 @@ func Status(path string, claims []model.Claim) (*Artifact, error) {
 //
 // A freshly-proposed artifact (never locked, so no hash baseline) is never
 // stale and is the normal thing Lock acts on.
-func Lock(path string, claims []model.Claim) (*Artifact, error) {
+func Lock(path string, claims []model.Claim, cfg *config.Config) (*Artifact, error) {
 	a, err := LoadArtifact(path)
 	if err != nil {
 		return nil, err
 	}
 
-	recomputeStale(a, claims)
+	recomputeStale(a, claims, cfg)
 	if a.Stale {
 		return nil, fmt.Errorf(
 			"buildorder: %q's build order is stale (%d claim(s) changed, added, or removed: %v); a bare relock would freeze an outdated order, so re-run \"dossierx build-order propose --module %s\" first, then lock",

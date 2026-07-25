@@ -132,7 +132,7 @@ func TestRender_BuildOrderTab_PresentWhenLockedArtifactExists(t *testing.T) {
 	if err := buildorder.WriteArtifact(artifact, path); err != nil {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
-	if _, err := buildorder.Lock(path, claims); err != nil {
+	if _, err := buildorder.Lock(path, claims, cfg); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -195,7 +195,7 @@ func TestRender_BuildOrderTab_OtherModuleUnaffected(t *testing.T) {
 	if err := buildorder.WriteArtifact(artifact, path); err != nil {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
-	if _, err := buildorder.Lock(path, widgetClaims); err != nil {
+	if _, err := buildorder.Lock(path, widgetClaims, cfg); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestRender_BuildOrderSectionVisibleNotAFacetGroup(t *testing.T) {
 	if err := buildorder.WriteArtifact(artifact, path); err != nil {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
-	if _, err := buildorder.Lock(path, claims); err != nil {
+	if _, err := buildorder.Lock(path, claims, cfg); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 

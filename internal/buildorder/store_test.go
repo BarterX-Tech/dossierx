@@ -28,7 +28,7 @@ func TestLoadArtifact_MissingFile_WrapsErrNotProposed(t *testing.T) {
 
 func TestStatus_MissingFile_WrapsErrNotProposed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".build-order.widget.json")
-	_, err := Status(path, nil)
+	_, err := Status(path, nil, nil)
 	if err == nil || !errors.Is(err, ErrNotProposed) {
 		t.Fatalf("expected an ErrNotProposed-wrapping error, got: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestStatus_MissingFile_WrapsErrNotProposed(t *testing.T) {
 
 func TestLock_MissingFile_Refuses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), ".build-order.widget.json")
-	_, err := Lock(path, nil)
+	_, err := Lock(path, nil, nil)
 	if err == nil || !errors.Is(err, ErrNotProposed) {
 		t.Fatalf("expected Lock to refuse against a not-yet-proposed artifact, got: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	}
 
 	// status: proposed, not locked, not stale (no baseline yet).
-	st, err := Status(path, claims)
+	st, err := Status(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 
 	// lock
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	locked, err := Lock(path, claims)
+	locked, err := Lock(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	}
 
 	// status immediately after lock: not stale.
-	st2, err := Status(path, claims)
+	st2, err := Status(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	}
 
 	// Lock again with nothing changed: refused.
-	if _, err := Lock(path, claims); err == nil {
+	if _, err := Lock(path, claims, nil); err == nil {
 		t.Fatalf("expected Lock to refuse re-locking an already-locked, non-stale artifact")
 	}
 
@@ -142,7 +142,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 		}
 	}
 
-	st3, err := Status(path, mutated)
+	st3, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status after mutation: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	// A stale artifact is NOT bare-relockable (FIX-13): a bare relock would
 	// freeze the OLD phase order (Lock never recomputes Phases) while
 	// silently clearing staleness. Lock refuses and directs a re-propose.
-	if _, err := Lock(path, mutated); err == nil {
+	if _, err := Lock(path, mutated, nil); err == nil {
 		t.Fatalf("expected Lock to refuse a stale artifact and direct a re-propose")
 	}
 
@@ -170,7 +170,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	if err := WriteArtifact(fresh, path); err != nil {
 		t.Fatalf("WriteArtifact after re-propose: %v", err)
 	}
-	relocked, err := Lock(path, mutated)
+	relocked, err := Lock(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("expected lock to succeed after re-propose, got: %v", err)
 	}
@@ -203,7 +203,7 @@ func TestRecomputeStale_CoveredClaimDeleted_IsStale(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -212,7 +212,7 @@ func TestRecomputeStale_CoveredClaimDeleted_IsStale(t *testing.T) {
 	// is given now, not just changed.
 	remaining := []model.Claim{claims[0]}
 
-	st, err := Status(path, remaining)
+	st, err := Status(path, remaining, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestRecomputeStale_AddedClaim_IsStale(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -262,7 +262,7 @@ func TestRecomputeStale_AddedClaim_IsStale(t *testing.T) {
 	augmented := append(append([]model.Claim{}, claims...),
 		mc("widget.contract.api", "widget", model.BuildRoleAPI, "widget.contract.behavior"))
 
-	st, err := Status(path, augmented)
+	st, err := Status(path, augmented, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -301,11 +301,11 @@ func TestRecomputeStale_AddedOutOfScopeClaim_NoFalsePositive(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
-	st, err := Status(path, claims)
+	st, err := Status(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestRecomputeStale_CoveredClaimBuildRoleChanged_IsStale(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -357,7 +357,7 @@ func TestRecomputeStale_CoveredClaimBuildRoleChanged_IsStale(t *testing.T) {
 		t.Fatalf("test setup error: a build_role change must not alter lock.ContentHash")
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -400,14 +400,14 @@ func TestRecomputeStale_ExcludedClaimDeleted_IsStale(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
 	// The excluded (out-of-scope) claim is deleted entirely from the claim set.
 	remaining := []model.Claim{claims[0]}
 
-	st, err := Status(path, remaining)
+	st, err := Status(path, remaining, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -453,7 +453,7 @@ func TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale(t *testin
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -467,7 +467,7 @@ func TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale(t *testin
 		}
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -505,7 +505,7 @@ func TestRecomputeStale_ExcludedClaimEditedButStillOutOfScope_NoFalsePositive(t 
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -517,7 +517,7 @@ func TestRecomputeStale_ExcludedClaimEditedButStillOutOfScope_NoFalsePositive(t 
 		}
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestLock_RefusesStaleArtifact(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -559,7 +559,7 @@ func TestLock_RefusesStaleArtifact(t *testing.T) {
 		}
 	}
 
-	_, err = Lock(path, mutated)
+	_, err = Lock(path, mutated, nil)
 	if err == nil {
 		t.Fatalf("expected Lock to refuse a stale artifact")
 	}
@@ -610,7 +610,7 @@ func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	locked, err := Lock(path, claims)
+	locked, err := Lock(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Lock must accept an orientation-note claim carrying build_role, got: %v", err)
 	}
@@ -646,7 +646,7 @@ func TestRecomputeStale_LockedAllOutOfScope_PromotedClaim_IsStale(t *testing.T) 
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	locked, err := Lock(path, claims)
+	locked, err := Lock(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
@@ -665,7 +665,7 @@ func TestRecomputeStale_LockedAllOutOfScope_PromotedClaim_IsStale(t *testing.T) 
 		}
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -698,14 +698,14 @@ func TestRecomputeStale_LockedAllOutOfScope_ExcludedDeleted_IsStale(t *testing.T
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
 	// Delete one of the excluded claims entirely.
 	remaining := []model.Claim{claims[0]}
 
-	st, err := Status(path, remaining)
+	st, err := Status(path, remaining, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -738,7 +738,7 @@ func TestRecomputeStale_LockedAllOutOfScope_FirstInPhaseAdded_IsStale(t *testing
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -746,7 +746,7 @@ func TestRecomputeStale_LockedAllOutOfScope_FirstInPhaseAdded_IsStale(t *testing
 	augmented := append(append([]model.Claim{}, claims...),
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema))
 
-	st, err := Status(path, augmented)
+	st, err := Status(path, augmented, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -777,11 +777,11 @@ func TestRecomputeStale_LockedAllOutOfScope_Unchanged_NoFalsePositive(t *testing
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
-	st, err := Status(path, claims)
+	st, err := Status(path, claims, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -813,7 +813,7 @@ func TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -828,7 +828,7 @@ func TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale(t *testing.T) {
 		}
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -861,7 +861,7 @@ func TestRecomputeStale_ExcludedClaimEditedToInvalidRole_IsStale(t *testing.T) {
 		t.Fatalf("WriteArtifact: %v", err)
 	}
 	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
-	if _, err := Lock(path, claims); err != nil {
+	if _, err := Lock(path, claims, nil); err != nil {
 		t.Fatalf("Lock: %v", err)
 	}
 
@@ -873,7 +873,7 @@ func TestRecomputeStale_ExcludedClaimEditedToInvalidRole_IsStale(t *testing.T) {
 		}
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -914,7 +914,7 @@ func TestRecomputeStale_UnlockedProposedArtifact_NeverStale(t *testing.T) {
 		}
 	}
 
-	st, err := Status(path, mutated)
+	st, err := Status(path, mutated, nil)
 	if err != nil {
 		t.Fatalf("Status: %v", err)
 	}
@@ -923,5 +923,168 @@ func TestRecomputeStale_UnlockedProposedArtifact_NeverStale(t *testing.T) {
 	}
 	if st.Stale {
 		t.Fatalf("expected an unlocked proposed-only artifact to stay non-stale, got stale_claim_ids=%v", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_CoveredClaimOrderEdited_IsStale is the primary regression
+// test for this fix: Propose sequences each phase via stableDisplayOrder, which
+// reads each claim's Order field — but Order is in NEITHER lock.ContentHash NOR
+// any per-input check recomputeStale previously ran. So editing ONLY the order:
+// of a covered claim silently changed the within-phase sequence a fresh propose
+// would compute while status reported stale:false. Flipping two same-phase
+// claims' relative order via Order must now be surfaced as staleness by the
+// structural re-derivation.
+func TestRecomputeStale_CoveredClaimOrderEdited_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	// Two independent (no rests_on between them) behavior claims: both land in
+	// the same phase's layer 0, so their relative order is decided purely by
+	// stableDisplayOrder (Order field, then incoming order).
+	claims := []model.Claim{
+		mc("widget.contract.first", "widget", model.BuildRoleBehavior),
+		mc("widget.contract.second", "widget", model.BuildRoleBehavior),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if got := idsOf(onlyPhase(a, model.BuildRoleBehavior)); len(got) != 2 || got[0] != "widget.contract.first" {
+		t.Fatalf("test setup: expected the initial order [first, second], got %v", got)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims, nil); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Edit ONLY the order: of the second claim so a fresh propose would now
+	// sequence it FIRST (a set Order sorts ahead of an unordered claim).
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.second" {
+			mutated[i].Order = 1
+		}
+	}
+	// Guard: an order: edit must not alter lock.ContentHash (which excludes
+	// Order), so a passing test proves the structural re-derivation — not the
+	// content-hash check — is what surfaces the staleness.
+	if lock.ContentHash(claims[1]) != lock.ContentHash(mutated[1]) {
+		t.Fatalf("test setup error: an order: edit must not alter lock.ContentHash")
+	}
+
+	st, err := Status(path, mutated, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after editing a covered claim's order:, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.second") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the reordered claim %q, got %v", "widget.contract.second", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_CoveredClaimSourceFileRenamed_IsStale is the second
+// regression test for this fix: Propose records each claim's source file into
+// ClaimEntry.File (displayPath of model.Claim.SourcePath) — but SourcePath is
+// in neither lock.ContentHash nor any prior per-input check. So renaming a
+// covered claim's source file (id and body unchanged) silently changed the File
+// a fresh propose would record while status reported stale:false. A source-file
+// rename must now be surfaced as staleness by the structural re-derivation.
+func TestRecomputeStale_CoveredClaimSourceFileRenamed_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims, nil); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Rename ONLY the source file of a covered claim (id and body unchanged).
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.schema" {
+			mutated[i].SourcePath = "widget.contract.renamed.yaml"
+		}
+	}
+	// Guard: a source-file rename must not alter lock.ContentHash (which
+	// excludes SourcePath), so a passing test proves the ClaimEntry.File diff —
+	// not the content-hash check — surfaces the staleness.
+	if lock.ContentHash(claims[0]) != lock.ContentHash(mutated[0]) {
+		t.Fatalf("test setup error: a source-file rename must not alter lock.ContentHash")
+	}
+
+	st, err := Status(path, mutated, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after renaming a covered claim's source file, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.schema") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the renamed claim %q, got %v", "widget.contract.schema", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale keeps the content-hash
+// path honest: reordering a claim's rests_on list (same target set, different
+// order) does NOT change its layeredTopoSort placement (deps are set-based), so
+// the structural re-derivation alone would miss it — but lock.ContentHash hashes
+// rests_on in order, so the retained content-hash check still surfaces it. This
+// guards against the structural diff being mistaken for a full replacement of
+// the content-hash check.
+func TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.a", "widget", model.BuildRoleBehavior),
+		mc("widget.contract.b", "widget", model.BuildRoleBehavior),
+		mc("widget.contract.c", "widget", model.BuildRoleBehavior, "widget.contract.a", "widget.contract.b"),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims, nil); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Reverse c's rests_on order (same set): topo placement is unchanged, but
+	// the ordered content hash differs.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.c" {
+			mutated[i].RestsOn = []string{"widget.contract.b", "widget.contract.a"}
+		}
+	}
+
+	st, err := Status(path, mutated, nil)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after reordering a covered claim's rests_on, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.c") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the rests_on-reordered claim %q, got %v", "widget.contract.c", st.StaleIDs)
 	}
 }
