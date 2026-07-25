@@ -24,7 +24,7 @@
      inline status pill — docs' "<div class="k">TITLE <span class="pill
      ps">...</span></div>" shape — per the shared claim-head convention
      every component partial follows (see components.go's pillClass). */}}
-<section class="claim claim-list card" id="{{.ID}}" data-status="{{.Status}}">
+<section class="claim claim-list card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}
   <div class="claim-list-items">{{markdown .Body}}</div>

@@ -21,7 +21,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
-//go:embed card.html table.html list.html steps.html tree.html banner.html mockup.html build_order.html
+//go:embed card.html table.html list.html steps.html tree.html banner.html mockup.html build_order.html comments.html
 var FS embed.FS
 
 // buildOrderFileName is the override-lookup name for the optional Build
@@ -56,6 +56,62 @@ var funcMap = template.FuncMap{
 	"pillClass":  pillClass,
 	"colClass":   colClass,
 	"mockupHTML": mockupHTML,
+}
+
+// commentsPanelTmpl is the parsed comments.html thread-panel partial, parsed
+// once from the embedded default at package init and never reassigned, so it
+// is safe to Execute concurrently — html/template permits parallel Execute so
+// long as writers are not shared, and every caller here uses its own builder.
+// EdgesHTMLWithLinks executes it to bake a claim's review threads into the
+// static render immediately after the shared edges <ul>. Parsed with funcMap
+// so comment bodies route through the same "markdown" renderer every other
+// body-shaped field uses. A parse failure here (a malformed embedded default)
+// is a programming error the package can't run without, so it panics at init
+// rather than deferring the failure to the first render.
+//
+// It is parsed with only the "markdown" func — not the full funcMap — on
+// purpose: funcMap binds "edges" to edgesHTML, whose body reaches
+// EdgesHTMLWithLinks, which reads this very var, so parsing with funcMap would
+// be a package-initialization cycle. comments.html needs nothing but "markdown"
+// anyway (its other constructs — range/if/eq/len/template — are builtins).
+//
+// Unlike the per-layout partials and build_order.html, this panel is not wired
+// to viewer.template_overrides: it reaches the render through EdgesHTMLWithLinks
+// (the shared "edges" func, whose signature is fixed — a project-scoped override
+// template can't be threaded to it without widening attachEdgesOverride, which
+// a second consumer of the "edges" name is explicitly not allowed to do), and
+// its markup is a tight contract with the viewer JS that a project override
+// would silently break. Projects restyle the panel via viewer.theme / a
+// style.css override instead of replacing this structure.
+var commentsPanelTmpl = template.Must(
+	template.New("comments.html").Funcs(template.FuncMap{"markdown": markdown.Render}).ParseFS(FS, "comments.html"),
+)
+
+// commentsPanelView is the shape comments.html executes against: the claim id
+// (carried on the panel as data-claim-id, never id=, so the viewer JS can fan
+// state out across an overview claim's N rendered copies) plus its threads
+// split into the open ones shown inline and the resolved ones tucked into the
+// <details> collapse.
+type commentsPanelView struct {
+	ClaimID  string
+	Open     []model.Comment
+	Resolved []model.Comment
+}
+
+// newCommentsPanelView partitions a claim's comments into open and resolved for
+// comments.html. A thread counts as resolved only when its status is exactly
+// CommentStatusResolved; anything else is shown inline, so an unexpected status
+// is surfaced to the reader rather than silently swallowed into the collapse.
+func newCommentsPanelView(c model.Claim) commentsPanelView {
+	v := commentsPanelView{ClaimID: c.ID}
+	for _, cm := range c.Comments {
+		if cm.Status == model.CommentStatusResolved {
+			v.Resolved = append(v.Resolved, cm)
+		} else {
+			v.Open = append(v.Open, cm)
+		}
+	}
+	return v
 }
 
 // Load parses the default embedded partial for every known layout and
@@ -316,6 +372,36 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 		b.WriteString(`<li class="claim-review-pending">review_pending</li>`)
 	}
 
+	// The 💬 comment chip rides this shared footer, reading c.Comments
+	// directly rather than a per-render lookup — the claim is already in
+	// scope under both the default "edges" binding (edgesHTML) and
+	// render's attachEdgesOverride closure, so the chip renders under both
+	// with no signature change and no second "edges" Funcs binding (which
+	// would silently discard the first). Values are hand-escaped like the
+	// rest of this func because a FuncMap-returned template.HTML bypasses
+	// html/template's auto-escaping. banner.html never calls {{edges .}},
+	// so banner claims are excluded from the whole comment surface for free.
+	if len(c.Comments) > 0 {
+		open := len(c.OpenThreadIDs())
+		chipClass := "comment-chip comment-chip--resolved"
+		count := len(c.Comments)
+		label := fmt.Sprintf("view %d comment thread(s), all resolved", count)
+		if open > 0 {
+			chipClass = "comment-chip comment-chip--open"
+			count = open
+			label = fmt.Sprintf("view %d open comment thread(s)", open)
+		}
+		b.WriteString(`<li class="claim-comments"><button type="button" class="`)
+		b.WriteString(chipClass)
+		b.WriteString(`" data-claim-id="`)
+		b.WriteString(html.EscapeString(c.ID))
+		b.WriteString(`" aria-expanded="false" aria-label="`)
+		b.WriteString(html.EscapeString(label))
+		b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
+		b.WriteString(fmt.Sprintf("%d", count))
+		b.WriteString(`</span></button></li>`)
+	}
+
 	for _, f := range files {
 		b.WriteString(`<li class="claim-implemented-in">implemented in: <code>`)
 		b.WriteString(html.EscapeString(f.File))
@@ -331,6 +417,21 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	}
 
 	b.WriteString(`</ul>`)
+
+	// The baked-in thread panel follows the edges <ul> (a <div>, so it can't
+	// be an <li> inside it) but stays inside the claim's <section>, since
+	// {{edges .}} is the last thing every non-banner partial emits before
+	// </section>. comments.html auto-escapes its bodies via the shared
+	// "markdown" func, so no hand-escaping is needed for the panel. On the
+	// (embedded, tested) template this Execute cannot fail; a defensive error
+	// path drops the panel rather than corrupt the footer with partial output.
+	if len(c.Comments) > 0 {
+		var pb strings.Builder
+		if err := commentsPanelTmpl.Execute(&pb, newCommentsPanelView(c)); err == nil {
+			b.WriteString(pb.String())
+		}
+	}
+
 	return template.HTML(b.String())
 }
 

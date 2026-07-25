@@ -27,7 +27,7 @@
      literal source — inline only, no <p> wrapper inside a <td>. `cell` also
      stringifies non-string cell values (numbers/bools) and maps a nil/absent
      cell to "", so a ragged row never breaks template execution. */}}
-<section class="claim claim-table card" id="{{.ID}}" data-status="{{.Status}}">
+<section class="claim claim-table card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
   {{if .Rows}}

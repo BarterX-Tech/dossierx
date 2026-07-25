@@ -345,6 +345,143 @@ th {
   border-color: var(--warn);
 }
 
+/* ---- comments (engine-managed review threads) --------------------------
+   The 💬 chip rides the shared edges footer (components.EdgesHTMLWithLinks);
+   the read-only thread panel is baked in right after it by comments.html.
+   Every color below is one of the inverting theme tokens declared in :root
+   above (and re-pointed in the prefers-color-scheme: light block), so the
+   whole surface tracks the OS theme with no separate dark rule — the one
+   genuinely per-mode value, the panel's drop shadow, gets its light value in
+   the media query at the end of this block. claim-card--commented is a
+   distinct accent marker, deliberately NOT the --warn boundary family. */
+.claim-comments {
+  list-style: none;
+}
+
+.comment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.comment-chip--open {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.comment-chip-count {
+  font-weight: 600;
+}
+
+/* Open-thread cards carry a 3px accent left border. The dedicated
+   .claim-tree rule is required because tree claims render without the .card
+   class (see tree.html), so a .card-scoped rule would never reach them. */
+.card.claim-card--commented,
+.claim-tree.claim-card--commented {
+  border-left: 3px solid var(--accent);
+}
+
+.comments-panel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 12px);
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .28);
+}
+
+.comments-panel[hidden] {
+  display: none;
+}
+
+.comments-panel-title {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--faint);
+}
+
+.comment-thread {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.comment-thread:first-of-type {
+  border-top: 0;
+}
+
+.comment-reply {
+  margin: 6px 0 0 14px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.comment-role {
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.comment-role--human {
+  color: var(--accent);
+}
+
+.comment-role--agent {
+  color: var(--link);
+}
+
+.comment-edited {
+  font-style: italic;
+}
+
+.comment-body {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.comments-resolved > summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Coarse pointers (touch) need a >=44px hit target on the chip. */
+@media (pointer: coarse) {
+  .comment-chip {
+    min-height: 44px;
+  }
+}
+
+/* The panel shadow is the one genuinely per-mode value here: softer on a
+   light background than the deeper shadow the dark base above uses. */
+@media (prefers-color-scheme: light) {
+  .comments-panel {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+  }
+}
+
 .k {
   font-family: var(--font-mono);
   font-size: 12px;
