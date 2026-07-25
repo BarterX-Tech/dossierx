@@ -142,8 +142,61 @@ func SaveClaim(c model.Claim) error {
 	if err != nil {
 		return fmt.Errorf("loader: marshal claim %q: %w", c.ID, err)
 	}
+	if err := verifyRoundTrip(c, data); err != nil {
+		return err
+	}
 	if err := atomicWriteFile(c.SourcePath, data, 0o644); err != nil {
 		return fmt.Errorf("loader: write %s: %w", c.SourcePath, err)
+	}
+	return nil
+}
+
+// verifyRoundTrip is the systemic store-bricking guard: it decodes c's freshly
+// marshaled bytes exactly the way LoadClaims will (a strict, single-document
+// decode) and refuses the write — returning ErrClaimNotRoundTrippable — if that
+// decode fails or the comment/reply bodies (the user-authored free text yaml.v3
+// mishandles) do not come back byte-exact. Every claim-file write (lock,
+// unlock, reaudit, flag, comment ops) passes through here, so a claim whose
+// YAML would not re-parse is never persisted and the next whole-dir LoadClaims
+// can never fail on a file this engine wrote. It is a pure check on already
+// marshaled bytes: valid claims (every claim the engine writes today) decode
+// cleanly and are unaffected.
+func verifyRoundTrip(c model.Claim, data []byte) error {
+	var back model.Claim
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&back); err != nil {
+		return fmt.Errorf("loader: claim %q: marshaled YAML does not re-parse (%v): %w", c.ID, err, ErrClaimNotRoundTrippable)
+	}
+	if err := commentBodiesRoundTrip(c.Comments, back.Comments); err != nil {
+		return fmt.Errorf("loader: claim %q: %v: %w", c.ID, err, ErrClaimNotRoundTrippable)
+	}
+	if c.Body != back.Body {
+		return fmt.Errorf("loader: claim %q: body did not round-trip byte-exact: %w", c.ID, ErrClaimNotRoundTrippable)
+	}
+	return nil
+}
+
+// commentBodiesRoundTrip reports whether every thread and reply body in want is
+// reproduced byte-exact in got (the marshal->decode image of want). A count or
+// body mismatch is the silent-corruption sibling of an outright parse failure,
+// and equally a reason to refuse the write.
+func commentBodiesRoundTrip(want, got []model.Comment) error {
+	if len(want) != len(got) {
+		return fmt.Errorf("comment thread count changed on round-trip (%d -> %d)", len(want), len(got))
+	}
+	for i := range want {
+		if want[i].Body != got[i].Body {
+			return fmt.Errorf("comment %q body did not round-trip byte-exact", want[i].ID)
+		}
+		if len(want[i].Replies) != len(got[i].Replies) {
+			return fmt.Errorf("comment %q reply count changed on round-trip (%d -> %d)", want[i].ID, len(want[i].Replies), len(got[i].Replies))
+		}
+		for j := range want[i].Replies {
+			if want[i].Replies[j].Body != got[i].Replies[j].Body {
+				return fmt.Errorf("comment %q reply %q body did not round-trip byte-exact", want[i].ID, want[i].Replies[j].ID)
+			}
+		}
 	}
 	return nil
 }
@@ -156,6 +209,18 @@ func SaveClaim(c model.Claim) error {
 // HTTP server can map it to a 409 Conflict / "reload, this claim changed"
 // response rather than a generic 500.
 var ErrClaimFileChanged = errors.New("claim file changed on disk since it was loaded")
+
+// ErrClaimNotRoundTrippable is returned by SaveClaim/SaveClaimIfUnchanged when
+// the claim's marshaled YAML would not decode back into the same claim — i.e.
+// writing it would leave a file the very next LoadClaims cannot parse, bricking
+// the whole claims dir (every loader-backed command then fails to load
+// anything). The canonical trigger is a comment/reply body whose leading
+// whitespace drives yaml.v3 v3.0.1 to emit a block scalar it cannot re-parse (a
+// leading newline, a leading blank line, or a leading whitespace-only line). The
+// save path REFUSES such a write and returns this matchable sentinel instead of
+// persisting the store-bricking file, so no writer — present or future — can
+// brick the store, even if it skipped the higher-level body validation.
+var ErrClaimNotRoundTrippable = errors.New("claim would not round-trip through YAML; refusing to write a store-bricking file")
 
 // ClaimFileToken is an opaque snapshot of a claim file's on-disk content at
 // load time, handed back to SaveClaimIfUnchanged so it can refuse to
@@ -221,6 +286,9 @@ func SaveClaimIfUnchanged(c model.Claim, want ClaimFileToken) error {
 	data, err := yaml.Marshal(c)
 	if err != nil {
 		return fmt.Errorf("loader: marshal claim %q: %w", c.ID, err)
+	}
+	if err := verifyRoundTrip(c, data); err != nil {
+		return err
 	}
 	if err := atomicWriteFile(c.SourcePath, data, 0o644); err != nil {
 		return fmt.Errorf("loader: write %s: %w", c.SourcePath, err)

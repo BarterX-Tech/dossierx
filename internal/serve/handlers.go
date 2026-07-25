@@ -15,9 +15,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
-	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
@@ -418,26 +416,22 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 var errReadOnly = errors.New("serve: read-only (viewer runtime unavailable)")
 
 // mutatingDeps builds the comments.Deps a mutating op runs against, mirroring
-// cmd/dossierx's mutatingCommentDeps: the lock-store and flag-store are read
-// WITHOUT their own sentinel (internal/comments takes only the claims sentinel;
-// a stale store read at worst leaves review_pending set for the next reconcile
-// to correct), so review_pending recomputation after the mutation still sees
-// real drift/flag state. Claims is left unset — every mutating op re-reads
-// claims fresh inside the claims lock. In read-only mode (degraded viewer) it
-// short-circuits with errReadOnly before touching any store.
+// cmd/dossierx's mutatingCommentDeps: the lock- and flag-store are supplied as
+// PATHS, not pre-loaded snapshots, so each op re-reads them fresh inside the
+// claims sentinel before recomputing review_pending — a snapshot loaded here,
+// before the sentinel, could miss a `dossierx flag` that committed concurrently
+// and orphan it with review_pending:false. Claims is left unset — every mutating
+// op re-reads claims fresh inside the claims lock. In read-only mode (degraded
+// viewer) it short-circuits with errReadOnly before touching any store.
 func (s *Server) mutatingDeps() (*comments.Deps, error) {
 	if s.readOnly.Load() {
 		return nil, errReadOnly
 	}
-	store, err := lock.LoadStore(s.storePath())
-	if err != nil {
-		return nil, fmt.Errorf("serve: load lock store: %w", err)
-	}
-	flagStore, err := reaudit.LoadFlagStore(s.flagStorePath())
-	if err != nil {
-		return nil, fmt.Errorf("serve: load flag store: %w", err)
-	}
-	return &comments.Deps{Cfg: s.cfg, LockStore: store, FlagStore: flagStore}, nil
+	return &comments.Deps{
+		Cfg:           s.cfg,
+		LockStorePath: s.storePath(),
+		FlagStorePath: s.flagStorePath(),
+	}, nil
 }
 
 // bodyRequest is the JSON body a mutating comment request may carry: the
@@ -526,6 +520,8 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "banner_claim")
 	case errors.Is(err, comments.ErrEmptyBody):
 		writeError(w, http.StatusBadRequest, "empty_body")
+	case errors.Is(err, comments.ErrUnsafeBody):
+		writeError(w, http.StatusBadRequest, "unsafe_body")
 	case errors.Is(err, comments.ErrInvalidActor):
 		writeError(w, http.StatusBadRequest, "invalid_actor")
 	case errors.Is(err, comments.ErrRightsDenied):

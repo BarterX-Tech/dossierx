@@ -27,6 +27,15 @@ var (
 	ErrReplyNotFound = errors.New("comments: reply not found")
 	// ErrEmptyBody: a comment/reply body was empty or whitespace-only.
 	ErrEmptyBody = errors.New("comments: comment body must not be empty")
+	// ErrUnsafeBody: a comment/reply body with real content but a leading
+	// blank/whitespace-only line (a leading newline, leading blank lines, or a
+	// leading tab line). yaml.v3 v3.0.1 emits such a string as a block scalar it
+	// then cannot parse back, so — stored verbatim — it would brick the whole
+	// claims dir on the next load. It is refused here, at the shared input
+	// boundary both the CLI and the serve handlers cross, with a clear error;
+	// the loader's round-trip guard (loader.ErrClaimNotRoundTrippable) is the
+	// systemic backstop under it. Callers strip the leading blank line and retry.
+	ErrUnsafeBody = errors.New("comments: comment body must not begin with a blank line, a leading newline, or a leading tab (it cannot be safely stored as YAML)")
 	// ErrInvalidActor: --as was neither "human" nor "agent".
 	ErrInvalidActor = errors.New(`comments: actor must be "human" or "agent"`)
 	// ErrRightsDenied: advisory rights — an agent may not resolve/reopen/edit/
@@ -46,6 +55,14 @@ var (
 // timestamps can be asserted deterministically.
 var nowFunc = time.Now
 
+// mutateInterlude is a test seam invoked inside mutate's claims-sentinel
+// critical section, after the claim's pre-mutation file token is captured and
+// just before the optimistic-concurrency-guarded save, so a test can
+// deterministically simulate an out-of-band edit landing in the load->save
+// window and assert the CAS guard refuses to clobber it. It is a no-op in
+// production, mirroring nowFunc.
+var mutateInterlude = func() {}
+
 func nowRFC3339() string { return nowFunc().UTC().Format(time.RFC3339) }
 
 // Deps is the dependency bundle every comment op runs against — the shared
@@ -55,17 +72,33 @@ func nowRFC3339() string { return nowFunc().UTC().Format(time.RFC3339) }
 // Claims is the caller's already-loaded snapshot; the read-only List reads it
 // directly. Every MUTATING op deliberately IGNORES it and re-reads the claims
 // fresh from disk inside the claims-sentinel critical section, because a
-// whole-file loader.SaveClaim over a stale snapshot would silently erase a
-// concurrent writer's change. LockStore and FlagStore are read WITHOUT their
-// own sentinels (a stale read at worst leaves review_pending set, which the
-// next reconcile corrects) so an op takes exactly one lock — the claims
-// sentinel — and the claims -> lock-store -> flag-store ordering hazard cannot
-// arise by construction.
+// whole-file save over a stale snapshot would silently erase a concurrent
+// writer's change. The lock- and flag-store review_pending inputs are likewise
+// re-read fresh inside that same sentinel — supply them as LockStorePath /
+// FlagStorePath (see below), which the production wiring does — so a concurrent
+// `dossierx flag` committed under the sentinel is honored, not orphaned. An op
+// still takes exactly one lock (the claims sentinel), and because the two
+// stores' own sentinels are never taken here the claims -> lock-store ->
+// flag-store ordering hazard cannot arise by construction.
 type Deps struct {
 	Cfg       *config.Config
 	Claims    []model.Claim
 	LockStore *lock.Store
 	FlagStore *reaudit.FlagStore
+
+	// LockStorePath and FlagStorePath, when set, are the on-disk lock- and
+	// flag-store files a mutating op RE-READS FRESH inside the claims sentinel
+	// (right before it recomputes review_pending), rather than trusting the
+	// LockStore/FlagStore snapshots above. The production wiring (the CLI and
+	// serve Deps builders) sets these paths: a snapshot loaded BEFORE the
+	// sentinel can miss a `dossierx flag` that committed concurrently — the
+	// claims sentinel serializes the two writers and flag persists its
+	// flag-store entry while holding it — so a fresh read here honors that flag
+	// instead of clobbering review_pending to false and orphaning it. A caller
+	// that leaves a path empty keeps the corresponding snapshot (unit tests that
+	// inject synthetic drift/flag state in memory).
+	LockStorePath string
+	FlagStorePath string
 }
 
 // Add opens a new comment thread on claimID and returns the updated claim and
@@ -80,7 +113,7 @@ func (d *Deps) Add(claimID string, actor model.CommentRole, body string) (model.
 		return model.Claim{}, "", err
 	}
 	var tid string
-	c, err := d.mutate(claimID, func(claims []model.Claim, c *model.Claim) error {
+	c, err := d.mutate(claimID, func(c *model.Claim) error {
 		if c.Layout == model.LayoutBanner {
 			return fmt.Errorf("comments: claim %q: %w", claimID, ErrBannerClaim)
 		}
@@ -100,7 +133,6 @@ func (d *Deps) Add(claimID string, actor model.CommentRole, body string) (model.
 			Body:    body,
 			Edited:  false,
 		})
-		d.refreshReviewPending(claims, c)
 		return nil
 	})
 	if err != nil {
@@ -120,7 +152,7 @@ func (d *Deps) Reply(claimID, threadID string, actor model.CommentRole, body str
 		return model.Claim{}, "", err
 	}
 	var rid string
-	c, err := d.mutate(claimID, func(claims []model.Claim, c *model.Claim) error {
+	c, err := d.mutate(claimID, func(c *model.Claim) error {
 		used, err := backfillIDs(c)
 		if err != nil {
 			return err
@@ -143,7 +175,6 @@ func (d *Deps) Reply(claimID, threadID string, actor model.CommentRole, body str
 			Body:    body,
 			Edited:  false,
 		})
-		d.refreshReviewPending(claims, c)
 		return nil
 	})
 	if err != nil {
@@ -160,7 +191,7 @@ func (d *Deps) Resolve(claimID, threadID string, actor model.CommentRole) (model
 	if err := validateActor(actor); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, func(claims []model.Claim, c *model.Claim) error {
+	return d.mutate(claimID, func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
@@ -177,7 +208,6 @@ func (d *Deps) Resolve(claimID, threadID string, actor model.CommentRole) (model
 		th.Status = model.CommentStatusResolved
 		th.ResolvedBy = actor
 		th.ResolvedAt = nowRFC3339()
-		d.refreshReviewPending(claims, c)
 		return nil
 	})
 }
@@ -188,7 +218,7 @@ func (d *Deps) Reopen(claimID, threadID string, actor model.CommentRole) (model.
 	if err := validateActor(actor); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, func(claims []model.Claim, c *model.Claim) error {
+	return d.mutate(claimID, func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
@@ -205,7 +235,6 @@ func (d *Deps) Reopen(claimID, threadID string, actor model.CommentRole) (model.
 		th.Status = model.CommentStatusOpen
 		th.ReopenedBy = actor
 		th.ReopenedAt = nowRFC3339()
-		d.refreshReviewPending(claims, c)
 		return nil
 	})
 }
@@ -219,7 +248,7 @@ func (d *Deps) Edit(claimID, threadID, replyID string, actor model.CommentRole, 
 	if err := validateBody(body); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, func(claims []model.Claim, c *model.Claim) error {
+	return d.mutate(claimID, func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
@@ -244,7 +273,6 @@ func (d *Deps) Edit(claimID, threadID, replyID string, actor model.CommentRole, 
 			rp.Body = body
 			rp.Edited = true
 		}
-		d.refreshReviewPending(claims, c)
 		return nil
 	})
 }
@@ -256,7 +284,7 @@ func (d *Deps) Delete(claimID, threadID, replyID string, actor model.CommentRole
 	if err := validateActor(actor); err != nil {
 		return model.Claim{}, err
 	}
-	return d.mutate(claimID, func(claims []model.Claim, c *model.Claim) error {
+	return d.mutate(claimID, func(c *model.Claim) error {
 		if _, err := backfillIDs(c); err != nil {
 			return err
 		}
@@ -279,7 +307,6 @@ func (d *Deps) Delete(claimID, threadID, replyID string, actor model.CommentRole
 			}
 			c.Comments[ti].Replies = append(c.Comments[ti].Replies[:ri], c.Comments[ti].Replies[ri+1:]...)
 		}
-		d.refreshReviewPending(claims, c)
 		return nil
 	})
 }
@@ -304,12 +331,15 @@ func (d *Deps) List(claimID string, openOnly bool) ([]model.Comment, error) {
 
 // mutate is the shared load->mutate->save skeleton for every mutating op. It
 // takes the claims sentinel, re-reads the claims FRESH inside it (never trusts
-// Deps.Claims for a write), locates the target claim by id, runs fn (which
-// mutates *c in place and may set review_pending), and writes exactly that one
-// claim back — releasing the lock on the way out. If fn returns an error,
-// nothing is written, so an unknown-id / rights / validation failure never
-// touches a neighbouring claim or message.
-func (d *Deps) mutate(claimID string, fn func(claims []model.Claim, c *model.Claim) error) (model.Claim, error) {
+// Deps.Claims for a write), locates the target claim by id, captures the claim
+// file's pre-mutation token, runs fn (which mutates *c in place), recomputes
+// review_pending against store state re-read fresh inside the sentinel, and
+// writes exactly that one claim back with an optimistic-concurrency guard
+// (SaveClaimIfUnchanged) so an out-of-band edit in the load->save window is
+// refused (ErrClaimFileChanged) rather than clobbered — releasing the lock on
+// the way out. If fn returns an error, nothing is written, so an unknown-id /
+// rights / validation failure never touches a neighbouring claim or message.
+func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Claim, error) {
 	release, err := lock.AcquireClaimsLock(d.Cfg)
 	if err != nil {
 		return model.Claim{}, err
@@ -324,24 +354,78 @@ func (d *Deps) mutate(claimID string, fn func(claims []model.Claim, c *model.Cla
 	if idx < 0 {
 		return model.Claim{}, fmt.Errorf("comments: claim %q: %w", claimID, ErrClaimNotFound)
 	}
-	if err := fn(claims, &claims[idx]); err != nil {
+
+	// Snapshot the claim file's pre-mutation bytes now — inside the sentinel,
+	// right after load — so the SaveClaimIfUnchanged below refuses to clobber an
+	// out-of-band edit (a text editor, a sentinel-less writer) that slips into
+	// this load->save window, surfacing loader.ErrClaimFileChanged (the wired
+	// 409 claim_file_changed) instead. This mirrors flag/reaudit/lock, which all
+	// write via CaptureClaimFileToken+SaveClaimIfUnchanged.
+	token, err := loader.CaptureClaimFileToken(claims[idx].SourcePath)
+	if err != nil {
 		return model.Claim{}, err
 	}
-	if err := loader.SaveClaim(claims[idx]); err != nil {
+
+	if err := fn(&claims[idx]); err != nil {
+		return model.Claim{}, err
+	}
+
+	// Recompute review_pending against store state RE-READ FRESH inside this
+	// claims sentinel (see reviewStores): a snapshot taken before the sentinel
+	// could miss a `dossierx flag` that committed concurrently and orphan it
+	// with review_pending:false.
+	ls, fs, err := d.reviewStores()
+	if err != nil {
+		return model.Claim{}, err
+	}
+	d.refreshReviewPending(claims, &claims[idx], ls, fs)
+
+	mutateInterlude()
+
+	if err := loader.SaveClaimIfUnchanged(claims[idx], token); err != nil {
 		return model.Claim{}, err
 	}
 	return claims[idx], nil
 }
 
 // refreshReviewPending recomputes review_pending for a LOCKED claim from the
-// single pending predicate after a mutation. A draft claim's review_pending is
-// left untouched (it is false and stays false — never set on a draft — and not
-// writing it preserves on-disk byte-identity for uncommented drafts).
-func (d *Deps) refreshReviewPending(claims []model.Claim, c *model.Claim) {
+// single pending predicate after a mutation, against the ls/lock- and fs/flag-
+// store snapshots mutate re-read fresh inside the claims sentinel. A draft
+// claim's review_pending is left untouched (it is false and stays false — never
+// set on a draft — and not writing it preserves on-disk byte-identity for
+// uncommented drafts).
+func (d *Deps) refreshReviewPending(claims []model.Claim, c *model.Claim, ls *lock.Store, fs *reaudit.FlagStore) {
 	if c.Status != model.StatusLocked {
 		return
 	}
-	c.ReviewPending = Recompute(*c, claims, d.LockStore, d.FlagStore)
+	c.ReviewPending = Recompute(*c, claims, ls, fs)
+}
+
+// reviewStores returns the lock- and flag-store snapshots review_pending is
+// recomputed against. When the caller supplied a path (the CLI/serve production
+// wiring), the store is RE-READ FRESH from disk here — inside mutate's claims
+// sentinel — so a `dossierx flag` (or lock/reaudit) that committed concurrently
+// is honored rather than missed by a snapshot taken before the sentinel. When
+// only an in-memory store and no path is supplied (unit tests injecting
+// synthetic drift/flag state), that snapshot is used as-is.
+func (d *Deps) reviewStores() (*lock.Store, *reaudit.FlagStore, error) {
+	ls := d.LockStore
+	if d.LockStorePath != "" {
+		loaded, err := lock.LoadStore(d.LockStorePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("comments: re-read lock store: %w", err)
+		}
+		ls = loaded
+	}
+	fs := d.FlagStore
+	if d.FlagStorePath != "" {
+		loaded, err := reaudit.LoadFlagStore(d.FlagStorePath)
+		if err != nil {
+			return nil, nil, fmt.Errorf("comments: re-read flag store: %w", err)
+		}
+		fs = loaded
+	}
+	return ls, fs, nil
 }
 
 func validateActor(a model.CommentRole) error {
@@ -355,7 +439,29 @@ func validateBody(body string) error {
 	if strings.TrimSpace(body) == "" {
 		return ErrEmptyBody
 	}
+	if leadingWhitespaceBreaksYAML(body) {
+		return ErrUnsafeBody
+	}
 	return nil
+}
+
+// leadingWhitespaceBreaksYAML reports whether body's LEADING whitespace would
+// drive yaml.v3 v3.0.1 to emit a block scalar it then cannot parse back —
+// bricking the whole claims file. The trigger, reproduced against v3.0.1, is a
+// body whose FIRST line (up to the first newline) is blank or whitespace-only
+// while real content follows: a leading newline (body: |4-), leading blank
+// lines, or a leading tab line (a tab where indentation is expected). A body
+// with no newline (leading spaces/tabs on a single line) or whose first line
+// already carries content is quoted safely by yaml.v3 and is NOT flagged — the
+// interior newlines/tabs of an ordinary multi-line body stay allowed. This is
+// the fast, user-facing pre-check; loader.verifyRoundTrip is the exact,
+// universal backstop for anything this heuristic does not cover.
+func leadingWhitespaceBreaksYAML(body string) bool {
+	i := strings.IndexByte(body, '\n')
+	if i < 0 {
+		return false
+	}
+	return strings.TrimSpace(body[:i]) == ""
 }
 
 // canAct is the advisory-rights rule: a human may act on anything; an agent may

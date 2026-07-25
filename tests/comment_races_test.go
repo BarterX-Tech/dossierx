@@ -122,6 +122,70 @@ func TestCommentRace_AddVsFlag(t *testing.T) {
 	}
 }
 
+// firstThreadID returns the id of the first thread "dossierx comment list
+// --json" reports for id (the fixture always has exactly one).
+func firstThreadID(t *testing.T, root, cfgPath, id string) string {
+	t.Helper()
+	out, stderr, code := run(t, root, "--config", cfgPath, "comment", "list", id, "--json")
+	if code != 0 {
+		t.Fatalf("comment list --json for %s exited %d (stderr: %s)", id, code, stderr)
+	}
+	var threads []map[string]any
+	if err := json.Unmarshal([]byte(out), &threads); err != nil {
+		t.Fatalf("comment list --json for %s is not valid JSON: %v\nout: %s", id, err, out)
+	}
+	if len(threads) == 0 {
+		t.Fatalf("expected at least one thread on %s, got none", id)
+	}
+	// "comment list --json" encodes model.Comment with its Go field names (no
+	// json tags), so the thread id is under "ID".
+	tid, _ := threads[0]["ID"].(string)
+	if tid == "" {
+		t.Fatalf("first thread on %s has no id: %v", id, threads[0])
+	}
+	return tid
+}
+
+// comment resolve vs flag on the same locked claim, the flag-orphan race: both
+// are review_pending inputs, but resolve CLEARS review_pending (its trigger, the
+// last open thread, is gone) while flag SETS it. Whichever serialized order
+// wins, the claim must end review_pending:true with the flag recorded — never
+// review_pending:false with an orphaned flag. That holds only because resolve
+// re-reads the flag store FRESH inside the claims sentinel; a snapshot taken
+// before the sentinel would miss a flag committed first and clear it. This
+// exercises the real "dossierx comment"/"dossierx flag" wiring end to end.
+func TestCommentRace_ResolveVsFlag(t *testing.T) {
+	for i := 0; i < raceIterations; i++ {
+		root := t.TempDir()
+		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
+		if _, stderr, code := run(t, root, "--config", cfgPath, "lock", "widget.contract.main"); code != 0 {
+			t.Fatalf("iter %d: lock setup: %s", i, stderr)
+		}
+		// Open a thread on the locked claim (this alone sets review_pending).
+		if _, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "please look"); code != 0 {
+			t.Fatalf("iter %d: comment add setup: %s", i, stderr)
+		}
+		tid := firstThreadID(t, root, cfgPath, "widget.contract.main")
+
+		runPair(t, root,
+			[]string{"--config", cfgPath, "comment", "resolve", "widget.contract.main", tid, "--as", "human"},
+			[]string{"--config", cfgPath, "flag", "widget.contract.main", "--claim-says", "x", "--now-does", "y", "--reason", "raced"},
+		)
+
+		// The flag stands (flag never gets deleted by resolve), so the claim MUST
+		// still be review_pending — otherwise the flag is orphaned.
+		final := llReadFile(t, claimPath)
+		if !strings.Contains(final, "status: locked") || !strings.Contains(final, "review_pending: true") {
+			t.Fatalf("iter %d: flag-orphan race — resolve cleared review_pending while a flag stands (expected locked + review_pending:true):\n%s", i, final)
+		}
+		flagStore := llReadFile(t, root+"/.dossierx-flag-store.json")
+		if !strings.Contains(flagStore, "widget.contract.main") {
+			t.Fatalf("iter %d: expected the flag recorded in the flag store, got:\n%s", i, flagStore)
+		}
+	}
+}
+
 // comment add vs a review_pending-flipping check: check reconciles main to
 // review_pending (its dependency drifted) while a comment is added; the
 // comments block must survive whichever order wins.

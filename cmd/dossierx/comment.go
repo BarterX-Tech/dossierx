@@ -19,9 +19,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
-	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 )
 
 // newCommentCmd is the "dossierx comment" command group: threaded review
@@ -60,23 +58,19 @@ func parseActor(as string) (model.CommentRole, error) {
 	}
 }
 
-// mutatingCommentDeps builds the Deps a mutating comment op runs against. It
-// loads the lock-store and flag-store read-only (no sentinel: internal/comments
-// takes only the claims sentinel, and a stale store read at worst leaves
-// review_pending set for the next reconcile to correct — see comments.Deps'
-// doc) so review_pending recomputation after the mutation sees real drift/flag
-// state. Claims is left unset: every mutating op re-reads claims fresh inside
-// the claims lock and ignores this snapshot.
+// mutatingCommentDeps builds the Deps a mutating comment op runs against. The
+// lock- and flag-store are supplied as PATHS, not pre-loaded snapshots, so each
+// op RE-READS them fresh inside the claims sentinel before recomputing
+// review_pending (see comments.Deps' LockStorePath/FlagStorePath doc): a
+// snapshot loaded here, before the sentinel, could miss a `dossierx flag` that
+// committed concurrently and orphan it with review_pending:false. Claims is left
+// unset: every mutating op re-reads claims fresh inside the claims lock too.
 func mutatingCommentDeps(cfg *config.Config) (*comments.Deps, error) {
-	store, err := lock.LoadStore(storePath(cfg))
-	if err != nil {
-		return nil, err
-	}
-	flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
-	if err != nil {
-		return nil, err
-	}
-	return &comments.Deps{Cfg: cfg, LockStore: store, FlagStore: flagStore}, nil
+	return &comments.Deps{
+		Cfg:           cfg,
+		LockStorePath: storePath(cfg),
+		FlagStorePath: flagStorePath(cfg),
+	}, nil
 }
 
 // viewHint is the trailing "how to see this" line every mutating comment verb
