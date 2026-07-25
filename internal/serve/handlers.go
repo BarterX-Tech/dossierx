@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
@@ -78,6 +79,115 @@ func (s *Server) handlePing(w http.ResponseWriter, r *http.Request) {
 		"dossierx": "serve",
 		"version":  s.version,
 	})
+}
+
+// ---------------------------------------------------------------------
+// GET /api/fragment — the two subtrees the live client swaps on reload
+// ---------------------------------------------------------------------
+
+// fragmentDTO carries the two viewer subtrees the SSE client re-fetches and
+// swaps in place after a "changed" event: Nav is the <nav id="nav"> sidebar
+// module list (which holds the per-module 🔒 lock state, so it lives OUTSIDE
+// .content-area and must be swapped alongside the body), and Content is the
+// <main class="content-area"> claim body. Each value is the element's full outer
+// HTML, so the client can replace outerHTML and keep the #nav / .content-area
+// selectors valid, then re-run initViewer() against the fresh DOM.
+type fragmentDTO struct {
+	Nav     string `json:"nav"`
+	Content string `json:"content"`
+}
+
+// handleFragment serves the nav + content-area subtrees from the SAME
+// single-flight in-memory render as GET / (pipe.get) — never a disk read/write —
+// so a fragment fetch and a full page load coalesce onto one render and always
+// agree. The two subtrees are sliced out server-side rather than shipping the
+// whole document for the client to DOMParser-slice, purely for testability: the
+// endpoint's contract is exactly "these two elements," which an httptest can
+// assert without a browser. If the effective shell dropped either anchor (a
+// custom override), that is a 500 with a diagnostic rather than a half fragment.
+func (s *Server) handleFragment(w http.ResponseWriter, r *http.Request) {
+	htmlBytes, err := s.pipe.get(r.Context())
+	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Client went away mid-render; nothing to send.
+			return
+		}
+		s.writeInternal(w, fmt.Errorf("serve: GET /api/fragment: render failed: %w", err))
+		return
+	}
+	doc := string(htmlBytes)
+	nav, okNav := extractElement(doc, `<nav id="nav">`, "nav")
+	content, okContent := extractElement(doc, `<main class="content-area">`, "main")
+	if !okNav || !okContent {
+		s.writeInternal(w, fmt.Errorf("serve: GET /api/fragment: shell is missing a swap anchor (nav=%t content=%t); a shell.html override must keep <nav id=\"nav\"> and <main class=\"content-area\">", okNav, okContent))
+		return
+	}
+	writeJSON(w, http.StatusOK, fragmentDTO{Nav: nav, Content: content})
+}
+
+// extractElement returns the outer HTML of the first element in doc that begins
+// with openTag (a literal opening tag such as `<nav id="nav">`), spanning that
+// opening tag through its matching `</name>` close. It depth-counts same-named
+// open/close tags, so a hypothetical nested <name> cannot end the slice early;
+// the default shell nests neither <nav> nor <main>, and claim bodies are
+// markdown-escaped (a literal "<main>" in a body renders as "&lt;main&gt;"), so
+// in practice the first close is the match and the counter is defensive. It
+// returns ("", false) when openTag is absent or no balanced close is found.
+func extractElement(doc, openTag, name string) (string, bool) {
+	start := strings.Index(doc, openTag)
+	if start < 0 {
+		return "", false
+	}
+	openPrefix := "<" + name
+	closeTag := "</" + name + ">"
+	depth := 1
+	i := start + len(openTag)
+	for depth > 0 {
+		rel := strings.Index(doc[i:], closeTag)
+		if rel < 0 {
+			return "", false // unbalanced: no matching close
+		}
+		closeAt := i + rel
+		if openAt := indexTagStart(doc, openPrefix, i); openAt >= 0 && openAt < closeAt {
+			depth++
+			i = openAt + len(openPrefix)
+			continue
+		}
+		depth--
+		i = closeAt + len(closeTag)
+	}
+	return doc[start:i], true
+}
+
+// indexTagStart returns the index of the next real opening tag beginning with
+// openPrefix (e.g. "<nav") at or after from — one whose following byte is a tag
+// boundary — so "<nav" cannot spuriously match a longer element name. It returns
+// -1 when none remain.
+func indexTagStart(doc, openPrefix string, from int) int {
+	for i := from; i < len(doc); {
+		rel := strings.Index(doc[i:], openPrefix)
+		if rel < 0 {
+			return -1
+		}
+		idx := i + rel
+		after := idx + len(openPrefix)
+		if after < len(doc) && isTagBoundary(doc[after]) {
+			return idx
+		}
+		i = idx + len(openPrefix)
+	}
+	return -1
+}
+
+// isTagBoundary reports whether c can immediately follow an element name in a
+// start tag: a space, the tag close, a self-close slash, or ASCII whitespace.
+func isTagBoundary(c byte) bool {
+	switch c {
+	case ' ', '>', '/', '\t', '\n', '\r', '\f':
+		return true
+	default:
+		return false
+	}
 }
 
 // ---------------------------------------------------------------------
@@ -152,7 +262,7 @@ func (s *Server) handleAddThread(w http.ResponseWriter, r *http.Request) {
 	}
 	deps, err := s.mutatingDeps()
 	if err != nil {
-		s.writeInternal(w, err)
+		s.writeOpError(w, err)
 		return
 	}
 	claim, tid, err := deps.Add(id, actor, req.Body)
@@ -180,7 +290,7 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	}
 	deps, err := s.mutatingDeps()
 	if err != nil {
-		s.writeInternal(w, err)
+		s.writeOpError(w, err)
 		return
 	}
 	claim, rid, err := deps.Reply(id, tid, actor, req.Body)
@@ -225,7 +335,7 @@ func (s *Server) threadStateChange(w http.ResponseWriter, r *http.Request, op fu
 	}
 	deps, err := s.mutatingDeps()
 	if err != nil {
-		s.writeInternal(w, err)
+		s.writeOpError(w, err)
 		return
 	}
 	claim, err := op(deps, id, tid, actor)
@@ -254,7 +364,7 @@ func (s *Server) handleEdit(w http.ResponseWriter, r *http.Request) {
 	}
 	deps, err := s.mutatingDeps()
 	if err != nil {
-		s.writeInternal(w, err)
+		s.writeOpError(w, err)
 		return
 	}
 	claim, err := deps.Edit(id, tid, replyID, actor, req.Body)
@@ -280,7 +390,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	deps, err := s.mutatingDeps()
 	if err != nil {
-		s.writeInternal(w, err)
+		s.writeOpError(w, err)
 		return
 	}
 	claim, err := deps.Delete(id, tid, replyID, actor)
@@ -300,14 +410,25 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 // Comment Deps + shared request/response plumbing
 // ---------------------------------------------------------------------
 
+// errReadOnly is returned by mutatingDeps when serve is running read-only (the
+// effective shell.html lacks the live-viewer runtime marker; see
+// Server.applyViewerRuntimeMode). writeOpError maps it to 403 read_only, so a
+// hand-crafted write is refused with a clear code even though the degraded viewer
+// would never send one itself. The CLI comment path is unaffected.
+var errReadOnly = errors.New("serve: read-only (viewer runtime unavailable)")
+
 // mutatingDeps builds the comments.Deps a mutating op runs against, mirroring
 // cmd/dossierx's mutatingCommentDeps: the lock-store and flag-store are read
 // WITHOUT their own sentinel (internal/comments takes only the claims sentinel;
 // a stale store read at worst leaves review_pending set for the next reconcile
 // to correct), so review_pending recomputation after the mutation still sees
 // real drift/flag state. Claims is left unset — every mutating op re-reads
-// claims fresh inside the claims lock.
+// claims fresh inside the claims lock. In read-only mode (degraded viewer) it
+// short-circuits with errReadOnly before touching any store.
 func (s *Server) mutatingDeps() (*comments.Deps, error) {
+	if s.readOnly.Load() {
+		return nil, errReadOnly
+	}
 	store, err := lock.LoadStore(s.storePath())
 	if err != nil {
 		return nil, fmt.Errorf("serve: load lock store: %w", err)
@@ -384,12 +505,17 @@ func (s *Server) writeInternal(w http.ResponseWriter, err error) {
 }
 
 // writeOpError maps an internal/comments op error to an HTTP status + stable
-// error code. Unknown thread/reply ids become 404 thread_not_found /
-// reply_not_found; a rights denial 403; a wrong-state op (reply to resolved,
-// double resolve/reopen) 409; an out-of-band file change (loader's optimistic
-// concurrency sentinel) 409 claim_file_changed; anything unmatched is a 500.
+// error code. Read-only mode becomes 403 read_only; unknown thread/reply ids
+// become 404 thread_not_found / reply_not_found; a rights denial 403; a
+// wrong-state op (reply to resolved, double resolve/reopen) 409; an out-of-band
+// file change (loader's optimistic concurrency sentinel) 409 claim_file_changed;
+// anything unmatched is a 500. It also fields mutatingDeps' setup errors (its
+// callers route them here), whose store-load failures fall through to the 500
+// default unchanged.
 func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, errReadOnly):
+		writeError(w, http.StatusForbidden, "read_only")
 	case errors.Is(err, comments.ErrClaimNotFound):
 		writeError(w, http.StatusNotFound, "claim_not_found")
 	case errors.Is(err, comments.ErrThreadNotFound):

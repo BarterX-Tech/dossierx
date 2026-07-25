@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Attests this shell carries the DossierX live-viewer runtime (comment UI +
+       SSE /api/fragment re-render). "dossierx serve" checks for this marker at
+       startup; a shell.html override that drops it is served read-only. Keep it
+       when customizing this template if you want live comments to work. -->
+  <meta name="dossierx-viewer-runtime" content="comments-sse">
   <title>{{.Title}}</title>
   <style>{{.CSS}}</style>
   <style>{{.ThemeCSS}}</style>

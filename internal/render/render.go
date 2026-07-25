@@ -435,6 +435,44 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	return loadedTemplates{partials: partials, css: css, shell: shell, buildOrder: buildOrderTmpl}, nil
 }
 
+// ViewerRuntimeMarker is a stable token the default shell.html emits (a
+// <meta name="dossierx-viewer-runtime"> in <head>) to attest that the template
+// carries the DossierX live-viewer runtime: the client-side hooks that mount the
+// comment UI and consume /api/fragment on an SSE "changed" event. "dossierx
+// serve" checks for it at startup — a project that ships its own shell.html
+// override WITHOUT this marker (an older copy, or a hand-written minimal shell)
+// cannot support live comments, so serve degrades to read-only and warns rather
+// than letting writes silently no-op in a viewer that cannot reflect them. The
+// token is intentionally not version-specific, so an override that copies the
+// current default keeps working across engine releases.
+const ViewerRuntimeMarker = "dossierx-viewer-runtime"
+
+// ShellHasViewerRuntime reports whether the EFFECTIVE shell template for cfg —
+// the project's shell.html override when present, else the embedded default —
+// carries ViewerRuntimeMarker. It resolves the override exactly as loadTemplates
+// does (cfg.Viewer.TemplateOverrides via components.OverrideFile, falling back to
+// the embedded default), so the answer matches the shell GET / actually renders.
+// A nil cfg, or one with no shell.html override, is the embedded default, which
+// always carries the marker; only a shell.html override that drops it returns
+// false. A stat/read failure other than "no override" is surfaced as an error.
+func ShellHasViewerRuntime(cfg *config.Config) (bool, error) {
+	overrideDir := ""
+	if cfg != nil {
+		overrideDir = cfg.Viewer.TemplateOverrides
+	}
+	src, overridden, err := components.OverrideFile(overrideDir, shellFileName)
+	if err != nil {
+		return false, fmt.Errorf("render: check viewer runtime: %w", err)
+	}
+	if !overridden {
+		src, err = shellFS.ReadFile(shellTemplatePath)
+		if err != nil {
+			return false, fmt.Errorf("render: read default shell: %w", err)
+		}
+	}
+	return bytes.Contains(src, []byte(ViewerRuntimeMarker)), nil
+}
+
 // renderClaims executes each cat.Claims entry through its layout's partial
 // template in partials (as loaded by loadTemplates), returning a
 // claim-ID-keyed lookup (renderedByID, consumed by buildGroups/newGroup) so

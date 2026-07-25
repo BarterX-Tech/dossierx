@@ -27,8 +27,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -93,6 +95,21 @@ type Server struct {
 	httpSrv *http.Server
 	ln      net.Listener
 	port    atomic.Int64
+
+	// readOnly is set once by Serve at startup when the effective shell.html
+	// lacks the live-viewer runtime marker (see render.ShellHasViewerRuntime): a
+	// custom override that cannot mount the comment UI or consume SSE re-renders.
+	// In that mode the mutating comment endpoints refuse with 403 read_only
+	// (writes belong on the CLI, which the degradation does not touch); reads —
+	// GET /, /api/fragment, /api/comments, /api/status — still work. It is
+	// atomic because handler goroutines read it while Serve writes it, though the
+	// write happens-before any request is accepted.
+	readOnly atomic.Bool
+
+	// warnw is where the startup viewer-degradation WARNING is written; it
+	// defaults to os.Stderr (the terminal running serve) and is redirected by
+	// SetWarnWriter in tests. Written once by Serve at startup.
+	warnw io.Writer
 }
 
 // New builds a Server for cfg. version is reported verbatim by GET /api/ping
@@ -107,6 +124,7 @@ func New(cfg *config.Config, version string) *Server {
 		closing:          make(chan struct{}),
 		pollInterval:     defaultPollInterval,
 		debounceInterval: defaultDebounceInterval,
+		warnw:            os.Stderr,
 	}
 	s.pipe = newPipeline(s.renderViewer)
 	s.httpSrv = &http.Server{
@@ -170,6 +188,10 @@ func (s *Server) Serve(ctx context.Context) error {
 		return err
 	}
 
+	// Viewer-runtime degradation: decide read-only vs. live BEFORE accepting any
+	// request, so the mode a handler observes is fixed for the process lifetime.
+	s.applyViewerRuntimeMode()
+
 	// Capture the claims fingerprint synchronously BEFORE accepting requests, so
 	// a change that lands between now and the watcher's first poll is still
 	// detected (the baseline reflects the pre-serve state). Then poll in the
@@ -228,6 +250,40 @@ func (s *Server) SetWatchIntervals(poll, debounce time.Duration) {
 	s.debounceInterval = debounce
 }
 
+// ReadOnly reports whether serve is running in read-only mode because the
+// effective shell.html lacks the live-viewer runtime marker (see
+// applyViewerRuntimeMode). Meaningful only after Serve has started; the mutating
+// comment endpoints consult the same flag to refuse writes with 403 read_only.
+func (s *Server) ReadOnly() bool { return s.readOnly.Load() }
+
+// SetWarnWriter redirects the startup viewer-degradation WARNING away from
+// os.Stderr, so a test can assert whether the warning fired. It MUST be called
+// before Serve (which writes the warning during startup); production code keeps
+// the New default (os.Stderr) and never calls this.
+func (s *Server) SetWarnWriter(w io.Writer) { s.warnw = w }
+
+// applyViewerRuntimeMode inspects the effective shell template once at startup
+// and, when it lacks the live-viewer runtime marker (a project ships its own
+// shell.html override that predates or omits the comment/SSE hooks), flips the
+// server into read-only mode and prints a single-line WARNING to warnw. This is
+// the "not silent breakage" contract: rather than serving a viewer whose write
+// controls can never mount while quietly accepting HTTP writes it can never
+// display, serve says so loudly and points at the CLI. A detection error (a
+// genuinely unreadable override, which render.Render will also surface) leaves
+// the server writable and notes the failure instead of false-degrading.
+func (s *Server) applyViewerRuntimeMode() {
+	hasRuntime, err := render.ShellHasViewerRuntime(s.cfg)
+	if err != nil {
+		fmt.Fprintf(s.warnw, "WARNING: dossierx serve could not check the viewer runtime marker: %v\n", err)
+		return
+	}
+	if hasRuntime {
+		return
+	}
+	s.readOnly.Store(true)
+	fmt.Fprintf(s.warnw, "WARNING: this project's shell.html override lacks the DossierX live-viewer runtime (no %q marker); serving READ-ONLY — the browser comment UI cannot mount and HTTP comment writes are disabled. Use the CLI (dossierx comment ...) to review, or restore the marker to your override.\n", render.ViewerRuntimeMarker)
+}
+
 // assertOutputsOutsideClaimsTree is serve's startup guardrail: the viewer,
 // catalog, and lock-store output paths MUST live outside the watched claims
 // tree. If one were inside, a render/catalog/store write would look like a claim
@@ -258,6 +314,7 @@ func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleRoot)
 	mux.HandleFunc("GET /api/ping", s.handlePing)
+	mux.HandleFunc("GET /api/fragment", s.handleFragment)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
