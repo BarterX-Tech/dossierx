@@ -660,7 +660,7 @@ export const contentSpec: ContentSpec = {
               "Markdown [text](url) links now render as anchors in claim bodies AND structured table cells (scheme-allowlisted; javascript:/data: neutralized); backtick code spans render in cells too.",
               "Lifecycle data integrity: dependency-hash baselines are keyed per-dependent (with an automatic, re-arming lock-store migration), unlock clears pending flags, and flag is refused on structured layouts.",
               "Security: the raw_html mockup gate is now default-deny across every attribute quote form (control-char and entity evasions closed) and enforced by render and catalog, not just lock.",
-              "Build-order staleness now catches added, deleted, re-roled, and promoted claims; the Build Order viewer section is visible; new dossierx version command; lint --json emits valid arrays.",
+              "Build-order staleness is now structural — status re-derives the order a fresh propose would compute and flags any divergence (reordered, re-roled, promoted, renamed, added, or deleted claims); the Build Order viewer section is visible; new dossierx version command; lint --json emits valid arrays.",
               "Patch bump despite new capabilities: internal/ is not importable, no breaking CLI changes, and the lock-store migrates automatically.",
             ],
           },
