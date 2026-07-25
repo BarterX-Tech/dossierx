@@ -425,6 +425,107 @@ func TestRecomputeStale_ExcludedClaimDeleted_IsStale(t *testing.T) {
 	}
 }
 
+// TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale is the
+// GAP-3c regression test, symmetric with the covered build_role-change case:
+// recomputeStale's a.Excluded loop only flagged an excluded claim's DELETION,
+// and the addition loop folds a.Excluded ids into the "already covered" set —
+// so an out-of-scope claim later promoted to an in-phase build_role (e.g.
+// out-of-scope -> schema) was examined by NOTHING and left stale:false, even
+// though a fresh propose would now place it in a phase, a silently different
+// order. Promoting an excluded claim into a build phase must be surfaced as
+// staleness, mirroring Propose's own out-of-scope-vs-phase classification.
+func TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if len(a.Excluded) != 1 || a.Excluded[0] != "widget.contract.future" {
+		t.Fatalf("expected the out-of-scope claim recorded as excluded, got %v", a.Excluded)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Promote the formerly out-of-scope claim into an in-phase build_role
+	// (out-of-scope -> schema). A fresh propose would now place it in the
+	// schema phase, so the frozen artifact must report stale.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.future" {
+			mutated[i].BuildRole = model.BuildRoleSchema
+		}
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after promoting an excluded claim into a build phase, got %+v", st)
+	}
+	found := false
+	for _, id := range st.StaleIDs {
+		if id == "widget.contract.future" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected stale_claim_ids to include the promoted claim %q, got %v", "widget.contract.future", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_ExcludedClaimEditedButStillOutOfScope_NoFalsePositive
+// guards the promotion check above: an excluded claim whose body is edited but
+// whose build_role stays out-of-scope is still not placed in any phase, so a
+// fresh propose would compute the same order. It must NOT be flagged stale.
+func TestRecomputeStale_ExcludedClaimEditedButStillOutOfScope_NoFalsePositive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Edit the excluded claim's body but keep it out-of-scope.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.future" {
+			mutated[i].Body = "future scope notes revised, still deferred"
+		}
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Stale {
+		t.Fatalf("expected an excluded claim that stayed out-of-scope to keep the artifact non-stale, got stale_claim_ids=%v", st.StaleIDs)
+	}
+}
+
 // TestLock_RefusesStaleArtifact is the FIX-13 regression test: a bare relock
 // of a stale artifact used to succeed, freezing the OLD phase order (Lock
 // never recomputes Phases) while clearing staleness. Lock must instead refuse
