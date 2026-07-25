@@ -266,6 +266,34 @@ func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
 }
 
+// loadStoreForRead loads the lock content-hash store for a read-mostly command
+// (currently "check"), first re-arming per-dependent baselines if the store
+// predates them (a legacy migration — see lock.MigrateLegacyStore) and
+// persisting that one-time re-arm. The load/migrate/Save runs under the same
+// cross-process file lock "dossierx lock"/"dossierx reaudit" take, so the
+// migration Save can never race their load-mutate-save on the shared store
+// file. The returned store is safe to read (e.g. lock.DetectStale) after the
+// lock is released: DetectStale only consults the already-loaded in-memory
+// store, never the file again.
+func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, error) {
+	release, err := lock.AcquireFileLock(storePath(cfg))
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil {
+		return nil, err
+	}
+	if lock.MigrateLegacyStore(store, claims) {
+		if err := store.Save(); err != nil {
+			return nil, err
+		}
+	}
+	return store, nil
+}
+
 // catalogPath is where "dossierx catalog" (and "dossierx check") writes the built
 // catalog.
 func catalogPath(cfg *config.Config) string {
@@ -457,7 +485,13 @@ func newCheckCmd() *cobra.Command {
 			// confirmed reaudit to locked+review_pending. Persist the flag
 			// change back to the claim's own file so it survives to the
 			// next run and shows up in "dossierx stale".
-			store, err := lock.LoadStore(storePath(cfg))
+			//
+			// loadStoreForRead also re-arms a legacy (pre-versioning) store's
+			// per-dependent baselines from current content on the first run
+			// after upgrade, so already-locked claims regain drift detection
+			// immediately (no manual re-lock) without any spurious
+			// review_pending — see lock.MigrateLegacyStore.
+			store, err := loadStoreForRead(cfg, claims)
 			if err != nil {
 				return fmt.Errorf("check: %w", err)
 			}
@@ -856,6 +890,18 @@ func newLockCmd() *cobra.Command {
 				return fmt.Errorf("lock: %w", err)
 			}
 
+			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
+			// from current content before recording this claim's own, so an
+			// upgrade caught mid-lock still restores drift detection for every
+			// already-locked claim (not just this one) — see
+			// lock.MigrateLegacyStore. Persisted here rather than relying on the
+			// Save below so the re-arm survives even a subsequently refused lock.
+			if lock.MigrateLegacyStore(store, claims) {
+				if err := store.Save(); err != nil {
+					return fmt.Errorf("lock: %w", err)
+				}
+			}
+
 			updated, err := lock.Lock(claim, claims, cfg, store)
 			if err != nil {
 				return fmt.Errorf("lock: %w", err)
@@ -979,6 +1025,15 @@ func newReauditCmd() *cobra.Command {
 			store, err := lock.LoadStore(storePath(cfg))
 			if err != nil {
 				return fmt.Errorf("reaudit: %w", err)
+			}
+			// Re-arm a legacy (pre-versioning) store's per-dependent baselines
+			// from current content — see lock.MigrateLegacyStore. Persisted here
+			// (not only on the --confirm path below) so a mere propose still
+			// restores drift detection for the project's already-locked claims.
+			if lock.MigrateLegacyStore(store, claims) {
+				if err := store.Save(); err != nil {
+					return fmt.Errorf("reaudit: %w", err)
+				}
 			}
 			flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
 			if err != nil {

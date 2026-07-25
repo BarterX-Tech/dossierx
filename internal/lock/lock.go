@@ -165,6 +165,70 @@ func LoadStore(path string) (*Store, error) {
 	return s, nil
 }
 
+// MigrateLegacyStore re-arms per-dependent hash baselines for a store that
+// predates them, so an existing project's already-locked claims regain
+// dependency-drift detection immediately on upgrade — with no manual re-lock
+// and no spurious review_pending.
+//
+// LoadStore migrates a pre-versioning store by DROPPING its un-attributable
+// flat hashes (see LoadStore's doc), which leaves every already-locked claim
+// with no baseline: DX-AUD-09's drift safety net is down for exactly the
+// claims that already exist, until each is manually re-locked or reaudited.
+// MigrateLegacyStore closes that gap. When the store carries no baselines at
+// all — Hashes empty, the state a legacy drop leaves behind (and equally a
+// brand-new store) — it records, for every currently-LOCKED claim, the CURRENT
+// content hash of each dependency it rests on, using the exact dependencyIDs
+// set DetectStale compares so baselines and staleness checks always agree. It
+// also stamps the store to the current schema version.
+//
+// Baselining against CURRENT content (rather than fabricating a historical
+// baseline, which is impossible: the dropped flat hashes could not be
+// attributed to any specific dependent) is what makes this safe:
+//   - DetectStale immediately after migration reports NO drift (current ==
+//     baseline), so no claim is spuriously flipped to review_pending;
+//   - any dependency edited AFTER migration flips its dependent to
+//     review_pending on the next DetectStale, exactly as a fresh lock would;
+//   - a claim already review_pending before the upgrade stays so — that flag
+//     lives in the claim's YAML, not the store, and DetectStale only ever sets
+//     the flag, never clears it (this function never touches claims at all).
+//
+// It is idempotent: once baselines are present (Hashes non-empty) it does
+// nothing and returns false, so re-running any command that calls it is a
+// no-op. It reports whether it changed the store so callers can skip a
+// needless Save.
+//
+// The caller must hold this store's file lock (AcquireFileLock) around the
+// migrate-and-Save sequence, the same as any other load-mutate-save on the
+// shared store file.
+func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
+	// Any recorded baseline means this store is already at (or past) the
+	// per-dependent schema — a current-version store, or one an earlier call
+	// already re-armed. Re-arming then would clobber real, differing baselines
+	// with current content and mask genuine drift, so bail out.
+	if len(s.Hashes) > 0 {
+		return false
+	}
+
+	for _, c := range claims {
+		if c.Status != model.StatusLocked {
+			continue
+		}
+		for _, dep := range dependencyIDs(c) {
+			depClaim, ok := findByID(claims, dep)
+			if !ok {
+				continue
+			}
+			s.recordBaseline(c.ID, dep, ContentHash(depClaim))
+			changed = true
+		}
+	}
+
+	if changed {
+		s.Version = storeSchemaVersion
+	}
+	return changed
+}
+
 // Save writes the store back to its path as JSON.
 //
 // The write is atomic (temp file in the same directory, then rename) rather
