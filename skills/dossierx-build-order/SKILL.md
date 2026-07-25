@@ -111,7 +111,8 @@ sequence.
 ## When the build order goes stale
 
 `dossierx build-order status --module <name>` reports `stale: true` if, since the sequence was
-locked, a covered claim's content changed, a covered claim was deleted, or a new claim was
+locked, a covered claim's content or `build_role` changed (a role change reassigns its phase,
+so the frozen order is now wrong), a covered or excluded claim was deleted, or a new claim was
 locked into the module (coverage the frozen order silently omits). `lock` refuses a stale
 artifact outright — a bare relock would only refresh hashes/flags without recomputing the
 order, freezing an outdated sequence (e.g. after a `rests_on` edit). Re-run `propose`

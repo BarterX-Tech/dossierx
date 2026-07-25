@@ -39,12 +39,20 @@ importable, there are no breaking CLI changes, and the lock-store migrates autom
 - Dependency-hash baselines were keyed by dependency id alone and shared across dependents,
   so locking or reauditing one claim erased another's drift baseline and that claim would
   never flip to `review_pending` when the shared dependency changed. Baselines are now keyed
-  per-dependent; the on-disk lock-store is versioned and migrates automatically.
+  per-dependent; the on-disk lock-store is versioned and migrates automatically, re-arming
+  baselines for every currently-locked claim from current content on first run so drift
+  detection is live immediately after upgrade without a manual re-lock.
 - `unlock` left a claim's pending flag in the flag-store, so a later dependency-drift reaudit
   could silently re-apply stale pre-unlock content; `unlock` now clears the flag entry.
+- `unlock` hard-failed when the flag-store file was missing or corrupt; flag-clearing is now
+  best-effort — a missing store is silent, an unreadable one warns and still returns the claim
+  to draft — so the recovery escape hatch stays reliable.
 - `flag` on a `table` / `steps` / `mockup` claim rewrote only the body, leaving the rendered
   rows/steps/raw HTML stale while clearing `review_pending`; `flag` is now refused on those
   structured layouts (use unlock → edit → relock).
+- Build-order staleness now also flags an artifact stale when a covered claim's `build_role`
+  changes (which reorders its phase) or when an excluded, out-of-scope claim is deleted —
+  previously only content changes, in-phase deletions, and additions were detected.
 - Build-order staleness ignored newly-added claims (an artifact could silently omit a claim);
   additions now flag the artifact stale, symmetric with deletions.
 - `build-order lock` re-blessed a stale artifact without recomputing its order; it now refuses
