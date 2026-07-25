@@ -1,24 +1,35 @@
-// check_parity_test.go is the byte-for-byte parity guard for "dossierx
-// check". Phase 4a extracts the check pipeline out of newCheckCmd's RunE
-// into a value-returning internal/check.Run, and rewires the command to
-// format that Result for the terminal. The whole point of the extraction is
-// that the CLI's observable behavior — every byte of stdout, every byte of
-// stderr, and whether the command failed — is UNCHANGED. These golden
-// fixtures were captured from the pre-extraction command and are asserted
-// exactly (==, not Contains) so any silent drift in the reporter, the
-// fail-fast ordering, or the next-steps advisory fails the build.
+// check_parity_test.go is the byte-for-byte guard for "dossierx check"'s
+// terminal output. Phase 4a extracts the check pipeline out of newCheckCmd's
+// RunE into a value-returning internal/check.Run, and rewires the command to
+// format that Result for the terminal. The point of the extraction is that the
+// CLI's observable behavior — every byte of stdout, every byte of stderr, and
+// whether the command failed — is preserved. These golden fixtures pin the
+// reporter's CURRENT intended output exactly (==, not Contains), so any silent
+// drift in the reporter, the fail-fast ordering, or the next-steps advisory
+// fails the build.
+//
+// Scope of the "vs v0.1.2" guarantee — one deliberate exception. The output is
+// byte-identical to the pre-extraction command EXCEPT for a single, intentional
+// wording improvement: the drift/flag reaudit next-step now reads "N claim(s)
+// review_pending from drift/flag -> dossierx reaudit <id> ..." (see check.Run's
+// nextSteps and fixtures F and I). That one-line reword is the ONLY byte-diff
+// from v0.1.2 and is captured in the goldens below as the intended text — the
+// goldens are the source of truth for the current reporter, not a promise that
+// every byte still matches v0.1.2 verbatim. Everything else is unchanged.
 //
 // The fixtures span every output segment check can print: the lint block
 // (warnings and the error/fail-fast path), the catalog+render write lines,
 // the impl-links scan summary and per-module status line, "check: OK", the
-// orientation-notes / open-comments per-module summaries, and each
-// next-steps hint (draft, open-comment-thread, drift/flag reaudit, and the
-// fully-locked build-order prompt).
+// orientation-notes / open-comments per-module summaries, and each next-steps
+// hint (draft, open-comment-thread, drift/flag reaudit including the
+// triggerless drift-then-revert catch-all, and the fully-locked build-order
+// prompt).
 package main
 
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -256,4 +267,84 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 		"next steps:\n" +
 		"  1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.locked)\n"
 	assertCheckParity(t, cfgPath, want, "", false)
+}
+
+// I: a GENUINE drift-then-revert — a dependency drifts (setting review_pending
+// on its dependent), then is reverted byte-identically so the dependent is no
+// longer drifted, yet stays review_pending (only reaudit --confirm / unlock /
+// resolving a thread clears it). The dependent is then locked+review_pending
+// with NO active trigger (no drift, no flag, no open thread), and the reaudit
+// next-step MUST still print — the triggerless catch-all. Distinct from F
+// (which keeps a live flag trigger): here every trigger is cleared, so a naive
+// trigger-partition would drop the claim from next-steps entirely.
+func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
+	root := t.TempDir()
+	baseV1 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"body: |\n  base body, version one.\n" +
+		"governed_by:\n  type: none\n  reason: fixture\n"
+	baseV2 := "id: widget.contract.base\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+		"body: |\n  base body, version TWO — changed to drift the dependent.\n" +
+		"governed_by:\n  type: none\n  reason: fixture\n"
+	dep := "id: widget.contract.dep\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"body: |\n  the dependent claim.\n" +
+		"rests_on:\n  - widget.contract.base\n" +
+		"governed_by:\n  type: none\n  reason: fixture\n"
+	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
+		"claims/base.yaml": baseV1,
+		"claims/dep.yaml":  dep,
+	})
+	basePath := filepath.Join(root, "claims", "base.yaml")
+
+	// Lock dep (base is authored locked already) so the store captures dep's
+	// per-dependent baseline for base = ContentHash(base v1).
+	if _, stderr, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.dep"); err != nil {
+		t.Fatalf("lock dep: %v (stderr=%s)", err, stderr)
+	}
+	// Drift base: change its body so dep's stored baseline no longer matches.
+	if err := os.WriteFile(basePath, []byte(baseV2), 0o644); err != nil {
+		t.Fatalf("drift base: %v", err)
+	}
+	// A check run reconciles dep -> locked+review_pending (drift detected).
+	if _, stderr, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
+		t.Fatalf("drift check: %v (stderr=%s)", err, stderr)
+	}
+	// Revert base to v1 (byte-identical body) so ContentHash matches the stored
+	// baseline again: dep is no longer drifted, but review_pending persists.
+	if err := os.WriteFile(basePath, []byte(baseV1), 0o644); err != nil {
+		t.Fatalf("revert base: %v", err)
+	}
+
+	catalog := filepath.Join(root, ".catalog.json")
+	viewer := filepath.Join(root, "viewer", "index.html")
+	want := "lint: 0 findings\n" +
+		"catalog: wrote " + catalog + " (2 claim(s))\n" +
+		"render: wrote " + viewer + "\n" +
+		"check: OK\n" +
+		"next steps:\n" +
+		"  1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.dep)\n"
+	assertCheckParity(t, cfgPath, want, "", false)
+}
+
+// A malformed claim YAML must fail "dossierx check" with the load error reported
+// as "Error: load claims: ..." — NOT "Error: check: load claims: ...". The
+// claims load is a precondition that predates the check pipeline, so its error
+// keeps v0.1.2's unprefixed shape; the "check:" wrap belongs only to the
+// pipeline steps. The yaml message and temp path vary, so this pins the stable
+// error PREFIX rather than full byte-parity.
+func TestCheckParity_MalformedClaimLoadErrorPrefix(t *testing.T) {
+	root := t.TempDir()
+	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
+		// An unclosed YAML flow sequence: a hard parse error in loader.LoadClaims.
+		"claims/broken.yaml": "id: [oops\n",
+	})
+	stdout, stderr, err := execCLI(t, "--config", cfgPath, "check")
+	if err == nil {
+		t.Fatalf("expected check to fail on a malformed claim; stdout=%q stderr=%q", stdout, stderr)
+	}
+	if strings.HasPrefix(stderr, "Error: check:") {
+		t.Fatalf("regression: claims-load error wrapped with a \"check:\" prefix: %q", stderr)
+	}
+	if !strings.HasPrefix(stderr, "Error: load claims: ") {
+		t.Fatalf("claims-load error must be reported unprefixed as \"Error: load claims: ...\"; got %q", stderr)
+	}
 }

@@ -566,6 +566,17 @@ func newCheckCmd() *cobra.Command {
 				return err
 			}
 
+			// Parse-check claims up front, OUTSIDE the "check:"-wrapped reconcile
+			// below, so a malformed claim YAML is reported as "load claims: ..."
+			// (v0.1.2's unprefixed shape) rather than "check: load claims: ...":
+			// loading claims is a precondition that predates the check pipeline,
+			// so the "check:" wrap must not attach to it. reconcile re-reads
+			// claims inside the project-wide claims sentinel (the Phase-0 write
+			// discipline); this early load only fixes the error's provenance.
+			if _, err := loadClaims(cfg); err != nil {
+				return err
+			}
+
 			// Dependency-drift detection + review_pending persistence is
 			// "check"'s only claim-file-writing phase; it runs under the
 			// project-wide claims sentinel and releases it before the

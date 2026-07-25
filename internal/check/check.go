@@ -181,6 +181,52 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	return res, nil
 }
 
+// Status computes the subset of Result the serve status strip renders — the
+// lint partition, per-module open-comment counts, and the next-steps advisory —
+// WITHOUT any of Run's disk writes. It exists so GET/HEAD /api/status can drive
+// the same check data as a page-poll WITHOUT truncating viewer/index.html or
+// .catalog.json (Run's os.WriteFile side effects) and WITHOUT the per-request
+// impl-link Scan, which mutates link artifacts. Those writers are the "dossierx
+// check" writer's job, gated to the CLI / serve startup — never a read endpoint
+// reachable by a bare, CSRF-exempt GET or HEAD. It reads only (lint in memory,
+// the lock/flag/build-order stores, and the READ-ONLY implink.Status for the
+// drift/unlinked next-step hints — never implink.Scan), so it can never itself
+// re-trigger the watcher or corrupt a half-written viewer.
+//
+// It mirrors Run's fail-fast shape for the fields it populates: LintFindings /
+// LintErrors / LintWarnings are always set; OK is true only when there is no
+// error-severity finding (the sole fail-fast signal computable without the
+// catalog/render/scan steps), and the best-effort reporting (OpenComments,
+// NextSteps) is populated only then — exactly as Run leaves those fields empty
+// when it stops at the lint step. It never returns an error: a lint failure is
+// data for the status strip to show, not a reason to fail the endpoint.
+func Status(claims []model.Claim, cfg *config.Config) Result {
+	var res Result
+
+	res.LintFindings = lint.RunAll(claims, cfg)
+	for _, f := range res.LintFindings {
+		if f.Severity == lint.SeverityWarning {
+			res.LintWarnings = append(res.LintWarnings, f)
+		} else {
+			res.LintErrors = append(res.LintErrors, f)
+		}
+	}
+	if len(res.LintErrors) > 0 {
+		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
+		// reporting below empty exactly as the disk-writing Run leaves it.
+		return res
+	}
+
+	res.OK = true
+	res.OpenComments = openCommentCounts(claims)
+	// The impl-link hints come from the READ-ONLY implink.Status (drift/unlinked),
+	// the same source Run's nextSteps uses — NOT implink.Scan, which is the
+	// mutating reconcile and stays out of the memory-only status path.
+	_, _, implinkHints := implinkStatus(cfg, claims)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints)
+	return res
+}
+
 // orientationNotes returns one "orientation notes: module %q: %d (…)" line
 // per module (in cfg.Modules order) that has at least one orientation-note
 // claim, broken down by facet (facets sorted for determinism). It is the
@@ -294,7 +340,17 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 			if open > 0 {
 				commentPending = append(commentPending, c)
 			}
-			if drift || flag {
+			// Reaudit bucket: a drift/flag trigger, OR a review_pending claim
+			// with NO detectable trigger at all (open==0 && !drift && !flag) —
+			// the state left when a drifted dependency is reverted, or an open
+			// thread is hand-resolved directly in YAML. v0.1.2 printed the
+			// reaudit hint for EVERY locked+review_pending claim, so a triggerless
+			// one must still surface it rather than vanishing from next-steps. The
+			// only case deliberately excluded from this bucket is a purely
+			// comment-pending claim (open>0 && !drift && !flag): its remedy is to
+			// resolve the thread (reaudit refuses a comment-only pending), and it
+			// is already carried by commentPending above.
+			if drift || flag || open == 0 {
 				reauditPending = append(reauditPending, c.ID)
 			}
 		}

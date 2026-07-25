@@ -368,6 +368,46 @@ func TestRoot_NoDiskWrites(t *testing.T) {
 	}
 }
 
+// GET/HEAD /api/status computes the check Result from memory only. A status
+// poll must NOT run check.Run's disk writers (viewer/index.html, .catalog.json)
+// or the impl-link Scan that mutates link artifacts: those are the "dossierx
+// check" writer, not a read endpoint's job. Because GET and HEAD are safe
+// methods that skip the CSRF admission gates, a write-on-read here would let a
+// bare, unauthenticated poll truncate the ~65KB viewer and rewrite the catalog
+// on every request. This pins that neither file is ever created by the endpoint,
+// for BOTH methods, while the endpoint still returns a real status DTO.
+func TestStatus_NoDiskWrites(t *testing.T) {
+	_, base, root := startServer(t, baseConfig, standardFiles())
+
+	// A real poller hits this repeatedly and with both methods.
+	for i := 0; i < 3; i++ {
+		resp, data := do(t, http.MethodGet, base+"/api/status", "")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /api/status: got %d, want 200 (body=%s)", resp.StatusCode, data)
+		}
+		// The memory-only path still returns a well-formed status DTO.
+		var dto struct {
+			OK           bool           `json:"ok"`
+			OpenComments map[string]int `json:"open_comments"`
+			NextSteps    []string       `json:"next_steps"`
+		}
+		if err := json.Unmarshal(data, &dto); err != nil {
+			t.Fatalf("decode status: %v (body=%s)", err, data)
+		}
+
+		resp, _ = do(t, http.MethodHead, base+"/api/status", "")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("HEAD /api/status: got %d, want 200", resp.StatusCode)
+		}
+	}
+
+	for _, rel := range []string{filepath.Join("viewer", "index.html"), ".catalog.json"} {
+		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
+			t.Fatalf("GET/HEAD /api/status wrote %s to disk (stat err=%v); status must be computed from memory only, never through check.Run's disk writers", rel, err)
+		}
+	}
+}
+
 // =============================================================================
 // (6) Happy path accepted end-to-end.
 // =============================================================================
@@ -486,6 +526,38 @@ func TestRoot_CSPValue(t *testing.T) {
 	want := "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
 	if got := resp.Header.Get("Content-Security-Policy"); got != want {
 		t.Fatalf("CSP header = %q, want %q", got, want)
+	}
+}
+
+// The 500 render-error page MUST carry the SAME CSP header the 200 path sets.
+// A shell.html override that fails to parse drives handleRoot's error branch,
+// which serves a self-contained HTML document — and that document must be
+// governed by the identical Content-Security-Policy, so a broken override can
+// never downgrade the page to an unprotected one. The override keeps the
+// viewer-runtime marker so serve stays writable, isolating this to the
+// render-error path rather than read-only degradation.
+func TestRoot_RenderErrorHasCSP(t *testing.T) {
+	// Invalid template syntax ({{end}} with no matching block) makes
+	// render.Render fail at shell-override parse time -> handleRoot 500.
+	brokenShell := `<!doctype html><html><head><meta name="dossierx-viewer-runtime"></head>` +
+		`<body>{{end}}</body></html>`
+	files := map[string]string{
+		"claims/one.yaml":            draftClaim("widget.contract.one"),
+		"viewer-override/shell.html": brokenShell,
+	}
+	_, base, _ := startServer(t, overrideConfig, files)
+
+	resp, data := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("GET / with a broken shell override: got %d, want 500 (body=%s)", resp.StatusCode, data)
+	}
+	want := "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+	if got := resp.Header.Get("Content-Security-Policy"); got != want {
+		t.Fatalf("500 render-error page CSP = %q, want %q (the error branch must set the same CSP as the 200 path)", got, want)
+	}
+	// Sanity: it is the diagnostic error page, not a blank body.
+	if !strings.Contains(string(data), "Viewer render error") {
+		t.Fatalf("expected the render-error page body, got: %s", data)
 	}
 }
 

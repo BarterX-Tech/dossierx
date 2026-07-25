@@ -18,11 +18,12 @@
 //     new in this package.
 //   - Inline links — [text](url) becomes <a href="url">text</a>, new in this
 //     package. The url is held to a scheme allowlist: only http, https,
-//     mailto, and scheme-less (relative-path or #fragment) hrefs are emitted
-//     as anchors; a javascript:, data:, vbscript: (or any other) scheme is
-//     neutralized to escaped literal text with no anchor. Both the url (in
-//     attribute context) and the link text are HTML-escaped. See renderInline
-//     and allowedScheme for the parsing/allowlist boundary.
+//     mailto, and scheme-less relative-path or #fragment hrefs are emitted as
+//     anchors. A javascript:, data:, vbscript: (or any other) scheme — AND a
+//     scheme-less protocol-relative "//host" network-path, which resolves
+//     off-origin — is neutralized to escaped literal text with no anchor. Both
+//     the url (in attribute context) and the link text are HTML-escaped. See
+//     renderInline and allowedScheme for the parsing/allowlist boundary.
 //   - Unordered ("-"/"*") and ordered ("1.", "2.", ...) lists, with exactly
 //     one level of nesting (an indented "-"/"*" or "N." item folded under
 //     the immediately preceding top-level item) — new in this package, and
@@ -400,16 +401,21 @@ func parseLink(s string) (matchLen int, linkText, url string, ok bool) {
 }
 
 // allowedScheme reports whether url may be emitted as an anchor's href. Only
-// http, https, mailto, and scheme-less (relative-path or #fragment) urls are
+// http, https, mailto, and scheme-less relative-path / #fragment urls are
 // permitted; every other scheme — notably javascript, data, and vbscript — is
-// rejected so a rejected link renders as inert escaped text instead of an
-// active anchor. This is the allowlist half of renderInline's escaping
-// boundary and is deliberately evasion-resistant (see schemeOf).
+// rejected, AS IS a scheme-less protocol-relative "//host" network-path (see
+// isNetworkPath), so a rejected link renders as inert escaped text instead of
+// an active off-origin anchor. This is the allowlist half of renderInline's
+// escaping boundary and is deliberately evasion-resistant (see schemeOf).
 func allowedScheme(url string) bool {
 	scheme, ok := schemeOf(url)
 	if !ok {
-		// No scheme: a relative path or #fragment — always allowed.
-		return true
+		// No scheme: a relative path or #fragment is allowed — but NOT a
+		// protocol-relative "//host" network-path, which carries no scheme yet
+		// resolves against the page's own scheme to an arbitrary off-origin
+		// host, outside the documented scheme-less (relative-path / #fragment)
+		// scope.
+		return !isNetworkPath(url)
 	}
 	switch scheme {
 	case "http", "https", "mailto":
@@ -418,6 +424,29 @@ func allowedScheme(url string) bool {
 		return false
 	}
 }
+
+// isNetworkPath reports whether url is a protocol-relative (RFC 3986
+// "network-path", "//host...") reference: scheme-less, yet NOT a same-origin
+// relative reference — it points at an arbitrary host under the page's own
+// scheme, so it must never be emitted as a live anchor. Control bytes and
+// spaces are stripped first (the same evasion resistance schemeOf applies before
+// reading a scheme), and a backslash counts as a slash because browsers
+// normalize "\" to "/" in the authority position of a URL under a special
+// (http/https) scheme — so "/\host", "\\host", and "\/host" are just as
+// off-origin as "//host".
+func isNetworkPath(url string) bool {
+	var b strings.Builder
+	b.Grow(len(url))
+	for i := 0; i < len(url); i++ {
+		if c := url[i]; c > 0x20 && c != 0x7f {
+			b.WriteByte(c)
+		}
+	}
+	stripped := b.String()
+	return len(stripped) >= 2 && isSlashByte(stripped[0]) && isSlashByte(stripped[1])
+}
+
+func isSlashByte(c byte) bool { return c == '/' || c == '\\' }
 
 // schemeOf extracts url's lower-cased URI scheme (the part before the first
 // ':', e.g. "http" or "mailto"), returning ok=false when url has no scheme

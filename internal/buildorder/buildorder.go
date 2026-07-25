@@ -156,7 +156,7 @@ func (a *Artifact) ClaimIDs() []string {
 //     a cycle, and Propose fails with their ids rather than writing an
 //     artifact that silently omits them.
 //
-// Once all three gates pass, claims are split into Excluded (build_role:
+// Once all four gates pass, claims are split into Excluded (build_role:
 // out-of-scope) and one bucket per Phases entry, and each bucket's
 // layeredTopoSort result becomes that phase's final claim order.
 func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact, error) {

@@ -202,6 +202,36 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 	}
 }
 
+// A locked claim marked review_pending with NO active trigger — no open thread,
+// no drifted dependency, no pending flag — is the state left behind when a
+// drifted dependency is reverted, or an open thread is hand-resolved directly in
+// YAML. It must STILL surface the reaudit next-step: v0.1.2 printed the reaudit
+// hint for every locked+review_pending claim, and the trigger-partitioned
+// nextSteps must not let a triggerless one fall into no bucket and silently
+// vanish from the advisory.
+func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/locked.yaml": "id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+			"body: |\n  a locked claim, review_pending with no active trigger.\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+	})
+
+	res, err := check.Run(claims, cfg)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	want := "1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.locked)"
+	found := false
+	for _, h := range res.NextSteps {
+		if h == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("triggerless review_pending claim dropped from next-steps; expected %q, got %#v", want, res.NextSteps)
+	}
+}
+
 // A fully-locked module with no build-order artifact yet drives the
 // build-order propose next step and leaves OpenComments empty.
 func TestRun_FullyLockedBuildOrderHint(t *testing.T) {

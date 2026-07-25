@@ -213,6 +213,40 @@ func TestRenderInline_Links(t *testing.T) {
 			want: "[x](java\tscript:alert(1))",
 		},
 		{
+			// A scheme-less "//host" is a protocol-relative / network-path
+			// reference: it resolves against the PAGE's scheme to an arbitrary
+			// off-origin host, outside the documented relative-path/#fragment
+			// scope. It must be neutralized, not emitted as a live anchor.
+			name: "protocol-relative network-path neutralized",
+			in:   "[x](//evil.example)",
+			want: "[x](//evil.example)",
+		},
+		{
+			name: "protocol-relative with path neutralized",
+			in:   "see [x](//evil.example/a) end",
+			want: "see [x](//evil.example/a) end",
+		},
+		{
+			// Browsers normalize "\" to "/" in a URL's authority under a special
+			// (http/https) scheme, so "/\host" is just as off-origin as "//host".
+			name: "backslash network-path neutralized",
+			in:   `[x](/\evil.example)`,
+			want: `[x](/\evil.example)`,
+		},
+		{
+			name: "network-path with leading space neutralized",
+			in:   "[x]( //evil.example)",
+			want: "[x]( //evil.example)",
+		},
+		{
+			// A single leading slash is a root-relative (same-origin) path, not a
+			// network-path — it stays a live anchor (the rejection is scoped to
+			// "//host", it must not over-reject ordinary relative references).
+			name: "single-slash root-relative still resolves",
+			in:   "[x](/local/path)",
+			want: `<a href="/local/path">x</a>`,
+		},
+		{
 			name: "unclosed link no paren falls through",
 			in:   "[text](http://x",
 			want: "[text](http://x",

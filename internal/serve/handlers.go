@@ -39,6 +39,10 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		}
 		fmt.Fprintf(os.Stderr, "serve: GET /: render failed: %v\n", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		// The 500 error page is a self-contained HTML document too, so it MUST
+		// carry the same CSP as the 200 path — a broken override must never
+		// downgrade the page to one served without the policy.
+		w.Header().Set("Content-Security-Policy", cspValue)
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = io.WriteString(w, renderErrorPage(err))
 		return
@@ -221,24 +225,27 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------
 
 // handleStatus returns the check pipeline's Result as JSON so the viewer's
-// status strip can show lint health and open-comment counts. It reuses
-// internal/check.Run — the single source of truth the "dossierx check" command
-// also drives — rather than re-deriving the same data, and treats Run's
-// fail-fast error as data (a lint/scan failure is something to display, never a
-// reason to fail the endpoint). Claims are loaded fresh but NOT reconciled here
-// (a GET must not rewrite claim files); OpenComments and the lint partition are
-// exact regardless, and NextSteps is best-effort. Run does write .catalog.json
-// and viewer/index.html as "check" always has — that is the check writer, not
-// the GET / render pipeline, which stays in memory. (Phase 5's status polling
-// should cache this rather than re-run per request.)
+// status strip can show lint health and open-comment counts. It drives
+// internal/check.Status — the MEMORY-ONLY sibling of check.Run — so this read
+// endpoint computes the same lint partition, open-comment counts, and
+// next-steps advisory WITHOUT any of Run's disk writes: it never truncates
+// viewer/index.html or .catalog.json (os.WriteFile) and never runs the
+// per-request impl-link Scan that mutates link artifacts. That matters because
+// GET and HEAD are safe methods that skip the CSRF admission gates, so a
+// write-on-read here would let a bare, unauthenticated poll rewrite the viewer
+// on every request and race the GET / render pipeline mid-write; the disk
+// writers belong to "dossierx check" / serve startup, never a read handler.
+// Claims are loaded fresh but NOT reconciled (a GET must not rewrite claim
+// files); the lint partition and OpenComments are exact regardless, and
+// NextSteps is best-effort. A lint failure is data to display, not a reason to
+// fail the endpoint.
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
 	if err != nil {
 		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
 		return
 	}
-	res, _ := check.Run(claims, s.cfg)
-	writeJSON(w, http.StatusOK, statusToDTO(res))
+	writeJSON(w, http.StatusOK, statusToDTO(check.Status(claims, s.cfg)))
 }
 
 // ---------------------------------------------------------------------
