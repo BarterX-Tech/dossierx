@@ -108,6 +108,7 @@ func newRootCmd() *cobra.Command {
 		newReauditCmd(),
 		newBuildOrderCmd(),
 		newCommentCmd(),
+		newServeCmd(),
 		newFlagCmd(),
 		newImplinkCmd(),
 		newSkillsCmd(),
