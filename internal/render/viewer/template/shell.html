@@ -813,6 +813,10 @@
           if (body && body.dossierx === 'serve') {
             mounted = true;
             document.body.classList.add('comments-live');
+            // A confirmed live serve is the ONLY place live reload is wired: the
+            // EventSource needs a server behind the page. startLiveReload is
+            // idempotent and no-ops on a hook-less (marker-absent) shell.
+            startLiveReload();
             // If a panel was opened during the (brief) probe window, re-render it
             // now with the live controls.
             if (currentClaimID) { renderPanel(currentClaimID); }
@@ -821,6 +825,169 @@
           if (timer) { window.clearTimeout(timer); }
           // file:// or unreachable — swallow. Controls simply never mount.
         });
+      }
+
+      // ================================================================
+      // SSE live reload (Phase 5c) — fragment-swap without losing view state
+      // ================================================================
+      //
+      // Against a confirmed live serve the viewer opens an EventSource on
+      // /api/events and, on each "changed", re-fetches the two swap subtrees from
+      // /api/fragment and replaces <main class="content-area"> and <nav id="nav">
+      // in place, then re-runs the idempotent initViewer() against the fresh DOM.
+      //
+      // Crucially this is the RESTORE-VIEW path, deliberately SEPARATE from a
+      // deep-link jump: it re-applies the CURRENT module/facet from the hash but
+      // SKIPS showModuleFacet's scrollIntoView+highlight block, restores the
+      // reader's captured scroll position, and re-opens an open comment panel by
+      // its claim/thread id. Re-running the deep-link path on every server tick
+      // would yank the viewport out from under the reader — so it must not.
+      //
+      // The handler attaches ONLY when the effective shell carries the runtime
+      // marker: a hook-less shell.html override (marker absent) is served
+      // read-only and must not attempt live reload. To bound the HTTP/1.1
+      // six-connections-per-host limit across many open tabs, the stream is
+      // closed when the tab is hidden or unloading and reopened when it is shown.
+
+      var sse = null;               // the live EventSource, or null when closed
+      var liveReloadAttached = false;
+      var reloadInFlight = false;   // a fragment fetch + swap is running
+      var reloadPending = false;    // a "changed" arrived mid-swap; re-fetch after
+
+      // hasViewerRuntime mirrors render.ShellHasViewerRuntime on the client: the
+      // default shell tags <head> with the viewer-runtime marker <meta> (its
+      // content is "comments-sse"), and a custom shell.html override that drops
+      // that tag is served read-only. The client detects the tag by its CONTENT
+      // value on purpose — not by the name token the server scans for — so that
+      // marker string still occurs in exactly ONE place (the tag itself). If this
+      // check duplicated that token, the server's bytes.Contains scan would find
+      // it here too and never recognize a stripped-marker override as read-only.
+      function hasViewerRuntime() {
+        return !!document.querySelector('meta[content="comments-sse"]');
+      }
+
+      // startLiveReload wires the EventSource + tab-visibility lifecycle exactly
+      // once. It is called only from the probe success path, so it runs only
+      // against a confirmed live serve; it no-ops (read-only degradation) when the
+      // shell lacks the runtime marker or the browser has no EventSource. The
+      // comments-livereload body class records the attach DECISION synchronously
+      // (so a marker-absent shell is observably NOT wired), distinct from
+      // comments-sse-open which marks the stream actually connecting below.
+      function startLiveReload() {
+        if (liveReloadAttached) { return; }
+        if (!hasViewerRuntime()) { return; }              // hook-less override: no live reload
+        if (typeof window.EventSource !== 'function') { return; }
+        liveReloadAttached = true;
+        document.body.classList.add('comments-livereload');
+        openSSE();
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'hidden') { closeSSE(); } else { openSSE(); }
+        });
+        // pagehide fires on navigation-away / bfcache entry; drop the stream so a
+        // backgrounded page stops holding one of the six per-host connections.
+        window.addEventListener('pagehide', closeSSE);
+      }
+
+      function openSSE() {
+        if (sse) { return; }                              // already open (idempotent)
+        try {
+          sse = new EventSource('/api/events');
+        } catch (e) {
+          sse = null;
+          return;
+        }
+        // onopen marks the stream live only AFTER the server has registered this
+        // subscriber (handleEvents subscribes before writing its response head),
+        // so a change made once comments-sse-open is set is guaranteed delivered.
+        sse.onopen = function () {
+          document.body.classList.add('comments-sse-open');
+        };
+        sse.addEventListener('changed', function () { onServerChanged(); });
+        // EventSource reconnects transient drops itself (readyState CONNECTING);
+        // only a permanently CLOSED stream is nulled so a later visibility reopen
+        // can re-create it.
+        sse.onerror = function () {
+          if (sse && sse.readyState === EventSource.CLOSED) {
+            sse = null;
+            document.body.classList.remove('comments-sse-open');
+          }
+        };
+      }
+
+      function closeSSE() {
+        if (!sse) { return; }
+        try { sse.close(); } catch (e) { /* ignore */ }
+        sse = null;
+        document.body.classList.remove('comments-sse-open');
+      }
+
+      // onServerChanged fetches the fresh fragment and swaps it in. Overlapping
+      // "changed" events (rare — the watcher debounces and the hub channel is
+      // capacity-1) are coalesced into one in-flight swap plus at most one
+      // trailing re-fetch, so two events can never interleave two swaps.
+      function onServerChanged() {
+        if (reloadInFlight) { reloadPending = true; return; }
+        reloadInFlight = true;
+        apiGet('/api/fragment').then(function (frag) {
+          applyFragment(frag);
+        }).catch(function () {
+          // A failed fragment fetch (server briefly away mid-reload) leaves the
+          // current DOM intact; the next changed (or a manual refresh) recovers.
+        }).then(function () {
+          reloadInFlight = false;
+          if (reloadPending) { reloadPending = false; onServerChanged(); }
+        });
+      }
+
+      // applyFragment swaps the two subtrees and restores the view. ESCAPING
+      // CONTRACT: the outerHTML sinks below receive ONLY the server-rendered
+      // fragment from /api/fragment (frag.content / frag.nav) — the very same
+      // trusted HTML the initial page shipped, produced by the one server-side
+      // renderer — which is exactly the second permitted innerHTML-family value
+      // alongside an API body_html. No user-derived string is ever assigned here.
+      function applyFragment(frag) {
+        if (!frag || typeof frag.content !== 'string' || typeof frag.nav !== 'string') { return; }
+        var oldContent = document.querySelector('.content-area');
+        var oldNav = document.getElementById('nav');
+        if (!oldContent || !oldNav) { return; }
+
+        // ---- capture RESTORE-VIEW state BEFORE the swap ----
+        // The default desktop layout scrolls the WINDOW (the sidebar is sticky and
+        // .content-area is flex:1 with no overflow of its own), so the reader's
+        // scroll lives on the document; a template override or the mobile layout
+        // could scroll .content-area instead, so BOTH are captured and restored.
+        var savedWinScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var savedContentScroll = oldContent.scrollTop;
+        var reopenClaimID = commentPanelOpen() ? currentClaimID : null;
+
+        // ---- swap both subtrees (server fragment — a permitted sink) ----
+        oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
+        oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
+
+        // ---- re-point every lookup map at the fresh DOM ----
+        initViewer();
+
+        // ---- RESTORE view (NOT a deep-link jump) ----
+        // Re-apply the current module/facet from the hash, but pass NO claim in
+        // opts, so showModuleFacet's scrollIntoView+highlight block does not run
+        // and the viewport is not yanked. skipHash keeps the URL untouched.
+        var target = resolve(hashId());
+        showModuleFacet(target.module, target.facet, { skipHash: true });
+
+        // ---- restore the reader's scroll AFTER the active section is un-hidden
+        // above, so the document has regained its full height ----
+        var freshContent = document.querySelector('.content-area');
+        if (freshContent && savedContentScroll) { freshContent.scrollTop = savedContentScroll; }
+        if (savedWinScroll) { window.scrollTo(0, savedWinScroll); }
+
+        // ---- re-open the panel by (claim/thread) id. The panel node itself lives
+        // OUTSIDE the swapped subtree so it survived, but its chips were replaced,
+        // so re-mark the fresh chips expanded and refresh the thread list (which
+        // also picks up whatever change triggered this reload). ----
+        if (reopenClaimID) {
+          setChipExpanded(reopenClaimID, true);
+          renderPanel(reopenClaimID);
+        }
       }
 
       // ================================================================
