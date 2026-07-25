@@ -108,8 +108,15 @@ func LoadArtifact(path string) (*Artifact, error) {
 // that baseline — mirroring internal/lock.DetectStale (read-only re-check)
 // vs internal/lock.Lock (the only thing that writes a new baseline).
 //
-// A not-yet-locked artifact (a.Hashes empty) is never stale: staleness is
-// only meaningful relative to a hash baseline that Lock hasn't taken yet.
+// An UNLOCKED artifact (Lock has not run) is never stale: staleness is a
+// locked-artifact concept. The early-return keys on !a.Locked, NOT on an
+// empty a.Hashes: a module locked with ONLY out-of-scope claims has an empty
+// ClaimIDs(), so Lock snapshots an empty (omitempty-dropped) Hashes map even
+// though the artifact IS locked — keying on len(a.Hashes) would let such a
+// module silently escape every drift check below forever. A LOCKED artifact
+// of ANY shape (including all-out-of-scope) is subject to staleness; the
+// content-hash loop below still no-ops safely when a.Hashes is empty (its
+// `stored, known := a.Hashes[id]` guard skips ids it has no baseline for).
 //
 // Six independent drifts all count as staleness, so a frozen artifact can
 // never silently stop describing its module's real claim set — nor silently
@@ -134,13 +141,17 @@ func LoadArtifact(path string) (*Artifact, error) {
 //     (a.Excluded) no longer exists in the current claim set. Symmetric with
 //     covered deletion: leaving it unflagged would keep a phantom id in the
 //     "N excluded" count for a claim that's gone.
-//   - excluded-claim promotion — an id the artifact recorded as out-of-scope
-//     (a.Excluded) still exists but its CURRENT build_role now names a build
-//     phase (isKnownPhase, Propose's own phased-vs-excluded rule). Symmetric
-//     with the covered build_role change: a fresh propose would place it in a
-//     phase, a silently different order, yet neither the a.Phases loop (it was
-//     never a covered claim) nor the addition loop (a.Excluded ids are folded
-//     into the "already covered" set) would otherwise examine it at all.
+//   - excluded-claim reclassification — an id the artifact recorded as
+//     out-of-scope (a.Excluded) still exists but its CURRENT build_role is no
+//     longer the out-of-scope value, so a fresh propose would no longer
+//     classify it excluded — it would place it in a build phase (a silently
+//     different order) or ERROR on an empty or invalid/typo role. This mirrors
+//     Propose's sole excluded predicate (build_role == out-of-scope) EXACTLY,
+//     rather than only catching an in-phase role, so the loop cannot silently
+//     diverge from the covered build_role check, which flags the same drift.
+//     Symmetric with that covered case: neither the a.Phases loop (it was never
+//     a covered claim) nor the addition loop (a.Excluded ids are folded into
+//     the "already covered" set) would otherwise examine it at all.
 //   - addition — a claim now locked into this module that the frozen artifact
 //     neither placed in a phase (a.ClaimIDs()) nor recorded as excluded
 //     (a.Excluded). This was the actual FIX-12 bug: locking a brand-new claim
@@ -151,7 +162,10 @@ func LoadArtifact(path string) (*Artifact, error) {
 //     locked claims (symmetric with deletion: an artifact only ever exists
 //     once its module was fully locked).
 func recomputeStale(a *Artifact, claims []model.Claim) {
-	if len(a.Hashes) == 0 {
+	// Only a LOCKED artifact can be stale (see this function's doc comment).
+	// This must NOT key on len(a.Hashes): a locked all-out-of-scope module has
+	// an empty Hashes map yet is still subject to every drift check below.
+	if !a.Locked {
 		a.Stale = false
 		a.StaleIDs = nil
 		return
@@ -185,21 +199,26 @@ func recomputeStale(a *Artifact, claims []model.Claim) {
 		}
 	}
 
-	// Excluded-claim deletion + promotion — over the ids the artifact recorded
-	// as out-of-scope. Deletion (the id is gone) is symmetric with covered
-	// deletion. Promotion is symmetric with the covered build_role change: an
-	// excluded id that STILL exists but whose CURRENT build_role now names a
-	// build phase (isKnownPhase — Propose's own phased-vs-excluded rule) would
-	// be placed in a phase by a fresh propose, a silently different order, so it
-	// must flag stale. A claim that stayed out-of-scope stays unflagged here.
+	// Excluded-claim deletion + reclassification — over the ids the artifact
+	// recorded as out-of-scope. Deletion (the id is gone) is symmetric with
+	// covered deletion. Reclassification is symmetric with the covered
+	// build_role change and mirrors Propose EXACTLY: Propose classifies a claim
+	// excluded IFF its build_role == model.BuildRoleOutOfScope, so an excluded
+	// id that STILL exists but whose CURRENT build_role is no longer that value
+	// would no longer be classified excluded by a fresh propose — whether it
+	// now names a build phase (placed, a different order) or is empty/invalid
+	// (a fresh propose would ERROR). Comparing against the same out-of-scope
+	// constant Propose uses — rather than only flagging an in-phase role — keeps
+	// this loop from silently diverging from the covered path. A claim that
+	// stayed genuinely out-of-scope stays unflagged here.
 	for _, id := range a.Excluded {
 		c, ok := byID[id]
 		if !ok {
 			staleSet[id] = true // deletion of an excluded claim
 			continue
 		}
-		if isKnownPhase(c.BuildRole) {
-			staleSet[id] = true // promotion of an excluded claim into a build phase
+		if c.BuildRole != model.BuildRoleOutOfScope {
+			staleSet[id] = true // no longer classified excluded by Propose
 		}
 	}
 

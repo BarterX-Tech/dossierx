@@ -618,3 +618,310 @@ func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
 		t.Fatalf("expected locked=true after locking an orientation-note-bearing module")
 	}
 }
+
+// TestRecomputeStale_LockedAllOutOfScope_PromotedClaim_IsStale is the DEFECT-1
+// regression test (a): a module locked with ONLY out-of-scope claims has an
+// empty ClaimIDs(), so Lock snapshots an empty (omitempty-dropped) Hashes map
+// even though the artifact IS locked. recomputeStale used to early-return "not
+// stale" on len(a.Hashes)==0, which skipped every drift check for such a
+// module forever — so promoting one of its out-of-scope claims into a build
+// phase (a silently different order a fresh propose would honor) went
+// unnoticed. Staleness must run for any LOCKED artifact regardless of Hashes.
+func TestRecomputeStale_LockedAllOutOfScope_PromotedClaim_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
+		mc("widget.contract.futureB", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if len(a.Phases) != 0 {
+		t.Fatalf("expected an all-out-of-scope module to have no phases, got %+v", a.Phases)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	locked, err := Lock(path, claims)
+	if err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+	if !locked.Locked {
+		t.Fatalf("expected the all-out-of-scope module to lock")
+	}
+	if len(locked.Hashes) != 0 {
+		t.Fatalf("expected an empty hash snapshot for an all-out-of-scope module, got %v", locked.Hashes)
+	}
+
+	// Promote one out-of-scope claim into an in-phase build_role.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.futureA" {
+			mutated[i].BuildRole = model.BuildRoleSchema
+		}
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after promoting an out-of-scope claim in a locked all-out-of-scope module, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.futureA") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the promoted claim %q, got %v", "widget.contract.futureA", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_LockedAllOutOfScope_ExcludedDeleted_IsStale is the
+// DEFECT-1 regression test (b): deleting an excluded claim from a locked
+// all-out-of-scope module (empty Hashes) must surface as staleness. The old
+// len(a.Hashes)==0 early-return swallowed it, keeping a phantom id in the
+// excluded count for a claim that's gone.
+func TestRecomputeStale_LockedAllOutOfScope_ExcludedDeleted_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
+		mc("widget.contract.futureB", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Delete one of the excluded claims entirely.
+	remaining := []model.Claim{claims[0]}
+
+	st, err := Status(path, remaining)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true when an excluded claim is deleted from a locked all-out-of-scope module, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.futureB") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the deleted excluded claim %q, got %v", "widget.contract.futureB", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_LockedAllOutOfScope_FirstInPhaseAdded_IsStale is the
+// DEFECT-1 regression test (c): locking the FIRST in-phase claim into a module
+// that was locked as all-out-of-scope (empty Hashes) must surface as
+// staleness. The old early-return skipped the addition loop, so the frozen
+// artifact silently omitted the new claim from the (empty) order forever.
+func TestRecomputeStale_LockedAllOutOfScope_FirstInPhaseAdded_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
+		mc("widget.contract.futureB", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// A brand-new in-phase claim is locked into the (all-out-of-scope) module.
+	augmented := append(append([]model.Claim{}, claims...),
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema))
+
+	st, err := Status(path, augmented)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true when the first in-phase claim is added to a locked all-out-of-scope module, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.schema") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the newly added claim %q, got %v", "widget.contract.schema", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_LockedAllOutOfScope_Unchanged_NoFalsePositive guards the
+// DEFECT-1 fix: running staleness for a LOCKED all-out-of-scope module must not
+// false-positive when nothing has changed.
+func TestRecomputeStale_LockedAllOutOfScope_Unchanged_NoFalsePositive(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
+		mc("widget.contract.futureB", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	st, err := Status(path, claims)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Stale {
+		t.Fatalf("expected an unchanged locked all-out-of-scope module to stay non-stale, got stale_claim_ids=%v", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale is the DEFECT-2
+// regression test (empty role): the excluded loop used to flag stale only when
+// isKnownPhase(currentRole) was true, but Propose classifies a claim as
+// excluded IFF build_role == out-of-scope. An excluded claim edited to an empty
+// build_role is therefore no longer excluded (a fresh propose would ERROR on
+// it), yet the old loop left it stale:false — an asymmetric, silent divergence
+// from the covered path. It must flag stale.
+func TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Edit the excluded claim's build_role to empty (no longer excluded by
+	// Propose, which would now error on it). Covered claim left untouched so a
+	// non-empty Hashes proves this is the excluded-loop classification, not the
+	// DEFECT-1 guard, that surfaces the staleness.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.future" {
+			mutated[i].BuildRole = ""
+		}
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after editing an excluded claim's build_role to empty, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.future") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the reclassified claim %q, got %v", "widget.contract.future", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_ExcludedClaimEditedToInvalidRole_IsStale is the DEFECT-2
+// regression test (invalid/typo role): symmetric with the empty-role case, an
+// excluded claim edited to an invalid build_role is no longer classified
+// excluded by Propose (which would error on it), so it must flag stale rather
+// than silently staying stale:false.
+func TestRecomputeStale_ExcludedClaimEditedToInvalidRole_IsStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.future", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+	fixedNow(t, time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	if _, err := Lock(path, claims); err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+
+	// Edit the excluded claim's build_role to an invalid/typo value.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.future" {
+			mutated[i].BuildRole = model.BuildRole("scheema")
+		}
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if !st.Stale {
+		t.Fatalf("expected stale=true after editing an excluded claim's build_role to an invalid value, got %+v", st)
+	}
+	if indexOf(st.StaleIDs, "widget.contract.future") < 0 {
+		t.Fatalf("expected stale_claim_ids to include the reclassified claim %q, got %v", "widget.contract.future", st.StaleIDs)
+	}
+}
+
+// TestRecomputeStale_UnlockedProposedArtifact_NeverStale guards the DEFECT-1
+// invariant from the other side: an UNLOCKED (proposed-only) artifact is never
+// stale — staleness is a locked-artifact concept — even if a covered claim's
+// body has since changed. Keying the early-return on !a.Locked (not on
+// len(a.Hashes)) must not start flagging unlocked artifacts.
+func TestRecomputeStale_UnlockedProposedArtifact_NeverStale(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+
+	// Mutate a covered claim's body, but never Lock the artifact.
+	mutated := append([]model.Claim{}, claims...)
+	for i := range mutated {
+		if mutated[i].ID == "widget.contract.schema" {
+			mutated[i].Body = "changed before ever locking"
+		}
+	}
+
+	st, err := Status(path, mutated)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if st.Locked {
+		t.Fatalf("test setup error: artifact must be unlocked")
+	}
+	if st.Stale {
+		t.Fatalf("expected an unlocked proposed-only artifact to stay non-stale, got stale_claim_ids=%v", st.StaleIDs)
+	}
+}
