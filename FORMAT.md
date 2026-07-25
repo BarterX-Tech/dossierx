@@ -35,6 +35,23 @@ governed_by:
   reason: string                # required when type is "none"
 migrated_from: string           # optional provenance note
 order: int                      # optional, viewer-only display sequencing (see below)
+comments:                       # optional, engine-managed review threads — authored via `dossierx comment`, not by hand (see below)
+  - id: c-8f3a2b                # engine-generated: "c-" + 6 lowercase hex, unique within the file
+    status: open | resolved
+    author: human | agent       # role, not identity
+    created: 2026-07-24T10:12:00Z   # RFC 3339 UTC
+    body: markdown string
+    edited: bool                # true once the thread root has been edited
+    replies:                    # optional follow-ups
+      - id: r-4c9e11            # engine-generated: "r-" + 6 lowercase hex
+        author: human | agent
+        created: 2026-07-24T10:40:00Z
+        body: markdown string
+        edited: bool
+    resolved_by: human | agent  # optional, set when the thread is resolved
+    resolved_at: 2026-07-24T11:02:00Z   # optional, RFC 3339 UTC
+    reopened_by: human | agent  # optional, set when the thread is reopened
+    reopened_at: 2026-07-24T11:10:00Z   # optional, RFC 3339 UTC
 ```
 
 ### `id` grammar
@@ -86,6 +103,30 @@ to keep `.catalog.json` and lint diffs byte-deterministic across builds and
 must never be repurposed for display sequencing. `order` only reorders how
 a module/facet group's claims are laid out in the rendered viewer
 (`internal/render.orderClaims`); it does not exist in `.catalog.json`.
+
+### `comments`
+
+`comments` is optional, engine-managed review discussion attached to a claim —
+the threaded, Google-Docs-style "comments on claims" surface. Like
+`review_pending` and `audit_notes`, it is engine bookkeeping rather than
+authored claim content:
+
+- It is **excluded from a claim's content hash**, so commenting on a claim
+  never flips its dependents to `review_pending`.
+- The field is `omitempty`: a claim that has never been commented on is written
+  byte-for-byte as it was before this field existed.
+
+Do **not** hand-edit `comments`; author it through the `dossierx comment` verbs
+(`add` / `reply` / `resolve` / `reopen` / `edit` / `delete` / `list`), which
+take the project-wide claims lock, re-read the claim inside it, and write it
+back safely. Each thread and reply `id` is engine-generated (`c-`/`r-` followed
+by 6 lowercase hex, unique within the claim file); a hand-authored or legacy
+entry that omits its `id` is assigned one on the next engine write, so strict
+decoding never rejects it.
+
+`author`, `resolved_by`, and `reopened_by` record a **role** (`human` or
+`agent`), not an identity — the same axis as the CLI's `--as` flag. A banner
+(`layout: banner`) claim is decorative and cannot carry comment threads.
 
 ### `build_role` and the build/implementation order
 

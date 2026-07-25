@@ -8,8 +8,10 @@
 package loader
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -444,5 +446,155 @@ func TestLoadClaims_TableRowsPreserveAuthoredColumnOrder(t *testing.T) {
 		if got[j] != wantOrder[j] {
 			t.Fatalf("reloaded row 0 authored column order = %v, want %v", got, wantOrder)
 		}
+	}
+}
+
+// TestLoadClaims_CommentsRoundTrip proves a fully-populated comment thread
+// (id, status, author, created, body, edited, a reply with its own id, and
+// resolve metadata) survives LoadClaims -> SaveClaim -> LoadClaims unchanged.
+func TestLoadClaims_CommentsRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	src := `id: widget.contract.a
+facet: contract
+module: widget
+status: locked
+build_role: schema
+body: claim a
+comments:
+  - id: c-8f3a2b
+    status: resolved
+    author: human
+    created: 2026-07-24T10:12:00Z
+    body: |
+      This row contradicts the API facet — which is right?
+    edited: true
+    replies:
+      - id: r-4c9e11
+        author: agent
+        created: 2026-07-24T10:40:00Z
+        body: Fixed the rows; API facet was stale.
+        edited: false
+    resolved_by: human
+    resolved_at: 2026-07-24T11:02:00Z
+governed_by:
+  type: none
+  reason: fixture
+`
+	writeFile(t, dir, "a.yaml", src)
+
+	claims, err := LoadClaims(dir)
+	if err != nil {
+		t.Fatalf("LoadClaims: %v", err)
+	}
+	if len(claims) != 1 {
+		t.Fatalf("expected 1 claim, got %d", len(claims))
+	}
+	c := claims[0]
+	if len(c.Comments) != 1 {
+		t.Fatalf("expected 1 comment thread, got %d", len(c.Comments))
+	}
+	th := c.Comments[0]
+	if th.ID != "c-8f3a2b" || th.Status != model.CommentStatusResolved || th.Author != model.CommentRoleHuman {
+		t.Fatalf("thread header wrong: %+v", th)
+	}
+	if th.ResolvedBy != model.CommentRoleHuman || th.ResolvedAt != "2026-07-24T11:02:00Z" || !th.Edited {
+		t.Fatalf("thread resolve/edit metadata wrong: %+v", th)
+	}
+	if len(th.Replies) != 1 || th.Replies[0].ID != "r-4c9e11" || th.Replies[0].Author != model.CommentRoleAgent {
+		t.Fatalf("reply wrong: %+v", th.Replies)
+	}
+
+	// Save and reload: Comments must be identical.
+	if err := SaveClaim(c); err != nil {
+		t.Fatalf("SaveClaim: %v", err)
+	}
+	reloaded, err := LoadClaims(dir)
+	if err != nil {
+		t.Fatalf("LoadClaims after save: %v", err)
+	}
+	if !reflect.DeepEqual(reloaded[0].Comments, c.Comments) {
+		t.Fatalf("comments did not round-trip through SaveClaim:\n want %#v\n  got %#v", c.Comments, reloaded[0].Comments)
+	}
+}
+
+// TestSaveClaim_CommentFreeStaysByteIdentical is the omitempty byte-identity
+// guarantee: a claim that has never been commented on writes no comments: key,
+// and clearing every comment returns the file byte-for-byte to that
+// comment-free form (so adding the feature never rewrites an uncommented claim).
+func TestSaveClaim_CommentFreeStaysByteIdentical(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.yaml", "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nbody: claim a\ngoverned_by:\n  type: none\n  reason: fixture\n")
+	claims, err := LoadClaims(dir)
+	if err != nil {
+		t.Fatalf("LoadClaims: %v", err)
+	}
+	c := claims[0]
+
+	if err := SaveClaim(c); err != nil {
+		t.Fatalf("SaveClaim (comment-free): %v", err)
+	}
+	want, err := os.ReadFile(c.SourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(want, []byte("comments:")) {
+		t.Fatalf("a comment-free claim must not write a comments: key, got:\n%s", want)
+	}
+
+	// Add a comment: the key now appears.
+	c.Comments = []model.Comment{{ID: "c-000001", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-24T10:12:00Z", Body: "x"}}
+	if err := SaveClaim(c); err != nil {
+		t.Fatalf("SaveClaim (with comment): %v", err)
+	}
+	withC, err := os.ReadFile(c.SourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(withC, []byte("comments:")) {
+		t.Fatalf("expected a comments: key when a comment is present, got:\n%s", withC)
+	}
+
+	// Clear every comment (len-0 slice): omitempty drops the key again, byte-identical.
+	c.Comments = c.Comments[:0]
+	if err := SaveClaim(c); err != nil {
+		t.Fatalf("SaveClaim (comments cleared): %v", err)
+	}
+	got, err := os.ReadFile(c.SourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("clearing all comments must return the file byte-identical to the comment-free form\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+// TestLoadClaims_UnknownCommentField_StrictError proves KnownFields(true)
+// strict decode rejects a misspelled field INSIDE a comment, not just at the
+// top level — so the struct field + FORMAT.md schema doc must land together.
+func TestLoadClaims_UnknownCommentField_StrictError(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.yaml", `id: widget.contract.a
+facet: contract
+module: widget
+status: draft
+body: claim a
+comments:
+  - id: c-000001
+    status: open
+    author: human
+    created: 2026-07-24T10:12:00Z
+    body: x
+    edited: false
+    bodyy: misspelled
+governed_by:
+  type: none
+  reason: fixture
+`)
+	_, err := LoadClaims(dir)
+	if err == nil {
+		t.Fatal("expected a strict-decode error for an unknown comment field, got nil")
+	}
+	if !strings.Contains(err.Error(), "bodyy") {
+		t.Fatalf("expected the error to name the unknown field 'bodyy', got: %v", err)
 	}
 }

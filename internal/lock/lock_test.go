@@ -2,6 +2,8 @@ package lock
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -553,5 +555,106 @@ func TestMigrateLegacyStoreSkipsDraftClaims(t *testing.T) {
 	}
 	if changed {
 		t.Fatalf("expected changed=false when no locked claim has a dependency to re-arm")
+	}
+}
+
+// TestContentHash_ExcludesComments is the Blocking #6 regression: ContentHash
+// hashes an explicit content allowlist that does NOT include Comments, so
+// every comment op leaves a claim's content hash byte-identical. This proves
+// the exclusion by construction — there is intentionally no comment-exclusion
+// code anywhere; this test is what guards it.
+func TestContentHash_ExcludesComments(t *testing.T) {
+	base := model.Claim{
+		ID:     "widget.contract.a",
+		Facet:  "contract",
+		Module: "widget",
+		Status: model.StatusLocked,
+		Body:   "the claim body",
+	}
+	want := ContentHash(base)
+
+	// Every mutation a comment op can make: add a thread, add a reply,
+	// resolve, reopen, edit, and set review_pending — none may change the hash.
+	withComments := base
+	withComments.Comments = []model.Comment{
+		{
+			ID:         "c-8f3a2b",
+			Status:     model.CommentStatusResolved,
+			Author:     model.CommentRoleHuman,
+			Created:    "2026-07-24T10:12:00Z",
+			Body:       "hostile: colons: --- and \"quotes\"",
+			Edited:     true,
+			Replies:    []model.Reply{{ID: "r-4c9e11", Author: model.CommentRoleAgent, Created: "2026-07-24T10:40:00Z", Body: "reply body", Edited: false}},
+			ResolvedBy: model.CommentRoleHuman,
+			ResolvedAt: "2026-07-24T11:02:00Z",
+			ReopenedBy: model.CommentRoleAgent,
+			ReopenedAt: "2026-07-24T11:10:00Z",
+		},
+	}
+	withComments.ReviewPending = true
+	if got := ContentHash(withComments); got != want {
+		t.Fatalf("ContentHash changed when comments/review_pending were added:\n got %s\nwant %s", got, want)
+	}
+}
+
+// TestDetectStale_CommentOnDependencyDoesNotFlip proves a locked dependent
+// claim is NOT flipped to review_pending merely because a claim it rests on
+// gained a comment thread: since ContentHash excludes Comments, the dependency
+// baseline still matches after the comment is added.
+func TestDetectStale_CommentOnDependencyDoesNotFlip(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep body"}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	claims := []model.Claim{dependent, dep}
+
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	store.recordBaseline(dependent.ID, dep.ID, ContentHash(dep))
+
+	// The dependency gains an open comment thread.
+	claims[1].Comments = []model.Comment{{ID: "c-000001", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-24T10:12:00Z", Body: "q"}}
+
+	out := DetectStale(claims, store)
+	for _, c := range out {
+		if c.ID == dependent.ID && c.ReviewPending {
+			t.Fatalf("dependent claim was flipped to review_pending by a comment on its dependency")
+		}
+	}
+}
+
+// TestClaimsSentinelPath_OutsideClaimsDir proves the claims sentinel lives
+// under cfg.Dir() and outside claims_dir, and that AcquireClaimsLock creates
+// then removes the .lock file.
+func TestClaimsSentinelPath_OutsideClaimsDir(t *testing.T) {
+	root := t.TempDir()
+	claimsDir := root + "/claims"
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+	if err := os.WriteFile(root+"/project.config.yaml", []byte(cfgYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig(root + "/project.config.yaml")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	base := ClaimsSentinelPath(cfg)
+	if got := base; got != filepath.Join(cfg.Dir(), ".dossierx-claims") {
+		t.Fatalf("ClaimsSentinelPath = %q, want %q", got, filepath.Join(cfg.Dir(), ".dossierx-claims"))
+	}
+	if strings.HasPrefix(base, cfg.ClaimsDir+string(filepath.Separator)) {
+		t.Fatalf("claims sentinel %q must live OUTSIDE claims_dir %q", base, cfg.ClaimsDir)
+	}
+
+	release, err := AcquireClaimsLock(cfg)
+	if err != nil {
+		t.Fatalf("AcquireClaimsLock: %v", err)
+	}
+	if _, err := os.Stat(base + ".lock"); err != nil {
+		t.Fatalf("expected sentinel lock file to exist while held: %v", err)
+	}
+	release()
+	if _, err := os.Stat(base + ".lock"); !os.IsNotExist(err) {
+		t.Fatalf("expected sentinel lock file to be removed after release, stat err = %v", err)
 	}
 }

@@ -283,8 +283,13 @@ func storePath(cfg *config.Config) string {
 // is always claims -> lock-store -> flag-store and no AB-BA deadlock is
 // possible. The critical section is bounded to load->mutate->SaveClaim;
 // render/catalog/scan work runs after it is released.
+//
+// The path is defined once, in internal/lock.ClaimsSentinelPath, and delegated
+// to here: internal/comments' CLI/serve ops (which cannot import package main)
+// take the very same sentinel through lock.AcquireClaimsLock, so there is a
+// single source of truth for which file every claim-file writer serializes on.
 func claimsSentinelPath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".dossierx-claims")
+	return lock.ClaimsSentinelPath(cfg)
 }
 
 // loadStoreForRead loads the lock content-hash store for a read-mostly command

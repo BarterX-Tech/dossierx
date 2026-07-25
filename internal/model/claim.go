@@ -342,6 +342,20 @@ type Claim struct {
 	// does not include it (same reasoning as ReviewPending).
 	AuditNotes []string `yaml:"audit_notes,omitempty"`
 
+	// Comments is engine-managed review discussion attached to this claim —
+	// the threaded, Google-Docs-style "comments on claims" feature (see
+	// model.Comment and internal/comments). It is bookkeeping about the
+	// claim, not comparable content, so internal/lock.ContentHash
+	// deliberately excludes it — commenting on a claim never flips its
+	// dependents to review_pending — exactly like ReviewPending and
+	// AuditNotes above. The `omitempty` tag is load-bearing: a claim that
+	// has never been commented on serializes byte-for-byte as it did before
+	// this field existed, so adding the feature does not rewrite every
+	// existing claim file. An unresolved (open) thread is a lock gate (a
+	// claim cannot lock while it carries one) and, on an already-locked
+	// claim, a review_pending trigger — see OpenThreadIDs/HasOpenThreads.
+	Comments []Comment `yaml:"comments,omitempty"`
+
 	// SourcePath is the filesystem path the claim was loaded from. It is
 	// populated by the claim loader (not part of the YAML schema itself)
 	// and is used by internal/lock to write edits back to the right file.
