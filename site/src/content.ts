@@ -19,6 +19,7 @@ export type SectionKind =
   | "narrative"
   | "model-diagram"
   | "lifecycle-diagram"
+  | "comments-workflow"
   | "build-order-diagram"
   | "cli-explorer"
   | "timeline"
@@ -45,12 +46,13 @@ export interface ContentSpec {
 export const contentSpec: ContentSpec = {
   siteTitle: "DossierX",
   tagline:
-    "Turn system facts into reviewable YAML claims. DossierX checks them in CI, links them to code, and flags drift before stale documentation becomes trusted truth.",
+    "Turn system facts into reviewable YAML claims. DossierX checks them in CI, links them to code, opens threaded review comments on any claim, and flags drift before stale documentation becomes trusted truth.",
   nav: [
     { id: "hero", label: "Overview" },
     { id: "philosophy", label: "Why" },
     { id: "claims", label: "Claims" },
     { id: "lifecycle", label: "Lifecycle" },
+    { id: "comments", label: "Comments" },
     { id: "build-order", label: "Build Order" },
     { id: "code-links", label: "Code Links" },
     { id: "cli", label: "CLI" },
@@ -63,15 +65,15 @@ export const contentSpec: ContentSpec = {
       title: "Documentation that makes drift impossible to miss.",
       kind: "hero",
       contentMd:
-        "**DossierX** is a config-driven Go CLI that turns a directory of atomic YAML **claims** — one reviewable fact each — into a linted, validated, human-reviewable HTML documentation site, governed by a lock / review_pending / reaudit lifecycle.\n\nIt treats docs like source-controlled assertions, not free-form prose. Every statement is atomic, validated by a linter, reviewed and locked by a human, and protected by an audit trail so it can never silently drift out of truth.\n\nCLI-only by design. No exported Go API. The only project-specific input the engine ever reads is your `project.config.yaml` — point the same binary at any project's config and it becomes that project's documentation engine.",
+        "**DossierX** is a config-driven Go CLI that turns a directory of atomic YAML **claims** — one reviewable fact each — into a linted, validated, human-reviewable HTML documentation site, governed by a lock / review_pending / reaudit lifecycle.\n\nIt treats docs like source-controlled assertions, not free-form prose. Every statement is atomic, validated by a linter, reviewed and locked by a human, and protected by an audit trail so it can never silently drift out of truth.\n\nReview happens on the claims themselves: threaded comments attach to any claim, a human and an agent talk it out, and an unresolved thread blocks the claim from locking. Open `dossierx serve` for a live, localhost-only viewer where a reviewer resolves threads in the browser while the agent works from the CLI.\n\nCLI-first by design. No public API. The only project-specific input the engine ever reads is your `project.config.yaml` — point the same binary at any project's config and it becomes that project's documentation engine.",
       data: {
         pitchLine:
-          "A config-driven CLI that turns YAML 'claims' into a linted, validated, human-reviewable HTML documentation site, with an audit trail via a lock/lint/reaudit lifecycle.",
+          "A config-driven CLI that turns YAML 'claims' into a linted, validated, human-reviewable HTML documentation site, with threaded review comments and an audit trail via a lock / review_pending / reaudit lifecycle.",
         badges: [
           "Go 1.26",
           "cobra + yaml.v3 only",
-          "CLI-only, no public API",
-          "v0.1.2",
+          "CLI-first, no public API",
+          "v0.2.0",
           "github.com/BarterX-Tech/dossierx",
         ],
         pipeline: ["lint", "catalog", "render", "check"],
@@ -89,7 +91,7 @@ export const contentSpec: ContentSpec = {
       title: "Ordinary docs rot silently. This exists to stop that.",
       kind: "narrative",
       contentMd:
-        "Markdown folders, ADRs, and wikis fail in the same way: prose can become wrong without producing a machine-readable signal. DossierX replaces page-level trust with atomic facts that can be linted, reviewed, locked, and flagged when their dependencies or implementing code move.\n\nIt began as internal tooling inside a private, multi-module production app that had been burned by silent documentation drift. The public tool keeps the proven claim schema, `lint → catalog → render → check` pipeline, lifecycle, build ordering, and code linking while taking all project-specific structure from `project.config.yaml`.\n\nThe same claim boundary serves two readers: humans get a coherent reviewable site; coding agents can load only the locked facts relevant to the work at hand. Three embedded skills teach agents how to author claims, derive build order, and link finished code back to its specification.",
+        "Markdown folders, ADRs, and wikis fail in the same way: prose can become wrong without producing a machine-readable signal. DossierX replaces page-level trust with atomic facts that can be linted, reviewed, locked, and flagged when their dependencies or implementing code move.\n\nIt began as internal tooling inside a private, multi-module production app that had been burned by silent documentation drift. The public tool keeps the proven claim schema, `lint → catalog → render → check` pipeline, lifecycle, build ordering, and code linking while taking all project-specific structure from `project.config.yaml`.\n\nThe same claim boundary serves two readers: humans get a coherent reviewable site; coding agents can load only the locked facts relevant to the work at hand. Four embedded skills teach agents how to author claims, derive build order, link finished code back to its specification, and review claims with threaded comments.",
       data: {
         principles: [
           {
@@ -181,7 +183,7 @@ export const contentSpec: ContentSpec = {
         engineManagedFields: [
           {
             name: "review_pending",
-            desc: "set true by internal/lock when a rests_on target's content hash drifts under a locked claim; cleared only by a confirmed reaudit --confirm",
+            desc: "set on a locked claim by any of three triggers — a rests_on/mirrors target's content hash drifts, an agent runs dossierx flag, or an open comment thread — and cleared by a confirmed reaudit --confirm, an unlock, or resolving the last open thread once no other trigger stands",
           },
           {
             name: "audit_notes",
@@ -216,7 +218,7 @@ export const contentSpec: ContentSpec = {
       title: "Lock, drift, reaudit — the trust mechanism.",
       kind: "lifecycle-diagram",
       contentMd:
-        "A locked claim is a **trust assertion**: a human reviewed it, lint passed, and other claims may safely depend on it. If a dependency hash changes—or an agent reports that code changed meaning—the claim stays locked but becomes visibly `review_pending`.\n\nDetection can only raise the flag. Clearing it requires `reaudit --confirm`, which presents the proposed change before writing, records the audit, refreshes the baseline, and restores the locked state. Drift becomes loud; re-approval stays deliberate.",
+        "A locked claim is a **trust assertion**: a human reviewed it, lint passed, and other claims may safely depend on it. Three things can flag it `review_pending` without unlocking it: a dependency's content hash drifts, an agent reports that code changed meaning via `dossierx flag`, or someone opens a comment thread on it.\n\nEach trigger has its own clearer. Drift and flags clear through `reaudit --confirm`, which presents the proposed change before writing, records the audit, and refreshes the baseline. A comment trigger clears when the last open thread is resolved — unless drift or a flag also stands. And `unlock` clears any of them by returning the claim to draft. Drift and open discussion become loud; re-approval stays deliberate.",
       data: {
         states: [
           {
@@ -255,20 +257,105 @@ export const contentSpec: ContentSpec = {
             note: "Agent asserts code drifted. Requires --claim-says --now-does --reason, all non-empty. Locked-only.",
           },
           {
+            from: "locked",
+            to: "review_pending",
+            trigger: "dossierx comment add <id>",
+            note: "A new open comment thread flags a locked claim for review — a legal, long-lived state. (A claim cannot lock in the first place while it has an unresolved thread.)",
+          },
+          {
             from: "review_pending",
             to: "locked",
             trigger: "dossierx reaudit <id> --confirm",
-            note: "The ONLY way to clear the flag. Prints diff first; writes only on --confirm. Appends audit_notes.",
+            note: "Clears a drift- or flag-triggered review. Prints the diff first; writes only on --confirm; appends audit_notes. Refuses a comment-only review_pending (nothing to diff).",
+          },
+          {
+            from: "review_pending",
+            to: "locked",
+            trigger: "dossierx comment resolve <id> <tid>",
+            note: "Resolving (or deleting) the last open thread clears review_pending — but only when no dependency drift or flag also stands, else the flag is retained with a printed reason.",
           },
           {
             from: "locked",
             to: "draft",
             trigger: "dossierx unlock <id>",
-            note: "Manual escape hatch. No lint gate — you may need to unlock precisely to fix what lint complains about.",
+            note: "Manual escape hatch, and a third clearer: returning a claim to draft drops review_pending. No lint gate — you may need to unlock precisely to fix what lint complains about.",
           },
         ],
         invariant:
-          "A locked claim's Status never reverts to draft on its own; review_pending is the only automatic transition, and it is one-directional until a human confirms a reaudit.",
+          "A locked claim's Status never reverts to draft on its own. review_pending has three triggers (dependency drift, dossierx flag, an open comment thread) and three clearers (reaudit --confirm, resolving the last open thread, unlock); a locked claim is one-directional back to trusted until one of those clearers runs.",
+      },
+    },
+    {
+      id: "comments",
+      title: "Review with comments — resolve every thread before locking.",
+      kind: "comments-workflow",
+      contentMd:
+        "Comments are engine-managed review discussion attached to a claim — the same idea as `audit_notes`, but a conversation. A reviewer opens a thread on a claim's card; a human and an agent talk it through; the thread is resolved. Until it is, the claim **cannot lock**, and an open thread on an already-locked claim flips it to `review_pending`.\n\nThe write path is `dossierx serve`: a localhost-only viewer with a live thread panel and composer. Agents mutate through the CLI, so the shared claims lock keeps a live reviewer and a working agent from clobbering each other. Bodies live in the claim YAML, excluded from its content hash, rendered through the same safe markdown the viewer already uses.",
+      data: {
+        roles: [
+          { id: "human", label: "human" },
+          { id: "agent", label: "agent" },
+          { id: "engine", label: "engine" },
+        ],
+        workflow: [
+          {
+            role: "human",
+            title: "Open a thread",
+            body: "A reviewer reads the claim in dossierx serve and opens a comment on its card: “This row contradicts the API facet — which is right?”",
+          },
+          {
+            role: "agent",
+            title: "Reply and fix",
+            body: "The agent investigates, edits the claim, and replies “Fixed the rows; API facet was stale.” It never resolves a human’s thread — it addresses and asks for confirmation.",
+          },
+          {
+            role: "human",
+            title: "Resolve",
+            body: "Satisfied, the reviewer resolves the thread. Advisory rights: a human-opened thread is resolved only by a human; an agent-opened one by either.",
+          },
+          {
+            role: "engine",
+            title: "Lock is gated",
+            body: "dossierx lock refuses any claim that still has an open thread and names the ids — the gate that makes “resolve before locking” a real rule, not a convention.",
+          },
+          {
+            role: "engine",
+            title: "review_pending on a locked claim",
+            body: "Open a thread on an already-locked claim and it flips to review_pending — a legal, long-lived state, surfaced by dossierx stale and dossierx check next-steps.",
+          },
+          {
+            role: "engine",
+            title: "Resolve to clear",
+            body: "Resolving (or deleting) the last open thread clears review_pending — unless dependency drift or a flag also stands, in which case it prints why the flag is retained.",
+          },
+        ],
+        card: {
+          id: "logger.internals.event-envelope-fields",
+          module: "logger",
+          facet: "internals",
+          status: "draft",
+          panelTitle: "Comments",
+          thread: {
+            id: "c-8f3a2b",
+            role: "human",
+            status: "open",
+            created: "2026-07-24 · 10:12",
+            body: "This row contradicts the API facet — which is right?",
+            replies: [
+              {
+                id: "r-4c9e11",
+                role: "agent",
+                created: "2026-07-24 · 10:40",
+                body: "Fixed the rows; API facet was stale.",
+              },
+            ],
+          },
+          resolvedCount: 1,
+        },
+        terminal: {
+          lang: "bash",
+          code: '$ dossierx serve\nserving: http://127.0.0.1:52431/\n\n# in another shell: the open threads an agent must clear before it can lock\n$ dossierx comment list logger.internals.event-envelope-fields --open\nc-8f3a2b open human 2026-07-24T10:12:00Z replies=1: This row contradicts the API facet — which is right?\n\n$ dossierx lock logger.internals.event-envelope-fields\nlock: refused, claim "logger.internals.event-envelope-fields" has 1 unresolved comment thread(s) [c-8f3a2b] — resolve them first, e.g. "dossierx comment resolve logger.internals.event-envelope-fields c-8f3a2b"',
+        },
       },
     },
     {
@@ -371,10 +458,10 @@ export const contentSpec: ContentSpec = {
     },
     {
       id: "cli",
-      title: "The CLI — 18 commands, zero hardcoded project.",
+      title: "The CLI — 26 commands, zero hardcoded project.",
       kind: "cli-explorer",
       contentMd:
-        "One binary serves any project through `project.config.yaml`, discovered from the working tree or supplied with `--config`. Use the explorer below for the full command surface; `check` is the CI entry point that detects drift, validates claims, renders the viewer, and verifies code links.",
+        "One binary serves any project through `project.config.yaml`, discovered from the working tree or supplied with `--config`. Use the explorer below for the full command surface; `check` is the CI entry point that detects drift, validates claims, renders the viewer, and verifies code links, while the `comment` group and `serve` add threaded review on top of it.",
       data: {
         groups: [
           {
@@ -453,11 +540,11 @@ export const contentSpec: ContentSpec = {
                 name: "reaudit",
                 usage: "dossierx reaudit <id> [--confirm]",
                 summary:
-                  "The single confirm-before-write gate for a review_pending claim.",
+                  "The confirm-before-write gate for a drift- or flag-triggered review_pending claim.",
                 detail:
-                  "Only valid on locked+review_pending (else exit 2). Prints the proposed diff and stops unless --confirm. Two sources converge: a flagged claim gets a real before/after diff (ProposeFlagDiff); any other gets a dependency-drift stub (ProposeDiff). On confirm: applies, appends audit_notes, re-baselines hashes, clears the flag.",
+                  "Valid on a locked claim whose review_pending came from dependency drift or a flag (else exit 2). A review_pending that is only from an open comment thread is refused — a comment carries no proposed content change to diff, so reaudit points you at dossierx comment resolve instead. Prints the proposed diff and stops unless --confirm. Two sources converge: a flagged claim gets a real before/after diff (ProposeFlagDiff); a drifted one gets a dependency-drift stub (ProposeDiff). On confirm: applies, appends audit_notes, re-baselines hashes, clears the flag — but leaves review_pending set if an open thread still stands.",
                 example:
-                  "$ dossierx reaudit logger.internals.dispatch\nreaudit: not applied (pass --confirm to apply)\n$ dossierx reaudit logger.internals.dispatch --confirm\nreaudit: applied, review_pending cleared",
+                  '$ dossierx reaudit logger.internals.dispatch --confirm\nreaudit: applied, review_pending cleared\n$ dossierx reaudit logger.contract.api-surface\nreaudit: claim "logger.contract.api-surface" is review_pending only because of 1 open comment thread(s); resolve them with "dossierx comment resolve ..." — nothing to reaudit',
               },
               {
                 name: "flag",
@@ -469,6 +556,90 @@ export const contentSpec: ContentSpec = {
                   "All three flags required and non-empty. Only a LOCKED claim can be flagged. Writes a one-shot PendingFlag to .dossierx-flag-store.json and sets review_pending=true.",
                 example:
                   '$ dossierx flag logger.internals.dispatch \\\n  --claim-says "dispatch is synchronous" \\\n  --now-does   "dispatch runs on a worker pool" \\\n  --reason     "concurrency added in PR #42"',
+              },
+            ],
+          },
+          {
+            group: "comments & serve",
+            commands: [
+              {
+                name: "serve",
+                usage: "dossierx serve [--port <n>]",
+                summary:
+                  "Serve the claims viewer with a localhost-only comment write-back API.",
+                detail:
+                  "Binds 127.0.0.1 on a random high port (override with --port), renders the viewer from memory, and exposes the same comment operations as the CLI over a same-origin JSON API — so a reviewer opens, replies to, and resolves threads in the browser while an agent works from the CLI. Every request passes Host + Origin admission checks (DNS-rebinding and CSRF defense) and no CORS header is ever sent; the page live-reloads over server-sent events as claim files change on disk. It renders to memory only — never writing viewer/index.html or .catalog.json on a page load — and every claim write goes through the one claims-locked code path, so browser and CLI never clobber each other.",
+                example:
+                  "$ dossierx serve\nserving: http://127.0.0.1:52431/",
+              },
+              {
+                name: "comment add",
+                usage:
+                  'dossierx comment add <claim-id> --as human|agent --body "…"',
+                summary: "Open a new comment thread on a claim.",
+                detail:
+                  "Mints an engine-generated thread id and echoes it so you can chain the next verb. --as records the author role (human or agent), not an identity. A draft claim with an open thread cannot lock; opening a thread on a locked claim sets review_pending. Refused on banner-layout claims (they render no viewer footer to hold a thread).",
+                example:
+                  '$ dossierx comment add logger.internals.event-envelope-fields --as human --body "This row contradicts the API facet"\ncomment: c-8f3a2b added on logger.internals.event-envelope-fields; run "dossierx check" or "dossierx serve" to view',
+              },
+              {
+                name: "comment reply",
+                usage:
+                  'dossierx comment reply <claim-id> <thread-id> --as human|agent --body "…"',
+                summary: "Reply to an open thread.",
+                detail:
+                  "Addressed by the engine-generated reply id it echoes, never by ordinal position. Replying to an already-resolved thread is refused.",
+                example:
+                  '$ dossierx comment reply logger.internals.event-envelope-fields c-8f3a2b --as agent --body "Fixed the rows; API facet was stale."\ncomment: reply r-4c9e11 added to thread c-8f3a2b on logger.internals.event-envelope-fields; run "dossierx check" or "dossierx serve" to view',
+              },
+              {
+                name: "comment resolve",
+                usage:
+                  "dossierx comment resolve <claim-id> <thread-id> --as human|agent",
+                summary: "Mark a thread resolved (advisory rights apply).",
+                detail:
+                  'A human-opened thread can be resolved only with --as human; an agent-opened one by either. Resolving the last open thread clears review_pending — but only if no dependency drift or flag also stands, otherwise it prints why the flag is retained. An agent should reply "addressed, please confirm" rather than resolve a human thread.',
+                example:
+                  '$ dossierx comment resolve logger.internals.event-envelope-fields c-8f3a2b --as human\ncomment: thread c-8f3a2b resolved on logger.internals.event-envelope-fields; run "dossierx check" or "dossierx serve" to view',
+              },
+              {
+                name: "comment reopen",
+                usage:
+                  "dossierx comment reopen <claim-id> <thread-id> --as human|agent",
+                summary: "Reopen a resolved thread.",
+                detail:
+                  "Re-sets review_pending on a locked claim. Same advisory rights as resolve — an agent may not reopen a human-resolved human thread.",
+                example:
+                  '$ dossierx comment reopen logger.internals.event-envelope-fields c-8f3a2b --as human\ncomment: thread c-8f3a2b reopened on logger.internals.event-envelope-fields; run "dossierx check" or "dossierx serve" to view',
+              },
+              {
+                name: "comment edit",
+                usage:
+                  'dossierx comment edit <claim-id> <thread-id> [--reply <reply-id>] --as … --body "…"',
+                summary: "Edit a thread root's body, or a reply's with --reply.",
+                detail:
+                  'Rights key off the author of the edited message (own-role only). Sets edited: true, which the viewer shows as an "(edited)" marker. --reply targets one reply by id; without it, the thread root.',
+                example:
+                  '$ dossierx comment edit logger.internals.event-envelope-fields c-8f3a2b --as human --body "This row contradicts the API facet — which wins?"\ncomment: thread c-8f3a2b edited on logger.internals.event-envelope-fields; run "dossierx check" or "dossierx serve" to view',
+              },
+              {
+                name: "comment delete",
+                usage:
+                  "dossierx comment delete <claim-id> <thread-id> [--reply <reply-id>] --as …",
+                summary: "Delete a whole thread, or one reply with --reply.",
+                detail:
+                  "Own-role only. Deleting the last open thread clears review_pending under the same no-other-trigger rule as resolve.",
+                example:
+                  '$ dossierx comment delete logger.internals.event-envelope-fields c-8f3a2b --as human\ncomment: thread c-8f3a2b deleted on logger.internals.event-envelope-fields; run "dossierx check" or "dossierx serve" to view',
+              },
+              {
+                name: "comment list",
+                usage: "dossierx comment list <claim-id> [--open] [--json]",
+                summary: "List a claim's threads, one greppable line each.",
+                detail:
+                  "Pinned one-line-per-thread format: <thread-id> <status> <author> <created> replies=<N>: <first-line-of-body> — a stable contract the skill, this site, and a golden test all reproduce. --open filters to unresolved threads; --json emits a top-level array (stdout stays pure JSON, the human hint goes to stderr).",
+                example:
+                  "$ dossierx comment list logger.internals.event-envelope-fields --open\nc-8f3a2b open human 2026-07-24T10:12:00Z replies=1: This row contradicts the API facet",
               },
             ],
           },
@@ -500,7 +671,7 @@ export const contentSpec: ContentSpec = {
                 detail:
                   "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
                 example:
-                  "$ dossierx version\ndossierx v0.1.2\n  commit: 71eecf9\n  date:   2026-07-25",
+                  "$ dossierx version\ndossierx v0.2.0\n  commit: e5c8ab1\n  date:   2026-07-25",
               },
             ],
           },
@@ -567,11 +738,11 @@ export const contentSpec: ContentSpec = {
                 name: "skills export",
                 usage: "dossierx skills export <dir>",
                 summary:
-                  "Write the binary's three embedded Claude Code skills to <dir>.",
+                  "Write the binary's four embedded Claude Code skills to <dir>.",
                 detail:
-                  "Walks the embedded skills/ FS (dossierx-claims, dossierx-build-order, dossierx-code-links), preserves layout, creates parent dirs, overwrites existing files.",
+                  "Walks the embedded skills/ FS (dossierx-claims, dossierx-build-order, dossierx-code-links, dossierx-comments), preserves layout, creates parent dirs, overwrites existing files. Projects that exported the old three bundles must re-export to pick up dossierx-comments.",
                 example:
-                  "$ dossierx skills export ./.claude/skills\nskills export: wrote 3 file(s) to ./.claude/skills",
+                  "$ dossierx skills export ./.claude/skills\nskills export: wrote 4 file(s) to ./.claude/skills",
               },
             ],
           },
@@ -587,7 +758,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.1.2** — see the full history below for what's shipped since the engine's public extraction.",
+        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.2.0**, which adds threaded review comments and `dossierx serve` — see the full history below for what's shipped since the engine's public extraction.",
       data: {
         releases: [
           {
@@ -654,7 +825,7 @@ export const contentSpec: ContentSpec = {
             version: "v0.1.2",
             date: "2026-07-25",
             title: "Consolidated audit-fix release",
-            tag: "Latest release",
+            tag: "Previous release",
             highlights: [
               "A deep audit against a real 202-claim consumer project found 25 confirmed defects, fixed together as one patch rather than a stream of point releases.",
               "Markdown [text](url) links now render as anchors in claim bodies AND structured table cells (scheme-allowlisted; javascript:/data: neutralized); backtick code spans render in cells too.",
@@ -662,6 +833,19 @@ export const contentSpec: ContentSpec = {
               "Security: the raw_html mockup gate is now default-deny across every attribute quote form (control-char and entity evasions closed) and enforced by render and catalog, not just lock.",
               "Build-order staleness is now structural — status re-derives the order a fresh propose would compute and flags any divergence (reordered, re-roled, promoted, renamed, added, or deleted claims); the Build Order viewer section is visible; new dossierx version command; lint --json emits valid arrays.",
               "Patch bump despite new capabilities: internal/ is not importable, no breaking CLI changes, and the lock-store migrates automatically.",
+            ],
+          },
+          {
+            version: "v0.2.0",
+            date: "2026-07-25",
+            title: "Comments on claims — review, discuss, resolve before locking",
+            tag: "Latest release",
+            highlights: [
+              "Threaded, Google-Docs-style review comments attach to any claim: a new dossierx comment group (add / reply / resolve / reopen / edit / delete / list) with an --as human|agent actor, engine-minted thread and reply ids, and a pinned, greppable list format.",
+              "An open comment thread is a third review_pending trigger alongside dependency drift and dossierx flag: a claim cannot lock while it has an unresolved thread (dossierx build-order propose refuses such a module too), and resolving the last open thread clears review_pending unless drift or a flag also stands. reaudit refuses a comment-only review_pending — there is no content diff to confirm.",
+              "New dossierx serve: a localhost-only HTTP viewer with an interactive thread panel and composer, a same-origin admission layer (Host/Origin checks, no CORS), and live reload over server-sent events as claim files change on disk. It renders from memory and never writes viewer/index.html or .catalog.json on a page load.",
+              "Adds NO new runtime dependency — the file watcher is a standard-library modification-time poll, so the runtime stays cobra + yaml.v3 only.",
+              "A fourth embedded skill, dossierx-comments, teaches agents when to comment vs. flag and the advisory-rights rule. The comments: field is omitempty and excluded from a claim's content hash, so commenting never rewrites an uncommented claim or flips its dependents. Minor, backward-compatible bump — dossierx skills export now writes four bundles, so re-export to pick up the new skill.",
             ],
           },
         ],
@@ -709,6 +893,13 @@ export const contentSpec: ContentSpec = {
             adr: "never",
             markdown: "never",
             dossierx: "flags review_pending, confirm-before-write",
+          },
+          {
+            property: "Review comments that gate trust",
+            wiki: "comments exist, but never block anything",
+            adr: "review is out-of-band; nothing enforces it",
+            markdown: "PR comments on the diff, detached from the doc",
+            dossierx: "threaded per claim; an unresolved thread blocks the lock",
           },
           {
             property: "Tells you what to build first",

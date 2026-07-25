@@ -5,6 +5,7 @@ import { Hero } from "./sections/Hero";
 import { Philosophy } from "./sections/Philosophy";
 import { Claims } from "./sections/Claims";
 import { Lifecycle } from "./sections/Lifecycle";
+import { Comments } from "./sections/Comments";
 import { BuildOrder } from "./sections/BuildOrder";
 import { CodeLinks } from "./sections/CodeLinks";
 import { Cli } from "./sections/Cli";
@@ -45,6 +46,7 @@ export default function App() {
         <Philosophy />
         <Claims />
         <Lifecycle />
+        <Comments />
         <BuildOrder />
         <CodeLinks />
         <Cli />
