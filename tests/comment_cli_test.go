@@ -469,3 +469,67 @@ func TestComment_AddRefusedOnBannerClaim(t *testing.T) {
 		t.Fatalf("expected the banner claim file untouched after a refused comment add")
 	}
 }
+
+// ---------------------------------------------------------------------
+// A store-bricking body whose FIRST line is real CONTENT that begins with a tab
+// or space indent ("\tcode\nmore", "    code\n    more") — the class the old
+// leading-whitespace heuristic MISSED — must be refused at the CLI with the
+// FRIENDLY, actionable ErrUnsafeBody guidance (exit non-zero), NEVER the cryptic
+// internal "did not round-trip byte-exact" text, and must never brick the store.
+// A body the old heuristic FALSE-REJECTED but that round-trips fine (" \ncontent")
+// must now be ACCEPTED.
+// ---------------------------------------------------------------------
+
+func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
+	unsafe := []struct {
+		name string
+		body string
+	}{
+		{"tab-led-content-line", "\tcode line\nmore"},
+		{"space-indented-content-line", "    func main() {}\n    return nil"},
+	}
+	for _, tc := range unsafe {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+			claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
+			before := llReadFile(t, claimPath)
+
+			out, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", tc.body)
+			if code == 0 {
+				t.Fatalf("expected a non-zero exit for an unsafe body, got 0 (stdout: %s)", out)
+			}
+			msg := stderr + out
+			// FRIENDLY + actionable: the guidance names how to fix it.
+			if !strings.Contains(msg, "de-indent") || !strings.Contains(msg, "stored as YAML") {
+				t.Fatalf("expected the friendly unsafe-body guidance, got stdout: %s stderr: %s", out, stderr)
+			}
+			// NEVER the cryptic internal round-trip text.
+			for _, cryptic := range []string{"round-trip", "byte-exact", "store-bricking", "block scalar", "did not re-parse"} {
+				if strings.Contains(msg, cryptic) {
+					t.Fatalf("unsafe-body CLI error leaked the internal detail %q: stdout: %s stderr: %s", cryptic, out, stderr)
+				}
+			}
+			// Never bricked: the claim file is byte-unchanged and the dir still lists.
+			if llReadFile(t, claimPath) != before {
+				t.Fatalf("the claim file changed after a refused unsafe-body add")
+			}
+			if _, listErr, listCode := run(t, root, "--config", cfgPath, "comment", "list", "widget.contract.a"); listCode != 0 {
+				t.Fatalf("claims dir unusable (possibly bricked) after a refused unsafe-body add: %s", listErr)
+			}
+		})
+	}
+
+	// A body the OLD heuristic false-rejected but that round-trips fine is now
+	// accepted end to end.
+	t.Run("false-reject-now-accepted", func(t *testing.T) {
+		root := t.TempDir()
+		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+		llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
+
+		out, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", " \ncontent below a blank first line")
+		if code != 0 {
+			t.Fatalf("expected a body that round-trips (\" \\ncontent\") to be ACCEPTED, got exit %d: stdout: %s stderr: %s", code, out, stderr)
+		}
+	})
+}

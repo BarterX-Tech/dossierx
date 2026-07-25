@@ -510,9 +510,12 @@ func (s *Server) writeInternal(w http.ResponseWriter, err error) {
 // become 404 thread_not_found / reply_not_found; a rights denial 403; a
 // wrong-state op (reply to resolved, double resolve/reopen) 409; an out-of-band
 // file change (loader's optimistic concurrency sentinel) 409 claim_file_changed;
-// anything unmatched is a 500. It also fields mutatingDeps' setup errors (its
-// callers route them here), whose store-load failures fall through to the 500
-// default unchanged.
+// a store-bricking / non-round-trippable body 400 unsafe_body (BOTH the input
+// pre-check's comments.ErrUnsafeBody AND the loader's save-time backstop
+// loader.ErrClaimNotRoundTrippable — never a 500 that leaks the internal yaml
+// round-trip text); anything unmatched is a 500. It also fields mutatingDeps'
+// setup errors (its callers route them here), whose store-load failures fall
+// through to the 500 default unchanged.
 func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errReadOnly):
@@ -527,7 +530,7 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "banner_claim")
 	case errors.Is(err, comments.ErrEmptyBody):
 		writeError(w, http.StatusBadRequest, "empty_body")
-	case errors.Is(err, comments.ErrUnsafeBody):
+	case errors.Is(err, comments.ErrUnsafeBody), errors.Is(err, loader.ErrClaimNotRoundTrippable):
 		writeError(w, http.StatusBadRequest, "unsafe_body")
 	case errors.Is(err, comments.ErrInvalidActor):
 		writeError(w, http.StatusBadRequest, "invalid_actor")

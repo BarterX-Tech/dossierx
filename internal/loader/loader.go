@@ -177,6 +177,45 @@ func verifyRoundTrip(c model.Claim, data []byte) error {
 	return nil
 }
 
+// CommentBodyRoundTrips reports whether body can be stored as a comment (or
+// reply) body and read back BYTE-EXACT through the very marshal + strict-decode
+// the save-time guard (verifyRoundTrip) applies. It is the shared, round-trip-
+// ACCURATE pre-check the comments input boundary (comments.validateBody) uses so
+// it rejects EXACTLY the bodies the save-time guard would refuse — matching that
+// guard BY CONSTRUCTION rather than by a hand-rolled leading-whitespace
+// heuristic, which both MISSED store-bricking bodies (a first CONTENT line that
+// itself begins with a tab or space indent, e.g. "\tcode\nmore" or
+// "    code\n    more") and FALSE-REJECTED bodies that actually round-trip
+// (" \n…", "\r\n…", a NBSP/NEL/VT/FF-led first line).
+//
+// yaml.v3 v3.0.1 emits certain leading-whitespace bodies as a block scalar it
+// then cannot re-parse (a bare leading newline, a leading blank/whitespace-only
+// line) or re-parses lossily (a space-indented first content line, whose block
+// indent indicator is stripped on read); persisting one bricks the whole claims
+// dir on the next LoadClaims. A minimal claim carrying body as its single
+// comment body is marshaled and strict-decoded here; the reply-body nesting
+// round-trips identically (verified empirically against v3.0.1), so probing the
+// thread-body position alone is faithful. Empty/whitespace-only bodies are not
+// this function's concern (comments.validateBody rejects those as ErrEmptyBody
+// first); it is called only on bodies that carry real content.
+func CommentBodyRoundTrips(body string) bool {
+	probe := model.Claim{
+		ID:       "probe",
+		Comments: []model.Comment{{ID: "c", Body: body}},
+	}
+	data, err := yaml.Marshal(probe)
+	if err != nil {
+		return false
+	}
+	var back model.Claim
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	dec.KnownFields(true)
+	if err := dec.Decode(&back); err != nil {
+		return false
+	}
+	return len(back.Comments) == 1 && back.Comments[0].Body == body
+}
+
 // commentBodiesRoundTrip reports whether every thread and reply body in want is
 // reproduced byte-exact in got (the marshal->decode image of want). A count or
 // body mismatch is the silent-corruption sibling of an outright parse failure,

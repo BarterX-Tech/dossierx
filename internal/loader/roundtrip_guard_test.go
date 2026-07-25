@@ -104,6 +104,89 @@ func TestSaveClaimIfUnchanged_RefusesStoreBrickingBody(t *testing.T) {
 	}
 }
 
+// bodyRoundTripCase is one probe body plus whether it is expected to survive
+// the marshal + strict-decode round-trip. The reject set is the exact
+// store-bricking class yaml.v3 v3.0.1 produces (reproduced against v3.0.1): a
+// bare leading newline, a leading blank/whitespace-only line, a tab-only first
+// line, AND — the class the old leading-whitespace heuristic MISSED — a first
+// CONTENT line that itself begins with a tab or space indent. The accept set
+// includes bodies the old heuristic FALSE-REJECTED (" \n…", "\r\n…", a
+// NBSP/NEL/VT/FF-led first line) even though they round-trip cleanly.
+func bodyRoundTripCases() []struct {
+	name string
+	body string
+	want bool
+} {
+	nbsp := string(rune(0x00A0))
+	nel := string(rune(0x0085))
+	vt := string(rune(0x000B))
+	ff := string(rune(0x000C))
+	return []struct {
+		name string
+		body string
+		want bool
+	}{
+		// --- REJECT (does not round-trip; would brick the store) ---
+		{"bare-leading-newline", "\ncontract says X", false},
+		{"leading-newline-minimal", "\n0", false},
+		{"tab-only-first-line", "\t\nreal content", false},
+		{"leading-blank-lines", "\n\nleading blank lines\ncontent", false},
+		{"tab-led-first-content-line", "\tcode\nmore", false},
+		{"space-indented-first-content-line", "    func main(){}\n    return", false},
+		{"two-space-indented-multiline", "  a\n  b", false},
+		// --- ACCEPT (round-trips; must NOT be rejected) ---
+		{"space-then-newline", " \ncontent", true},
+		{"crlf-lead", "\r\ncontent", true},
+		{"nbsp-then-newline", nbsp + "\ncontent", true},
+		{"nel-then-newline", nel + "\ncontent", true},
+		{"vt-then-newline", vt + "\ncontent", true},
+		{"ff-then-newline", ff + "\ncontent", true},
+		{"plain", "plain body", true},
+		{"normal-multiline", "multi\nline\nbody\nhere", true},
+		{"interior-tab", "tab\tin\tthe\tmiddle", true},
+		{"leading-tab-single-line", "\tleading tab but single line", true},
+		{"trailing-newline", "trailing newline\n", true},
+		{"windows-endings", "windows\r\nline\r\nendings", true},
+		{"unicode", "unicode café — ☕ 你好 Ω \U0001f389", true},
+	}
+}
+
+// TestCommentBodyRoundTrips_MatchesExpectedBrickClass pins the shared pre-check
+// against the empirically-established yaml.v3 v3.0.1 brick class.
+func TestCommentBodyRoundTrips_MatchesExpectedBrickClass(t *testing.T) {
+	for _, c := range bodyRoundTripCases() {
+		t.Run(c.name, func(t *testing.T) {
+			if got := CommentBodyRoundTrips(c.body); got != c.want {
+				t.Fatalf("CommentBodyRoundTrips(%q) = %v, want %v", c.body, got, c.want)
+			}
+		})
+	}
+}
+
+// TestCommentBodyRoundTrips_AgreesWithSaveGuard proves the pre-check matches the
+// actual save-time round-trip guard BY CONSTRUCTION: for every probe body,
+// CommentBodyRoundTrips must agree with whether SaveClaim (which runs
+// verifyRoundTrip over the full claim, body in BOTH a thread and a reply body)
+// accepts a claim carrying it. If these ever diverge, a body could pass the
+// input pre-check yet be refused at save (a leaked round-trip error) or vice
+// versa — exactly the inconsistency this fix removes.
+func TestCommentBodyRoundTrips_AgreesWithSaveGuard(t *testing.T) {
+	for _, c := range bodyRoundTripCases() {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "a.yaml")
+			saveErr := SaveClaim(brickClaim(path, c.body))
+			saveOK := saveErr == nil
+			if saveErr != nil && !errors.Is(saveErr, ErrClaimNotRoundTrippable) {
+				t.Fatalf("SaveClaim(body=%q): unexpected error kind: %v", c.body, saveErr)
+			}
+			if pre := CommentBodyRoundTrips(c.body); pre != saveOK {
+				t.Fatalf("pre-check/save-guard DISAGREE for body=%q: CommentBodyRoundTrips=%v, SaveClaim-accepts=%v", c.body, pre, saveOK)
+			}
+		})
+	}
+}
+
 // The guard must NOT reject valid bodies (interior newlines, interior/leading
 // tabs without a following newline, trailing newline, unicode) — those all
 // round-trip and must still save exactly as before.

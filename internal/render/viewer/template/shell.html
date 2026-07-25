@@ -565,6 +565,24 @@
         railBody.appendChild(list);
         railBody.appendChild(buildComposer(claimID, drafts.composer));
         updateChips(claimID, open.length, threads.length);
+        // (part a) Now the whole panel is attached to the DOM, size every textarea
+        // that carries a RESTORED draft (composer, reply composers, re-opened edit
+        // forms) to fit — a programmatic .value fires no 'input' event, and
+        // scrollHeight is only meaningful once laid out, so this post-attach pass is
+        // what actually grows a restored draft instead of leaving it clipped to one
+        // row (VJF-1). Empty textareas are skipped, staying at their one-row default.
+        growRestoredDrafts();
+      }
+
+      // growRestoredDrafts grows every non-empty composer/reply/edit textarea now
+      // attached under railBody to fit its content. It is idempotent and cheap
+      // (a handful of textareas), and safe on an empty rail (querySelectorAll on a
+      // missing railBody is guarded).
+      function growRestoredDrafts() {
+        if (!railBody) { return; }
+        railBody.querySelectorAll('.comment-composer-input').forEach(function (ta) {
+          if (ta.value) { growNow(ta); }
+        });
       }
 
       function buildThread(claimID, t, drafts) {
@@ -650,12 +668,19 @@
         return b;
       }
 
+      // growNow sizes a textarea to fit its current .value in one shot. It is the
+      // body of autoGrow's input handler, exposed so that a PROGRAMMATIC .value
+      // assignment — restoring a dirty draft across an SSE rebuild, or rolling a
+      // failed add/reply back into the composer — can grow the field to fit too:
+      // setting .value fires no 'input' event, so without an explicit growNow the
+      // restored text renders CLIPPED to the one-row default (VJF-1).
+      function growNow(ta) {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+      }
+
       function autoGrow(ta) {
-        function grow() {
-          ta.style.height = 'auto';
-          ta.style.height = ta.scrollHeight + 'px';
-        }
-        ta.addEventListener('input', grow);
+        ta.addEventListener('input', function () { growNow(ta); });
       }
 
       function buildComposer(claimID, draftValue) {
@@ -665,7 +690,7 @@
         ta.rows = 1;
         ta.placeholder = 'Add a comment…';
         autoGrow(ta);
-        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent draft across a rebuild
+        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent draft across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
         var btn = textEl('button', 'comment-composer-submit', 'Comment');
         btn.type = 'submit';
         form.appendChild(ta);
@@ -686,7 +711,7 @@
         ta.rows = 1;
         ta.placeholder = 'Reply…';
         autoGrow(ta);
-        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent reply across a rebuild
+        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent reply across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
         var btn = textEl('button', 'comment-composer-submit', 'Reply');
         btn.type = 'submit';
         form.appendChild(ta);
@@ -737,9 +762,11 @@
             if (placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
             recomputeChipsFromPanel(claimID);
             // The input was cleared optimistically when the placeholder went in;
-            // a failed write must restore the user's text, never discard it.
+            // a failed write must restore the user's text, never discard it — and
+            // grow it back to fit (a bare .value assignment fires no input event,
+            // so without growNow a multi-line draft renders clipped to one row).
             ta.value = body;
-            ta.style.height = 'auto';
+            growNow(ta);
             toast(errMsg('Could not add comment', err));
           });
       }
@@ -760,9 +787,11 @@
           .catch(function (err) {
             if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
             // Restore the user's text (cleared optimistically above) so a failed
-            // reply is not silently lost.
+            // reply is not silently lost — and grow it back to fit (a bare .value
+            // assignment fires no input event, so without growNow a multi-line
+            // draft renders clipped to one row).
             ta.value = body;
-            ta.style.height = 'auto';
+            growNow(ta);
             toast(errMsg('Could not reply', err));
           });
       }
@@ -847,6 +876,12 @@
         form.appendChild(save);
         form.appendChild(cancel);
         bodyNode.replaceWith(form);
+        // Grow to fit the prefilled body/draft AFTER the form is in the DOM — a
+        // .value assignment fires no 'input' event, and scrollHeight is only
+        // meaningful once laid out (a live edit-click attaches here; an edit form
+        // re-opened during a rebuild is instead grown by buildPanel's post-attach
+        // growRestoredDrafts, since this subtree is still detached then).
+        growNow(ta);
         ta.focus();
         cancel.addEventListener('click', function () { form.replaceWith(bodyNode); });
         form.addEventListener('submit', function (e) {

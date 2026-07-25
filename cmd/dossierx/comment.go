@@ -12,6 +12,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -19,6 +20,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -78,6 +80,22 @@ func mutatingCommentDeps(cfg *config.Config) (*comments.Deps, error) {
 // re-rendered, so point the caller at the two commands that do so.
 const viewHint = `; run "dossierx check" or "dossierx serve" to view`
 
+// friendlyCommentBodyErr translates the loader's store-bricking backstop
+// (loader.ErrClaimNotRoundTrippable) — whose raw "did not round-trip byte-exact"
+// text is an internal implementation detail — into the user-facing
+// comments.ErrUnsafeBody guidance, so an unsafe comment body prints the same
+// actionable "remove the leading blank line / de-indent the first line" message
+// no matter which layer caught it. The round-trip-accurate input pre-check
+// (comments.validateBody) normally rejects every unsafe body first (so this is a
+// defensive backstop, symmetric with serve's writeOpError mapping); every other
+// error passes through unchanged.
+func friendlyCommentBodyErr(err error) error {
+	if err != nil && errors.Is(err, loader.ErrClaimNotRoundTrippable) && !errors.Is(err, comments.ErrUnsafeBody) {
+		return comments.ErrUnsafeBody
+	}
+	return err
+}
+
 func newCommentAddCmd() *cobra.Command {
 	var as, body string
 	cmd := &cobra.Command{
@@ -99,7 +117,7 @@ func newCommentAddCmd() *cobra.Command {
 			}
 			_, tid, err := deps.Add(args[0], actor, body)
 			if err != nil {
-				return err
+				return friendlyCommentBodyErr(err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: %s added on %s%s\n", tid, args[0], viewHint)
 			return nil
@@ -131,7 +149,7 @@ func newCommentReplyCmd() *cobra.Command {
 			}
 			_, rid, err := deps.Reply(args[0], args[1], actor, body)
 			if err != nil {
-				return err
+				return friendlyCommentBodyErr(err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: reply %s added to thread %s on %s%s\n", rid, args[1], args[0], viewHint)
 			return nil
@@ -222,7 +240,7 @@ func newCommentEditCmd() *cobra.Command {
 				return err
 			}
 			if _, err := deps.Edit(args[0], args[1], replyID, actor, body); err != nil {
-				return err
+				return friendlyCommentBodyErr(err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: %s edited on %s%s\n", editTarget(args[1], replyID), args[0], viewHint)
 			return nil

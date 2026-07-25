@@ -220,12 +220,22 @@ func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	want := "1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.locked)"
+	// A triggerless review_pending claim STILL surfaces the reaudit next-step, but
+	// it must be labeled ACCURATELY — "no active trigger", not "from drift/flag"
+	// (there is neither a drifted dependency nor a pending flag).
+	want := "1 claim(s) review_pending with no active trigger -> dossierx reaudit <id> (e.g. widget.contract.locked)"
 	found := false
+	mislabeled := false
 	for _, h := range res.NextSteps {
 		if h == want {
 			found = true
 		}
+		if h == "1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.locked)" {
+			mislabeled = true
+		}
+	}
+	if mislabeled {
+		t.Fatalf("triggerless review_pending claim mislabeled as \"from drift/flag\"; got %#v", res.NextSteps)
 	}
 	if !found {
 		t.Fatalf("triggerless review_pending claim dropped from next-steps; expected %q, got %#v", want, res.NextSteps)

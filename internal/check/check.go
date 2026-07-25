@@ -330,7 +330,8 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 
 	var draftIDs []string
 	var commentPending []model.Claim // review_pending with >=1 open thread
-	var reauditPending []string      // review_pending from drift/flag
+	var reauditTriggered []string    // review_pending from an ACTIVE drift/flag trigger
+	var reauditTriggerless []string  // review_pending but NO active trigger at all
 	for _, c := range claims {
 		switch {
 		case c.Status == model.StatusDraft:
@@ -340,18 +341,24 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 			if open > 0 {
 				commentPending = append(commentPending, c)
 			}
-			// Reaudit bucket: a drift/flag trigger, OR a review_pending claim
-			// with NO detectable trigger at all (open==0 && !drift && !flag) —
-			// the state left when a drifted dependency is reverted, or an open
-			// thread is hand-resolved directly in YAML. v0.1.2 printed the
-			// reaudit hint for EVERY locked+review_pending claim, so a triggerless
-			// one must still surface it rather than vanishing from next-steps. The
-			// only case deliberately excluded from this bucket is a purely
-			// comment-pending claim (open>0 && !drift && !flag): its remedy is to
-			// resolve the thread (reaudit refuses a comment-only pending), and it
-			// is already carried by commentPending above.
-			if drift || flag || open == 0 {
-				reauditPending = append(reauditPending, c.ID)
+			// Partition the reaudit next-step by WHY the claim is review_pending so
+			// its label is accurate:
+			//   - an ACTIVE drift/flag trigger -> "from drift/flag".
+			//   - NO active trigger at all (open==0 && !drift && !flag) -> "no
+			//     active trigger": the state left when a drifted dependency is
+			//     reverted, or an open thread is hand-resolved directly in YAML.
+			//     v0.1.2 printed the reaudit hint for EVERY locked+review_pending
+			//     claim, so a triggerless one must still surface it — just not
+			//     MISLABELED as drift/flag (its cause is neither).
+			// The only case in neither bucket is a purely comment-pending claim
+			// (open>0 && !drift && !flag): its remedy is to resolve the thread
+			// (reaudit refuses a comment-only pending), already carried by
+			// commentPending above.
+			switch {
+			case drift || flag:
+				reauditTriggered = append(reauditTriggered, c.ID)
+			case open == 0:
+				reauditTriggerless = append(reauditTriggerless, c.ID)
 			}
 		}
 	}
@@ -362,8 +369,11 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 		example := commentPending[0]
 		hints = append(hints, fmt.Sprintf("%d claim(s) with open comment thread(s) -> dossierx comment resolve <id> <thread-id> (e.g. %s %s)", len(commentPending), example.ID, example.OpenThreadIDs()[0]))
 	}
-	if len(reauditPending) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. %s)", len(reauditPending), reauditPending[0]))
+	if len(reauditTriggered) > 0 {
+		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. %s)", len(reauditTriggered), reauditTriggered[0]))
+	}
+	if len(reauditTriggerless) > 0 {
+		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending with no active trigger -> dossierx reaudit <id> (e.g. %s)", len(reauditTriggerless), reauditTriggerless[0]))
 	}
 	hints = append(hints, implinkHints...)
 

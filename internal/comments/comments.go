@@ -27,15 +27,19 @@ var (
 	ErrReplyNotFound = errors.New("comments: reply not found")
 	// ErrEmptyBody: a comment/reply body was empty or whitespace-only.
 	ErrEmptyBody = errors.New("comments: comment body must not be empty")
-	// ErrUnsafeBody: a comment/reply body with real content but a leading
-	// blank/whitespace-only line (a leading newline, leading blank lines, or a
-	// leading tab line). yaml.v3 v3.0.1 emits such a string as a block scalar it
-	// then cannot parse back, so — stored verbatim — it would brick the whole
-	// claims dir on the next load. It is refused here, at the shared input
-	// boundary both the CLI and the serve handlers cross, with a clear error;
-	// the loader's round-trip guard (loader.ErrClaimNotRoundTrippable) is the
-	// systemic backstop under it. Callers strip the leading blank line and retry.
-	ErrUnsafeBody = errors.New("comments: comment body must not begin with a blank line, a leading newline, or a leading tab (it cannot be safely stored as YAML)")
+	// ErrUnsafeBody: a comment/reply body with real content that cannot be stored
+	// and read back byte-exact through YAML. yaml.v3 v3.0.1 emits certain
+	// leading-whitespace bodies as a block scalar it then cannot re-parse (a bare
+	// leading newline, a leading blank/whitespace-only line) or re-parses lossily
+	// (a first CONTENT line indented by a tab or spaces, e.g. "\tcode\nmore" or
+	// "    code\n    more"), so — stored verbatim — it would brick the whole claims
+	// dir on the next load. It is refused here, at the shared input boundary both
+	// the CLI and the serve handlers cross, by an ACTUAL round-trip probe
+	// (loader.CommentBodyRoundTrips) that matches the loader's save-time guard
+	// (loader.ErrClaimNotRoundTrippable) by construction — the guard remains the
+	// systemic backstop under it. The message is actionable: start the body with a
+	// non-whitespace character.
+	ErrUnsafeBody = errors.New("comments: comment body cannot be safely stored as YAML: start it with a non-whitespace character — remove any leading blank line and de-indent the first line — then retry")
 	// ErrInvalidActor: --as was neither "human" nor "agent".
 	ErrInvalidActor = errors.New(`comments: actor must be "human" or "agent"`)
 	// ErrRightsDenied: advisory rights — an agent may not resolve/reopen/edit/
@@ -435,33 +439,26 @@ func validateActor(a model.CommentRole) error {
 	return nil
 }
 
+// validateBody is the shared input-boundary check both the CLI verbs and the
+// serve handlers cross before any mutating op. An empty/whitespace-only body is
+// ErrEmptyBody; a body with real content that would not survive storage is
+// ErrUnsafeBody. The unsafe check is an ACTUAL marshal + strict-decode round-trip
+// probe (loader.CommentBodyRoundTrips), NOT a hand-rolled leading-whitespace
+// heuristic, so it rejects EXACTLY the bodies the loader's save-time guard
+// (loader.ErrClaimNotRoundTrippable) would refuse — matching it by construction.
+// That closes the two gaps the old heuristic had: it now rejects a first CONTENT
+// line indented by a tab or spaces (which the heuristic missed, so the op ran and
+// the guard leaked a raw round-trip error), and it now ACCEPTS bodies that
+// round-trip cleanly despite a whitespace-only or CR/NBSP/NEL-led first line
+// (which the heuristic false-rejected).
 func validateBody(body string) error {
 	if strings.TrimSpace(body) == "" {
 		return ErrEmptyBody
 	}
-	if leadingWhitespaceBreaksYAML(body) {
+	if !loader.CommentBodyRoundTrips(body) {
 		return ErrUnsafeBody
 	}
 	return nil
-}
-
-// leadingWhitespaceBreaksYAML reports whether body's LEADING whitespace would
-// drive yaml.v3 v3.0.1 to emit a block scalar it then cannot parse back —
-// bricking the whole claims file. The trigger, reproduced against v3.0.1, is a
-// body whose FIRST line (up to the first newline) is blank or whitespace-only
-// while real content follows: a leading newline (body: |4-), leading blank
-// lines, or a leading tab line (a tab where indentation is expected). A body
-// with no newline (leading spaces/tabs on a single line) or whose first line
-// already carries content is quoted safely by yaml.v3 and is NOT flagged — the
-// interior newlines/tabs of an ordinary multi-line body stay allowed. This is
-// the fast, user-facing pre-check; loader.verifyRoundTrip is the exact,
-// universal backstop for anything this heuristic does not cover.
-func leadingWhitespaceBreaksYAML(body string) bool {
-	i := strings.IndexByte(body, '\n')
-	if i < 0 {
-		return false
-	}
-	return strings.TrimSpace(body[:i]) == ""
 }
 
 // canAct is the advisory-rights rule: a human may act on anything; an agent may

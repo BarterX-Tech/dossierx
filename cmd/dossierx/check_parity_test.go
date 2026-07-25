@@ -316,12 +316,15 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 
 	catalog := filepath.Join(root, ".catalog.json")
 	viewer := filepath.Join(root, "viewer", "index.html")
+	// The dependent is review_pending with NO active trigger (drift reverted, no
+	// flag, no open thread), so the reaudit hint must be labeled "no active
+	// trigger" — NOT "from drift/flag" (F's live-flag case keeps that label).
 	want := "lint: 0 findings\n" +
 		"catalog: wrote " + catalog + " (2 claim(s))\n" +
 		"render: wrote " + viewer + "\n" +
 		"check: OK\n" +
 		"next steps:\n" +
-		"  1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.dep)\n"
+		"  1 claim(s) review_pending with no active trigger -> dossierx reaudit <id> (e.g. widget.contract.dep)\n"
 	assertCheckParity(t, cfgPath, want, "", false)
 }
 

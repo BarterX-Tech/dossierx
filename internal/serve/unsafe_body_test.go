@@ -2,6 +2,7 @@ package serve_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 )
 
@@ -39,5 +40,63 @@ func TestUnsafeBody_HTTPRejectedWithoutBricking(t *testing.T) {
 				t.Fatalf("%s: GET /api/comments after rejected write = %d, want 200 (dir may be bricked)", tc.name, resp2.StatusCode)
 			}
 		})
+	}
+}
+
+// TestUnsafeBody_ContentFirstLine_HTTPCleanNoLeak covers the class the old
+// leading-whitespace heuristic MISSED: a body whose FIRST line is real CONTENT
+// that begins with a tab or space indent ("\tcode\nmore", "    code\n    more").
+// Under the old code these slipped past validation, the op ran, and the loader
+// guard produced a 500 that LEAKED the raw internal yaml/round-trip error in the
+// JSON body. They must now be a clean 400 unsafe_body across add/reply/edit, with
+// the JSON body carrying only the stable code — no leaked internal text — and no
+// claim file bricked.
+func TestUnsafeBody_ContentFirstLine_HTTPCleanNoLeak(t *testing.T) {
+	// JSON string escapes: \t and \n are literal here (backtick raw strings); the
+	// server's JSON decoder turns them into an actual tab/newline body. The first
+	// case is tab-led, the second space-indented — both first-CONTENT-line unsafe.
+	bodies := []struct {
+		name string
+		json string
+	}{
+		{"tab-led", `{"body":"\tcode line\nmore"}`},
+		{"space-indented", `{"body":"    func main() {}\n    return nil"}`},
+	}
+	surfaces := []struct {
+		name   string
+		method string
+		path   string
+	}{
+		{"add", http.MethodPost, "/api/claims/widget.contract.one/comments"},
+		{"reply", http.MethodPost, "/api/claims/widget.contract.locked/comments/c-aaaaaa/replies"},
+		{"edit-root", http.MethodPatch, "/api/claims/widget.contract.locked/comments/c-aaaaaa"},
+	}
+	for _, b := range bodies {
+		for _, s := range surfaces {
+			t.Run(b.name+"/"+s.name, func(t *testing.T) {
+				_, base, root := startServer(t, baseConfig, standardFiles())
+				before := snapshotClaims(t, root)
+
+				resp, data := do(t, s.method, base+s.path, b.json, allowedMutating(base)...)
+				if resp.StatusCode != http.StatusBadRequest {
+					t.Fatalf("%s %s: got %d, want 400 (body=%s)", b.name, s.name, resp.StatusCode, data)
+				}
+				assertErrorCode(t, data, "unsafe_body")
+
+				// The JSON body must carry ONLY the stable code — never the internal
+				// round-trip / yaml / loader detail a 500 would have leaked.
+				for _, leak := range []string{"round-trip", "round trip", "store-bricking", "loader:", "yaml:", "block scalar", "tab character"} {
+					if strings.Contains(string(data), leak) {
+						t.Fatalf("%s %s: leaked internal text %q in error body: %s", b.name, s.name, leak, data)
+					}
+				}
+
+				// Never bricked: bytes unchanged and the project still loads.
+				assertClaimsUnchanged(t, before, root)
+				if resp2, _ := do(t, http.MethodGet, base+"/api/comments", ""); resp2.StatusCode != http.StatusOK {
+					t.Fatalf("%s %s: GET /api/comments after rejected write = %d, want 200 (dir may be bricked)", b.name, s.name, resp2.StatusCode)
+				}
+			})
+		}
 	}
 }
