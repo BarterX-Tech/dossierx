@@ -15,11 +15,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -570,282 +569,105 @@ func newCheckCmd() *cobra.Command {
 			// "check"'s only claim-file-writing phase; it runs under the
 			// project-wide claims sentinel and releases it before the
 			// (non-writing) lint/catalog/render/scan pipeline below, so a full
-			// render never blocks a concurrent agent CLI write.
+			// render never blocks a concurrent agent CLI write. It stays here,
+			// in the command, rather than inside check.Run: Run takes the
+			// already-reconciled claims so ALL claim-file persistence — and the
+			// Phase-0 claims-lock discipline guarding it — stays with the caller
+			// that holds the sentinel (serve reconciles at startup the same way
+			// before handing the claims to the same check.Run).
 			claims, err := reconcileReviewPending(cfg)
 			if err != nil {
 				return fmt.Errorf("check: %w", err)
 			}
 
-			findings := lint.RunAll(claims, cfg)
-			if err := reportLintFindings(cmd, findings, false); err != nil {
-				return fmt.Errorf("check: %w", err)
+			// check.Run is the shared, value-returning pipeline (lint, catalog,
+			// render, impl-link scan, and the non-blocking per-module
+			// reporting) that "dossierx serve" reuses without this fail-fast
+			// contract. Here we APPLY the fail-fast contract: format the Result
+			// to the terminal — byte-for-byte the output the previously inlined
+			// RunE produced (guarded by check_parity_test.go) — and return the
+			// first failing step's error wrapped "check: %w", exactly as each
+			// inlined step used to. Run's error is unprefixed; the wrap here is
+			// the single choke point that used to live at every call site.
+			res, runErr := check.Run(claims, cfg)
+			formatCheckResult(cmd, res)
+			if runErr != nil {
+				return fmt.Errorf("check: %w", runErr)
 			}
-			if err := runCatalog(cmd, cfg, claims); err != nil {
-				return fmt.Errorf("check: %w", err)
-			}
-			if err := runRender(cmd, cfg, claims); err != nil {
-				return fmt.Errorf("check: %w", err)
-			}
-
-			// Fourth step, and the one exception to "everything past this
-			// point is non-blocking reporting": scan cfg.SourceDirs for
-			// "dossierx-claim: <id>" comments and reconcile each valid one into
-			// internal/implink's artifact automatically (same Set logic any
-			// explicit "dossierx implink set" call already goes through — see
-			// implink.Scan's doc comment). A tag naming an unknown or
-			// not-yet-locked claim is a hard check FAILURE, not a warning —
-			// the whole point of this step is that an unbacked or stale tag
-			// can never sit silently wrong in the codebase. Entirely silent
-			// (and this hard-fail path unreachable) for a project that has
-			// never set source_dirs at all.
-			scanReport, err := implink.Scan(claims, cfg)
-			if err != nil {
-				return fmt.Errorf("check: %w", err)
-			}
-			if len(scanReport.Errors) > 0 {
-				for _, e := range scanReport.Errors {
-					fmt.Fprintf(cmd.ErrOrStderr(), "impl-links: scan error in %s:%d: dossierx-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
-				}
-				return fmt.Errorf("check: %d impl-link scan error(s)", len(scanReport.Errors))
-			}
-			if scanReport.FilesScanned > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), scanReport.Summary())
-			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), "check: OK")
-
-			reportOrientationNotes(cmd, cfg, claims)
-			reportOpenComments(cmd, cfg, claims)
-
-			// Remaining steps are purely additional, non-blocking reporting
-			// — the same relationship lint WARNINGS already have to a
-			// successful check — and are entirely silent for any project
-			// that has never opted into the feature they report on.
-			implinkHints := reportImplinkStatus(cmd, cfg, claims)
-			reportNextSteps(cmd, cfg, claims, implinkHints)
 			return nil
 		},
 	}
 }
 
-// orientationCounts accumulates one module's orientation-note claims,
-// broken down by facet, for reportOrientationNotes below. Named (rather
-// than an inline anonymous struct) because Go does not allow methods on
-// anonymous struct types, and orderedFacets below needs to be a method.
-type orientationCounts struct {
-	total   int
-	byFacet map[string]int
-}
-
-// orderedFacets returns c's facet keys sorted, so reportOrientationNotes's
-// output is deterministic across runs (map iteration order is not).
-func (c *orientationCounts) orderedFacets() []string {
-	facets := make([]string, 0, len(c.byFacet))
-	for f := range c.byFacet {
-		facets = append(facets, f)
-	}
-	sort.Strings(facets)
-	return facets
-}
-
-// reportOrientationNotes prints one non-blocking line per module that has
-// at least one orientation-note claim (module.overview.* and/or
-// kind: orientation-note claims in a regular facet), broken down by
-// facet — so "dossierx check" alone is enough to confirm an orientation set
-// exists for a module before diving into its other claims, per this
-// engine's "the one command you run routinely" contract.
-func reportOrientationNotes(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) {
-	byModule := map[string]*orientationCounts{}
-	for _, c := range claims {
-		if c.EffectiveKind() != model.KindOrientationNote {
-			continue
-		}
-		cnt, ok := byModule[c.Module]
-		if !ok {
-			cnt = &orientationCounts{byFacet: map[string]int{}}
-			byModule[c.Module] = cnt
-		}
-		cnt.total++
-		cnt.byFacet[c.Facet]++
-	}
-
+// formatCheckResult writes res to the command's stdout/stderr in the exact
+// segment order — and with the exact format strings — the pre-extraction
+// newCheckCmd RunE used, so "dossierx check" output stays byte-identical (the
+// guard is check_parity_test.go). It prints only the segments the run
+// actually reached: an empty CatalogPath/RenderPath, a false OK, an empty
+// reporting slice are precisely how a fail-fast stop reproduces as "that line
+// never printed". It never decides the exit code — the RunE returns
+// check.Run's error for that.
+func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	out := cmd.OutOrStdout()
-	for _, module := range cfg.Modules {
-		cnt, ok := byModule[module]
-		if !ok {
-			continue
-		}
-		var parts []string
-		for _, f := range cnt.orderedFacets() {
-			parts = append(parts, fmt.Sprintf("%d in %s", cnt.byFacet[f], f))
-		}
-		fmt.Fprintf(out, "orientation notes: module %q: %d (%s)\n", module, cnt.total, strings.Join(parts, ", "))
-	}
-}
+	errOut := cmd.ErrOrStderr()
 
-// reportImplinkStatus prints one implink.Status summary line (plus one line
-// per drifted entry) for every module in cfg.Modules that has an existing
-// implementation-link artifact on disk, silently skipping every module that
-// has none at all — the "zero-cost/silent when unused" contract this
-// feature must uphold, mirroring internal/render's attachBuildOrders (a
-// module with no build-order artifact gets nothing extra rendered, either).
-// Any error other than "no artifact yet" is reported to stderr but never
-// turns into a non-nil return from newCheckCmd's RunE — this step is purely
-// additional reporting, never a reason "dossierx check" itself fails.
-// reportImplinkStatus prints the per-module drift/unlinked report (as
-// before) and additionally returns one "next steps" hint line per drifted
-// entry and per module with any unlinked claims, so newCheckCmd's final
-// summary can point at exactly what to run next instead of a reader having
-// to infer it from the raw report above.
-// reportOpenComments prints one non-blocking line per module that has at least
-// one claim carrying an unresolved (status: open) comment thread, with that
-// module's total open-thread count:
-//
-//	open comments: module "widget": 3
-//
-// It is the comment analogue of reportOrientationNotes — a per-module summary
-// "dossierx check" surfaces so a reviewer sees at a glance where review
-// discussion is still outstanding, without failing the command (an open thread
-// is a warning-severity lint plus a lock/build-order gate, never a check
-// failure). Modules with no open threads print nothing; output is sorted by
-// module for determinism.
-func reportOpenComments(cmd *cobra.Command, _ *config.Config, claims []model.Claim) {
-	counts := map[string]int{}
-	for _, c := range claims {
-		if n := len(c.OpenThreadIDs()); n > 0 {
-			counts[c.Module] += n
-		}
+	// Lint block — always present (lint is the first step, so LintFindings is
+	// always populated). Reuse the shared reporter for byte-identical output;
+	// its error return is intentionally discarded here — check.Run already
+	// surfaced the fail-fast error, and the RunE returns that, not this.
+	_ = reportLintFindings(cmd, res.LintFindings, false)
+
+	// Catalog/render write confirmations. Empty paths mean the run stopped
+	// before that write (e.g. a lint error), so the line is correctly skipped.
+	if res.CatalogPath != "" {
+		fmt.Fprintf(out, "catalog: wrote %s (%d claim(s))\n", res.CatalogPath, res.CatalogCount)
 	}
-	if len(counts) == 0 {
+	if res.RenderPath != "" {
+		fmt.Fprintf(out, "render: wrote %s\n", res.RenderPath)
+	}
+
+	// Impl-link scan errors print (to stderr) whether or not the run then
+	// failed — they preceded the wrapped "check:" error in the old RunE too.
+	for _, e := range res.ScanErrors {
+		fmt.Fprintf(errOut, "impl-links: scan error in %s:%d: dossierx-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
+	}
+
+	if !res.OK {
 		return
 	}
-	modules := make([]string, 0, len(counts))
-	for m := range counts {
-		modules = append(modules, m)
-	}
-	sort.Strings(modules)
-	out := cmd.OutOrStdout()
-	for _, module := range modules {
-		fmt.Fprintf(out, "open comments: module %q: %d\n", module, counts[module])
-	}
-}
 
-func reportImplinkStatus(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) []string {
-	out := cmd.OutOrStdout()
-	var hints []string
-	for _, module := range cfg.Modules {
-		report, err := implink.Status(claims, cfg, module)
-		if err != nil {
-			if errors.Is(err, implink.ErrNoArtifact) {
-				continue
-			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "check: implink status for %q: %v\n", module, err)
-			continue
+	// Success tail: the scan summary (only on a clean scan, and only when a
+	// file was actually scanned), "check: OK", then the non-blocking
+	// per-module reporting — orientation notes, open comments, impl-link
+	// status, and the next-steps advisory — in the same order as before.
+	if res.ScanFilesScanned > 0 {
+		fmt.Fprintln(out, res.ScanSummary)
+	}
+	fmt.Fprintln(out, "check: OK")
+	for _, line := range res.OrientationNotes {
+		fmt.Fprintln(out, line)
+	}
+	if len(res.OpenComments) > 0 {
+		modules := make([]string, 0, len(res.OpenComments))
+		for m := range res.OpenComments {
+			modules = append(modules, m)
 		}
-		fmt.Fprintln(out, report.Summary())
-		for _, d := range report.Drifted {
-			fmt.Fprintf(out, "  drifted: %s %s: %s\n", d.ClaimID, d.File, d.Reason)
-			hints = append(hints, fmt.Sprintf("%s is drifted -> re-tag or dossierx implink set --module %s --claim %s --file %s", d.ClaimID, module, d.ClaimID, d.File))
-		}
-		for _, id := range report.UnlinkedIDs {
-			fmt.Fprintf(out, "  unlinked: %s\n", id)
-		}
-		if len(report.UnlinkedIDs) > 0 {
-			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim tag or dossierx implink set", len(report.UnlinkedIDs), module))
+		sort.Strings(modules)
+		for _, m := range modules {
+			fmt.Fprintf(out, "open comments: module %q: %d\n", m, res.OpenComments[m])
 		}
 	}
-	return hints
-}
-
-// reportNextSteps prints a short, always-present-when-non-empty "what to
-// run next" block at the very end of "dossierx check" — the answer to "I don't
-// want to have to remember which of several commands applies": run check,
-// read this block, do what it says, run check again. It is derived
-// entirely from state check already computed (draft claims; review_pending
-// claims partitioned by TRIGGER via comments.PendingTriggers — an open comment
-// thread routes to "dossierx comment resolve", drift/flag to "dossierx
-// reaudit", since reaudit refuses a comment-only pending; implinkHints from
-// reportImplinkStatus above; and per-module Build Order readiness) rather than
-// requiring a human to cross-reference several separate reports by hand.
-func reportNextSteps(cmd *cobra.Command, cfg *config.Config, claims []model.Claim, implinkHints []string) {
-	var hints []string
-
-	// Load the two trigger stores read-only so review_pending claims can be
-	// partitioned by WHY they are pending (open comment thread vs. dependency
-	// drift / "dossierx flag") and pointed at the right remedy — reaudit refuses
-	// a comment-only pending claim, so pointing it at reaudit would be a dead
-	// end. Best-effort: a load error degrades gracefully (PendingTriggers treats
-	// a nil store as no drift/flag) and never blocks the advisory block.
-	store, _ := lock.LoadStore(storePath(cfg))
-	flagStore, _ := reaudit.LoadFlagStore(flagStorePath(cfg))
-
-	var draftIDs []string
-	var commentPending []model.Claim // review_pending with >=1 open thread
-	var reauditPending []string      // review_pending from drift/flag
-	for _, c := range claims {
-		switch {
-		case c.Status == model.StatusDraft:
-			draftIDs = append(draftIDs, c.ID)
-		case c.Status == model.StatusLocked && c.ReviewPending:
-			drift, flag, open := comments.PendingTriggers(c, claims, store, flagStore)
-			if open > 0 {
-				commentPending = append(commentPending, c)
-			}
-			if drift || flag {
-				reauditPending = append(reauditPending, c.ID)
-			}
+	for _, line := range res.ImplinkStatusStdout {
+		fmt.Fprintln(out, line)
+	}
+	for _, line := range res.ImplinkStatusStderr {
+		fmt.Fprintln(errOut, line)
+	}
+	if len(res.NextSteps) > 0 {
+		fmt.Fprintln(out, "next steps:")
+		for _, h := range res.NextSteps {
+			fmt.Fprintf(out, "  %s\n", h)
 		}
-	}
-	if len(draftIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx lock <id> (e.g. %s)", len(draftIDs), draftIDs[0]))
-	}
-	// Comment-resolution hint comes FIRST: a claim pending on BOTH an open
-	// thread and drift/flag is listed here AND under reaudit, comment first,
-	// because the thread must be resolved before the claim can lock/build and
-	// reaudit refuses a comment-only pending outright.
-	if len(commentPending) > 0 {
-		example := commentPending[0]
-		hints = append(hints, fmt.Sprintf("%d claim(s) with open comment thread(s) -> dossierx comment resolve <id> <thread-id> (e.g. %s %s)", len(commentPending), example.ID, example.OpenThreadIDs()[0]))
-	}
-	if len(reauditPending) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. %s)", len(reauditPending), reauditPending[0]))
-	}
-	hints = append(hints, implinkHints...)
-
-	byModule := make(map[string][]model.Claim, len(cfg.Modules))
-	for _, c := range claims {
-		byModule[c.Module] = append(byModule[c.Module], c)
-	}
-	for _, module := range cfg.Modules {
-		mClaims := byModule[module]
-		if len(mClaims) == 0 {
-			continue
-		}
-		fullyLocked := true
-		for _, c := range mClaims {
-			// Same predicate as the buildorder Propose gate: an open comment
-			// thread makes a module not build-ready even if every claim is
-			// locked, so it must not be reported "fully locked, propose now".
-			if c.Status != model.StatusLocked || c.ReviewPending || c.HasOpenThreads() {
-				fullyLocked = false
-				break
-			}
-		}
-		if !fullyLocked {
-			continue
-		}
-		if _, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module)); errors.Is(err, buildorder.ErrNotProposed) {
-			hints = append(hints, fmt.Sprintf("module %q is fully locked with no build order yet -> dossierx build-order propose --module %s", module, module))
-		}
-	}
-
-	if len(hints) == 0 {
-		return
-	}
-	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, "next steps:")
-	for _, h := range hints {
-		fmt.Fprintf(out, "  %s\n", h)
 	}
 }
 
