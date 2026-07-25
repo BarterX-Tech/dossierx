@@ -951,11 +951,20 @@ func newUnlockCmd() *cobra.Command {
 			}
 			defer release()
 
-			flagStore, err := reaudit.LoadFlagStore(flagStorePath(cfg))
-			if err != nil {
-				return fmt.Errorf("unlock: %w", err)
-			}
-			if _, flagged := flagStore.Flags[id]; flagged {
+			// Clearing the pending flag is best-effort: unlock is the recovery
+			// escape hatch ("get this claim back to draft so I can fix things")
+			// and must never be blocked by an unrelated broken flag-store file.
+			// A missing store is already the empty-store case (LoadFlagStore
+			// treats it as fresh — nothing to clear, silently). An existing but
+			// unparseable/unreadable store is warned about on stderr and skipped
+			// rather than fatal, so the status revert below still happens. Only a
+			// failing Save of a store we DID read + mutate is a hard error (that
+			// is a real write failure, not the corruption case this tolerates).
+			// The lock-acquire above is still fatal on error: that is contention,
+			// not corruption.
+			if flagStore, ferr := reaudit.LoadFlagStore(flagStorePath(cfg)); ferr != nil {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not read flag store (%v); a pending flag for %s was not cleared\n", ferr, id)
+			} else if _, flagged := flagStore.Flags[id]; flagged {
 				delete(flagStore.Flags, id)
 				if err := flagStore.Save(); err != nil {
 					return fmt.Errorf("unlock: %w", err)

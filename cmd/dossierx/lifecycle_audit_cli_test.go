@@ -136,6 +136,99 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	}
 }
 
+// TestCLI_Unlock_TolerantOfFlagStore is the v0.1.2 regression for the
+// deferred DX-AUD-10 follow-up: the DX-AUD-10 fix made unlock unconditionally
+// load the flag store to clear a pending entry, which turned an unrelated
+// broken flag-store file into a hard unlock failure. But unlock is the
+// recovery escape hatch ("get this claim back to draft so I can fix things")
+// and must never be blocked by that. So: an absent store means nothing to
+// clear (proceed silently); an unparseable store is warned about on stderr
+// and skipped (unlock still succeeds, exit 0); a valid store holding this
+// claim's flag still has that entry removed (the original DX-AUD-10 behavior).
+func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
+	writeProject := func(t *testing.T) (root, cfgPath, claimPath string) {
+		t.Helper()
+		root = t.TempDir()
+		claimsDir := filepath.Join(root, "claims")
+		if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+			t.Fatalf("mkdir claims: %v", err)
+		}
+		cfgPath = filepath.Join(root, "project.config.yaml")
+		if err := os.WriteFile(cfgPath, []byte("schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+		claimPath = writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the real body")
+		return root, cfgPath, claimPath
+	}
+	assertDraft := func(t *testing.T, claimPath string) {
+		t.Helper()
+		after, err := os.ReadFile(claimPath)
+		if err != nil {
+			t.Fatalf("read claim: %v", err)
+		}
+		if !strings.Contains(string(after), "status: draft") {
+			t.Fatalf("expected the claim reverted to draft after unlock, got:\n%s", after)
+		}
+	}
+
+	t.Run("absent flag store proceeds silently", func(t *testing.T) {
+		root, cfgPath, claimPath := writeProject(t)
+		flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+		if _, err := os.Stat(flagStorePath); !os.IsNotExist(err) {
+			t.Fatalf("precondition: expected no flag store on disk, stat err=%v", err)
+		}
+		_, stderr, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main")
+		if err != nil {
+			t.Fatalf("unlock with an absent flag store must succeed, got: %v", err)
+		}
+		if strings.Contains(stderr, "warning") {
+			t.Fatalf("expected no warning when the flag store is simply absent, got stderr:\n%s", stderr)
+		}
+		assertDraft(t, claimPath)
+	})
+
+	t.Run("unparseable flag store warns and proceeds", func(t *testing.T) {
+		root, cfgPath, claimPath := writeProject(t)
+		flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+		if err := os.WriteFile(flagStorePath, []byte("{ this is not valid json"), 0o644); err != nil {
+			t.Fatalf("write corrupt flag store: %v", err)
+		}
+		_, stderr, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main")
+		if err != nil {
+			t.Fatalf("unlock must still succeed with a corrupt flag store, got: %v", err)
+		}
+		if !strings.Contains(stderr, "warning") || !strings.Contains(stderr, "widget.contract.main") {
+			t.Fatalf("expected a stderr warning naming the claim whose flag was not cleared, got:\n%s", stderr)
+		}
+		assertDraft(t, claimPath)
+	})
+
+	t.Run("valid flag store has this claim's entry removed", func(t *testing.T) {
+		root, cfgPath, claimPath := writeProject(t)
+		flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+		valid := `{"flags":{` +
+			`"widget.contract.main":{"claim_says":"a","now_does":"b","reason":"c","flagged_at":"2026-01-01T00:00:00Z"},` +
+			`"widget.contract.other":{"claim_says":"x","now_does":"y","reason":"z","flagged_at":"2026-01-01T00:00:00Z"}}}`
+		if err := os.WriteFile(flagStorePath, []byte(valid), 0o644); err != nil {
+			t.Fatalf("write valid flag store: %v", err)
+		}
+		if _, _, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main"); err != nil {
+			t.Fatalf("unlock: %v", err)
+		}
+		raw, err := os.ReadFile(flagStorePath)
+		if err != nil {
+			t.Fatalf("read flag store after unlock: %v", err)
+		}
+		if strings.Contains(string(raw), "widget.contract.main") {
+			t.Fatalf("expected unlock to remove main's flag entry, got:\n%s", raw)
+		}
+		if !strings.Contains(string(raw), "widget.contract.other") {
+			t.Fatalf("expected unlock to leave other claims' flag entries intact, got:\n%s", raw)
+		}
+		assertDraft(t, claimPath)
+	})
+}
+
 // TestCLI_Flag_RefusesStructuredLayouts is the DX-AUD-11 regression: flagging
 // a table/steps/mockup claim must be refused (a body-only flag reaudit cannot
 // update its rows/steps/raw-HTML), leaving review_pending untouched; a card
