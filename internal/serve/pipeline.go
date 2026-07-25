@@ -95,5 +95,16 @@ func (p *pipeline) drain(b *batch) {
 	}
 }
 
+// refresh triggers a background render so a change the watcher detected is
+// already reflected in memory before the client's SSE-driven re-fetch of GET /
+// arrives. It reuses get's single-flight machinery via a fresh context, so a
+// refresh that overlaps in-flight GET / requests COALESCES into the same render
+// instead of adding a redundant one, and it never blocks the watcher's poll
+// loop. The render writes nothing to disk (renderViewer is in-memory only), so
+// a refresh can never itself re-trigger the watcher.
+func (p *pipeline) refresh() {
+	go func() { _, _ = p.get(context.Background()) }()
+}
+
 // runCount reports how many renders have executed (for the single-flight test).
 func (p *pipeline) runCount() int64 { return p.runs.Load() }

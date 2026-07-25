@@ -71,6 +71,21 @@ type Server struct {
 	// pipe serializes viewer renders (single-flight); see pipeline.go.
 	pipe *pipeline
 
+	// hub fans a "changed" signal out to every live /api/events subscriber; the
+	// watcher drives it on each debounced claim-file change. See sse.go.
+	hub *hub
+
+	// closing is closed once when Serve begins a graceful shutdown, so live
+	// /api/events handlers return promptly instead of making Shutdown wait out
+	// the whole grace period. It is created in New and closed by Serve.
+	closing chan struct{}
+
+	// pollInterval and debounceInterval are the watcher's poll cadence and
+	// trailing-debounce window (see watcher.go). New sets the production
+	// defaults; SetWatchIntervals overrides them for tests before Serve.
+	pollInterval     time.Duration
+	debounceInterval time.Duration
+
 	// httpSrv is built in New (its handler closes over this Server, so the
 	// admission middleware reads port at request time). ln and port are set by
 	// Listen. port is atomic because the admission middleware reads it from
@@ -85,14 +100,21 @@ type Server struct {
 // mount); the caller resolves it (cmd/dossierx passes resolveVersionInfo's
 // value). New does not bind a port — call Listen next.
 func New(cfg *config.Config, version string) *Server {
-	s := &Server{cfg: cfg, version: version}
+	s := &Server{
+		cfg:              cfg,
+		version:          version,
+		hub:              newHub(),
+		closing:          make(chan struct{}),
+		pollInterval:     defaultPollInterval,
+		debounceInterval: defaultDebounceInterval,
+	}
 	s.pipe = newPipeline(s.renderViewer)
 	s.httpSrv = &http.Server{
 		Handler: s.admission(s.routes()),
 		// ReadHeaderTimeout guards against a slow-loris client dribbling
 		// request headers; the body is separately capped by MaxBytesReader in
-		// the admission middleware. WriteTimeout is deliberately 0: a future
-		// SSE stream (Phase 5) is a long-lived response that a write deadline
+		// the admission middleware. WriteTimeout is deliberately 0: the
+		// /api/events SSE stream is a long-lived response that a write deadline
 		// would silently kill, and a finite response is bounded by the client
 		// context instead.
 		ReadHeaderTimeout: 10 * time.Second,
@@ -142,21 +164,88 @@ func (s *Server) Serve(ctx context.Context) error {
 	if s.ln == nil {
 		return errors.New("serve: Serve called before Listen")
 	}
+	// Startup guardrail: refuse to run if a render/catalog/store output sits
+	// inside the watched claims tree (which would drive the watcher in a loop).
+	if err := s.assertOutputsOutsideClaimsTree(); err != nil {
+		return err
+	}
+
+	// Capture the claims fingerprint synchronously BEFORE accepting requests, so
+	// a change that lands between now and the watcher's first poll is still
+	// detected (the baseline reflects the pre-serve state). Then poll in the
+	// background until ctx is cancelled, feeding the render pipeline and the SSE
+	// hub on each debounced change.
+	baseline, err := scanFingerprint(s.cfg.ClaimsDir)
+	if err != nil {
+		baseline = map[string]fileStamp{}
+	}
+	w := newWatcher(s.cfg.ClaimsDir, s.pollInterval, s.debounceInterval, s.onChange)
+	go w.run(ctx, baseline)
+
 	errCh := make(chan error, 1)
 	go func() { errCh <- s.httpSrv.Serve(s.ln) }()
 
 	select {
 	case <-ctx.Done():
+		// Wake any live /api/events handlers first so Shutdown does not wait out
+		// the grace period on a long-lived stream, then drain in-flight requests.
+		close(s.closing)
 		shutCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 		defer cancel()
 		_ = s.httpSrv.Shutdown(shutCtx)
 		return nil
 	case err := <-errCh:
+		close(s.closing)
 		if errors.Is(err, http.ErrServerClosed) {
 			return nil
 		}
 		return err
 	}
+}
+
+// onChange is what the watcher calls once per debounced change burst: refresh
+// the in-memory render so the next GET / (or an SSE-driven re-fetch) is already
+// warm, and signal every /api/events subscriber to re-fetch (the render and
+// /api/status). It writes nothing to disk, so it cannot itself re-trigger the
+// watcher.
+func (s *Server) onChange() {
+	s.pipe.refresh()
+	s.hub.broadcast()
+}
+
+// HubSize reports the number of live /api/events subscribers. It exists for
+// tests to prove a disconnect drops the subscription (a leak -race cannot see);
+// production code has no reason to call it.
+func (s *Server) HubSize() int { return s.hub.size() }
+
+// SetWatchIntervals overrides the watcher's poll and debounce cadence. It lets
+// tests drive live reload on a short, deterministic cycle instead of the
+// ~500ms/200ms production defaults; it MUST be called before Serve, which reads
+// the values when it starts the watcher. Production code keeps the New defaults
+// and never calls this.
+func (s *Server) SetWatchIntervals(poll, debounce time.Duration) {
+	s.pollInterval = poll
+	s.debounceInterval = debounce
+}
+
+// assertOutputsOutsideClaimsTree is serve's startup guardrail: the viewer,
+// catalog, and lock-store output paths MUST live outside the watched claims
+// tree. If one were inside, a render/catalog/store write would look like a claim
+// change and drive the watcher in an endless re-render loop. A violation almost
+// always means a misconfigured claims_dir (e.g. "."), so serve refuses to start
+// rather than spin.
+func (s *Server) assertOutputsOutsideClaimsTree() error {
+	root := s.cfg.ClaimsDir
+	for _, out := range []struct{ name, path string }{
+		{"viewer/index.html", s.renderOutPath()},
+		{".catalog.json", s.catalogPath()},
+		{"lock store", s.storePath()},
+	} {
+		if isInsideDir(root, out.path) {
+			return fmt.Errorf("serve: %s (%s) is inside the watched claims_dir (%s); move claims_dir so the render/catalog/store outputs sit outside it", out.name, out.path, root)
+		}
+	}
+	return nil
 }
 
 // routes wires the endpoint set. It uses the method+wildcard patterns of the
@@ -171,6 +260,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/claims/{id}/comments", s.handleAddThread)
 	mux.HandleFunc("POST /api/claims/{id}/comments/{tid}/replies", s.handleReply)
 	mux.HandleFunc("POST /api/claims/{id}/comments/{tid}/resolve", s.handleResolve)
@@ -214,4 +304,17 @@ func (s *Server) storePath() string {
 
 func (s *Server) flagStorePath() string {
 	return filepath.Join(s.cfg.Dir(), ".dossierx-flag-store.json")
+}
+
+// renderOutPath and catalogPath resolve "dossierx render"/"check"'s viewer and
+// catalog output files under cfg.Dir() (absolute), matching cmd/dossierx and
+// internal/check. serve never writes them from the GET / pipeline (which renders
+// to memory), but the startup guardrail checks they sit outside the watched
+// claims tree so a check-driven write can never loop the watcher.
+func (s *Server) renderOutPath() string {
+	return filepath.Join(s.cfg.Dir(), "viewer", "index.html")
+}
+
+func (s *Server) catalogPath() string {
+	return filepath.Join(s.cfg.Dir(), ".catalog.json")
 }
