@@ -24,6 +24,7 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		filepath.Join(targetDir, "dossierx-claims", "SKILL.md"):      "name: dossierx-claims",
 		filepath.Join(targetDir, "dossierx-build-order", "SKILL.md"): "name: dossierx-build-order",
 		filepath.Join(targetDir, "dossierx-code-links", "SKILL.md"):  "name: dossierx-code-links",
+		filepath.Join(targetDir, "dossierx-comments", "SKILL.md"):    "name: dossierx-comments",
 	}
 
 	for path, wantFrontmatter := range wantNames {
@@ -36,8 +37,8 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(stdout, "wrote 3 file(s)") {
-		t.Fatalf("expected stdout to report 3 file(s) written, got:\n%s", stdout)
+	if !strings.Contains(stdout, "wrote 4 file(s)") {
+		t.Fatalf("expected stdout to report 4 file(s) written, got:\n%s", stdout)
 	}
 }
 

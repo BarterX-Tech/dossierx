@@ -85,11 +85,18 @@ dossierx build-order lock    --module <name>   # freeze the proposed sequence (h
 order only ever gets generated once a module's docs are genuinely done, so it covers every
 claim by construction, nothing skipped.
 
+The same gate also refuses a module any of whose claims still carries an **unresolved comment
+thread**, naming the offending claim ids — a module isn't "done" while a review conversation is
+still open on one of its claims. Resolve the threads (`dossierx comment resolve`, see
+**[[dossierx-comments]]**), then re-run `propose`. This mirrors the per-claim lock gate: a
+single claim can't lock with an open thread either.
+
 ## The review step
 
 1. `dossierx build-order propose --module <name>` — writes the proposed sequence. Writes
-   nothing if the module isn't fully locked, or if a same-phase cycle makes the sequence
-   invalid (both cases print exactly what's blocking it).
+   nothing if the module isn't fully locked, if any of its claims still has an open comment
+   thread, or if a same-phase cycle makes the sequence invalid (each case prints exactly
+   what's blocking it).
 2. **Present the proposed sequence and wait for explicit confirmation** before locking —
    same review discipline as any other dossierx-v1 gate.
 3. `dossierx build-order lock --module <name>` — freezes it. Refuses if nothing was proposed

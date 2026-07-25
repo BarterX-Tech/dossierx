@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Comments on claims** — threaded, Google-Docs-style review discussion attached to any claim,
+  so a human and an agent can talk *about* a claim without editing it.
+  - New `dossierx comment` command group: `add`, `reply`, `resolve`, `reopen`, `edit`, `delete`,
+    and `list` (with `--open` and `--json`). Every mutating verb takes `--as human|agent`
+    (recording the actor's role, which the advisory-rights rule keys off) and takes the
+    project-wide claims lock, so concurrent CLI and browser edits can't clobber each other.
+    Threads and replies carry engine-minted ids; the new `comments:` claim field is `omitempty`
+    and **excluded from a claim's content hash**, so commenting on a claim never rewrites an
+    uncommented claim's bytes and never flips its dependents to `review_pending`.
+  - New `dossierx serve`: a localhost-only HTTP server that renders the claims viewer from
+    memory and exposes the same comment operations to the browser, with an interactive thread
+    panel and composer, a same-origin admission layer (Host/Origin checks, no CORS), and live
+    reload that pushes changes over server-sent events as claim files change on disk. Binds a
+    random high port by default (`--port` to override) and never writes `viewer/index.html` or
+    `.catalog.json` on a page load. **Adds no new runtime dependency** — the file watcher is a
+    standard-library modification-time poll, so the runtime stays cobra + yaml.v3 only.
+  - An open comment thread is now a third `review_pending` trigger on a locked claim, alongside
+    dependency drift and `dossierx flag`. A claim **cannot be locked while it has an unresolved
+    comment thread** (and `dossierx build-order propose` refuses a module with any open thread);
+    `review_pending` clears when the last open thread is resolved, unless drift or a flag also
+    stands. `dossierx reaudit` refuses a claim that is `review_pending` only because of an open
+    thread — there is no content diff to confirm, so it directs you to resolve the thread
+    instead. `dossierx check` reports open-comment counts per module and points its next-steps
+    at the exact `dossierx comment resolve` command.
+  - New `comments-unresolved` lint (warning severity): surfaces claims that still carry an open
+    comment thread.
+- A fourth embedded Claude Code skill, **`dossierx-comments`**, teaching an agent when to
+  comment versus `flag` (the discriminator is "is there a specific proposed wording change?"),
+  the advisory-rights rule (an agent never resolves a human-opened thread), and how an open
+  thread gates locking. The three existing skills were updated for the new three-trigger
+  lifecycle and cross-linked to it.
+
+### Changed
+- `dossierx skills export` now writes **four** skill bundles instead of three. Projects that
+  previously exported the skills (e.g. into `.claude/skills/`) with the old three bundles must
+  **re-export** to pick up `dossierx-comments`; the export overwrites in place, so re-running
+  the same `dossierx skills export <dir>` is all that's needed.
+
+### Docs
+- Documented the `comments:` claim field and rewrote the lock lifecycle in `FORMAT.md`,
+  `README.md`, and the skills to the three-trigger (dependency drift / `dossierx flag` / open
+  comment thread) model with its three matching clearers.
+
 ## [0.1.2] - 2026-07-25
 
 Consolidated audit-fix release: a deep audit against a real 202-claim consumer project
