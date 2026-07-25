@@ -35,8 +35,9 @@ var (
 // common install locations for Chrome/Chromium on this platform, then the Comet
 // build known to exist on the maintainer's machine. If none is found the test
 // SKIPS with a clear message rather than failing — a machine without a browser
-// simply cannot run the browser suite — but CI/this environment is expected to
-// export DOSSIERX_TEST_BROWSER so the suite actually runs.
+// simply cannot run the browser suite. This suite is maintainer-run: set
+// DOSSIERX_TEST_BROWSER to a Chrome/Chromium binary to actually run it. It is
+// not yet wired into CI — there is no CI job that runs the chromedp suite.
 func resolveBrowser(t *testing.T) string {
 	t.Helper()
 	if p := os.Getenv("DOSSIERX_TEST_BROWSER"); p != "" {

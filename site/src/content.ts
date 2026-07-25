@@ -544,7 +544,7 @@ export const contentSpec: ContentSpec = {
                 detail:
                   "Valid on a locked claim whose review_pending came from dependency drift or a flag (else exit 2). A review_pending that is only from an open comment thread is refused — a comment carries no proposed content change to diff, so reaudit points you at dossierx comment resolve instead. Prints the proposed diff and stops unless --confirm. Two sources converge: a flagged claim gets a real before/after diff (ProposeFlagDiff); a drifted one gets a dependency-drift stub (ProposeDiff). On confirm: applies, appends audit_notes, re-baselines hashes, clears the flag — but leaves review_pending set if an open thread still stands.",
                 example:
-                  '$ dossierx reaudit logger.internals.dispatch --confirm\nreaudit: applied, review_pending cleared\n$ dossierx reaudit logger.contract.api-surface\nreaudit: claim "logger.contract.api-surface" is review_pending only because of 1 open comment thread(s); resolve them with "dossierx comment resolve ..." — nothing to reaudit',
+                  '$ dossierx reaudit logger.internals.dispatch --confirm\nreaudit: logger.internals.dispatch applied, review_pending cleared\n$ dossierx reaudit logger.contract.api-surface\nreaudit: claim "logger.contract.api-surface" is review_pending only because of 1 open comment thread(s); resolve them with "dossierx comment resolve ..." — nothing to reaudit',
               },
               {
                 name: "flag",

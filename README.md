@@ -80,7 +80,8 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 | `dossierx flag <id> --claim-says --now-does --reason` | Flag a locked claim whose stated behavior no longer matches reality, marking it `review_pending`. |
 | `dossierx comment add <id> --as <role> --body <text>` | Open a review comment thread on a claim (`--as human\|agent`); dialogue about the claim, no content edit. |
 | `dossierx comment list <id> [--open] [--json]` | List a claim's comment threads; `--open` for unresolved only, `--json` for machine output. |
-| `dossierx comment reply\|resolve\|reopen\|edit\|delete <id> <thread-id> --as <role>` | Reply to, resolve, reopen, edit, or delete a thread (advisory rights: an agent may only act on its own messages). |
+| `dossierx comment reply <id> <thread-id> --as <role>` | Reply to an open thread (ungated: an agent may reply to a human-opened thread — the core agent-to-human workflow). |
+| `dossierx comment resolve\|reopen\|edit\|delete <id> <thread-id> --as <role>` | Resolve, reopen, edit, or delete a thread (advisory rights: an agent may only act on its own messages). |
 | `dossierx implink set --module --claim --file [--symbol]` | Manually record that a claim is implemented in a source file (for links scanning can't reach). |
 | `dossierx implink status --module <name>` | Report which claims in a module are linked to code and which are drifted or unlinked. |
 | `dossierx skills export <dir>` | Write the embedded Claude Code skill files into a consuming project (e.g. `.claude/skills/`). |
