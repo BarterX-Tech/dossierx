@@ -266,6 +266,27 @@ func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
 }
 
+// claimsSentinelPath is the base path of the ONE project-wide claim-file
+// write sentinel (lock.AcquireFileLock appends ".lock", so the real lock file
+// is cfg.Dir()/.dossierx-claims.lock). It deliberately lives under cfg.Dir(),
+// never cwd, and OUTSIDE claims_dir — so it is never itself loaded as a claim
+// (LoadClaims only decodes *.yaml/*.yml, and the file is outside claims_dir
+// besides) and, in a later serve phase, never trips a claims_dir file watcher.
+//
+// Unlike storePath/flagStorePath, each of which guards its OWN single JSON
+// store, this sentinel guards EVERY claim file in the project. loader.SaveClaim
+// rewrites a claim's entire file, so two writers that each loaded the same
+// pre-mutation snapshot would have whichever saved last silently erase the
+// other's change. Every claim-file writer (lock/unlock/check/flag/reaudit)
+// therefore takes THIS sentinel FIRST — before any lock-store or flag-store
+// sentinel — then re-reads claims inside it, so the global acquisition order
+// is always claims -> lock-store -> flag-store and no AB-BA deadlock is
+// possible. The critical section is bounded to load->mutate->SaveClaim;
+// render/catalog/scan work runs after it is released.
+func claimsSentinelPath(cfg *config.Config) string {
+	return filepath.Join(cfg.Dir(), ".dossierx-claims")
+}
+
 // loadStoreForRead loads the lock content-hash store for a read-mostly command
 // (currently "check"), first re-arming per-dependent baselines if the store
 // predates them (a legacy migration — see lock.MigrateLegacyStore) and
@@ -470,40 +491,71 @@ func runRender(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) err
 // check (lint + catalog + render, stop at first failure)
 // ---------------------------------------------------------------------
 
+// reconcileReviewPending runs "check"'s only claim-file-writing phase under
+// the project-wide claims sentinel: it loads claims, flips every locked claim
+// whose mirrors/rests_on content has drifted since its last lock or confirmed
+// reaudit to locked+review_pending, and persists each flip back to the claim's
+// own file so it survives to the next run and shows up in "dossierx stale". It
+// returns the reconciled claims for the caller's (non-writing)
+// lint/catalog/render/scan pipeline.
+//
+// The claims sentinel is taken FIRST — before loadStoreForRead's own
+// lock-store sentinel, preserving the global claims -> lock-store order — and
+// released (via defer, when this function returns) BEFORE the caller renders,
+// so a full render never blocks a concurrent agent CLI write. loadStoreForRead
+// also re-arms a legacy (pre-versioning) store's per-dependent baselines from
+// current content on the first run after upgrade, so already-locked claims
+// regain drift detection immediately (no manual re-lock) without any spurious
+// review_pending — see lock.MigrateLegacyStore.
+//
+// Plain loader.SaveClaim (not SaveClaimIfUnchanged) is correct here: the
+// claims sentinel is held across this whole load->detect->save, so no
+// cooperating writer can change a claim file underneath the loop.
+func reconcileReviewPending(cfg *config.Config) ([]model.Claim, error) {
+	releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+	if err != nil {
+		return nil, err
+	}
+	defer releaseClaims()
+
+	claims, err := loadClaims(cfg)
+	if err != nil {
+		return nil, err
+	}
+	store, err := loadStoreForRead(cfg, claims)
+	if err != nil {
+		return nil, err
+	}
+	updated := lock.DetectStale(claims, store)
+	for i := range updated {
+		if updated[i].ReviewPending != claims[i].ReviewPending {
+			if err := loader.SaveClaim(updated[i]); err != nil {
+				return nil, fmt.Errorf("persist review_pending for %q: %w", updated[i].ID, err)
+			}
+		}
+	}
+	return updated, nil
+}
+
 func newCheckCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
 		Short: "Run lint, catalog, and render in one shot, stopping at first failure",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
 
-			// Dependency-drift detection: flip locked claims whose
-			// mirrors/rests_on content has changed since the last lock or
-			// confirmed reaudit to locked+review_pending. Persist the flag
-			// change back to the claim's own file so it survives to the
-			// next run and shows up in "dossierx stale".
-			//
-			// loadStoreForRead also re-arms a legacy (pre-versioning) store's
-			// per-dependent baselines from current content on the first run
-			// after upgrade, so already-locked claims regain drift detection
-			// immediately (no manual re-lock) without any spurious
-			// review_pending — see lock.MigrateLegacyStore.
-			store, err := loadStoreForRead(cfg, claims)
+			// Dependency-drift detection + review_pending persistence is
+			// "check"'s only claim-file-writing phase; it runs under the
+			// project-wide claims sentinel and releases it before the
+			// (non-writing) lint/catalog/render/scan pipeline below, so a full
+			// render never blocks a concurrent agent CLI write.
+			claims, err := reconcileReviewPending(cfg)
 			if err != nil {
 				return fmt.Errorf("check: %w", err)
 			}
-			updated := lock.DetectStale(claims, store)
-			for i := range updated {
-				if updated[i].ReviewPending != claims[i].ReviewPending {
-					if err := loader.SaveClaim(updated[i]); err != nil {
-						return fmt.Errorf("check: persist review_pending for %q: %w", updated[i].ID, err)
-					}
-				}
-			}
-			claims = updated
 
 			findings := lint.RunAll(claims, cfg)
 			if err := reportLintFindings(cmd, findings, false); err != nil {
@@ -864,13 +916,36 @@ func newLockCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			// Claim-file write discipline (Phase 0): take the project-wide
+			// claims sentinel FIRST — before the lock-store sentinel below —
+			// and load claims INSIDE it, so this whole load->mutate->SaveClaim
+			// runs against a snapshot no concurrent claim-file writer can have
+			// changed underneath us (loader.SaveClaim rewrites the entire file,
+			// so a stale snapshot would silently erase a co-writer's edit).
+			// Acquiring claims before lock-store keeps the global order
+			// (claims -> lock-store -> flag-store) deadlock-free.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("lock: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err := loadClaims(cfg)
 			if err != nil {
 				return err
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
 				return fmt.Errorf("lock: claim %q not found: %w", id, errClaimNotFound)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("lock: %w", err)
 			}
 
 			// Serialize concurrent "dossierx lock"/"dossierx reaudit --confirm"
@@ -906,7 +981,7 @@ func newLockCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("lock: %w", err)
 			}
-			if err := loader.SaveClaim(updated); err != nil {
+			if err := loader.SaveClaimIfUnchanged(updated, token); err != nil {
 				return fmt.Errorf("lock: %w", err)
 			}
 			if err := store.Save(); err != nil {
@@ -925,13 +1000,34 @@ func newUnlockCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			// Claim-file write discipline (Phase 0): take the project-wide
+			// claims sentinel FIRST — before the flag-store sentinel below —
+			// and load claims INSIDE it, so this load->mutate->SaveClaim runs
+			// against a snapshot no concurrent claim-file writer can change
+			// underneath us. claims-then-flag-store keeps the global order
+			// (claims -> lock-store -> flag-store) deadlock-free.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err := loadClaims(cfg)
 			if err != nil {
 				return err
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
 				return fmt.Errorf("unlock: claim %q not found: %w", id, errClaimNotFound)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
 			}
 
 			// Unlocking must also drop any pending "dossierx flag" trigger for
@@ -972,7 +1068,7 @@ func newUnlockCmd() *cobra.Command {
 			}
 
 			updated := lock.Unlock(claim)
-			if err := loader.SaveClaim(updated); err != nil {
+			if err := loader.SaveClaimIfUnchanged(updated, token); err != nil {
 				return fmt.Errorf("unlock: %w", err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "unlock: %s is now draft\n", id)
@@ -1008,6 +1104,40 @@ func newReauditCmd() *cobra.Command {
 			if claim.Status != model.StatusLocked || !claim.ReviewPending {
 				fmt.Fprintf(cmd.ErrOrStderr(), "reaudit: claim %q is not locked+review_pending\n", id)
 				os.Exit(2)
+			}
+
+			// Claim-file write discipline (Phase 0): the two guards above ran
+			// on a lock-free load DELIBERATELY — they os.Exit(2) (which skips
+			// defers) only while no file lock is held, so nothing is leaked.
+			// Now take the project-wide claims sentinel FIRST (before the
+			// lock-store and flag-store sentinels below, preserving the global
+			// claims -> lock-store -> flag-store order) and RE-READ claims
+			// inside it, so a confirmed reaudit's load->mutate->SaveClaim runs
+			// against a snapshot no concurrent claim-file writer can change
+			// underneath us.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("reaudit: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err = loadClaims(cfg)
+			if err != nil {
+				return fmt.Errorf("reaudit: %w", err)
+			}
+			claim, ok = loader.FindByID(claims, id)
+			if !ok {
+				// Vanished between the guard and the sentinel (an out-of-band
+				// delete). Refuse via the sentinel error so the deferred
+				// release still runs; main() maps it to the same exit 2.
+				return fmt.Errorf("reaudit: claim %q not found: %w", id, errClaimNotFound)
+			}
+			if claim.Status != model.StatusLocked || !claim.ReviewPending {
+				return fmt.Errorf("reaudit: claim %q is not locked+review_pending: %w", id, errWrongState)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("reaudit: %w", err)
 			}
 
 			// See newLockCmd's comment: serializes against any concurrent
@@ -1084,7 +1214,7 @@ func newReauditCmd() *cobra.Command {
 				return fmt.Errorf("reaudit: %w", err)
 			}
 			applied = lock.ClearReviewPending(applied, claims, store)
-			if err := loader.SaveClaim(applied); err != nil {
+			if err := loader.SaveClaimIfUnchanged(applied, token); err != nil {
 				return fmt.Errorf("reaudit: %w", err)
 			}
 			if err := store.Save(); err != nil {

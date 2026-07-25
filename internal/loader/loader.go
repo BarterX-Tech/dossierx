@@ -6,6 +6,8 @@
 package loader
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -134,6 +136,86 @@ func readFileWithRetry(path string) ([]byte, error) {
 func SaveClaim(c model.Claim) error {
 	if strings.TrimSpace(c.SourcePath) == "" {
 		return fmt.Errorf("loader: claim %q has no source path to save to", c.ID)
+	}
+
+	data, err := yaml.Marshal(c)
+	if err != nil {
+		return fmt.Errorf("loader: marshal claim %q: %w", c.ID, err)
+	}
+	if err := atomicWriteFile(c.SourcePath, data, 0o644); err != nil {
+		return fmt.Errorf("loader: write %s: %w", c.SourcePath, err)
+	}
+	return nil
+}
+
+// ErrClaimFileChanged is returned by SaveClaimIfUnchanged when the target
+// claim file's on-disk content no longer matches the snapshot the caller
+// captured (via CaptureClaimFileToken) before mutating it — i.e. some other
+// writer changed the file underneath this load->mutate->save sequence. It is
+// a distinct, matchable sentinel (errors.Is) so a caller such as a future
+// HTTP server can map it to a 409 Conflict / "reload, this claim changed"
+// response rather than a generic 500.
+var ErrClaimFileChanged = errors.New("claim file changed on disk since it was loaded")
+
+// ClaimFileToken is an opaque snapshot of a claim file's on-disk content at
+// load time, handed back to SaveClaimIfUnchanged so it can refuse to
+// overwrite a file that changed underneath the caller. It records the file's
+// byte length and a content hash; a content hash (rather than only mtime+size)
+// is used deliberately, so the check is robust to same-size edits and to
+// coarse filesystem mtime granularity — a hash mismatch is exactly "the bytes
+// differ", with no timestamp-resolution guesswork.
+type ClaimFileToken struct {
+	size int64
+	hash string
+}
+
+// tokenForBytes derives a ClaimFileToken from a file's raw bytes.
+func tokenForBytes(data []byte) ClaimFileToken {
+	sum := sha256.Sum256(data)
+	return ClaimFileToken{size: int64(len(data)), hash: hex.EncodeToString(sum[:])}
+}
+
+// CaptureClaimFileToken snapshots path's current on-disk content for a later
+// SaveClaimIfUnchanged optimistic-concurrency check. Call it right after
+// loading the claim (inside the same claims-sentinel critical section) so the
+// token reflects the bytes the caller is about to mutate. A file that cannot
+// be read is an error, not an empty token: callers only ever snapshot a claim
+// they just loaded, so an unreadable file there is a real failure, never the
+// expected "fresh, absent store" case LoadStore/LoadFlagStore tolerate.
+func CaptureClaimFileToken(path string) (ClaimFileToken, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ClaimFileToken{}, fmt.Errorf("loader: snapshot %s: %w", path, err)
+	}
+	return tokenForBytes(data), nil
+}
+
+// SaveClaimIfUnchanged is SaveClaim guarded by an optimistic-concurrency
+// check: it writes c back to its SourcePath only if that file's current
+// on-disk content still matches want (the token the caller captured at load
+// time via CaptureClaimFileToken). If the file changed underneath, it writes
+// nothing and returns ErrClaimFileChanged.
+//
+// This is a best-effort backstop layered UNDER the project-wide claims
+// sentinel (see cmd/dossierx's claimsSentinelPath), not a replacement for it.
+// The sentinel serializes every cooperating claim-file writer; this check
+// additionally catches an out-of-band edit (a text editor, or a future writer
+// that forgets the sentinel) — the one class of change the sentinel alone
+// cannot see. The re-read/compare/write is deliberately not a single atomic
+// transaction (a change slipped in after the compare but before the rename
+// would be missed), which is precisely why it BACKS the sentinel rather than
+// standing in for it.
+func SaveClaimIfUnchanged(c model.Claim, want ClaimFileToken) error {
+	if strings.TrimSpace(c.SourcePath) == "" {
+		return fmt.Errorf("loader: claim %q has no source path to save to", c.ID)
+	}
+
+	current, err := os.ReadFile(c.SourcePath)
+	if err != nil {
+		return fmt.Errorf("loader: re-read %s before optimistic save: %w", c.SourcePath, err)
+	}
+	if tokenForBytes(current) != want {
+		return fmt.Errorf("loader: %s: %w", c.SourcePath, ErrClaimFileChanged)
 	}
 
 	data, err := yaml.Marshal(c)

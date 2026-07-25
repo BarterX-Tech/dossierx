@@ -41,7 +41,24 @@ func newFlagCmd() *cobra.Command {
 				return fmt.Errorf("flag: --claim-says, --now-does, and --reason are all required and must be non-empty")
 			}
 
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			// Claim-file write discipline (Phase 0): take the project-wide
+			// claims sentinel FIRST — before the flag-store sentinel below —
+			// and load claims INSIDE it, so this load->mutate->SaveClaim runs
+			// against a snapshot no concurrent claim-file writer can change
+			// underneath us. claims-then-flag-store keeps the global order
+			// (claims -> lock-store -> flag-store) deadlock-free.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("flag: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err := loadClaims(cfg)
 			if err != nil {
 				return err
 			}
@@ -67,6 +84,10 @@ func newFlagCmd() *cobra.Command {
 			// rows/steps/raw_html directly, and relock.
 			if lay := flagStructuredLayout(claim); lay != "" {
 				return fmt.Errorf("flag: claim %q has a %s layout whose rendered content (rows/steps/raw HTML) a flag-sourced reaudit cannot update; unlock the claim, edit it directly, then relock instead", id, lay)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("flag: %w", err)
 			}
 
 			// Serializes against any concurrent "dossierx flag"/"dossierx reaudit
@@ -94,7 +115,7 @@ func newFlagCmd() *cobra.Command {
 			}
 
 			claim.ReviewPending = true
-			if err := loader.SaveClaim(claim); err != nil {
+			if err := loader.SaveClaimIfUnchanged(claim, token); err != nil {
 				return fmt.Errorf("flag: %w", err)
 			}
 
