@@ -126,7 +126,15 @@ func TestRender_NoComposerInStaticDocument(t *testing.T) {
 	if !strings.Contains(out, `class="comment-chip`) || !strings.Contains(out, `class="comments-panel"`) {
 		t.Fatalf("expected the chip + baked panel in the rendered document:\n%s", out)
 	}
-	for _, forbidden := range []string{"<textarea", "comment-composer"} {
+	// No composer MARKUP may be baked into a claim's static HTML. The checks are
+	// attribute-precise on purpose: since Phase 5 the shell's inline <style> and
+	// <script> legitimately DEFINE the client-side composer (its CSS selectors
+	// like ".comment-composer" and JS class strings like 'comment-composer'), so
+	// a bare-token scan would false-positive on the runtime the test is meant to
+	// tolerate. A composer rendered as real DOM by comments.html would instead
+	// emit a `class="comment-composer"` attribute or a literal `<textarea` tag —
+	// exactly what these forbid — so the read-only-snapshot guarantee still holds.
+	for _, forbidden := range []string{"<textarea", `class="comment-composer`, `class="comment-reply-composer`} {
 		if strings.Contains(out, forbidden) {
 			t.Fatalf("static document must contain no composer markup, found %q:\n%s", forbidden, out)
 		}

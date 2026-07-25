@@ -1,0 +1,10 @@
+# Browser caches / profiles chromedp may spawn under the working dir, plus any
+# built dossierx binary or throwaway project a test writes. The test harness
+# already uses os.MkdirTemp / t.TempDir for its own scratch, but ignore these
+# defensively so a stray artifact never gets committed.
+dossierx
+*.test
+.chromedp/
+chrome-user-data/
+chromedp-*/
+/tmp/

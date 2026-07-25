@@ -391,11 +391,15 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 			count = open
 			label = fmt.Sprintf("view %d open comment thread(s)", open)
 		}
+		// aria-controls names the shared comment rail (#commentsPanel, emitted by
+		// shell.html) that the viewer JS reveals on click; aria-expanded is kept in
+		// sync by that JS. Both are inert in a browser-less context but make the
+		// chip a proper disclosure control for assistive tech.
 		b.WriteString(`<li class="claim-comments"><button type="button" class="`)
 		b.WriteString(chipClass)
 		b.WriteString(`" data-claim-id="`)
 		b.WriteString(html.EscapeString(c.ID))
-		b.WriteString(`" aria-expanded="false" aria-label="`)
+		b.WriteString(`" aria-controls="commentsPanel" aria-expanded="false" aria-label="`)
 		b.WriteString(html.EscapeString(label))
 		b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
 		b.WriteString(fmt.Sprintf("%d", count))

@@ -221,6 +221,14 @@ func TestEdgesHTMLWithLinks_AccessibleControls(t *testing.T) {
 	if !strings.Contains(got, `<button type="button"`) {
 		t.Fatalf("expected the chip to be a real <button type=\"button\">, got: %s", got)
 	}
+	// It is a disclosure control for the shared rail: aria-controls names the
+	// panel and aria-expanded reflects (initially closed) open state.
+	if !strings.Contains(got, `aria-controls="commentsPanel"`) {
+		t.Fatalf("chip must reference the panel via aria-controls, got: %s", got)
+	}
+	if !strings.Contains(got, `aria-expanded="false"`) {
+		t.Fatalf("chip must carry an aria-expanded state, got: %s", got)
+	}
 	labelIdx := strings.Index(got, `aria-label="`)
 	if labelIdx == -1 {
 		t.Fatalf("chip button must carry an aria-label, got: %s", got)
