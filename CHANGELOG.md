@@ -50,12 +50,13 @@ importable, there are no breaking CLI changes, and the lock-store migrates autom
 - `flag` on a `table` / `steps` / `mockup` claim rewrote only the body, leaving the rendered
   rows/steps/raw HTML stale while clearing `review_pending`; `flag` is now refused on those
   structured layouts (use unlock → edit → relock).
-- Build-order staleness now flags an artifact stale on every order-affecting change, not just
-  content edits, in-phase deletions, and additions: a covered claim's `build_role` change
-  (which reorders its phase), an excluded out-of-scope claim being deleted, and an excluded
-  claim being *promoted* into a real build phase (or edited to an empty/invalid role, mirroring
-  what `propose` would now reject). Staleness also runs for a locked module that covers only
-  out-of-scope claims, which previously escaped every check and could not be relocked.
+- Build-order staleness is now computed structurally: `status` re-derives the order a fresh
+  `propose` would produce from the current claims and flags the locked artifact stale whenever
+  they differ. This covers every order-affecting change in one check — a covered claim's
+  `build_role` or `order:` edit, a source-file rename, `rests_on` reordering, additions,
+  deletions, and an excluded claim promoted into a phase (or edited to an empty/invalid role) —
+  plus content edits via the existing per-claim hash. It also runs for a locked module that
+  covers only out-of-scope claims, which previously escaped every check and could not be relocked.
 - Build-order staleness ignored newly-added claims (an artifact could silently omit a claim);
   additions now flag the artifact stale, symmetric with deletions.
 - `build-order lock` re-blessed a stale artifact without recomputing its order; it now refuses
