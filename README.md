@@ -1,107 +1,195 @@
 # DossierX
 
-A config-driven CLI that turns YAML "claims" into a linted, validated, human-reviewable HTML documentation site, with an audit trail via a lock/lint/reaudit lifecycle.
+DossierX turns a directory of YAML "claims" — atomic, reviewable facts about a system — into a linted, cross-checked HTML site a human can actually read and argue with. Each claim can be **locked** once a human has approved it, after which it never changes silently: a drifted dependency, a code change that contradicts it, or an open comment thread flags it for review instead. It is built to be operated by an **agent** and reviewed by a **human**, and this release gives each of them their own surface.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/BarterX-Tech/dossierx/ci.yml?branch=main&label=CI)](https://github.com/BarterX-Tech/dossierx/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/BarterX-Tech/dossierx)](https://github.com/BarterX-Tech/dossierx/blob/main/LICENSE)
 [![Release](https://img.shields.io/github/v/release/BarterX-Tech/dossierx)](https://github.com/BarterX-Tech/dossierx/releases)
 
-DossierX is a CLI only — there is no public Go package API. Everything below is invoked through the `dossierx` binary; `internal/` is not importable by other modules and its structure is free to change between releases without that counting as a breaking change.
+## Two roles
 
-## Install
+|  | **Agent** — the operator | **Human** — the reviewer |
+|---|---|---|
+| **Surface** | the CLI: 19 commands under 6 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
+| **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
+
+The gate is narrower than "the agent may not touch claims", which would defeat the point. Draft claims are the agent's workshop and stay unfrictioned. The invariant is: **nothing already locked changes without your approval on the record** — see [the lock ledger](#integrity-the-lock-ledger).
+
+## Start here — paste this to your agent
+
+Paste this into Claude Code, Codex, or any other coding agent working in the repository you want documented. It is idempotent: running it again on a project that is already set up changes nothing and reports what it found.
+
+```text
+Set up DossierX in this repository.
+
+1. If the `dossierx` binary is missing, install it with
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.3.0`,
+   then run `dossierx version` and show me the output.
+2. Run `dossierx skills export .claude/skills` — or point it at whichever
+   skills/instructions directory this harness actually reads. Load what it
+   wrote and follow it: those guides, not this message, are the contract.
+3. If `project.config.yaml` and the claims directory do not exist yet,
+   propose a title, the facets, and the modules, and WAIT for me to confirm
+   before writing anything.
+4. ASK ME before installing the git pre-commit hook. If I say yes, fetch
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.3.0/scripts/install-git-hook.sh
+   to a file, show me what it does, then run `sh install-git-hook.sh --yes`.
+   If I say no, add the CI workflow instead and tell me so — CI is the
+   authority either way.
+5. Run `dossierx check --format text` and show me the output. Do not tell me
+   it works; show me it exiting 0.
+6. Tell me to commit `.dossierx-lock-store.json` — and
+   `.dossierx-comment-digest.json` once it appears — together with the claim
+   files. They are tracked artifacts: the ledger is what CI compares the
+   claims against, and the gate is vacuous without them. Never add them to
+   .gitignore.
+7. Tell me to run `dossierx serve`. That is the only DossierX command I run.
+
+Draft claims are yours: write, restructure and delete them freely, that is
+the work. A LOCKED claim never changes without asking me first, and the path
+is unlock -> fix -> lock:
+
+    dossierx claim unlock <id> --reason "<my words>"
+    ...make the edit...
+    dossierx claim lock   <id> --reason "<my words>"
+
+Never hand-edit a locked claim's YAML, and never lock, unlock, flag or
+reaudit anything without my explicit yes. `reaudit` is the drift tool, not
+the general edit tool.
+```
+
+Installing the binary needs a Go 1.26+ toolchain; prebuilt binaries for common platforms are attached to each [GitHub release](https://github.com/BarterX-Tech/dossierx/releases). A DossierX project is a `project.config.yaml` plus a directory of claim YAML files — [the config schema is below](#config-schema-projectconfigyaml), and the agent will write both for you.
+
+## The human's one command
 
 ```sh
-go install github.com/BarterX-Tech/dossierx/cmd/dossierx@latest
+dossierx serve
 ```
 
-This requires a working Go 1.26+ toolchain. Prebuilt binaries for common platforms are also attached to each [GitHub release](https://github.com/BarterX-Tech/dossierx/releases).
+Open the URL it prints. That is a local viewer of every claim, facet, build order and code link, plus a live comment API: click 💬 on any card — including cards nobody has commented on yet — write what you doubt, and the page re-renders as claim files change on disk. It binds a random high port unless you pass `--port`, is localhost-only, and never writes `viewer/index.html` or `.catalog.json` on a page load.
 
-## Quick start
+**The review loop**, end to end:
 
-A DossierX project is a `project.config.yaml` file plus a directory of claim YAML files.
+1. You comment on a card in the viewer. The comment is written into that claim's YAML.
+2. You tell the agent "I left comments."
+3. The agent runs `dossierx comment inbox` — every open thread in the project, one call.
+4. The agent fixes the claim and replies on the thread. Replies are deliberately **ungated**: an agent may reply to a human-opened thread, because that is the entire workflow.
+5. You click **Resolve**. That click *is* the approval — and it is load-bearing, because a claim cannot be locked while it carries an unresolved thread.
+6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>"`.
 
-**`project.config.yaml`**
+Advisory rights are enforced in the engine, not by convention: an agent may only act on its own messages, so it can resolve, reopen, edit or delete only the threads and messages it authored itself. Everything you wrote is yours to close.
 
-```yaml
-schema_version: 1
-facets:
-  - contract
-  - internals
-modules:
-  - widget
-claims_dir: claims
+A static `file://` export of the viewer is read-only by design — comments need `dossierx serve`.
+
+## The CLI surface
+
+Nineteen leaf commands under six nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+
+```text
+check                    lint, catalog, render and the lock-ledger gate in one shot
+                         --validate  read-only: lint + ledger gate, writes nothing
+                         --staged    judge the git index instead of the working tree
+
+claim        show · list · new · lock · unlock · flag · reaudit · link
+comment      inbox · list · add · reply
+build-order  propose · status · lock
+
+serve                    the human's viewer + comment API
+skills export [dir]      write the embedded agent skills into a project
+version                  version, commit, build date (also --version)
 ```
 
-**`claims/widget-overview.yaml`**
+Every subcommand takes the global `--config` (a path to `project.config.yaml`; when omitted, DossierX searches upward from the current directory the way `git` finds `.git`) and `--format json|text`.
 
-```yaml
-id: widget.contract.overview
-facet: contract
-module: widget
-status: draft
-layout: card
-body: |
-  A widget is the smallest unit this project documents.
-governed_by:
-  type: none
-  reason: no doctrine facet configured yet
+Upgrading from v0.2.x? Ten commands were removed and four moved — [the CHANGELOG has the full migration table](CHANGELOG.md).
+
+### The machine contract
+
+`--format json` is the default, and every run emits exactly one envelope:
+
+```json
+{"ok": false, "command": "claim lock", "stopped_at": "lint",
+ "error": {"code": "lint_failed", "message": "...", "hint": "run: dossierx check"}}
 ```
 
-Then, from the directory containing `project.config.yaml`:
+`error.code` is a stable snake_case token — `lint_failed`, `claim_not_found`, `rights_denied`, `integrity_failed`, `unresolved_comments`, and so on. Branch on it. `message` and `hint` are prose and will be reworded; `code` is the promise. Successful runs carry their payload in `data`, non-blocking findings in `warnings`, and `check` reports how far it got in `stopped_at`.
 
-```sh
-dossierx lint      # validate the claim(s) above
-dossierx catalog    # build .catalog.json from claims
-dossierx render      # generate viewer/index.html from the catalog
-```
+Mutating commands take `--dry-run`, which reports what *would* change and writes nothing. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`).
 
-`dossierx check` runs all three of the above in one shot and stops at the first failure — this is the command most CI setups and pre-commit hooks should call. Open the generated `viewer/index.html` in a browser to see the rendered site.
-
-## CLI reference
-
-Every subcommand accepts the global `--config` flag: a path to `project.config.yaml`. When omitted, DossierX searches upward from the current directory for one, the same way `git` finds `.git`.
-
-| Command | Description |
-|---|---|
-| `dossierx lint [--json]` | Run every lint against `claims_dir`; `--json` prints findings as JSON instead of text. |
-| `dossierx catalog` | Build `.catalog.json` from the claims directory. |
-| `dossierx render` | Generate `viewer/index.html` from the catalog. |
-| `dossierx check` | Run lint, catalog, and render in one shot, stopping at the first failure. |
-| `dossierx serve [--port <n>]` | Serve the claims viewer over localhost with a live comment API and reload; open the printed URL in a browser to review and comment. Binds a random high port unless `--port` is given. |
-| `dossierx deps <id>` | Print a claim's edge graph in both directions (what it rests on, what rests on it). |
-| `dossierx coverage` | Report the percentage of claims carrying a `migrated_from` note. |
-| `dossierx stale` | List locked claims currently flagged `review_pending`. |
-| `dossierx lock <id>` | Lock a draft claim; refused if lint fails. |
-| `dossierx unlock <id>` | Unlock a locked claim back to `draft`. |
-| `dossierx reaudit <id> [--confirm]` | Propose a diff for a `review_pending` claim; `--confirm` applies it. Without `--confirm`, only prints the proposed diff. |
-| `dossierx build-order propose --module <name>` | Write a build-order artifact for a module; refused unless every claim in it is locked. |
-| `dossierx build-order status --module <name>` | Show a module's build-order artifact state: proposed/locked/stale, plus coverage. |
-| `dossierx build-order lock --module <name>` | Lock a module's proposed build-order artifact, snapshotting a content-hash baseline. |
-| `dossierx flag <id> --claim-says --now-does --reason` | Flag a locked claim whose stated behavior no longer matches reality, marking it `review_pending`. |
-| `dossierx comment add <id> --as <role> --body <text>` | Open a review comment thread on a claim (`--as human\|agent`); dialogue about the claim, no content edit. |
-| `dossierx comment list <id> [--open] [--json]` | List a claim's comment threads; `--open` for unresolved only, `--json` for machine output. |
-| `dossierx comment reply <id> <thread-id> --as <role>` | Reply to an open thread (ungated: an agent may reply to a human-opened thread — the core agent-to-human workflow). |
-| `dossierx comment resolve\|reopen\|edit\|delete <id> <thread-id> --as <role>` | Resolve, reopen, edit, or delete a thread (advisory rights: an agent may only act on its own messages). |
-| `dossierx implink set --module --claim --file [--symbol]` | Manually record that a claim is implemented in a source file (for links scanning can't reach). |
-| `dossierx implink status --module <name>` | Report which claims in a module are linked to code and which are drifted or unlinked. |
-| `dossierx skills export <dir>` | Write the embedded Claude Code skill files into a consuming project (e.g. `.claude/skills/`). |
-| `dossierx version` | Print the binary's version, commit, and build date. Also available as the `--version` flag. |
+`--reason` is required on `claim lock`, `claim unlock`, `claim reaudit --confirm`, `claim flag`, and `build-order lock`. Under the two-role split the human never types these, so `--reason` is where their approving words enter the record.
 
 ### Exit codes
 
 | Code | Meaning |
 |---|---|
 | `0` | Success. |
-| `1` | Failure — a lint error, a validation failure, a malformed claim, etc. |
+| `1` | Failure — a lint error, an integrity finding, a validation failure, a malformed claim, a failed write. |
 | `2` | Not found / not in the right state — e.g. no `project.config.yaml` found, a claim id that doesn't exist, or a claim that isn't `review_pending` when a command requires it to be. |
+
+There is no fourth status and the three have not been renumbered. The fine-grained signal is `error.code`, not the exit status.
+
+## Integrity: the lock ledger
+
+Claims are YAML in git, so nothing can *prevent* an edit. The goal is that no out-of-band edit of a **locked** claim is *silent*.
+
+Every legitimate approval — `claim lock`, a confirmed `claim reaudit`, `build-order lock` — writes a record into the **lock ledger**: the hash of exactly what was approved, when, by which account, and the human's own `--reason` words. Unlocking marks the record released rather than deleting it, so the evidence that a claim was ever locked survives. Comment history gets the same treatment in its own digest store, which is why `serve` never needs write access to the lock store.
+
+Two files hold this, at the project root, next to `project.config.yaml`:
+
+| File | Holds |
+|---|---|
+| `.dossierx-lock-store.json` | the lock ledger — per locked claim and locked build order: `{hash, at, actor, reason}` |
+| `.dossierx-comment-digest.json` | the review history's fingerprint |
+
+**Both are tracked artifacts. Commit them; never `.gitignore` them** — the lock store the moment anything is locked, the digest once anyone comments. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip.
+
+These are the exception, not the rule. `.catalog.json` and `viewer/` are *generated* — regenerated in full by every `dossierx check` — and are safe to `.gitignore`.
+
+The gate names each disagreement:
+
+| Finding | What it caught |
+|---|---|
+| `lock-ledger-missing` | a claim is `locked` with no approval record — e.g. `status: draft` flipped to `locked` by hand, walking past the lint, hub-gating and unresolved-comment gates |
+| `lock-content-drift` | a locked claim's content no longer matches what was approved — including fields the dependency-drift hash never covered, such as `raw_html`, `build_role`, `section` and `order` |
+| `lock-ledger-orphan` | a `draft` claim still holding an *unreleased* record — `locked` flipped back to `draft` to dodge review |
+| `comment-ledger-drift` | a review thread edited or deleted outside the engine |
+
+The gate runs as the **last** step of `check`, after the catalog and viewer have been written: a tampered project still regenerates its documentation, it just does not exit 0. It is deliberately not a lint — one tampered claim must not be able to freeze locking project-wide.
+
+### Where the gate runs
+
+- **`dossierx check --staged`** judges the git index — what the commit will actually contain — reading content with `git show`, never the worktree, and writing nothing. This is what the **pre-commit hook** runs: [`scripts/install-git-hook.sh`](scripts/install-git-hook.sh) (with [`install-git-hook.ps1`](scripts/install-git-hook.ps1) for PowerShell users). It asks before writing anything, resolves `core.hooksPath` instead of assuming `.git/hooks`, handles linked worktrees, never replaces a foreign hook without `--force`, and re-running it is a no-op.
+- **CI is the authority.** git does not run `pre-commit` for a clean merge, a rebase, a cherry-pick or a revert, `--no-verify` is one keystroke away, and most contributors never installed the hook at all. Copy [`scripts/ci/dossierx-check.yml`](scripts/ci/dossierx-check.yml) into your repository's `.github/workflows/`. If you adopt only one of the two, adopt this one.
+
+The ledger is not authentication. `actor` is provenance, not identity, and anyone who can edit a claim can edit the ledger. What it buys is that tampering now requires editing **two** tracked files consistently instead of one — and the second is a file whose entire purpose is to be read in the diff.
 
 ## Concepts
 
-**Claims.** A claim is one atomic, YAML-authored fact about a system: a field table, a sequence of steps, a paragraph of prose, a piece of hand-authored mockup HTML. Each claim has an `id`, a `facet` (which tab it renders under, e.g. `contract` or `internals`), a `module`, a `status` (`draft` or `locked`), a `layout` (how it's rendered — `card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`), and a `governed_by` block naming what backs its truth (a doctrine claim, or `none`). Claims can name other claims they `rests_on`, forming a dependency graph the CLI can walk and validate.
+**Claims.** A claim is one atomic, YAML-authored fact about a system: a field table, a sequence of steps, a paragraph of prose, a piece of hand-authored mockup HTML. One claim per file, under the project's `claims_dir`.
 
-**The pipeline: lint → catalog → render → check.** `lint` validates every claim in isolation and across the whole set (id shape, facet/module membership, dependency cycles, and more). `catalog` compiles the validated claims into a single `.catalog.json`. `render` turns that catalog into a static `viewer/index.html` site. `check` chains all three and stops at the first failure — the command to wire into CI.
+```yaml
+id: widget.contract.overview     # module.facet.slug
+facet: contract                  # the tab it renders under
+module: widget
+status: draft                    # draft | locked
+layout: card
+body: |
+  A widget is the smallest unit this project documents.
+rests_on:
+  - widget.internals.storage     # this claim is true only while that one is
+governed_by:
+  type: none
+  reason: no doctrine facet configured yet
+```
 
-**The lock/review_pending/reaudit lifecycle.** A new claim starts as `draft` and is freely editable. `dossierx lock <id>` promotes it to `locked` — refused if lint doesn't pass, if doctrine hub-gating blocks it, or if the claim still has an unresolved comment thread — signaling it has been reviewed and is now a source of truth other claims and code can depend on. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`/`mirrors` drifts, a `dossierx flag` records that its stated behavior no longer matches reality, or an open comment thread is added to it — rather than being auto-updated. `review_pending` is set automatically but never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a human-confirmed `dossierx reaudit <id> --confirm` (drift/flag), `dossierx unlock`, or resolving the last open thread with `dossierx comment resolve`. `dossierx reaudit` proposes a diff and only writes it with an explicit `--confirm`, so every content change to a locked claim goes through a human-reviewed, confirm-before-write step — never an automatic overwrite; it refuses a claim that is `review_pending` only because of an open comment thread (there is no diff to confirm — resolve the thread instead).
+Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`), and a `governed_by` block naming what backs its truth (a doctrine claim, or `none` with a reason). Claims name other claims they `rests_on` or `mirrors`, forming a graph the engine walks and validates. The full schema is in [FORMAT.md](FORMAT.md).
+
+**`check` is the pipeline.** One command runs lint → catalog → render → the ledger gate and stops at the first failure. `--validate` is the read-only form for the authoring loop: it runs the lint gate and the ledger gate in memory and writes nothing — no claim files, no lock store, no `.catalog.json`, no viewer. It also does not reconcile `review_pending`, rebuild the catalog or the viewer, or scan source for code links; run plain `check` before trusting what the viewer shows.
+
+**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`/`mirrors` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
+
+**`reaudit` is the drift tool, not the general edit tool.** It refuses a claim that is not already `review_pending`, it rewrites only `body`, and it refuses a claim whose only trigger is an open thread (there is no diff to confirm — resolve the thread instead). To change anything else about a locked claim, the path is `unlock → fix → lock`.
 
 ## Config schema (`project.config.yaml`)
 
@@ -123,16 +211,25 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 
 Config loading is strict: an unknown top-level or `viewer.theme` field is a hard error, not silently ignored.
 
-## Using DossierX's skills in your project
+## The skills
 
-DossierX ships four [Claude Code](https://claude.com/claude-code) skills — `dossierx-claims`, `dossierx-build-order`, `dossierx-code-links`, and `dossierx-comments` — that teach an agent working in a *consuming* project how to author claims, derive a module's build order, link finished code back to the claims it implements, and run review comment threads (including when to comment versus `flag`). See [`skills/`](skills/) for what each one covers.
+DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the six nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
 
-To use them in a project that depends on DossierX:
+`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 2 of the paste block above does this. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 
-1. Install the pinned CLI: `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@<version>`.
-2. Export the skills into your project: `dossierx skills export .claude/skills/`.
-3. Write your project's `project.config.yaml` (see the schema above).
-4. Optionally, add a project-specific overlay skill alongside the exported ones for anything local to your repo (house style, module-specific conventions) that the generic skills can't know about.
+The skills are one source written in three forms, because no two agent harnesses read the same file:
+
+| Form | Where | Notes |
+| --- | --- | --- |
+| `SKILL.md` tree | the `[dir]` you name, else `.claude/skills` if `.claude` already exists | verbatim bundles, frontmatter intact |
+| `AGENTS.md` section | an existing `AGENTS.md` only — never created | marker-delimited and idempotent; carries the router only, since this text is resident on every turn |
+| `docs/dossierx-agent-guide.md` | always written | all five bundles inline, self-contained, no loader or plugin needed |
+
+Both derived forms are regenerated by re-running the export, so they are committed artifacts like the ledger: re-export to pick up a new release, and commit the result.
+
+## Scope
+
+DossierX is a CLI only — there is no public Go package API. Everything here is invoked through the `dossierx` binary; `internal/` is not importable by other modules and its structure is free to change between releases without that counting as a breaking change. The runtime dependency set is deliberately two packages (cobra and yaml.v3) and adding a third is a decision, not a convenience.
 
 ## Contributing
 

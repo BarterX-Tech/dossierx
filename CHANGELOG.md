@@ -5,7 +5,226 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [Unreleased] — v0.3.0
+
+The agent-first restructure. DossierX has two users with opposite needs: an **agent** that
+operates it, and a **human** who reviews what the agent did. Until now both were half-served by
+one command line. v0.3.0 gives each its own surface and takes the other away — the agent gets a
+19-command machine-readable CLI, the human gets the viewer and one command (`dossierx serve`).
+
+Alongside the split, this release closes the gap that made the split worth making: until now a
+locked claim could be hand-edited and **nothing would notice**. The new lock ledger records what
+was approved, when, by whom, and on whose words, and a gate compares the claims against it in
+`dossierx check`, in a pre-commit hook, and in CI.
+
+**This release is not backward compatible at the CLI.** Ten commands were removed and four were
+moved. The migration table below maps every one of them.
+
+### Migration — every retired command and its replacement
+
+| Retired | Replacement | Notes |
+| --- | --- | --- |
+| `dossierx lint` | `dossierx check --validate` | `--validate` is a **read-only** run — no claim files, no lock store, no `.catalog.json`, no viewer. Plain `check` writes all four. |
+| `dossierx lint --json` | `dossierx check --validate` (JSON is the default format) | Findings are `data.lint_findings[]`, in snake_case: `lint`, `claim_id`, `severity`, `message` (the old bare array used Go field names). |
+| `dossierx catalog` | `dossierx check` | It was a stage of `check`, exposed as a verb only because the extraction had no Go API. |
+| `dossierx render` | `dossierx check` | Same. |
+| `dossierx deps <id>` | `dossierx claim show <id>` | Reports both edge directions as before, **plus** lock state, `review_pending` and its trigger, code links with drift, comment counts, and `next_actions`. |
+| `dossierx stale` | `dossierx claim list --review-pending` | Names the claims and reports the count, as before. The bespoke "nothing locked" message is gone; an empty project is an empty result. |
+| `dossierx coverage` | `dossierx claim list --migrated` | Reports the same ratio (`count`, `total`, `percent_of_total`) **and** names the claims. |
+| `dossierx implink set` | `dossierx claim link` | Identical flags (`--module --claim --file --symbol`) and identical behavior. |
+| `dossierx implink status` | `dossierx claim show <id>` | Per-claim `implemented_in[]` with a `drifted` verdict on each file. `dossierx check` still reports module-wide impl-link status. |
+| `dossierx lock <id>` | `dossierx claim lock <id>` | `--reason` is required (see below). |
+| `dossierx unlock <id>` | `dossierx claim unlock <id>` | `--reason` is required. |
+| `dossierx flag <id>` | `dossierx claim flag <id>` | Unchanged otherwise. |
+| `dossierx reaudit <id>` | `dossierx claim reaudit <id>` | `--reason` is required with `--confirm`. |
+| `dossierx comment edit` | the viewer | A review history the agent can rewrite is not a review history. Still fully available over `dossierx serve`'s HTTP API. |
+| `dossierx comment delete` | the viewer | Same. |
+| `dossierx comment resolve` | the viewer | Advisory rights already forbade an agent acting on a human-authored thread, and every viewer thread is human-authored — so on the CLI this could only ever act on the agent's own threads. The human's **Resolve click is the approval** the lock gate waits for. |
+| `dossierx comment reopen` | the viewer | Same. |
+| `dossierx comment list --json` | `dossierx comment list` (JSON is the default format) | Threads are `data.threads[]` inside the standard envelope, rather than a bare array. |
+
+Nothing was removed from the **product**: `internal/comments` still implements all six comment
+operations, and `dossierx serve`'s HTTP API — which is what the viewer drives — still exposes
+every one of them. Only the CLI surface shrank.
+
+### Added
+- **`dossierx claim` — one noun for everything you do to a claim**: `show`, `list`, `new`,
+  `lock`, `unlock`, `flag`, `reaudit`, `link`.
+- **`dossierx claim show <id>`** — one call returning a claim's whole state: lifecycle status,
+  lock state and timestamp, `review_pending` **and which of the three triggers caused it**, both
+  edge directions (outgoing `mirrors`/`rests_on`/`governed_by`, and the derived incoming
+  `mirrored_by`/`depended_on_by`), `implemented_in` with a per-file drift verdict, comment
+  counts with the open thread ids, and `next_actions` — the legal next steps, computed from the
+  same gates the write paths enforce, so the advice can never disagree with what the command
+  would actually do.
+- **`dossierx claim list`** with `--review-pending`, `--migrated`, `--drifted`, `--facet`,
+  `--module`, and `--match`. `--match` is a fuzzy, ranked search over each claim's id and its
+  derived title, so a human's "the retry-policy card in the contract facet" resolves to an id in
+  one call; each result carries its `score` so an agent can tell a confident hit from a tie it
+  should hand back.
+- **`dossierx claim new <id>`** — the sanctioned way for an agent to author a claim. Since the
+  release gates hand-editing claim YAML, an agent needs a way to write one at all; this writes
+  `<claims_dir>/<id>.yaml` shaped to pass the lint suite immediately, validates the project with
+  the new claim in it, and reports the verdict. The id grammar (`module.facet.slug`, kebab-case
+  slug, module and facet the project actually declares) is enforced at the door rather than
+  after the write. Draft authoring is deliberately unfrictioned: no `--reason`, no confirmation.
+- **`dossierx check --validate`** — a read-only run over `internal/check`'s existing non-writing
+  seam (the same one `serve`'s status endpoint uses). It exists because cutting `lint` would
+  otherwise have turned the per-claim authoring loop into a writer.
+- **`dossierx comment inbox`** — every open thread in the project in one call, oldest activity
+  first, with `--since <RFC3339>` and an echoed `cursor` to poll with. Each thread carries
+  **`agent_can_resolve`**, so an agent never spends a call earning `rights_denied` on a thread
+  it was never allowed to close. `--since` is inclusive of its own second: comment timestamps
+  have one-second resolution, and re-reporting a thread costs nothing while missing the human's
+  comment breaks the entire loop.
+- **A machine contract on every command.** `--format json|text` is global and **JSON is the
+  default**; every run emits exactly one envelope — `{ok, command, data, warnings, error,
+  stopped_at}` — and every failure carries a stable snake_case `error.code` (`lint_failed`,
+  `claim_not_found`, `rights_denied`, `integrity_failed`, `unresolved_comments`, …) so a skill
+  branches on a token instead of regexing an English sentence. `message` and `hint` are prose
+  and will be reworded; `code` is the promise.
+- **`--dry-run` on every mutating command**, reporting what would change, what is missing, and
+  what else it affects. A dry run fails *only* when it cannot compute the preview: a refusal —
+  including a missing required flag — is a **successful** blocked report (exit 0, `ok: true`,
+  `data.blocked: true`), because "would this be allowed?" is a question, and answering "no" is
+  not an error. `claim reaudit` keeps `--confirm` as its apply gate; `--dry-run` always wins
+  over it.
+
+### Added — integrity: the lock ledger
+
+Claims are YAML in git, so nothing can *prevent* an edit. The goal is that no out-of-band edit
+of a **locked** claim is *silent*. Before this release, every one of these was invisible: a
+`status: draft` flipped to `locked` by hand (walking past the lint gate, hub-gating and the
+unresolved-comment gate as though all three had passed); an edited locked body with no locked
+dependents; a swapped `raw_html` on a locked, reviewed, allowlisted mockup — which the viewer
+renders **unescaped**; a flipped `build_role`/`section`/`order`/`emphasis`; a comment thread
+deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge review.
+
+- **The lock ledger.** Every legitimate approval — `claim lock`, a confirmed `claim reaudit`,
+  `build-order lock` — now records `{hash, at, actor, reason}` for the artifact it approved, in
+  `.dossierx-lock-store.json`. `reason` is the human's own approving words, carried in from
+  `--reason`: the one part of the record a machine cannot generate for itself. `claim unlock`
+  **releases** a record rather than deleting it, so the evidence that a claim was ever locked
+  survives the window in which it matters.
+- **`.dossierx-lock-store.json` and `.dossierx-comment-digest.json` are TRACKED ARTIFACTS.**
+  Commit them; never `.gitignore` them. CI compares the claims against the ledger, so a project
+  that does not track it has no gate. Documented in README, FORMAT.md, the skills, the hook
+  installer's own output, and the CI workflow template.
+- **A new hash, `LockedClaimHash`, separate from `ContentHash`.** It is a **deny-list** over
+  every persisted claim field except `status`, `review_pending` and `comments` (each excluded
+  because the engine rewrites it as ordinary bookkeeping), so a field added to the schema
+  tomorrow is signed by default. `ContentHash` — the dependency-drift baseline — is
+  **byte-identical to v0.2.0**: widening it would have flipped every locked claim in every
+  existing project to `review_pending` on upgrade day. It covers ten of the schema's fields;
+  the nine it cannot see include `raw_html`, the only path in the engine that renders author
+  bytes unescaped, which is why the ledger could not reuse it.
+- **The comment digest lives in its own store** (`internal/digest`, `.dossierx-comment-digest.json`),
+  refreshed on every legitimate comment write. Putting it in the lock store would have made
+  `dossierx serve` a lock-store writer and falsified this release's own headline guarantee.
+- **Six named findings**, stable strings the hook, CI and the skills branch on:
+  `lock-ledger-absent` (locked claims but no ledger file — a hard error, never a silent pass,
+  because "no ledger means bless everything" would make `rm` the universal bypass),
+  `lock-ledger-missing`, `lock-content-drift`, `lock-ledger-orphan`, `comment-ledger-drift`, and
+  `lock-ledger-unreadable` (a ledger that exists but will not parse fails closed and loudly).
+  The gate is deliberately **not** a lint: registering these in the lint registry would let one
+  tampered file freeze locking project-wide and stop the viewer regenerating. It runs as
+  `check`'s last step, after the catalog and viewer are written — a disputed project still
+  regenerates its documentation, it just does not exit 0.
+- **`dossierx check --staged`** judges the **git index** — what the commit will actually
+  contain — reading content with `git show :<path>` rather than the worktree, and writing
+  nothing at all. Outside a work tree it warns and exits 0.
+- **A pre-commit hook installer**, `scripts/install-git-hook.sh` (plus `install-git-hook.ps1`
+  for PowerShell). It **asks before writing anything**, resolves `core.hooksPath` instead of
+  assuming `.git/hooks` (so a repo using husky/lefthook is installed into *its* hook directory,
+  never hijacked), handles linked worktrees, refuses to replace a foreign hook without
+  `--force`, and is a no-op when re-run. The hook body is embedded in the one file so an agent
+  can drop it into a project that has the binary but not this repository.
+- **A CI workflow template**, `scripts/ci/dossierx-check.yml`, to copy into a consuming
+  project. **CI is the authority, not the hook**: git does not run `pre-commit` for a clean
+  merge, a rebase, a cherry-pick or a revert, `--no-verify` is one keystroke away, and most
+  contributors never installed the hook. If you adopt one of the two, adopt CI.
+- **Grandfathering, once and loudly.** A project that locked claims before the ledger existed
+  adopts them on first run of a build that has it, each record marked `grandfathered` — an
+  adopted hash is content that was *observed*, not approved, and the flag stays on the record
+  permanently so nobody mistakes the two. Adoption triggers only on an older store file being
+  *present*; an absent store never adopts.
+
+### Added — graph integrity and readability
+
+- **New `self-edge` lint** (error): a claim may not name its own id in `rests_on`, `mirrors`, or
+  `governed_by`. A self-edge is trivially satisfied by every content rule — a claim always
+  equals itself, always mirrors itself back, always resolves — so it asserted nothing while
+  looking like a well-formed edge.
+- **New `governed-cycle` lint** (error): `governed_by` is now cycle-checked, with its own
+  message distinct from `cycle`'s. Following `governed_by` must reach `type: none` in finitely
+  many steps; a cycle means a set of claims whose authority rests only on each other, which is
+  to say on nothing.
+- The `cycle` lint's depth-first search is now an **explicit stack** rather than recursion. Its
+  depth was the longest authored edge chain in the project, with no engine-imposed bound.
+- **Readable edge labels in the viewer** (issue #11). A claim-to-claim edge used to render as
+  its raw id. It now renders as a derived label with prefix elision keyed on how far the target
+  is from the claim doing the pointing — bare within the same facet, `facet › Label` across
+  facets, `module · facet › Label` across modules. The machine id stays reachable via
+  `data-claim-id` and a tooltip, and an id that is not exactly three non-empty segments renders
+  as the **raw id, verbatim** — never a partial label — because rendering does not run the lint
+  suite.
+
+### Fixed
+
+- **The viewer's 💬 chip now appears on every card, not only on cards that already have a
+  thread** — so the first comment on a claim can actually be opened, which was the whole
+  premise of the human review loop. Two gates were involved and both had to move together: the
+  server emitted no chip for a zero-thread claim, and the client hid any chip reading `0`, so
+  an empty chip would have vanished the moment it was clicked. Empty chips are now hidden only
+  when no live comment API answered — the static `file://` export, where there would be nothing
+  to open — and the three chip states (`--open`, `--resolved`, `--empty`) are mutually
+  exclusive, so "no comments" no longer reads as "everything raised was settled".
+- **Every command the engine advises you to run is a command that exists** — and, where the
+  verb requires it, one that would succeed as printed. `check`'s next steps named five retired
+  invocations (`dossierx lock`, `dossierx reaudit`, `dossierx implink set`, and a
+  `dossierx comment resolve` that this release deliberately removed from the CLI); they now
+  name `claim lock … --reason`, `claim reaudit`, `claim link`, and — for an open thread — the
+  human's viewer rather than any agent-runnable command, because resolving a thread is the
+  approval itself. `lock`'s and `build-order propose`'s comment refusals and `build-order`'s
+  cycle diagnostic were stale in the same way and were corrected alongside. This matters more
+  than the wording suggests: the v0.3.0 skills tell an agent to read `next_actions` and
+  `error.hint` instead of re-deriving the lifecycle, so a stale hint is advice an agent acts on.
+- **Generated viewers no longer advertise a deleted command.** Every `viewer/index.html`
+  carried `generated by dossierx render … re-run "dossierx render"`; the banner now names
+  `dossierx check`, which is the command that actually regenerates it.
+
+### Changed
+- The CLI is **19 leaf commands under 6 nouns**, down from 26. A test pins the exact set, so
+  adding to the surface is a decision someone makes on purpose.
+- `--reason` is **required** on `claim lock`, `claim unlock`, `claim reaudit --confirm`, and
+  `build-order lock`. Under the new split the human never types these — they say "good, lock it"
+  in chat and the agent executes — so `--reason` is where the human's own approving words enter
+  the record.
+- Exit codes are **unchanged**: still 0 / 1 / 2 with the meanings the README documents. The
+  fine-grained signal is `error.code` in the envelope, not a new status.
+- `dossierx check` now runs **four** stages, not three: lint, catalog, render, and the
+  lock-ledger gate. `--validate` is the read-only form — it runs the lint gate and the ledger
+  gate in memory and writes nothing, and is honest about what it therefore does not do (no
+  `review_pending` reconcile, no catalog, no viewer, no source scan for code links).
+- `dossierx skills export <dir>` now writes **five** skill bundles. A project that exported the
+  skills before must **re-export** to pick up the new router and the rewritten companions; the
+  export overwrites in place, so re-running the same command is all that is needed.
+
+### Docs
+- **README rewritten around the two roles.** It now opens on who does what, carries a
+  copy-paste bootstrap block a human hands to their agent (install, export the skills, propose
+  the config, *ask* before installing the git hook, prove itself with `check`, commit the
+  ledger, then hand `dossierx serve` back to the human), and documents `dossierx serve` as the
+  human's one command. The lint → catalog → render walkthrough and the per-verb command table
+  are gone: a human is not expected to run any of it, and the CLI is now documented as a
+  machine contract — the envelope, `error.code`, `--dry-run`, and the unchanged exit codes.
+- **FORMAT.md gained an "Integrity invariants" section**: the two tracked ledger files, what
+  `LockedClaimHash` signs and the three fields it deliberately does not, all six findings and
+  the invariant each one enforces, and how one-time adoption works. It also gained the three
+  **graph invariants** (`rests_on` acyclic, `mirrors` a reciprocal 2-cycle, `governed_by`
+  terminating, and no self-edges in any of the three), and a short, quotable statement of the
+  **markdown ceiling** — the subset `body`, `rows` cells, `steps` and comment bodies all render
+  through, with everything outside it staying literal text.
 
 ## [0.2.0] - 2026-07-26
 

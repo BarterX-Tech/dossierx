@@ -24,3 +24,6 @@ secrets/
 go.work
 go.work.sum
 go.mod.local
+
+# Claude Code local worktrees
+.claude/worktrees/
