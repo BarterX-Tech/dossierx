@@ -1,0 +1,92 @@
+# dossierx-check.yml — the claim-integrity gate for a project that uses DossierX.
+#
+# COPY THIS FILE INTO YOUR REPOSITORY at .github/workflows/dossierx-check.yml.
+# It is a template and lives under scripts/ on purpose: dropping it into this
+# repository's own .github/workflows/ would run it against a repository that
+# has no claims/ of its own.
+#
+# ---------------------------------------------------------------------------
+# WHY CI, WHEN THERE IS ALREADY A PRE-COMMIT HOOK
+# ---------------------------------------------------------------------------
+#
+# The pre-commit hook (scripts/install-git-hook.sh) is fast feedback. It is not
+# the authority, and treating it as one would be a mistake, because git does
+# not run pre-commit for:
+#
+#   · a clean merge          — no conflicts, no pre-commit, so a locked claim
+#                              edited on a branch lands on main unexamined
+#   · git rebase             — replayed commits do not fire it
+#   · git cherry-pick        — same
+#   · git revert             — same
+#   · git commit --no-verify — deliberate, and one keystroke away
+#   · any contributor who simply never installed the hook, which is everyone
+#     who has not been asked yet
+#
+# This workflow runs the same gate over the merge result, where none of those
+# apply. If you only adopt one of the two, adopt this one.
+#
+# ---------------------------------------------------------------------------
+# WHAT IT DEPENDS ON BEING COMMITTED
+# ---------------------------------------------------------------------------
+#
+# The lock ledger and the comment digest are TRACKED FILES:
+#
+#   .dossierx-lock-store.json      what was approved, when, by whom, and on
+#                                  whose words, per locked claim
+#   .dossierx-comment-digest.json  the review history's fingerprint
+#
+# Do not add them to .gitignore. Without the ledger in the repository, CI has
+# nothing to compare the claims against and this workflow is theatre — and
+# dossierx says so out loud: locked claims with no ledger is a hard error
+# (lock-ledger-absent), not a silent pass.
+
+name: dossierx
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: claim integrity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+
+      # Pin the version rather than tracking @latest: dossierx's gate decides
+      # whether a pull request may merge, so a new release must be something
+      # you adopt on purpose, in a commit someone reviewed — not something that
+      # arrives on a Tuesday and starts failing everyone's builds.
+      - name: Install dossierx
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.3.0
+
+      # The full pipeline: lint, catalog, render, and the lock-ledger gate.
+      # --format text because the audience here is a human reading a failed
+      # job log; drop it if you post-process the output, in which case the JSON
+      # envelope's error.code is the thing to branch on.
+      #
+      # This run DOES write (regenerated claim files, .catalog.json, the
+      # viewer) — that is fine, the writes go nowhere but the runner's disk.
+      # Use "dossierx check --validate" instead if your workflow needs the tree
+      # left untouched, but note it is the read-only LINT pass: it does not
+      # render, so it will not catch a rendering-stage failure.
+      - name: dossierx check
+        run: dossierx check --format text
+
+      # Optional, and worth turning on once your claims are stable: fail when
+      # the checked-in claim files are not what dossierx would write. It
+      # catches hand-edited YAML that is valid but non-canonical — the kind of
+      # edit that produces a noisy diff on everyone else's next run.
+      #
+      # - name: Claims are canonical
+      #   run: git diff --exit-code -- claims

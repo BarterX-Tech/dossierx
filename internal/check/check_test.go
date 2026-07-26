@@ -19,6 +19,15 @@ const baseConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widg
 // loaded claims, the exact inputs check.Run takes (a caller would have
 // reconciled review_pending first; these fixtures set status/review_pending
 // directly so no reconcile is needed to exercise Run).
+//
+// It also ARMS THE LOCK LEDGER for every claim the fixture wrote as locked (see
+// armLedger). Fixtures hand-write "status: locked" because reaching that state
+// through the CLI would make every one of them a lifecycle test; the ledger
+// gate, correctly, treats a locked claim with no approval record as tampering.
+// Arming here says what the fixture means — "these claims are legitimately
+// locked" — in one place, and leaves the gate free to fail loudly everywhere it
+// has not been said. Tests that WANT a ledger finding tamper after this point;
+// see ledger_test.go.
 func project(t *testing.T, cfgBody string, files map[string]string) (*config.Config, []model.Claim) {
 	t.Helper()
 	root := t.TempDir()
@@ -42,6 +51,7 @@ func project(t *testing.T, cfgBody string, files map[string]string) (*config.Con
 	if err != nil {
 		t.Fatalf("load claims: %v", err)
 	}
+	armLedger(t, cfg, claims)
 	return cfg, claims
 }
 
@@ -124,7 +134,7 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 	}
 	foundDraftHint := false
 	for _, h := range res.NextSteps {
-		if h == "2 claim(s) still draft -> dossierx lock <id> (e.g. widget.contract.one)" {
+		if h == "2 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)" {
 			foundDraftHint = true
 		}
 	}
@@ -193,7 +203,7 @@ func TestRun_OpenCommentsReported(t *testing.T) {
 	}
 	foundCommentHint := false
 	for _, h := range res.NextSteps {
-		if h == "1 claim(s) with open comment thread(s) -> dossierx comment resolve <id> <thread-id> (e.g. widget.contract.locked c-aaaaaa)" {
+		if h == "1 claim(s) with open comment thread(s) -> the human resolves them in the viewer (dossierx serve); an agent may only reply (e.g. widget.contract.locked c-aaaaaa)" {
 			foundCommentHint = true
 		}
 	}
@@ -223,14 +233,14 @@ func TestRun_TriggerlessReviewPendingReauditHint(t *testing.T) {
 	// A triggerless review_pending claim STILL surfaces the reaudit next-step, but
 	// it must be labeled ACCURATELY — "no active trigger", not "from drift/flag"
 	// (there is neither a drifted dependency nor a pending flag).
-	want := "1 claim(s) review_pending with no active trigger -> dossierx reaudit <id> (e.g. widget.contract.locked)"
+	want := "1 claim(s) review_pending with no active trigger -> dossierx claim reaudit <id> (e.g. widget.contract.locked)"
 	found := false
 	mislabeled := false
 	for _, h := range res.NextSteps {
 		if h == want {
 			found = true
 		}
-		if h == "1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.locked)" {
+		if h == "1 claim(s) review_pending from drift/flag -> dossierx claim reaudit <id> (e.g. widget.contract.locked)" {
 			mislabeled = true
 		}
 	}

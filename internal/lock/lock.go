@@ -49,14 +49,35 @@ import (
 // refreshes can be asserted deterministically instead of racing real time.
 var nowFunc = time.Now
 
-// storeSchemaVersion is the on-disk schema version of the lock hash store.
+// storeSchemaVersion is the on-disk schema version of the lock hash store, and
+// nestedHashSchemaVersion / ledgerSchemaVersion are the two versions at which
+// its two migratable changes landed. They are separate constants on purpose:
+// the old code compared the on-disk version against "the current version" to
+// decide whether to DROP the baselines, which was correct only while there was
+// exactly one migration. Bumping the current version with that comparison still
+// in place would have silently thrown away every v1 store's per-dependent
+// baselines — re-opening the DX-AUD-09 drift hole for every existing project on
+// upgrade day, and then handing MigrateLegacyStore an empty Hashes map, which
+// it would re-arm from CURRENT content, blessing any drift that happened before
+// the upgrade as the new baseline. Each migration therefore keys on the version
+// that introduced ITS shape, never on "current".
 //
 // Version 1 introduced PER-DEPENDENT hash baselines: Hashes became
 // map[dependentID]map[depID]hash, so each locked claim records its own
 // snapshot of every dependency it rests on. A store file carrying no
 // "version" field (Version == 0 after decode) predates that change and holds
 // the legacy flat map[depID]hash; LoadStore migrates it — see LoadStore.
-const storeSchemaVersion = 1
+//
+// Version 2 introduced the LOCK LEDGER (Store.Ledger — see ledger.go): a record
+// per locked artifact of the content that was approved, when, by whom, and on
+// whose words. A store at version < 2 predates the ledger, so its already-locked
+// claims are grandfathered in once — see AdoptLedger for why that trigger is
+// "the file exists at an older version" and never "the ledger is empty".
+const (
+	storeSchemaVersion      = 2
+	nestedHashSchemaVersion = 1
+	ledgerSchemaVersion     = 2
+)
 
 // Store is the on-disk (JSON) record of dependency content hashes as of each
 // locked claim's most recent lock or confirmed reaudit.
@@ -83,8 +104,39 @@ type Store struct {
 	// confirmation.
 	LockedAt map[string]string `json:"locked_at"`
 
+	// Ledger is the lock ledger (schema version 2 and later): one
+	// LedgerRecord per locked artifact, keyed by claim id — or by
+	// BuildOrderLedgerKey(module) for a locked build order. See ledger.go's
+	// file doc for what it is for, and audit.go for the rules read off it.
+	// It is `omitempty` so a project with nothing locked keeps a store file
+	// shaped exactly as the pre-ledger one.
+	Ledger map[string]LedgerRecord `json:"ledger,omitempty"`
+
 	path string
+
+	// diskVersion is the schema version this store was DECODED FROM, as
+	// opposed to Version, which LoadStore always sets to the current version
+	// so Save writes a current-shaped file. Every migration keys on
+	// diskVersion: after a load, Version no longer says anything about what
+	// was on disk.
+	diskVersion int
+
+	// fileExists records whether the store file was actually there. It is
+	// load-bearing for grandfathering, which must distinguish "an older store
+	// that never had a ledger" (adopt, once, loudly) from "no store at all
+	// while locked claims exist" (never adopt — see AdoptLedger).
+	fileExists bool
 }
+
+// OnDiskVersion returns the schema version this store was decoded from, or 0
+// for a store whose file did not exist. Exported for the ledger gate, which
+// must tell "this project predates the ledger" from "someone deleted the
+// ledger".
+func (s *Store) OnDiskVersion() int { return s.diskVersion }
+
+// FileExists reports whether the store file existed when this store was loaded.
+// See OnDiskVersion.
+func (s *Store) FileExists() bool { return s.fileExists }
 
 // Baseline returns the recorded content hash of dependency depID as of the
 // last time dependent dependentID was locked or reaudited-and-confirmed, and
@@ -126,6 +178,17 @@ func (s *Store) recordBaseline(dependentID, depID, hash string) {
 // and let every locked claim re-baseline on its next lock/reaudit. Until
 // then DetectStale simply finds no baseline for those dependents and reports
 // no drift — never a crash, never a spurious review_pending.
+//
+// That drop is scoped to schema 0 by comparing against nestedHashSchemaVersion,
+// NOT against the current version. This matters more than it looks: while there
+// was one migration the two were the same number, and comparing against
+// "current" read as correct. It is not. A store at version 1 holds perfectly
+// good NESTED baselines, and dropping them on the version-2 upgrade would take
+// dependency-drift detection down for every existing project — and then hand
+// MigrateLegacyStore an empty Hashes map, which it re-arms from CURRENT
+// content, silently adopting as the new baseline whatever drift had already
+// happened. That is the exact silent drift hole this comparison exists to
+// prevent, so it must stay keyed on the version that changed the SHAPE.
 func LoadStore(path string) (*Store, error) {
 	s := &Store{
 		Version:  storeSchemaVersion,
@@ -148,9 +211,10 @@ func LoadStore(path string) (*Store, error) {
 	// first, decide by schema version whether to keep or drop it, and only
 	// then decode the ones we keep.
 	var onDisk struct {
-		Version  int               `json:"version"`
-		Hashes   json.RawMessage   `json:"hashes"`
-		LockedAt map[string]string `json:"locked_at"`
+		Version  int                     `json:"version"`
+		Hashes   json.RawMessage         `json:"hashes"`
+		LockedAt map[string]string       `json:"locked_at"`
+		Ledger   map[string]LedgerRecord `json:"ledger"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
@@ -158,10 +222,21 @@ func LoadStore(path string) (*Store, error) {
 	if onDisk.LockedAt != nil {
 		s.LockedAt = onDisk.LockedAt
 	}
+	if onDisk.Ledger != nil {
+		s.Ledger = onDisk.Ledger
+	}
+	// Remember what was actually on disk (see Store.diskVersion/fileExists):
+	// Version has already been set to the CURRENT version above, so from here
+	// on it is the write format, not a fact about this file.
+	s.fileExists = true
+	s.diskVersion = onDisk.Version
 
-	// Legacy (pre-versioning) store: drop its flat hashes, keep LockedAt, and
-	// present it to callers as an already-migrated current-version store.
-	if onDisk.Version < storeSchemaVersion {
+	// Legacy (pre-versioning, schema 0) store: drop its flat hashes, keep
+	// LockedAt, and present it to callers as an already-migrated
+	// current-version store. Scoped to the version that changed the hashes'
+	// SHAPE — see this function's doc comment for why comparing against the
+	// current version instead would be a silent drift hole.
+	if onDisk.Version < nestedHashSchemaVersion {
 		return s, nil
 	}
 
@@ -218,6 +293,20 @@ func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
 	// already re-armed. Re-arming then would clobber real, differing baselines
 	// with current content and mask genuine drift, so bail out.
 	if len(s.Hashes) > 0 {
+		return false
+	}
+
+	// A store already AT the per-dependent schema is never re-armed, even when
+	// its baselines map is empty. The emptiness of a schema-0 store's map means
+	// "LoadStore dropped un-attributable legacy hashes", which is the one
+	// situation baselining from current content is the safe answer to. The
+	// emptiness of a schema-1-or-later store means something else entirely —
+	// most sharply, a claim hand-flipped to status: locked after the store was
+	// written — and re-arming THAT would bless whatever its dependencies happen
+	// to say right now as an approved baseline. The hand-flip itself is caught
+	// by the ledger gate (lock-ledger-missing); this guard makes sure the drift
+	// machinery does not quietly hand it a clean bill of health first.
+	if s.diskVersion >= nestedHashSchemaVersion {
 		return false
 	}
 
@@ -340,7 +429,14 @@ func ContentHash(c model.Claim) string {
 // against its pre-lock draft status would let a claim that rests_on a
 // still-draft dependency lock successfully, silently defeating the
 // lint's entire purpose.
-func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *Store) (model.Claim, error) {
+//
+// ap is the approval this lock executes — the human's own --reason words and
+// the account that ran the command — and it is a REQUIRED PARAMETER rather than
+// something the caller records afterwards on purpose: a lock that writes the
+// claim but forgets the ledger record is indistinguishable, from then on, from
+// a hand-flipped status, and the gate would refuse the honest lock. Putting it
+// in the signature makes forgetting it a compile error.
+func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *Store, ap Approval) (model.Claim, error) {
 	lintClaims := withLockedCandidate(claims, claim)
 	findings := lint.RunAll(lintClaims, cfg)
 	errCount := 0
@@ -364,8 +460,14 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	// down with it). It is candidate-scoped — it inspects only THIS claim's own
 	// threads via the pure model predicate — so an unrelated locked claim's
 	// open thread never blocks locking a different, thread-free claim.
+	//
+	// The refusal deliberately does NOT name a command to run. Resolving a
+	// thread is the human's act — it IS the approval this lock is waiting on —
+	// and "comment resolve" was removed from the CLI in v0.3.0 precisely so an
+	// agent cannot clear its own gate. Naming the viewer instead tells the
+	// caller who has to act, which is the actual blocker.
 	if open := claim.OpenThreadIDs(); len(open) > 0 {
-		return claim, fmt.Errorf("lock: refused, claim %q has %d unresolved comment thread(s) %v — resolve them first, e.g. \"dossierx comment resolve %s %s\"", claim.ID, len(open), open, claim.ID, open[0])
+		return claim, fmt.Errorf("lock: refused, claim %q has %d unresolved comment thread(s) %v — the human resolves them in the viewer (\"dossierx serve\"); an agent may reply but never resolve", claim.ID, len(open), open)
 	}
 
 	claim.Status = model.StatusLocked
@@ -381,15 +483,29 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	}
 	store.LockedAt[claim.ID] = nowFunc().UTC().Format(time.RFC3339Nano)
 
+	// The ledger record: what this human approved, in bytes. Recorded from the
+	// already-flipped claim, which is safe in either order — LockedClaimHash
+	// does not sign Status (see lockedClaimHashExcluded).
+	RecordApproval(store, claim, ap)
+
 	return claim, nil
 }
 
 // Unlock transitions claim back to draft. This is always human-initiated
 // and always allowed (no lint gate) — a project may need to unlock a
 // locked claim precisely to fix the thing lint is complaining about.
-func Unlock(claim model.Claim) model.Claim {
+//
+// It RELEASES the claim's ledger record rather than deleting it, and takes the
+// store and the approval to do so. The store parameter is what makes
+// lock-ledger-orphan a precise rule instead of a heuristic: a draft claim
+// holding an UNRELEASED ledger record was flipped out of locked by something
+// that was not this function. A nil store is tolerated (in-memory callers with
+// no ledger); a claim with no record at all releases nothing, which is
+// deliberate — unlock is the recovery escape hatch and must never fail.
+func Unlock(claim model.Claim, store *Store, ap Approval) model.Claim {
 	claim.Status = model.StatusDraft
 	claim.ReviewPending = false
+	ReleaseApproval(store, claim.ID, ap)
 	return claim
 }
 

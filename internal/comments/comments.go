@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -389,7 +390,64 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 	if err := loader.SaveClaimIfUnchanged(claims[idx], token); err != nil {
 		return model.Claim{}, err
 	}
+
+	// Refresh this claim's comment digest — the integrity record that makes a
+	// hand-edited comment block detectable (internal/digest). This is THE hook
+	// point: every comment write in the product, from the CLI and from serve
+	// alike, funnels through this one function, so one call here covers all of
+	// them and there is no second path to keep in step.
+	if err := d.recordCommentDigest(claims, claims[idx]); err != nil {
+		return model.Claim{}, err
+	}
 	return claims[idx], nil
+}
+
+// recordCommentDigest refreshes the digest store's entry for the claim just
+// written. It runs INSIDE mutate's claims sentinel and takes the digest store's
+// own sentinel underneath it — claims -> digest, always that way round and
+// never digest alone — so it adds no new lock-ordering hazard to the existing
+// claims -> lock-store -> flag-store discipline.
+//
+// It runs AFTER the claim file is saved, not before, for two reasons that pull
+// in the same direction. First, SaveClaimIfUnchanged can legitimately REFUSE
+// (an out-of-band edit landed in the load->save window): recording the digest
+// first would leave a digest describing a mutation that never happened, so an
+// honest concurrency refusal would be reported forever after as tampering.
+// Second, if this process dies between the save and this refresh, the recorded
+// digest LAGS the file and the gate reports comment-ledger-drift — a false
+// positive a human can see and clear by re-running the gate after any comment
+// op. Both failure modes are loud; neither is silently wrong, which is the only
+// ordering property an integrity record has to have.
+//
+// On a store file that does not exist yet, every claim's current comment block
+// is adopted at once (digest.Adopt), so a project upgrading into this feature
+// gets coverage for the threads it already has instead of only for claims
+// someone happens to comment on afterwards.
+//
+// A failure here is returned to the caller even though the comment itself is
+// already on disk — the message says so — because the alternative is to swallow
+// the one signal that the integrity record has stopped tracking reality.
+func (d *Deps) recordCommentDigest(claims []model.Claim, c model.Claim) error {
+	path := digest.StorePath(d.Cfg)
+
+	release, err := lock.AcquireFileLock(path)
+	if err != nil {
+		return fmt.Errorf("comments: the comment was saved, but the comment digest could not be updated: %w", err)
+	}
+	defer release()
+
+	store, err := digest.LoadStore(path)
+	if err != nil {
+		return fmt.Errorf("comments: the comment was saved, but the comment digest could not be read: %w", err)
+	}
+	if !store.FileExists() {
+		digest.Adopt(store, claims)
+	}
+	store.Record(c)
+	if err := store.Save(); err != nil {
+		return fmt.Errorf("comments: the comment was saved, but the comment digest could not be written: %w", err)
+	}
+	return nil
 }
 
 // refreshReviewPending recomputes review_pending for a LOCKED claim from the

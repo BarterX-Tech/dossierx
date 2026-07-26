@@ -49,6 +49,14 @@ func testConfig() *config.Config {
 	}
 }
 
+// testApproval is the stand-in human approval every Lock/Unlock in this
+// package's tests executes. The ledger write hooks take one by value so a
+// caller cannot record an approval without having something to put in it; a
+// test that wants to assert the RECORDED actor/reason builds its own.
+func testApproval() Approval {
+	return Approval{Actor: "test-actor", Reason: "test approval"}
+}
+
 func testConfigWithDoctrine() *config.Config {
 	cfg := testConfig()
 	cfg.Facets = append(cfg.Facets, "doctrine")
@@ -66,7 +74,7 @@ func TestLockFailsOnLintError(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err == nil {
 		t.Fatalf("expected Lock to be refused when lint has findings, got nil error")
 	}
@@ -92,7 +100,7 @@ func TestLockSucceedsWithOnlyWarningFindings(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed with only warning-severity findings, got error: %v", err)
 	}
@@ -112,7 +120,7 @@ func TestLockSucceedsWithEmptyLintRegistry(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("Lock: unexpected error: %v", err)
 	}
@@ -183,7 +191,7 @@ func TestHubGatingBlocksWhenConfigured(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	_, err = Lock(child, claims, testConfigWithDoctrine(), store)
+	_, err = Lock(child, claims, testConfigWithDoctrine(), store, testApproval())
 	if err == nil {
 		t.Fatalf("expected Lock to be refused: doctrine hub is not yet locked")
 	}
@@ -191,7 +199,7 @@ func TestHubGatingBlocksWhenConfigured(t *testing.T) {
 	// Once the hub is locked, locking the child should succeed.
 	hub.Status = model.StatusLocked
 	claims = []model.Claim{hub, child}
-	got, err := Lock(child, claims, testConfigWithDoctrine(), store)
+	got, err := Lock(child, claims, testConfigWithDoctrine(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed once doctrine hub is locked, got: %v", err)
 	}
@@ -214,7 +222,7 @@ func TestHubGatingSkippedWhenNotConfigured(t *testing.T) {
 	// cfg has no DoctrineFacet set at all: hub-gating must not run, so this
 	// lock succeeds even though "hub" (which isn't even a doctrine claim
 	// here) is still draft.
-	got, err := Lock(child, claims, testConfig(), store)
+	got, err := Lock(child, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed when hub-gating is not configured, got: %v", err)
 	}
@@ -244,14 +252,14 @@ func TestLockEvaluatesLintsAgainstCandidatesPostLockStatus(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	if _, err := Lock(candidate, claims, testConfig(), store); err == nil {
+	if _, err := Lock(candidate, claims, testConfig(), store, testApproval()); err == nil {
 		t.Fatalf("expected Lock to be refused: candidate would rest_on a still-draft target once locked")
 	}
 
 	// Locking the target first, then the candidate, must succeed.
 	target.Status = model.StatusLocked
 	claims = []model.Claim{target, candidate}
-	got, err := Lock(candidate, claims, testConfig(), store)
+	got, err := Lock(candidate, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed once target is locked, got: %v", err)
 	}
@@ -262,7 +270,7 @@ func TestLockEvaluatesLintsAgainstCandidatesPostLockStatus(t *testing.T) {
 
 func TestUnlockAlwaysAllowed(t *testing.T) {
 	claim := model.Claim{ID: "widget.contract.main", Status: model.StatusLocked, ReviewPending: true}
-	got := Unlock(claim)
+	got := Unlock(claim, nil, testApproval())
 	if got.Status != model.StatusDraft {
 		t.Fatalf("expected status draft after Unlock, got %q", got.Status)
 	}
@@ -329,7 +337,7 @@ func TestLockRefusedOnOpenCommentThread(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err == nil {
 		t.Fatalf("expected Lock to be refused for a claim with an open comment thread")
 	}
@@ -359,7 +367,7 @@ func TestLockAllowedWhenUnrelatedLockedClaimHasOpenThread(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(b, claims, testConfig(), store)
+	got, err := Lock(b, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock of B to succeed while unrelated locked A has an open thread, got: %v", err)
 	}
@@ -392,14 +400,14 @@ func TestPerDependentBaselineNotSharedAcrossDependents(t *testing.T) {
 	}
 
 	// A locks against D v1.
-	lockedA, err := Lock(a, []model.Claim{dep, a, b}, testConfig(), store)
+	lockedA, err := Lock(a, []model.Claim{dep, a, b}, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("lock A: %v", err)
 	}
 
 	// D drifts to v2, then B locks against v2.
 	dep.Body = "dep v2"
-	lockedB, err := Lock(b, []model.Claim{dep, lockedA, b}, testConfig(), store)
+	lockedB, err := Lock(b, []model.Claim{dep, lockedA, b}, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("lock B: %v", err)
 	}
