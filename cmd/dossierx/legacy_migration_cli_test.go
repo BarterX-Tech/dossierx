@@ -82,15 +82,26 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 
 	// The store must have been re-armed and persisted: stamped current schema
 	// version, carrying a nested per-dependent baseline keyed under main.
+	//
+	// Version 2 is the lock-ledger schema. A legacy store IS a store that
+	// exists at an older version, so this same first check also grandfathers
+	// both already-locked claims into the ledger and announces it on stderr —
+	// see lock.AdoptLedger. Asserting the ledger's presence here as well keeps
+	// the two on-load migrations pinned together, since they now run from one
+	// entry point (lock.PrepareStore) and a caller that ran only half of them
+	// would still pass every assertion above.
 	storeRaw, err := os.ReadFile(storeFile)
 	if err != nil {
 		t.Fatalf("read store after migration: %v", err)
 	}
-	if !strings.Contains(string(storeRaw), `"version": 1`) {
-		t.Fatalf("expected the migrated store stamped version 1, got:\n%s", storeRaw)
+	if !strings.Contains(string(storeRaw), `"version": 2`) {
+		t.Fatalf("expected the migrated store stamped version 2, got:\n%s", storeRaw)
 	}
 	if !strings.Contains(string(storeRaw), "widget.contract.main") {
 		t.Fatalf("expected the migrated store to carry a per-dependent baseline for main, got:\n%s", storeRaw)
+	}
+	if !strings.Contains(string(storeRaw), `"grandfathered": true`) {
+		t.Fatalf("expected the legacy store's already-locked claims grandfathered into the lock ledger, got:\n%s", storeRaw)
 	}
 
 	// Now drift the dependency AFTER migration: the next check must flip main to
@@ -101,6 +112,11 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 	if err := os.WriteFile(depPath, []byte(drifted), 0o644); err != nil {
 		t.Fatalf("rewrite dep: %v", err)
 	}
+	// dep is locked, and the rewrite above stands in for the real approval path
+	// (unlock -> edit -> lock), which re-records the approved content. Without
+	// the re-record the ledger gate correctly reports the in-place edit as
+	// tampering, and this test would be measuring that instead of drift re-arming.
+	armLedgerFixture(t, cfgPath)
 	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check (post-drift): %v", err)
 	}

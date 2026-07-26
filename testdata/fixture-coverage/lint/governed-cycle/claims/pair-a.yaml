@@ -1,0 +1,12 @@
+id: govcyc.contract.pair-a
+facet: contract
+module: govcyc
+status: draft
+layout: card
+body: |
+  Half of a 2-claim governed_by cycle: a is governed by b, b is governed by
+  a, so neither claim's authority ever bottoms out anywhere.
+governed_by:
+  type: govcyc.contract.pair-b
+rests_on:
+  - govcyc.contract.anchor

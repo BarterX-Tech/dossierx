@@ -1,0 +1,15 @@
+id: selfmod.contract.self-mirror
+facet: contract
+module: selfmod
+status: draft
+layout: card
+body: |
+  A claim whose mirrors edge names its own id -- the self-edge case that
+  used to pass every rule in the registry: mirror-reciprocal is trivially
+  satisfied (the target mirrors the source back because it IS the source)
+  and mirror-mismatch is too (a claim's content always equals its own).
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+mirrors:
+  - selfmod.contract.self-mirror

@@ -25,7 +25,7 @@ func TestExplicitConfigMissingExitsTwoNamingPath(t *testing.T) {
 	isolated := t.TempDir()
 	missing := filepath.Join(isolated, "does-not-exist.config.yaml")
 
-	stdout, stderr, code := run(t, isolated, "--config", missing, "lint")
+	stdout, stderr, code := run(t, isolated, "--config", missing, "check", "--validate")
 
 	if code != 2 {
 		t.Fatalf("expected exit code 2 for missing --config file, got %d (stdout: %s, stderr: %s)", code, stdout, stderr)
@@ -42,7 +42,7 @@ func TestDefaultSearchNoConfigExitsTwo(t *testing.T) {
 	// code (1) used for e.g. lint/render failures.
 	isolated := t.TempDir()
 
-	stdout, stderr, code := run(t, isolated, "lint")
+	stdout, stderr, code := run(t, isolated, "check", "--validate")
 	if code != 2 {
 		t.Fatalf("expected exit code 2 when no project.config.yaml is found anywhere, got %d (stdout: %s, stderr: %s)", code, stdout, stderr)
 	}
@@ -84,7 +84,7 @@ func TestClaimsDirResolvedAgainstConfigDirAtCLILevel(t *testing.T) {
 	// if claims_dir were (wrongly) resolved against cwd instead of the
 	// config file's directory, "deps" would fail to find the claim.
 	elsewhere := t.TempDir()
-	stdout, stderr, code := run(t, elsewhere, "--config", cfgPath, "deps", "relmod.contract.only-claim")
+	stdout, stderr, code := run(t, elsewhere, "--config", cfgPath, "claim", "show", "relmod.contract.only-claim")
 	if code != 0 {
 		t.Fatalf("expected deps to find the claim via config-relative claims_dir, got exit %d (stdout: %s, stderr: %s)", code, stdout, stderr)
 	}

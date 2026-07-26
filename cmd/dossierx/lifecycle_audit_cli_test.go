@@ -63,15 +63,15 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 		t.Fatalf("write main: %v", err)
 	}
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.dep"); err != nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock dep: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.main"); err != nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock main: %v", err)
 	}
 
 	const stale = "STALE-NOW-DOES-MUST-NOT-APPLY"
-	if _, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.main",
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
 		"--claim-says", "the real, correct main body.", "--now-does", stale, "--reason", "flagged before unlock"); err != nil {
 		t.Fatalf("flag main: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	}
 
 	// Unlock must delete the pending flag entry for this claim.
-	if _, _, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main"); err != nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "unlock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 		t.Fatalf("unlock main: %v", err)
 	}
 	if raw, err := os.ReadFile(flagStorePath); err != nil {
@@ -95,7 +95,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 
 	// Relock, then drift the dependency so a normal (dependency-drift)
 	// reaudit is triggered on main.
-	if _, _, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.main"); err != nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 		t.Fatalf("relock main: %v", err)
 	}
 	depOnDisk, err := os.ReadFile(depPath)
@@ -106,6 +106,9 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	if err := os.WriteFile(depPath, []byte(drifted), 0o644); err != nil {
 		t.Fatalf("rewrite dep: %v", err)
 	}
+	// The in-place edit of a LOCKED dependency stands in for unlock -> edit ->
+	// lock; re-record its approval so the ledger gate sees an approved change.
+	armLedgerFixture(t, cfgPath)
 	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -121,7 +124,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 	// Confirmed reaudit: with the pre-unlock flag gone, this is a plain
 	// dependency-drift (no-change stub) reaudit — it must NOT apply the stale
 	// --now-does over the body.
-	if _, _, err := execCLI(t, "--config", cfgPath, "reaudit", "widget.contract.main", "--confirm"); err != nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture"); err != nil {
 		t.Fatalf("reaudit --confirm: %v", err)
 	}
 	mainAfter, err := os.ReadFile(mainPath)
@@ -177,7 +180,7 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 		if _, err := os.Stat(flagStorePath); !os.IsNotExist(err) {
 			t.Fatalf("precondition: expected no flag store on disk, stat err=%v", err)
 		}
-		_, stderr, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main")
+		_, stderr, err := execCLI(t, "--config", cfgPath, "claim", "unlock", "widget.contract.main", "--reason", "test fixture")
 		if err != nil {
 			t.Fatalf("unlock with an absent flag store must succeed, got: %v", err)
 		}
@@ -193,7 +196,7 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 		if err := os.WriteFile(flagStorePath, []byte("{ this is not valid json"), 0o644); err != nil {
 			t.Fatalf("write corrupt flag store: %v", err)
 		}
-		_, stderr, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main")
+		_, stderr, err := execCLI(t, "--config", cfgPath, "claim", "unlock", "widget.contract.main", "--reason", "test fixture")
 		if err != nil {
 			t.Fatalf("unlock must still succeed with a corrupt flag store, got: %v", err)
 		}
@@ -212,7 +215,7 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 		if err := os.WriteFile(flagStorePath, []byte(valid), 0o644); err != nil {
 			t.Fatalf("write valid flag store: %v", err)
 		}
-		if _, _, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main"); err != nil {
+		if _, _, err := execCLI(t, "--config", cfgPath, "claim", "unlock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 			t.Fatalf("unlock: %v", err)
 		}
 		raw, err := os.ReadFile(flagStorePath)
@@ -254,7 +257,7 @@ func TestCLI_Flag_RefusesStructuredLayouts(t *testing.T) {
 			}
 			claimPath := writeLayoutClaim(t, claimsDir, tc.id, tc.layout, tc.extra)
 
-			_, stderr, err := execCLI(t, "--config", cfgPath, "flag", tc.id,
+			_, stderr, err := execCLI(t, "--config", cfgPath, "claim", "flag", tc.id,
 				"--claim-says", "a", "--now-does", "b", "--reason", "c")
 			if err == nil {
 				t.Fatalf("expected flag to be refused for a %s-layout claim", tc.layout)
@@ -285,7 +288,7 @@ func TestCLI_Flag_RefusesStructuredLayouts(t *testing.T) {
 		}
 		claimPath := writeLockedFixtureClaim(t, claimsDir, "widget.contract.card", "widget", "a plain card body")
 
-		if _, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.card",
+		if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.card",
 			"--claim-says", "a", "--now-does", "b", "--reason", "c"); err != nil {
 			t.Fatalf("expected flag to succeed on a card (body-only) claim: %v", err)
 		}

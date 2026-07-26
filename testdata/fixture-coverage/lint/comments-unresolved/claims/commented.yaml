@@ -5,7 +5,8 @@ status: draft
 layout: card
 body: |
   A draft claim carrying one unresolved (status: open) comment thread -- the
-  comments-unresolved lint's WARNING-severity finding. "dossierx lint" must
+  comments-unresolved lint's WARNING-severity finding. "dossierx check --validate"
+  must
   still exit 0 for this fixture: an open review thread is reported, not a
   failure. It rests_on the helper claim so neither trips the orphan warning.
 rests_on:

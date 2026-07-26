@@ -26,7 +26,7 @@ body:
       description: The minimal command(s) and config/claim files needed to reproduce this.
       placeholder: |
         1. `project.config.yaml` containing ...
-        2. `dossierx lint`
+        2. `dossierx check`
         3. Observed ...
       render: shell
     validations:

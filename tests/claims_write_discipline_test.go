@@ -46,7 +46,9 @@ type asyncResult struct {
 func runAsync(dir string, args ...string) <-chan asyncResult {
 	ch := make(chan asyncResult, 1)
 	go func() {
-		cmd := exec.Command(binPath, args...)
+		// --format text for the same reason run() prepends it: this suite
+		// asserts prose and exit codes, not the v0.3.0 envelope.
+		cmd := exec.Command(binPath, append([]string{"--format", "text"}, args...)...)
 		cmd.Dir = dir
 		var out, errb strings.Builder
 		cmd.Stdout = &out
@@ -119,37 +121,37 @@ func assertGatedThenCompletes(t *testing.T, root string, args []string, wantCode
 func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 	claimPathOf := func(root string) string { return filepath.Join(root, "claims", "overview.yaml") }
 
-	t.Run("lock", func(t *testing.T) {
+	t.Run("claim lock", func(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widlock")
 		id := "widlock.contract.overview"
-		assertGatedThenCompletes(t, root, []string{"lock", id}, 0, claimPathOf(root))
+		assertGatedThenCompletes(t, root, []string{"claim", "lock", id, "--reason", "test fixture"}, 0, claimPathOf(root))
 		if got := llReadFile(t, claimPathOf(root)); !strings.Contains(got, "status: locked") {
 			t.Fatalf("expected %s locked after release, got:\n%s", id, got)
 		}
 	})
 
-	t.Run("unlock", func(t *testing.T) {
+	t.Run("claim unlock", func(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widunlock")
 		id := "widunlock.contract.overview"
-		if _, stderr, code := run(t, root, "lock", id); code != 0 {
+		if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("setup lock: exit %d: %s", code, stderr)
 		}
-		assertGatedThenCompletes(t, root, []string{"unlock", id}, 0, claimPathOf(root))
+		assertGatedThenCompletes(t, root, []string{"claim", "unlock", id, "--reason", "test fixture"}, 0, claimPathOf(root))
 		if got := llReadFile(t, claimPathOf(root)); !strings.Contains(got, "status: draft") {
 			t.Fatalf("expected %s draft after release, got:\n%s", id, got)
 		}
 	})
 
-	t.Run("flag", func(t *testing.T) {
+	t.Run("claim flag", func(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widflag")
 		id := "widflag.contract.overview"
-		if _, stderr, code := run(t, root, "lock", id); code != 0 {
+		if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("setup lock: exit %d: %s", code, stderr)
 		}
-		assertGatedThenCompletes(t, root, []string{"flag", id, "--claim-says", "old", "--now-does", "new", "--reason", "because"}, 0, claimPathOf(root))
+		assertGatedThenCompletes(t, root, []string{"claim", "flag", id, "--claim-says", "old", "--now-does", "new", "--reason", "because"}, 0, claimPathOf(root))
 		if got := llReadFile(t, claimPathOf(root)); !strings.Contains(got, "review_pending: true") {
 			t.Fatalf("expected %s review_pending after release, got:\n%s", id, got)
 		}
@@ -159,13 +161,13 @@ func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widreaudit")
 		id := "widreaudit.contract.overview"
-		if _, stderr, code := run(t, root, "lock", id); code != 0 {
+		if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("setup lock: exit %d: %s", code, stderr)
 		}
-		if _, stderr, code := run(t, root, "flag", id, "--claim-says", "old", "--now-does", "the new truth", "--reason", "because"); code != 0 {
+		if _, stderr, code := run(t, root, "claim", "flag", id, "--claim-says", "old", "--now-does", "the new truth", "--reason", "because"); code != 0 {
 			t.Fatalf("setup flag: exit %d: %s", code, stderr)
 		}
-		assertGatedThenCompletes(t, root, []string{"reaudit", id, "--confirm"}, 0, claimPathOf(root))
+		assertGatedThenCompletes(t, root, []string{"claim", "reaudit", id, "--confirm", "--reason", "test fixture"}, 0, claimPathOf(root))
 		if got := llReadFile(t, claimPathOf(root)); strings.Contains(got, "review_pending: true") {
 			t.Fatalf("expected %s review_pending cleared after release, got:\n%s", id, got)
 		}
@@ -194,7 +196,7 @@ func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 		}
 		defer os.Remove(sentinel)
 
-		ch := runAsync(root, "deps", id)
+		ch := runAsync(root, "claim", "show", id)
 		select {
 		case r := <-ch:
 			if r.code != 0 {
@@ -248,7 +250,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
-			if _, stderr, code := run(t, root, "lock", id); code != 0 {
+			if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 				t.Errorf("concurrent lock %s: exit %d: %s", id, code, stderr)
 			}
 		}(id)
@@ -263,11 +265,11 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for k := 0; k < 2; k++ {
-				if _, stderr, code := run(t, root, "lock", hotID); code != 0 {
+				if _, stderr, code := run(t, root, "claim", "lock", hotID, "--reason", "test fixture"); code != 0 {
 					t.Errorf("concurrent lock %s: exit %d: %s", hotID, code, stderr)
 					return
 				}
-				if _, stderr, code := run(t, root, "unlock", hotID); code != 0 {
+				if _, stderr, code := run(t, root, "claim", "unlock", hotID, "--reason", "test fixture"); code != 0 {
 					t.Errorf("concurrent unlock %s: exit %d: %s", hotID, code, stderr)
 					return
 				}

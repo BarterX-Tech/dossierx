@@ -1,14 +1,17 @@
 // lint_fixtures_test.go proves every registered lint rule (internal/lint's
-// Registry) actually fires via the real CLI ("dossierx lint --json"), not just
-// in a package-internal unit test: it table-drives every synthetic project
+// Registry) actually fires via the real CLI ("dossierx check --validate"), not
+// just in a package-internal unit test: it table-drives every synthetic project
 // under testdata/fixture-coverage/lint/<rule-name>/, one directory per
 // rule, each deliberately shaped to trip exactly that one rule.
 //
-// These fixtures are read-only from "dossierx lint"'s point of view (lint never
-// writes anything to disk -- see cmd/dossierx/main.go's newLintCmd), so
-// unlike the lock-lifecycle fixtures elsewhere in this package, they are
-// run directly against their checked-in testdata directory via --config,
-// with no need to copy into a t.TempDir() first.
+// These fixtures are read-only from the command's point of view — which is now
+// a guarantee rather than an accident. Before v0.3.0 they were driven by
+// "dossierx check --validate", which happened not to write; that verb is gone, and
+// "check --validate" is its replacement precisely BECAUSE it is specified never
+// to write (plain "check" reconciles review_pending, rewrites the lock store,
+// and regenerates .catalog.json and the viewer, all of which would dirty a
+// checked-in fixture directory). So these still run directly against their
+// testdata directory via --config, with no need to copy into a t.TempDir().
 package tests
 
 import (
@@ -19,15 +22,50 @@ import (
 	"testing"
 )
 
-// lintFinding mirrors the JSON shape "dossierx lint --json" encodes
-// internal/lint.Finding as (see cmd/dossierx/main.go's reportLintFindings,
-// which json.Marshals []lint.Finding directly -- no custom json tags, so
-// the field names are the Go struct's own).
+// lintFinding is one entry of the check envelope's data.lint_findings.
+//
+// Before v0.3.0 this mirrored the Go field names of internal/lint.Finding,
+// because "dossierx check --validate" json.Marshal'd that struct directly and it
+// carries no tags. The envelope projects it into snake_case instead (see
+// cmd/dossierx's lintFindingData and TestEnvelopeKeysAreSnakeCase), so the
+// keys here are the contract's, not Go's.
 type lintFinding struct {
-	LintName string `json:"LintName"`
-	ClaimID  string `json:"ClaimID"`
-	Message  string `json:"Message"`
-	Severity string `json:"Severity"`
+	LintName string `json:"lint"`
+	ClaimID  string `json:"claim_id"`
+	Message  string `json:"message"`
+	Severity string `json:"severity"`
+}
+
+// validateEnvelope is the subset of the check envelope these fixtures read.
+// Data survives onto a FAILED envelope too (that is the whole point of the
+// contract's partial-result rule), which is what lets one helper serve both
+// the warning-severity fixtures that exit 0 and the error-severity ones that
+// exit 1.
+type validateEnvelope struct {
+	OK   bool `json:"ok"`
+	Data struct {
+		ReadOnly     bool          `json:"read_only"`
+		LintFindings []lintFinding `json:"lint_findings"`
+	} `json:"data"`
+}
+
+// runValidateFindings runs "dossierx check --validate --format json" in
+// fixtureDir against cfgPath and returns the findings plus the exit code.
+//
+// "--format", "json" is passed explicitly and wins over the "--format text"
+// the run helper prepends, because pflag takes the LAST occurrence of a
+// repeated flag — see run's own doc comment.
+func runValidateFindings(t *testing.T, fixtureDir, cfgPath string) ([]lintFinding, int) {
+	t.Helper()
+	stdout, stderr, code := run(t, fixtureDir, "--config", cfgPath, "--format", "json", "check", "--validate")
+	var env validateEnvelope
+	if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+		t.Fatalf("check --validate output is not a single envelope: %v\nstdout: %s\nstderr: %s", err, stdout, stderr)
+	}
+	if !env.Data.ReadOnly {
+		t.Fatalf("check --validate must mark its payload read_only; got: %s", stdout)
+	}
+	return env.Data.LintFindings, code
 }
 
 // coFiresWith records the small set of *legitimate* additional rules a
@@ -42,15 +80,21 @@ type lintFinding struct {
 //     for this one edge kind, not a replacement for it.
 //   - validated-on-missing: the same overlap, for a governed_by.type that
 //     names a doctrine claim id with no matching claim.
+//   - cycle: its fixture includes the degenerate one-node case (a claim
+//     whose rests_on names itself), which is by construction also a
+//     self-edge. Both rules are telling the truth about that claim -- it is
+//     a self-reference AND a cycle in the dependency graph -- and see
+//     internal/lint/self_edge.go for why neither suppresses the other.
 //
 // Every other fixture is built to trip its target rule alone.
 var coFiresWith = map[string][]string{
 	"mirror-unanchored":    {"dangling"},
 	"validated-on-missing": {"dangling"},
+	"cycle":                {"self-edge"},
 }
 
-// lintFixtureExpectedExit is the exit code "dossierx lint" must produce for a
-// given rule's fixture: 0 for the three WARNING-severity rules (orphan,
+// lintFixtureExpectedExit is the exit code "dossierx check --validate" must
+// produce for a given rule's fixture: 0 for the three WARNING-severity rules (orphan,
 // body-edge-hint, comments-unresolved -- see their own doc comments in
 // internal/lint), 1 (a lint failure) for every ERROR-severity rule.
 var lintFixtureExpectedExit = map[string]int{
@@ -66,8 +110,8 @@ func TestLintRuleCoverageFixtures(t *testing.T) {
 		t.Fatalf("read %s: %v", root, err)
 	}
 
-	if len(entries) != 23 {
-		t.Fatalf("expected exactly 23 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
+	if len(entries) != 25 {
+		t.Fatalf("expected exactly 25 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
 	}
 
 	for _, e := range entries {
@@ -93,7 +137,7 @@ func lintFixturesRoot(t *testing.T) string {
 	return abs
 }
 
-// testLintFixtureFiresExactlyOneRule runs "dossierx lint --json" against
+// testLintFixtureFiresExactlyOneRule runs "dossierx check --validate" against
 // fixtureDir and asserts: (a) the expected exit code for wantRule's
 // severity, (b) wantRule appears at least once in the parsed findings, and
 // (c) every OTHER rule name present is one of wantRule's documented,
@@ -104,19 +148,14 @@ func testLintFixtureFiresExactlyOneRule(t *testing.T, fixtureDir, wantRule strin
 	t.Helper()
 
 	cfgPath := filepath.Join(fixtureDir, "project.config.yaml")
-	stdout, stderr, code := run(t, fixtureDir, "--config", cfgPath, "lint", "--json")
+	findings, code := runValidateFindings(t, fixtureDir, cfgPath)
 
 	wantExit := 1
 	if e, ok := lintFixtureExpectedExit[wantRule]; ok {
 		wantExit = e
 	}
 	if code != wantExit {
-		t.Fatalf("fixture %q: expected exit %d, got %d\nstdout: %s\nstderr: %s", wantRule, wantExit, code, stdout, stderr)
-	}
-
-	var findings []lintFinding
-	if err := json.Unmarshal([]byte(stdout), &findings); err != nil {
-		t.Fatalf("fixture %q: lint --json output is not valid JSON: %v\noutput: %s", wantRule, err, stdout)
+		t.Fatalf("fixture %q: expected exit %d, got %d (findings: %+v)", wantRule, wantExit, code, findings)
 	}
 
 	allowed := map[string]bool{wantRule: true}

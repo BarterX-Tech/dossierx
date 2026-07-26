@@ -5,40 +5,70 @@
 // invocation of the "dossierx" binary would.
 //
 // This is deliberately narrower than tests/ (see that package's own doc
-// comment): tests/ execs the built binary as a subprocess and is the
-// source of truth for end-to-end CLI behavior, including exit codes,
-// because two RunE branches here (newDepsCmd and newReauditCmd's
-// "not found" / "not locked+review_pending" cases) call os.Exit(2)
-// directly rather than returning an error — calling those in-process would
-// kill this test binary, so only tests/'s subprocess model can exercise
-// them. What belongs here instead is coverage of the command wiring itself
-// (each subcommand's happy path, in-process, cheap, no subprocess build
-// step) — including "dossierx coverage", which tests/ does not exercise at
-// all.
+// comment): tests/ execs the built binary as a subprocess and is the source of
+// truth for end-to-end CLI behavior, including exit codes, which cannot be
+// asserted in-process (a RunE that called os.Exit would kill this test binary;
+// since v0.3.0 none do, but the exit STATUS a returned error maps to is still
+// only observable from a real process). What belongs here instead is coverage
+// of the command wiring itself — each subcommand's happy path, in-process,
+// cheap, no subprocess build step.
 package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/cliout"
 )
 
 // execCLI builds a fresh root command (so no state leaks between calls via
 // the newXxxCmd() closures) and runs it in-process with args, returning
-// combined stdout/stderr and the error Execute() returned (nil on
+// combined stdout/stderr and the error runCLI returned (nil on
 // success). Every subcommand here reaches its work through --config, never
 // a process chdir, so tests can run in parallel-safe temp dirs.
+//
+// It goes through runCLI rather than root.Execute() so these tests see exactly
+// what main() sees, including the "Error: <msg>" line runCLI now prints in
+// place of cobra's (root.SilenceErrors is set unconditionally — see
+// output.go's runCLI).
+//
+// --format text is PREPENDED to every invocation, which is what pins this whole
+// suite — check_parity_test.go's ten byte-for-byte goldens above all — to the
+// human surface it was written against. v0.3.0 makes JSON the default; the
+// prose is now the opt-in, and these fixtures assert the prose. Because
+// pflag takes the LAST occurrence of a repeated flag, a test that wants the
+// machine surface simply passes "--format", "json" in its own args and wins.
 func execCLI(t *testing.T, args ...string) (stdout, stderr string, err error) {
 	t.Helper()
 	root := newRootCmd()
 	var outBuf, errBuf bytes.Buffer
 	root.SetOut(&outBuf)
 	root.SetErr(&errBuf)
-	root.SetArgs(args)
-	err = root.Execute()
+	root.SetArgs(append([]string{"--format", formatText}, args...))
+	err = runCLI(root)
 	return outBuf.String(), errBuf.String(), err
+}
+
+// execCLIJSON is execCLI's machine-surface twin: it runs the SAME command tree
+// with the v0.3.0 default format and decodes the single envelope the command
+// printed to stdout. Tests that assert the contract use this; tests that assert
+// the prose use execCLI.
+func execCLIJSON(t *testing.T, args ...string) (env cliout.Envelope, stderr string, err error) {
+	t.Helper()
+	root := newRootCmd()
+	var outBuf, errBuf bytes.Buffer
+	root.SetOut(&outBuf)
+	root.SetErr(&errBuf)
+	root.SetArgs(append([]string{"--format", formatJSON}, args...))
+	err = runCLI(root)
+	if decodeErr := json.Unmarshal(outBuf.Bytes(), &env); decodeErr != nil {
+		t.Fatalf("stdout is not a single JSON envelope (%v):\n%s\nstderr:\n%s", decodeErr, outBuf.String(), errBuf.String())
+	}
+	return env, errBuf.String(), err
 }
 
 // icWriteFixtureProject writes a minimal valid project.config.yaml plus one
@@ -69,10 +99,15 @@ func icWriteFixtureProject(t *testing.T, root, module string) (cfgPath, claimPat
 }
 
 // ---------------------------------------------------------------------
-// lint / catalog / render / check
+// check, in both its writing and read-only forms
+//
+// The four separate lint/catalog/render/check invocations this test used to
+// make are one command now: v0.3.0 deleted the three stage verbs, so what is
+// asserted here is that the ONE surviving command still produces every artifact
+// each of them used to, and that --validate produces none of them.
 // ---------------------------------------------------------------------
 
-func TestCLI_LintCatalogRenderCheck(t *testing.T) {
+func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
@@ -89,49 +124,50 @@ func TestCLI_LintCatalogRenderCheck(t *testing.T) {
 		t.Fatalf("write overview claim: %v", err)
 	}
 
-	// The single fixture claim carries no mirrors/rests_on edges, which
-	// trips the warning-severity "orphan" lint — expected and non-fatal
-	// (lint only fails the command on an error-severity finding).
-	if out, _, err := execCLI(t, "--config", cfgPath, "lint"); err != nil {
-		t.Fatalf("lint: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "0 error(s)") {
-		t.Fatalf("expected a warning-only (non-failing) lint run, got: %s", out)
+	// --validate first, on a clean tree: it must report the lint verdict and
+	// leave the two artifacts ABSENT. The fixture claims carry no
+	// mirrors/rests_on edges, which trips the warning-severity "orphan" lint —
+	// expected and non-fatal (only an error-severity finding fails a run).
+	out, _, err := execCLI(t, "--config", cfgPath, "check", "--validate")
+	if err != nil {
+		t.Fatalf("check --validate: %v (out: %s)", err, out)
+	}
+	if !strings.Contains(out, "0 error(s)") {
+		t.Fatalf("expected a warning-only (non-failing) validate run, got: %s", out)
+	}
+	if !strings.Contains(out, "read-only") {
+		t.Fatalf("expected --validate to say it wrote nothing, got: %s", out)
+	}
+	if strings.Contains(out, "wrote") {
+		t.Fatalf("--validate must not report writing anything, got: %s", out)
+	}
+	for _, artifact := range []string{filepath.Join(root, ".catalog.json"), filepath.Join(root, "viewer", "index.html")} {
+		if _, statErr := os.Stat(artifact); statErr == nil {
+			t.Fatalf("check --validate wrote %s; it must be read-only", artifact)
+		}
 	}
 
-	if out, _, err := execCLI(t, "--config", cfgPath, "lint", "--json"); err != nil {
-		t.Fatalf("lint --json: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "\"orphan\"") {
-		t.Fatalf("expected the orphan warning finding in JSON output, got: %s", out)
+	// Now the writing form: same lint verdict, plus both artifacts and the
+	// non-blocking orientation-notes report.
+	out, _, err = execCLI(t, "--config", cfgPath, "check")
+	if err != nil {
+		t.Fatalf("check: %v (out: %s)", err, out)
 	}
-
-	if out, _, err := execCLI(t, "--config", cfgPath, "catalog"); err != nil {
-		t.Fatalf("catalog: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "wrote") {
-		t.Fatalf("expected catalog to report where it wrote, got: %s", out)
+	if !strings.Contains(out, "check: OK") {
+		t.Fatalf("expected check: OK, got: %s", out)
+	}
+	if !strings.Contains(out, `orientation notes: module "widget": 1 (1 in overview)`) {
+		t.Fatalf("expected orientation notes report line, got: %s", out)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, ".catalog.json")); statErr != nil {
-		t.Fatalf("expected .catalog.json to exist: %v", statErr)
-	}
-
-	if out, _, err := execCLI(t, "--config", cfgPath, "render"); err != nil {
-		t.Fatalf("render: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "wrote") {
-		t.Fatalf("expected render to report where it wrote, got: %s", out)
+		t.Fatalf("expected .catalog.json to exist after check: %v", statErr)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "viewer", "index.html")); statErr != nil {
-		t.Fatalf("expected viewer/index.html to exist: %v", statErr)
-	}
-
-	if out, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
-		t.Fatalf("check: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "check: OK") {
-		t.Fatalf("expected check: OK, got: %s", out)
-	} else if !strings.Contains(out, `orientation notes: module "widget": 1 (1 in overview)`) {
-		t.Fatalf("expected orientation notes report line, got: %s", out)
+		t.Fatalf("expected viewer/index.html to exist after check: %v", statErr)
 	}
 }
 
-func TestCLI_LintFailurePropagatesAsError(t *testing.T) {
+func TestCLI_LintFailureFailsBothCheckForms(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
@@ -151,51 +187,64 @@ func TestCLI_LintFailurePropagatesAsError(t *testing.T) {
 		t.Fatalf("write claim: %v", err)
 	}
 
-	out, _, err := execCLI(t, "--config", cfgPath, "lint")
+	out, _, err := execCLI(t, "--config", cfgPath, "check", "--validate")
 	if err == nil {
-		t.Fatalf("expected lint to fail on a dangling rests_on target, got no error (out: %s)", out)
+		t.Fatalf("expected --validate to fail on a dangling rests_on target, got no error (out: %s)", out)
 	}
 	if !strings.Contains(out, "error(s)") {
 		t.Fatalf("expected findings summary in stdout, got: %s", out)
 	}
+	if strings.Contains(out, "check --validate: OK") {
+		t.Fatalf("a failing validate must not print its OK line, got: %s", out)
+	}
 
+	// The writing form fails on the same finding, at the same step — the point
+	// being that --validate is the SAME gate, not a laxer one.
 	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err == nil {
 		t.Fatalf("expected check to fail too, since it lints first")
 	}
 }
 
 // ---------------------------------------------------------------------
-// deps
+// claim show — successor to "deps" (and to "implink status")
 // ---------------------------------------------------------------------
 
-func TestCLI_DepsFoundClaim(t *testing.T) {
+func TestCLI_ClaimShowReportsBothEdgeDirections(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	out, _, err := execCLI(t, "--config", cfgPath, "deps", "widget.contract.overview")
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "show", "widget.contract.overview")
 	if err != nil {
-		t.Fatalf("deps: %v", err)
+		t.Fatalf("claim show: %v", err)
 	}
 	if !strings.Contains(out, "widget.contract.overview") || !strings.Contains(out, "governed_by") {
-		t.Fatalf("expected deps output to describe the claim, got: %s", out)
+		t.Fatalf("expected claim show to describe the claim, got: %s", out)
 	}
 	if !strings.Contains(out, "incoming mirrors") || !strings.Contains(out, "incoming rests_on") {
-		t.Fatalf("expected deps to report incoming edges, got: %s", out)
+		t.Fatalf("expected claim show to report incoming edges, got: %s", out)
+	}
+	// The two things "deps" never said, and the reason claim show replaced it.
+	if !strings.Contains(out, "implemented in") {
+		t.Fatalf("expected claim show to report implementation links, got: %s", out)
+	}
+	if !strings.Contains(out, "next actions") {
+		t.Fatalf("expected claim show to report the legal next actions, got: %s", out)
 	}
 }
 
-// Deps on an unknown id, and reaudit on a not-pending claim, both call
-// os.Exit(2) directly (see this file's package doc comment) — that path
-// is intentionally left to tests/'s subprocess-based CLI tests
-// (tests/cli_test.go's TestNestedConfigNearestWins and
-// tests/lock_lifecycle_test.go's TestLockLifecycle_ReauditRefusedWhenNotPending),
-// never exercised in-process here.
+// The exit STATUS of "claim show" on an unknown id (2, the not-found family)
+// is asserted in tests/, which execs a real process — see this file's package
+// doc comment.
 
 // ---------------------------------------------------------------------
-// coverage
+// claim list --migrated — successor to "coverage"
+//
+// "coverage" printed a ratio and nothing else. The replacement prints the same
+// ratio AND names the claims in it, which is what a caller actually wanted the
+// ratio for.
 // ---------------------------------------------------------------------
 
-func TestCLI_CoverageCommand(t *testing.T) {
+func TestCLI_ClaimListMigratedReportsTheRatioAndTheClaims(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
@@ -218,16 +267,22 @@ func TestCLI_CoverageCommand(t *testing.T) {
 		t.Fatalf("write fresh claim: %v", err)
 	}
 
-	out, _, err := execCLI(t, "--config", cfgPath, "coverage")
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--migrated")
 	if err != nil {
-		t.Fatalf("coverage: %v", err)
+		t.Fatalf("claim list --migrated: %v", err)
 	}
-	if !strings.Contains(out, "1/2 claim(s) carry migrated_from (50.0%)") {
-		t.Fatalf("expected a 1/2 (50.0%%) coverage report, got: %s", out)
+	if !strings.Contains(out, "claim list: 1 of 2 claim(s) (50.0%)") {
+		t.Fatalf("expected a 1-of-2 (50.0%%) summary, got: %s", out)
+	}
+	if !strings.Contains(out, "widget.contract.migrated") {
+		t.Fatalf("expected the migrated claim to be NAMED, not just counted, got: %s", out)
+	}
+	if strings.Contains(out, "widget.contract.fresh") {
+		t.Fatalf("--migrated must exclude claims with no migrated_from, got: %s", out)
 	}
 }
 
-func TestCLI_CoverageCommandEmptyClaimsDir(t *testing.T) {
+func TestCLI_ClaimListMigratedEmptyClaimsDir(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
@@ -238,29 +293,32 @@ func TestCLI_CoverageCommandEmptyClaimsDir(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	out, _, err := execCLI(t, "--config", cfgPath, "coverage")
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--migrated")
 	if err != nil {
-		t.Fatalf("coverage: %v", err)
+		t.Fatalf("claim list --migrated: %v", err)
 	}
-	if !strings.Contains(out, "0/0 claim(s) carry migrated_from (0.0%)") {
+	if !strings.Contains(out, "claim list: 0 of 0 claim(s) (0.0%)") {
 		t.Fatalf("expected the zero-total case to report 0.0%% without dividing by zero, got: %s", out)
 	}
 }
 
 // ---------------------------------------------------------------------
-// stale
+// claim list --review-pending — successor to "stale"
 // ---------------------------------------------------------------------
 
-func TestCLI_StaleNothingLocked(t *testing.T) {
+func TestCLI_ClaimListReviewPendingWhenNothingIsLocked(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	out, _, err := execCLI(t, "--config", cfgPath, "stale")
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--review-pending")
 	if err != nil {
-		t.Fatalf("stale: %v", err)
+		t.Fatalf("claim list --review-pending: %v", err)
 	}
-	if !strings.Contains(out, "nothing locked") {
-		t.Fatalf("expected 'nothing locked', got: %s", out)
+	// "stale" had a bespoke "nothing locked" message; the filter reports the
+	// same fact in the one shape every claim list uses — an empty result set
+	// out of a non-empty project.
+	if !strings.Contains(out, "claim list: 0 of 1 claim(s)") {
+		t.Fatalf("expected an empty review-pending result over one claim, got: %s", out)
 	}
 }
 
@@ -300,10 +358,10 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 		t.Fatalf("write main: %v", err)
 	}
 
-	if out, _, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.dep"); err != nil {
+	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock dep: %v (out: %s)", err, out)
 	}
-	if out, _, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.main"); err != nil {
+	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock main: %v (out: %s)", err, out)
 	}
 
@@ -315,6 +373,10 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 	if err := os.WriteFile(depPath, []byte(changed), 0o644); err != nil {
 		t.Fatalf("rewrite dep: %v", err)
 	}
+	// dep is LOCKED: rewriting its file in place is what the ledger gate
+	// refuses. The real path is unlock -> edit -> lock, which records the new
+	// content; re-record it so this test stays about the DEPENDENT's drift.
+	armLedgerFixture(t, cfgPath)
 
 	if out, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v (out: %s)", err, out)
@@ -327,7 +389,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 		t.Fatalf("expected main to be flagged review_pending after check, got:\n%s", mainAfterCheck)
 	}
 
-	staleOut, _, err := execCLI(t, "--config", cfgPath, "stale")
+	staleOut, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--review-pending")
 	if err != nil {
 		t.Fatalf("stale: %v", err)
 	}
@@ -336,7 +398,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 	}
 
 	// Reject (no --confirm): propose-only, claim untouched.
-	rejectOut, _, err := execCLI(t, "--config", cfgPath, "reaudit", "widget.contract.main")
+	rejectOut, _, err := execCLI(t, "--config", cfgPath, "claim", "reaudit", "widget.contract.main")
 	if err != nil {
 		t.Fatalf("reaudit (propose-only): %v", err)
 	}
@@ -352,7 +414,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 	}
 
 	// Confirm: review_pending clears, claim stays locked, gains an audit note.
-	confirmOut, _, err := execCLI(t, "--config", cfgPath, "reaudit", "widget.contract.main", "--confirm")
+	confirmOut, _, err := execCLI(t, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture")
 	if err != nil {
 		t.Fatalf("reaudit --confirm: %v (out: %s)", err, confirmOut)
 	}
@@ -371,7 +433,7 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 	}
 
 	// unlock: main reverts to draft.
-	unlockOut, _, err := execCLI(t, "--config", cfgPath, "unlock", "widget.contract.main")
+	unlockOut, _, err := execCLI(t, "--config", cfgPath, "claim", "unlock", "widget.contract.main", "--reason", "test fixture")
 	if err != nil {
 		t.Fatalf("unlock: %v (out: %s)", err, unlockOut)
 	}

@@ -512,7 +512,7 @@ func TestCheckSucceedsWithNetworkDisabled(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command(binPath, "check")
+	cmd := exec.Command(binPath, "--format", "text", "check")
 	cmd.Dir = root
 	// Route any accidental outbound HTTP(S) through an unroutable address
 	// (TEST-NET-1, RFC 5737) so a real network call would time out/fail
@@ -586,7 +586,7 @@ func TestEngineCopiedIntoCollidingParentDirNameWorks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	runCmd := exec.Command(binOut, "check")
+	runCmd := exec.Command(binOut, "--format", "text", "check")
 	runCmd.Dir = projectRoot
 	if out, err := runCmd.CombinedOutput(); err != nil {
 		t.Fatalf("check via binary built from colliding parent path failed: %v\n%s", err, out)

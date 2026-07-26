@@ -107,9 +107,24 @@ func TestSiteContent_ReauditExampleIncludesClaimID(t *testing.T) {
 
 	// The depicted output id must match the depicted command's id, so the
 	// example is internally consistent with what the binary would print.
-	wantCmd := "dossierx reaudit " + id + " --confirm"
+	//
+	// The verb is "claim reaudit", not the bare "reaudit" this test pinned
+	// before v0.3.0: the restructure moved lock, unlock, flag and reaudit
+	// under the claim noun, so a site example showing "dossierx reaudit" is
+	// now depicting a command that does not exist. Asserting the noun here is
+	// what makes that a test failure rather than a plausible-looking snippet
+	// a reader would paste and watch fail.
+	wantCmd := "dossierx claim reaudit " + id + " --confirm"
 	if !strings.Contains(content, wantCmd) {
 		t.Fatalf("reaudit success line shows id %q but no matching %q command precedes it", id, wantCmd)
+	}
+
+	// The retired top-level form must not reappear anywhere in the copy. The
+	// check above only proves the shaped example is right; this one catches a
+	// stale invocation elsewhere on the page, which is the failure mode that
+	// actually shipped in v0.2.x copy.
+	if strings.Contains(content, "dossierx reaudit ") {
+		t.Fatal(`site content still depicts the retired top-level "dossierx reaudit"; the verb moved under the claim noun in v0.3.0 ("dossierx claim reaudit")`)
 	}
 }
 

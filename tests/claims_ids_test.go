@@ -1,5 +1,5 @@
 // This file covers the "Claims & IDs" edge-case category end-to-end at the
-// CLI level: how "dossierx lint"/"dossierx check" behave for malformed, duplicate,
+// CLI level: how "dossierx check --validate"/"dossierx check" behave for malformed, duplicate,
 // empty, or oddly-shaped claim ids and claim content. It reuses the
 // binPath/run/writeFixtureProject scaffolding from cli_test.go in this same
 // package.
@@ -64,7 +64,7 @@ governed_by:
   reason: fixture
 `)
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected nonzero exit for duplicate id, got 0; stdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -91,7 +91,7 @@ governed_by:
   reason: fixture
 `)
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected nonzero exit for malformed id, got 0; stdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -116,7 +116,7 @@ governed_by:
   reason: fixture
 `)
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected nonzero exit for unknown facet, got 0; stdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -144,7 +144,7 @@ governed_by:
   reason: fixture
 `)
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected nonzero exit for unknown module, got 0; stdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -163,13 +163,13 @@ func TestClaimsIDs_EmptyClaimsDir(t *testing.T) {
 	writeIDsFixtureProject(t, root)
 	// claims dir was created empty and never populated.
 
-	if stdout, stderr, code := run(t, root, "lint"); code != 0 {
+	if stdout, stderr, code := run(t, root, "check", "--validate"); code != 0 {
 		t.Fatalf("lint on empty claims dir: exit %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
-	if stdout, stderr, code := run(t, root, "catalog"); code != 0 {
+	if stdout, stderr, code := run(t, root, "check"); code != 0 {
 		t.Fatalf("catalog on empty claims dir: exit %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
-	if stdout, stderr, code := run(t, root, "render"); code != 0 {
+	if stdout, stderr, code := run(t, root, "check"); code != 0 {
 		t.Fatalf("render on empty claims dir: exit %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 	}
 	if stdout, stderr, code := run(t, root, "check"); code != 0 {
@@ -192,7 +192,7 @@ governed_by:
   reason: fixture
 `)
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected nonzero exit for a claim with no body/rows/steps, got 0; stdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}
@@ -249,7 +249,7 @@ func TestClaimsIDs_UnicodeSlugRejected(t *testing.T) {
 		"  type: none\n"+
 		"  reason: fixture\n")
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected nonzero exit for a unicode slug, got 0; stdout:\n%s\nstderr:\n%s", stdout, stderr)
 	}

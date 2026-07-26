@@ -1,37 +1,72 @@
 // cli_uxaudit_test.go covers the in-process (execCLI / direct-helper) half
-// of the CLI/UX audit fixes (DX-AUD-17..22): the JSON-array coercion for a
-// clean lint run, the version subcommand and --version flag, and the
-// unknown-module rejection shared by build-order and implink status. The
-// exit-code-sensitive half (lock/unlock/flag not-found -> exit 2, unknown
+// of the CLI/UX audit fixes (DX-AUD-17..22): the empty-findings envelope shape
+// for a clean validate run, the version subcommand and --version flag, and the
+// unknown-module rejection shared by build-order status and claim list. The
+// exit-code-sensitive half (claim lock/unlock/flag not-found -> exit 2, unknown
 // module -> non-zero exit) lives in tests/cli_uxaudit_test.go, which execs
 // the built binary as a subprocess (see cli_inprocess_test.go's package doc
 // comment for why exit codes cannot be asserted in-process).
 package main
 
 import (
-	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/spf13/cobra"
 )
 
 // ---------------------------------------------------------------------
-// DX-AUD-18: a clean lint --json run emits [] (a JSON array), never null.
+// DX-AUD-18: a clean run emits an EMPTY ARRAY of findings, never null.
+//
+// The original form of this test pinned "dossierx lint --json" printing "[]".
+// v0.3.0 deleted that verb; the guarantee moved to the envelope, where the same
+// mistake (a nil Go slice encoding as null) would break exactly the same
+// consumer — one that ranges over the findings without a null check.
 // ---------------------------------------------------------------------
 
-func TestReportLintFindings_EmptyJSONIsArrayNotNull(t *testing.T) {
-	cmd := &cobra.Command{}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
+func TestCleanValidateRunEmitsAnEmptyFindingsArrayNotNull(t *testing.T) {
+	root := t.TempDir()
+	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	if err := reportLintFindings(cmd, nil, true); err != nil {
-		t.Fatalf("expected no error for zero findings, got: %v", err)
+	// A lone claim with no edges trips the WARNING-severity orphan lint, so
+	// findings is non-empty; give it an edge partner so the run is truly clean.
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	if err != nil {
+		t.Fatalf("check --validate: %v", err)
 	}
-	got := strings.TrimSpace(buf.String())
-	if got != "[]" {
-		t.Fatalf("expected a clean lint --json run to print [], got: %q", got)
+	raw, err := json.Marshal(env.Data)
+	if err != nil {
+		t.Fatalf("re-marshal envelope data: %v", err)
 	}
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("decode envelope data: %v", err)
+	}
+	for _, key := range []string{"lint_findings", "scan_errors"} {
+		got, ok := decoded[key]
+		if !ok {
+			t.Fatalf("expected %s in the check payload, got: %s", key, raw)
+		}
+		if strings.TrimSpace(string(got)) == "null" {
+			t.Fatalf("%s must encode as an array, never null: %s", key, raw)
+		}
+	}
+	if !decodedBool(t, decoded, "read_only") {
+		t.Fatalf("expected check --validate to mark its payload read_only, got: %s", raw)
+	}
+}
+
+// decodedBool reads one boolean out of an already-decoded payload.
+func decodedBool(t *testing.T, decoded map[string]json.RawMessage, key string) bool {
+	t.Helper()
+	raw, ok := decoded[key]
+	if !ok {
+		return false
+	}
+	var b bool
+	if err := json.Unmarshal(raw, &b); err != nil {
+		t.Fatalf("decode %s: %v", key, err)
+	}
+	return b
 }
 
 // ---------------------------------------------------------------------
@@ -65,9 +100,14 @@ func TestCLI_VersionFlag(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// DX-AUD-21: `build-order status` / `implink status` reject an unknown
-// --module instead of silently reporting an empty state and exiting 0. A
-// known-but-unused module still reaches its normal report.
+// DX-AUD-21: a command taking --module rejects an unknown one instead of
+// silently reporting an empty state and exiting 0. A known-but-unused module
+// still reaches its normal report.
+//
+// "implink status" was the second half of this pair until v0.3.0 absorbed it
+// into "claim show"; "claim list --module" inherits the guarantee, since it is
+// the surviving command where a typo'd module would otherwise produce an
+// empty, success-looking answer.
 // ---------------------------------------------------------------------
 
 func TestCLI_BuildOrderStatus_UnknownModuleRejected(t *testing.T) {
@@ -90,22 +130,22 @@ func TestCLI_BuildOrderStatus_UnknownModuleRejected(t *testing.T) {
 	}
 }
 
-func TestCLI_ImplinkStatus_UnknownModuleRejected(t *testing.T) {
+func TestCLI_ClaimList_UnknownModuleRejected(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	_, _, err := execCLI(t, "--config", cfgPath, "implink", "status", "--module", "nope")
+	_, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--module", "nope")
 	if err == nil {
-		t.Fatalf("expected implink status to reject an unknown module")
+		t.Fatalf("expected claim list to reject an unknown module")
 	}
 	if !strings.Contains(err.Error(), "unknown module") {
 		t.Fatalf("expected an unknown-module error, got: %v", err)
 	}
 
-	// A known module with nothing linked must still report normally.
-	if out, _, err := execCLI(t, "--config", cfgPath, "implink", "status", "--module", "widget"); err != nil {
-		t.Fatalf("known-but-unlinked module should not error: %v (out: %s)", err, out)
-	} else if !strings.Contains(out, "nothing linked yet") {
-		t.Fatalf("expected a nothing-linked-yet report for a known module, got: %s", out)
+	// A known module still reaches its normal report.
+	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "list", "--module", "widget"); err != nil {
+		t.Fatalf("known module should not error: %v (out: %s)", err, out)
+	} else if !strings.Contains(out, "widget.contract.overview") {
+		t.Fatalf("expected the module's claim listed, got: %s", out)
 	}
 }

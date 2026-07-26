@@ -1,0 +1,11 @@
+id: govcyc.contract.pair-b
+facet: contract
+module: govcyc
+status: draft
+layout: card
+body: |
+  The other half of the 2-claim governed_by cycle.
+governed_by:
+  type: govcyc.contract.pair-a
+rests_on:
+  - govcyc.contract.anchor

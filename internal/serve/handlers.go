@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
+	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
@@ -257,12 +258,12 @@ func (s *Server) handleAddThread(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -285,12 +286,12 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	tid := r.PathValue("tid")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -330,12 +331,12 @@ func (s *Server) threadStateChange(w http.ResponseWriter, r *http.Request, op fu
 	tid := r.PathValue("tid")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -359,12 +360,12 @@ func (s *Server) handleEdit(w http.ResponseWriter, r *http.Request) {
 	replyID := r.URL.Query().Get("reply")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -390,7 +391,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	replyID := r.URL.Query().Get("reply")
 	actor, err := actorFromString(r.URL.Query().Get("as"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -492,8 +493,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes a structured {"error":"<code>"} body with the given status.
 // code is a stable snake_case token the client can branch on (thread_not_found,
 // reply_not_found, ...), never a raw message.
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
+//
+// The codes themselves now live in internal/cliout, shared with the CLI's
+// output envelope, so the browser and the terminal answer the same question
+// with the same word. The WIRE FORMAT here is unchanged — a bare
+// {"error":"<code>"} object, not an envelope — because the viewer's fetch()
+// calls parse it as it is, and reshaping a working API to match a new one would
+// be churn for its own sake.
+func writeError(w http.ResponseWriter, status int, code cliout.Code) {
+	writeJSON(w, status, map[string]string{"error": string(code)})
 }
 
 // writeInternal logs err to stderr and returns a 500 with the error text. This
@@ -523,35 +531,35 @@ func (s *Server) writeInternal(w http.ResponseWriter, err error) {
 func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errReadOnly):
-		writeError(w, http.StatusForbidden, "read_only")
+		writeError(w, http.StatusForbidden, cliout.CodeReadOnly)
 	case errors.Is(err, comments.ErrClaimNotFound):
-		writeError(w, http.StatusNotFound, "claim_not_found")
+		writeError(w, http.StatusNotFound, cliout.CodeClaimNotFound)
 	case errors.Is(err, comments.ErrThreadNotFound):
-		writeError(w, http.StatusNotFound, "thread_not_found")
+		writeError(w, http.StatusNotFound, cliout.CodeThreadNotFound)
 	case errors.Is(err, comments.ErrReplyNotFound):
-		writeError(w, http.StatusNotFound, "reply_not_found")
+		writeError(w, http.StatusNotFound, cliout.CodeReplyNotFound)
 	case errors.Is(err, comments.ErrBannerClaim):
-		writeError(w, http.StatusUnprocessableEntity, "banner_claim")
+		writeError(w, http.StatusUnprocessableEntity, cliout.CodeBannerClaim)
 	case errors.Is(err, comments.ErrEmptyBody):
-		writeError(w, http.StatusBadRequest, "empty_body")
+		writeError(w, http.StatusBadRequest, cliout.CodeEmptyBody)
 	case errors.Is(err, comments.ErrUnsafeBody):
 		// The caller's SUPPLIED body cannot be stored: their input IS at fault.
-		writeError(w, http.StatusBadRequest, "unsafe_body")
+		writeError(w, http.StatusBadRequest, cliout.CodeUnsafeBody)
 	case errors.Is(err, loader.ErrClaimNotRoundTrippable):
 		// The whole claim's STORED bytes will not re-serialize (usually a
 		// pre-existing, hand-edited body) — NOT the caller's input. Distinct code,
 		// and honest that this is not a 400-class bad request.
-		writeError(w, http.StatusUnprocessableEntity, "claim_not_serializable")
+		writeError(w, http.StatusUnprocessableEntity, cliout.CodeClaimNotSerializable)
 	case errors.Is(err, comments.ErrInvalidActor):
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 	case errors.Is(err, comments.ErrRightsDenied):
-		writeError(w, http.StatusForbidden, "rights_denied")
+		writeError(w, http.StatusForbidden, cliout.CodeRightsDenied)
 	case errors.Is(err, comments.ErrThreadResolved):
-		writeError(w, http.StatusConflict, "thread_resolved")
+		writeError(w, http.StatusConflict, cliout.CodeThreadResolved)
 	case errors.Is(err, comments.ErrThreadOpen):
-		writeError(w, http.StatusConflict, "thread_open")
+		writeError(w, http.StatusConflict, cliout.CodeThreadOpen)
 	case errors.Is(err, loader.ErrClaimFileChanged):
-		writeError(w, http.StatusConflict, "claim_file_changed")
+		writeError(w, http.StatusConflict, cliout.CodeClaimFileChanged)
 	default:
 		s.writeInternal(w, err)
 	}

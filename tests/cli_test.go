@@ -67,9 +67,18 @@ func TestMain(m *testing.M) {
 
 // run execs the built dossierx binary with args, in dir, and returns combined
 // stdout, stderr, and the process exit code (0 if it exited cleanly).
+//
+// --format text is PREPENDED to every invocation. v0.3.0 makes the JSON
+// envelope the default output of every surviving command, and this suite —
+// which predates it — asserts the human prose: exit codes, "check: OK",
+// "not proposed yet". Pinning the helper rather than each of its ~150 call
+// sites keeps that assertion set meaningful and confines the migration to one
+// place. Because pflag takes the LAST occurrence of a repeated flag, a test
+// that wants the machine surface passes "--format", "json" in its own args and
+// wins.
 func run(t *testing.T, dir string, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
-	cmd := exec.Command(binPath, args...)
+	cmd := exec.Command(binPath, append([]string{"--format", "text"}, args...)...)
 	cmd.Dir = dir
 
 	var outBuf, errBuf strings.Builder
@@ -128,7 +137,7 @@ func TestSubdirectoryInvocationWalksUpwardForConfig(t *testing.T) {
 		t.Fatalf("mkdir deep subdir: %v", err)
 	}
 
-	stdout, stderr, code := run(t, deep, "lint")
+	stdout, stderr, code := run(t, deep, "check", "--validate")
 	if code != 0 {
 		t.Fatalf("lint from subdirectory: expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -144,7 +153,7 @@ func TestSubdirectoryInvocationWalksUpwardForConfig(t *testing.T) {
 	// resolution: from a directory with NO ancestor config, the same
 	// command must fail to find one.
 	isolated := t.TempDir()
-	_, stderr2, code2 := run(t, isolated, "lint")
+	_, stderr2, code2 := run(t, isolated, "check", "--validate")
 	if code2 == 0 {
 		t.Fatalf("lint from a directory with no ancestor config unexpectedly succeeded")
 	}
@@ -164,7 +173,7 @@ func TestNoConfigFoundSuggestsConfigFlag(t *testing.T) {
 	// outside this repo's tree).
 	isolated := t.TempDir()
 
-	stdout, stderr, code := run(t, isolated, "lint")
+	stdout, stderr, code := run(t, isolated, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected non-zero exit with no config anywhere, got 0 (stdout: %s)", stdout)
 	}
@@ -201,7 +210,7 @@ func TestNestedConfigNearestWins(t *testing.T) {
 		t.Fatalf("mkdir work: %v", err)
 	}
 
-	stdout, stderr, code := run(t, workDir, "deps", "innermod.contract.overview")
+	stdout, stderr, code := run(t, workDir, "claim", "show", "innermod.contract.overview")
 	if code != 0 {
 		t.Fatalf("deps for inner claim: expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -211,7 +220,7 @@ func TestNestedConfigNearestWins(t *testing.T) {
 
 	// The outer config's claim must NOT be visible: if the two configs were
 	// merged (or the outer one won instead), this claim id would resolve.
-	_, _, code2 := run(t, workDir, "deps", "outermod.contract.overview")
+	_, _, code2 := run(t, workDir, "claim", "show", "outermod.contract.overview")
 	if code2 != 2 {
 		t.Fatalf("expected deps for outer-only claim id to exit 2 (not found) when nested config is nearest, got %d", code2)
 	}
@@ -246,7 +255,7 @@ func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
 		}
 	})
 
-	stdout, stderr, code := run(t, root, "catalog")
+	stdout, stderr, code := run(t, root, "check")
 	if code == 0 {
 		t.Fatalf("expected non-zero exit writing catalog into an unwritable directory, got 0 (stdout: %s)", stdout)
 	}
@@ -261,11 +270,11 @@ func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// 5. lint failures in a CI-style invocation -> always non-zero exit;
-//    --json flag for machine-readable output
+// 5. lint failures in a CI-style invocation -> always non-zero exit, in both
+//    output formats
 // ---------------------------------------------------------------------
 
-func TestLintFailureExitsNonZeroAndSupportsJSON(t *testing.T) {
+func TestLintFailureExitsNonZeroInBothFormats(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
@@ -286,7 +295,7 @@ func TestLintFailureExitsNonZeroAndSupportsJSON(t *testing.T) {
 		t.Fatalf("write claim: %v", err)
 	}
 
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected non-zero exit for a claim with a dangling reference, got 0 (stdout: %s)", stdout)
 	}
@@ -295,24 +304,44 @@ func TestLintFailureExitsNonZeroAndSupportsJSON(t *testing.T) {
 	}
 	_ = stderr
 
-	jsonOut, jsonErr, jsonCode := run(t, root, "lint", "--json")
+	// The machine surface. The pre-v0.3.0 form of this assertion parsed
+	// "lint --json"'s bare array; the same guarantee — a CI-style caller can
+	// read the findings without scraping prose — is now the envelope's
+	// data.lint_findings, and it rides on a FAILED envelope, which is the
+	// contract's partial-result rule doing exactly what it exists for.
+	jsonOut, jsonErr, jsonCode := run(t, root, "--format", "json", "check", "--validate")
 	if jsonCode == 0 {
-		t.Fatalf("expected non-zero exit with --json too, got 0")
+		t.Fatalf("expected non-zero exit in json format too, got 0")
 	}
-	var findings []map[string]any
-	if err := json.Unmarshal([]byte(jsonOut), &findings); err != nil {
-		t.Fatalf("lint --json output is not valid JSON: %v\noutput: %s\nstderr: %s", err, jsonOut, jsonErr)
+	var env struct {
+		OK    bool `json:"ok"`
+		Error *struct {
+			Code string `json:"code"`
+		} `json:"error"`
+		StoppedAt string `json:"stopped_at"`
+		Data      struct {
+			LintFindings []map[string]any `json:"lint_findings"`
+		} `json:"data"`
 	}
-	if len(findings) == 0 {
-		t.Fatalf("expected at least one finding in --json output, got none")
+	if err := json.Unmarshal([]byte(jsonOut), &env); err != nil {
+		t.Fatalf("check --validate output is not a single envelope: %v\noutput: %s\nstderr: %s", err, jsonOut, jsonErr)
+	}
+	if env.OK || env.Error == nil || env.Error.Code != "lint_failed" {
+		t.Fatalf("expected a lint_failed failure envelope, got: %s", jsonOut)
+	}
+	if env.StoppedAt != "lint" {
+		t.Fatalf("expected stopped_at=lint, got %q", env.StoppedAt)
+	}
+	if len(env.Data.LintFindings) == 0 {
+		t.Fatalf("expected the findings to ride on the failed envelope, got: %s", jsonOut)
 	}
 	foundDangling := false
-	for _, f := range findings {
-		if f["LintName"] == "dangling" || f["lint_name"] == "dangling" {
+	for _, f := range env.Data.LintFindings {
+		if f["lint"] == "dangling" {
 			foundDangling = true
 		}
 	}
 	if !foundDangling {
-		t.Fatalf("expected a dangling-lint finding in --json output, got: %v", findings)
+		t.Fatalf("expected a dangling-lint finding in the envelope, got: %v", env.Data.LintFindings)
 	}
 }

@@ -4,7 +4,7 @@
 // via rest-on-locked; the locked claim now tracks this new dependent for
 // future review_pending checks" — exercises lint (rest-on-locked), lock,
 // and the lock-content-hash Store together, across two separate CLI
-// invocations ("dossierx lock" then "dossierx check"), which no single package's
+// invocations ("dossierx claim lock" then "dossierx check"), which no single package's
 // unit test can exercise on its own.
 package tests
 
@@ -71,16 +71,16 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 	aPath, bPath := writeRestOnLockedFixture(t, root, "restlockmod")
 
 	// Step 1: lint is clean while both are draft.
-	stdout, stderr, code := run(t, root, "lint")
+	stdout, stderr, code := run(t, root, "check", "--validate")
 	if code != 0 {
 		t.Fatalf("lint before locking: expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
 	// Step 2: lock A, then lock B (which rests_on the now-locked A).
-	if _, stderr, code := run(t, root, "lock", "restlockmod.contract.a"); code != 0 {
+	if _, stderr, code := run(t, root, "claim", "lock", "restlockmod.contract.a", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock A: expected exit 0, got %d\nstderr: %s", code, stderr)
 	}
-	if _, stderr, code := run(t, root, "lock", "restlockmod.contract.b"); code != 0 {
+	if _, stderr, code := run(t, root, "claim", "lock", "restlockmod.contract.b", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock B (rests_on locked A): expected exit 0 via rest-on-locked, got %d\nstderr: %s", code, stderr)
 	}
 
@@ -105,7 +105,7 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 	}
 
 	// Step 4: "dossierx check" must detect the drift and flag B review_pending,
-	// while B stays locked. Run "dossierx stale" afterward to confirm via the
+	// while B stays locked. Run "dossierx claim list --review-pending" afterward to confirm via the
 	// CLI's own reporting surface, not just the raw file.
 	if stdout, stderr, code := run(t, root, "check"); code == 0 {
 		// "dossierx check" is expected to still report clean lint/catalog/render
@@ -126,12 +126,12 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 		t.Fatalf("expected B's dependency drift on A to flip review_pending: true, got:\n%s", raw)
 	}
 
-	stdout, stderr, code = run(t, root, "stale")
+	stdout, stderr, code = run(t, root, "claim", "list", "--review-pending")
 	if code != 0 {
 		t.Fatalf("stale: expected exit 0 (report-only), got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, "restlockmod.contract.b") {
-		t.Fatalf("expected \"dossierx stale\" to list restlockmod.contract.b, got: %s", stdout)
+		t.Fatalf("expected \"dossierx claim list --review-pending\" to list restlockmod.contract.b, got: %s", stdout)
 	}
 
 	// A itself must NOT be flagged: nothing A depends on changed.
@@ -142,7 +142,7 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 
 // TestRestOnLockedRejectsLockingDependentOnDraftTarget is the negative
 // half of scenario 4: locking a claim whose rests_on target is still draft
-// must be refused by the rest-on-locked lint (via "dossierx lock"'s lint
+// must be refused by the rest-on-locked lint (via "dossierx claim lock"'s lint
 // gate), proving the lint is actually load-bearing for the CLI's lock
 // command and not just checked in isolation.
 func TestRestOnLockedRejectsLockingDependentOnDraftTarget(t *testing.T) {
@@ -150,7 +150,7 @@ func TestRestOnLockedRejectsLockingDependentOnDraftTarget(t *testing.T) {
 	writeRestOnLockedFixture(t, root, "restlockneg")
 
 	// Lock B while A is still draft: must be refused.
-	stdout, stderr, code := run(t, root, "lock", "restlockneg.contract.b")
+	stdout, stderr, code := run(t, root, "claim", "lock", "restlockneg.contract.b", "--reason", "test fixture")
 	if code == 0 {
 		t.Fatalf("expected \"dossierx lock\" to refuse locking B while its rests_on target A is still draft, got exit 0\nstdout: %s", stdout)
 	}
@@ -168,11 +168,11 @@ func TestRestOnLockedRejectsLockingDependentOnDraftTarget(t *testing.T) {
 	}
 }
 
-// TestLockSucceedsWithOnlyWarningSeverityFinding proves "dossierx lock"'s lint
-// gate mirrors "dossierx lint"/"dossierx check"'s own pass/fail semantics: a claim
+// TestLockSucceedsWithOnlyWarningSeverityFinding proves "dossierx claim lock"'s lint
+// gate mirrors "dossierx check --validate"/"dossierx check"'s own pass/fail semantics: a claim
 // that trips only a warning-severity lint (here, the real "orphan" lint —
 // a lone claim with no mirrors/rests_on edges in either direction) must
-// still lock successfully, exactly as "dossierx lint" exits 0 for it (findings
+// still lock successfully, exactly as "dossierx check --validate" exits 0 for it (findings
 // reported, no error-level findings). This is the CLI-level companion to
 // internal/lock/lock_test.go's TestLockSucceedsWithOnlyWarningFindings,
 // which proves the same thing against the real Registry instead of a
@@ -196,17 +196,17 @@ func TestLockSucceedsWithOnlyWarningSeverityFinding(t *testing.T) {
 		t.Fatalf("write claim: %v", err)
 	}
 
-	// Sanity: "dossierx lint" reports the orphan finding but exits 0 (warning,
+	// Sanity: "dossierx check --validate" reports the orphan finding but exits 0 (warning,
 	// not error).
-	lintOut, lintErr, lintCode := run(t, root, "lint")
+	lintOut, lintErr, lintCode := run(t, root, "check", "--validate")
 	if lintCode != 0 {
-		t.Fatalf("expected \"dossierx lint\" to exit 0 for a warning-only orphan finding, got %d\nstdout: %s\nstderr: %s", lintCode, lintOut, lintErr)
+		t.Fatalf("expected \"dossierx check --validate\" to exit 0 for a warning-only orphan finding, got %d\nstdout: %s\nstderr: %s", lintCode, lintOut, lintErr)
 	}
 	if !strings.Contains(lintOut, "orphan") {
 		t.Fatalf("expected the orphan finding to be reported (even though it doesn't fail), got: %s", lintOut)
 	}
 
-	stdout, stderr, code := run(t, root, "lock", "orphanmod.contract.lonely")
+	stdout, stderr, code := run(t, root, "claim", "lock", "orphanmod.contract.lonely", "--reason", "test fixture")
 	if code != 0 {
 		t.Fatalf("expected \"dossierx lock\" to succeed with only a warning-severity finding outstanding, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
