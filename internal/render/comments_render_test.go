@@ -66,17 +66,85 @@ func TestRender_CommentedOverviewChipFansOutToEveryFacet(t *testing.T) {
 	if got := strings.Count(out, `class="comments-panel"`); got != 2 {
 		t.Fatalf("overview baked panel appears %d times, want 2 (one per facet):\n%s", got, out)
 	}
-	// Both the chip and the panel carry data-claim-id, so an overview claim in
-	// two facets yields 2 copies * 2 = 4 — every one a data-* hook the viewer
-	// JS fans state out over, never a duplicate id=.
-	if got := strings.Count(out, `data-claim-id="widget.overview.router"`); got != 4 {
-		t.Fatalf("overview data-claim-id appears %d times, want 4 (chip+panel per facet):\n%s", got, out)
+	// The chip, the baked panel and (since the claim-edge label work) the .k
+	// heading each carry data-claim-id, so an overview claim in two facets
+	// yields 2 copies * 3 = 6 — every one a data-* hook, never a duplicate id=.
+	// The heading's copy is the point of that attribute: its visible text is
+	// now the derived label ("Router"), so data-claim-id is what keeps the id
+	// "dossierx claim lock <id>" needs greppable in the rendered document.
+	if got := strings.Count(out, `data-claim-id="widget.overview.router"`); got != 6 {
+		t.Fatalf("overview data-claim-id appears %d times, want 6 (heading+chip+panel per facet):\n%s", got, out)
 	}
 
 	// Comments must not perturb the canonical-id-appears-once invariant
 	// (DX-AUD-16): the chip/panel use data-claim-id, never id=.
 	if got := strings.Count(out, ` id="widget.overview.router"`); got != 1 {
 		t.Fatalf("overview canonical id appears %d times, want exactly 1 (comments add no id=):\n%s", got, out)
+	}
+}
+
+// v0.2.1 — the chip must reach EVERY non-banner claim through the full Render
+// pipeline, not only ones that already have threads, or the first comment on a
+// quiet card is unreachable from the viewer. This is the render-level companion
+// to components.TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault: it
+// pins that nothing between the footer and the finished document (facet
+// grouping, overview injection, the shell) drops the zero-state chip, and that
+// its <li> arrives `hidden` — the static file:// export has no comment API and
+// therefore no composer, so shell.html's probe is what reveals these.
+func TestRender_EmptyChipOnQuietClaimHiddenInStaticRender(t *testing.T) {
+	claims := []model.Claim{
+		commentedClaim("widget.contract.loud", "widget", "contract", model.LayoutCard,
+			[]model.Comment{openComment("c-aaaaaa", "a real thread")}),
+		commentedClaim("widget.contract.quiet", "widget", "contract", model.LayoutCard, nil),
+		commentedClaim("widget.contract.notice", "widget", "contract", model.LayoutBanner, nil),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// The quiet claim carries an --empty chip keyed to itself...
+	if !strings.Contains(out, `class="comment-chip comment-chip--empty" data-claim-id="widget.contract.quiet"`) {
+		t.Fatalf("a claim with zero threads must still carry an --empty chip:\n%s", out)
+	}
+	// ...inside a hidden <li>. Exactly one <li> is hidden: the quiet claim's.
+	// The commented claim's chip is visible from the server render, since a
+	// static export can still SHOW an existing discussion — only ADDING one
+	// needs the API.
+	if got := strings.Count(out, `<li class="claim-comments" hidden>`); got != 1 {
+		t.Fatalf("hidden zero-state <li> appears %d times, want exactly 1 (the quiet claim's):\n%s", got, out)
+	}
+	if !strings.Contains(out, `<li class="claim-comments"><button type="button" class="comment-chip comment-chip--open" data-claim-id="widget.contract.loud"`) {
+		t.Fatalf("a claim with an open thread must keep its VISIBLE (not hidden) chip:\n%s", out)
+	}
+	// The banner layout never calls {{edges .}}, so the whole comment surface —
+	// including the new zero state — stays off it for free.
+	//
+	// Asserted against the comment surface's OWN markup rather than a bare
+	// data-claim-id scan: since the claim-edge label work every partial's .k
+	// heading carries data-claim-id, banner.html included (it is the one piece
+	// of that work that does reach banner — the heading label needs the id
+	// reachable, and that has nothing to do with comments). So the invariant is
+	// "no chip and no panel for a banner claim", which is what this checks.
+	for _, forbidden := range []string{
+		`class="comment-chip comment-chip--empty" data-claim-id="widget.contract.notice"`,
+		`class="comments-panel" data-claim-id="widget.contract.notice"`,
+	} {
+		if strings.Contains(out, forbidden) {
+			t.Fatalf("banner claims must be excluded from the comment surface entirely, found %q:\n%s", forbidden, out)
+		}
+	}
+	if strings.Contains(out, `claim-comments`) && strings.Count(out, `<li class="claim-comments`) != 2 {
+		t.Fatalf("expected exactly 2 comment <li>s (the two non-banner claims), got %d:\n%s", strings.Count(out, `<li class="claim-comments`), out)
+	}
+	// A zero-thread claim bakes in no panel: there are no threads to bake.
+	if got := strings.Count(out, `class="comments-panel"`); got != 1 {
+		t.Fatalf("baked panel appears %d times, want 1 (only the commented claim):\n%s", got, out)
 	}
 }
 

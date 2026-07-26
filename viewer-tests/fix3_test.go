@@ -292,7 +292,7 @@ func TestReplyRepopulatesOnResolvedConflict(t *testing.T) {
 
 	// Resolve the thread out-of-band; the reply POST then races a now-resolved
 	// thread -> 409 thread_resolved.
-	p.run("comment", "resolve", testClaimID, tid, "--as", "human")
+	p.resolveViaAPI(tid, "human")
 	runCDP(t, ctx, chromedp.Click("#commentsPanel .comment-reply-composer .comment-composer-submit", chromedp.ByQuery))
 
 	// A toast surfaces and the reply composer is repopulated (not silently lost).

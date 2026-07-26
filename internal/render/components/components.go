@@ -48,14 +48,16 @@ var fileForLayout = map[model.Layout]string{
 // alike — so an override partial can use the same generic helpers as the
 // built-in ones.
 var funcMap = template.FuncMap{
-	"rowKeys":    rowKeys,
-	"markdown":   markdown.Render,
-	"cell":       cell,
-	"edges":      edgesHTML,
-	"inc":        inc,
-	"pillClass":  pillClass,
-	"colClass":   colClass,
-	"mockupHTML": mockupHTML,
+	"rowKeys":       rowKeys,
+	"markdown":      markdown.Render,
+	"cell":          cell,
+	"edges":         edgesHTML,
+	"inc":           inc,
+	"pillClass":     pillClass,
+	"colClass":      colClass,
+	"mockupHTML":    mockupHTML,
+	"claimLabel":    ClaimLabel,
+	"claimEdgeList": ClaimEdgeListHTML,
 }
 
 // commentsPanelTmpl is the parsed comments.html thread-panel partial, parsed
@@ -336,29 +338,32 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 			}
 			b.WriteString(`</li>`)
 		} else {
-			b.WriteString(`<li class="claim-governed">governed_by: <a href="#`)
-			b.WriteString(html.EscapeString(c.Governed.Type))
-			b.WriteString(`">`)
-			b.WriteString(html.EscapeString(c.Governed.Type))
-			b.WriteString(`</a></li>`)
+			// governed_by names another claim, so it renders through the same
+			// writeClaimRef every other claim-to-claim edge below uses rather
+			// than its own hand-built <a>: a doctrine hub is nearly always in a
+			// different facet from the claim it governs, so this is precisely
+			// the edge whose prefix tier ("Doctrine › Hub") carries information.
+			b.WriteString(`<li class="claim-governed">governed_by: `)
+			writeClaimRef(&b, c.Governed.Type, c.Module, c.Facet)
+			b.WriteString(`</li>`)
 		}
 	}
 
 	if len(c.Mirrors) > 0 {
 		b.WriteString(`<li class="claim-mirrors">mirrors:`)
-		writeIDListItems(&b, c.Mirrors)
+		writeIDListItems(&b, c.Module, c.Facet, c.Mirrors)
 		b.WriteString(`</li>`)
 	}
 
 	if len(c.RestsOn) > 0 {
 		b.WriteString(`<li class="claim-rests-on">rests_on:`)
-		writeIDListItems(&b, c.RestsOn)
+		writeIDListItems(&b, c.Module, c.Facet, c.RestsOn)
 		b.WriteString(`</li>`)
 	}
 
 	if len(dependedBy) > 0 {
 		b.WriteString(`<li class="claim-depended-by">depended on by:`)
-		writeIDListItems(&b, dependedBy)
+		writeIDListItems(&b, c.Module, c.Facet, dependedBy)
 		b.WriteString(`</li>`)
 	}
 
@@ -381,30 +386,55 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	// rest of this func because a FuncMap-returned template.HTML bypasses
 	// html/template's auto-escaping. banner.html never calls {{edges .}},
 	// so banner claims are excluded from the whole comment surface for free.
-	if len(c.Comments) > 0 {
-		open := len(c.OpenThreadIDs())
-		chipClass := "comment-chip comment-chip--resolved"
-		count := len(c.Comments)
-		label := fmt.Sprintf("view %d comment thread(s), all resolved", count)
+	//
+	// The chip is emitted for EVERY claim reaching this footer, not only ones
+	// that already carry threads. Gating it on len(c.Comments) > 0 made the
+	// FIRST comment on a card unreachable from the viewer — the only surface
+	// the human has — so a claim nobody had questioned yet could never be
+	// questioned. The zero state is its own third variant (comment-chip--empty,
+	// reading "💬 0") rather than a borrowed --resolved, because "no one has
+	// commented" and "everything raised was settled" are different facts and
+	// the --resolved count would lie about the second.
+	//
+	// The zero-state <li> ships with the `hidden` attribute and is revealed by
+	// shell.html only once its /api/ping probe confirms a live serve. A static
+	// file:// export has no reachable comment API and therefore mounts no
+	// composer, so an empty chip there would open a rail with nothing in it and
+	// no way to add anything — a dead control. Hidden-by-default (rather than
+	// shown-then-hidden-on-probe-failure) is deliberate: the capability appears
+	// when it is confirmed available, instead of flashing away ~1s after load
+	// and inviting a click that resolves to nothing.
+	open := len(c.OpenThreadIDs())
+	total := len(c.Comments)
+	liOpenTag := `<li class="claim-comments" hidden>`
+	chipClass := "comment-chip comment-chip--empty"
+	count := 0
+	label := "add the first comment on this claim"
+	if total > 0 {
+		liOpenTag = `<li class="claim-comments">`
+		chipClass = "comment-chip comment-chip--resolved"
+		count = total
+		label = fmt.Sprintf("view %d comment thread(s), all resolved", total)
 		if open > 0 {
 			chipClass = "comment-chip comment-chip--open"
 			count = open
 			label = fmt.Sprintf("view %d open comment thread(s)", open)
 		}
-		// aria-controls names the shared comment rail (#commentsPanel, emitted by
-		// shell.html) that the viewer JS reveals on click; aria-expanded is kept in
-		// sync by that JS. Both are inert in a browser-less context but make the
-		// chip a proper disclosure control for assistive tech.
-		b.WriteString(`<li class="claim-comments"><button type="button" class="`)
-		b.WriteString(chipClass)
-		b.WriteString(`" data-claim-id="`)
-		b.WriteString(html.EscapeString(c.ID))
-		b.WriteString(`" aria-controls="commentsPanel" aria-expanded="false" aria-label="`)
-		b.WriteString(html.EscapeString(label))
-		b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
-		b.WriteString(fmt.Sprintf("%d", count))
-		b.WriteString(`</span></button></li>`)
 	}
+	// aria-controls names the shared comment rail (#commentsPanel, emitted by
+	// shell.html) that the viewer JS reveals on click; aria-expanded is kept in
+	// sync by that JS. Both are inert in a browser-less context but make the
+	// chip a proper disclosure control for assistive tech.
+	b.WriteString(liOpenTag)
+	b.WriteString(`<button type="button" class="`)
+	b.WriteString(chipClass)
+	b.WriteString(`" data-claim-id="`)
+	b.WriteString(html.EscapeString(c.ID))
+	b.WriteString(`" aria-controls="commentsPanel" aria-expanded="false" aria-label="`)
+	b.WriteString(html.EscapeString(label))
+	b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
+	b.WriteString(fmt.Sprintf("%d", count))
+	b.WriteString(`</span></button></li>`)
 
 	for _, f := range files {
 		b.WriteString(`<li class="claim-implemented-in">implemented in: <code>`)
@@ -530,18 +560,218 @@ func cell(v any) template.HTML {
 	return markdown.RenderInline(fmt.Sprint(v))
 }
 
-// writeIDListItems renders ids as a nested <ul> of <li><a href="#id">id</a>
-// </li> entries, used for every edges-footer field that lists other claim
-// ids (mirrors, rests_on, depended-by) so each id gets its own bulleted
-// line rather than a run-on comma list.
-func writeIDListItems(b *strings.Builder, ids []string) {
+// writeIDListItems renders ids as a nested <ul> of one <li> per id, each
+// holding a writeClaimRef anchor, used for every edges-footer field that
+// lists other claim ids (mirrors, rests_on, depended-by) so each id gets its
+// own bulleted line rather than a run-on comma list. fromModule/fromFacet are
+// the RENDERING claim's own module and facet — the context writeClaimRef
+// elides each target's redundant prefix against.
+func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []string) {
 	b.WriteString(`<ul class="claim-edge-id-list">`)
 	for _, id := range ids {
-		b.WriteString(`<li><a href="#`)
-		b.WriteString(html.EscapeString(id))
-		b.WriteString(`">`)
-		b.WriteString(html.EscapeString(id))
-		b.WriteString(`</a></li>`)
+		b.WriteString(`<li>`)
+		writeClaimRef(b, id, fromModule, fromFacet)
+		b.WriteString(`</li>`)
 	}
 	b.WriteString(`</ul>`)
+}
+
+// ---------------------------------------------------------------------
+// Claim-edge labels (issue #11)
+//
+// Every claim-to-claim edge used to render as its raw id. Stacked under a
+// card, a column of "widget.contract.retry-policy / widget.contract.retry-
+// budget / widget.contract.retry-jitter" is near-unreadable: the segments
+// that differ are the last few characters of otherwise identical strings,
+// and the shared "widget.contract." prefix repeats a module and facet the
+// reader is already inside (the surrounding tab and nav entry state both —
+// the same reasoning that keeps facet/module off the footer entirely, see
+// edgesHTML). The helpers below turn an id into a readable label and elide
+// exactly the prefix that is redundant in the rendering claim's context,
+// while keeping the machine id itself one hover (or one "view source", or
+// one querySelector) away — see writeClaimRef for why that is non-negotiable.
+// ---------------------------------------------------------------------
+
+// claimRefModuleSep joins a cross-module target's module and facet; and
+// claimRefLabelSep separates the whole elided prefix from the label proper.
+// Two different glyphs rather than one repeated separator so the reader can
+// tell at a glance where the context ends and the claim begins — "Widget ·
+// Contract › Retry Policy" reads as "over in Widget/Contract, the Retry
+// Policy claim", which a uniform "Widget › Contract › Retry Policy" would
+// flatten into an undifferentiated path. Both are plain text in a document
+// that declares <meta charset="utf-8"> (see viewer/template/shell.html).
+const (
+	claimRefModuleSep = " · "
+	claimRefLabelSep  = " › "
+)
+
+// splitClaimID splits a claim id into its module/facet/slug segments — the
+// shape internal/lint's id-shape lint enforces (exactly three dot-separated
+// segments, with module and facet agreeing with the claim's own Module/Facet
+// fields). ok is false unless the id is EXACTLY three segments and none of
+// them is empty.
+//
+// This package deliberately re-checks a shape a lint already guarantees,
+// because render does not run the lint suite: a draft claim, or any claim in
+// a project whose author has not run "dossierx lint" yet, reaches render
+// carrying whatever id its YAML happened to say. So "not three segments" is a
+// state every caller here has to have a defined answer for (see ClaimLabel,
+// whose answer is "the raw id, verbatim") rather than a state that indexes
+// segs[2] and panics on the first unlinted claim anyone renders.
+func splitClaimID(id string) (module, facet, slug string, ok bool) {
+	segs := strings.Split(id, ".")
+	if len(segs) != 3 || segs[0] == "" || segs[1] == "" || segs[2] == "" {
+		return "", "", "", false
+	}
+	return segs[0], segs[1], segs[2], true
+}
+
+// ClaimLabel turns a claim id into the readable label the viewer shows in its
+// place: "widget.contract.retry-policy" -> "Retry Policy". Only the slug
+// segment becomes the label, because module and facet are page context the
+// reader can already see rather than facts about the claim (edgesHTML's doc
+// comment makes the same argument for keeping them off the footer).
+//
+// The label is DERIVED, never authored: adding a "title:" field to the claim
+// schema would mean backfilling every existing claim in every consumer corpus
+// and then policing agreement between a claim's id and its title forever —
+// two names for one thing, which is the duplication this project's
+// single-source-of-truth rule exists to rule out.
+//
+// An id that is not exactly three non-empty segments renders as the RAW ID,
+// VERBATIM — never a partial label ("just the bit after the last dot"), which
+// would silently mislabel an unlinted claim, and never a panic. See
+// splitClaimID for why render cannot assume the linted shape.
+//
+// Exported both as a Go helper and, via funcMap, as the "claimLabel" template
+// func, so all seven layout partials' <div class="k"> heading and
+// build_order.html's per-claim heading share this one implementation instead
+// of each re-deriving a label from {{.ID}} in template syntax.
+func ClaimLabel(id string) string {
+	_, _, slug, ok := splitClaimID(id)
+	if !ok {
+		return id
+	}
+	return DisplayCase(slug)
+}
+
+// writeClaimRef writes one claim-to-claim edge as an anchor to targetID,
+// labeled for a reader sitting in fromModule/fromFacet. It hand-escapes every
+// interpolation point for the same reason the rest of EdgesHTMLWithLinks does:
+// a FuncMap-returned template.HTML bypasses html/template's automatic
+// escaping, so nothing downstream will escape these for us — and an id that
+// failed splitClaimID flows through here VERBATIM FROM YAML, which is exactly
+// the input most likely to contain a quote or an angle bracket.
+//
+// Three elision tiers, keyed on how far the target is from the reader:
+//
+//	same module + facet   ->  "Retry Policy"
+//	same module, other facet -> "Contract › Retry Policy"
+//	other module          ->  "Widget · Contract › Retry Policy"
+//
+// Cross-boundary edges are the ones that carry real information — they are
+// what internal/lint's hub-gating keys off — so the prefix is kept exactly
+// where it distinguishes something and dropped exactly where it repeats the
+// page the reader is already on.
+//
+// The machine id stays reachable two ways on the same element: data-claim-id
+// (greppable in the rendered HTML, queryable from the viewer JS, and the
+// attribute convention the comment chip already established) and a title
+// tooltip. That is not decoration — "dossierx claim lock <id>" takes the id,
+// "dossierx-claim: <id>" source tags take the id, and a reader who can only
+// see "Retry Policy" cannot type either. A tooltip alone would be invisible on
+// touch and to keyboard users, which is why the attribute rides along with it.
+//
+// Prefix segments go through DisplayCase like the label does, so a prefix
+// reads the same as the nav entry and tab the reader would click to get there
+// ("Token Ledger · Contract ›" for module "token-ledger"), rather than showing
+// a second, raw spelling of names the chrome already renders capitalized.
+func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string) {
+	esc := html.EscapeString(targetID)
+	b.WriteString(`<a class="claim-ref" href="#`)
+	b.WriteString(esc)
+	b.WriteString(`" data-claim-id="`)
+	b.WriteString(esc)
+	b.WriteString(`" title="`)
+	b.WriteString(esc)
+	b.WriteString(`">`)
+
+	module, facet, slug, ok := splitClaimID(targetID)
+	if !ok {
+		// Unshaped id: show it exactly as authored, marked so style.css can
+		// render it as the machine string it is rather than as a label.
+		b.WriteString(`<span class="claim-ref-label claim-ref-raw">`)
+		b.WriteString(esc)
+		b.WriteString(`</span></a>`)
+		return
+	}
+
+	var prefix string
+	switch {
+	case module != fromModule:
+		prefix = DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)
+	case facet != fromFacet:
+		prefix = DisplayCase(facet)
+	}
+	if prefix != "" {
+		b.WriteString(`<span class="claim-ref-prefix">`)
+		b.WriteString(html.EscapeString(prefix + claimRefLabelSep))
+		b.WriteString(`</span>`)
+	}
+
+	b.WriteString(`<span class="claim-ref-label">`)
+	b.WriteString(html.EscapeString(DisplayCase(slug)))
+	b.WriteString(`</span></a>`)
+}
+
+// ClaimEdgeListHTML renders ids as the same nested <ul class="claim-edge-id-
+// list"> the shared edges footer emits, labeled and prefix-elided relative to
+// fromID — the id of the claim the list is being rendered UNDER.
+//
+// It exists for build_order.html, the one template that renders a rests_on
+// edge itself instead of going through {{edges .}}: it lists a whole locked
+// build-order artifact, whose claim entries are internal/buildorder's own view
+// type, not a model.Claim, so the edges footer cannot reach them. That
+// independent rendering had already drifted (an inline, comma-separated run
+// rather than the footer's bulleted list); routing it through this func
+// converges the two on one markup shape and one label implementation, so a
+// future change to either lands in both.
+//
+// The reader's context is derived from fromID's own segments rather than
+// passed separately, because a buildorder claim entry carries only an id. An
+// unshaped fromID yields empty module/facet, which simply means nothing
+// matches and every target keeps its full "Module · Facet ›" prefix — a
+// degraded label, never a wrong one.
+func ClaimEdgeListHTML(fromID string, ids []string) template.HTML {
+	module, facet, _, _ := splitClaimID(fromID)
+	var b strings.Builder
+	writeIDListItems(&b, module, facet, ids)
+	return template.HTML(b.String())
+}
+
+// DisplayCase renders a raw module/facet/slug value (e.g. "token-ledger" or
+// "token_ledger") as a human-readable label ("Token Ledger"): '-' and '_'
+// become spaces, and each resulting word is capitalized. It is a display-only
+// transform — nothing derived from it is ever used as an id, hash fragment, or
+// lookup key.
+//
+// It lives here, rather than in internal/render where it started life as the
+// unexported displayCase powering module/facet nav labels, because render
+// imports components and not the other way round: ClaimLabel needs the exact
+// same transform, and a second copy would let a card's label drift away from
+// the nav label naming the very same facet. internal/render's displayCase is
+// now a one-line wrapper over this.
+func DisplayCase(s string) string {
+	words := strings.FieldsFunc(s, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' '
+	})
+	for i, w := range words {
+		if w == "" {
+			continue
+		}
+		r := []rune(w)
+		r[0] = []rune(strings.ToUpper(string(r[0])))[0]
+		words[i] = string(r)
+	}
+	return strings.Join(words, " ")
 }

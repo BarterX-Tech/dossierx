@@ -305,8 +305,13 @@ func TestEdgesHTML_GovernedByDoctrineClaim(t *testing.T) {
 	if strings.Contains(got, "governed-none") {
 		t.Fatalf("a doctrine-governed claim must not carry the governed-none class, got: %s", got)
 	}
-	if !strings.Contains(got, `governed_by: <a href="#widget.doctrine.hub">widget.doctrine.hub</a>`) {
-		t.Fatalf("expected governed_by to link to the doctrine claim by hash, got: %s", got)
+	// governed_by now routes through the shared writeClaimRef like every other
+	// claim-to-claim edge: the hash link is unchanged, the visible text is the
+	// derived label, and the machine id rides along in data-claim-id + title.
+	// The rendering claim here has no Module and a different Facet, so this is
+	// the widest ("Module · Facet › Label") elision tier.
+	if !strings.Contains(got, `governed_by: <a class="claim-ref" href="#widget.doctrine.hub" data-claim-id="widget.doctrine.hub" title="widget.doctrine.hub"><span class="claim-ref-prefix">Widget · Doctrine › </span><span class="claim-ref-label">Hub</span></a>`) {
+		t.Fatalf("expected governed_by to link to the doctrine claim by hash, labeled and id-bearing, got: %s", got)
 	}
 }
 
@@ -340,9 +345,14 @@ func TestEdgesHTML_FullClaimAllFields(t *testing.T) {
 			t.Errorf("edgesHTML missing %q, got: %s", want, got)
 		}
 	}
-	// Two mirror ids each get their own bulleted <li>.
-	if !strings.Contains(got, `<li><a href="#widget.contract.a">widget.contract.a</a></li><li><a href="#widget.contract.b">widget.contract.b</a></li>`) {
+	// Two mirror ids each get their own bulleted <li>. Both targets share this
+	// claim's module AND facet, so they are the bare-label tier: no prefix at
+	// all, since "widget.contract." is the tab the reader is already on.
+	if !strings.Contains(got, `<li><a class="claim-ref" href="#widget.contract.a" data-claim-id="widget.contract.a" title="widget.contract.a"><span class="claim-ref-label">A</span></a></li><li><a class="claim-ref" href="#widget.contract.b" data-claim-id="widget.contract.b" title="widget.contract.b"><span class="claim-ref-label">B</span></a></li>`) {
 		t.Fatalf("expected multiple ids in an edge list rendered as separate <li> bullets, got: %s", got)
+	}
+	if strings.Contains(got, "claim-ref-prefix") {
+		t.Errorf("a same-module, same-facet target must carry no prefix at all, got: %s", got)
 	}
 }
 
@@ -419,7 +429,7 @@ func TestEdgesHTMLWithLinks_DependedBy_RendersLinkedList(t *testing.T) {
 	if !strings.Contains(got, "depended on by") {
 		t.Fatalf("expected a 'depended on by' line, got: %s", got)
 	}
-	if !strings.Contains(got, `<li><a href="#widget.internals.a">widget.internals.a</a></li>`) {
+	if !strings.Contains(got, `<li><a class="claim-ref" href="#widget.internals.a" data-claim-id="widget.internals.a" title="widget.internals.a">`) {
 		t.Fatalf("expected each depended-by id rendered as its own <li>, got: %s", got)
 	}
 	if strings.Count(got, "<li>") != 2 {
@@ -590,5 +600,298 @@ func TestOverrideFile_UnreadableFileIsHardError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "card.html") {
 		t.Errorf("expected the error to name the file, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Claim-edge labels (issue #11): ClaimLabel / writeClaimRef / the three
+// elision tiers / the not-three-segments fallback / escaping.
+// ---------------------------------------------------------------------
+
+// TestClaimLabel_DerivesFromSlugOrFallsBackToRawID is the fallback contract in
+// full. render never runs the lint suite, so id-shape's module.facet.slug
+// guarantee does not hold here: every malformed shape must come back as the
+// raw id, byte for byte, with no partial label and no panic.
+func TestClaimLabel_DerivesFromSlugOrFallsBackToRawID(t *testing.T) {
+	cases := []struct {
+		id   string
+		want string
+	}{
+		// Well-shaped: only the slug becomes the label, DisplayCase'd.
+		{"widget.contract.retry-policy", "Retry Policy"},
+		{"widget.contract.overview", "Overview"},
+		{"token-ledger.contract.spend_cap", "Spend Cap"},
+		{"widget.contract.a", "A"},
+		// Not three segments -> raw id, verbatim.
+		{"widget", "widget"},
+		{"widget.contract", "widget.contract"},
+		{"widget.contract.retry.policy", "widget.contract.retry.policy"},
+		{"", ""},
+		// Three segments but one is empty -> still raw, since an empty
+		// module/facet can't be compared against anything and an empty slug
+		// would label the claim with nothing at all.
+		{".contract.slug", ".contract.slug"},
+		{"widget..slug", "widget..slug"},
+		{"widget.contract.", "widget.contract."},
+		{"..", ".."},
+		// Nothing dot-shaped at all: a draft's placeholder, a path, a sentence.
+		{"TODO pick an id", "TODO pick an id"},
+	}
+	for _, tc := range cases {
+		if got := ClaimLabel(tc.id); got != tc.want {
+			t.Errorf("ClaimLabel(%q) = %q, want %q", tc.id, got, tc.want)
+		}
+	}
+}
+
+// TestEdgesHTML_ElisionTiers walks one rendering claim's three kinds of
+// outgoing edge and pins which prefix each target keeps. This is the heart of
+// issue #11: the prefix survives exactly where it distinguishes something the
+// reader can't already see from the surrounding tab and nav entry.
+func TestEdgesHTML_ElisionTiers(t *testing.T) {
+	c := model.Claim{
+		ID:     "widget.contract.self",
+		Module: "widget",
+		Facet:  "contract",
+		RestsOn: []string{
+			"widget.contract.retry-policy",  // same module + facet -> bare
+			"widget.internals.retry-buffer", // same module, other facet
+			"ledger.contract.spend-cap",     // other module entirely
+		},
+	}
+	got := string(edgesHTML(c))
+
+	for _, want := range []string{
+		// Tier 1: bare label, no prefix span.
+		`title="widget.contract.retry-policy"><span class="claim-ref-label">Retry Policy</span>`,
+		// Tier 2: facet only — the module is the nav entry the reader is under.
+		`title="widget.internals.retry-buffer"><span class="claim-ref-prefix">Internals › </span><span class="claim-ref-label">Retry Buffer</span>`,
+		// Tier 3: module and facet both, joined by the module separator.
+		`title="ledger.contract.spend-cap"><span class="claim-ref-prefix">Ledger · Contract › </span><span class="claim-ref-label">Spend Cap</span>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in the edges footer, got: %s", want, got)
+		}
+	}
+
+	// Exactly two of the three targets are cross-boundary, so exactly two
+	// prefixes are rendered — the same-facet one is elided, not merely dimmed.
+	if n := strings.Count(got, "claim-ref-prefix"); n != 2 {
+		t.Errorf("expected 2 prefix spans (the two cross-boundary targets), got %d in: %s", n, got)
+	}
+}
+
+// TestEdgesHTML_UnshapedTargetIDRendersRawVerbatim pins the render-side half of
+// ClaimLabel's fallback: an edge pointing at an id render can't parse still
+// links, still carries the machine id, and shows that id exactly as authored —
+// marked claim-ref-raw so style.css can render it as the machine string it is.
+func TestEdgesHTML_UnshapedTargetIDRendersRawVerbatim(t *testing.T) {
+	c := model.Claim{
+		ID:      "widget.contract.self",
+		Module:  "widget",
+		Facet:   "contract",
+		RestsOn: []string{"widget.contract.four.segments", "loose-id"},
+	}
+	got := string(edgesHTML(c))
+	for _, want := range []string{
+		`<a class="claim-ref" href="#widget.contract.four.segments" data-claim-id="widget.contract.four.segments" title="widget.contract.four.segments"><span class="claim-ref-label claim-ref-raw">widget.contract.four.segments</span></a>`,
+		`<a class="claim-ref" href="#loose-id" data-claim-id="loose-id" title="loose-id"><span class="claim-ref-label claim-ref-raw">loose-id</span></a>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected an unshaped id rendered raw and verbatim: %q, got: %s", want, got)
+		}
+	}
+	// A raw id is never given a prefix — there is no trustworthy module/facet
+	// to build one from, and a guessed prefix would be a lie about the graph.
+	if strings.Contains(got, "claim-ref-prefix") {
+		t.Errorf("an unshaped id must carry no prefix, got: %s", got)
+	}
+}
+
+// TestEdgesHTML_HostileIDIsEscapedInEveryContext is C-L3. EdgesHTMLWithLinks
+// hand-escapes because a FuncMap-returned template.HTML bypasses
+// html/template's auto-escaping, and the label work added interpolation points
+// in three contexts at once: the href, two attribute values (data-claim-id and
+// the title tooltip), and element text. An id that fails the shape check flows
+// through VERBATIM FROM YAML, so it is the likeliest carrier of a quote or an
+// angle bracket — and a shaped-but-hostile id reaches the prefix and label
+// spans too, via DisplayCase.
+func TestEdgesHTML_HostileIDIsEscapedInEveryContext(t *testing.T) {
+	// Unshaped (five segments) hostile id: breaks out of the title attribute
+	// with a double quote, then opens a tag.
+	unshaped := `a"><script>alert(1)</script>.b.c.d.e`
+	// Shaped hostile id: exactly three non-empty segments, so it reaches
+	// DisplayCase and both the prefix and the label span.
+	shaped := `<img src=x onerror="alert(1)">.'facet.slug&x`
+
+	c := model.Claim{
+		ID:      "widget.contract.self",
+		Module:  "widget",
+		Facet:   "contract",
+		RestsOn: []string{unshaped, shaped},
+	}
+	got := string(edgesHTML(c))
+
+	// Nothing that could open a tag or close an attribute survives anywhere.
+	for _, forbidden := range []string{
+		`<script>`, `</script>`, `<img `, `onerror="alert`,
+		`"><script`, `">alert`,
+	} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("hostile id leaked %q unescaped into the footer: %s", forbidden, got)
+		}
+	}
+	// html.EscapeString covers < > & ' " — the full set, in every context.
+	for _, want := range []string{
+		// Unshaped: escaped identically in href, data-claim-id, title and text.
+		`href="#a&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;.b.c.d.e"`,
+		`data-claim-id="a&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;.b.c.d.e"`,
+		`title="a&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;.b.c.d.e"`,
+		`claim-ref-raw">a&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;.b.c.d.e</span>`,
+		// Shaped: the prefix span (module · facet) and the label span both get
+		// their DisplayCase'd segments escaped.
+		`<span class="claim-ref-prefix">&lt;img Src=x Onerror=&#34;alert(1)&#34;&gt; · &#39;facet › </span>`,
+		`<span class="claim-ref-label">Slug&amp;x</span>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected escaped %q in the footer, got: %s", want, got)
+		}
+	}
+}
+
+// TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup is C5: build_order.html's
+// once-independent rests_on rendering and the shared edges footer must now emit
+// the same bytes for the same edge, so the two can no longer drift.
+func TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup(t *testing.T) {
+	ids := []string{"widget.contract.a", "widget.internals.b", "ledger.contract.c"}
+
+	// The footer's version, rendered from a real claim.
+	footer := string(edgesHTML(model.Claim{
+		ID: "widget.contract.self", Module: "widget", Facet: "contract", RestsOn: ids,
+	}))
+	// build_order.html's version, which knows only the rendering claim's id.
+	list := string(ClaimEdgeListHTML("widget.contract.self", ids))
+
+	if !strings.Contains(footer, list) {
+		t.Fatalf("ClaimEdgeListHTML must emit the same markup the shared footer does\n list:   %s\n footer: %s", list, footer)
+	}
+	if !strings.HasPrefix(list, `<ul class="claim-edge-id-list">`) {
+		t.Errorf("expected the shared bulleted list container, got: %s", list)
+	}
+}
+
+// An unshaped fromID leaves ClaimEdgeListHTML with no module/facet context to
+// elide against. Every target then keeps its full prefix: a degraded label,
+// never a wrong one, and never a panic.
+func TestClaimEdgeListHTML_UnshapedFromIDKeepsEveryPrefix(t *testing.T) {
+	list := string(ClaimEdgeListHTML("not-an-id", []string{"widget.contract.a", "widget.contract.b"}))
+	if n := strings.Count(list, "claim-ref-prefix"); n != 2 {
+		t.Errorf("expected both targets to keep a full prefix when the reader's context is unknown, got %d in: %s", n, list)
+	}
+	if !strings.Contains(list, `<span class="claim-ref-prefix">Widget · Contract › </span>`) {
+		t.Errorf("expected the widest prefix tier, got: %s", list)
+	}
+}
+
+// TestPartialHeadings_LabelIDAndKeepMachineIDReachable is C4/item 5 across all
+// seven layout partials at once — banner.html included, the one partial with no
+// edges footer for the rest of this work to reach. The heading shows the label;
+// data-claim-id and the title tooltip keep the id typeable for "dossierx claim
+// lock <id>", greppable in the rendered HTML, and reachable from the viewer JS.
+func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
+	partials, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	claim := model.Claim{
+		ID:     "widget.contract.retry-policy",
+		Module: "widget",
+		Facet:  "contract",
+		Status: model.StatusLocked,
+		Body:   "prose",
+		Rows:   []model.Row{{"key": "k"}},
+		Steps:  []string{"one"},
+	}
+
+	for _, layout := range []model.Layout{
+		model.LayoutCard, model.LayoutTable, model.LayoutList,
+		model.LayoutSteps, model.LayoutTree, model.LayoutBanner,
+		model.LayoutMockup,
+	} {
+		t.Run(string(layout), func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := partials[layout].Execute(&buf, claim); err != nil {
+				t.Fatalf("execute %q partial: %v", layout, err)
+			}
+			got := buf.String()
+			want := `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">Retry Policy `
+			if !strings.Contains(got, want) {
+				t.Fatalf("expected the labeled, id-bearing heading %q, got: %s", want, got)
+			}
+			// The heading label is the BARE label — a claim's own module and
+			// facet are the page the reader is standing on.
+			if strings.Contains(got, `>Widget · Contract › Retry Policy`) {
+				t.Errorf("a claim's own heading must not carry a prefix, got: %s", got)
+			}
+			// The root element's id= is untouched: it is what a #hash deep link
+			// and stripOverviewIDs both key off.
+			if !strings.Contains(got, ` id="widget.contract.retry-policy"`) {
+				t.Errorf("the root element must keep its id attribute, got: %s", got)
+			}
+		})
+	}
+}
+
+// A partial heading is ordinary auto-escaping template context — claimLabel
+// returns a plain string, not template.HTML — so a hostile id must come back
+// escaped by html/template itself, with no hand-escaping in the partial. This
+// pins that no future edit "helpfully" wraps claimLabel's output in a
+// template.HTML the way the edges footer legitimately has to.
+func TestPartialHeadings_HostileIDIsAutoEscaped(t *testing.T) {
+	partials, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	claim := model.Claim{
+		ID:     `x"><script>alert(1)</script>`,
+		Status: model.StatusDraft,
+		Body:   "prose",
+	}
+	var buf bytes.Buffer
+	if err := partials[model.LayoutCard].Execute(&buf, claim); err != nil {
+		t.Fatalf("execute card partial: %v", err)
+	}
+	got := buf.String()
+	if strings.Contains(got, "<script>") || strings.Contains(got, "</script>") {
+		t.Fatalf("hostile id leaked into a partial heading unescaped: %s", got)
+	}
+	// Not three segments, so the heading shows the raw id — escaped.
+	if !strings.Contains(got, `alert(1)`) {
+		t.Fatalf("expected the raw id shown (escaped) in the heading, got: %s", got)
+	}
+}
+
+// DisplayCase moved here from internal/render (where it was the unexported
+// displayCase driving module/facet nav labels) so ClaimLabel could share the
+// one implementation. Its behavior must not have changed in the move: render's
+// nav labels and a card's claim label both depend on it.
+func TestDisplayCase(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"token-ledger", "Token Ledger"},
+		{"token_ledger", "Token Ledger"},
+		{"contract", "Contract"},
+		{"retry policy", "Retry Policy"},
+		{"a-b_c d", "A B C D"},
+		{"", ""},
+		{"-", ""},
+		{"--a--", "A"},
+		{"ALREADY-CAPS", "ALREADY CAPS"},
+		{"9lives", "9lives"},
+	}
+	for _, tc := range cases {
+		if got := DisplayCase(tc.in); got != tc.want {
+			t.Errorf("DisplayCase(%q) = %q, want %q", tc.in, got, tc.want)
+		}
 	}
 }

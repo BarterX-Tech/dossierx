@@ -304,6 +304,42 @@ th {
   opacity: 0.6;
 }
 
+/* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
+   (components.go's writeClaimRef): governed_by, mirrors, rests_on,
+   depended-on-by, and build_order.html's rests_on. Its two inner spans carry
+   the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
+   when the target is outside the reading claim's own module/facet, and the
+   claim's own label. No new color tokens: the prefix borrows --faint (the
+   same "present but subordinate" step the meta/label text uses) so it recedes
+   against the link color the label keeps, which is the whole point — the
+   prefix is context, the label is the claim.
+
+   Specificity note: these are scoped under .claim-edges deliberately. The
+   bare .claim-ref-prefix class (0,1,0) would lose to the existing
+   ".claim-edges a" rule (0,1,1) and inherit --link; ".claim-edges
+   .claim-ref-prefix" (0,2,0) wins. build_order.html's independently rendered
+   rests_on sits inside a .claim-edges container too, so one scope covers
+   both paths. */
+.claim-edges .claim-ref-prefix {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.claim-edges .claim-ref-label {
+  font-weight: 500;
+}
+
+/* claim-ref-raw is the fallback tier: an id that is not the linted
+   module.facet.slug shape is shown verbatim rather than mislabeled (see
+   ClaimLabel), so it is styled as the machine string it is — mono, matching
+   how every other literal identifier in this stylesheet reads — instead of
+   sitting in the sans label font pretending to be a human-readable name. */
+.claim-edges .claim-ref-raw {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  font-weight: 400;
+}
+
 .claim-review-pending {
   color: var(--warn);
   background: var(--warn-bg);
@@ -377,6 +413,32 @@ th {
   border-color: var(--accent);
   background: var(--accent-bg);
   color: var(--accent);
+}
+
+/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
+   comment is openable from the viewer. Since most cards on a healthy project
+   have never been commented on, this variant has to sit BELOW the ambient
+   noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
+   dimmed — or a page turns into a wall of chips competing with the claims
+   themselves. Hover/focus is where it becomes a control: solid accent border,
+   full-strength ink, no dimming. Declared after --open so a chip can never
+   carry both (the viewer JS keeps the three state classes exclusive anyway).
+   Its <li> is hidden by default in the server markup and revealed by
+   shell.html's syncEmptyChips once the /api/ping probe confirms a live serve —
+   there is nothing to style for the static file:// case, where it stays
+   display:none via the [hidden] attribute. */
+.comment-chip--empty {
+  border-style: dashed;
+  color: var(--faint);
+  opacity: .75;
+}
+
+.comment-chip--empty:hover,
+.comment-chip--empty:focus-visible {
+  border-style: solid;
+  border-color: var(--accent);
+  color: var(--ink);
+  opacity: 1;
 }
 
 .comment-chip-count {

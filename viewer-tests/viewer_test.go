@@ -63,7 +63,10 @@ func waitVisible(t *testing.T, ctx context.Context, sel string) {
 // (body.comments-live). The chip is present and visible on return.
 func newLiveTab(t *testing.T, p *project) context.Context {
 	t.Helper()
-	base, _ := p.serve()
+	// ensureServe, not serve: a test may already have started the server to
+	// reach the HTTP API (resolveViaAPI) before opening a tab, and a second
+	// serve process on the same project directory would race the first.
+	base := p.ensureServe()
 	ctx := browserContext(t)
 	runCDP(t, ctx,
 		chromedp.Navigate(base+"/"),
@@ -262,8 +265,14 @@ func TestUIDeleteWholeThreadConfirmed(t *testing.T) {
 		chromedp.Click("#commentsPanel .comment-thread > .comment-message .comment-delete", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.querySelectorAll('#commentsPanel .comment-thread').length === 0`)
-	// The last thread is gone: the chip hides itself.
-	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip');return !c || c.closest('.claim-comments').hidden;})()`)
+	// The last thread is gone, so the chip falls back to its zero state — but
+	// against a live serve it STAYS VISIBLE (v0.2.1): the claim can still be
+	// commented on, and hiding the chip here would strand the panel the user is
+	// currently looking at behind a control that no longer exists.
+	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip');return !!c && c.classList.contains('comment-chip--empty') && !c.closest('.claim-comments').hidden;})()`)
+	if evalString(t, ctx, `document.querySelector('.comment-chip .comment-chip-count').textContent`) != "0" {
+		t.Fatal("the zero-state chip must read 0 after the last thread is deleted")
+	}
 	if bytes.Contains(p.claimBytes(), []byte("whole thread to delete")) {
 		t.Fatalf("thread delete was not persisted:\n%s", p.claimBytes())
 	}
@@ -272,7 +281,7 @@ func TestUIDeleteWholeThreadConfirmed(t *testing.T) {
 func TestUIReopenReturnsThreadToOpen(t *testing.T) {
 	p := newProject(t)
 	tid := p.seedComment("human", "resolved then reopened")
-	p.run("comment", "resolve", testClaimID, tid, "--as", "human") // starts resolved
+	p.resolveViaAPI(tid, "human") // starts resolved (viewer-only op; see resolveViaAPI)
 	ctx := newLiveTab(t, p)
 	openPanelLive(t, ctx)
 
@@ -351,7 +360,7 @@ func TestUIToastAndRollbackOnConflict(t *testing.T) {
 
 	// Resolve the thread out-of-band via the CLI AFTER the panel loaded it as
 	// open. The next UI resolve then races a now-resolved thread -> 409.
-	p.run("comment", "resolve", testClaimID, tid, "--as", "human")
+	p.resolveViaAPI(tid, "human")
 
 	runCDP(t, ctx, chromedp.Click("#commentsPanel .comment-resolve", chromedp.ByQuery))
 

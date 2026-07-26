@@ -148,6 +148,12 @@
             });
           });
         });
+
+        // Zero-thread chips arrive from the server hidden (a file:// export has
+        // no comment API to reach). Re-apply the probe's verdict over whatever
+        // DOM is current — on first load `mounted` is still false and this is a
+        // no-op, after a fragment swap it re-reveals the fresh chips.
+        syncEmptyChips();
       }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
@@ -377,20 +383,46 @@
       function updateChips(claimID, openCount, totalCount) {
         chipsFor(claimID).forEach(function (chip) {
           var open = openCount > 0;
+          var empty = totalCount === 0;
           var shown = open ? openCount : totalCount;
           var countEl = chip.querySelector('.comment-chip-count');
           if (countEl) { countEl.textContent = String(shown); }
           chip.classList.toggle('comment-chip--open', open);
-          chip.classList.toggle('comment-chip--resolved', !open);
-          chip.setAttribute('aria-label', open
-            ? 'view ' + openCount + ' open comment thread(s)'
-            : 'view ' + totalCount + ' comment thread(s), all resolved');
+          chip.classList.toggle('comment-chip--empty', empty);
+          // The three chip states are mutually exclusive: --open (unsettled
+          // threads), --resolved (threads, all settled), --empty (no thread has
+          // ever been opened). "no comments" must NOT fall through to --resolved,
+          // whose muted "0" would read as "everything raised was settled".
+          chip.classList.toggle('comment-chip--resolved', !open && !empty);
+          chip.setAttribute('aria-label', empty
+            ? 'add the first comment on this claim'
+            : (open
+              ? 'view ' + openCount + ' open comment thread(s)'
+              : 'view ' + totalCount + ' comment thread(s), all resolved'));
           var card = chip.closest('.claim');
           if (card) { card.classList.toggle('claim-card--commented', open); }
-          // Hide the chip entirely when the last thread is gone, and reveal it
-          // again if a thread is re-added while the panel is still open.
+          // PROBE-AWARE hiding. An empty chip is hidden ONLY when no live comment
+          // API answered — the static file:// case, where there is no composer to
+          // reach and the chip would open a rail with nothing in it and no way to
+          // add anything. Against a confirmed serve it stays visible, which is what
+          // lets the user open the FIRST comment on a claim at all: buildPanel calls
+          // updateChips(claimID, 0, 0) on exactly the empty claim whose chip was just
+          // clicked, and a bare `totalCount === 0` here would hide that chip out from
+          // under the click that opened it.
           var li = chip.closest('.claim-comments');
-          if (li) { li.hidden = (totalCount === 0); }
+          if (li) { li.hidden = (empty && !mounted); }
+        });
+      }
+      // syncEmptyChips reveals (or re-hides) every zero-thread chip on the page as
+      // a group, matching the server's hidden-by-default markup to what the probe
+      // actually found. It runs on probe success and at the end of every
+      // initViewer — a Phase 5c fragment swap ships freshly server-rendered chips,
+      // hidden again, and only this pass knows the API is live. Chips that carry
+      // threads are untouched; their <li> is never hidden.
+      function syncEmptyChips() {
+        document.querySelectorAll('.comment-chip--empty').forEach(function (chip) {
+          var li = chip.closest('.claim-comments');
+          if (li) { li.hidden = !mounted; }
         });
       }
       // recomputeChipsFromPanel refreshes chip state from the threads currently
@@ -559,9 +591,11 @@
           resolved.forEach(function (t) { details.appendChild(buildThread(claimID, t, drafts)); });
           list.appendChild(details);
         }
-        if (!open.length && !resolved.length) {
-          list.appendChild(textEl('p', 'comments-empty', 'No comments yet.'));
-        }
+        // An empty claim's rail is a first-class destination since v0.2.1 (every
+        // claim carries a chip), so this is no longer a corner case: the reader
+        // arrives here precisely to write the FIRST comment. The empty-state line
+        // plus buildComposer below are what they find.
+        syncEmptyLine(list, open.length > 0 || resolved.length > 0);
         railBody.appendChild(list);
         railBody.appendChild(buildComposer(claimID, drafts.composer));
         updateChips(claimID, open.length, threads.length);
@@ -572,6 +606,23 @@
         // what actually grows a restored draft instead of leaving it clipped to one
         // row (VJF-1). Empty textareas are skipped, staying at their one-row default.
         growRestoredDrafts();
+      }
+
+      // syncEmptyLine keeps the rail's empty-state line in step with whether the
+      // thread list actually holds anything: hasThreads removes it, !hasThreads
+      // ensures exactly one is present. Three callers need it — buildPanel (the
+      // rail opened on a claim with no threads), doAdd (the first optimistic
+      // thread displaces it), and doAdd's rollback (a failed first write must not
+      // leave a rail that is both threadless and silent) — so the invariant lives
+      // in one place instead of three inline appends that could drift.
+      function syncEmptyLine(list, hasThreads) {
+        if (!list) { return; }
+        var line = list.querySelector('.comments-empty');
+        if (hasThreads) {
+          if (line) { line.remove(); }
+        } else if (!line) {
+          list.appendChild(textEl('p', 'comments-empty', 'No comments yet — add the first one below.'));
+        }
       }
 
       // growRestoredDrafts grows every non-empty composer/reply/edit textarea now
@@ -752,7 +803,15 @@
         var list = railBody.querySelector('.comments-threads');
         var placeholder = el('article', 'comment-thread comment-thread--optimistic');
         placeholder.appendChild(optimisticMessage(body));
-        if (list) { list.insertBefore(placeholder, list.firstChild); }
+        if (list) {
+          // On a claim with no threads yet the list holds only the empty-state
+          // line; drop it as the first optimistic thread goes in, so the rail
+          // never reads "No comments yet." directly above a comment. The catch
+          // below puts it back if the write fails, since nothing else rebuilds
+          // the list on that path.
+          syncEmptyLine(list, true);
+          list.insertBefore(placeholder, list.firstChild);
+        }
         ta.value = '';
         ta.style.height = 'auto';
         recomputeChipsFromPanel(claimID);
@@ -760,6 +819,7 @@
           .then(function () { renderPanelFromAPI(claimID); })
           .catch(function (err) {
             if (placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
+            if (list) { syncEmptyLine(list, list.querySelector('.comment-thread') !== null); }
             recomputeChipsFromPanel(claimID);
             // The input was cleared optimistically when the placeholder went in;
             // a failed write must restore the user's text, never discard it — and
@@ -932,6 +992,11 @@
           if (body && body.dossierx === 'serve') {
             mounted = true;
             document.body.classList.add('comments-live');
+            // A reachable comment API is exactly what makes "add the first
+            // comment" a real action, so this is where the zero-thread chips the
+            // server rendered hidden become visible. It must follow `mounted =
+            // true` — syncEmptyChips reads it.
+            syncEmptyChips();
             // A confirmed live serve is the ONLY place live reload is wired: the
             // EventSource needs a server behind the page. startLiveReload is
             // idempotent and no-ops on a hook-less (marker-absent) shell.

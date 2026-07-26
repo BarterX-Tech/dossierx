@@ -76,6 +76,19 @@ them explicitly. `mockup` renders a project-authored `raw_html` blob instead
 of markdown/rows/steps and carries its own human review gate — see the
 `raw-html-scope` lint for the full constraints.
 
+### `body` and the markdown ceiling
+
+`body` is markdown, but the engine's renderer is a small owned subset rather
+than a general parser. It supports paragraphs, fenced code blocks, inline
+`` `code` `` spans, `[text](url)` links whose scheme is allowlisted, and
+unordered/ordered lists nested one level deep. Everything else — bold, italic,
+headings, blockquotes, markdown tables, deeper nesting — stays literal text.
+
+This is a documented ceiling, not a silent gap: the same subset renders `body`,
+every `rows` cell, every `steps` entry, and every comment body, so what a claim
+author sees in one place is what they get in all of them. A future release
+widens it.
+
 ### `rows` cells
 
 Every value in a `rows` cell must be an authored **string**. A non-string
@@ -116,10 +129,14 @@ authored claim content:
 - The field is `omitempty`: a claim that has never been commented on is written
   byte-for-byte as it was before this field existed.
 
-Do **not** hand-edit `comments`; author it through the `dossierx comment` verbs
-(`add` / `reply` / `resolve` / `reopen` / `edit` / `delete` / `list`), which
-take the project-wide claims lock, re-read the claim inside it, and write it
-back safely. Each thread and reply `id` is engine-generated (`c-`/`r-` followed
+Do **not** hand-edit `comments`; author it through the engine, which takes the
+project-wide claims lock, re-reads the claim inside it, and writes it back
+safely. Two surfaces reach the same operations: the CLI (`dossierx comment
+add` / `reply` / `list` / `inbox`) and `dossierx serve`'s HTTP API, which is
+what the viewer drives — resolve, reopen, edit and delete are viewer-only, so a
+review history is never rewritten by the party being reviewed. A hand-edited
+thread is detected rather than accepted: see `comment-ledger-drift` under
+Integrity invariants below. Each thread and reply `id` is engine-generated (`c-`/`r-` followed
 by 6 lowercase hex, unique within the claim file); a hand-authored or legacy
 entry that omits its `id` is assigned one on the next engine write, so strict
 decoding never rejects it.
@@ -187,23 +204,26 @@ schema field instead of a path convention.
 ### `status` and the lock lifecycle
 
 - `draft` — freely editable, not yet reviewed.
-- `locked` — has passed human review via `dossierx lock` (refused if lint has
-  any error-level finding, if doctrine hub-gating blocks it, or if the claim
+- `locked` — has passed human review via `dossierx claim lock` (refused if lint
+  has any error-level finding, if doctrine hub-gating blocks it, or if the claim
   still carries an unresolved comment thread); also carries an engine-managed
   `review_pending` bool. `review_pending` is `true` while ANY of three
   independent triggers stands: a dependency's content has drifted since the
-  claim was last locked or reaudited; a `dossierx flag` has recorded a spec
-  mismatch; or the claim carries an unresolved (`status: open`) comment thread.
-  It is set automatically but never cleared automatically — a locked claim's
-  `status` never reverts to `draft` on its own, and `review_pending` clears
-  only once EVERY trigger is gone, via one of three matching clearers: a
-  human-confirmed `dossierx reaudit --confirm` (drift/flag), `dossierx unlock`,
-  or resolving/deleting the last open comment thread with `dossierx comment
-  resolve` (while no drift or flag still stands). A claim cannot lock while it
-  has an unresolved comment thread, and `dossierx reaudit` refuses a claim that
-  is `review_pending` only because of an open thread (there is no content diff
-  to confirm — resolve the thread instead). See the engine's `internal/lock`,
-  `internal/reaudit`, and `internal/comments` packages for the full lifecycle.
+  claim was last locked or reaudited; a `dossierx claim flag` has recorded a
+  spec mismatch; or the claim carries an unresolved (`status: open`) comment
+  thread. It is set automatically but never cleared automatically — a locked
+  claim's `status` never reverts to `draft` on its own, and `review_pending`
+  clears only once EVERY trigger is gone, via one of three matching clearers: a
+  human-confirmed `dossierx claim reaudit --confirm` (drift/flag), `dossierx
+  claim unlock`, or resolving/deleting the last open comment thread in the
+  viewer (while no drift or flag still stands). A claim cannot lock while it
+  has an unresolved comment thread, and `reaudit` refuses a claim that is
+  `review_pending` only because of an open thread (there is no content diff to
+  confirm — resolve the thread instead). `reaudit` is the DRIFT tool: it
+  rewrites only `body` and refuses a claim that is not already
+  `review_pending`. Every other change to a locked claim goes through
+  `unlock → fix → lock`. See the engine's `internal/lock`, `internal/reaudit`,
+  and `internal/comments` packages for the full lifecycle.
 
 ## Edge types
 
@@ -225,6 +245,109 @@ edge, each with a different meaning:
   dependency cannot be locked until the doctrine claim itself is locked
   (hub-gating). If `doctrine_facet` is unset, hub-gating does not run at
   all.
+
+### Graph invariants
+
+Each edge kind is not just a per-claim field but a directed graph over the
+whole claim set, and each of those three graphs has a shape it must hold to.
+These are enforced by the lint suite, so a violation blocks `dossierx lock`
+the same way any other error-severity finding does:
+
+1. **`rests_on` must be acyclic.** It is a dependency edge, so a cycle means
+   a set of claims each of which is true only if the others are — no claim
+   in the loop can be reviewed on its own terms, and the drift propagation
+   that flips dependents to `review_pending` has no order to run in. Every
+   claim in the loop is reported by the `cycle` lint, with the cycle path in
+   the message.
+2. **`mirrors` must be a reciprocal 2-cycle.** Equality is symmetric, so if
+   `A` mirrors `B` then `B` must mirror `A` back (`mirror-reciprocal`), the
+   target must exist (`mirror-unanchored`), and the two claims' comparable
+   content — `layout`, `body`, `rows`, `steps` — must actually match
+   (`mirror-mismatch`). A one-directional `mirrors` edge is not a weaker
+   equality claim; it is an unfinished one.
+3. **`governed_by` must terminate.** Following `governed_by` from any claim
+   has to reach `type: none` (with its required `reason`) in finitely many
+   steps — that sentinel is the only grounded end state. A cycle in this
+   graph means a set of claims whose authority rests only on each other,
+   which is to say on nothing, and is reported by the `governed-cycle` lint.
+
+Across all three, a claim may never name **its own id** in any edge
+(`self-edge`). A self-edge is trivially satisfied by every content rule —
+a claim always equals itself, always mirrors itself back, and always
+resolves — so it asserts nothing while looking like a well-formed edge. An
+edge is a statement about a *different* claim.
+
+## Integrity invariants
+
+Claim files are YAML in git, so nothing in this format can *prevent* a hand
+edit. The invariants below are about something narrower and achievable: no
+out-of-band edit of a **locked** claim is silent.
+
+They are enforced by the **lock-ledger gate**, which is not part of the lint
+suite. A lint failure is a statement about a claim's content; a ledger finding
+is a statement about whether a human ever approved it, and the two must not
+share a severity ladder — registering these as lints would let one tampered
+file freeze locking project-wide and stop the viewer regenerating.
+
+### The two ledger files are tracked artifacts
+
+| File | Holds |
+|---|---|
+| `.dossierx-lock-store.json` | the lock ledger: per locked claim and per locked build-order artifact, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
+| `.dossierx-comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
+
+Both live beside `project.config.yaml`. **Commit them; never `.gitignore`
+them.** The gate compares the claims on disk against these records, so a
+project that does not track them has no gate — a claim and its approval have to
+travel in the same commit for CI to be able to check either one. Both are
+engine-written: hand-editing them is the same act as hand-editing a locked
+claim, and it is visible in exactly the same way (the diff).
+
+### What is signed, and what is not
+
+A ledger record stores `LockedClaimHash` of the claim as approved. That hash is
+a **deny-list over every persisted field** — it signs everything a claim
+persists except three engine-managed fields:
+
+- `status` — the gate notices a status flip by the presence or absence of a
+  record, not by hashing the field. Hashing it would make a legitimate unlock
+  read as tampering.
+- `review_pending` — set automatically by the three triggers with no human in
+  the loop; signing it would report drift every time the engine did its job.
+- `comments` — written on every comment operation, including from `dossierx
+  serve`, which deliberately has no write authority over the lock store.
+  Comment integrity is covered by the separate digest file instead.
+
+Everything else is signed, **including any field added to the schema later**.
+This is deliberately not the same hash as the dependency-drift `ContentHash`,
+which covers a hand-picked ten fields and must stay byte-identical forever:
+`raw_html`, `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
+`emphasis`, `migrated_from`, and `audit_notes` are invisible to it — and
+`raw_html` on a locked, reviewed, allowlisted mockup is the only path in the
+engine that renders author bytes unescaped. A ledger built on `ContentHash`
+would certify the one edit that most needs a signature.
+
+### The findings
+
+| Finding | The invariant it enforces |
+|---|---|
+| `lock-ledger-absent` | Locked claims exist, so the ledger file must exist. Deleting it is not a way to re-bless a project; it is a project-scoped refusal you fix by restoring the file from version control. |
+| `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate, hub-gating and the unresolved-comment gate as though all three had passed. |
+| `lock-content-drift` | A locked claim's content still hashes to what was approved. Covers every field above, including the ones `ContentHash` cannot see. |
+| `lock-ledger-orphan` | A `draft` claim holds no *unreleased* record. Unlocking releases a record and keeps it; flipping `locked` back to `draft` by hand does not, and that is the cheapest way to dodge review. |
+| `comment-ledger-drift` | A claim's comment block matches the digest recorded at the last engine write. Deleting an unresolved thread by hand is how a claim would otherwise slip past the lock gate with a review still open. |
+| `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |
+
+### Adoption, once
+
+A project that locked claims before the ledger existed adopts them on the first
+run of a build that has it: each already-locked claim gets a record marked
+`grandfathered`, and the adoption announces itself. The flag stays on the
+record permanently, because an adopted hash is content that was *observed*, not
+content anyone approved — re-lock those claims deliberately when you get to
+them. Adoption triggers on an older store file being present, never on an
+absent one: "no ledger means adopt everything" would make deleting the file the
+universal bypass.
 
 ## Project config (`project.config.yaml`)
 

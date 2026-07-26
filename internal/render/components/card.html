@@ -14,9 +14,18 @@
      through the shared internal/render/markdown package (exposed as the
      "markdown" template func) rather than shown raw, so any
      ```fenced``` span in a claim's prose renders as a real
-     <pre><code>...</code></pre> element instead of literal backticks. */}}
+     <pre><code>...</code></pre> element instead of literal backticks.
+
+     The heading shows the id's readable label via the shared "claimLabel"
+     func (components.go's ClaimLabel — bare label here, since a card's own
+     module and facet are the page the reader is standing on), never a raw
+     id. The machine id stays reachable on the same element through
+     data-claim-id and the hover title, because "dossierx claim lock <id>",
+     grep, and "dossierx-claim:" source tags all take the id and a reader
+     who can only see "Retry Policy" cannot type it. An id that isn't the
+     linted module.facet.slug shape renders verbatim — see ClaimLabel. */}}
 <section class="claim claim-card card{{if .Emphasis}} claim-card--warn{{end}}{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
   {{edges .}}
 </section>

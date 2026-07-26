@@ -23,9 +23,15 @@
      places it in its own <ul>/<ol>. The head is a single .k line with an
      inline status pill — docs' "<div class="k">TITLE <span class="pill
      ps">...</span></div>" shape — per the shared claim-head convention
-     every component partial follows (see components.go's pillClass). */}}
+     every component partial follows (see components.go's pillClass).
+
+     The heading shows the id's readable label via the shared "claimLabel"
+     func (components.go's ClaimLabel), with the machine id kept reachable on
+     the same element through data-claim-id and the hover title — see
+     card.html's head comment for why both, and ClaimLabel for what an
+     unshaped id does. */}}
 <section class="claim claim-list card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}
   <div class="claim-list-items">{{markdown .Body}}</div>
   {{else}}

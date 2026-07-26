@@ -156,9 +156,28 @@ func TestRender_BuildOrderTab_PresentWhenLockedArtifactExists(t *testing.T) {
 	}
 	// The behavior claim's rests_on edge to the schema claim must be
 	// rendered as a same-page link, matching every other component's edge
-	// convention (components.writeIDList).
+	// convention (components.writeIDListItems).
 	if !strings.Contains(out, `href="#`+module+`.contract.schema"`) {
 		t.Fatalf("expected a rests_on link to the schema claim, got:\n%s", out)
+	}
+	// C5: build_order.html used to render rests_on itself, as an inline
+	// comma-separated run of bare-id <a> tags — a second, drifted copy of what
+	// the shared edges footer emits. It now goes through the same
+	// claimEdgeList/writeIDListItems path, so it must produce the shared
+	// bulleted container and the shared labeled anchor, prefix-elided against
+	// the rendering entry's own module+facet (both claims are widget.contract,
+	// so the schema target is the bare-label tier).
+	if !strings.Contains(out, `<div class="claim-rests-on">rests_on: <ul class="claim-edge-id-list">`) {
+		t.Fatalf("expected build_order rests_on to use the shared edge-id list container, got:\n%s", out)
+	}
+	if !strings.Contains(out, `<a class="claim-ref" href="#`+module+`.contract.schema" data-claim-id="`+module+`.contract.schema" title="`+module+`.contract.schema"><span class="claim-ref-label">Schema</span></a>`) {
+		t.Fatalf("expected build_order rests_on to use the shared labeled, bare-tier claim ref, got:\n%s", out)
+	}
+	// The per-claim heading is labeled too, with the machine id still on the
+	// element — a build-order card is precisely where a reader needs the id,
+	// since the next thing they do with it is "dossierx claim show <id>".
+	if !strings.Contains(out, `<div class="k" data-claim-id="`+module+`.contract.behavior" title="`+module+`.contract.behavior">Behavior `) {
+		t.Fatalf("expected a labeled, id-bearing build-order claim heading, got:\n%s", out)
 	}
 }
 

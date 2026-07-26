@@ -37,20 +37,41 @@ func resolvedThread(id, body string) model.Comment {
 // EdgesHTMLWithLinks — comment chip + baked-in thread panel
 // ---------------------------------------------------------------------
 
-// A claim with no comments must render exactly as before the feature existed:
-// no chip, no panel, and byte-identical to plain edgesHTML. This is the
-// graceful-degradation / byte-identity guard the implink footer already
-// relies on (see TestEdgesHTMLWithLinks_NilFiles_MatchesPlainEdgesHTML).
-func TestEdgesHTMLWithLinks_NoComments_NoChipOrPanel(t *testing.T) {
-	c := model.Claim{Facet: "contract", Status: model.StatusLocked}
+// v0.2.1 — a claim with NO comments still renders a chip, so the FIRST comment
+// on it is openable from the viewer (the human's only surface). Gating chip
+// emission on len(c.Comments) > 0 was the bug: a card nobody had questioned yet
+// could never be questioned. The zero state is its own variant reading "💬 0",
+// its <li> ships `hidden` for the static file:// case, and it drags in no baked
+// panel (there are no threads to bake).
+func TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault(t *testing.T) {
+	c := model.Claim{ID: "widget.contract.quiet", Facet: "contract", Status: model.StatusLocked}
 	got := string(EdgesHTMLWithLinks(c, nil, nil))
-	for _, absent := range []string{"comment-chip", "comments-panel", "claim-comments", "💬"} {
+
+	if !strings.Contains(got, `<li class="claim-comments" hidden>`) {
+		t.Fatalf("the zero-state chip's <li> must ship hidden (revealed only by the viewer's live-API probe), got: %s", got)
+	}
+	if !strings.Contains(got, `class="comment-chip comment-chip--empty"`) {
+		t.Fatalf("a comment-free claim must render the --empty chip variant, got: %s", got)
+	}
+	if !strings.Contains(got, `<span class="comment-chip-count">0</span>`) {
+		t.Fatalf("the zero-state chip must read 0, got: %s", got)
+	}
+	// "no one has commented" is not "everything raised was settled": the empty
+	// chip must not borrow either of the other two variants.
+	for _, absent := range []string{"comment-chip--open", "comment-chip--resolved", "comments-panel"} {
 		if strings.Contains(got, absent) {
 			t.Fatalf("a comment-free claim must not render %q, got: %s", absent, got)
 		}
 	}
+	// The aria-label invites the action rather than describing a count of zero.
+	if !strings.Contains(got, `aria-label="add the first comment on this claim"`) {
+		t.Fatalf("the zero-state chip must invite the first comment in its aria-label, got: %s", got)
+	}
+	// The chip is the ONLY thing the zero state adds: still byte-identical to
+	// plain edgesHTML, which is the graceful-degradation guard the implink
+	// footer relies on (see TestEdgesHTMLWithLinks_NilFiles_MatchesPlainEdgesHTML).
 	if got != string(edgesHTML(c)) {
-		t.Fatalf("a comment-free claim's edges output changed; want byte-identical to edgesHTML(c)\n got: %s", got)
+		t.Fatalf("a comment-free claim's edges output must match edgesHTML(c)\n got: %s", got)
 	}
 }
 
