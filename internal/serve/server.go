@@ -214,7 +214,7 @@ func (s *Server) Serve(ctx context.Context) error {
 		close(s.closing)
 		shutCtx, cancel := context.WithTimeout(context.Background(), shutdownGrace)
 		defer cancel()
-		_ = s.httpSrv.Shutdown(shutCtx)
+		s.httpSrv.Shutdown(shutCtx) //nolint:errcheck // graceful shutdown on ctx cancel; we return nil regardless
 		return nil
 	case err := <-errCh:
 		close(s.closing)

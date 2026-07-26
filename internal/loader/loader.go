@@ -166,10 +166,10 @@ func verifyRoundTrip(c model.Claim, data []byte) error {
 	dec := yaml.NewDecoder(strings.NewReader(string(data)))
 	dec.KnownFields(true)
 	if err := dec.Decode(&back); err != nil {
-		return fmt.Errorf("loader: claim %q: marshaled YAML does not re-parse (%v): %w", c.ID, err, ErrClaimNotRoundTrippable)
+		return fmt.Errorf("loader: claim %q: marshaled YAML does not re-parse (%w): %w", c.ID, err, ErrClaimNotRoundTrippable)
 	}
 	if err := commentBodiesRoundTrip(c.Comments, back.Comments); err != nil {
-		return fmt.Errorf("loader: claim %q: %v: %w", c.ID, err, ErrClaimNotRoundTrippable)
+		return fmt.Errorf("loader: claim %q: %w: %w", c.ID, err, ErrClaimNotRoundTrippable)
 	}
 	if c.Body != back.Body {
 		return fmt.Errorf("loader: claim %q: body did not round-trip byte-exact: %w", c.ID, ErrClaimNotRoundTrippable)

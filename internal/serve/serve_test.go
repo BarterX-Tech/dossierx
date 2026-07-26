@@ -71,7 +71,7 @@ func startServer(t *testing.T, cfgBody string, files map[string]string) (srv *se
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = srv.Serve(ctx)
+		srv.Serve(ctx) //nolint:errcheck // test server; Serve returns ErrServerClosed on cancel
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -95,7 +95,7 @@ func writeFile(t *testing.T, path, content string) {
 
 type reqMod func(*http.Request)
 
-func setHost(h string) reqMod   { return func(r *http.Request) { r.Host = h } }
+func setHost(h string) reqMod { return func(r *http.Request) { r.Host = h } }
 func setHeader(k, v string) reqMod {
 	return func(r *http.Request) { r.Header.Set(k, v) }
 }
@@ -110,7 +110,7 @@ func allowedMutating(base string) []reqMod {
 	}
 }
 
-func do(t *testing.T, method, url, body string, mods ...reqMod) (*http.Response, []byte) {
+func do(t *testing.T, method, url, body string, mods ...reqMod) (res *http.Response, raw []byte) {
 	t.Helper()
 	var rdr io.Reader
 	if body != "" {
@@ -569,7 +569,10 @@ func TestXSS_BodyEscapedInResponses(t *testing.T) {
 	_, base, _ := startServer(t, baseConfig, standardFiles())
 
 	const payload = `<img src=x onerror=alert(1)>`
-	body, _ := json.Marshal(map[string]string{"body": payload})
+	body, err := json.Marshal(map[string]string{"body": payload})
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	resp, data := do(t, http.MethodPost, base+"/api/claims/widget.contract.one/comments",
 		string(body), allowedMutating(base)...)

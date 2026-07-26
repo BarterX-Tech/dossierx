@@ -325,8 +325,16 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) []string {
 	var hints []string
 
-	store, _ := lock.LoadStore(storePath(cfg))
-	flagStore, _ := reaudit.LoadFlagStore(flagStorePath(cfg))
+	// Best-effort: a load error just degrades the drift/flag partition to "none"
+	// (PendingTriggers nil-checks both stores), so status stays a pure read.
+	store, storeErr := lock.LoadStore(storePath(cfg))
+	if storeErr != nil {
+		store = nil
+	}
+	flagStore, flagErr := reaudit.LoadFlagStore(flagStorePath(cfg))
+	if flagErr != nil {
+		flagStore = nil
+	}
 
 	var draftIDs []string
 	var commentPending []model.Claim // review_pending with >=1 open thread

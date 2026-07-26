@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"testing"
 	"time"
 
@@ -132,6 +133,28 @@ func (p *project) deps() *Deps {
 		p.t.Fatalf("LoadClaims: %v", err)
 	}
 	return &Deps{Cfg: p.cfg, Claims: claims, LockStore: p.store, FlagStore: p.flags}
+}
+
+// addThread seeds a comment thread on claimA and fails the test on error,
+// returning the new thread id — keeps the common "seed a thread" setup a
+// conflict-free one-liner.
+func (p *project) addThread(role model.CommentRole, body string) string {
+	p.t.Helper()
+	_, tid, err := p.deps().Add(claimA, role, body)
+	if err != nil {
+		p.t.Fatalf("Add(%q): %v", body, err)
+	}
+	return tid
+}
+
+// readAYAML reads claimA's on-disk file and fails the test on error.
+func (p *project) readAYAML() []byte {
+	p.t.Helper()
+	b, err := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	return b
 }
 
 func (p *project) reload(id string) model.Claim {
@@ -269,7 +292,10 @@ func TestPending_OpenOnLockedSetsReviewPending(t *testing.T) {
 
 func TestPending_ResolveLastClearsWhenNoDriftNoFlag(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": lockedAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	c, err := p.deps().Resolve(claimA, tid, model.CommentRoleHuman)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -281,7 +307,10 @@ func TestPending_ResolveLastClearsWhenNoDriftNoFlag(t *testing.T) {
 
 func TestPending_DeleteLastClearsWhenNoDriftNoFlag(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": lockedAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	c, err := p.deps().Delete(claimA, tid, "", model.CommentRoleHuman)
 	if err != nil {
 		t.Fatalf("Delete: %v", err)
@@ -294,7 +323,10 @@ func TestPending_DeleteLastClearsWhenNoDriftNoFlag(t *testing.T) {
 func TestPending_ResolveLastRetainedOnDrift(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": lockedARestsOnBYAML, "b.yaml": draftBYAML})
 	p.setStaleBaseline(claimA, claimB) // dependency drifted since lock
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	c, err := p.deps().Resolve(claimA, tid, model.CommentRoleHuman)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -311,7 +343,10 @@ func TestPending_ResolveLastRetainedOnDrift(t *testing.T) {
 func TestPending_StaleFlagSurvivesResolveLast(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": lockedAYAML})
 	p.setFlag(claimA) // flag parked from before an unlock/lock cycle
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleAgent, "please look")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleAgent, "please look")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	c, err := p.deps().Resolve(claimA, tid, model.CommentRoleAgent)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -323,7 +358,10 @@ func TestPending_StaleFlagSurvivesResolveLast(t *testing.T) {
 
 func TestPending_ReopenReSetsReviewPending(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": lockedAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleHuman, "please look")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	if _, err := p.deps().Resolve(claimA, tid, model.CommentRoleHuman); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -444,7 +482,10 @@ func TestRights_ReplyOps(t *testing.T) {
 	// Thread opened by human, reply authored by agent: an agent may edit/delete
 	// its OWN reply even though the thread is human-owned.
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "human thread")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleHuman, "human thread")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
 	_, rid, err := p.deps().Reply(claimA, tid, model.CommentRoleAgent, "agent reply")
 	if err != nil {
 		t.Fatalf("Reply: %v", err)
@@ -453,7 +494,10 @@ func TestRights_ReplyOps(t *testing.T) {
 		t.Fatalf("agent editing its own reply must be allowed, got %v", err)
 	}
 	// A human-authored reply may NOT be edited/deleted by an agent.
-	_, hrid, _ := p.deps().Reply(claimA, tid, model.CommentRoleHuman, "human reply")
+	_, hrid, err := p.deps().Reply(claimA, tid, model.CommentRoleHuman, "human reply")
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
 	if _, err := p.deps().Edit(claimA, tid, hrid, model.CommentRoleAgent, "nope"); !errors.Is(err, ErrRightsDenied) {
 		t.Fatalf("agent editing a human reply must be denied, got %v", err)
 	}
@@ -465,7 +509,7 @@ func TestRights_ReplyOps(t *testing.T) {
 // TestRights_AnyoneMayReplyToOpenThread: reply carries no author-rights gate.
 func TestRights_AnyoneMayReplyToOpenThread(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "human thread")
+	tid := p.addThread(model.CommentRoleHuman, "human thread")
 	if _, _, err := p.deps().Reply(claimA, tid, model.CommentRoleAgent, "agent may reply to a human thread"); err != nil {
 		t.Fatalf("agent replying to a human-opened thread must be allowed, got %v", err)
 	}
@@ -482,7 +526,7 @@ func TestEdge_UnknownClaim(t *testing.T) {
 
 func TestEdge_UnknownThread_NeighbourUntouched(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "real thread")
+	tid := p.addThread(model.CommentRoleHuman, "real thread")
 	before := p.reload(claimA)
 
 	if _, err := p.deps().Resolve(claimA, "c-nope00", model.CommentRoleHuman); !errors.Is(err, ErrThreadNotFound) {
@@ -496,8 +540,14 @@ func TestEdge_UnknownThread_NeighbourUntouched(t *testing.T) {
 
 func TestEdge_UnknownReply_NeighbourUntouched(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "thread")
-	_, rid, _ := p.deps().Reply(claimA, tid, model.CommentRoleHuman, "real reply")
+	_, tid, err := p.deps().Add(claimA, model.CommentRoleHuman, "thread")
+	if err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+	_, rid, err := p.deps().Reply(claimA, tid, model.CommentRoleHuman, "real reply")
+	if err != nil {
+		t.Fatalf("Reply: %v", err)
+	}
 
 	if _, err := p.deps().Edit(claimA, tid, "r-nope00", model.CommentRoleHuman, "x"); !errors.Is(err, ErrReplyNotFound) {
 		t.Fatalf("want ErrReplyNotFound, got %v", err)
@@ -510,7 +560,7 @@ func TestEdge_UnknownReply_NeighbourUntouched(t *testing.T) {
 
 func TestEdge_ReplyToResolvedRejected(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "thread")
+	tid := p.addThread(model.CommentRoleHuman, "thread")
 	if _, err := p.deps().Resolve(claimA, tid, model.CommentRoleHuman); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -521,7 +571,7 @@ func TestEdge_ReplyToResolvedRejected(t *testing.T) {
 
 func TestEdge_DoubleResolveRejected(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "thread")
+	tid := p.addThread(model.CommentRoleHuman, "thread")
 	if _, err := p.deps().Resolve(claimA, tid, model.CommentRoleHuman); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
@@ -532,7 +582,7 @@ func TestEdge_DoubleResolveRejected(t *testing.T) {
 
 func TestEdge_ReopenOpenRejected(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "thread")
+	tid := p.addThread(model.CommentRoleHuman, "thread")
 	if _, err := p.deps().Reopen(claimA, tid, model.CommentRoleHuman); !errors.Is(err, ErrThreadOpen) {
 		t.Fatalf("want ErrThreadOpen reopening an open thread, got %v", err)
 	}
@@ -540,14 +590,14 @@ func TestEdge_ReopenOpenRejected(t *testing.T) {
 
 func TestEdge_EmptyBodyRejected_NoWrite(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	before, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+	before := p.readAYAML()
 	for _, body := range []string{"", "   ", "\t\n"} {
 		if _, _, err := p.deps().Add(claimA, model.CommentRoleHuman, body); !errors.Is(err, ErrEmptyBody) {
 			t.Fatalf("Add(%q): want ErrEmptyBody, got %v", body, err)
 		}
 	}
 	// Reply and Edit reject empty too.
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "real")
+	tid := p.addThread(model.CommentRoleHuman, "real")
 	if _, _, err := p.deps().Reply(claimA, tid, model.CommentRoleHuman, "  "); !errors.Is(err, ErrEmptyBody) {
 		t.Fatalf("Reply empty: want ErrEmptyBody, got %v", err)
 	}
@@ -567,11 +617,11 @@ func TestEdge_InvalidActorRejected(t *testing.T) {
 
 func TestEdge_BannerClaimRejected(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": bannerYAML})
-	before, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+	before := p.readAYAML()
 	if _, _, err := p.deps().Add(claimA, model.CommentRoleHuman, "x"); !errors.Is(err, ErrBannerClaim) {
 		t.Fatalf("want ErrBannerClaim, got %v", err)
 	}
-	after, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+	after := p.readAYAML()
 	if !bytes.Equal(before, after) {
 		t.Fatalf("banner claim file must be untouched after a rejected Add")
 	}
@@ -579,7 +629,7 @@ func TestEdge_BannerClaimRejected(t *testing.T) {
 
 func TestEdge_TwoEditsLastWriteWins(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, tid, _ := p.deps().Add(claimA, model.CommentRoleHuman, "v0")
+	tid := p.addThread(model.CommentRoleHuman, "v0")
 	if _, err := p.deps().Edit(claimA, tid, "", model.CommentRoleHuman, "v1"); err != nil {
 		t.Fatalf("Edit v1: %v", err)
 	}
@@ -593,14 +643,17 @@ func TestEdge_TwoEditsLastWriteWins(t *testing.T) {
 }
 
 func TestEdge_ReadOnlyClaimFile_CleanError_NoPartialWrite(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("a read-only directory bit does not block file creation on Windows")
+	}
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	before, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+	before := p.readAYAML()
 	d := p.deps() // load claims while the dir is still writable
 
 	if err := os.Chmod(p.claimsDir, 0o555); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(p.claimsDir, 0o755) })
+	t.Cleanup(func() { os.Chmod(p.claimsDir, 0o755) }) //nolint:errcheck // best-effort perm restore on cleanup
 
 	_, _, err := d.Add(claimA, model.CommentRoleHuman, "body")
 	if err == nil {
@@ -610,8 +663,10 @@ func TestEdge_ReadOnlyClaimFile_CleanError_NoPartialWrite(t *testing.T) {
 		t.Fatalf("expected an I/O write error, got a logical error: %v", err)
 	}
 
-	_ = os.Chmod(p.claimsDir, 0o755)
-	after, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+	if err := os.Chmod(p.claimsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	after := p.readAYAML()
 	if !bytes.Equal(before, after) {
 		t.Fatalf("claim file changed despite a failed save (partial write)")
 	}
@@ -758,8 +813,8 @@ func TestID_LegacyBackfilledOnSave(t *testing.T) {
 
 func TestList_OpenOnlyFiltersResolved(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	_, t1, _ := p.deps().Add(claimA, model.CommentRoleHuman, "open one")
-	_, t2, _ := p.deps().Add(claimA, model.CommentRoleHuman, "to be resolved")
+	t1 := p.addThread(model.CommentRoleHuman, "open one")
+	t2 := p.addThread(model.CommentRoleHuman, "to be resolved")
 	if _, err := p.deps().Resolve(claimA, t2, model.CommentRoleHuman); err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

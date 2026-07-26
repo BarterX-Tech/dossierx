@@ -139,8 +139,8 @@ func firstThreadID(t *testing.T, root, cfgPath, id string) string {
 	}
 	// "comment list --json" encodes model.Comment with its Go field names (no
 	// json tags), so the thread id is under "ID".
-	tid, _ := threads[0]["ID"].(string)
-	if tid == "" {
+	tid, ok := threads[0]["ID"].(string)
+	if !ok || tid == "" {
 		t.Fatalf("first thread on %s has no id: %v", id, threads[0])
 	}
 	return tid

@@ -52,7 +52,10 @@ func TestMutate_OutOfBandEdit_YieldsClaimFileChanged(t *testing.T) {
 	}
 
 	// The refused save must not have clobbered the out-of-band content.
-	got, _ := os.ReadFile(claimPath)
+	got, err := os.ReadFile(claimPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if string(got) != string(outOfBand) {
 		t.Fatalf("optimistic save clobbered the out-of-band edit:\n%s", got)
 	}

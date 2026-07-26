@@ -103,7 +103,7 @@ func (p *pipeline) drain(b *batch) {
 // loop. The render writes nothing to disk (renderViewer is in-memory only), so
 // a refresh can never itself re-trigger the watcher.
 func (p *pipeline) refresh() {
-	go func() { _, _ = p.get(context.Background()) }()
+	go func() { p.get(context.Background()) }() //nolint:errcheck // best-effort pre-warm; a failed render is re-attempted on the next GET /
 }
 
 // runCount reports how many renders have executed (for the single-flight test).

@@ -37,7 +37,7 @@ func newHub() *hub {
 // channel is never closed by the hub: unsubscribe only removes it from the
 // fan-out set, so a broadcast racing an unsubscribe (both take mu) can never
 // send on a closed channel.
-func (h *hub) Subscribe() (<-chan struct{}, func()) {
+func (h *hub) Subscribe() (events <-chan struct{}, cancel func()) {
 	ch := make(chan struct{}, 1)
 	h.mu.Lock()
 	h.subs[ch] = struct{}{}

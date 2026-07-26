@@ -627,7 +627,7 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	// always populated). Reuse the shared reporter for byte-identical output;
 	// its error return is intentionally discarded here — check.Run already
 	// surfaced the fail-fast error, and the RunE returns that, not this.
-	_ = reportLintFindings(cmd, res.LintFindings, false)
+	reportLintFindings(cmd, res.LintFindings, false) //nolint:errcheck // intentionally discarded (see comment above); check.Run already surfaced the fail-fast error
 
 	// Catalog/render write confirmations. Empty paths mean the run stopped
 	// before that write (e.g. a lint error), so the line is correctly skipped.

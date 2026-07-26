@@ -53,7 +53,7 @@ func TestIsInsideDir(t *testing.T) {
 		{root, true}, // the dir itself counts as inside
 		{filepath.Join(sep+"proj", "viewer", "index.html"), false},
 		{filepath.Join(sep+"proj", ".catalog.json"), false},
-		{filepath.Join(sep + "proj"), false}, // the parent is outside
+		{sep + "proj", false}, // the parent is outside
 		{filepath.Join(sep+"other", "x"), false},
 	}
 	for _, c := range cases {
@@ -79,13 +79,19 @@ func TestScanFingerprint_DetectsRelevantChanges(t *testing.T) {
 	}
 
 	writeTestFile(t, filepath.Join(dir, "sub", "b.yaml"), "two-and-more")
-	fp2, _ := scanFingerprint(dir)
+	fp2, err := scanFingerprint(dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
 	if fingerprintsEqual(fp1, fp2) {
 		t.Fatal("fingerprint unchanged after a nested-dir claim modify")
 	}
 
 	writeTestFile(t, filepath.Join(dir, "c.yaml"), "three")
-	fp3, _ := scanFingerprint(dir)
+	fp3, err := scanFingerprint(dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
 	if fingerprintsEqual(fp2, fp3) {
 		t.Fatal("fingerprint unchanged after adding a claim")
 	}
@@ -93,7 +99,10 @@ func TestScanFingerprint_DetectsRelevantChanges(t *testing.T) {
 	if err := os.Remove(filepath.Join(dir, "a.yaml")); err != nil {
 		t.Fatalf("remove: %v", err)
 	}
-	fp4, _ := scanFingerprint(dir)
+	fp4, err := scanFingerprint(dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
 	if fingerprintsEqual(fp3, fp4) {
 		t.Fatal("fingerprint unchanged after deleting a claim")
 	}
@@ -104,18 +113,29 @@ func TestScanFingerprint_DetectsRelevantChanges(t *testing.T) {
 func TestScanFingerprint_IgnoresTmpDotDirAndNonYAML(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, filepath.Join(dir, "a.yaml"), "one")
-	base, _ := scanFingerprint(dir)
+	base, err := scanFingerprint(dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
 
 	writeTestFile(t, filepath.Join(dir, "a.yaml.tmp-000123"), "scratch")
-	if fp, _ := scanFingerprint(dir); !fingerprintsEqual(base, fp) {
+	fp, err := scanFingerprint(dir)
+	if err != nil {
+		t.Fatalf("scan: %v", err)
+	}
+	if !fingerprintsEqual(base, fp) {
 		t.Fatal("a *.tmp-* scratch file changed the fingerprint")
 	}
 	writeTestFile(t, filepath.Join(dir, ".git", "HEAD.yaml"), "ref: main")
-	if fp, _ := scanFingerprint(dir); !fingerprintsEqual(base, fp) {
+	if fp, err := scanFingerprint(dir); err != nil {
+		t.Fatalf("scan: %v", err)
+	} else if !fingerprintsEqual(base, fp) {
 		t.Fatal("a file under a dot-directory changed the fingerprint")
 	}
 	writeTestFile(t, filepath.Join(dir, "notes.md"), "text")
-	if fp, _ := scanFingerprint(dir); !fingerprintsEqual(base, fp) {
+	if fp, err := scanFingerprint(dir); err != nil {
+		t.Fatalf("scan: %v", err)
+	} else if !fingerprintsEqual(base, fp) {
 		t.Fatal("a non-YAML file changed the fingerprint")
 	}
 }

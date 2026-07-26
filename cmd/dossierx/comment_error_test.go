@@ -70,7 +70,7 @@ func TestFriendlyCommentBodyErr(t *testing.T) {
 	}
 	// An unrelated error is returned unchanged.
 	other := errors.New("comments: some other failure")
-	if got := friendlyCommentBodyErr(claimID, other); got != other {
+	if got := friendlyCommentBodyErr(claimID, other); !errors.Is(got, other) {
 		t.Fatalf("friendlyCommentBodyErr(other) = %v, want the same error unchanged", got)
 	}
 }

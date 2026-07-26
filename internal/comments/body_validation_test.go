@@ -63,13 +63,19 @@ func TestAdd_RejectsUnsafeLeadingWhitespaceBody_NoWrite(t *testing.T) {
 	for _, body := range unsafeLeadingBodies {
 		t.Run(body, func(t *testing.T) {
 			p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-			before, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			before, readErr := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 
 			_, _, err := p.deps().Add(claimA, model.CommentRoleHuman, body)
 			if !errors.Is(err, ErrUnsafeBody) {
 				t.Fatalf("Add(body=%q): want ErrUnsafeBody, got %v", body, err)
 			}
-			after, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			after, readErr := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 			if !bytes.Equal(before, after) {
 				t.Fatalf("Add(body=%q) rejected but the claim file changed", body)
 			}
@@ -161,7 +167,10 @@ func TestAddReplyEdit_RejectContentFirstLineUnsafeBody_NoWrite_NoLeak(t *testing
 			if err != nil {
 				t.Fatalf("seed Add: %v", err)
 			}
-			before, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			before, readErr := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 
 			assertUnsafeNoLeak := func(op string, err error) {
 				t.Helper()
@@ -186,7 +195,10 @@ func TestAddReplyEdit_RejectContentFirstLineUnsafeBody_NoWrite_NoLeak(t *testing
 			assertUnsafeNoLeak("Edit", editErr)
 
 			// Nothing was written past the seed thread, and the dir still loads.
-			after, _ := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			after, readErr := os.ReadFile(filepath.Join(p.claimsDir, "a.yaml"))
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
 			if !bytes.Equal(before, after) {
 				t.Fatalf("rejected unsafe ops changed the claim file (body=%q)", body)
 			}

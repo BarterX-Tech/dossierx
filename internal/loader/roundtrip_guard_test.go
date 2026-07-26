@@ -93,7 +93,10 @@ func TestSaveClaimIfUnchanged_RefusesStoreBrickingBody(t *testing.T) {
 			if !errors.Is(err, ErrClaimNotRoundTrippable) {
 				t.Fatalf("SaveClaimIfUnchanged(body=%q): want ErrClaimNotRoundTrippable, got %v", body, err)
 			}
-			got, _ := os.ReadFile(path)
+			got, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
 			if string(got) != string(good) {
 				t.Fatalf("refused SaveClaimIfUnchanged(body=%q) clobbered the good file:\n%s", body, got)
 			}

@@ -173,7 +173,7 @@ func startServerWarn(t *testing.T, cfgBody string, files map[string]string) (srv
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = srv.Serve(ctx)
+		srv.Serve(ctx) //nolint:errcheck // test server; Serve returns ErrServerClosed on cancel
 		close(done)
 	}()
 	t.Cleanup(func() {

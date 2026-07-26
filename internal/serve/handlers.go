@@ -44,13 +44,13 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		// downgrade the page to one served without the policy.
 		w.Header().Set("Content-Security-Policy", cspValue)
 		w.WriteHeader(http.StatusInternalServerError)
-		_, _ = io.WriteString(w, renderErrorPage(err))
+		io.WriteString(w, renderErrorPage(err)) //nolint:errcheck // headers already sent; a client write error mid-response is unrecoverable
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Content-Security-Policy", cspValue)
 	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(htmlBytes)
+	w.Write(htmlBytes) //nolint:errcheck // headers already sent; a client write error mid-response is unrecoverable
 }
 
 // renderErrorPage is the minimal, self-contained 500 body shown when the viewer
@@ -486,7 +486,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.WriteHeader(status)
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
+	enc.Encode(v) //nolint:errcheck // status + headers already written; a mid-response encode error is unrecoverable
 }
 
 // writeError writes a structured {"error":"<code>"} body with the given status.

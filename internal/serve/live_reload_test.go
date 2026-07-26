@@ -38,7 +38,7 @@ func startServerFast(t *testing.T, files map[string]string) (srv *serve.Server, 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {
-		_ = srv.Serve(ctx)
+		srv.Serve(ctx) //nolint:errcheck // test server; Serve returns ErrServerClosed on cancel
 		close(done)
 	}()
 	t.Cleanup(func() {
@@ -56,7 +56,7 @@ func startServerFast(t *testing.T, files map[string]string) (srv *serve.Server, 
 func sseClient(t *testing.T, base string) (<-chan string, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/events", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/events", http.NoBody)
 	if err != nil {
 		cancel()
 		t.Fatalf("new events request: %v", err)

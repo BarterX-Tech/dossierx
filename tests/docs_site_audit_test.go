@@ -88,7 +88,8 @@ func TestREADME_ReplyRightsNotOvergated(t *testing.T) {
 // example depicts the success line exactly as the binary prints it:
 // "reaudit: <id> applied, review_pending cleared" — carrying the claim id.
 // Source of truth: cmd/dossierx/main.go's
-//   fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
+//
+//	fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
 func TestSiteContent_ReauditExampleIncludesClaimID(t *testing.T) {
 	content := readRepoFile(t, filepath.Join("site", "src", "content.ts"))
 
