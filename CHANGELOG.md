@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-26
+
 ### Added
 - **Comments on claims** — threaded, Google-Docs-style review discussion attached to any claim,
   so a human and an agent can talk *about* a claim without editing it.
@@ -208,7 +210,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.2.0
 [0.1.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.2
 [0.1.1]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.1
 [0.1.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.0
