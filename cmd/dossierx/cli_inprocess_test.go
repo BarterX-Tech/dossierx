@@ -78,9 +78,9 @@ func TestCLI_LintCatalogRenderCheck(t *testing.T) {
 
 	// An orientation-note claim (via the reserved "overview" facet, which
 	// implies kind: orientation-note without saying so explicitly — see
-	// model.Claim.EffectiveKind) so the "check" assertion below can cover
-	// reportOrientationNotes's non-blocking report line, not just
-	// "check: OK" itself.
+	// model.Claim.EffectiveKind) so the "check" assertion below can cover the
+	// orientation-notes non-blocking report line (computed in internal/check,
+	// formatted by formatCheckResult), not just "check: OK" itself.
 	overviewClaim := "id: widget.overview.router\n" +
 		"facet: overview\nmodule: widget\nstatus: draft\nlayout: banner\n" +
 		"body: |\n  fixture orientation-note claim for in-process CLI tests.\n" +

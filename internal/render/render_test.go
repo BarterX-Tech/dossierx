@@ -882,6 +882,41 @@ func TestRender_ShellAndStyleOverrideMissingFallsBackToDefaults(t *testing.T) {
 	}
 }
 
+// TestShellHasViewerRuntime_DefaultAndOverride exercises the live-viewer
+// runtime detector "dossierx serve" uses to decide read-only vs. live: the
+// embedded default shell (also the nil-cfg and no-shell-override fallbacks) must
+// carry ViewerRuntimeMarker; an override that keeps the marker reports true; one
+// that drops it reports false so serve can degrade. This also guards the marker
+// against silent removal from the embedded shell.html.
+func TestShellHasViewerRuntime_DefaultAndOverride(t *testing.T) {
+	// nil cfg -> embedded default -> carries the runtime marker.
+	if has, err := ShellHasViewerRuntime(nil); err != nil || !has {
+		t.Fatalf("ShellHasViewerRuntime(nil) = (%v, %v); embedded default must carry the %q marker", has, err, ViewerRuntimeMarker)
+	}
+
+	// Override dir with no shell.html -> falls back to the marker-bearing default.
+	empty := t.TempDir()
+	if has, err := ShellHasViewerRuntime(&config.Config{Viewer: config.Viewer{TemplateOverrides: empty}}); err != nil || !has {
+		t.Fatalf("no-shell-override fallback = (%v, %v); want (true, nil)", has, err)
+	}
+
+	// Override that KEEPS the marker -> true.
+	withMarker := t.TempDir()
+	writeFile(t, withMarker+"/shell.html",
+		`<!doctype html><html><head><meta name="`+ViewerRuntimeMarker+`" content="x"></head><body>{{range .ModuleGroups}}{{end}}</body></html>`)
+	if has, err := ShellHasViewerRuntime(&config.Config{Viewer: config.Viewer{TemplateOverrides: withMarker}}); err != nil || !has {
+		t.Fatalf("marker-bearing override = (%v, %v); want (true, nil)", has, err)
+	}
+
+	// Override that DROPS the marker -> false (serve degrades to read-only).
+	noMarker := t.TempDir()
+	writeFile(t, noMarker+"/shell.html",
+		`<!doctype html><html><head></head><body class="custom">{{range .ModuleGroups}}{{end}}</body></html>`)
+	if has, err := ShellHasViewerRuntime(&config.Config{Viewer: config.Viewer{TemplateOverrides: noMarker}}); err != nil || has {
+		t.Fatalf("marker-less override = (%v, %v); want (false, nil)", has, err)
+	}
+}
+
 // TestRender_StyleOverrideUsedInsteadOfEmbeddedDefault proves an override
 // dir containing a custom style.css is used instead of the embedded
 // default stylesheet.

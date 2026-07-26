@@ -380,7 +380,7 @@ export function Hero() {
           <div className="hero__col">
             <motion.div className="hero__kicker" variants={rise}>
               <span>Open-source documentation engine</span>
-              <span className="hero__kicker-meta">v0.1.1 · Go 1.26</span>
+              <span className="hero__kicker-meta">v0.2.0 · Go 1.26</span>
             </motion.div>
 
             <h1 className="hero__title">
@@ -447,11 +447,11 @@ export function Hero() {
           </div>
           <dl className="hero__facts">
             <div>
-              <dt>21</dt>
+              <dt>23</dt>
               <dd>lint rules</dd>
             </div>
             <div>
-              <dt>17</dt>
+              <dt>26</dt>
               <dd>CLI commands</dd>
             </div>
             <div>

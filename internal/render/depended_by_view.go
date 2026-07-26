@@ -72,6 +72,17 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 // project that has adopted neither feature gets output that is not
 // merely equivalent but byte-identical to what Render produced before
 // either feature existed.
+//
+// The 💬 comment chip + baked thread panel deliberately do NOT ride this
+// override: components.EdgesHTMLWithLinks reads c.Comments directly, and the
+// claim is already in scope under both this closure and the default
+// components.edgesHTML binding (which also calls EdgesHTMLWithLinks), so the
+// chip renders under both with no new argument here, no early-return widening,
+// and — critically — no second tmpl.Funcs("edges", …) call, which would
+// silently discard whichever "edges" binding was attached first. A commented
+// project with no implink/depended-by data still hits the early return above
+// and keeps the default binding, and still gets its chip, precisely because the
+// chip lives inside EdgesHTMLWithLinks rather than in this closure.
 func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, dependedByLookup map[string][]string) {
 	if len(implinkLookup) == 0 && len(dependedByLookup) == 0 {
 		return

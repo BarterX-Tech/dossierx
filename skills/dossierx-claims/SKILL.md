@@ -20,13 +20,16 @@ here is specific to any one project; it applies to any repo that has a
 `project.config.yaml` pointing at a `claims/` directory and the dossierx CLI available
 (installed via `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@<tag>`).
 
-This is the first of three DossierX skills, covering the base layer (claims themselves).
-The other two build on top of it once a module is fully locked:
+This is the base DossierX skill, covering claims themselves. Three companion skills build on
+it:
 
 - **[[dossierx-build-order]]** — deriving and following the dependency-ordered sequence an
   implementing agent should build a locked module in.
 - **[[dossierx-code-links]]** — grounding finished code in the claims it implements, and
   what to do when a later code change means a locked claim is no longer true.
+- **[[dossierx-comments]]** — the threaded review-discussion layer: when to open a comment
+  (a remark needing human dialogue) versus a `dossierx flag` (a proposed content edit), the
+  advisory-rights rule, and how an open thread gates locking.
 
 ## When to use this
 
@@ -118,8 +121,8 @@ header); never hand-edit the generated viewer file.
 
 ## Lock lifecycle — what to do with a `review_pending` claim
 
-A locked claim's status **never** silently drops back to `draft`. `review_pending` has two
-independent triggers, both resolved the same way:
+A locked claim's status **never** silently drops back to `draft`. `review_pending` is `true`
+while ANY of three independent triggers stands:
 
 1. A dependency's content changed underneath it (`dossierx check` detects this automatically via
    a stored content hash).
@@ -127,10 +130,20 @@ independent triggers, both resolved the same way:
    implementing or maintaining the code revealed the claim's own stated meaning no longer
    matches reality (see **[[dossierx-code-links]]** — this is the only place a human comes
    back into that skill's otherwise-autonomous flow).
+3. An open comment thread was added to the locked claim — a review remark that needs human
+   dialogue and carries no proposed edit (see **[[dossierx-comments]]**).
 
-Do not hand-edit a `review_pending` claim's YAML directly as the default move — go through
-the reaudit flow so the change is visible and reviewable first, regardless of which trigger
-fired it:
+`review_pending` is set automatically but never cleared automatically; it clears only once
+EVERY trigger is gone, via one of three matching clearers: a human-confirmed
+`dossierx reaudit <id> --confirm` (triggers 1 and 2), `dossierx unlock`, or resolving/deleting
+the last open comment thread with `dossierx comment resolve` (trigger 3, when no drift or flag
+still stands). Relatedly, a claim **cannot be locked at all while it carries an unresolved
+comment thread** — `dossierx lock` refuses it and names the blocking thread; resolve, then lock.
+
+Do not hand-edit a `review_pending` claim's YAML directly as the default move. For a drift- or
+flag-sourced trigger (1 or 2), go through the reaudit flow so the change is visible and
+reviewable first; for an open-thread trigger (3), resolve the thread instead of reauditing (see
+the note after the steps):
 
 1. `dossierx stale` — lists every claim currently `review_pending`.
 2. `dossierx reaudit <id>` — proposes a diff, rendered with git-diff-style `<mark>`
@@ -143,12 +156,20 @@ fired it:
 3. **Present the proposed diff and wait for explicit confirmation** — same review-before-
    apply discipline used throughout this workflow. Do not auto-apply.
 4. On confirmation, run `dossierx reaudit <id> --confirm` — this strips the markup, applies the
-   edit, refreshes the lock timestamp + dependency hash, clears `review_pending`, and (for a
-   flag-sourced proposal) consumes the pending flag so it never re-fires. The claim stays
+   edit, refreshes the lock timestamp + dependency hash, clears the drift/flag trigger, and
+   (for a flag-sourced proposal) consumes the pending flag so it never re-fires. If an open
+   comment thread is *also* standing on the claim, `review_pending` stays `true` until that
+   thread is resolved too (reaudit cleared triggers 1/2, not trigger 3). The claim stays
    `locked` throughout; it is never demoted to `draft` by this flow.
 5. On rejection, do nothing further via the CLI — the claim stays `locked, review_pending`
    until either hand-edited directly or re-reaudited later. Never force-clear the flag
    without either path.
+
+**Reaudit refuses a comment-only `review_pending` claim.** If the *only* reason a claim is
+`review_pending` is an open comment thread — no drift, no flag — `dossierx reaudit` exits
+non-zero (there is no content diff to confirm) and tells you to resolve the thread instead.
+Reaudit is for content changes; a comment is dialogue. See **[[dossierx-comments]]** for the
+comment verbs and the advisory-rights rule (an agent never resolves a human-opened thread).
 
 ## Portability note
 

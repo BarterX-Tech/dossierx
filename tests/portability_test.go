@@ -271,6 +271,15 @@ func TestNoHardcodedPathSeparatorsOrOSSpecificSyscalls(t *testing.T) {
 	}
 }
 
+// portableSignalConst matches the termination-signal constants a graceful
+// server legitimately catches. syscall.SIGTERM/SIGINT are defined on every Go
+// target (including Windows), so — unlike a genuinely platform-specific
+// syscall — they do NOT make a cross-compiled binary diverge per OS; they are
+// the idiomatic, portable way to handle Ctrl-C / `kill`, and "dossierx serve"
+// needs them for its SIGINT/SIGTERM shutdown handler. Only these two constants
+// are exempted below; any OTHER syscall.* reference still trips the guard.
+var portableSignalConst = regexp.MustCompile(`syscall\.SIG(TERM|INT)\b`)
+
 func scanForPatterns(t *testing.T, hardcodedSep, syscallUse *regexp.Regexp, offenders *[]string) filepath.WalkFunc {
 	return func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -291,7 +300,12 @@ func scanForPatterns(t *testing.T, hardcodedSep, syscallUse *regexp.Regexp, offe
 				*offenders = append(*offenders, path+":"+itoa(i+1)+": hardcoded path separator: "+strings.TrimSpace(line))
 			}
 			if syscallUse.MatchString(line) {
-				*offenders = append(*offenders, path+":"+itoa(i+1)+": raw syscall use: "+strings.TrimSpace(line))
+				// Exempt only the portable termination-signal constants: strip
+				// them and re-test, so any other syscall use on the same line
+				// still fails.
+				if residual := portableSignalConst.ReplaceAllString(line, ""); syscallUse.MatchString(residual) {
+					*offenders = append(*offenders, path+":"+itoa(i+1)+": raw syscall use: "+strings.TrimSpace(line))
+				}
 			}
 		}
 		return nil
@@ -401,13 +415,23 @@ func TestTrimpathBuildDoesNotEmbedBuildMachinePaths(t *testing.T) {
 // never drift apart.
 var networkRefPattern = regexp.MustCompile(`(?i)https?://|cdn\.|fonts\.googleapis|fonts\.gstatic|analytics|telemetry|sentry|segment\.io`)
 
+// loopbackURL matches an http(s) URL whose host is the loopback interface
+// (127.0.0.1 or localhost). Such a reference is NOT external egress — it is the
+// local "dossierx serve" address (the server binds loopback only) and is fully
+// offline-compatible. These are stripped before the offline scan so the guard
+// still catches every real remote CDN/telemetry/external URL while permitting
+// the local server's own address in serve source and its admission checks.
+var loopbackURL = regexp.MustCompile(`(?i)https?://(127\.0\.0\.1|localhost)\b`)
+
 // scanForNetworkRefs returns one "label:line: text" entry for every line in
-// content that matches networkRefPattern. label is a human-readable source
-// identifier (a file path in the real scan; a synthetic name in the test).
+// content that matches networkRefPattern after loopback URLs are removed.
+// label is a human-readable source identifier (a file path in the real scan; a
+// synthetic name in the test).
 func scanForNetworkRefs(label, content string) []string {
 	var offenders []string
 	for i, line := range strings.Split(content, "\n") {
-		if networkRefPattern.MatchString(line) {
+		probe := loopbackURL.ReplaceAllString(line, "")
+		if networkRefPattern.MatchString(probe) {
 			offenders = append(offenders, label+":"+itoa(i+1)+": "+strings.TrimSpace(line))
 		}
 	}

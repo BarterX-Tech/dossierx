@@ -15,10 +15,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
+	"github.com/BarterX-Tech/dossierx/internal/check"
+	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -107,6 +107,8 @@ func newRootCmd() *cobra.Command {
 		newUnlockCmd(),
 		newReauditCmd(),
 		newBuildOrderCmd(),
+		newCommentCmd(),
+		newServeCmd(),
 		newFlagCmd(),
 		newImplinkCmd(),
 		newSkillsCmd(),
@@ -264,6 +266,32 @@ func loadConfigAndClaims() (*config.Config, []model.Claim, error) {
 // convention as claims_dir and viewer.template_overrides.
 func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+}
+
+// claimsSentinelPath is the base path of the ONE project-wide claim-file
+// write sentinel (lock.AcquireFileLock appends ".lock", so the real lock file
+// is cfg.Dir()/.dossierx-claims.lock). It deliberately lives under cfg.Dir(),
+// never cwd, and OUTSIDE claims_dir — so it is never itself loaded as a claim
+// (LoadClaims only decodes *.yaml/*.yml, and the file is outside claims_dir
+// besides) and, in a later serve phase, never trips a claims_dir file watcher.
+//
+// Unlike storePath/flagStorePath, each of which guards its OWN single JSON
+// store, this sentinel guards EVERY claim file in the project. loader.SaveClaim
+// rewrites a claim's entire file, so two writers that each loaded the same
+// pre-mutation snapshot would have whichever saved last silently erase the
+// other's change. Every claim-file writer (lock/unlock/check/flag/reaudit)
+// therefore takes THIS sentinel FIRST — before any lock-store or flag-store
+// sentinel — then re-reads claims inside it, so the global acquisition order
+// is always claims -> lock-store -> flag-store and no AB-BA deadlock is
+// possible. The critical section is bounded to load->mutate->SaveClaim;
+// render/catalog/scan work runs after it is released.
+//
+// The path is defined once, in internal/lock.ClaimsSentinelPath, and delegated
+// to here: internal/comments' CLI/serve ops (which cannot import package main)
+// take the very same sentinel through lock.AcquireClaimsLock, so there is a
+// single source of truth for which file every claim-file writer serializes on.
+func claimsSentinelPath(cfg *config.Config) string {
+	return lock.ClaimsSentinelPath(cfg)
 }
 
 // loadStoreForRead loads the lock content-hash store for a read-mostly command
@@ -470,248 +498,188 @@ func runRender(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) err
 // check (lint + catalog + render, stop at first failure)
 // ---------------------------------------------------------------------
 
+// reconcileReviewPending runs "check"'s only claim-file-writing phase under
+// the project-wide claims sentinel: it loads claims, flips every locked claim
+// whose mirrors/rests_on content has drifted since its last lock or confirmed
+// reaudit — OR that carries an unresolved comment thread — to
+// locked+review_pending, and persists each flip back to the claim's
+// own file so it survives to the next run and shows up in "dossierx stale". It
+// returns the reconciled claims for the caller's (non-writing)
+// lint/catalog/render/scan pipeline. Like DetectStale it only ever SETS
+// review_pending; clearing it is reaudit --confirm / unlock / resolving the
+// last open thread's job.
+//
+// The claims sentinel is taken FIRST — before loadStoreForRead's own
+// lock-store sentinel, preserving the global claims -> lock-store order — and
+// released (via defer, when this function returns) BEFORE the caller renders,
+// so a full render never blocks a concurrent agent CLI write. loadStoreForRead
+// also re-arms a legacy (pre-versioning) store's per-dependent baselines from
+// current content on the first run after upgrade, so already-locked claims
+// regain drift detection immediately (no manual re-lock) without any spurious
+// review_pending — see lock.MigrateLegacyStore.
+//
+// Plain loader.SaveClaim (not SaveClaimIfUnchanged) is correct here: the
+// claims sentinel is held across this whole load->detect->save, so no
+// cooperating writer can change a claim file underneath the loop.
+func reconcileReviewPending(cfg *config.Config) ([]model.Claim, error) {
+	releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+	if err != nil {
+		return nil, err
+	}
+	defer releaseClaims()
+
+	claims, err := loadClaims(cfg)
+	if err != nil {
+		return nil, err
+	}
+	store, err := loadStoreForRead(cfg, claims)
+	if err != nil {
+		return nil, err
+	}
+	updated := lock.DetectStale(claims, store)
+	for i := range updated {
+		// Third review_pending trigger, reconciled alongside dependency drift:
+		// a LOCKED claim carrying an open comment thread is review_pending too.
+		// The lock gate forbids locking WITH an open thread, but a thread can
+		// be opened on an already-locked claim (or hand-authored into its
+		// YAML), so check reconciles it here. Purely additive — like
+		// DetectStale it only SETS the flag, never clears one.
+		if updated[i].Status == model.StatusLocked && updated[i].HasOpenThreads() {
+			updated[i].ReviewPending = true
+		}
+		if updated[i].ReviewPending != claims[i].ReviewPending {
+			if err := loader.SaveClaim(updated[i]); err != nil {
+				return nil, fmt.Errorf("persist review_pending for %q: %w", updated[i].ID, err)
+			}
+		}
+	}
+	return updated, nil
+}
+
 func newCheckCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "check",
 		Short: "Run lint, catalog, and render in one shot, stopping at first failure",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
 
-			// Dependency-drift detection: flip locked claims whose
-			// mirrors/rests_on content has changed since the last lock or
-			// confirmed reaudit to locked+review_pending. Persist the flag
-			// change back to the claim's own file so it survives to the
-			// next run and shows up in "dossierx stale".
-			//
-			// loadStoreForRead also re-arms a legacy (pre-versioning) store's
-			// per-dependent baselines from current content on the first run
-			// after upgrade, so already-locked claims regain drift detection
-			// immediately (no manual re-lock) without any spurious
-			// review_pending — see lock.MigrateLegacyStore.
-			store, err := loadStoreForRead(cfg, claims)
+			// Parse-check claims up front, OUTSIDE the "check:"-wrapped reconcile
+			// below, so a malformed claim YAML is reported as "load claims: ..."
+			// (v0.1.2's unprefixed shape) rather than "check: load claims: ...":
+			// loading claims is a precondition that predates the check pipeline,
+			// so the "check:" wrap must not attach to it. reconcile re-reads
+			// claims inside the project-wide claims sentinel (the Phase-0 write
+			// discipline); this early load only fixes the error's provenance.
+			if _, err := loadClaims(cfg); err != nil {
+				return err
+			}
+
+			// Dependency-drift detection + review_pending persistence is
+			// "check"'s only claim-file-writing phase; it runs under the
+			// project-wide claims sentinel and releases it before the
+			// (non-writing) lint/catalog/render/scan pipeline below, so a full
+			// render never blocks a concurrent agent CLI write. It stays here,
+			// in the command, rather than inside check.Run: Run takes the
+			// already-reconciled claims so ALL claim-file persistence — and the
+			// Phase-0 claims-lock discipline guarding it — stays with the caller
+			// that holds the sentinel (serve reconciles at startup the same way
+			// before handing the claims to the same check.Run).
+			claims, err := reconcileReviewPending(cfg)
 			if err != nil {
 				return fmt.Errorf("check: %w", err)
 			}
-			updated := lock.DetectStale(claims, store)
-			for i := range updated {
-				if updated[i].ReviewPending != claims[i].ReviewPending {
-					if err := loader.SaveClaim(updated[i]); err != nil {
-						return fmt.Errorf("check: persist review_pending for %q: %w", updated[i].ID, err)
-					}
-				}
-			}
-			claims = updated
 
-			findings := lint.RunAll(claims, cfg)
-			if err := reportLintFindings(cmd, findings, false); err != nil {
-				return fmt.Errorf("check: %w", err)
+			// check.Run is the shared, value-returning pipeline (lint, catalog,
+			// render, impl-link scan, and the non-blocking per-module
+			// reporting) that "dossierx serve" reuses without this fail-fast
+			// contract. Here we APPLY the fail-fast contract: format the Result
+			// to the terminal — byte-for-byte the output the previously inlined
+			// RunE produced (guarded by check_parity_test.go) — and return the
+			// first failing step's error wrapped "check: %w", exactly as each
+			// inlined step used to. Run's error is unprefixed; the wrap here is
+			// the single choke point that used to live at every call site.
+			res, runErr := check.Run(claims, cfg)
+			formatCheckResult(cmd, res)
+			if runErr != nil {
+				return fmt.Errorf("check: %w", runErr)
 			}
-			if err := runCatalog(cmd, cfg, claims); err != nil {
-				return fmt.Errorf("check: %w", err)
-			}
-			if err := runRender(cmd, cfg, claims); err != nil {
-				return fmt.Errorf("check: %w", err)
-			}
-
-			// Fourth step, and the one exception to "everything past this
-			// point is non-blocking reporting": scan cfg.SourceDirs for
-			// "dossierx-claim: <id>" comments and reconcile each valid one into
-			// internal/implink's artifact automatically (same Set logic any
-			// explicit "dossierx implink set" call already goes through — see
-			// implink.Scan's doc comment). A tag naming an unknown or
-			// not-yet-locked claim is a hard check FAILURE, not a warning —
-			// the whole point of this step is that an unbacked or stale tag
-			// can never sit silently wrong in the codebase. Entirely silent
-			// (and this hard-fail path unreachable) for a project that has
-			// never set source_dirs at all.
-			scanReport, err := implink.Scan(claims, cfg)
-			if err != nil {
-				return fmt.Errorf("check: %w", err)
-			}
-			if len(scanReport.Errors) > 0 {
-				for _, e := range scanReport.Errors {
-					fmt.Fprintf(cmd.ErrOrStderr(), "impl-links: scan error in %s:%d: dossierx-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
-				}
-				return fmt.Errorf("check: %d impl-link scan error(s)", len(scanReport.Errors))
-			}
-			if scanReport.FilesScanned > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), scanReport.Summary())
-			}
-
-			fmt.Fprintln(cmd.OutOrStdout(), "check: OK")
-
-			reportOrientationNotes(cmd, cfg, claims)
-
-			// Remaining steps are purely additional, non-blocking reporting
-			// — the same relationship lint WARNINGS already have to a
-			// successful check — and are entirely silent for any project
-			// that has never opted into the feature they report on.
-			implinkHints := reportImplinkStatus(cmd, cfg, claims)
-			reportNextSteps(cmd, cfg, claims, implinkHints)
 			return nil
 		},
 	}
 }
 
-// orientationCounts accumulates one module's orientation-note claims,
-// broken down by facet, for reportOrientationNotes below. Named (rather
-// than an inline anonymous struct) because Go does not allow methods on
-// anonymous struct types, and orderedFacets below needs to be a method.
-type orientationCounts struct {
-	total   int
-	byFacet map[string]int
-}
-
-// orderedFacets returns c's facet keys sorted, so reportOrientationNotes's
-// output is deterministic across runs (map iteration order is not).
-func (c *orientationCounts) orderedFacets() []string {
-	facets := make([]string, 0, len(c.byFacet))
-	for f := range c.byFacet {
-		facets = append(facets, f)
-	}
-	sort.Strings(facets)
-	return facets
-}
-
-// reportOrientationNotes prints one non-blocking line per module that has
-// at least one orientation-note claim (module.overview.* and/or
-// kind: orientation-note claims in a regular facet), broken down by
-// facet — so "dossierx check" alone is enough to confirm an orientation set
-// exists for a module before diving into its other claims, per this
-// engine's "the one command you run routinely" contract.
-func reportOrientationNotes(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) {
-	byModule := map[string]*orientationCounts{}
-	for _, c := range claims {
-		if c.EffectiveKind() != model.KindOrientationNote {
-			continue
-		}
-		cnt, ok := byModule[c.Module]
-		if !ok {
-			cnt = &orientationCounts{byFacet: map[string]int{}}
-			byModule[c.Module] = cnt
-		}
-		cnt.total++
-		cnt.byFacet[c.Facet]++
-	}
-
+// formatCheckResult writes res to the command's stdout/stderr in the exact
+// segment order — and with the exact format strings — the pre-extraction
+// newCheckCmd RunE used, so "dossierx check" output stays byte-identical (the
+// guard is check_parity_test.go). It prints only the segments the run
+// actually reached: an empty CatalogPath/RenderPath, a false OK, an empty
+// reporting slice are precisely how a fail-fast stop reproduces as "that line
+// never printed". It never decides the exit code — the RunE returns
+// check.Run's error for that.
+func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	out := cmd.OutOrStdout()
-	for _, module := range cfg.Modules {
-		cnt, ok := byModule[module]
-		if !ok {
-			continue
-		}
-		var parts []string
-		for _, f := range cnt.orderedFacets() {
-			parts = append(parts, fmt.Sprintf("%d in %s", cnt.byFacet[f], f))
-		}
-		fmt.Fprintf(out, "orientation notes: module %q: %d (%s)\n", module, cnt.total, strings.Join(parts, ", "))
-	}
-}
+	errOut := cmd.ErrOrStderr()
 
-// reportImplinkStatus prints one implink.Status summary line (plus one line
-// per drifted entry) for every module in cfg.Modules that has an existing
-// implementation-link artifact on disk, silently skipping every module that
-// has none at all — the "zero-cost/silent when unused" contract this
-// feature must uphold, mirroring internal/render's attachBuildOrders (a
-// module with no build-order artifact gets nothing extra rendered, either).
-// Any error other than "no artifact yet" is reported to stderr but never
-// turns into a non-nil return from newCheckCmd's RunE — this step is purely
-// additional reporting, never a reason "dossierx check" itself fails.
-// reportImplinkStatus prints the per-module drift/unlinked report (as
-// before) and additionally returns one "next steps" hint line per drifted
-// entry and per module with any unlinked claims, so newCheckCmd's final
-// summary can point at exactly what to run next instead of a reader having
-// to infer it from the raw report above.
-func reportImplinkStatus(cmd *cobra.Command, cfg *config.Config, claims []model.Claim) []string {
-	out := cmd.OutOrStdout()
-	var hints []string
-	for _, module := range cfg.Modules {
-		report, err := implink.Status(claims, cfg, module)
-		if err != nil {
-			if errors.Is(err, implink.ErrNoArtifact) {
-				continue
-			}
-			fmt.Fprintf(cmd.ErrOrStderr(), "check: implink status for %q: %v\n", module, err)
-			continue
-		}
-		fmt.Fprintln(out, report.Summary())
-		for _, d := range report.Drifted {
-			fmt.Fprintf(out, "  drifted: %s %s: %s\n", d.ClaimID, d.File, d.Reason)
-			hints = append(hints, fmt.Sprintf("%s is drifted -> re-tag or dossierx implink set --module %s --claim %s --file %s", d.ClaimID, module, d.ClaimID, d.File))
-		}
-		for _, id := range report.UnlinkedIDs {
-			fmt.Fprintf(out, "  unlinked: %s\n", id)
-		}
-		if len(report.UnlinkedIDs) > 0 {
-			hints = append(hints, fmt.Sprintf("%d claim(s) in module %q have no code link yet -> add a dossierx-claim tag or dossierx implink set", len(report.UnlinkedIDs), module))
-		}
-	}
-	return hints
-}
+	// Lint block — always present (lint is the first step, so LintFindings is
+	// always populated). Reuse the shared reporter for byte-identical output;
+	// its error return is intentionally discarded here — check.Run already
+	// surfaced the fail-fast error, and the RunE returns that, not this.
+	reportLintFindings(cmd, res.LintFindings, false) //nolint:errcheck // intentionally discarded (see comment above); check.Run already surfaced the fail-fast error
 
-// reportNextSteps prints a short, always-present-when-non-empty "what to
-// run next" block at the very end of "dossierx check" — the answer to "I don't
-// want to have to remember which of several commands applies": run check,
-// read this block, do what it says, run check again. It is derived
-// entirely from state check already computed (draft/review_pending claims,
-// implinkHints from reportImplinkStatus above, and per-module Build Order
-// readiness) rather than requiring a human to cross-reference several
-// separate reports by hand.
-func reportNextSteps(cmd *cobra.Command, cfg *config.Config, claims []model.Claim, implinkHints []string) {
-	var hints []string
-
-	var draftIDs []string
-	var reviewPendingIDs []string
-	for _, c := range claims {
-		switch {
-		case c.Status == model.StatusDraft:
-			draftIDs = append(draftIDs, c.ID)
-		case c.Status == model.StatusLocked && c.ReviewPending:
-			reviewPendingIDs = append(reviewPendingIDs, c.ID)
-		}
+	// Catalog/render write confirmations. Empty paths mean the run stopped
+	// before that write (e.g. a lint error), so the line is correctly skipped.
+	if res.CatalogPath != "" {
+		fmt.Fprintf(out, "catalog: wrote %s (%d claim(s))\n", res.CatalogPath, res.CatalogCount)
 	}
-	if len(draftIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx lock <id> (e.g. %s)", len(draftIDs), draftIDs[0]))
-	}
-	if len(reviewPendingIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) review_pending -> dossierx reaudit <id> (e.g. %s)", len(reviewPendingIDs), reviewPendingIDs[0]))
-	}
-	hints = append(hints, implinkHints...)
-
-	byModule := make(map[string][]model.Claim, len(cfg.Modules))
-	for _, c := range claims {
-		byModule[c.Module] = append(byModule[c.Module], c)
-	}
-	for _, module := range cfg.Modules {
-		mClaims := byModule[module]
-		if len(mClaims) == 0 {
-			continue
-		}
-		fullyLocked := true
-		for _, c := range mClaims {
-			if c.Status != model.StatusLocked || c.ReviewPending {
-				fullyLocked = false
-				break
-			}
-		}
-		if !fullyLocked {
-			continue
-		}
-		if _, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module)); errors.Is(err, buildorder.ErrNotProposed) {
-			hints = append(hints, fmt.Sprintf("module %q is fully locked with no build order yet -> dossierx build-order propose --module %s", module, module))
-		}
+	if res.RenderPath != "" {
+		fmt.Fprintf(out, "render: wrote %s\n", res.RenderPath)
 	}
 
-	if len(hints) == 0 {
+	// Impl-link scan errors print (to stderr) whether or not the run then
+	// failed — they preceded the wrapped "check:" error in the old RunE too.
+	for _, e := range res.ScanErrors {
+		fmt.Fprintf(errOut, "impl-links: scan error in %s:%d: dossierx-claim references %q: %s\n", e.File, e.Line, e.ClaimID, e.Message)
+	}
+
+	if !res.OK {
 		return
 	}
-	out := cmd.OutOrStdout()
-	fmt.Fprintln(out, "next steps:")
-	for _, h := range hints {
-		fmt.Fprintf(out, "  %s\n", h)
+
+	// Success tail: the scan summary (only on a clean scan, and only when a
+	// file was actually scanned), "check: OK", then the non-blocking
+	// per-module reporting — orientation notes, open comments, impl-link
+	// status, and the next-steps advisory — in the same order as before.
+	if res.ScanFilesScanned > 0 {
+		fmt.Fprintln(out, res.ScanSummary)
+	}
+	fmt.Fprintln(out, "check: OK")
+	for _, line := range res.OrientationNotes {
+		fmt.Fprintln(out, line)
+	}
+	if len(res.OpenComments) > 0 {
+		modules := make([]string, 0, len(res.OpenComments))
+		for m := range res.OpenComments {
+			modules = append(modules, m)
+		}
+		sort.Strings(modules)
+		for _, m := range modules {
+			fmt.Fprintf(out, "open comments: module %q: %d\n", m, res.OpenComments[m])
+		}
+	}
+	for _, line := range res.ImplinkStatusStdout {
+		fmt.Fprintln(out, line)
+	}
+	for _, line := range res.ImplinkStatusStderr {
+		fmt.Fprintln(errOut, line)
+	}
+	if len(res.NextSteps) > 0 {
+		fmt.Fprintln(out, "next steps:")
+		for _, h := range res.NextSteps {
+			fmt.Fprintf(out, "  %s\n", h)
+		}
 	}
 }
 
@@ -864,13 +832,36 @@ func newLockCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			// Claim-file write discipline (Phase 0): take the project-wide
+			// claims sentinel FIRST — before the lock-store sentinel below —
+			// and load claims INSIDE it, so this whole load->mutate->SaveClaim
+			// runs against a snapshot no concurrent claim-file writer can have
+			// changed underneath us (loader.SaveClaim rewrites the entire file,
+			// so a stale snapshot would silently erase a co-writer's edit).
+			// Acquiring claims before lock-store keeps the global order
+			// (claims -> lock-store -> flag-store) deadlock-free.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("lock: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err := loadClaims(cfg)
 			if err != nil {
 				return err
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
 				return fmt.Errorf("lock: claim %q not found: %w", id, errClaimNotFound)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("lock: %w", err)
 			}
 
 			// Serialize concurrent "dossierx lock"/"dossierx reaudit --confirm"
@@ -906,7 +897,7 @@ func newLockCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("lock: %w", err)
 			}
-			if err := loader.SaveClaim(updated); err != nil {
+			if err := loader.SaveClaimIfUnchanged(updated, token); err != nil {
 				return fmt.Errorf("lock: %w", err)
 			}
 			if err := store.Save(); err != nil {
@@ -925,13 +916,34 @@ func newUnlockCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id := args[0]
-			cfg, claims, err := loadConfigAndClaims()
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			// Claim-file write discipline (Phase 0): take the project-wide
+			// claims sentinel FIRST — before the flag-store sentinel below —
+			// and load claims INSIDE it, so this load->mutate->SaveClaim runs
+			// against a snapshot no concurrent claim-file writer can change
+			// underneath us. claims-then-flag-store keeps the global order
+			// (claims -> lock-store -> flag-store) deadlock-free.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err := loadClaims(cfg)
 			if err != nil {
 				return err
 			}
 			claim, ok := loader.FindByID(claims, id)
 			if !ok {
 				return fmt.Errorf("unlock: claim %q not found: %w", id, errClaimNotFound)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("unlock: %w", err)
 			}
 
 			// Unlocking must also drop any pending "dossierx flag" trigger for
@@ -972,7 +984,7 @@ func newUnlockCmd() *cobra.Command {
 			}
 
 			updated := lock.Unlock(claim)
-			if err := loader.SaveClaim(updated); err != nil {
+			if err := loader.SaveClaimIfUnchanged(updated, token); err != nil {
 				return fmt.Errorf("unlock: %w", err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "unlock: %s is now draft\n", id)
@@ -1008,6 +1020,40 @@ func newReauditCmd() *cobra.Command {
 			if claim.Status != model.StatusLocked || !claim.ReviewPending {
 				fmt.Fprintf(cmd.ErrOrStderr(), "reaudit: claim %q is not locked+review_pending\n", id)
 				os.Exit(2)
+			}
+
+			// Claim-file write discipline (Phase 0): the two guards above ran
+			// on a lock-free load DELIBERATELY — they os.Exit(2) (which skips
+			// defers) only while no file lock is held, so nothing is leaked.
+			// Now take the project-wide claims sentinel FIRST (before the
+			// lock-store and flag-store sentinels below, preserving the global
+			// claims -> lock-store -> flag-store order) and RE-READ claims
+			// inside it, so a confirmed reaudit's load->mutate->SaveClaim runs
+			// against a snapshot no concurrent claim-file writer can change
+			// underneath us.
+			releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
+			if err != nil {
+				return fmt.Errorf("reaudit: %w", err)
+			}
+			defer releaseClaims()
+
+			claims, err = loadClaims(cfg)
+			if err != nil {
+				return fmt.Errorf("reaudit: %w", err)
+			}
+			claim, ok = loader.FindByID(claims, id)
+			if !ok {
+				// Vanished between the guard and the sentinel (an out-of-band
+				// delete). Refuse via the sentinel error so the deferred
+				// release still runs; main() maps it to the same exit 2.
+				return fmt.Errorf("reaudit: claim %q not found: %w", id, errClaimNotFound)
+			}
+			if claim.Status != model.StatusLocked || !claim.ReviewPending {
+				return fmt.Errorf("reaudit: claim %q is not locked+review_pending: %w", id, errWrongState)
+			}
+			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
+			if err != nil {
+				return fmt.Errorf("reaudit: %w", err)
 			}
 
 			// See newLockCmd's comment: serializes against any concurrent
@@ -1056,6 +1102,21 @@ func newReauditCmd() *cobra.Command {
 			// that has never used "dossierx flag") keeps going through
 			// ProposeDiff's dependency-diff stub exactly as before.
 			pendingFlag, flagged := flagStore.Flags[id]
+
+			// A claim whose ONLY pending trigger is an open comment thread has
+			// nothing for reaudit to do: reaudit reviews a proposed CONTENT
+			// change (a drifted dependency, or a "dossierx flag"), and a comment
+			// thread is discussion, not an edit to diff-and-confirm. Refuse with
+			// exit 2 BEFORE proposing or writing anything. Crucially this point
+			// is PAST both file locks (store + flag, acquired above), so it must
+			// NOT os.Exit(2) — that skips the deferred releases and leaks the
+			// two held locks. Returning a wrapped errWrongState lets the defers
+			// run and main() map it to exit 2. The remedy is to resolve the
+			// thread, which clears review_pending on its own.
+			if drift, flag, open := comments.PendingTriggers(claim, claims, store, flagStore); !drift && !flag && open > 0 {
+				return fmt.Errorf("reaudit: claim %q is review_pending only because of %d open comment thread(s); resolve them with \"dossierx comment resolve %s <thread-id>\" — nothing to reaudit: %w", id, open, id, errWrongState)
+			}
+
 			var diff reaudit.Diff
 			if flagged {
 				diff, err = reaudit.ProposeFlagDiff(claim, pendingFlag)
@@ -1083,24 +1144,38 @@ func newReauditCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("reaudit: %w", err)
 			}
-			applied = lock.ClearReviewPending(applied, claims, store)
-			if err := loader.SaveClaim(applied); err != nil {
+			// Re-baseline this claim's dependency hashes and refresh its lock
+			// timestamp — the drift-clearing half of the old ClearReviewPending.
+			// review_pending is deliberately NOT hard-cleared here: it becomes
+			// the Recompute verdict below, so a claim still carrying an
+			// independent open comment thread stays review_pending even though
+			// this confirmed reaudit cleared the drift/flag that prompted it
+			// (a comment is a third trigger reaudit does not resolve).
+			lock.RefreshBaseline(applied, claims, store)
+			if flagged {
+				// A flag is a one-shot trigger (see PendingFlag's doc comment):
+				// remove it BEFORE recomputing so the verdict sees it cleared,
+				// and so a future dependency-drift reaudit on this same claim
+				// doesn't mistake a stale flag for a still-pending one.
+				delete(flagStore.Flags, id)
+			}
+			applied.ReviewPending = comments.Recompute(applied, claims, store, flagStore)
+			if err := loader.SaveClaimIfUnchanged(applied, token); err != nil {
 				return fmt.Errorf("reaudit: %w", err)
 			}
 			if err := store.Save(); err != nil {
 				return fmt.Errorf("reaudit: %w", err)
 			}
 			if flagged {
-				// A flag is a one-shot trigger (see PendingFlag's doc
-				// comment): once its reaudit is confirmed, remove it so a
-				// future dependency-drift reaudit on this same claim
-				// doesn't mistake a stale flag for a still-pending one.
-				delete(flagStore.Flags, id)
 				if err := flagStore.Save(); err != nil {
 					return fmt.Errorf("reaudit: %w", err)
 				}
 			}
-			fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
+			if applied.ReviewPending {
+				fmt.Fprintf(out, "reaudit: %s applied; review_pending retained (open comment thread(s) remain — resolve them to clear)\n", id)
+			} else {
+				fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
+			}
 			return nil
 		},
 	}

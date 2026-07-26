@@ -39,7 +39,7 @@
      convention, computed via components.go's pillClass) so a mockup claim
      still reads as an ordinary claim record in the surrounding document —
      only its body differs. */}}
-<section class="claim claim-mockup card" id="{{.ID}}" data-status="{{.Status}}">
+<section class="claim claim-mockup card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
   {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{else if not .Body}}<p class="claim-empty">No mockup content.</p>{{end}}

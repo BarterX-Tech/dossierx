@@ -73,6 +73,7 @@ const DELAYS = {
   reviewNode: 2.25,
   reviewGlow: 2.35,
   reauditDraw: 2.8,
+  resolveDraw: 3.2,
   lockedGlow2: 3.4,
   unlockDraw: 3.9,
 } as const;
@@ -144,7 +145,7 @@ const EDGES: DiagEdge[] = [
     dashed: true,
     tip: [562, 112],
     angle: 55.9,
-    label: "DetectStale / flag",
+    label: "DetectStale · flag · comment",
     lx: 512,
     ly: 42,
     drawAt: DELAYS.flagDraw,
@@ -161,6 +162,20 @@ const EDGES: DiagEdge[] = [
     lx: 512,
     ly: 218,
     drawAt: DELAYS.reauditDraw,
+    kind: "draw",
+  },
+  // return: comment resolve (review -> locked), the SECOND clearer, nested just
+  // inside the reaudit arc; apex ~175.5 at x=513; end tangent 223.4°
+  {
+    id: "resolve",
+    d: "M 558 150 C 522 184 504 184 468 150",
+    color: "var(--accent)",
+    tip: [468, 150],
+    angle: 223.4,
+    label: "comment resolve",
+    lx: 512,
+    ly: 188,
+    drawAt: DELAYS.resolveDraw,
     kind: "draw",
   },
   // return: unlock (locked -> draft), the de-emphasized secondary escape, drawn LAST
@@ -416,7 +431,7 @@ function LifecycleDiagram() {
         viewBox="0 0 760 260"
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="Lifecycle state diagram: draft locks to locked; locked flags to review_pending via DetectStale or flag; reaudit --confirm returns review_pending to locked; unlock returns locked to draft."
+        aria-label="Lifecycle state diagram: draft locks to locked; locked flags to review_pending via DetectStale, flag, or an open comment thread; reaudit --confirm or resolving the last comment thread returns review_pending to locked; unlock returns locked to draft."
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "0px 0px -80px 0px" }}
@@ -472,7 +487,7 @@ function LifecycleDiagram() {
         </span>
         <span>
           <i className="legend-swatch" style={{ background: "var(--warn)" }} />{" "}
-          automatic flag (dashed)
+          raised for review (dashed)
         </span>
         <span>
           <i className="legend-swatch" style={{ background: "var(--ok)" }} />{" "}

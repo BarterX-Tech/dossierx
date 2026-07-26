@@ -27,7 +27,7 @@ import (
 func newSkillsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skills",
-		Short: "Work with the embedded Claude Code skill files (dossierx-claims, dossierx-build-order, dossierx-code-links)",
+		Short: "Work with the embedded Claude Code skill files (dossierx-claims, dossierx-build-order, dossierx-code-links, dossierx-comments)",
 	}
 	cmd.AddCommand(newSkillsExportCmd())
 	return cmd

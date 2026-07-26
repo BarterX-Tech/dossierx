@@ -3,6 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Attests this shell carries the DossierX live-viewer runtime (comment UI +
+       SSE /api/fragment re-render). "dossierx serve" checks for this marker at
+       startup; a shell.html override that drops it is served read-only. Keep it
+       when customizing this template if you want live comments to work. -->
+  <meta name="dossierx-viewer-runtime" content="comments-sse">
   <title>{{.Title}}</title>
   <style>{{.CSS}}</style>
   <style>{{.ThemeCSS}}</style>
@@ -51,72 +56,105 @@
     </main>
   </div>
 
+  <!-- Comment UI overlay chrome (Phase 5). These live OUTSIDE .layout on purpose:
+       an SSE fragment swap replaces only <main class="content-area"> and
+       <nav id="nav"> (both inside .layout), so keeping the panel/overlay/toast
+       out here means an open panel is never destroyed mid-reload. The viewer JS
+       reveals them on 💬-chip click. On a static file:// viewer the reachability
+       probe fails, so the composer and per-message action controls never mount
+       and the panel is a read-only snapshot cloned from the baked-in
+       .comments-panel markup. The panel keeps its own #commentsOverlay and
+       body.comments-open lock, distinct from the sidebar's #navOverlay /
+       body.nav-open, and opening either overlay closes the other. -->
+  <button id="commentsOverlay" class="comments-overlay" type="button" aria-label="Close comments" tabindex="-1" hidden></button>
+  <aside id="commentsPanel" class="comments-rail" role="complementary" aria-label="Comments" tabindex="-1" hidden>
+    <header class="comments-rail-head">
+      <p id="commentsRailTitle" class="comments-rail-title">Comments</p>
+      <button id="commentsRailClose" class="comments-rail-close" type="button" aria-label="Close comments"><span aria-hidden="true">✕</span></button>
+    </header>
+    <div id="commentsRailBody" class="comments-rail-body"></div>
+  </aside>
+  <div id="commentsToast" class="comments-toast" role="status" aria-live="polite" hidden></div>
+
   <script>
     (function () {
-      // Two-level show/hide: one .module-section per sidebar .sec-tab, and
-      // (when a module has more than one facet) one .claim-group per
-      // .subtab inside that module's .sub-nav. A single-facet module still
-      // has exactly one .claim-group child, it just has no .sub-nav strip
-      // to click — showModuleFacet still needs to show that lone facet.
-      var moduleSections = document.querySelectorAll('.module-section');
-      var moduleTabs = document.querySelectorAll('.sec-tab');
+      'use strict';
 
-      // facetToModule maps every facet (.claim-group) id to its owning
-      // module-section id; moduleDefaultFacet maps a module-section id to
-      // its first facet's id (shown by default when the module tab itself,
-      // rather than a specific subtab, is what got clicked/hashed to).
-      var facetToModule = {};
-      var moduleDefaultFacet = {};
-      moduleSections.forEach(function (sec) {
-        var facets = sec.querySelectorAll('.claim-group');
-        facets.forEach(function (g, i) {
-          facetToModule[g.id] = sec.id;
-          if (i === 0) { moduleDefaultFacet[sec.id] = g.id; }
-        });
-      });
-      var firstModuleID = moduleSections.length ? moduleSections[0].id : '';
+      // ================================================================
+      // Navigation lookup maps + view state (idempotent initViewer)
+      // ================================================================
+      //
+      // These NodeLists and lookup maps are all RE-DERIVED by initViewer(),
+      // which is safe to call any number of times. Phase 5 keeps everything the
+      // deep-link/tab machinery reads in these IIFE-scope vars (not const at the
+      // top) precisely so a later SSE fragment swap can replace <main> + <nav>
+      // and then call initViewer() again to re-point them at the fresh DOM.
+      var moduleSections, moduleTabs;
+      var facetToModule, moduleDefaultFacet, firstModuleID, claimToFacet, buildOrderToModule;
 
-      // claimToFacet maps every individual claim card's own id (card.html
-      // etc. render the card's root element id as the full claim id, e.g.
-      // "widget.doctrine.foo") to its owning .claim-group (facet) id, so an
-      // edges-footer link (`href="#<claim-id>"`, written by
-      // components.writeIDList) can resolve to a specific card instead of
-      // falling through to the unknown-hash fallback. A banner claim has no
-      // edges footer and is therefore never a rests_on/mirrors link target
-      // in practice, but it still gets an entry here for consistency.
-      var claimToFacet = {};
-      document.querySelectorAll('.claim-group').forEach(function (g) {
-        g.querySelectorAll('.claim[id]').forEach(function (c) {
-          claimToFacet[c.id] = g.id;
-        });
-      });
+      // initViewer re-queries the section/tab NodeLists and rebuilds every
+      // lookup map from the CURRENT DOM. Called once at load and (Phase 5c) after
+      // each SSE re-render. It attaches NO listeners — those are delegated once
+      // on surviving nodes below, so re-running this never double-binds.
+      function initViewer() {
+        // Two-level show/hide: one .module-section per sidebar .sec-tab, and
+        // (when a module has more than one facet) one .claim-group per .subtab
+        // inside that module's .sub-nav. A single-facet module still has exactly
+        // one .claim-group child; it just has no .sub-nav strip to click.
+        moduleSections = document.querySelectorAll('.module-section');
+        moduleTabs = document.querySelectorAll('.sec-tab');
 
-      // buildOrderToModule maps each Build Order section's own id — and each
-      // of its claim-card ids — to its owning module-section id. The Build
-      // Order section is deliberately NOT a facet .claim-group (it renders
-      // below the active facet and stays visible on every facet of its
-      // module), so it is absent from facetToModule/claimToFacet above; this
-      // separate map lets a "#build-order-..." deep-link still switch to the
-      // owning module and scroll to the card.
-      var buildOrderToModule = {};
-      moduleSections.forEach(function (sec) {
-        sec.querySelectorAll('.build-order-module').forEach(function (bo) {
-          if (bo.id) { buildOrderToModule[bo.id] = sec.id; }
-          bo.querySelectorAll('.claim[id]').forEach(function (c) {
-            buildOrderToModule[c.id] = sec.id;
+        // facetToModule maps every facet (.claim-group) id to its owning
+        // module-section id; moduleDefaultFacet maps a module-section id to its
+        // first facet's id (shown when the module tab itself, not a specific
+        // subtab, is clicked/hashed to).
+        facetToModule = {};
+        moduleDefaultFacet = {};
+        moduleSections.forEach(function (sec) {
+          var facets = sec.querySelectorAll('.claim-group');
+          facets.forEach(function (g, i) {
+            facetToModule[g.id] = sec.id;
+            if (i === 0) { moduleDefaultFacet[sec.id] = g.id; }
           });
         });
-      });
+        firstModuleID = moduleSections.length ? moduleSections[0].id : '';
+
+        // claimToFacet maps every individual claim card's own id (the full claim
+        // id, e.g. "widget.doctrine.foo") to its owning .claim-group (facet) id,
+        // so an edges-footer link (`href="#<claim-id>"`) resolves to a specific
+        // card instead of the unknown-hash fallback. Overview claims render N
+        // times but only the canonical copy keeps its id (render.stripOverviewIDs
+        // strips the rest), so only that copy is indexed here — consistent with
+        // the comment JS keying off data-claim-id (never id) for state fan-out.
+        claimToFacet = {};
+        document.querySelectorAll('.claim-group').forEach(function (g) {
+          g.querySelectorAll('.claim[id]').forEach(function (c) {
+            claimToFacet[c.id] = g.id;
+          });
+        });
+
+        // buildOrderToModule maps each Build Order section's own id — and each of
+        // its claim-card ids — to its owning module-section id. The Build Order
+        // section is deliberately NOT a facet .claim-group (it renders below the
+        // active facet and stays visible on every facet of its module), so it is
+        // absent from facetToModule/claimToFacet; this separate map lets a
+        // "#build-order-..." deep-link still switch to the owning module.
+        buildOrderToModule = {};
+        moduleSections.forEach(function (sec) {
+          sec.querySelectorAll('.build-order-module').forEach(function (bo) {
+            if (bo.id) { buildOrderToModule[bo.id] = sec.id; }
+            bo.querySelectorAll('.claim[id]').forEach(function (c) {
+              buildOrderToModule[c.id] = sec.id;
+            });
+          });
+        });
+      }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
-      // triple. Cases, checked in this order: a claim id resolves to its own
-      // card's facet + module, with claim set so the caller can scroll to
-      // it; a Build Order section/card id resolves to its owning module + the
-      // module's default facet, with claim set to scroll (the Build Order
-      // section is always visible for its module, so any facet works); a
-      // facet id resolves to its own module + itself; a bare module id
-      // resolves to that module + its default facet. Anything else
-      // (empty/unknown) falls back to the first module + its default facet.
+      // triple. Checked in order: a claim id -> its own card's facet + module; a
+      // Build Order section/card id -> its owning module + default facet; a facet
+      // id -> its own module + itself; a bare module id -> that module + its
+      // default facet; anything else -> the first module + its default facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -158,9 +196,9 @@
           });
         }
 
-        // A resolved claim id keeps the full claim id as the hash target
-        // (not just its facet) so the URL stays deep-linkable/shareable and
-        // a page refresh lands back on the same card, not just the tab.
+        // A resolved claim id keeps the full claim id as the hash target (not
+        // just its facet) so the URL stays deep-linkable/shareable and a refresh
+        // lands back on the same card, not just the tab.
         var claimID = opts && opts.claim;
         var hashTarget = claimID || facetID || moduleID;
         if (!(opts && opts.skipHash) && window.location.hash !== '#' + hashTarget) {
@@ -189,36 +227,939 @@
         showModuleFacet(target.module, target.facet, merged);
       }
 
-      moduleTabs.forEach(function (b) {
-        b.addEventListener('click', function () {
-          var moduleID = (b.dataset.target || '').replace(/^#/, '');
-          var facetID = (b.dataset.defaultTarget || '').replace(/^#/, '');
-          showModuleFacet(moduleID, facetID);
-          setDrawer(false);
-        });
-      });
+      // ================================================================
+      // Responsive off-canvas nav drawer (below 860px)
+      // ================================================================
+      var navToggle = document.getElementById('navToggle');
+      var navOverlay = document.getElementById('navOverlay');
 
-      document.querySelectorAll('.subtab').forEach(function (b) {
-        b.addEventListener('click', function () {
-          var facetID = (b.dataset.target || '').replace(/^#/, '');
-          var moduleID = facetToModule[facetID];
+      // setDrawer owns body.nav-open (sidebar transform + #navOverlay). Opening
+      // the nav closes any open comment panel: the two overlays are mutually
+      // exclusive, each with its OWN overflow lock, and must never both hold the
+      // body scroll-lock at once.
+      function setDrawer(open) {
+        if (open) { closeCommentPanel(); }
+        document.body.classList.toggle('nav-open', open);
+        if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
+      }
+
+      // ================================================================
+      // Comment UI (Phase 5) — probe-gated composer + thread actions
+      // ================================================================
+      //
+      // ESCAPING CONTRACT (XSS): innerHTML is assigned EXACTLY ONE kind of value
+      // in this whole block — a `body_html` field the server produced with
+      // internal/render/markdown (the only markdown renderer), reached via
+      // setBodyHTML(). EVERYTHING else — author roles, ids, timestamps, the
+      // optimistic placeholder typed into the composer, and every toast/error
+      // string — goes through textContent. The optimistic placeholder is
+      // deliberately plain text and is replaced by the server's escaped body_html
+      // when the write resolves, so a hostile body renders inert before AND after
+      // the round-trip.
+
+      var mounted = false;          // true once /api/ping confirms a live serve
+      var currentClaimID = null;    // claim id of the open panel, or null
+      // part-b skip state: the claim id + JSON signature of the threads currently
+      // rendered in the rail. A reload whose freshly-fetched threads match this
+      // signature (e.g. an SSE "changed" for a DIFFERENT claim, or a no-op tick)
+      // skips the destructive rebuild, so unsent composer/reply/edit text and the
+      // reader's focus survive. Only ever read/written in renderPanelFromAPI.
+      var lastRenderedClaimID = null;
+      var lastRenderedThreadsJSON = null;
+      var rail = document.getElementById('commentsPanel');
+      var railBody = document.getElementById('commentsRailBody');
+      var railTitle = document.getElementById('commentsRailTitle');
+      var railClose = document.getElementById('commentsRailClose');
+      var commentsOverlay = document.getElementById('commentsOverlay');
+      var toastEl = document.getElementById('commentsToast');
+      var toastTimer = null;
+
+      function el(tag, cls) {
+        var n = document.createElement(tag);
+        if (cls) { n.className = cls; }
+        return n;
+      }
+      function textEl(tag, cls, text) {
+        var n = el(tag, cls);
+        if (text != null) { n.textContent = text; } // textContent, never innerHTML
+        return n;
+      }
+      // setBodyHTML is the SOLE innerHTML sink. Its only caller passes a server
+      // body_html value; centralizing it keeps the escaping contract auditable.
+      function setBodyHTML(node, bodyHTML) {
+        node.innerHTML = bodyHTML || '';
+      }
+
+      function toast(msg) {
+        if (!toastEl) { return; }
+        toastEl.textContent = msg; // textContent — error text is never trusted markup
+        toastEl.hidden = false;
+        toastEl.classList.add('comments-toast--show');
+        if (toastTimer) { window.clearTimeout(toastTimer); }
+        toastTimer = window.setTimeout(function () {
+          toastEl.classList.remove('comments-toast--show');
+          toastEl.hidden = true;
+        }, 4000);
+      }
+
+      var ERR_TEXT = {
+        rights_denied: 'you can only act on your own comments',
+        thread_resolved: 'that thread is already resolved',
+        thread_open: 'that thread is already open',
+        claim_file_changed: 'the claim changed on disk — reload the page',
+        read_only: 'this viewer is read-only',
+        empty_body: 'the comment body is empty',
+        thread_not_found: 'that thread no longer exists',
+        reply_not_found: 'that reply no longer exists',
+        claim_not_found: 'that claim no longer exists'
+      };
+      function errMsg(prefix, err) {
+        var code = err && err.code;
+        if (code && ERR_TEXT[code]) { return prefix + ': ' + ERR_TEXT[code]; }
+        return prefix + '.';
+      }
+
+      // ---- API helpers ------------------------------------------------
+      function apiGet(path) {
+        return fetch(path, { headers: { 'Accept': 'application/json' } }).then(function (res) {
+          if (!res.ok) {
+            var e = new Error('http ' + res.status);
+            e.status = res.status;
+            throw e;
+          }
+          return res.json();
+        });
+      }
+      // apiSend issues a mutating request. POST/PATCH carry a JSON body (and thus
+      // a Content-Type the admission middleware requires); DELETE carries none
+      // (its actor rides a query param), matching the server handlers. The
+      // browser stamps Origin + Sec-Fetch-Site same-origin automatically, so a
+      // same-origin fetch passes admission.
+      function apiSend(method, path, body) {
+        var opts = { method: method, headers: {} };
+        if (method === 'POST' || method === 'PATCH') {
+          opts.headers['Content-Type'] = 'application/json';
+          opts.body = JSON.stringify(body || {});
+        }
+        return fetch(path, opts).then(function (res) {
+          return res.json().catch(function () { return {}; }).then(function (data) {
+            if (!res.ok) {
+              var e = new Error((data && data.error) ? data.error : ('http ' + res.status));
+              e.code = data && data.error;
+              e.status = res.status;
+              throw e;
+            }
+            return data;
+          });
+        });
+      }
+      function claimPath(claimID) {
+        return '/api/claims/' + encodeURIComponent(claimID) + '/comments';
+      }
+
+      // ---- chip / card state fan-out ----------------------------------
+      // Every claim renders its chip once per DOM copy (overview claims render N
+      // times), so state fan-out iterates ALL chips carrying the claim id via
+      // data-claim-id and never getElementById — the canonical copy is the only
+      // one with an id. Each chip's owning card is reached with closest('.claim').
+      function chipsFor(claimID) {
+        var out = [];
+        document.querySelectorAll('.comment-chip').forEach(function (chip) {
+          if (chip.getAttribute('data-claim-id') === claimID) { out.push(chip); }
+        });
+        return out;
+      }
+      function setChipExpanded(claimID, expanded) {
+        chipsFor(claimID).forEach(function (chip) {
+          chip.setAttribute('aria-expanded', String(expanded));
+        });
+      }
+      function updateChips(claimID, openCount, totalCount) {
+        chipsFor(claimID).forEach(function (chip) {
+          var open = openCount > 0;
+          var shown = open ? openCount : totalCount;
+          var countEl = chip.querySelector('.comment-chip-count');
+          if (countEl) { countEl.textContent = String(shown); }
+          chip.classList.toggle('comment-chip--open', open);
+          chip.classList.toggle('comment-chip--resolved', !open);
+          chip.setAttribute('aria-label', open
+            ? 'view ' + openCount + ' open comment thread(s)'
+            : 'view ' + totalCount + ' comment thread(s), all resolved');
+          var card = chip.closest('.claim');
+          if (card) { card.classList.toggle('claim-card--commented', open); }
+          // Hide the chip entirely when the last thread is gone, and reveal it
+          // again if a thread is re-added while the panel is still open.
+          var li = chip.closest('.claim-comments');
+          if (li) { li.hidden = (totalCount === 0); }
+        });
+      }
+      // recomputeChipsFromPanel refreshes chip state from the threads currently
+      // in the rail (used for optimistic updates before the authoritative
+      // refetch): open = threads without the resolved class, total = all.
+      function recomputeChipsFromPanel(claimID) {
+        if (!railBody) { return; }
+        var all = railBody.querySelectorAll('.comment-thread');
+        var total = all.length;
+        var open = 0;
+        all.forEach(function (t) {
+          if (!t.classList.contains('comment-thread--resolved')) { open++; }
+        });
+        updateChips(claimID, open, total);
+      }
+
+      // ---- panel open / close -----------------------------------------
+      function commentPanelOpen() {
+        return document.body.classList.contains('comments-open');
+      }
+      function openCommentPanel(claimID) {
+        currentClaimID = claimID;
+        setDrawer(false); // mutual exclusion: opening comments closes the nav
+        document.body.classList.add('comments-open');
+        if (commentsOverlay) { commentsOverlay.hidden = false; }
+        if (railTitle) { railTitle.textContent = 'Comments — ' + claimID; }
+        if (rail) {
+          rail.hidden = false;
+          // Desktop: a non-modal complementary right rail. Mobile: a modal
+          // bottom sheet. The role/aria-modal pair is set per viewport here
+          // because an attribute cannot be media-queried in CSS.
+          if (window.matchMedia('(max-width: 860px)').matches) {
+            rail.setAttribute('role', 'dialog');
+            rail.setAttribute('aria-modal', 'true');
+          } else {
+            rail.setAttribute('role', 'complementary');
+            rail.removeAttribute('aria-modal');
+          }
+        }
+        setChipExpanded(claimID, true);
+        renderPanel(claimID);
+        if (rail) { rail.focus(); }
+      }
+      function closeCommentPanel() {
+        if (!commentPanelOpen()) { return; }
+        document.body.classList.remove('comments-open');
+        if (commentsOverlay) { commentsOverlay.hidden = true; }
+        if (rail) { rail.hidden = true; }
+        if (currentClaimID) { setChipExpanded(currentClaimID, false); }
+        currentClaimID = null;
+      }
+
+      // ---- panel rendering --------------------------------------------
+      function renderPanel(claimID) {
+        if (!railBody) { return; }
+        if (mounted) {
+          renderPanelFromAPI(claimID);
+        } else {
+          renderPanelReadOnly(claimID);
+        }
+      }
+
+      // Read-only (file://): clone the baked-in server-rendered .comments-panel
+      // threads for this claim into the rail. Cloning a server node is DOM copy,
+      // not innerHTML parsing, so it stays within the escaping contract; no
+      // composer or action controls are added.
+      function renderPanelReadOnly(claimID) {
+        railBody.textContent = '';
+        var baked = null;
+        document.querySelectorAll('.comments-panel').forEach(function (p) {
+          if (!baked && p.getAttribute('data-claim-id') === claimID) { baked = p; }
+        });
+        var list = el('div', 'comments-threads');
+        if (baked) {
+          baked.querySelectorAll(':scope > .comment-thread, :scope > .comments-resolved').forEach(function (node) {
+            list.appendChild(node.cloneNode(true));
+          });
+        }
+        if (!list.children.length) {
+          list.appendChild(textEl('p', 'comments-empty', 'No comments.'));
+        }
+        railBody.appendChild(list);
+      }
+
+      // Serve mode: fetch the authoritative thread list and rebuild the rail with
+      // live controls + composer. GET /api/comments returns every thread; we
+      // filter to this claim client-side (there is no per-claim GET endpoint).
+      function renderPanelFromAPI(claimID) {
+        if (!railBody.querySelector('.comments-threads')) {
+          railBody.textContent = '';
+          railBody.appendChild(textEl('p', 'comments-loading', 'Loading…'));
+        }
+        apiGet('/api/comments').then(function (data) {
+          if (currentClaimID !== claimID) { return; } // panel switched/closed while loading
+          var threads = ((data && data.comments) || []).filter(function (c) {
+            return c.claim_id === claimID;
+          });
+          // A JSON signature of exactly what buildPanel would render for this
+          // claim. The server serializes deterministically, so two fetches of an
+          // unchanged claim produce byte-identical signatures.
+          var sig = JSON.stringify(threads);
+          // sameClaimRendered: the rail currently shows THIS claim's threads (not a
+          // different claim we just switched from, and not an error/loading state).
+          var sameClaimRendered = (lastRenderedClaimID === claimID &&
+            !!railBody.querySelector('.comments-threads'));
+          // (part b) Nothing this claim shows has changed -> skip the destructive
+          // rebuild entirely, preserving any dirty draft and the reader's focus.
+          if (sameClaimRendered && lastRenderedThreadsJSON === sig) { return; }
+          // (part a) A rebuild is needed. Capture dirty drafts to restore across it
+          // — but ONLY when the rail already shows this claim, never on a claim
+          // switch (that would leak one claim's draft into another's panel).
+          var drafts = sameClaimRendered ? captureDirtyDrafts() : emptyDrafts();
+          lastRenderedClaimID = claimID;
+          lastRenderedThreadsJSON = sig;
+          buildPanel(claimID, threads, drafts);
+        }).catch(function () {
+          if (currentClaimID !== claimID) { return; }
+          railBody.textContent = '';
+          railBody.appendChild(textEl('p', 'comments-error', 'Could not load comments.'));
+          railBody.appendChild(buildComposer(claimID));
+        });
+      }
+
+      // ---- dirty-draft capture (part a) -------------------------------
+      // A "draft" is user-typed, non-empty text sitting in the composer, a reply
+      // composer, or an open inline edit form when a rebuild is about to wipe the
+      // rail. captureDirtyDrafts snapshots those values keyed so buildPanel can
+      // put each one back on the freshly-built node it belongs to. Reply drafts key
+      // by owning thread id; edit drafts key by (thread id, reply id) so a root
+      // edit and a reply edit never collide. The three source classes are disjoint
+      // (.comment-composer / .comment-reply-composer / .comment-edit-form), so a
+      // textarea is captured into exactly one bucket.
+      function emptyDrafts() { return { composer: null, replies: {}, edits: {} }; }
+      function editKey(threadID, replyID) { return String(threadID) + '\n' + String(replyID || ''); }
+      function captureDirtyDrafts() {
+        var drafts = emptyDrafts();
+        if (!railBody) { return drafts; }
+        var comp = railBody.querySelector('.comment-composer .comment-composer-input');
+        if (comp && comp.value.trim()) { drafts.composer = comp.value; }
+        railBody.querySelectorAll('.comment-reply-composer .comment-composer-input').forEach(function (ta) {
+          if (!ta.value.trim()) { return; }
+          var thread = ta.closest('.comment-thread');
+          if (thread) { drafts.replies[thread.getAttribute('data-thread-id')] = ta.value; }
+        });
+        railBody.querySelectorAll('.comment-edit-form .comment-composer-input').forEach(function (ta) {
+          if (!ta.value.trim()) { return; }
+          var thread = ta.closest('.comment-thread');
+          var reply = ta.closest('.comment-reply');
+          var tid = thread ? thread.getAttribute('data-thread-id') : '';
+          var rid = reply ? reply.getAttribute('data-reply-id') : '';
+          drafts.edits[editKey(tid, rid)] = ta.value;
+        });
+        return drafts;
+      }
+
+      function buildPanel(claimID, threads, drafts) {
+        drafts = drafts || emptyDrafts();
+        railBody.textContent = '';
+        var open = threads.filter(function (t) { return t.status === 'open'; });
+        var resolved = threads.filter(function (t) { return t.status !== 'open'; });
+        var list = el('div', 'comments-threads');
+        open.forEach(function (t) { list.appendChild(buildThread(claimID, t, drafts)); });
+        if (resolved.length) {
+          var details = el('details', 'comments-resolved');
+          details.appendChild(textEl('summary', null, resolved.length + ' resolved'));
+          resolved.forEach(function (t) { details.appendChild(buildThread(claimID, t, drafts)); });
+          list.appendChild(details);
+        }
+        if (!open.length && !resolved.length) {
+          list.appendChild(textEl('p', 'comments-empty', 'No comments yet.'));
+        }
+        railBody.appendChild(list);
+        railBody.appendChild(buildComposer(claimID, drafts.composer));
+        updateChips(claimID, open.length, threads.length);
+        // (part a) Now the whole panel is attached to the DOM, size every textarea
+        // that carries a RESTORED draft (composer, reply composers, re-opened edit
+        // forms) to fit — a programmatic .value fires no 'input' event, and
+        // scrollHeight is only meaningful once laid out, so this post-attach pass is
+        // what actually grows a restored draft instead of leaving it clipped to one
+        // row (VJF-1). Empty textareas are skipped, staying at their one-row default.
+        growRestoredDrafts();
+      }
+
+      // growRestoredDrafts grows every non-empty composer/reply/edit textarea now
+      // attached under railBody to fit its content. It is idempotent and cheap
+      // (a handful of textareas), and safe on an empty rail (querySelectorAll on a
+      // missing railBody is guarded).
+      function growRestoredDrafts() {
+        if (!railBody) { return; }
+        railBody.querySelectorAll('.comment-composer-input').forEach(function (ta) {
+          if (ta.value) { growNow(ta); }
+        });
+      }
+
+      function buildThread(claimID, t, drafts) {
+        drafts = drafts || emptyDrafts();
+        var art = el('article', 'comment-thread' + (t.status !== 'open' ? ' comment-thread--resolved' : ''));
+        art.setAttribute('data-thread-id', t.id);
+        art.appendChild(buildMessage(claimID, t.id, '', t, drafts));
+        (t.replies || []).forEach(function (r) {
+          var rep = el('div', 'comment-reply');
+          rep.setAttribute('data-reply-id', r.id);
+          rep.appendChild(buildMessage(claimID, t.id, r.id, r, drafts));
+          art.appendChild(rep);
+        });
+        if (mounted) {
+          art.appendChild(buildThreadActions(claimID, t));
+          if (t.status === 'open') {
+            art.appendChild(buildReplyComposer(claimID, t.id, drafts.replies[t.id]));
+          }
+        }
+        return art;
+      }
+
+      // buildMessage renders one message (thread root when replyID==="" else a
+      // reply). The body is the ONLY innerHTML sink (server body_html). Edit and
+      // delete controls mount only in serve mode and only on own-role (human)
+      // messages — the browser composer's actor is fixed to human; the server
+      // enforces the same rights and is the real backstop.
+      function buildMessage(claimID, threadID, replyID, m, drafts) {
+        var wrap = el('div', 'comment-message');
+        var meta = el('div', 'comment-meta');
+        meta.appendChild(textEl('span', 'comment-role comment-role--' + m.author, m.author));
+        var time = textEl('time', 'comment-time', m.created);
+        time.setAttribute('datetime', m.created);
+        meta.appendChild(time);
+        if (m.edited) { meta.appendChild(textEl('span', 'comment-edited', '(edited)')); }
+        if (mounted && m.author === 'human') {
+          var edit = iconButton('comment-action comment-edit', '✎', 'Edit comment', function () {
+            startEdit(claimID, threadID, replyID, m, body);
+          });
+          var del = iconButton('comment-action comment-delete', '✕',
+            replyID ? 'Delete reply' : 'Delete thread', function () {
+              doDelete(claimID, threadID, replyID);
+            });
+          meta.appendChild(edit);
+          meta.appendChild(del);
+        }
+        wrap.appendChild(meta);
+        var body = el('div', 'comment-body');
+        setBodyHTML(body, m.body_html);
+        wrap.appendChild(body);
+        // (part a) Restore an in-progress edit: if this message had a dirty edit
+        // draft when the rebuild started, re-open its inline editor prefilled with
+        // that draft (only own-role human messages ever carry an editor).
+        var editDraft = drafts && drafts.edits ? drafts.edits[editKey(threadID, replyID)] : undefined;
+        if (mounted && m.author === 'human' && editDraft != null) {
+          startEdit(claimID, threadID, replyID, m, body, editDraft);
+        }
+        return wrap;
+      }
+
+      function buildThreadActions(claimID, t) {
+        var row = el('div', 'comment-thread-actions');
+        if (t.status === 'open') {
+          row.appendChild(iconButton('comment-action comment-resolve', '✓', 'Resolve thread', function () {
+            doResolve(claimID, t.id);
+          }));
+        } else {
+          row.appendChild(iconButton('comment-action comment-reopen', '↺', 'Reopen thread', function () {
+            doReopen(claimID, t.id);
+          }));
+        }
+        return row;
+      }
+
+      function iconButton(cls, glyph, label, onClick) {
+        var b = el('button', cls);
+        b.type = 'button';
+        b.setAttribute('aria-label', label);
+        var g = textEl('span', 'comment-action-glyph', glyph);
+        g.setAttribute('aria-hidden', 'true');
+        b.appendChild(g);
+        b.addEventListener('click', onClick);
+        return b;
+      }
+
+      // growNow sizes a textarea to fit its current .value in one shot. It is the
+      // body of autoGrow's input handler, exposed so that a PROGRAMMATIC .value
+      // assignment — restoring a dirty draft across an SSE rebuild, or rolling a
+      // failed add/reply back into the composer — can grow the field to fit too:
+      // setting .value fires no 'input' event, so without an explicit growNow the
+      // restored text renders CLIPPED to the one-row default (VJF-1).
+      function growNow(ta) {
+        ta.style.height = 'auto';
+        ta.style.height = ta.scrollHeight + 'px';
+      }
+
+      function autoGrow(ta) {
+        ta.addEventListener('input', function () { growNow(ta); });
+      }
+
+      function buildComposer(claimID, draftValue) {
+        var form = el('form', 'comment-composer');
+        var ta = el('textarea', 'comment-composer-input');
+        ta.setAttribute('aria-label', 'Add a comment');
+        ta.rows = 1;
+        ta.placeholder = 'Add a comment…';
+        autoGrow(ta);
+        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent draft across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
+        var btn = textEl('button', 'comment-composer-submit', 'Comment');
+        btn.type = 'submit';
+        form.appendChild(ta);
+        form.appendChild(btn);
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var body = ta.value.trim();
+          if (!body) { return; }
+          doAdd(claimID, body, ta);
+        });
+        return form;
+      }
+
+      function buildReplyComposer(claimID, threadID, draftValue) {
+        var form = el('form', 'comment-reply-composer');
+        var ta = el('textarea', 'comment-composer-input');
+        ta.setAttribute('aria-label', 'Reply to thread');
+        ta.rows = 1;
+        ta.placeholder = 'Reply…';
+        autoGrow(ta);
+        if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent reply across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
+        var btn = textEl('button', 'comment-composer-submit', 'Reply');
+        btn.type = 'submit';
+        form.appendChild(ta);
+        form.appendChild(btn);
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var body = ta.value.trim();
+          if (!body) { return; }
+          doReply(claimID, threadID, body, ta);
+        });
+        return form;
+      }
+
+      // optimisticMessage builds a plain-text placeholder message. The body is
+      // set with textContent, so even a hostile body renders as inert text until
+      // the server's escaped body_html replaces the whole panel on refresh.
+      function optimisticMessage(body) {
+        var wrap = el('div', 'comment-message');
+        var meta = el('div', 'comment-meta');
+        meta.appendChild(textEl('span', 'comment-role comment-role--human', 'human'));
+        meta.appendChild(textEl('span', 'comment-pending', 'sending…'));
+        wrap.appendChild(meta);
+        wrap.appendChild(textEl('div', 'comment-body', body));
+        return wrap;
+      }
+
+      // ---- mutating ops (optimistic + rollback + toast) ---------------
+      function threadNode(tid) {
+        if (!railBody) { return null; }
+        var found = null;
+        railBody.querySelectorAll('.comment-thread').forEach(function (a) {
+          if (!found && a.getAttribute('data-thread-id') === tid) { found = a; }
+        });
+        return found;
+      }
+
+      function doAdd(claimID, body, ta) {
+        var list = railBody.querySelector('.comments-threads');
+        var placeholder = el('article', 'comment-thread comment-thread--optimistic');
+        placeholder.appendChild(optimisticMessage(body));
+        if (list) { list.insertBefore(placeholder, list.firstChild); }
+        ta.value = '';
+        ta.style.height = 'auto';
+        recomputeChipsFromPanel(claimID);
+        apiSend('POST', claimPath(claimID), { as: 'human', body: body })
+          .then(function () { renderPanelFromAPI(claimID); })
+          .catch(function (err) {
+            if (placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
+            recomputeChipsFromPanel(claimID);
+            // The input was cleared optimistically when the placeholder went in;
+            // a failed write must restore the user's text, never discard it — and
+            // grow it back to fit (a bare .value assignment fires no input event,
+            // so without growNow a multi-line draft renders clipped to one row).
+            ta.value = body;
+            growNow(ta);
+            toast(errMsg('Could not add comment', err));
+          });
+      }
+
+      function doReply(claimID, tid, body, ta) {
+        var art = threadNode(tid);
+        var placeholder = null;
+        if (art) {
+          placeholder = el('div', 'comment-reply comment-reply--optimistic');
+          placeholder.appendChild(optimisticMessage(body));
+          var actions = art.querySelector('.comment-thread-actions');
+          if (actions) { art.insertBefore(placeholder, actions); } else { art.appendChild(placeholder); }
+        }
+        ta.value = '';
+        ta.style.height = 'auto';
+        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/replies', { as: 'human', body: body })
+          .then(function () { renderPanelFromAPI(claimID); })
+          .catch(function (err) {
+            if (placeholder && placeholder.parentNode) { placeholder.parentNode.removeChild(placeholder); }
+            // Restore the user's text (cleared optimistically above) so a failed
+            // reply is not silently lost — and grow it back to fit (a bare .value
+            // assignment fires no input event, so without growNow a multi-line
+            // draft renders clipped to one row).
+            ta.value = body;
+            growNow(ta);
+            toast(errMsg('Could not reply', err));
+          });
+      }
+
+      function doResolve(claimID, tid) {
+        var art = threadNode(tid);
+        if (art) { art.classList.add('comment-thread--resolved'); }
+        recomputeChipsFromPanel(claimID);
+        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/resolve', { as: 'human' })
+          .then(function () { renderPanelFromAPI(claimID); })
+          .catch(function (err) {
+            if (art) { art.classList.remove('comment-thread--resolved'); }
+            recomputeChipsFromPanel(claimID);
+            toast(errMsg('Could not resolve thread', err));
+          });
+      }
+
+      function doReopen(claimID, tid) {
+        var art = threadNode(tid);
+        if (art) { art.classList.remove('comment-thread--resolved'); }
+        recomputeChipsFromPanel(claimID);
+        apiSend('POST', '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid) + '/reopen', { as: 'human' })
+          .then(function () { renderPanelFromAPI(claimID); })
+          .catch(function (err) {
+            if (art) { art.classList.add('comment-thread--resolved'); }
+            recomputeChipsFromPanel(claimID);
+            toast(errMsg('Could not reopen thread', err));
+          });
+      }
+
+      function doDelete(claimID, tid, rid) {
+        var wholeThread = !rid;
+        if (wholeThread && !window.confirm('Delete this whole comment thread? This cannot be undone.')) {
+          return;
+        }
+        var node;
+        if (wholeThread) {
+          node = threadNode(tid);
+        } else {
+          var art = threadNode(tid);
+          node = art ? art.querySelector('.comment-reply[data-reply-id="' + cssAttr(rid) + '"]') : null;
+        }
+        if (node) { node.classList.add('comment-thread--deleting'); }
+        var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
+        if (rid) { path += '?reply=' + encodeURIComponent(rid); }
+        apiSend('DELETE', path)
+          .then(function () {
+            if (node && node.parentNode) { node.parentNode.removeChild(node); }
+            recomputeChipsFromPanel(claimID);
+            renderPanelFromAPI(claimID);
+          })
+          .catch(function (err) {
+            if (node) { node.classList.remove('comment-thread--deleting'); }
+            toast(errMsg('Could not delete', err));
+          });
+      }
+
+      // cssAttr escapes a value for use inside an attribute selector's quoted
+      // string (only backslash and the double-quote need escaping there). Reply
+      // ids are engine-minted "r-<hex>" tokens, so this is defensive.
+      function cssAttr(v) {
+        return String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      }
+
+      // startEdit swaps a message body for an inline textarea prefilled with the
+      // RAW body (server-provided m.body), and PATCHes on save. Cancel restores
+      // the original rendered body node; a successful save rebuilds the panel.
+      function startEdit(claimID, tid, rid, m, bodyNode, initialValue) {
+        if (!bodyNode || !bodyNode.parentNode) { return; }
+        var form = el('form', 'comment-edit-form');
+        var ta = el('textarea', 'comment-composer-input');
+        ta.setAttribute('aria-label', 'Edit comment');
+        // Prefill with an explicit initialValue when re-opening after a rebuild
+        // (part a — the captured in-progress draft), else the message's raw body.
+        ta.value = (initialValue != null ? initialValue : (m.body || ''));
+        autoGrow(ta);
+        var save = textEl('button', 'comment-composer-submit', 'Save');
+        save.type = 'submit';
+        var cancel = textEl('button', 'comment-action-text', 'Cancel');
+        cancel.type = 'button';
+        form.appendChild(ta);
+        form.appendChild(save);
+        form.appendChild(cancel);
+        bodyNode.replaceWith(form);
+        // Grow to fit the prefilled body/draft AFTER the form is in the DOM — a
+        // .value assignment fires no 'input' event, and scrollHeight is only
+        // meaningful once laid out (a live edit-click attaches here; an edit form
+        // re-opened during a rebuild is instead grown by buildPanel's post-attach
+        // growRestoredDrafts, since this subtree is still detached then).
+        growNow(ta);
+        ta.focus();
+        cancel.addEventListener('click', function () { form.replaceWith(bodyNode); });
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var newBody = ta.value.trim();
+          if (!newBody) { return; }
+          var path = '/api/claims/' + encodeURIComponent(claimID) + '/comments/' + encodeURIComponent(tid);
+          if (rid) { path += '?reply=' + encodeURIComponent(rid); }
+          apiSend('PATCH', path, { as: 'human', body: newBody })
+            .then(function () {
+              // Close the editor BEFORE the authoritative rebuild so the rebuild's
+              // draft-capture does not mistake a just-saved edit for one still in
+              // progress and re-open it; the rebuild renders the saved body.
+              if (form.parentNode) { form.replaceWith(bodyNode); }
+              renderPanelFromAPI(claimID);
+            })
+            .catch(function (err) {
+              // Keep the edit form open with the user's revision (do NOT revert to
+              // the rendered body) so a failed edit does not discard the text.
+              toast(errMsg('Could not edit', err));
+            });
+        });
+      }
+
+      // ---- reachability probe -----------------------------------------
+      // A relative fetch('/api/ping') with a ~1s AbortController timeout, wrapped
+      // so its rejection can NEVER abort the rest of init. Success requires
+      // res.ok AND a JSON content type AND body.dossierx === "serve"; only then
+      // do the write controls mount. On file:// the fetch rejects and is
+      // swallowed — the read-only panel is the correct, intended outcome.
+      function probeAndMount() {
+        var controller = null;
+        var timer = null;
+        try { controller = new AbortController(); } catch (e) { controller = null; }
+        var opts = { headers: { 'Accept': 'application/json' } };
+        if (controller) {
+          opts.signal = controller.signal;
+          timer = window.setTimeout(function () {
+            try { controller.abort(); } catch (e) { /* ignore */ }
+          }, 1000);
+        }
+        fetch('/api/ping', opts).then(function (res) {
+          if (timer) { window.clearTimeout(timer); }
+          var ct = res.headers.get('Content-Type') || '';
+          if (!res.ok || ct.indexOf('application/json') === -1) { return null; }
+          return res.json();
+        }).then(function (body) {
+          if (body && body.dossierx === 'serve') {
+            mounted = true;
+            document.body.classList.add('comments-live');
+            // A confirmed live serve is the ONLY place live reload is wired: the
+            // EventSource needs a server behind the page. startLiveReload is
+            // idempotent and no-ops on a hook-less (marker-absent) shell.
+            startLiveReload();
+            // If a panel was opened during the (brief) probe window, re-render it
+            // now with the live controls.
+            if (currentClaimID) { renderPanel(currentClaimID); }
+          }
+        }).catch(function () {
+          if (timer) { window.clearTimeout(timer); }
+          // file:// or unreachable — swallow. Controls simply never mount.
+        });
+      }
+
+      // ================================================================
+      // SSE live reload (Phase 5c) — fragment-swap without losing view state
+      // ================================================================
+      //
+      // Against a confirmed live serve the viewer opens an EventSource on
+      // /api/events and, on each "changed", re-fetches the two swap subtrees from
+      // /api/fragment and replaces <main class="content-area"> and <nav id="nav">
+      // in place, then re-runs the idempotent initViewer() against the fresh DOM.
+      //
+      // Crucially this is the RESTORE-VIEW path, deliberately SEPARATE from a
+      // deep-link jump: it re-applies the CURRENT module/facet from the hash but
+      // SKIPS showModuleFacet's scrollIntoView+highlight block, restores the
+      // reader's captured scroll position, and re-opens an open comment panel by
+      // its claim/thread id. Re-running the deep-link path on every server tick
+      // would yank the viewport out from under the reader — so it must not.
+      //
+      // The handler attaches ONLY when the effective shell carries the runtime
+      // marker: a hook-less shell.html override (marker absent) is served
+      // read-only and must not attempt live reload. To bound the HTTP/1.1
+      // six-connections-per-host limit across many open tabs, the stream is
+      // closed when the tab is hidden or unloading and reopened when it is shown.
+
+      var sse = null;               // the live EventSource, or null when closed
+      var liveReloadAttached = false;
+      var reloadInFlight = false;   // a fragment fetch + swap is running
+      var reloadPending = false;    // a "changed" arrived mid-swap; re-fetch after
+
+      // hasViewerRuntime mirrors render.ShellHasViewerRuntime on the client: the
+      // default shell tags <head> with the viewer-runtime marker <meta> (its
+      // content is "comments-sse"), and a custom shell.html override that drops
+      // that tag is served read-only. The client detects the tag by its CONTENT
+      // value on purpose — not by the name token the server scans for — so that
+      // marker string still occurs in exactly ONE place (the tag itself). If this
+      // check duplicated that token, the server's bytes.Contains scan would find
+      // it here too and never recognize a stripped-marker override as read-only.
+      function hasViewerRuntime() {
+        return !!document.querySelector('meta[content="comments-sse"]');
+      }
+
+      // startLiveReload wires the EventSource + tab-visibility lifecycle exactly
+      // once. It is called only from the probe success path, so it runs only
+      // against a confirmed live serve; it no-ops (read-only degradation) when the
+      // shell lacks the runtime marker or the browser has no EventSource. The
+      // comments-livereload body class records the attach DECISION synchronously
+      // (so a marker-absent shell is observably NOT wired), distinct from
+      // comments-sse-open which marks the stream actually connecting below.
+      function startLiveReload() {
+        if (liveReloadAttached) { return; }
+        if (!hasViewerRuntime()) { return; }              // hook-less override: no live reload
+        if (typeof window.EventSource !== 'function') { return; }
+        liveReloadAttached = true;
+        document.body.classList.add('comments-livereload');
+        openSSE();
+        document.addEventListener('visibilitychange', function () {
+          if (document.visibilityState === 'hidden') {
+            closeSSE();
+          } else {
+            // Re-open the stream AND catch up. While hidden the stream was closed,
+            // so any change in that window was broadcast to no subscriber, and the
+            // reconnect below replays nothing (the server only re-sends
+            // ": connected" on subscribe). Fire one onServerChanged() to re-fetch
+            // /api/fragment and fold in whatever changed while we were away — a
+            // fragment fetch always reads the freshest render, so this is a full
+            // catch-up regardless of the (now closed) SSE having missed the signal.
+            openSSE();
+            onServerChanged();
+          }
+        });
+        // pagehide fires on navigation-away / bfcache entry; drop the stream so a
+        // backgrounded page stops holding one of the six per-host connections.
+        window.addEventListener('pagehide', closeSSE);
+      }
+
+      function openSSE() {
+        if (sse) { return; }                              // already open (idempotent)
+        try {
+          sse = new EventSource('/api/events');
+        } catch (e) {
+          sse = null;
+          return;
+        }
+        // onopen marks the stream live only AFTER the server has registered this
+        // subscriber (handleEvents subscribes before writing its response head),
+        // so a change made once comments-sse-open is set is guaranteed delivered.
+        sse.onopen = function () {
+          document.body.classList.add('comments-sse-open');
+        };
+        sse.addEventListener('changed', function () { onServerChanged(); });
+        // EventSource reconnects transient drops itself (readyState CONNECTING);
+        // only a permanently CLOSED stream is nulled so a later visibility reopen
+        // can re-create it.
+        sse.onerror = function () {
+          if (sse && sse.readyState === EventSource.CLOSED) {
+            sse = null;
+            document.body.classList.remove('comments-sse-open');
+          }
+        };
+      }
+
+      function closeSSE() {
+        if (!sse) { return; }
+        try { sse.close(); } catch (e) { /* ignore */ }
+        sse = null;
+        document.body.classList.remove('comments-sse-open');
+      }
+
+      // onServerChanged fetches the fresh fragment and swaps it in. Overlapping
+      // "changed" events (rare — the watcher debounces and the hub channel is
+      // capacity-1) are coalesced into one in-flight swap plus at most one
+      // trailing re-fetch, so two events can never interleave two swaps.
+      function onServerChanged() {
+        if (reloadInFlight) { reloadPending = true; return; }
+        reloadInFlight = true;
+        apiGet('/api/fragment').then(function (frag) {
+          applyFragment(frag);
+        }).catch(function () {
+          // A failed fragment fetch (server briefly away mid-reload) leaves the
+          // current DOM intact; the next changed (or a manual refresh) recovers.
+        }).then(function () {
+          reloadInFlight = false;
+          if (reloadPending) { reloadPending = false; onServerChanged(); }
+        });
+      }
+
+      // applyFragment swaps the two subtrees and restores the view. ESCAPING
+      // CONTRACT: the outerHTML sinks below receive ONLY the server-rendered
+      // fragment from /api/fragment (frag.content / frag.nav) — the very same
+      // trusted HTML the initial page shipped, produced by the one server-side
+      // renderer — which is exactly the second permitted innerHTML-family value
+      // alongside an API body_html. No user-derived string is ever assigned here.
+      function applyFragment(frag) {
+        if (!frag || typeof frag.content !== 'string' || typeof frag.nav !== 'string') { return; }
+        var oldContent = document.querySelector('.content-area');
+        var oldNav = document.getElementById('nav');
+        if (!oldContent || !oldNav) { return; }
+
+        // ---- capture RESTORE-VIEW state BEFORE the swap ----
+        // The default desktop layout scrolls the WINDOW (the sidebar is sticky and
+        // .content-area is flex:1 with no overflow of its own), so the reader's
+        // scroll lives on the document; a template override or the mobile layout
+        // could scroll .content-area instead, so BOTH are captured and restored.
+        var savedWinScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+        var savedContentScroll = oldContent.scrollTop;
+        var reopenClaimID = commentPanelOpen() ? currentClaimID : null;
+
+        // ---- swap both subtrees (server fragment — a permitted sink) ----
+        oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
+        oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
+
+        // ---- re-point every lookup map at the fresh DOM ----
+        initViewer();
+
+        // ---- RESTORE view (NOT a deep-link jump) ----
+        // Re-apply the current module/facet from the hash, but pass NO claim in
+        // opts, so showModuleFacet's scrollIntoView+highlight block does not run
+        // and the viewport is not yanked. skipHash keeps the URL untouched.
+        var target = resolve(hashId());
+        showModuleFacet(target.module, target.facet, { skipHash: true });
+
+        // ---- restore the reader's scroll AFTER the active section is un-hidden
+        // above, so the document has regained its full height ----
+        var freshContent = document.querySelector('.content-area');
+        if (freshContent && savedContentScroll) { freshContent.scrollTop = savedContentScroll; }
+        if (savedWinScroll) { window.scrollTo(0, savedWinScroll); }
+
+        // ---- re-open the panel by (claim/thread) id. The panel node itself lives
+        // OUTSIDE the swapped subtree so it survived, but its chips were replaced,
+        // so re-mark the fresh chips expanded and refresh the thread list (which
+        // also picks up whatever change triggered this reload). ----
+        if (reopenClaimID) {
+          setChipExpanded(reopenClaimID, true);
+          renderPanel(reopenClaimID);
+        }
+      }
+
+      // ================================================================
+      // Delegated listeners (attached ONCE, on surviving nodes) + init
+      // ================================================================
+      //
+      // Tab/subtab/chip clicks are delegated on document rather than bound
+      // per-element, so a later SSE fragment swap that replaces the tabs/cards
+      // keeps working without re-binding (and initViewer can be re-run freely).
+      document.addEventListener('click', function (e) {
+        var chip = e.target.closest('.comment-chip');
+        if (chip) {
+          e.preventDefault();
+          var chipClaim = chip.getAttribute('data-claim-id');
+          if (commentPanelOpen() && currentClaimID === chipClaim) {
+            closeCommentPanel();
+          } else {
+            openCommentPanel(chipClaim);
+          }
+          return;
+        }
+        var secTab = e.target.closest('.sec-tab');
+        if (secTab) {
+          var moduleID = (secTab.dataset.target || '').replace(/^#/, '');
+          var facetID = (secTab.dataset.defaultTarget || '').replace(/^#/, '');
           showModuleFacet(moduleID, facetID);
           setDrawer(false);
-        });
+          return;
+        }
+        var subtab = e.target.closest('.subtab');
+        if (subtab) {
+          var subFacet = (subtab.dataset.target || '').replace(/^#/, '');
+          showModuleFacet(facetToModule[subFacet], subFacet);
+          setDrawer(false);
+          return;
+        }
       });
 
       window.addEventListener('hashchange', function () {
         showFromHash({ skipHash: true });
       });
-
-      // Responsive off-canvas drawer (below 860px).
-      var navToggle = document.getElementById('navToggle');
-      var navOverlay = document.getElementById('navOverlay');
-
-      function setDrawer(open) {
-        document.body.classList.toggle('nav-open', open);
-        if (navToggle) { navToggle.setAttribute('aria-expanded', String(open)); }
-      }
 
       if (navToggle) {
         navToggle.addEventListener('click', function () {
@@ -228,14 +1169,28 @@
       if (navOverlay) {
         navOverlay.addEventListener('click', function () { setDrawer(false); });
       }
+      if (commentsOverlay) {
+        commentsOverlay.addEventListener('click', function () { closeCommentPanel(); });
+      }
+      if (railClose) {
+        railClose.addEventListener('click', function () { closeCommentPanel(); });
+      }
+
+      // The SINGLE window keydown Escape listener, modified in place: an open
+      // comment panel closes first (and returns, so the same press does not also
+      // toggle the nav); otherwise Escape closes the nav drawer as before.
       window.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape') { setDrawer(false); }
+        if (event.key === 'Escape') {
+          if (commentPanelOpen()) { closeCommentPanel(); return; }
+          setDrawer(false);
+        }
       });
 
-      // Initial render. This script tag sits at the end of <body>, so the
-      // DOM is already parsed by the time this IIFE runs — no need to wait
-      // for DOMContentLoaded here.
+      // Initial render. This script tag sits at the end of <body>, so the DOM is
+      // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
+      initViewer();
       showFromHash({ skipHash: true });
+      probeAndMount();
     })();
   </script>
 </body>

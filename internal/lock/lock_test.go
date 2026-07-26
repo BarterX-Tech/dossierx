@@ -2,6 +2,8 @@ package lock
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -289,6 +291,83 @@ func TestClearReviewPendingRefreshesHashesAndKeepsLocked(t *testing.T) {
 	}
 }
 
+// TestRefreshBaselineRefreshesHashesWithoutTouchingReviewPending pins the
+// ClearReviewPending split: RefreshBaseline does the re-baseline + LockedAt
+// stamp half and NOTHING to the claim's ReviewPending — that verdict is the
+// caller's to compute, so a claim with an independent open-comment-thread
+// trigger can stay review_pending after a confirmed reaudit re-baselines it.
+func TestRefreshBaselineRefreshesHashesWithoutTouchingReviewPending(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "v2 body"}
+	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true, RestsOn: []string{dep.ID}}
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{claim.ID: {dep.ID: "stale-hash"}}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	claims := []model.Claim{claim, dep}
+
+	RefreshBaseline(claim, claims, store)
+
+	if h, ok := store.Baseline(claim.ID, dep.ID); !ok || h != ContentHash(dep) {
+		t.Fatalf("expected RefreshBaseline to re-record the dependency baseline to current content")
+	}
+	if _, ok := store.LockedAt[claim.ID]; !ok {
+		t.Fatalf("expected RefreshBaseline to stamp LockedAt")
+	}
+}
+
+// TestLockRefusedOnOpenCommentThread is the comment lock gate: a claim cannot
+// transition draft -> locked while it carries an unresolved comment thread, and
+// the refusal names the open thread id(s). The empty registry isolates this
+// gate from the (warning-only) comments-unresolved lint.
+func TestLockRefusedOnOpenCommentThread(t *testing.T) {
+	withRegistry(t)
+
+	claim := model.Claim{
+		ID: "widget.contract.overview", Facet: "contract", Module: "widget", Status: model.StatusDraft,
+		Comments: []model.Comment{{ID: "c-aaa111", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "clarify"}},
+	}
+	claims := []model.Claim{claim}
+	store, err := LoadStore(t.TempDir() + "/store.json")
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	got, err := Lock(claim, claims, testConfig(), store)
+	if err == nil {
+		t.Fatalf("expected Lock to be refused for a claim with an open comment thread")
+	}
+	if !strings.Contains(err.Error(), "c-aaa111") {
+		t.Fatalf("expected the refusal to name the open thread id, got: %v", err)
+	}
+	if got.Status != model.StatusDraft {
+		t.Fatalf("expected claim to remain draft on refused lock, got %q", got.Status)
+	}
+}
+
+// TestLockAllowedWhenUnrelatedLockedClaimHasOpenThread proves the gate is
+// CANDIDATE-scoped: locking a clean claim B succeeds even though an unrelated
+// already-locked claim A in the same project carries an open thread. A
+// project-wide open-thread check would freeze all locking; this one must not.
+func TestLockAllowedWhenUnrelatedLockedClaimHasOpenThread(t *testing.T) {
+	withRegistry(t)
+
+	a := model.Claim{
+		ID: "widget.contract.a", Facet: "contract", Module: "widget", Status: model.StatusLocked, ReviewPending: true,
+		Comments: []model.Comment{{ID: "c-aaa111", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "clarify"}},
+	}
+	b := model.Claim{ID: "widget.contract.b", Facet: "contract", Module: "widget", Status: model.StatusDraft}
+	claims := []model.Claim{a, b}
+	store, err := LoadStore(t.TempDir() + "/store.json")
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	got, err := Lock(b, claims, testConfig(), store)
+	if err != nil {
+		t.Fatalf("expected Lock of B to succeed while unrelated locked A has an open thread, got: %v", err)
+	}
+	if got.Status != model.StatusLocked {
+		t.Fatalf("expected B to be locked, got %q", got.Status)
+	}
+}
+
 // TestPerDependentBaselineNotSharedAcrossDependents is the DX-AUD-09
 // regression: two locked claims A and B both rest_on the same dependency D.
 // A locks against D's v1 content; D then drifts to v2; B locks against v2.
@@ -553,5 +632,106 @@ func TestMigrateLegacyStoreSkipsDraftClaims(t *testing.T) {
 	}
 	if changed {
 		t.Fatalf("expected changed=false when no locked claim has a dependency to re-arm")
+	}
+}
+
+// TestContentHash_ExcludesComments is the Blocking #6 regression: ContentHash
+// hashes an explicit content allowlist that does NOT include Comments, so
+// every comment op leaves a claim's content hash byte-identical. This proves
+// the exclusion by construction — there is intentionally no comment-exclusion
+// code anywhere; this test is what guards it.
+func TestContentHash_ExcludesComments(t *testing.T) {
+	base := model.Claim{
+		ID:     "widget.contract.a",
+		Facet:  "contract",
+		Module: "widget",
+		Status: model.StatusLocked,
+		Body:   "the claim body",
+	}
+	want := ContentHash(base)
+
+	// Every mutation a comment op can make: add a thread, add a reply,
+	// resolve, reopen, edit, and set review_pending — none may change the hash.
+	withComments := base
+	withComments.Comments = []model.Comment{
+		{
+			ID:         "c-8f3a2b",
+			Status:     model.CommentStatusResolved,
+			Author:     model.CommentRoleHuman,
+			Created:    "2026-07-24T10:12:00Z",
+			Body:       "hostile: colons: --- and \"quotes\"",
+			Edited:     true,
+			Replies:    []model.Reply{{ID: "r-4c9e11", Author: model.CommentRoleAgent, Created: "2026-07-24T10:40:00Z", Body: "reply body", Edited: false}},
+			ResolvedBy: model.CommentRoleHuman,
+			ResolvedAt: "2026-07-24T11:02:00Z",
+			ReopenedBy: model.CommentRoleAgent,
+			ReopenedAt: "2026-07-24T11:10:00Z",
+		},
+	}
+	withComments.ReviewPending = true
+	if got := ContentHash(withComments); got != want {
+		t.Fatalf("ContentHash changed when comments/review_pending were added:\n got %s\nwant %s", got, want)
+	}
+}
+
+// TestDetectStale_CommentOnDependencyDoesNotFlip proves a locked dependent
+// claim is NOT flipped to review_pending merely because a claim it rests on
+// gained a comment thread: since ContentHash excludes Comments, the dependency
+// baseline still matches after the comment is added.
+func TestDetectStale_CommentOnDependencyDoesNotFlip(t *testing.T) {
+	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep body"}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	claims := []model.Claim{dependent, dep}
+
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	store.recordBaseline(dependent.ID, dep.ID, ContentHash(dep))
+
+	// The dependency gains an open comment thread.
+	claims[1].Comments = []model.Comment{{ID: "c-000001", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-24T10:12:00Z", Body: "q"}}
+
+	out := DetectStale(claims, store)
+	for _, c := range out {
+		if c.ID == dependent.ID && c.ReviewPending {
+			t.Fatalf("dependent claim was flipped to review_pending by a comment on its dependency")
+		}
+	}
+}
+
+// TestClaimsSentinelPath_OutsideClaimsDir proves the claims sentinel lives
+// under cfg.Dir() and outside claims_dir, and that AcquireClaimsLock creates
+// then removes the .lock file.
+func TestClaimsSentinelPath_OutsideClaimsDir(t *testing.T) {
+	root := t.TempDir()
+	claimsDir := root + "/claims"
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgYAML := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n"
+	if err := os.WriteFile(root+"/project.config.yaml", []byte(cfgYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadConfig(root + "/project.config.yaml")
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	base := ClaimsSentinelPath(cfg)
+	if got := base; got != filepath.Join(cfg.Dir(), ".dossierx-claims") {
+		t.Fatalf("ClaimsSentinelPath = %q, want %q", got, filepath.Join(cfg.Dir(), ".dossierx-claims"))
+	}
+	if strings.HasPrefix(base, cfg.ClaimsDir+string(filepath.Separator)) {
+		t.Fatalf("claims sentinel %q must live OUTSIDE claims_dir %q", base, cfg.ClaimsDir)
+	}
+
+	release, err := AcquireClaimsLock(cfg)
+	if err != nil {
+		t.Fatalf("AcquireClaimsLock: %v", err)
+	}
+	if _, err := os.Stat(base + ".lock"); err != nil {
+		t.Fatalf("expected sentinel lock file to exist while held: %v", err)
+	}
+	release()
+	if _, err := os.Stat(base + ".lock"); !os.IsNotExist(err) {
+		t.Fatalf("expected sentinel lock file to be removed after release, stat err = %v", err)
 	}
 }

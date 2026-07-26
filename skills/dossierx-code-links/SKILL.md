@@ -71,6 +71,15 @@ The scenario this exists for: months after lock, you're asked to change code for
 requirement, and the change means the locked claim's stated behavior no longer matches
 reality. This is not something Channel B's silent auto-linking should paper over.
 
+**Flag vs. comment — before you flag, check it's actually a flag.** `dossierx flag` is only for
+a locked claim whose meaning has drifted and for which you can state a concrete before/after
+(`--claim-says` / `--now-does`): it carries a proposed content edit and feeds reaudit. If you
+instead have a *question* or a discussion point about the claim with no specific proposed
+rewording ("is this still right?", "why was it designed this way?"), that's a **comment**, not
+a flag — use `dossierx comment` and leave the claim body untouched. The discriminator is simply
+"is there a specific proposed wording change?": yes → flag, no → comment. See
+**[[dossierx-comments]]**.
+
 **The rule for which channel a code change goes through**: did the code's *meaning* change
 relative to what the claim states, or did it just move/get renamed/refactored with identical
 behavior?

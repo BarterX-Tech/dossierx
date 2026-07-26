@@ -1,0 +1,41 @@
+{{/* comments.html — engine-managed review-thread panel, baked into the static
+     render right after a claim's shared edges footer (see
+     components.EdgesHTMLWithLinks, which appends this after the edges <ul> and
+     hand-builds the 💬 chip that reveals it). It emits ZERO id= attributes: an
+     overview claim renders N times and only one copy may keep its root id
+     (render.stripOverviewIDs strips the rest), so claims and threads are keyed
+     by data-claim-id / data-thread-id and the viewer JS fans state out with
+     querySelectorAll, never getElementById. Comment bodies route through the
+     shared "markdown" renderer — the same subset every body-shaped field uses —
+     so a hostile body renders HTML-escaped and inert. The panel ships hidden:
+     it is a read-only snapshot of the discussion for the viewer JS (Phase 5) to
+     reveal on chip click; the static render mounts NO composer and NO per-message
+     action controls, since a control with nowhere to POST would be dead. Resolved
+     threads are tucked into a native <details> collapse — it needs no id and
+     toggles without JS. */ -}}
+{{- define "dossierx-comment-message" -}}
+<div class="comment-meta"><span class="comment-role comment-role--{{.Author}}">{{.Author}}</span> <time class="comment-time" datetime="{{.Created}}">{{.Created}}</time>{{if .Edited}} <span class="comment-edited">(edited)</span>{{end}}</div>
+<div class="comment-body">{{markdown .Body}}</div>
+{{- end -}}
+{{- define "dossierx-comment-thread" -}}
+<article class="comment-thread{{if eq .Status "resolved"}} comment-thread--resolved{{end}}" data-thread-id="{{.ID}}">
+  {{template "dossierx-comment-message" .}}
+  {{- range .Replies}}
+  <div class="comment-reply" data-reply-id="{{.ID}}">{{template "dossierx-comment-message" .}}</div>
+  {{- end}}
+</article>
+{{- end -}}
+<div class="comments-panel" data-claim-id="{{.ClaimID}}" hidden>
+  <p class="comments-panel-title">Comments</p>
+  {{- range .Open}}
+  {{template "dossierx-comment-thread" .}}
+  {{- end}}
+  {{- if .Resolved}}
+  <details class="comments-resolved">
+    <summary>{{len .Resolved}} resolved</summary>
+    {{- range .Resolved}}
+    {{template "dossierx-comment-thread" .}}
+    {{- end}}
+  </details>
+  {{- end}}
+</div>

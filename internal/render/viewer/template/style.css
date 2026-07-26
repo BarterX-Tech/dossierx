@@ -345,6 +345,436 @@ th {
   border-color: var(--warn);
 }
 
+/* ---- comments (engine-managed review threads) --------------------------
+   The 💬 chip rides the shared edges footer (components.EdgesHTMLWithLinks);
+   the read-only thread panel is baked in right after it by comments.html.
+   Every color below is one of the inverting theme tokens declared in :root
+   above (and re-pointed in the prefers-color-scheme: light block), so the
+   whole surface tracks the OS theme with no separate dark rule — the one
+   genuinely per-mode value, the panel's drop shadow, gets its light value in
+   the media query at the end of this block. claim-card--commented is a
+   distinct accent marker, deliberately NOT the --warn boundary family. */
+.claim-comments {
+  list-style: none;
+}
+
+.comment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.comment-chip--open {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.comment-chip-count {
+  font-weight: 600;
+}
+
+/* Open-thread cards carry a 3px accent left border. The dedicated
+   .claim-tree rule is required because tree claims render without the .card
+   class (see tree.html), so a .card-scoped rule would never reach them. */
+.card.claim-card--commented,
+.claim-tree.claim-card--commented {
+  border-left: 3px solid var(--accent);
+}
+
+.comments-panel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 12px);
+  background: var(--paper);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .28);
+}
+
+.comments-panel[hidden] {
+  display: none;
+}
+
+.comments-panel-title {
+  margin: 0 0 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--faint);
+}
+
+.comment-thread {
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+}
+
+.comment-thread:first-of-type {
+  border-top: 0;
+}
+
+.comment-reply {
+  margin: 6px 0 0 14px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
+.comment-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.comment-role {
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+.comment-role--human {
+  color: var(--accent);
+}
+
+.comment-role--agent {
+  color: var(--link);
+}
+
+.comment-edited {
+  font-style: italic;
+}
+
+.comment-body {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.comments-resolved > summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* Coarse pointers (touch) need a >=44px hit target on the chip. */
+@media (pointer: coarse) {
+  .comment-chip {
+    min-height: 44px;
+  }
+}
+
+/* The panel shadow is the one genuinely per-mode value here: softer on a
+   light background than the deeper shadow the dark base above uses. */
+@media (prefers-color-scheme: light) {
+  .comments-panel {
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
+  }
+}
+
+/* ---- interactive comment UI (Phase 5, serve + file://) -----------------
+   The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop
+   (role=complementary), a modal bottom sheet on mobile. Its backdrop
+   (#commentsOverlay) and body scroll-lock (body.comments-open) are the MODAL
+   half, so they are scoped to the <= 860px bottom-sheet breakpoint (in the media
+   query below) — above it the desktop rail shows neither. They stay deliberately
+   distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
+   closes the other. Colours are the inverting theme tokens from :root; the few
+   genuinely per-mode values (shadows, backdrop dim) get their light values in the
+   media query at the end of this block, matching the dark-base / light-override
+   convention the rest of this stylesheet uses. */
+
+/* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
+   the media query below); it stays a plain open-state marker on desktop. Never
+   reuse body.nav-open. */
+
+.comments-overlay {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: rgba(0, 0, 0, .42);
+  cursor: pointer;
+}
+
+/* .comments-overlay stays display:none above 860px (the desktop rail is
+   non-modal); the mobile media query below re-enables it as :not([hidden]). */
+
+.comments-rail {
+  position: fixed;
+  z-index: 60;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(380px, 90vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--paper);
+  border-left: 1px solid var(--border);
+  box-shadow: -2px 0 18px rgba(0, 0, 0, .38);
+}
+
+.comments-rail[hidden] {
+  display: none;
+}
+
+.comments-rail:focus {
+  outline: none;
+}
+
+.comments-rail-head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.comments-rail-title {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--faint);
+}
+
+.comments-rail-close {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--ink);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 6px 9px;
+}
+
+.comments-rail-body {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px 14px;
+}
+
+.comments-loading,
+.comments-error,
+.comments-empty {
+  margin: 8px 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.comments-error {
+  color: var(--warn);
+}
+
+/* An optimistic (not-yet-confirmed) thread/reply reads dimmer until the server
+   round-trip replaces it with the rendered body. */
+.comment-thread--optimistic,
+.comment-reply--optimistic,
+.comment-thread--deleting {
+  opacity: .55;
+}
+
+.comment-pending {
+  font-style: italic;
+  color: var(--faint);
+}
+
+/* Per-message edit/delete controls sit at the right end of the meta row. */
+.comment-meta .comment-action {
+  padding: 3px 6px;
+  line-height: 1;
+}
+
+.comment-meta .comment-edit {
+  margin-left: auto;
+}
+
+.comment-action {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  padding: 5px 9px;
+}
+
+.comment-action:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.comment-delete:hover {
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.comment-action-text {
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font: 12px var(--font-sans);
+  padding: 6px 10px;
+}
+
+.comment-thread-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.comment-composer,
+.comment-reply-composer,
+.comment-edit-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.comment-composer {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.comment-reply-composer,
+.comment-edit-form {
+  margin-top: 8px;
+}
+
+.comment-composer-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  font: 13px/1.4 var(--font-sans);
+  color: var(--ink);
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.comment-composer-input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.comment-composer-submit {
+  flex-shrink: 0;
+  border: 1px solid var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: 600 12px var(--font-sans);
+  cursor: pointer;
+}
+
+.comments-toast {
+  position: fixed;
+  z-index: 70;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  max-width: min(420px, 92vw);
+  padding: 10px 16px;
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 1px solid var(--warn);
+  border-radius: 10px;
+  font: 13px var(--font-sans);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .34);
+}
+
+.comments-toast[hidden] {
+  display: none;
+}
+
+/* Coarse pointers (touch) need >=44px hit targets on every comment control. */
+@media (pointer: coarse) {
+  .comments-rail-close,
+  .comment-action,
+  .comment-action-text,
+  .comment-composer-submit,
+  .comment-composer-input {
+    min-height: 44px;
+  }
+}
+
+/* Mobile: the rail becomes a modal bottom sheet — the dimming backdrop and the
+   body scroll-lock are the MODAL half of the panel and apply ONLY at this
+   breakpoint, so the > 860px desktop rail stays a non-modal complementary panel
+   with neither (Escape still closes it, from the shell.html keydown handler). */
+@media (max-width: 860px) {
+  body.comments-open {
+    overflow: hidden;
+  }
+  .comments-overlay:not([hidden]) {
+    display: block;
+  }
+  .comments-rail {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-height: 70vh;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 -2px 18px rgba(0, 0, 0, .38);
+  }
+}
+
+/* Per-mode values: softer shadows and a lighter backdrop dim on a light OS. */
+@media (prefers-color-scheme: light) {
+  .comments-rail {
+    box-shadow: -2px 0 18px rgba(0, 0, 0, .14);
+  }
+
+  .comments-overlay {
+    background: rgba(0, 0, 0, .22);
+  }
+
+  .comments-toast {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .14);
+  }
+}
+
+@media (prefers-color-scheme: light) and (max-width: 860px) {
+  .comments-rail {
+    box-shadow: 0 -2px 18px rgba(0, 0, 0, .14);
+  }
+}
+
 .k {
   font-family: var(--font-mono);
   font-size: 12px;

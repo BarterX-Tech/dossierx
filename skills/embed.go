@@ -1,8 +1,9 @@
 // Package skills embeds the DossierX Claude Code skill files (SKILL.md
 // bundles teaching an agent how to author/review claims, derive Build
-// Order, and ground code in claims) so they can be extracted into any
-// consuming project via "dossierx skills export <dir>", without requiring
-// this repository checked out alongside the installed binary.
+// Order, ground code in claims, and run review comment threads) so they
+// can be extracted into any consuming project via "dossierx skills export
+// <dir>", without requiring this repository checked out alongside the
+// installed binary.
 //
 // The go:embed directive lives here, in a file inside skills/ itself,
 // rather than in cmd/dossierx: embed patterns must not contain ".." path
@@ -13,7 +14,7 @@ package skills
 import "embed"
 
 // FS holds every skill directory (dossierx-claims, dossierx-build-order,
-// dossierx-code-links), each containing one SKILL.md.
+// dossierx-code-links, dossierx-comments), each containing one SKILL.md.
 //
-//go:embed dossierx-claims dossierx-build-order dossierx-code-links
+//go:embed dossierx-claims dossierx-build-order dossierx-code-links dossierx-comments
 var FS embed.FS

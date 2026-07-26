@@ -67,6 +67,7 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 | `dossierx catalog` | Build `.catalog.json` from the claims directory. |
 | `dossierx render` | Generate `viewer/index.html` from the catalog. |
 | `dossierx check` | Run lint, catalog, and render in one shot, stopping at the first failure. |
+| `dossierx serve [--port <n>]` | Serve the claims viewer over localhost with a live comment API and reload; open the printed URL in a browser to review and comment. Binds a random high port unless `--port` is given. |
 | `dossierx deps <id>` | Print a claim's edge graph in both directions (what it rests on, what rests on it). |
 | `dossierx coverage` | Report the percentage of claims carrying a `migrated_from` note. |
 | `dossierx stale` | List locked claims currently flagged `review_pending`. |
@@ -77,6 +78,10 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 | `dossierx build-order status --module <name>` | Show a module's build-order artifact state: proposed/locked/stale, plus coverage. |
 | `dossierx build-order lock --module <name>` | Lock a module's proposed build-order artifact, snapshotting a content-hash baseline. |
 | `dossierx flag <id> --claim-says --now-does --reason` | Flag a locked claim whose stated behavior no longer matches reality, marking it `review_pending`. |
+| `dossierx comment add <id> --as <role> --body <text>` | Open a review comment thread on a claim (`--as human\|agent`); dialogue about the claim, no content edit. |
+| `dossierx comment list <id> [--open] [--json]` | List a claim's comment threads; `--open` for unresolved only, `--json` for machine output. |
+| `dossierx comment reply <id> <thread-id> --as <role>` | Reply to an open thread (ungated: an agent may reply to a human-opened thread — the core agent-to-human workflow). |
+| `dossierx comment resolve\|reopen\|edit\|delete <id> <thread-id> --as <role>` | Resolve, reopen, edit, or delete a thread (advisory rights: an agent may only act on its own messages). |
 | `dossierx implink set --module --claim --file [--symbol]` | Manually record that a claim is implemented in a source file (for links scanning can't reach). |
 | `dossierx implink status --module <name>` | Report which claims in a module are linked to code and which are drifted or unlinked. |
 | `dossierx skills export <dir>` | Write the embedded Claude Code skill files into a consuming project (e.g. `.claude/skills/`). |
@@ -96,7 +101,7 @@ Every subcommand accepts the global `--config` flag: a path to `project.config.y
 
 **The pipeline: lint → catalog → render → check.** `lint` validates every claim in isolation and across the whole set (id shape, facet/module membership, dependency cycles, and more). `catalog` compiles the validated claims into a single `.catalog.json`. `render` turns that catalog into a static `viewer/index.html` site. `check` chains all three and stops at the first failure — the command to wire into CI.
 
-**The lock/review_pending/reaudit lifecycle.** A new claim starts as `draft` and is freely editable. `dossierx lock <id>` promotes it to `locked` — refused if lint doesn't pass — signaling it has been reviewed and is now a source of truth other claims and code can depend on. A locked claim never silently changes: if a dependency it `rests_on` changes, or code that implements it changes in a way that no longer matches, the claim is flagged `review_pending` (via `dossierx flag`) rather than auto-updated. `dossierx reaudit <id>` proposes a diff to resolve the pending state and only writes it with an explicit `--confirm`, so every change to a locked claim goes through a human-reviewed, confirm-before-write step — never an automatic overwrite.
+**The lock/review_pending/reaudit lifecycle.** A new claim starts as `draft` and is freely editable. `dossierx lock <id>` promotes it to `locked` — refused if lint doesn't pass, if doctrine hub-gating blocks it, or if the claim still has an unresolved comment thread — signaling it has been reviewed and is now a source of truth other claims and code can depend on. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`/`mirrors` drifts, a `dossierx flag` records that its stated behavior no longer matches reality, or an open comment thread is added to it — rather than being auto-updated. `review_pending` is set automatically but never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a human-confirmed `dossierx reaudit <id> --confirm` (drift/flag), `dossierx unlock`, or resolving the last open thread with `dossierx comment resolve`. `dossierx reaudit` proposes a diff and only writes it with an explicit `--confirm`, so every content change to a locked claim goes through a human-reviewed, confirm-before-write step — never an automatic overwrite; it refuses a claim that is `review_pending` only because of an open comment thread (there is no diff to confirm — resolve the thread instead).
 
 ## Config schema (`project.config.yaml`)
 
@@ -120,7 +125,7 @@ Config loading is strict: an unknown top-level or `viewer.theme` field is a hard
 
 ## Using DossierX's skills in your project
 
-DossierX ships three [Claude Code](https://claude.com/claude-code) skills — `dossierx-claims`, `dossierx-build-order`, and `dossierx-code-links` — that teach an agent working in a *consuming* project how to author claims, derive a module's build order, and link finished code back to the claims it implements. See [`skills/`](skills/) for what each one covers.
+DossierX ships four [Claude Code](https://claude.com/claude-code) skills — `dossierx-claims`, `dossierx-build-order`, `dossierx-code-links`, and `dossierx-comments` — that teach an agent working in a *consuming* project how to author claims, derive a module's build order, link finished code back to the claims it implements, and run review comment threads (including when to comment versus `flag`). See [`skills/`](skills/) for what each one covers.
 
 To use them in a project that depends on DossierX:
 
