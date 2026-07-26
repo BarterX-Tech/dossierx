@@ -533,3 +533,98 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 		}
 	})
 }
+
+// writePoisonStoredBodyClaim hand-authors a claim whose STORED prose body is a
+// tab-led first content line — a shape yaml.v3 v3.0.1 emits as a block scalar it
+// cannot re-parse, so the WHOLE claim will not round-trip on the next save. The
+// double-quoted flow scalar on disk loads cleanly (so `dossierx check`/list pass,
+// exactly the state a user reaches by hand-editing a claim YAML), yet ANY comment
+// op that re-saves the claim trips the loader's store-bricking guard. It carries
+// one open thread (c-poison1) and one resolved thread (c-poison2) so all six
+// mutating verbs have a valid target, and the poison lives in the CLAIM body (not
+// a thread body) so even a whole-thread delete still re-saves the bad bytes.
+func writePoisonStoredBodyClaim(t *testing.T, root, id, module string) string {
+	t.Helper()
+	body := "id: " + id + "\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"body: \"\\tstored prose yaml cannot round-trip\\nsecond line\"\n" +
+		"governed_by:\n  type: none\n  reason: fixture poison claim\n" +
+		"comments:\n" +
+		"  - id: c-poison1\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: open thread on a poison claim\n    edited: false\n" +
+		"  - id: c-poison2\n    status: resolved\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: resolved thread on a poison claim\n    edited: false\n    resolved_by: human\n    resolved_at: \"2026-07-24T11:00:00Z\"\n"
+	path := filepath.Join(root, "claims", lastSegment(id)+".yaml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write poison claim: %v", err)
+	}
+	return path
+}
+
+// A claim whose PRE-EXISTING stored body will not round-trip (a hand-edited
+// tab-led body, a state `dossierx check` passes clean) must NOT print the
+// supplied-body de-indent guidance — the caller's supplied body, if any, is fine.
+// Every mutating verb — the body-less resolve/reopen/delete AS WELL AS
+// add/reply/edit — must instead print a DISTINCT, claim-SCOPED message that names
+// the offending claim, exit non-zero, and NEVER leak the raw internal yaml /
+// round-trip / store-bricking text. This pins EM-01 (resolve/reopen/delete were
+// doing a raw `return err`) and EM-02 (the blanket ErrUnsafeBody misattribution).
+func TestComment_StoredBodyNotRoundTrippable_ClaimScopedError(t *testing.T) {
+	const claimID = "widget.contract.poison"
+	// Every mutating verb, including the body-less ones and a whole-thread delete.
+	verbs := []struct {
+		name string
+		args []string
+	}{
+		{"add", []string{"comment", "add", claimID, "--as", "human", "--body", "a perfectly fine new thread"}},
+		{"reply", []string{"comment", "reply", claimID, "c-poison1", "--as", "human", "--body", "a perfectly fine reply"}},
+		{"resolve", []string{"comment", "resolve", claimID, "c-poison1", "--as", "human"}},
+		{"reopen", []string{"comment", "reopen", claimID, "c-poison2", "--as", "human"}},
+		{"edit", []string{"comment", "edit", claimID, "c-poison1", "--as", "human", "--body", "a perfectly fine edit"}},
+		{"delete", []string{"comment", "delete", claimID, "c-poison1", "--as", "human"}},
+	}
+	for _, v := range verbs {
+		t.Run(v.name, func(t *testing.T) {
+			root := t.TempDir()
+			cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
+			claimPath := writePoisonStoredBodyClaim(t, root, claimID, "widget")
+			before := llReadFile(t, claimPath)
+
+			// Sanity: the poison file loads cleanly (list works) — the exact state a
+			// user reaches by hand-editing a claim YAML; the failure is at SAVE time.
+			if _, e, c := run(t, root, "--config", cfgPath, "comment", "list", claimID); c != 0 {
+				t.Fatalf("precondition: poison claim should LOAD clean (list), got exit %d: %s", c, e)
+			}
+
+			args := append([]string{"--config", cfgPath}, v.args...)
+			out, stderr, code := run(t, root, args...)
+			msg := stderr + out
+			if code == 0 {
+				t.Fatalf("%s: expected a non-zero exit on a non-round-trippable stored body, got 0 (stdout: %s)", v.name, out)
+			}
+			// DISTINCT, claim-SCOPED message that NAMES the claim and points at its
+			// STORED body — not the supplied body.
+			if !strings.Contains(msg, claimID) {
+				t.Fatalf("%s: error must name the offending claim %q, got stdout: %s stderr: %s", v.name, claimID, out, stderr)
+			}
+			if !strings.Contains(msg, "stored body") {
+				t.Fatalf("%s: error must point at the STORED body, got stdout: %s stderr: %s", v.name, out, stderr)
+			}
+			// NOT the supplied-body de-indent guidance (the caller's body is fine here).
+			if strings.Contains(msg, "de-indent") {
+				t.Fatalf("%s: must not print the supplied-body de-indent guidance for a stored-body failure, got: %s", v.name, msg)
+			}
+			// NEVER the raw internal loader/yaml/round-trip text.
+			for _, cryptic := range []string{"round-trip", "byte-exact", "store-bricking", "block scalar", "did not re-parse", "loader:", "yaml:"} {
+				if strings.Contains(msg, cryptic) {
+					t.Fatalf("%s: leaked internal detail %q: stdout: %s stderr: %s", v.name, cryptic, out, stderr)
+				}
+			}
+			// Never bricked: the file is byte-unchanged and the dir still lists.
+			if llReadFile(t, claimPath) != before {
+				t.Fatalf("%s: the poison claim file changed after a refused op", v.name)
+			}
+			if _, e, c := run(t, root, "--config", cfgPath, "comment", "list", claimID); c != 0 {
+				t.Fatalf("%s: claims dir unusable after a refused op: %s", v.name, e)
+			}
+		})
+	}
+}

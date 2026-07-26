@@ -80,18 +80,29 @@ func mutatingCommentDeps(cfg *config.Config) (*comments.Deps, error) {
 // re-rendered, so point the caller at the two commands that do so.
 const viewHint = `; run "dossierx check" or "dossierx serve" to view`
 
-// friendlyCommentBodyErr translates the loader's store-bricking backstop
-// (loader.ErrClaimNotRoundTrippable) — whose raw "did not round-trip byte-exact"
-// text is an internal implementation detail — into the user-facing
-// comments.ErrUnsafeBody guidance, so an unsafe comment body prints the same
-// actionable "remove the leading blank line / de-indent the first line" message
-// no matter which layer caught it. The round-trip-accurate input pre-check
-// (comments.validateBody) normally rejects every unsafe body first (so this is a
-// defensive backstop, symmetric with serve's writeOpError mapping); every other
-// error passes through unchanged.
-func friendlyCommentBodyErr(err error) error {
+// friendlyCommentBodyErr keeps the two DISTINCT store-safety failures apart and
+// never lets the loader's cryptic internal round-trip text reach the user:
+//
+//   - comments.ErrUnsafeBody is the SUPPLIED body (add/reply/edit) failing the
+//     round-trip-accurate input pre-check; its "start with a non-whitespace
+//     character / de-indent the first line" guidance is correct, so it passes
+//     through unchanged.
+//   - loader.ErrClaimNotRoundTrippable is the WHOLE claim's STORED bytes failing
+//     to re-serialize at save time — usually a pre-existing prose or comment body
+//     a user hand-edited into a store-bricking shape (a state "dossierx check"
+//     passes clean), NOT the caller's supplied body. The de-indent-your-input
+//     guidance is wrong for it (and the body-less verbs resolve/reopen/delete have
+//     no supplied body at all), so it translates to a DISTINCT, claim-SCOPED
+//     message that names the offending claim and points at its stored body —
+//     never ErrUnsafeBody's text, never the raw internal yaml/round-trip detail.
+//
+// This is symmetric with serve's writeOpError, which maps ErrUnsafeBody -> 400
+// unsafe_body and ErrClaimNotRoundTrippable -> 422 claim_not_serializable. Every
+// mutating verb (add/reply/resolve/reopen/edit/delete) routes its op error
+// through here; every other error (and nil) passes through unchanged.
+func friendlyCommentBodyErr(claimID string, err error) error {
 	if err != nil && errors.Is(err, loader.ErrClaimNotRoundTrippable) && !errors.Is(err, comments.ErrUnsafeBody) {
-		return comments.ErrUnsafeBody
+		return fmt.Errorf("comment: claim %q has a stored body that can't be re-serialized to YAML (likely a hand-edited leading tab or blank line in a body:); fix that claim's body and retry", claimID)
 	}
 	return err
 }
@@ -117,7 +128,7 @@ func newCommentAddCmd() *cobra.Command {
 			}
 			_, tid, err := deps.Add(args[0], actor, body)
 			if err != nil {
-				return friendlyCommentBodyErr(err)
+				return friendlyCommentBodyErr(args[0], err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: %s added on %s%s\n", tid, args[0], viewHint)
 			return nil
@@ -149,7 +160,7 @@ func newCommentReplyCmd() *cobra.Command {
 			}
 			_, rid, err := deps.Reply(args[0], args[1], actor, body)
 			if err != nil {
-				return friendlyCommentBodyErr(err)
+				return friendlyCommentBodyErr(args[0], err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: reply %s added to thread %s on %s%s\n", rid, args[1], args[0], viewHint)
 			return nil
@@ -180,7 +191,7 @@ func newCommentResolveCmd() *cobra.Command {
 				return err
 			}
 			if _, err := deps.Resolve(args[0], args[1], actor); err != nil {
-				return err
+				return friendlyCommentBodyErr(args[0], err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: thread %s resolved on %s%s\n", args[1], args[0], viewHint)
 			return nil
@@ -210,7 +221,7 @@ func newCommentReopenCmd() *cobra.Command {
 				return err
 			}
 			if _, err := deps.Reopen(args[0], args[1], actor); err != nil {
-				return err
+				return friendlyCommentBodyErr(args[0], err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: thread %s reopened on %s%s\n", args[1], args[0], viewHint)
 			return nil
@@ -240,7 +251,7 @@ func newCommentEditCmd() *cobra.Command {
 				return err
 			}
 			if _, err := deps.Edit(args[0], args[1], replyID, actor, body); err != nil {
-				return friendlyCommentBodyErr(err)
+				return friendlyCommentBodyErr(args[0], err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: %s edited on %s%s\n", editTarget(args[1], replyID), args[0], viewHint)
 			return nil
@@ -272,7 +283,7 @@ func newCommentDeleteCmd() *cobra.Command {
 				return err
 			}
 			if _, err := deps.Delete(args[0], args[1], replyID, actor); err != nil {
-				return err
+				return friendlyCommentBodyErr(args[0], err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "comment: %s deleted on %s%s\n", editTarget(args[1], replyID), args[0], viewHint)
 			return nil

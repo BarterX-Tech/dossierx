@@ -400,6 +400,19 @@ func TestOverlaysAreMutuallyExclusive(t *testing.T) {
 	p.seedComment("human", "overlap")
 	ctx := newLiveTab(t, p)
 
+	// Pin an explicit DESKTOP viewport (above the 860px bottom-sheet breakpoint)
+	// so this spec is deterministic under any Chromium. The default browser window
+	// is ~800px wide in some builds — below 860px — which puts the viewer in mobile
+	// mode where the modal nav drawer's full-viewport scrim (#navOverlay,
+	// pointer-events:auto while open) intercepts the real chip click below, so the
+	// final "re-open comments closes the nav" step would flakily never fire. The
+	// mutual-exclusivity assertions are JS class-state and hold at any width; this
+	// only removes the click-interception flake, it does not weaken them.
+	runCDP(t, ctx, chromedp.EmulateViewport(1200, 800))
+	if evalBool(t, ctx, `window.matchMedia('(max-width: 860px)').matches`) {
+		t.Fatal("EmulateViewport(1200) did not take effect: still matches the <=860px media query")
+	}
+
 	// Open the comment panel.
 	runCDP(t, ctx, chromedp.Click(".comment-chip", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)

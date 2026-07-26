@@ -509,13 +509,17 @@ func (s *Server) writeInternal(w http.ResponseWriter, err error) {
 // error code. Read-only mode becomes 403 read_only; unknown thread/reply ids
 // become 404 thread_not_found / reply_not_found; a rights denial 403; a
 // wrong-state op (reply to resolved, double resolve/reopen) 409; an out-of-band
-// file change (loader's optimistic concurrency sentinel) 409 claim_file_changed;
-// a store-bricking / non-round-trippable body 400 unsafe_body (BOTH the input
-// pre-check's comments.ErrUnsafeBody AND the loader's save-time backstop
-// loader.ErrClaimNotRoundTrippable — never a 500 that leaks the internal yaml
-// round-trip text); anything unmatched is a 500. It also fields mutatingDeps'
-// setup errors (its callers route them here), whose store-load failures fall
-// through to the 500 default unchanged.
+// file change (loader's optimistic concurrency sentinel) 409 claim_file_changed.
+// The two store-safety failures are kept DISTINCT: the input pre-check's
+// comments.ErrUnsafeBody (the caller's SUPPLIED body cannot be stored) is 400
+// unsafe_body, while the loader's save-time backstop
+// loader.ErrClaimNotRoundTrippable (the WHOLE claim's STORED bytes will not
+// re-serialize — usually a pre-existing, hand-edited body, NOT the caller's input,
+// so 400 would misattribute fault) is 422 claim_not_serializable. Both carry ONLY
+// their stable code — never a 500 that leaks the internal yaml round-trip text.
+// Anything unmatched is a 500. It also fields mutatingDeps' setup errors (its
+// callers route them here), whose store-load failures fall through to the 500
+// default unchanged.
 func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errReadOnly):
@@ -530,8 +534,14 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusUnprocessableEntity, "banner_claim")
 	case errors.Is(err, comments.ErrEmptyBody):
 		writeError(w, http.StatusBadRequest, "empty_body")
-	case errors.Is(err, comments.ErrUnsafeBody), errors.Is(err, loader.ErrClaimNotRoundTrippable):
+	case errors.Is(err, comments.ErrUnsafeBody):
+		// The caller's SUPPLIED body cannot be stored: their input IS at fault.
 		writeError(w, http.StatusBadRequest, "unsafe_body")
+	case errors.Is(err, loader.ErrClaimNotRoundTrippable):
+		// The whole claim's STORED bytes will not re-serialize (usually a
+		// pre-existing, hand-edited body) — NOT the caller's input. Distinct code,
+		// and honest that this is not a 400-class bad request.
+		writeError(w, http.StatusUnprocessableEntity, "claim_not_serializable")
 	case errors.Is(err, comments.ErrInvalidActor):
 		writeError(w, http.StatusBadRequest, "invalid_actor")
 	case errors.Is(err, comments.ErrRightsDenied):
