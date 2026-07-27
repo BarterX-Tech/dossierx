@@ -1133,18 +1133,6 @@ export const contentSpec: ContentSpec = {
             ],
           },
           {
-            version: "v0.2.1",
-            date: "2026-07-26",
-            title: "Comment on any card (the loop no longer dead-ends)",
-            tag: "Previous release",
-            highlights: [
-              "BUG FIX: a claim with no comments rendered no 💬 chip, so the first comment on any card could never be opened from the viewer — the exact gesture the review loop starts with.",
-              "Both gates had to move together: the server emitted the chip only when threads existed, and the client hid any chip whose count was zero, so an empty chip would have vanished the moment it was clicked.",
-              "Every non-banner card now carries a chip, zero-state included, with an 'add the first comment' label; the rail on an empty claim mounts the composer plus an empty-state line.",
-              "A static file:// export still hides empty chips: with no API to answer, read-only is the honest presentation.",
-            ],
-          },
-          {
             version: "v0.3.0",
             date: "2026-07-27",
             title: "Agent-first restructure — two surfaces, one gate",
@@ -1154,6 +1142,7 @@ export const contentSpec: ContentSpec = {
               "MACHINE CONTRACT: every command emits exactly one JSON envelope ({ok, command, data, warnings, error, stopped_at}), JSON by default, with a shared snake_case error.code vocabulary that the viewer's JSON API and the CLI now literally share. --dry-run on every mutating verb; --reason required on claim lock, claim unlock, claim reaudit --confirm and build-order lock. Exit codes stayed additive: 1 generic, 2 not-found/wrong-state.",
               "SURFACE: 26 commands became 19 under six nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
               "INTEGRITY: a lock ledger, separate from the content hash and built as a deny-list over every persisted field — so a swapped raw_html payload on a locked, allowlisted mockup can no longer pass as unchanged. Hand-flipping status, editing a locked body, or deleting a thread from YAML is now reported as lock-ledger-missing, lock-content-drift, lock-ledger-orphan or comment-ledger-drift. The gate rides git: a pre-commit hook running check --staged over the index, with CI as the authority, because merges and rebases never fire pre-commit.",
+              "BUG FIX, and the reason the loop works at all: a claim with no comments rendered no 💬 chip, so the first comment on any card could never be opened from the viewer — the exact gesture the review loop starts with. Both gates had to move together, since the server emitted the chip only when threads existed and the client hid any chip reading zero, so an empty chip would have vanished the moment it was clicked. Every non-banner card now carries a chip, zero-state included; a static file:// export still hides them, because with no API to answer, read-only is the honest presentation.",
               "Also: self-edges rejected across every edge type and a second cycle pass over governed_by; edge labels in the viewer read as prose instead of raw ids (issue #11); five embedded skills, contract front-loaded, rewritten onto the new surface. Still cobra + yaml.v3 only.",
             ],
           },
