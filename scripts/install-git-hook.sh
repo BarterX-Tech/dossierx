@@ -69,7 +69,7 @@
 
 set -eu
 
-marker='# dossierx-hook: pre-commit v3'
+marker='# dossierx-hook: pre-commit v4'
 
 # ---------------------------------------------------------------------------
 # The hook body.
@@ -85,7 +85,7 @@ marker='# dossierx-hook: pre-commit v3'
 hook_body() {
 	cat <<'PRECOMMIT_HOOK'
 #!/bin/sh
-# dossierx-hook: pre-commit v3
+# dossierx-hook: pre-commit v4
 #
 # Refuses a commit that changes a LOCKED claim without an approval record.
 #
@@ -210,7 +210,53 @@ check_one() {
 	# human-readable re-run happens only on the failure path, where a second
 	# ~200ms read-only pass is worth a report someone can act on.
 	report=$(run_check "$cfg" json)
-	if [ $? -eq 0 ]; then
+	check_rc=$?
+
+	# A SKIPPED RUN IS NOT A PASS, and this branch is what says so.
+	#
+	# "check --staged" exits 0 with data.skipped when it had no git index to
+	# evaluate. That is deliberate and stays: running it by hand outside a
+	# repository, or in CI over a tarball checkout, must not fail. Inside a
+	# pre-commit hook the reasoning does not apply at all — git is running us,
+	# from a work tree, on a commit — so "nothing was evaluated" means the gate
+	# did not look at the thing it was installed to guard.
+	#
+	# It used to be invisible here. check_one branched on the exit code and on
+	# error.code and on nothing else, and --format json prints the warning into
+	# the envelope rather than onto the terminal, so a skipped run was
+	# byte-for-byte indistinguishable from a clean pass: no output, exit 0,
+	# commit lands. That is how a project whose claims_dir resolved outside the
+	# config's own directory — docs/project.config.yaml with
+	# "claims_dir: ../claims", an ordinary monorepo layout every other dossierx
+	# command handles — committed an out-of-band edit to a LOCKED claim in
+	# total silence. The engine no longer skips that layout, and this branch is
+	# the second lock on the same door: whatever the reason, a gate that
+	# evaluated nothing does not get to report a pass.
+	case "$report" in
+	*'"skipped": true'* | *'"skipped":true'*)
+		printf '%s\n' \
+			'dossierx: COMMIT REFUSED — the claim-integrity gate evaluated NOTHING.' \
+			'' \
+			'"dossierx check --staged" reported skipped:true, which means it found no' \
+			'git index to judge. In a pre-commit hook that cannot be right: git is' \
+			'running this hook, from a work tree, on a commit. Passing the commit on' \
+			'that basis would be a gate reporting OK over a claim it never read.' \
+			'' \
+			'  most likely: claims_dir resolves OUTSIDE this repository, so no commit' \
+			'  here could carry the claims. Check claims_dir in your project config.' \
+			'' \
+			'  what it said:' >&2
+		# The text re-run, so the reason is on screen rather than only in the
+		# JSON envelope nobody sees.
+		run_check "$cfg" text >&2 || true
+		printf '%s\n' \
+			'' \
+			'  or skip once: git commit --no-verify (CI runs the same gate)' >&2
+		return 1
+		;;
+	esac
+
+	if [ "$check_rc" -eq 0 ]; then
 		return 0
 	fi
 

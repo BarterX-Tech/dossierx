@@ -75,22 +75,24 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 |---|---|---|
 | `config_not_found` | 2 | not a DossierX project (yet). Do not create one unasked — see Bootstrap below. |
 | `claim_not_found` | 2 | you guessed an id. Run `dossierx claim list --match "<what the human said>"` and confirm the id back to them. |
-| `lint_failed` | 1 | read `data.lint_findings`, fix the claims, re-run `dossierx check --validate`. |
+| `lint_failed` | 1 | findings are in **`data.lint_findings`** — on `check` and on `claim lock` alike (`claim lock` keeps a second copy under `error.details.lint_findings`). Fix the claims, then re-check **with the command that refused you**: `dossierx check --validate` after a `check` failure, `dossierx claim lock <id> --dry-run` after a `claim lock` failure. Re-running `check --validate` after a lock refusal is a **loop, not a recovery**: it does not re-attempt the lock, and it reports *zero* findings for every rule that keys off a claim's own status (`build-role-required-for-locked`, `rest-on-locked`, `roll-up`) because the claim is still `draft` on disk. The dry run lints the about-to-be-locked form, which is the only form that answers. |
 | `integrity_failed` | 1 | a locked claim moved outside the approval path. Read `data.ledger_findings`. **Do not re-lock to make it go away** — restore the file from git, or unlock → fix → lock. |
 | `unresolved_comments` | 1 | the claim has an open thread. Reply on it; the **human** clicks Resolve in the viewer. That click is the approval this gate waits for. |
 | `dependency_not_locked` | 1 | a doctrine dependency is still draft. Lock it first (with approval), then retry. |
 | `not_review_pending` | 2 | you reached for `claim reaudit` on a claim that is not drifting. The general edit path is unlock → fix → lock. |
 | `review_pending` | 2 | the claim IS pending, and that is what blocks you. `dossierx claim show <id>` names the trigger. |
 | `already_locked` | 1 | the claim (or build order) is **already** locked, and `lock` refuses rather than re-signing it — a second lock would stamp a fresh approval over content nobody approved and clear `review_pending` with no diff. To change it: `unlock` → fix → `lock`. If a gate reported drift on it, restore the file from git instead. |
-| `comment_digest_drift` | 1 | the claim's `comments:` block was changed outside the engine, so this write is refused rather than silently re-recording the tampered block as the truth. Restore the claim file from version control, then retry. |
+| `comment_digest_drift` | 1 | the claim's `comments:` block and `.dossierx-comment-digest.json` disagree, so this write is refused rather than silently re-recording the block as the truth. **No command clears it** — the recovery is version control, and which file you restore depends on which side moved: the claim file if its block was hand-edited, the digest store if a commit carried the claim file without it, both from the same commit if you cannot tell. The engine writes the two as a pair and they only agree as a pair. **Never delete the digest store to clear this** — that is the laundering the store exists to catch, and `check` then reports `comment-digest-absent`. Tell the human; do not loop on it. |
 | `comment_digest_unavailable` | 1 | the comment digest store could not be opened, so the write was refused **before anything changed**. Nothing was written, so a retry is safe — but it will keep failing identically until `.dossierx-comment-digest.json` is restored from version control (or a stale `.dossierx-comment-digest.json.lock` left by a crash is removed). Tell the human; do not loop on it. |
 | `build_order_hand_edited` | 1 | `.build-order.<module>.json` is not what a fresh `propose` computes — a phase sequence, a claim's placement, or the `excluded` set was edited by hand. The **claims are fine**; the artifact is not, so none of `build_order_refused`'s recoveries apply. Re-run `build-order propose --module <m>` to discard the edit, then `lock` what the engine derived. |
+| `untracked_config` | 1 | `check --staged` was asked to judge a commit whose `project.config.yaml` is not tracked. It reads the claims, the ledger and the digest store from the **index**, and an untracked config can be edited without staging anything — so honouring the worktree copy would let a one-line `claims_dir:` edit point the gate at a clean decoy while the commit carries a tampered locked claim. Run `git add project.config.yaml` (or the path you passed to `--config`) and commit again. Nothing was judged, so this is not a verdict on your claims. |
 | `not_locked` | 2 | flagging and linking need a locked claim. |
 | `implink_refused` | 1 | `claim link` could not record the link, or `check`'s source scan rejected a `dossierx-claim:` tag — a file that does not exist, a claim outside `--module`, a path that is absolute or escapes the project, a tag naming an unknown id, or **a tag on a claim you deliberately unlocked**, which is still `draft` in the middle of `unlock → fix → lock` while the scan wants it locked. That last case is the one where the tag is already right: finish `dossierx claim lock <id> --reason "…"` and re-run — **do not remove or edit the tag**, and do not treat the exit 1 as a verdict on your source. `data.scan_errors[]` gives the file, line and `claim_id` of every rejected tag; `dossierx claim show <id>` settles which case you are in without reading a word of prose. Every other case is your invocation or your tag, not a gate: fix it and re-run, and show the human the message. |
 | `structured_layout` | 1 | `claim flag` rewrites `body` only; this claim renders from `rows`/`steps`/`raw_html`. Use unlock → fix → lock. |
 | `rights_denied` | 1 | the advisory-rights rule. You tried to act on a human's message. **Do not retry as another role.** Reply instead. |
 | `missing_flag` | 1 | a required `--reason`/`--as`/`--module` was omitted. `--reason` carries the human's approving words; do not invent them. |
 | `unknown_module` / `unsupported_format` / `usage` | 1 | fix your own invocation. |
+| `write_failed` | 1 | a write did not land: a permission, a missing directory, a full disk — or, from `skills export`, "no directory given and no `project.config.yaml` found", which is your invocation and not the filesystem. Give the export an explicit directory (`dossierx skills export .claude/skills`). Show the human anything else; retrying an unwritable path just fails again. |
 | `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, nobody is holding it: a process died inside the critical section and left the sentinel file behind, and no timeout clears it — the acquire timeout only makes each failure arrive faster. The message names the file (`.dossierx-claims.lock`, or the `.lock` sitting beside whichever store it names); delete that file and retry. Do not loop on it. |
 | `claim_file_changed` | 1 | someone wrote while you were deciding. Re-read the claim and redo the decision — do **not** retry blindly. |
 | `banner_claim` / `empty_body` / `unsafe_body` | 1 | the comment you tried to write cannot be stored. Fix the body; `claim_not_serializable` instead means the claim **on disk** is already broken. |
@@ -103,7 +105,8 @@ even when the real run would refuse — including when you forgot a required fla
 ```json
 {"ok": true, "command": "claim lock", "data": {
   "would": "lock claim widget.contract.retry-policy", "from": "draft", "to": "locked",
-  "preconditions": [{"name": "lint_clean", "ok": true, "detail": "0 error-level lint finding(s)"},
+  "preconditions": [{"name": "claim_is_draft", "ok": true, "detail": "status is \"draft\""},
+                    {"name": "lint_clean", "ok": true, "detail": "0 error-level lint finding(s)"},
                     {"name": "no_open_comment_threads", "ok": false, "detail": "1 unresolved thread(s) [c-b98f8b]"}],
   "side_effects": ["rewrites claims/retry-policy.yaml", "the claim becomes locked: every later change must go through unlock -> fix -> lock"],
   "missing": ["--reason", "no_open_comment_threads"], "blocked": true}}
@@ -145,13 +148,36 @@ Load one, not all four. Each states the contract it needs at the top.
 
 ## Bootstrap — setting DossierX up in a repo
 
-Only when the human asks. 1) install the binary if absent, then `dossierx version`. 2)
-`dossierx skills export` — it writes the guide in whatever form this repo uses. 3) propose
-`project.config.yaml` (project name, facets, modules) and `claims/`, and **ask them to confirm
-the facet list** before writing it. 4) ask before installing the git pre-commit hook
-(`scripts/install-git-hook.sh`), then run `dossierx check` and show them the result. Commit the
-lock ledger file — CI depends on it. 5) tell them to run `dossierx serve`; that is the only
-DossierX command they ever run.
+Only when the human asks, and **in this order** — steps 2 and 3 are not interchangeable.
+
+1. Install the binary if absent, then `dossierx version`.
+2. `dossierx skills export .claude/skills` — or whichever skills/instructions directory this
+   harness actually reads. **Name the directory explicitly.** The argument is optional only
+   inside an existing project: with no directory *and* no `project.config.yaml` there is nowhere
+   to install to, and the command fails with `write_failed`. That is exactly where you are at
+   step 2, because the config does not exist until step 3.
+3. Propose `project.config.yaml` (title, facets, modules) and `claims/`, and **ask them to
+   confirm the facet list** before writing it.
+4. Ask before installing the git pre-commit hook. If they say yes, fetch
+   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.3.0/scripts/install-git-hook.sh`
+   to a file, show them what it does, then run `sh install-git-hook.sh --yes`. Neither that script
+   nor `scripts/ci/dossierx-check.yml` exists in *their* repository — both ship with DossierX, so
+   fetch them from the same release path. If they say no to the hook, add the CI workflow instead
+   and say so: **CI is the authority either way.**
+5. Run `dossierx check --format text` and show them the output exiting 0. Do not assert it works.
+6. Tell them to commit `.dossierx-lock-store.json`, and `.dossierx-comment-digest.json` and
+   `.dossierx-flag-store.json` once those appear. All three are tracked artifacts and none may
+   be `.gitignore`d — see the note under this list.
+7. Tell them to run `dossierx serve`; that is the only DossierX command they ever run.
+
+**The three project-root stores travel with the claims.** `.dossierx-lock-store.json` is what CI
+compares the claims against — without it the gate is theatre. `.dossierx-comment-digest.json` is
+the same thing for review history, and deleting it is reported as `comment-digest-absent`.
+`.dossierx-flag-store.json` holds each `claim flag`'s pending before/after, and it is the one
+with **no gate rule behind it at all**: nothing compares it to anything, so if it does not travel
+with its claim, that claim arrives `review_pending` with nothing to propose and a confirmed
+`claim reaudit` clears the human's flag having changed nothing — silently. Commit all three in
+the same commit as the claims they describe.
 
 ## If you remember an older command
 

@@ -146,6 +146,12 @@ func newBuildOrderProposeCmd() *cobra.Command {
 				dr.Require("module_is_orderable", proposeErr == nil, proposeErrDetail(proposeErr))
 				dr.Require("no_approved_order_to_discard", !discards, existingOrderDetail(cfg, module, existing, existingErr))
 				dr.Effect("writes " + path + ", overwriting any existing proposal for this module")
+				// The ledger write is a SIDE EFFECT of proposing, and one a
+				// reader would not predict from the verb, so the preview names
+				// it rather than letting the real run be the first mention.
+				if buildOrderRecordStands(cfg, module) {
+					dr.Effect(fmt.Sprintf("releases module %q's standing build-order approval in the lock ledger (the record is kept and marked released, never deleted) — the order it approved is being replaced by an unlocked proposal", module))
+				}
 				if proposeErr == nil {
 					for _, p := range phaseData(artifact) {
 						dr.Propose(p.Phase, p.Claims)
@@ -163,8 +169,31 @@ func newBuildOrderProposeCmd() *cobra.Command {
 					"build-order propose: module %q's build order is locked and current; re-proposing would discard an approved order and replace it with an unlocked recomputation, leaving its lock-ledger record pointing at content that no longer exists", module).
 					WithHint(fmt.Sprintf("if the order genuinely needs to change, change what it is derived from — dossierx claim unlock <id> --reason \"...\", edit, relock — which makes the order stale, and a stale order may be re-proposed and re-locked (dossierx build-order status --module %s)", module))
 			}
+			// The lock-store sentinel is taken BEFORE the artifact is written and
+			// held across both writes, for the reason "build-order lock" states
+			// at its own acquisition: this command now writes TWO files, and
+			// contention on the second one must refuse the whole operation with
+			// nothing written rather than leave the first half on disk. See the
+			// releaseBuildOrderApproval call below for what the second write is.
+			//
+			// Acquisition order is unchanged: propose never takes the claims
+			// sentinel, and the project-wide order is claims -> lock-store ->
+			// flag-store.
+			releaseLock, err := lock.AcquireFileLock(storePath(cfg))
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteConflict, "build-order propose: %w", err)
+			}
+			defer releaseLock()
+
 			if err := buildorder.WriteArtifact(artifact, path); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "build-order propose: %w", err)
+			}
+
+			// Release the module's standing approval, because the artifact it
+			// vouched for no longer exists — the line above just overwrote it
+			// with an unlocked recomputation. See releaseBuildOrderApproval.
+			if err := releaseBuildOrderApproval(cfg, module, path); err != nil {
+				return cmdResult{}, err
 			}
 
 			excluded := artifact.Excluded
@@ -649,6 +678,87 @@ func recordBuildOrderApproval(cfg *config.Config, module string, artifact *build
 			WithHint(recovery)
 	}
 	return nil
+}
+
+// releaseBuildOrderApproval marks module's build-order ledger record released
+// after "propose" has overwritten the approved artifact with a fresh unlocked
+// one, returning nil on success or a CODED error the command fails on.
+//
+// It is the write that makes RuleBuildOrderLedgerOrphan's predicate honest. That
+// rule fires on any unlocked artifact under a STANDING record, and the only
+// legitimate way to reach that state is the window between a re-propose and the
+// lock that follows it. Rather than have the gate guess which unlocked artifact
+// is honest — the guess it used to make, by re-signing the file as if its locked
+// flag were still true, which caught a lone flag flip and missed the strictly
+// worse "flag flip plus a content edit" — propose simply writes down what is
+// true: this approval no longer stands, because the bytes it vouched for are
+// gone. The gate then needs no exception, and a hand-cleared "locked": false is
+// a finding no matter what else was edited alongside it.
+//
+// The record is RELEASED, never deleted, for the reason
+// lock.ReleaseBuildOrderApproval's own comment gives: the evidence that this
+// module's order was once approved is what the reverse sweep needs, and deleting
+// it would make removal quieter than editing.
+//
+// A module with no record at all — the ordinary first propose — is not an error.
+// ReleaseBuildOrderApproval reports false, there is nothing to write, and the
+// store is left untouched rather than created as a side effect of a read-mostly
+// verb.
+//
+// The caller already holds the lock-store sentinel, exactly as
+// recordBuildOrderApproval's caller does and for the same reason, so this takes
+// no sentinel of its own; taking it again here would self-deadlock.
+//
+// Both failures below leave the artifact on disk unlocked with its record still
+// standing, which is precisely the state the orphan rule refuses. That makes
+// them FATAL rather than warnings — the same call this file already made for
+// recordBuildOrderApproval, and for the same reason: an ok:true envelope over a
+// project the next `check --validate` refuses is a false machine contract. The
+// recovery named is restoring the artifact, because the approved order is what
+// was just destroyed and version control is the only place it still exists.
+func releaseBuildOrderApproval(cfg *config.Config, module string, path string) error {
+	recovery := fmt.Sprintf("the approved order at %s has been overwritten with an unlocked proposal while its approval still stands, which dossierx check reports as build-order-ledger-orphan; restore %s from version control to undo the propose, or re-run this command once the lock ledger is writable and then dossierx build-order lock --module %s --reason \"<the human's words>\"", path, path, module)
+
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil {
+		return cliout.Errorf(cliout.CodeIntegrityFailed,
+			"build-order propose: %s's build order was rewritten as an unlocked proposal, but the lock ledger could not be read, so its previous approval could not be released: %v", module, err).
+			WithHint(recovery)
+	}
+
+	if !lock.ReleaseBuildOrderApproval(store, module,
+		lock.Approval{Actor: lock.DefaultActor(), Reason: "superseded by dossierx build-order propose --module " + module}) {
+		// No record to release: nothing was approved, so nothing is being
+		// discarded and there is nothing to persist.
+		return nil
+	}
+
+	if err := store.Save(); err != nil {
+		return cliout.Errorf(cliout.CodeWriteFailed,
+			"build-order propose: %s's build order was rewritten as an unlocked proposal, but the release of its previous approval could not be saved to the lock ledger: %v", module, err).
+			WithHint(recovery)
+	}
+	return nil
+}
+
+// buildOrderRecordStands reports whether module carries a STANDING (unreleased)
+// build-order record right now, which is the one question the propose dry run
+// needs in order to say whether the real run would release an approval.
+//
+// It is deliberately narrower than buildOrderApprovalStands: that function asks
+// whether an approval vouches for the artifact's CURRENT bytes (and answers true
+// on no evidence, so that not knowing can never be spent as permission to
+// overwrite). This one asks only whether a record is there and unreleased, and
+// answers false on no evidence — an unreadable store must not make the preview
+// announce a side effect the real run may not perform. The real run's own
+// correctness does not rest on this; it re-reads the store under the sentinel.
+func buildOrderRecordStands(cfg *config.Config, module string) bool {
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil || store == nil {
+		return false
+	}
+	record, ok := store.Record(lock.BuildOrderLedgerKey(module))
+	return ok && record.Subject == lock.SubjectBuildOrder && !record.Released()
 }
 
 // buildOrderSignature hashes a build-order artifact for the lock ledger:

@@ -63,8 +63,9 @@ func flagDryRun(claim model.Claim, claimSays, nowDoes, reason string) *cliout.Dr
 	dr.Require("claim_is_locked", claim.Status == model.StatusLocked,
 		fmt.Sprintf("status is %q", claim.Status))
 	lay := flagStructuredLayout(claim)
-	dr.Require("claim_is_body_only", lay == "",
-		fmt.Sprintf("layout is %q; a flag-sourced reaudit can only rewrite body", lay))
+	dr.Require("claim_is_body_only", lay == "", boolDetail(lay == "",
+		fmt.Sprintf("layout %q renders from body, which is the only field a flag-sourced reaudit rewrites", claim.Layout),
+		fmt.Sprintf("layout is %q; a flag-sourced reaudit can only rewrite body", lay)))
 
 	dr.Effect("sets review_pending on " + claim.SourcePath).
 		Effect("records a one-shot pending-flag entry that the next \"dossierx claim reaudit --confirm\" consumes").

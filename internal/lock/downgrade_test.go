@@ -265,3 +265,71 @@ func TestADowngradedSchemaZeroStoreWritesBackVersionZero(t *testing.T) {
 		t.Fatalf("expected the refused store written back at version 0, got %v", got)
 	}
 }
+
+// THE EMPTIED LEDGER. The downgrade evidence used to be "the ledger map is
+// non-empty", which reads the RECORDS and not the KEY — so emptying the map in
+// the same edit that lowers the version satisfied both existing guards:
+//
+//	"version": 2 -> 1, "ledger": { … } -> {}   and the store looks pre-ledger
+//
+// The ledger key did not exist before schema 2, so its PRESENCE is the same
+// proof its contents were: a store that has never been through a ledger-aware
+// build cannot carry the key at all, empty or not. Reading the key rather than
+// its size costs nothing and closes the cheaper of the two edits — one that also
+// leaves a smaller diff than deleting the key outright.
+func TestAnEmptiedLedgerKeyIsStillEvidenceOfADowngrade(t *testing.T) {
+	silenceAnnouncements(t)
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{},"ledger":{}}`), 0o644); err != nil {
+		t.Fatalf("write downgraded store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	// No digest store beside it (the attacker deletes that too), so the ledger
+	// key is the only evidence left — which is exactly what is being asserted.
+	if !store.LedgerDowngraded(digestStorePresentBeside(path)) {
+		t.Fatalf("a store carrying the ledger key cannot predate the ledger")
+	}
+
+	tampered := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "quietly rewritten"}
+	if adopted := AdoptLedger(store, []model.Claim{tampered}); len(adopted) != 0 {
+		t.Fatalf("an emptied ledger must not re-arm grandfathering, adopted %v", adopted)
+	}
+	if !hasRule(Audit([]model.Claim{tampered}, store, nil), RuleLockLedgerDowngraded) {
+		t.Fatalf("expected %s", RuleLockLedgerDowngraded)
+	}
+	// The claims under it must still be reported as unrecorded: the downgrade is
+	// the cause, "no standing approval" is what it cost, and a reader needs both.
+	if !hasRule(Audit([]model.Claim{tampered}, store, nil), RuleLockLedgerMissing) {
+		t.Fatalf("expected %s alongside the downgrade", RuleLockLedgerMissing)
+	}
+}
+
+// The honest side of the same read: a genuine v0.2.x store has NO ledger key at
+// all, and must still be grandfathered. This is the assertion that keeps the
+// guard above from being a different outage — an upgrading project that could
+// not adopt would fail check with lock-ledger-missing on every locked claim it
+// had done nothing wrong to earn.
+func TestAStoreWithNoLedgerKeyStillGrandfathers(t *testing.T) {
+	silenceAnnouncements(t)
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.main":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatalf("write v1 store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if store.LedgerDowngraded(digestStorePresentBeside(path)) {
+		t.Fatalf("a genuine pre-ledger store must not read as downgraded")
+	}
+	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
+	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 1 {
+		t.Fatalf("a genuine pre-ledger project must still be grandfathered, adopted = %v", adopted)
+	}
+}

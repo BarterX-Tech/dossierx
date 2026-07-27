@@ -127,10 +127,9 @@ get a yes, then run it. `--reason` is where their approval is carried into the r
 fabricate one.
 
 The window between the two ends is not a steady state. If any source file carries a
-`dossierx-claim:` tag for that id, a plain `dossierx check` in the middle of it fails with
-`implink_refused` and `claim is not locked (status "draft")` — the tag is fine, the claim is
-simply mid-edit. Finish the relock; do not touch the tag, and do not leave the claim unlocked to
-silence it.
+`dossierx-claim:` tag for that id, a plain `dossierx check` mid-edit fails with `implink_refused`
+and `claim is not locked (status "draft")` — the tag is fine, the claim is simply mid-edit. Finish
+the relock; do not touch the tag, and never leave the claim unlocked to silence it.
 
 `dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
 the findings), `unresolved_comments` (reply, and let the human click Resolve),
@@ -159,13 +158,8 @@ that is not already locked **and** `review_pending` (`not_review_pending`, exit 
 dependency-drift proposal is a no-change stub today (treat any content diff there as
 illustrative), and it can rewrite `body` and nothing else. If you want to change a locked claim
 for any other reason — new information, a better wording, a `rows` fix, a structural change —
-that is unlock → fix → lock. The CLI says so itself:
-
-```json
-{"ok": false, "command": "claim reaudit", "error": {"code": "not_review_pending",
-  "message": "reaudit: claim \"widget.contract.retry-policy\" is not locked+review_pending: claim not in the required state",
-  "hint": "to change a locked claim that is not drifting: dossierx claim unlock <id> --reason \"...\", edit, then dossierx claim lock <id> --reason \"...\""}}
-```
+that is unlock → fix → lock — and the refusal's own `error.hint` spells out both commands with the
+claim id already substituted, so read it rather than re-deriving the path.
 
 When reaudit *is* right: run it bare first (a preview; writes nothing, renders the before/after
 as a diff), **show the human the diff and wait**, then `--confirm --reason "<their words>"`. On
@@ -184,12 +178,23 @@ still stands (there is no `claim delete` verb — `unlock` first, then delete), 
 changed outside the engine.
 
 The recovery is never "re-lock it so the hashes match" — that launders the edit. Restore the file
-from version control, or take it through unlock → fix → lock so the change is on the record. The
-ledger file is a tracked, committed artifact; CI is the authority, the hook is only fast feedback.
+from version control, or take it through unlock → fix → lock. CI is the authority; the hook is
+only fast feedback.
+
+**Three project-root files are tracked, committed artifacts**, beside `project.config.yaml` and
+never `.gitignore`d: `.dossierx-lock-store.json` (the ledger; missing → `lock-ledger-absent`, and
+the gate has nothing to compare against), `.dossierx-comment-digest.json` (the review history's
+fingerprint; missing → `comment-digest-absent`), `.dossierx-flag-store.json` (each flagged claim's
+pending `{claim_says, now_does, reason, flagged_at}`).
+
+The flag store is the one to watch, because **no gate rule reads it at all**: losing it is silent.
+The claim still arrives `review_pending`, but `reaudit` has no before/after to propose, and
+confirming that empty proposal clears the human's flag having applied nothing — the one state where
+a trigger disappears with no edit and no record. Commit it with its claim, and treat an empty
+`reaudit` diff on a flagged claim as a missing flag entry: **stop and say so**, do not confirm.
 
 ## Portability
 
 DossierX takes zero project-specific behavior from its own source: facets, modules, claims dir,
 source dirs, doctrine facet and template overrides all come from `project.config.yaml`. Adding
-DossierX to a project is that file plus a `claims/` directory — never patch the engine to
-special-case a project.
+DossierX to a project is that file plus a `claims/` directory — never patch the engine.

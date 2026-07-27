@@ -106,6 +106,15 @@ it just move, get renamed, or get refactored with identical behavior?
   prose. Continue from **[[dossierx-claims]]**'s reaudit section. This is the **only** place a human
   re-enters this otherwise fully autonomous workflow — a genuine mismatch, never routine linking.
 
+  **The before/after lives in `.dossierx-flag-store.json`, and that file is a tracked artifact.**
+  Only `review_pending` goes into the claim; the two strings the human is going to review go into
+  the store at the project root, beside `.dossierx-lock-store.json` and
+  `.dossierx-comment-digest.json`. Commit it in the same commit as the flagged claim and never
+  `.gitignore` it. Unlike the other two it has **no gate rule behind it** — nothing compares it to
+  anything — so a flag that does not travel is lost in silence: the claim arrives elsewhere
+  `review_pending`, `reaudit` proposes an empty diff, and confirming that empty diff clears the
+  flag having changed nothing. After flagging, tell the human the store needs committing.
+
   `dossierx claim flag` works only on **body-rendered** claims (`card`, `banner`, `list`, `tree`).
   On a `table`, `steps` or `mockup` claim it is refused with `structured_layout`: a flag-sourced
   reaudit rewrites `body` and nothing else, so accepting it would clear `review_pending` while

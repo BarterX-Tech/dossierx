@@ -174,6 +174,7 @@ func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
 		claimNewData{},
 		claimLinkData{},
 		lockData{},
+		lockRefusedData{},
 		unlockData{},
 		reauditData{},
 		flagData{},

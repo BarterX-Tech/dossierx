@@ -109,6 +109,20 @@ const (
 	// CodeInvalidConfig is a project.config.yaml that exists but does not load
 	// or validate.
 	CodeInvalidConfig Code = "invalid_config"
+	// CodeUntrackedConfig is "check --staged was asked to judge an index whose
+	// project.config.yaml is not tracked". The gate reads claims, the lock
+	// ledger and the digest store from the git INDEX; an untracked config is
+	// editable without staging anything, so honouring the worktree copy let a
+	// one-line claims_dir edit point the whole gate at a pristine decoy while
+	// the index carried a tampered locked claim.
+	//
+	// It is its own code rather than `internal` because internal is defined as
+	// an unclassified failure — "a bug report, not a branch target" — and the
+	// reflex it invites is a retry. This refusal is deterministic, it is nobody's
+	// bug, and it keeps failing identically until the one action that fixes it
+	// is taken: git add project.config.yaml. A code an agent can branch on is
+	// what turns that from a wedged commit into a one-command recovery.
+	CodeUntrackedConfig Code = "untracked_config"
 	// CodeInvalidClaim is a claim file under claims_dir that does not parse.
 	CodeInvalidClaim Code = "invalid_claim"
 	// CodeLintFailed is one or more error-severity lint findings. Emitted by

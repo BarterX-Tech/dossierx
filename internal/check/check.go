@@ -788,8 +788,14 @@ func renderOutPath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), "viewer", "index.html")
 }
 
+// lockStoreFileName is the lock ledger's file name, named rather than inlined
+// because staged.go also has to RECOGNISE it — by base name, anywhere in the
+// index — when deciding whether an untracked project.config.yaml is a
+// first-commit project or a bypass (see indexHoldsJudgeableContent).
+const lockStoreFileName = ".dossierx-lock-store.json"
+
 func storePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	return filepath.Join(cfg.Dir(), lockStoreFileName)
 }
 
 // digestStorePresent reports whether the comment digest store is on disk for

@@ -199,6 +199,37 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
 
 ### Fixed
 
+- **`dossierx build-order propose` now releases the approval it discards, and a hand-cleared
+  `"locked": false` is a finding no matter what else was edited beside it.** The build-order
+  orphan rule could only identify a *lone* flag flip: it re-signed the artifact as if the flag
+  were still true and required that hash to match the record, because without that test it could
+  not tell a hand edit from the honest window between a re-propose and the lock that follows.
+  A content edit re-signs to something else, so flipping the flag **and** gutting the phases in
+  the same write was strictly quieter than flipping the flag alone — `check --validate` reported
+  `OK`, exit 0, and offered `dossierx build-order lock` as a next step over a sequence nobody
+  approved. `propose` now writes the truth instead of leaving the gate to guess it: it releases
+  the module's ledger record as it overwrites the artifact (under the lock-store sentinel, held
+  across both writes, so contention refuses with nothing written). The honest window is therefore
+  the only unlocked artifact whose record is *released*, and the rule needs no exception —
+  any unlocked artifact under a **standing** record is `build-order-ledger-orphan`. The
+  `--dry-run` discloses the release as a side effect.
+- **A run that adopts a comment digest says so.** `lock.PrepareStore` left the adopted ids on the
+  store and `cmd/dossierx` dropped them, so `dossierx check` printed `ok:true`, zero findings,
+  exit 0 on the very run that recorded a hand-added comment block as truth. The ids now ride the
+  same channel as the grandfathered ones, reaching `data.comment_digests_adopted` and the
+  envelope warnings — with the recovery that actually applies, which is **not** the re-lock the
+  grandfathering sentence offers: no verb in this binary clears a recorded comment digest, so the
+  only way back is version control. Deliberately silent when the digest store is being *created*
+  (a new project, or the one-time pre-ledger crossing), where every block is adopted by
+  definition and nothing has been laundered.
+- **`claim lock --dry-run` no longer previews a lock the real run refuses.** Its
+  `claim_is_draft` precondition read the claim file's own `status:` line — the exact line a hand
+  edit rewrites — so a claim flipped out of locked without an unlock, still carrying a standing
+  approval, previewed as lockable and was then refused `already_locked`. The preview now asks the
+  question the real run asks, as a `no_standing_ledger_record` precondition. The refusal's
+  `error.hint` also splits by state: a claim whose file says `locked` is pointed at `unlock`,
+  while one that says `draft` under a standing approval is told to **restore from version control
+  first**, since unlocking there accepts the edit that caused it.
 - **A comment op refused because the digest store is unreadable now reports
   `comment_digest_unavailable`, not `internal`.** `internal` is defined as an unclassified
   failure — "a bug report, not a branch target" — and the reflex it invites is a retry. This
@@ -268,7 +299,33 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
   Pinned by a `scripts/hook-smoke-test.sh` case that asserts both halves — an honest commit
   still passes, and a tampered locked claim is still refused — because "still refuses" alone is
   satisfied by a hook that refuses unconditionally, which was the bug. The hook body's marker is
-  now `pre-commit v3`; re-run the installer to pick it up.
+  now `pre-commit v4` (see the two entries below for what v4 added); re-run the installer to
+  pick it up. A v3 install is classified `outdated` and replaced cleanly by re-running the
+  installer — no `--force` needed.
+- **`check --staged` no longer disarms itself when `claims_dir` points outside the config's own
+  directory.** Every git pathspec was built relative to the *config file's* directory, so the
+  ordinary monorepo layout — `docs/project.config.yaml` with `claims_dir: ../claims` — produced
+  the spec `../claims`, which mapped to the deliberate "no index here" escape hatch and exited 0
+  having evaluated nothing. A tampered locked claim committed with **no hook output at all**.
+  The git runner now anchors itself at `git rev-parse --show-toplevel` and takes the project's
+  position from `--show-prefix` (asked of git rather than derived by string arithmetic, so
+  macOS's `/var` vs `/private/var` symlink cannot desync it); the escape hatch is now reached
+  only when a path is genuinely outside the work tree. `data.staged_files` consequently carries
+  repository-relative paths — identical in the layout where the config sits at the repo root,
+  and only different for the layout that used to be broken.
+- **A skipped `check --staged` is no longer indistinguishable from a pass.** `--format json`
+  never printed the skip warning and the hook branched on the exit code alone, so a gate that
+  evaluated nothing looked byte-identical to a clean run. The hook (`pre-commit v4`) now matches
+  `data.skipped`, re-runs in text mode so the reason reaches the screen, and **refuses** the
+  commit, naming the likely cause and the `--no-verify` hatch.
+- **An untracked `project.config.yaml` no longer judges tracked content.** `check --staged` fell
+  back to the *worktree* config whenever the config was merely untracked — and an untracked
+  config can be edited without staging anything, so pointing it at a pristine decoy directory
+  made the gate report `OK`, exit 0, over an index carrying a tampered locked claim. It now
+  refuses with a distinct, non-skippable error unless the index genuinely holds nothing to judge
+  (no claim blob, no lock ledger, no comment digest store), which keeps the first-commit case the
+  fallback exists for working. Ordinary repository YAML — workflows, chart values — does not
+  decode as a claim, so a repo full of unrelated YAML is not turned into a refusal.
 - **The viewer's browser suite is actually run.** `viewer-tests/` is a separate Go module (it
   needs `chromedp`; the engine's `go.mod` stays cobra + yaml.v3), which means the root
   `go test ./...` cannot descend into it — and until now nothing else did either: no CI job, no

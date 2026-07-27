@@ -368,6 +368,16 @@ var ErrReasonRequired = errors.New("comments: a reason is required: the re-adopt
 // pulls. The documented recovery ("restore the claim file from version control")
 // throws away the comment the human just wrote, and there was no other verb.
 //
+// NOT REACHABLE FROM THE CLI YET, and that is stated here rather than left for
+// a reader to discover: `dossierx comment` is inbox, list, add and reply, so
+// nothing in cmd/dossierx calls this. The gap is real and is why
+// checkCommentDigest's refusal names the version-control restore instead of a
+// verb — a refusal must not send its reader to a command that does not exist.
+// Exposing it needs a `dossierx comment reaudit <claim-id> --reason "…"` leaf
+// (required --reason, --dry-run like every other lifecycle verb, classified
+// through cliout the way the other comment verbs are); until that lands, this is
+// the engine half of a recovery only a test can drive.
+//
 // It is on the same footing as `claim unlock`: always available, never gated,
 // and never silent. The reason is REQUIRED and is written into the store beside
 // the adopted value (digest.Store.Reaudit), so the one operation that can make
@@ -599,12 +609,44 @@ func (d *Deps) openCommentDigest() (*digest.Store, func(), error) {
 //
 // A store that could not be read never reaches here at all: openCommentDigest
 // refuses first, before anything is written (ErrCommentDigestUnavailable).
+//
+// WHAT THE MESSAGE MAY SAY. It used to end "ask the human and run: dossierx
+// comment reaudit --claim <id> --reason …". Deps.ReauditDigest is real and is
+// exactly that operation, but no CLI verb reaches it — `dossierx comment` is
+// inbox, list, add and reply — so the one moment a reader is wedged and reading
+// this text for a way out, it handed them `unknown command`. A refusal that
+// names a recovery which does not exist is worse than one that names none: it
+// costs a round trip and then leaves the reader improvising, and the
+// improvisation closest to hand is deleting the digest store, which is the
+// laundering the store exists to catch. So the text names only what the binary
+// and git can actually do, and says the delete is not it.
+//
+// THE ONLY TWO RECOVERIES ARE RESTORES, and that is a property of the code
+// rather than a documentation choice. digest.Adopt — the one path that writes an
+// entry for a claim outside a comment op, via lock.SweepCommentDigests on every
+// store-opening command — skips every id that already HAS an entry, precisely so
+// a recorded digest can never be re-blessed by an ordinary command. So no
+// command in this binary clears a recorded-but-disagreeing digest; only putting
+// one of the two files back does. Which file depends on which side is wrong, and
+// the message says both because the engine cannot tell them apart: it knows the
+// pair disagrees, not which half moved.
 func checkCommentDigest(store *digest.Store, c model.Claim) error {
 	recorded, known := store.Digest(c.ID)
 	if !known || recorded == digest.CommentsDigest(c) {
 		return nil
 	}
-	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed. If the block on disk is wrong, restore the claim file from version control. If it is RIGHT — a crash between the claim write and the digest write, or a commit that carried the claim file without .dossierx-comment-digest.json — ask the human and run: dossierx comment reaudit --claim %s --reason \"<their words>\", which re-adopts this one claim's block and records who authorised it", ErrCommentDigestDrift, c.ID, c.ID)
+	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed and no command re-blesses a block: the recovery is version control. DO NOT DELETE %s to clear this — a claim the store has never seen reads as unknown rather than drifted, so the delete would bury this refusal and the comment-ledger-drift finding beside it, and dossierx check reports it as comment-digest-absent. Restore whichever side is wrong: the claim file (%s) when its comments block was hand-edited, or %s when a commit carried the claim file without it. If you cannot tell which, restore BOTH from the same commit — the engine writes them as a pair and they only agree as a pair — then re-enter anything written since with dossierx comment add / dossierx comment reply", ErrCommentDigestDrift, c.ID, digest.StoreFileName, claimFileFor(c), digest.StoreFileName)
+}
+
+// claimFileFor names the file to restore, for a message a human acts on.
+// SourcePath is set by the loader on every claim this package ever sees, but it
+// is `yaml:"-"` and so is empty on a claim assembled in memory; the fallback
+// keeps the sentence grammatical rather than printing an empty parenthesis.
+func claimFileFor(c model.Claim) string {
+	if c.SourcePath == "" {
+		return "the claim's YAML file under claims_dir"
+	}
+	return c.SourcePath
 }
 
 // recordCommentDigest refreshes the digest store's entry for the claim just
@@ -626,10 +668,16 @@ func checkCommentDigest(store *digest.Store, c model.Claim) error {
 // comment op"). It is false by construction: checkCommentDigest runs BEFORE fn
 // inside the same mutate, so every comment op on that claim is refused — add,
 // reply, everything — and the advice the refusal gave was to restore the claim
-// file, which discards the comment the human actually wrote. The recovery is the
-// explicit, reason-carrying one: `dossierx comment reaudit --claim <id> --reason
-// "…"` (Deps.ReauditDigest), which re-adopts that ONE claim's block and records
-// who authorised it in the digest store itself.
+// file alone, which discards the comment the human actually wrote.
+//
+// The engine-level recovery is the explicit, reason-carrying Deps.ReauditDigest,
+// which re-adopts that ONE claim's block and records who authorised it in the
+// digest store itself. NO CLI VERB REACHES IT in this release, so the refusal
+// text does not name one — see checkCommentDigest for what it says instead, and
+// why naming a command the binary does not have was worse than naming none. What
+// the CLI can offer today is the restore, and the honest form of it is BOTH
+// files from the same commit: this function and the claim save are one act, so
+// the two files only ever agree as a pair.
 //
 // On a store file that does not exist yet, every claim's current comment block
 // is adopted at once (digest.Adopt), so a project upgrading into this feature

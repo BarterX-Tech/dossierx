@@ -254,7 +254,7 @@ edge, each with a different meaning:
 
 Each edge kind is not just a per-claim field but a directed graph over the
 whole claim set, and each of those three graphs has a shape it must hold to.
-These are enforced by the lint suite, so a violation blocks `dossierx lock`
+These are enforced by the lint suite, so a violation blocks `dossierx claim lock`
 the same way any other error-severity finding does:
 
 1. **`rests_on` must be acyclic.** It is a dependency edge, so a cycle means
@@ -317,6 +317,23 @@ machine without its flag entry reaudits to an EMPTY proposal, and confirming
 that empty proposal clears `review_pending` having applied nothing — the one
 state in which a trigger disappears with no edit and no record.
 
+**It has no integrity coverage at all, and that gap is stated here rather than
+left to be discovered.** The other two stores are each guarded from both sides —
+the lock ledger by `lock-ledger-missing` / `-orphan` / `-released` / `-abandoned`
+and `lock-content-drift`, the digest store by `comment-digest-absent` /
+`-missing` / `-abandoned` and `comment-ledger-drift`. Nothing in the gate reads
+`.dossierx-flag-store.json`, so **deleting it, `.gitignore`-ing it, or emptying
+its map is undetectable**: `dossierx check` exits 0 over a project whose flag
+entries are gone, and the human's recorded "the claim says X, the code does Y"
+is erased with no finding, no warning, and nothing in any diff but the absence
+of a file nobody is looking for. That is a smaller hole than it looks — a flag
+is a request for review, not an approval, and erasing one cannot make a locked
+claim change or make an unapproved claim read as approved — but it is a real
+one. Until a rule covers it, the mitigation is procedural and belongs in review:
+commit the store in the same commit as the claim it describes, and treat an
+empty `reaudit` proposal on a `review_pending` claim as a missing flag entry
+rather than as a claim that needs no change.
+
 ### What is signed, and what is not
 
 A ledger record stores `LockedClaimHash` of the claim as approved. That hash is
@@ -358,7 +375,7 @@ would certify the one edit that most needs a signature.
 | `comment-digest-abandoned` | A digest entry that recorded review history still has the claim it recorded it for. This is the comment half's reverse sweep, symmetric with `lock-ledger-abandoned`, and it is what makes the **rename** launder visible: deleting a claim's `comments:` block alone fires `comment-ledger-drift`, but deleting the block *and* changing `id:` in the same edit went completely quiet — the claim the store knows no longer exists, the claim that exists is one the store has never seen, and `claim lock <new id>` then succeeded on a claim whose human review had been erased. The old id's entry survives that edit precisely because it is not reachable from the file the tamper rewrote. It does not fire on the two accounted-for departures — an entry that recorded no threads, and a claim whose record an honest `unlock` released — and `lock.SweepCommentDigests` drops those entries so they never accumulate. `lock.AbandonedCommentDigests` owns the predicate for both the rule and the sweep, so the gate and the sweep cannot disagree. |
 | `build-order-content-drift` | A locked `.build-order.<module>.json` still matches the artifact that was approved. The sequence is what an implementing agent builds from, so reordering two phases by hand, moving a claim into `excluded`, or splicing the frozen `hashes` baseline so the order never reports `stale` again all change what gets built without changing any claim. |
 | `build-order-ledger-missing` | A build-order artifact carrying `locked: true` has an approval record. `locked` in that file is a claim about a human's `--reason`, and a hand-set one is the same act as a hand-set `status: locked` on a claim. |
-| `build-order-ledger-orphan` | An unlocked build-order artifact is not the approved one with its flag flipped. This was the cheapest bypass in the gate: both build-order rules above skip an artifact carrying `locked: false` — correctly, since an unlocked artifact is a proposal nobody approved — so editing `true` to `false` and changing nothing else removed the file from every rule's evidence at once while the approved sequence sat there for an agent to follow and the record still said a human approved it. The honest re-propose window produces an unlocked artifact under a standing record too, so the two are told apart exactly: re-sign the artifact as if its `locked` flag were still `true`, and if that matches the standing record, the flag is the only thing anyone touched. Re-propose is a recomputation from claims that had to have moved, so it never re-signs to the approved hash. Flipping the flag *and* editing the phases in one edit stays indistinguishable from a re-proposal — a known gap. |
+| `build-order-ledger-orphan` | An unlocked build-order artifact whose ledger record still **stands**, unreleased. This was the cheapest bypass in the gate: both build-order rules above skip an artifact carrying `locked: false` — correctly, since an unlocked artifact is a proposal nobody approved — so writing `false` removed the file from every rule's evidence at once while the approved sequence sat there for an agent to follow and the record still said a human approved it. The honest re-propose window is separated by the *release*, not by a guess: `build-order propose` releases the module's record as it overwrites the artifact, so an unlocked artifact under a released record is the documented flow and one under a standing record is not. The predicate therefore has no exception, and it catches a flag flip made together with a content edit — which the earlier, exact predicate (re-sign the artifact as if the flag were still `true`) could not, since a content edit re-signs to something else. |
 | `build-order-ledger-abandoned` | An unreleased build-order record still has the artifact it approved. The two build-order rules above are both driven by the artifacts that exist, so deleting `.build-order.<module>.json` — or dropping the module from `modules:`, which stops anything auditing it — silenced them both at once and made removal strictly quieter than editing. It fires on *unreleased* records only, so a build order a human deliberately released stays silent. This is the build-order twin of `lock-ledger-abandoned`, and exists for the same reason. |
 | `build-order-unreadable` | A build-order artifact that is *there* is legible. This is the build-order twin of `lock-ledger-unreadable`, and it closed the gap where corrupting the approved sequence was quieter than deleting it: deletion is caught by `build-order-ledger-abandoned`, but truncating the same file mid-token left it neither present (so the forward rules skipped it) nor absent (so the reverse sweep skipped it), and `check` exited 0 over a destroyed sequence. Its own rule because it is neither of the two: the artifact was not deleted, and its bytes cannot be compared to anything. Restore the file from version control — never re-propose, which records whatever the claims say **now** as the approved order. |
 | `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |

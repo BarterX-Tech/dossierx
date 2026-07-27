@@ -1020,6 +1020,7 @@ func newClaimNewCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
+			layout = defaultLayoutForFacet(facet, layout, cmd.Flags().Changed("layout"))
 			path, err := claimNewPath(cfg, id, file)
 			if err != nil {
 				return cmdResult{}, err
@@ -1036,8 +1037,17 @@ func newClaimNewCmd() *cobra.Command {
 				if governedBy == string(model.GovernedNone) && strings.TrimSpace(governedReason) == "" {
 					dr.Lacking("--governed-reason")
 				}
-				dr.Require("id_is_unused", !exists, "a claim with this id already exists")
-				dr.Require("file_is_unused", !fileExists(path), path)
+				// Both details are written for the verdict they are attached to,
+				// not for the failure. A Detail is emitted verbatim whether OK is
+				// true or false, so "a claim with this id already exists" printed
+				// under [ok] told a human reading the preview the opposite of what
+				// the preview had just decided.
+				dr.Require("id_is_unused", !exists, boolDetail(exists,
+					"a claim with this id already exists",
+					"no claim currently has this id"))
+				dr.Require("file_is_unused", !fileExists(path), boolDetail(fileExists(path),
+					path+" already exists",
+					path+" does not exist yet"))
 				dr.Effect("creates " + path).
 					Effect("the claim is created as a DRAFT: it is yours to edit freely until someone locks it")
 				dr.Propose("path", path).
@@ -1140,6 +1150,30 @@ func newClaimNewCmd() *cobra.Command {
 	cmd.Flags().StringVar(&file, "file", "", "write to this path instead of <claims_dir>/<id>.yaml (relative to claims_dir)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what creating this claim would do, and write nothing")
 	return cmd
+}
+
+// defaultLayoutForFacet resolves --layout's default against the facet the id
+// lands in.
+//
+// This command's help text promises "the claim it writes is shaped to pass the
+// lint suite immediately", and for the one reserved facet it did the opposite,
+// every single time. A claim under `overview` IS an orientation note — the facet
+// name is what makes it one (model.Claim.EffectiveKind) — and
+// orientation-note-shape requires every orientation note to render as layout:
+// banner. The flag's default is "card", so `claim new widget.overview.router`
+// wrote a file the very next lint call rejected, and the command's own
+// lint_error_count reported the failure it had just created.
+//
+// The fix is a default, not a refusal: an explicit --layout still wins, because
+// a caller who names a layout is making a choice and this command's job is to
+// carry it out (the lint suite is where a wrong choice gets answered, and it
+// will say so in the same call's lint_error_count). Only the UNSET case moves,
+// which is precisely the case where the command is the one picking.
+func defaultLayoutForFacet(facet, layout string, layoutWasSet bool) string {
+	if layoutWasSet || facet != config.ReservedOverviewFacet {
+		return layout
+	}
+	return string(model.LayoutBanner)
 }
 
 // fileExists is a plain "is something already there" probe. Any stat error

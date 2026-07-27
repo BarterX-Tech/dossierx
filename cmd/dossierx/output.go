@@ -255,6 +255,23 @@ func dryRunResult(cmd *cobra.Command, verb string, dr *cliout.DryRun) cmdResult 
 	}
 }
 
+// boolDetail picks a dry-run precondition's Detail from the condition it
+// describes, so the sentence a reader sees always matches the verdict beside it.
+//
+// cliout.Precondition.Detail is emitted verbatim on BOTH branches — that is the
+// whole point of reporting passing gates, since the passes are the evidence —
+// and several call sites had written theirs for the failing branch only. The
+// result was a preview that printed "[ok] thread_is_open: a resolved thread
+// cannot take new replies", which reads as a contradiction of the verdict
+// standing next to it, in exactly the document an agent shows a human to get a
+// yes. whenTrue is the sentence for the condition holding, whenFalse for it not.
+func boolDetail(cond bool, whenTrue, whenFalse string) string {
+	if cond {
+		return whenTrue
+	}
+	return whenFalse
+}
+
 // writeDryRunText renders a dry run for a human reading the terminal. It exists
 // so the preview an agent shows its human is legible when pasted into chat;
 // the JSON form is the contract, this is the courtesy.

@@ -50,10 +50,13 @@ func TestReauditDigest_ClearsALaggingDigestWithoutLosingTheThread(t *testing.T) 
 	// reach for next.
 	if _, _, err := p.deps().Add(claimA, model.CommentRoleAgent, "another note"); !errors.Is(err, ErrCommentDigestDrift) {
 		t.Fatalf("expected the lagging digest to refuse the next comment op, got %v", err)
-	} else if !strings.Contains(err.Error(), "comment reaudit") {
-		// ...and the refusal must name the recovery that exists, rather than
-		// advising a restore that discards the comment the human wrote.
-		t.Fatalf("the refusal must name the recovery verb, got %q", err.Error())
+	} else if !strings.Contains(err.Error(), digest.StoreFileName) {
+		// ...and the refusal must name the recovery a reader can actually run.
+		// It used to name `dossierx comment reaudit`, which this recovery IS but
+		// which no CLI verb reaches, so a wedged reader got `unknown command`.
+		// digest_refusal_test.go owns that property in full; this line only
+		// keeps the wedge and its message tied together in one place.
+		t.Fatalf("the refusal must name the store to restore, got %q", err.Error())
 	}
 
 	// The recovery. It requires the human's words, exactly as claim unlock does.

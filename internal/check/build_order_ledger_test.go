@@ -291,9 +291,15 @@ func TestBuildOrderGate_HandFlippedLockedFalseIsLedgerOrphan(t *testing.T) {
 }
 
 // The honest re-propose window must stay silent: propose overwrites the locked
-// artifact with a fresh unlocked one, and the record still stands until the lock
-// that follows. A gate that failed here would refuse every commit between the
-// two halves of the documented flow.
+// artifact with a fresh unlocked one, and the commits between that and the lock
+// which follows must not be refused.
+//
+// What makes the window identifiable is the RELEASE. propose writes two things —
+// the artifact and the release of the approval the artifact just destroyed — so
+// the honest window is an unlocked artifact under a RELEASED record, and a hand
+// edit is an unlocked artifact under a standing one. This test performs both
+// writes, which is what the propose command does; TestBuildOrderGate_
+// FlagFlipWithAContentEditIsLedgerOrphan is the same fixture minus the release.
 func TestBuildOrderGate_ReProposedArtifactIsNotAbandoned(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
@@ -307,10 +313,81 @@ func TestBuildOrderGate_ReProposedArtifactIsNotAbandoned(t *testing.T) {
 	if err := buildorder.WriteArtifact(reproposed, buildorder.ArtifactPath(cfg, "widget")); err != nil {
 		t.Fatalf("write re-proposed artifact: %v", err)
 	}
+	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	store, err := lock.LoadStore(storePath)
+	if err != nil {
+		t.Fatalf("load store: %v", err)
+	}
+	if !lock.ReleaseBuildOrderApproval(store, "widget",
+		lock.Approval{Actor: "fixture", Reason: "superseded by propose"}) {
+		t.Fatal("precondition: there should have been a standing record to release")
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("save store: %v", err)
+	}
 
 	res := check.Status(claims, cfg)
 	if len(res.LedgerFindings) != 0 {
-		t.Fatalf("a re-proposed (unlocked) artifact must not be audited at all, got %v", rulesOf(res.LedgerFindings))
+		t.Fatalf("a re-proposed (unlocked) artifact whose record was released must not be audited at all, got %v", rulesOf(res.LedgerFindings))
+	}
+}
+
+// The attack the orphan rule's old exactness let through, and the reason that
+// exception is gone.
+//
+// The predicate used to be "the artifact re-signs to its record once the locked
+// flag is put back" — which identifies a LONE flag flip, and by construction
+// cannot identify a flip made together with a content edit, because a content
+// edit re-signs to something else. So gutting the approved implementation
+// sequence AND clearing its locked flag in one edit was strictly quieter than
+// clearing the flag alone: check reported ok:true, exit 0, and even offered
+// "dossierx build-order lock" as a next step over a sequence nobody approved.
+//
+// Reproduced end to end before the fix on a real project: propose + lock a
+// widget order, empty the schema phase and set "locked": false in the same
+// write, then `dossierx check --validate` -> "OK (read-only: nothing written)",
+// exit 0, zero ledger findings.
+func TestBuildOrderGate_FlagFlipWithAContentEditIsLedgerOrphan(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/a.yaml": orderedClaim("widget.contract.a"),
+	})
+	lockBuildOrder(t, cfg, claims, "widget")
+
+	path := buildorder.ArtifactPath(cfg, "widget")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read artifact: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse artifact: %v", err)
+	}
+	if doc["locked"] != true {
+		t.Fatalf("precondition: the artifact should be locked, got %v", doc["locked"])
+	}
+	// Both edits in one write: the flag AND the sequence itself.
+	doc["locked"] = false
+	phases, ok := doc["phases"].([]any)
+	if !ok || len(phases) == 0 {
+		t.Fatalf("precondition: expected phases in the artifact, got %v", doc["phases"])
+	}
+	first, ok := phases[0].(map[string]any)
+	if !ok {
+		t.Fatalf("precondition: expected a phase object, got %T", phases[0])
+	}
+	first["claims"] = []any{}
+	tampered, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal tampered artifact: %v", err)
+	}
+	if err := os.WriteFile(path, tampered, 0o644); err != nil {
+		t.Fatalf("write tampered artifact: %v", err)
+	}
+
+	res := check.Status(claims, cfg)
+	if !hasRule(res.LedgerFindings, check.RuleBuildOrderLedgerOrphan) {
+		t.Fatalf("expected %s for a flag flip made together with a content edit, got %v",
+			check.RuleBuildOrderLedgerOrphan, rulesOf(res.LedgerFindings))
 	}
 }
 

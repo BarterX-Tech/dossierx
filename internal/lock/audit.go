@@ -295,7 +295,7 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		findings = append(findings, Finding{
 			Rule: RuleLockLedgerDowngraded,
 			Message: fmt.Sprintf(
-				"the lock store says it predates the lock ledger (schema version %d), but this project has already been through a ledger-aware build — its comment digest store is present, or the store itself still carries ledger records. A store's own version field is what triggers the one-time grandfathering of already-locked artifacts, so a store that can lower its own version can re-adopt every locked claim as-found and clear any finding against it. Nothing was grandfathered on this run. Restore the lock store from version control; do not re-lock, which would record whatever the claims say NOW as approved.",
+				"the lock store says it predates the lock ledger (schema version %d), but this project has already been through a ledger-aware build — its comment digest store is present, or the store itself still carries the ledger key (a key that did not exist before the ledger, with or without records in it). A store's own version field is what triggers the one-time grandfathering of already-locked artifacts, so a store that can lower its own version can re-adopt every locked claim as-found and clear any finding against it. Nothing was grandfathered on this run. Restore the lock store from version control; do not re-lock, which would record whatever the claims say NOW as approved.",
 				store.OnDiskVersion()),
 		})
 	}

@@ -501,16 +501,16 @@ var errStoreUnreadable = errors.New("lock store could not be read")
 
 // It also returns the ids grandfathered by the one-time ledger adoption, so the
 // command that called it can put them in its envelope — see prepareStore.
-func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, []string, error) {
+func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, adoptions, error) {
 	release, err := lock.AcquireFileLock(storePath(cfg))
 	if err != nil {
-		return nil, nil, err
+		return nil, adoptions{}, err
 	}
 	defer release()
 
 	store, err := lock.LoadStore(storePath(cfg))
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errStoreUnreadable, err)
+		return nil, adoptions{}, fmt.Errorf("%w: %w", errStoreUnreadable, err)
 	}
 	changed, adopted := prepareStore(cfg, store, claims)
 	if changed {
@@ -572,17 +572,46 @@ func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, []
 // what happened does not have a machine contract". lock.AdoptLedger returns the
 // ids sorted precisely so a caller can do this; there is one call site and it
 // has to.
-func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (bool, []string) {
+func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (bool, adoptions) {
 	// Both halves of the evidence are read BEFORE lock.PrepareStore runs:
 	// PrepareStore stamps the current schema version onto the store AND (on a
 	// genuine upgrade) creates the comment digest store, so asking either
 	// question afterwards would be asking it of a project this run had already
 	// changed.
-	preLedgerExempt := store.PreLedgerExempt(digestStorePresent(cfg))
+	digestStoreExisted := digestStorePresent(cfg)
+	preLedgerExempt := store.PreLedgerExempt(digestStoreExisted)
 
 	changed, adopted := lock.PrepareStore(store, claims)
+	// The COMMENT-DIGEST half of the same run's adoption. lock.PrepareStore
+	// leaves it on the store rather than in a return value (see
+	// Store.CommentDigestsAdopted, which keeps PrepareStore's signature stable),
+	// so it is collected here — the one place that has just called it — and
+	// travels with the grandfathered ids from now on.
+	//
+	// REPORTED ONLY WHEN THE DIGEST STORE ALREADY EXISTED, which is the
+	// difference between an adoption worth a human's attention and the noise
+	// that would have buried it. When PrepareStore CREATES the store — a brand
+	// new project, or the one-time pre-ledger crossing — every comment block in
+	// the project is adopted by definition, because there was nothing to compare
+	// against and nothing has been laundered. Warning there would have put a
+	// paragraph about content "nobody approved" on the first `check` of every
+	// new project, and a warning that fires on correct state is one nobody reads
+	// on the run that matters. The upgrade crossing is not left silent either:
+	// the grandfathering sentence above already announces it, loudly, on exactly
+	// the runs where the store is created for an existing project.
+	//
+	// With an EXISTING store, adoption means something specific: a claim whose
+	// comment block the store has never seen. Every comment op records the
+	// digest as it writes (internal/comments), so a block that arrived without
+	// one arrived outside the comment path — hand-added or hand-edited. That is
+	// the run a human should look at, and it is the run this used to report as
+	// ok:true with nothing else said.
+	a := adoptions{Grandfathered: adopted}
+	if digestStoreExisted {
+		a.CommentDigests = store.CommentDigestsAdopted()
+	}
 	if !preLedgerExempt {
-		return changed, adopted
+		return changed, a
 	}
 
 	for _, module := range cfg.Modules {
@@ -596,29 +625,74 @@ func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (
 		}
 		if lock.AdoptBuildOrderApproval(store, module, hash) {
 			changed = true
-			adopted = append(adopted, lock.BuildOrderLedgerKey(module))
+			a.Grandfathered = append(a.Grandfathered, lock.BuildOrderLedgerKey(module))
 		}
 	}
-	return changed, adopted
+	return changed, a
 }
 
-// ledgerAdoptionWarnings renders the one-time grandfathering as envelope
-// warnings — one sentence naming what adoption did and did not establish, then
-// one line per adopted id.
+// adoptions is everything a single run ADOPTED — took coverage of on the
+// strength of what was on disk, rather than on the strength of anybody's
+// approval.
 //
-// It is a WARNING rather than data alone because the envelope's ok field cannot
-// carry it: adoption happens on a run that otherwise succeeds, and "ok:true with
-// zero findings" is exactly the answer that must not be the whole answer on the
-// run that blessed every locked artifact in the project as-found.
-func ledgerAdoptionWarnings(adopted []string) []string {
-	if len(adopted) == 0 {
-		return nil
+// It is one value rather than two loose slices because both halves have to
+// reach the same envelope, and the second half kept not reaching it. The
+// grandfathered ids were already threaded through prepareStore ->
+// loadStoreForRead -> reconcileReviewPending to every command's Warnings; the
+// comment-digest ids were computed on the same run, by the same call, and
+// dropped on the floor — so `dossierx check` printed ok:true, zero findings,
+// exit 0 on a run that had just adopted a hand-edited comment block as truth.
+// Threading a *lock.Store to each of those call sites instead was not an
+// option: `check` does not have one in scope, only the ids reconcile handed
+// back. Making the channel a struct means the compiler asks every site the
+// question, which is the property a silently-dropped field needs.
+//
+// The two are kept SEPARATE inside it rather than concatenated because they are
+// different claims about the project and have different recoveries: a
+// grandfathered lock is re-lockable (unlock, review, lock), while an adopted
+// comment digest is not — no CLI verb clears one, and the recovery is version
+// control. A reader who cannot tell which kind an id is cannot act on it.
+type adoptions struct {
+	// Grandfathered is the locked artifacts — claim ids, and
+	// build-order:<module> keys — the one-time ledger adoption took as-found.
+	Grandfathered []string
+	// CommentDigests is the claim ids whose comment blocks the digest sweep
+	// took coverage of. See lock.Store.CommentDigestsAdopted.
+	CommentDigests []string
+}
+
+// adoptionWarnings renders everything a run ADOPTED as envelope warnings — for
+// each kind, one sentence naming what the adoption did and did not establish,
+// then one line per id.
+//
+// They are WARNINGS rather than data alone because the envelope's ok field
+// cannot carry them: adoption happens on a run that otherwise succeeds, and
+// "ok:true with zero findings" is exactly the answer that must not be the whole
+// answer on the run that blessed content nobody approved. That reasoning is
+// identical for both halves, which is why they render through one function; what
+// differs is the recovery each sentence names.
+func adoptionWarnings(a adoptions) []string {
+	var warnings []string
+	if len(a.Grandfathered) > 0 {
+		warnings = append(warnings, fmt.Sprintf(
+			"lock ledger created: %d already-locked artifact(s) were adopted as GRANDFATHERED. Their recorded content is what was on disk just now, NOT content anyone approved — any edit made before this upgrade is adopted with it. Review them, and re-lock any you are not sure of (dossierx claim unlock <id> --reason \"...\" then dossierx claim lock <id> --reason \"...\").",
+			len(a.Grandfathered)))
+		for _, id := range a.Grandfathered {
+			warnings = append(warnings, "grandfathered: "+id)
+		}
 	}
-	warnings := []string{fmt.Sprintf(
-		"lock ledger created: %d already-locked artifact(s) were adopted as GRANDFATHERED. Their recorded content is what was on disk just now, NOT content anyone approved — any edit made before this upgrade is adopted with it. Review them, and re-lock any you are not sure of (dossierx claim unlock <id> --reason \"...\" then dossierx claim lock <id> --reason \"...\").",
-		len(adopted))}
-	for _, id := range adopted {
-		warnings = append(warnings, "grandfathered: "+id)
+	if len(a.CommentDigests) > 0 {
+		// The recovery differs from the grandfathered one and has to, because
+		// the re-lock this offers there does not exist here: no verb in the
+		// binary clears a recorded comment digest, so version control is the
+		// only way back to a block anyone actually wrote. See
+		// lock.Store.CommentDigestsAdopted and internal/comments' drift refusal.
+		warnings = append(warnings, fmt.Sprintf(
+			"comment digest store: %d claim(s) had their comment block ADOPTED. The recorded digest is the block that was on disk just now, NOT a block anyone reviewed or approved — if one of them was hand-edited, this run recorded the edit as truth. Check the comment threads on the claims below against version control, and restore the claim file if it disagrees.",
+			len(a.CommentDigests)))
+		for _, id := range a.CommentDigests {
+			warnings = append(warnings, "comment digest adopted: "+id)
+		}
 	}
 	return warnings
 }
@@ -762,16 +836,16 @@ func reportLedgerFindings(cmd *cobra.Command, findings []lock.Finding) {
 // It returns the grandfathered ids alongside the reconciled claims, because
 // reconcile is where "dossierx check" opens the lock store for writing and
 // therefore where a pre-ledger project's one-time adoption happens.
-func reconcileReviewPending(cfg *config.Config) ([]model.Claim, []string, error) {
+func reconcileReviewPending(cfg *config.Config) ([]model.Claim, adoptions, error) {
 	releaseClaims, err := lock.AcquireFileLock(claimsSentinelPath(cfg))
 	if err != nil {
-		return nil, nil, err
+		return nil, adoptions{}, err
 	}
 	defer releaseClaims()
 
 	claims, err := loadClaims(cfg)
 	if err != nil {
-		return nil, nil, err
+		return nil, adoptions{}, err
 	}
 	// The LOCK store, read best-effort in exactly one respect: a store file that
 	// exists and cannot be DECODED degrades this phase to "no baselines" instead
@@ -925,8 +999,17 @@ type checkData struct {
 	// present only on the single run that performs the adoption, which is the
 	// point: that run reports ok:true with zero findings, and without this the
 	// only trace of it in the machine surface would be nothing at all. See
-	// prepareStore and ledgerAdoptionWarnings.
+	// prepareStore and adoptionWarnings.
 	LedgerAdopted []string `json:"ledger_adopted,omitempty"`
+
+	// CommentDigestsAdopted names the claims whose COMMENT BLOCK this run took
+	// digest coverage of. It is a separate field from LedgerAdopted, not more
+	// entries in it, because the two are different claims about the project with
+	// different recoveries — a grandfathered lock can be re-locked, an adopted
+	// comment digest cannot be cleared by any verb in this binary. Present only
+	// on the run that adopts, for the same reason LedgerAdopted is. See
+	// lock.Store.CommentDigestsAdopted.
+	CommentDigestsAdopted []string `json:"comment_digests_adopted,omitempty"`
 
 	CatalogPath      string          `json:"catalog_path,omitempty"`
 	CatalogCount     int             `json:"catalog_count,omitempty"`
@@ -1106,14 +1189,18 @@ func newCheckCmd() *cobra.Command {
 			data := newCheckData(res)
 			// The one-time ledger adoption, in the MACHINE surface. It reached
 			// stderr already (lock.announceAdoption), and stderr alone is not a
-			// contract — see ledgerAdoptionWarnings. Carried as both data (the
-			// ids, for a consumer that wants to act on them) and warnings (the
+			// contract — see adoptionWarnings. Carried as both data (the ids,
+			// for a consumer that wants to act on them) and warnings (the
 			// sentence, so an agent that reads only ok/warnings still learns the
 			// run blessed content nobody approved).
-			data.LedgerAdopted = adopted
+			//
+			// Both halves ride, in their own fields: an adopted comment digest
+			// is not a grandfathered lock and does not have its recovery.
+			data.LedgerAdopted = adopted.Grandfathered
+			data.CommentDigestsAdopted = adopted.CommentDigests
 			out := cmdResult{
 				Data:      data,
-				Warnings:  append(ledgerAdoptionWarnings(adopted), lintWarningLines(res.LintWarnings)...),
+				Warnings:  append(adoptionWarnings(adopted), lintWarningLines(res.LintWarnings)...),
 				StoppedAt: stoppedAt,
 				Text:      func() { formatCheckResult(cmd, res) },
 			}
@@ -1167,6 +1254,14 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 					fmt.Fprintln(cmd.ErrOrStderr(), warning)
 				},
 			}, nil
+		}
+		// The untracked config, classified before the catch-all. It is a
+		// deterministic refusal with exactly one recovery — git add the config —
+		// and CodeInternal is defined as an unclassified failure whose reflex is
+		// a retry, which here loops forever. See cliout.CodeUntrackedConfig.
+		if errors.Is(err, check.ErrUntrackedConfig) {
+			return cmdResult{StoppedAt: "load"}, cliout.Errorf(cliout.CodeUntrackedConfig, "%w", err).
+				WithHint("git add project.config.yaml (or the path given to --config), then commit again — check --staged judges the index, and it cannot read a config that is not in it")
 		}
 		// A real git failure is not a verdict either way, so it must not be
 		// reported as a clean run. CodeInternal rather than a check-step code:
@@ -1296,14 +1391,17 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 	// The error return is intentionally discarded: runCheckValidate already
 	// decided the outcome from res.LintErrors and returns the coded error.
 	reportLintFindings(cmd, res.LintFindings) //nolint:errcheck // intentionally discarded (see comment above)
-	if !res.OK {
-		return
-	}
-	// res.OK is lint-driven in check.Status (see its doc comment), so the
-	// ledger block is printed here, after the lint verdict, and the OK line
-	// below is suppressed when the gate found anything.
+	// The ledger block prints UNCONDITIONALLY, ahead of the res.OK gate.
+	//
+	// It used to sit behind it, and res.OK is lint-driven — so a project with
+	// even one lint error printed no ledger findings at all, while plain `check`
+	// and `check --staged` printed both (see formatCheckStagedResult, which has
+	// always done it in this order). The same command, the same tree, three
+	// different answers about whether a locked claim had been tampered with,
+	// decided by whether something unrelated failed to lint. Integrity findings
+	// are the ones a reader must not have to run a second command to see.
 	reportLedgerFindings(cmd, res.LedgerFindings)
-	if len(res.LedgerFindings) > 0 {
+	if !res.OK || len(res.LedgerFindings) > 0 {
 		return
 	}
 
@@ -1490,25 +1588,32 @@ func (g lockGate) lockLintFindingData() []lintFindingData {
 }
 
 // lintBlockerDetail renders the lint gate as one line a human or an agent can
-// act on: the count, then the rules that produced it, named.
+// act on: the count, then each blocking finding named — rule, claim, and the
+// rule's own sentence.
 //
 // It is the dry run's lint_clean detail and `claim show`'s next_action text. The
 // old detail was "%d error-level lint finding(s)" and nothing else, which named
-// a quantity of a thing the caller could not see.
+// a quantity of a thing the caller could not see; the version after that named
+// the RULES, which was enough for a rule whose subject is the claim you are
+// locking and not enough for one whose subject is somewhere else. roll-up is
+// that second kind: it fires on a banner and is cleared by locking a sibling,
+// and "1 error-level lint finding(s) (roll-up)" named neither claim. Carrying
+// the message is what makes both ends reachable from the cheapest read.
 func (g lockGate) lintBlockerDetail() string {
 	if g.LintErrors == 0 {
 		return "0 error-level lint finding(s)"
 	}
-	names := make([]string, 0, len(g.LintFindings))
+	lines := make([]string, 0, len(g.LintFindings))
 	seen := map[string]bool{}
 	for _, f := range g.LintFindings {
-		if seen[f.LintName] {
+		line := fmt.Sprintf("%s on %s: %s", f.LintName, f.ClaimID, f.Message)
+		if seen[line] {
 			continue
 		}
-		seen[f.LintName] = true
-		names = append(names, f.LintName)
+		seen[line] = true
+		lines = append(lines, line)
 	}
-	return fmt.Sprintf("%d error-level lint finding(s) (%s)", g.LintErrors, strings.Join(names, ", "))
+	return fmt.Sprintf("%d error-level lint finding(s): %s", g.LintErrors, strings.Join(lines, "; "))
 }
 
 // blocked reports whether any gate would refuse the lock.
@@ -1531,6 +1636,11 @@ func (g lockGate) code() cliout.Code {
 	}
 }
 
+// rollUpLintName is internal/lint's roll-up rule, named here because this
+// package treats it differently from every other lint — see
+// evaluateLockGates' escalation and rollUpBlockers.
+const rollUpLintName = "roll-up"
+
 // evaluateLockGates computes lockGate for claim as if it were already locked.
 //
 // Linting the ABOUT-TO-BE-LOCKED form rather than the current draft form is not
@@ -1538,6 +1648,14 @@ func (g lockGate) code() cliout.Code {
 // Two lints key off a claim's own status (rest-on-locked, roll-up), and running
 // them against the still-draft entry would let a claim whose dependency is
 // draft sail through the very gate that exists to stop it.
+//
+// The roll-up rule is the one exception to "warnings do not block", inverted:
+// internal/lint reports it as a WARNING (a project-wide error-severity roll-up
+// deadlocked every ordinary module — see internal/lint/roll_up.go's file
+// comment), and this function escalates it back to a blocker for exactly one
+// claim: the banner it is about. Locking a banner while its module still holds a
+// draft is still refused, which is the whole point of the rule; locking that
+// draft is not, which is what makes the module reachable again.
 func evaluateLockGates(claim model.Claim, claims []model.Claim, cfg *config.Config) lockGate {
 	candidate := claim
 	candidate.Status = model.StatusLocked
@@ -1553,10 +1671,11 @@ func evaluateLockGates(claim model.Claim, claims []model.Claim, cfg *config.Conf
 
 	var g lockGate
 	for _, f := range lint.RunAll(lintClaims, cfg) {
-		if f.Severity != lint.SeverityWarning {
-			g.LintErrors++
-			g.LintFindings = append(g.LintFindings, f)
+		if f.Severity == lint.SeverityWarning && !isOwnRollUp(f, claim.ID) {
+			continue
 		}
+		g.LintErrors++
+		g.LintFindings = append(g.LintFindings, f)
 	}
 	if cfg != nil && cfg.HubGatingEnabled() {
 		deps := append(append([]string(nil), claim.Mirrors...), claim.RestsOn...)
@@ -1573,6 +1692,104 @@ func evaluateLockGates(claim model.Claim, claims []model.Claim, cfg *config.Conf
 	}
 	g.OpenThreads = claim.OpenThreadIDs()
 	return g
+}
+
+// isOwnRollUp reports whether f is the roll-up rule firing on claimID itself —
+// the one warning-severity finding that blocks a lock.
+func isOwnRollUp(f lint.Finding, claimID string) bool {
+	return f.LintName == rollUpLintName && f.ClaimID == claimID
+}
+
+// rollUpBlockers returns the roll-up findings that refuse claim's own lock.
+//
+// It exists because the refusal it feeds cannot live where every other lint
+// refusal lives. internal/lock.Lock's lint gate counts error-severity findings,
+// and roll-up is now a warning, so Lock would happily lock a banner whose module
+// still holds a draft — the very thing the rule exists to prevent. The CLI
+// therefore refuses first, with the same code (lint_failed) and the same payload
+// shape any other lint refusal produces, so nothing downstream can tell which
+// side of the boundary the gate ran on.
+//
+// It is scoped to claim.ID by construction (evaluateLockGates only escalates
+// findings about the claim being locked), which is what keeps this a refusal of
+// ONE illegal lock rather than a project-wide freeze.
+func rollUpBlockers(claim model.Claim, claims []model.Claim, cfg *config.Config) []lint.Finding {
+	// Short-circuited on the layout, so the ordinary lock — a card, a list, a
+	// table — does not pay for a second full lint pass to be told the rule it
+	// cannot trip anyway. roll-up only ever fires on a banner.
+	if claim.Layout != model.LayoutBanner {
+		return nil
+	}
+	var out []lint.Finding
+	for _, f := range evaluateLockGates(claim, claims, cfg).LintFindings {
+		if isOwnRollUp(f, claim.ID) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// lockRefusedData is the payload a REFUSED "dossierx claim lock" carries.
+//
+// A failing run still gets a top-level data — emit() keeps whatever the body
+// produced — and this is the one refusal in the CLI that needed it. The router
+// skill's recovery for lint_failed is "read data.lint_findings", and `claim
+// lock` published them only under error.details.lint_findings: an agent that
+// followed the documented recovery literally found nothing, re-ran the same
+// command, and looped. error.details keeps its copy for compatibility; this is
+// where the documented key now actually resolves.
+//
+// It reports every gate, not only the one that refused, for the same reason a
+// dry run reports passing preconditions: an agent that fixes the lint error and
+// re-runs into an open comment thread has already been told about it.
+type lockRefusedData struct {
+	ClaimID            string            `json:"claim_id"`
+	Gate               string            `json:"gate"`
+	LintErrors         int               `json:"lint_errors"`
+	LintFindings       []lintFindingData `json:"lint_findings"`
+	OpenThreads        []string          `json:"open_threads"`
+	UnlockedDependency string            `json:"unlocked_dependency"`
+}
+
+// newLockRefusedData projects an evaluated gate into the refusal payload.
+func newLockRefusedData(id string, g lockGate) lockRefusedData {
+	return lockRefusedData{
+		ClaimID:            id,
+		Gate:               string(g.code()),
+		LintErrors:         g.LintErrors,
+		LintFindings:       g.lockLintFindingData(),
+		OpenThreads:        emptyIfNil(g.OpenThreads),
+		UnlockedDependency: g.UnlockedDoctrineDep,
+	}
+}
+
+// lockRefusalDetails is the error.details half of a lock refusal, kept beside
+// the data payload above rather than inlined at the two call sites so the two
+// can never drift into describing different gates.
+func lockRefusalDetails(g lockGate) map[string]any {
+	return map[string]any{
+		"lint_errors":         g.LintErrors,
+		"lint_findings":       g.lockLintFindingData(),
+		"open_threads":        g.OpenThreads,
+		"unlocked_dependency": g.UnlockedDoctrineDep,
+	}
+}
+
+// lockErr codes an internal/lock refusal for this command's envelope.
+//
+// internal/lock's errors already begin with "lock: " — they are written to be
+// read on their own — and the CLI wrapped them in a second "lock: ", so every
+// refusal an agent saw read "lock: lock: refused, ...". A duplicated prefix is
+// not merely untidy in a machine contract: it is the kind of thing a consumer
+// writes a strings.TrimPrefix against and then breaks on when it is fixed. The
+// verb is added only when the message does not already carry it, so an error
+// arriving from anywhere else is still attributed. Both branches keep the cause
+// reachable, so errors.Is on any sentinel below still matches.
+func lockErr(code cliout.Code, err error) *cliout.CodedError {
+	if strings.HasPrefix(err.Error(), "lock: ") {
+		return cliout.Wrap(err, code)
+	}
+	return cliout.Errorf(code, "lock: %w", err)
 }
 
 // lockData is "dossierx claim lock"'s machine payload: the transition, and the human
@@ -1603,6 +1820,39 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 	}
 	dr.Require("claim_is_draft", claim.Status != model.StatusLocked,
 		fmt.Sprintf("status is %q", claim.Status))
+
+	// THE SAME QUESTION, ASKED THE WAY THE REAL RUN ASKS IT. claim_is_draft
+	// above reads the claim file's own status line, which is exactly the line a
+	// hand edit rewrites, so on its own it advertises as lockable the one claim
+	// lock.Lock refuses hardest: a claim flipped out of locked without an
+	// unlock, still carrying a STANDING approval. Preview said ok, the real run
+	// refused already_locked — the preview/real-run disagreement that the
+	// already_locked guard's own WHY-comment names as the original defect,
+	// reintroduced on the other side.
+	//
+	// The predicate is lock.Lock's, not an approximation of it: a standing,
+	// unreleased CLAIM record, unconditional on whether the content still
+	// matches (standingLedgerRecord's third return, deliberately unused here for
+	// that reason). A released record is not standing, so the ordinary
+	// unlock -> fix -> lock preview is unaffected, and a claim with no record at
+	// all is not blocked either — both of which mirror the real run exactly.
+	//
+	// The store is read WITHOUT the sentinel, as every read-only path in this
+	// binary reads it (see buildOrderApprovalStands): a dry run answers a
+	// question and must not take a lock. A store that cannot be read yields no
+	// standing record and no block — the preview must not manufacture a refusal
+	// out of evidence it could not load, and the real run fails that case
+	// loudly on its own.
+	if store, err := lock.LoadStore(storePath(cfg)); err == nil {
+		if rec, standing, _ := standingLedgerRecord(store, claim); standing {
+			dr.Require("no_standing_ledger_record", false, fmt.Sprintf(
+				"the lock ledger still holds a STANDING approval for this claim from %s (%q), unreleased — nothing unlocked it, so locking here would re-sign content the ledger already speaks for",
+				rec.At, rec.Reason))
+		} else {
+			dr.Require("no_standing_ledger_record", true,
+				"no unreleased lock-ledger approval stands for this claim")
+		}
+	}
 
 	g := evaluateLockGates(claim, claims, cfg)
 	// The detail NAMES the rules. A preview whose blocked precondition reads
@@ -1728,6 +1978,14 @@ func newLockCmd() *cobra.Command {
 				}
 			}
 
+			// THE ROLL-UP GATE, ahead of lock.Lock because lock.Lock cannot see
+			// it: roll-up is a warning-severity lint now (internal/lint/roll_up.go
+			// explains why an error deadlocked every ordinary module), and Lock's
+			// lint gate counts error-severity findings only. Without this, locking
+			// a banner whose module still holds a draft would SUCCEED — the exact
+			// misrepresentation the rule exists to prevent, since a banner is a
+			// module-wide "reviewed" callout.
+			//
 			updated, err := lock.Lock(claim, claims, cfg, store, lock.Approval{Actor: lock.DefaultActor(), Reason: reason})
 			if err != nil {
 				// Checked before evaluateLockGates: an already-locked claim
@@ -1736,8 +1994,30 @@ func newLockCmd() *cobra.Command {
 				// classifier would fall through to CodeInternal and tell the
 				// agent to file a bug about its own mistake.
 				if errors.Is(err, lock.ErrAlreadyLocked) {
-					return cmdResult{}, cliout.Errorf(cliout.CodeAlreadyLocked, "lock: %w", err).
-						WithHint(fmt.Sprintf(`run: dossierx claim unlock %s --reason "<why the human agreed to reopen it>"`, id))
+					// TWO STATES SHARE THIS SENTINEL, and they do not share a
+					// recovery. lock.Lock reuses ErrAlreadyLocked for the
+					// LEDGER's answer as well as the file's (see its guard: the
+					// record stands, so "is this locked?" is yes either way),
+					// which keeps the error.code stable — but the hint is the one
+					// line an agent acts on, and pointing the second state at
+					// unlock points it at the wrong move.
+					//
+					// A claim whose FILE says locked is the honest re-approval
+					// attempt: unlock is exactly right.
+					//
+					// A claim whose file says DRAFT under a standing approval got
+					// there outside the approval path. Unlocking accepts whatever
+					// the file now says and merely records that a human agreed to
+					// reopen it — so it launders the edit that caused this. The
+					// first move is to restore the approved content; unlock is
+					// what comes after, if the change is actually wanted. The
+					// error message carries both halves; the hint carries the one
+					// to do first.
+					hint := fmt.Sprintf(`run: dossierx claim unlock %s --reason "<why the human agreed to reopen it>"`, id)
+					if claim.Status != model.StatusLocked {
+						hint = fmt.Sprintf(`restore %s from version control first — it says status: draft while an unreleased approval still stands, so unlocking now would accept the edit that caused this. Once the approved content is back: dossierx claim unlock %s --reason "<why the human agreed to reopen it>", edit, then lock again`, claim.SourcePath, id)
+					}
+					return cmdResult{}, cliout.Wrap(err, cliout.CodeAlreadyLocked).WithHint(hint)
 				}
 				// Re-evaluate the gates to name WHICH one refused. lock.Lock
 				// reports its refusal only in prose, and a skill that has to
@@ -1752,15 +2032,50 @@ func newLockCmd() *cobra.Command {
 				// the claim sent the agent to `check --validate`, which reports
 				// zero of them (the claim is still draft; the rule that refuses
 				// keys off the locked form) — an unbreakable loop. See lockGate.
+				//
+				// The findings ride in the TOP-LEVEL data as well as in
+				// error.details, and that is the half that closes the loop: the
+				// router's lint_failed row says "read data.lint_findings", and
+				// until now this was the only refusal in the CLI that hid its
+				// payload under error. See lockRefusedData.
 				gate := evaluateLockGates(claim, claims, cfg)
-				return cmdResult{}, cliout.Errorf(gate.code(), "lock: %w", err).
-					WithDetails(map[string]any{
-						"lint_errors":         gate.LintErrors,
-						"lint_findings":       gate.lockLintFindingData(),
-						"open_threads":        gate.OpenThreads,
-						"unlocked_dependency": gate.UnlockedDoctrineDep,
-					})
+				return cmdResult{
+						Warnings: adoptionWarnings(adopted),
+						Data:     newLockRefusedData(id, gate),
+					}, lockErr(gate.code(), err).
+						WithDetails(lockRefusalDetails(gate))
 			}
+
+			// THE ROLL-UP GATE — a FOURTH refusal, and it lives here, on this side
+			// of the internal/lock boundary, because lock.Lock can no longer see
+			// it: roll-up is a warning-severity lint now (internal/lint/roll_up.go
+			// explains at length why an error-severity one deadlocked every
+			// ordinary module), and Lock's lint gate counts error-severity findings
+			// only. Without this, locking a banner whose module still holds a draft
+			// would SUCCEED — the exact misrepresentation the rule exists to
+			// prevent, since a banner renders as a module-wide "reviewed" callout.
+			//
+			// It runs LAST, after Lock has returned, so Lock's own refusal order is
+			// untouched: an already-locked claim, a ledger-orphaned one, an
+			// unlocked doctrine dependency and an open comment thread all still
+			// refuse first, and each of those is a more serious finding than a
+			// roll-up that is out of step. Returning here writes nothing — Lock
+			// mutated only the in-memory store, and store.Save() is below.
+			//
+			// Scoped to this claim's own finding, so it refuses the one illegal
+			// lock and nothing else. Same code and same payload as any other lint
+			// refusal, so a caller cannot tell which side of the boundary it ran on.
+			if blockers := rollUpBlockers(claim, claims, cfg); len(blockers) > 0 {
+				g := lockGate{LintErrors: len(blockers), LintFindings: blockers, OpenThreads: claim.OpenThreadIDs()}
+				return cmdResult{
+						Warnings: adoptionWarnings(adopted),
+						Data:     newLockRefusedData(id, g),
+					}, cliout.Errorf(cliout.CodeLintFailed,
+						"lock: refused, %d error-level lint finding(s) outstanding: %s", len(blockers), g.lintBlockerDetail()).
+						WithDetails(lockRefusalDetails(g)).
+						WithHint(fmt.Sprintf("run: dossierx claim lock %s --dry-run (it names the banner and the sibling holding it open)", id))
+			}
+
 			if err := loader.SaveClaimIfUnchanged(updated, token); err != nil {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 			}
@@ -1768,7 +2083,7 @@ func newLockCmd() *cobra.Command {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 			}
 			return cmdResult{
-				Warnings: ledgerAdoptionWarnings(adopted),
+				Warnings: adoptionWarnings(adopted),
 				Data: lockData{
 					ClaimID:  id,
 					From:     from,
@@ -1954,7 +2269,7 @@ func newUnlockCmd() *cobra.Command {
 			// The lock-acquire above is still fatal on error: that is contention,
 			// not corruption.
 			flagCleared := false
-			warnings := ledgerAdoptionWarnings(adopted)
+			warnings := adoptionWarnings(adopted)
 			if flagStore, ferr := reaudit.LoadFlagStore(flagStorePath(cfg)); ferr != nil {
 				// Kept on stderr for the text surface (unchanged bytes) AND
 				// promoted into the envelope's warnings[], because a machine
@@ -2016,11 +2331,39 @@ func newUnlockCmd() *cobra.Command {
 // because reaudit is the DRIFT tool, and an agent that finds trigger "none"
 // should be reaching for unlock -> fix -> lock, not for this command.
 type reauditData struct {
-	ClaimID       string `json:"claim_id"`
-	Trigger       string `json:"trigger"`
-	NoChange      bool   `json:"no_change"`
-	Note          string `json:"note"`
-	Body          string `json:"body"`
+	ClaimID  string `json:"claim_id"`
+	Trigger  string `json:"trigger"`
+	NoChange bool   `json:"no_change"`
+	Note     string `json:"note"`
+
+	// BodyDiffHTML is Diff.Body: the proposal RENDERED as an inline diff, red
+	// removal spans and green addition spans, `<mark style=...>` markup and all.
+	//
+	// It was called `body` until round 5, and the name was the defect. Nothing in
+	// the payload said this was markup rather than content, so it read as "the
+	// body reaudit will write" — which it is not, and on a flag-sourced proposal
+	// it is not even close: the diff is two phrase-level spans and Apply replaces
+	// the whole body. The field keeps its place (a viewer or a chat message still
+	// wants the rendered diff) under a name that cannot be mistaken for the text
+	// on its way to disk. ResultingBody is that text.
+	BodyDiffHTML string `json:"body_diff_html"`
+
+	// ResultingBody is Diff.ResultingBody: the EXACT text a confirmed reaudit
+	// writes into the claim, computed by the same stripMarkup call Apply makes.
+	//
+	// This is the field the human's yes is actually about. internal/reaudit has
+	// computed it since round 4 for exactly that reason; it simply never reached
+	// the CLI, so `claim reaudit --confirm --reason "<their words>"` re-signed a
+	// truncated body into the ledger under words given for something else.
+	ResultingBody string `json:"resulting_body"`
+
+	// SideEffects is Diff.SideEffects: what confirming does BEYOND the diff a
+	// reader can see in BodyDiffHTML — today, the whole-body replacement and how
+	// many lines of the current body go with it. Empty when there is nothing
+	// beyond the visible diff, because a disclosure that fires when nothing
+	// happens is one people learn to skip.
+	SideEffects []string `json:"side_effects"`
+
 	Applied       bool   `json:"applied"`
 	Reason        string `json:"reason,omitempty"`
 	ReviewPending bool   `json:"review_pending"`
@@ -2215,6 +2558,14 @@ func newReauditCmd() *cobra.Command {
 			// The proposal block is printed identically on both paths (preview
 			// and apply), so it is built once here and the two paths only
 			// differ in the trailing line.
+			//
+			// It prints THREE things, not one, and the order is the order a human
+			// reads them in: what changed (the rendered diff), what the file will
+			// actually say afterwards, and what that costs beyond the diff. Only
+			// the first was ever printed, and on a flag-sourced proposal the first
+			// is two phrase-level spans while the write replaces the whole body —
+			// so the terminal output an agent pastes into chat to ask for a yes
+			// showed a surgical edit and hid a truncation.
 			printProposal := func() {
 				out := cmd.OutOrStdout()
 				fmt.Fprintf(out, "reaudit: %s (no_change=%v)\n", diff.ClaimID, diff.NoChange)
@@ -2222,6 +2573,13 @@ func newReauditCmd() *cobra.Command {
 				fmt.Fprintln(out, "---")
 				fmt.Fprintln(out, diff.Body)
 				fmt.Fprintln(out, "---")
+				fmt.Fprintln(out, "resulting body (exactly what --confirm writes):")
+				fmt.Fprintln(out, "---")
+				fmt.Fprintln(out, strings.TrimRight(diff.ResultingBody, "\n"))
+				fmt.Fprintln(out, "---")
+				for _, e := range diff.SideEffects {
+					fmt.Fprintf(out, "side effect: %s\n", e)
+				}
 			}
 
 			data := reauditData{
@@ -2229,15 +2587,21 @@ func newReauditCmd() *cobra.Command {
 				Trigger:  reauditTrigger(drift, flagged),
 				NoChange: diff.NoChange,
 				Note:     diff.Note,
-				Body:     diff.Body,
-				Reason:   reason,
+				// Both halves of the proposal, kept distinct: the rendered diff a
+				// reader looks at, and the plain text Apply writes. See
+				// reauditData's field comments for why carrying only the first was
+				// a silent data-loss path.
+				BodyDiffHTML:  diff.Body,
+				ResultingBody: diff.ResultingBody,
+				SideEffects:   emptyIfNil(diff.SideEffects),
+				Reason:        reason,
 			}
 
 			if !confirm {
 				data.Applied = false
 				data.ReviewPending = claim.ReviewPending
 				return cmdResult{
-					Warnings: ledgerAdoptionWarnings(adopted),
+					Warnings: adoptionWarnings(adopted),
 					Data:     data,
 					Text: func() {
 						printProposal()
@@ -2321,7 +2685,7 @@ func newReauditCmd() *cobra.Command {
 			data.Applied = true
 			data.ReviewPending = applied.ReviewPending
 			return cmdResult{
-				Warnings: ledgerAdoptionWarnings(adopted),
+				Warnings: adoptionWarnings(adopted),
 				Data:     data,
 				Text: func() {
 					printProposal()
@@ -2356,9 +2720,11 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	if strings.TrimSpace(reason) == "" {
 		dr.Lacking("--reason")
 	}
-	dr.Require("claim_is_locked", claim.Status == model.StatusLocked,
+	locked := claim.Status == model.StatusLocked
+	pending := claim.ReviewPending
+	dr.Require("claim_is_locked", locked,
 		fmt.Sprintf("status is %q", claim.Status))
-	dr.Require("claim_is_review_pending", claim.ReviewPending,
+	dr.Require("claim_is_review_pending", pending,
 		fmt.Sprintf("review_pending is %v", claim.ReviewPending))
 
 	store, err := lock.LoadStore(storePath(cfg))
@@ -2376,7 +2742,8 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	// flag": review_pending caused ONLY by discussion. There is no diff to
 	// confirm, and the remedy is a human clicking Resolve — so it is reported
 	// as a precondition, not smuggled in as a side effect.
-	dr.Require("has_a_content_trigger", drift || flagTrigger,
+	hasTrigger := drift || flagTrigger
+	dr.Require("has_a_content_trigger", hasTrigger,
 		fmt.Sprintf("drift=%v flag=%v open_comment_threads=%d", drift, flagTrigger, open))
 
 	// The pre-reaudit integrity gate, previewed. The write path refuses a claim
@@ -2388,14 +2755,29 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	dr.Require("content_matches_ledger", matches,
 		fmt.Sprintf("a standing lock-ledger approval covers this claim=%v; its recorded content still matches the file=%v", standing, matches))
 
-	// The proposal is computed only once the state gates hold. internal/reaudit
+	// The proposal is computed once the STATE gates hold. internal/reaudit
 	// refuses to propose for a claim that is not locked+review_pending, and
 	// surfacing that refusal as a command ERROR would break the rule this whole
 	// mechanism rests on: a dry run fails only when it cannot compute the
 	// preview at all (no config, no such claim). Every other refusal is a
 	// failed precondition on a successful, blocked report — otherwise "the
 	// answer is no" and "the preview itself broke" become indistinguishable.
-	if !dr.Blocked {
+	//
+	// The condition is the state gates THEMSELVES, not dr.Blocked, and the
+	// difference is the whole value of this preview. dr.Blocked is also set by
+	// Lacking("--reason") — and --reason is precisely what this preview exists to
+	// elicit, since the agent has to show the human a proposal before it can have
+	// their approving words. Gating on dr.Blocked meant the ordinary invocation,
+	// `claim reaudit <id> --dry-run` with no --reason yet, computed no proposal at
+	// all: no resulting_body, and no side_effects naming the whole-body
+	// replacement. The one call an agent makes to find out what it is about to ask
+	// for was the one call that would not say.
+	//
+	// proposalEffects carries Diff.SideEffects out of the block below so it can
+	// be folded into the dry run's own side_effects list further down, where the
+	// rest of the blast radius is assembled.
+	var proposalEffects []string
+	if locked && pending && hasTrigger && matches {
 		var diff reaudit.Diff
 		if flagged {
 			diff, err = reaudit.ProposeFlagDiff(claim, pendingFlag)
@@ -2407,9 +2789,23 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 		}
 		dr.Propose("no_change", diff.NoChange).
 			Propose("note", diff.Note).
-			Propose("body", diff.Body)
+			// body_diff_html and resulting_body are proposed under the same names
+			// the reaudit envelope publishes them under, so an agent that previews
+			// and then applies is reading one vocabulary, not two. Proposing only
+			// the rendered diff — as this did — described the markup and never the
+			// content, which is the one value the human's yes is actually about.
+			Propose("body_diff_html", diff.Body).
+			Propose("resulting_body", diff.ResultingBody)
+		proposalEffects = diff.SideEffects
 	}
 
+	// The proposer's OWN side effects come first, ahead of the file-level ones:
+	// "this replaces the entire body and drops N lines" is the disclosure a human
+	// has to weigh, and burying it under "rewrites <path>" would rank the
+	// mechanical consequence above the substantive one.
+	for _, e := range proposalEffects {
+		dr.Effect(e)
+	}
 	dr.Effect("rewrites " + claim.SourcePath + " — reaudit can only change body, nothing else").
 		Effect("re-baselines this claim's dependency content hashes and refreshes its lock timestamp in " + storePath(cfg))
 	if flagged {

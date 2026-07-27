@@ -572,4 +572,185 @@ if grep -q 'skipping the claim-integrity check' "$TMP/uni-commit3.out"; then
 	fail "the hook reported no project in a repository that has one under a non-ASCII path: $(cat "$TMP/uni-commit3.out")"
 fi
 
-echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind assume-unchanged, and under a non-ASCII directory name — while still letting honest commits through in every one of them."
+# --- 17 · claims_dir OUTSIDE the config's own directory ----------------------
+#
+# The ordinary monorepo layout: the config in docs/, the claims beside it rather
+# than under it, "claims_dir: ../claims". Nothing in FORMAT.md or README requires
+# claims_dir to sit under the config's directory, config validation does not
+# reject "..", and check, claim new, claim lock and serve all work on it.
+#
+# --staged did not. Every pathspec was computed relative to the CONFIG's own
+# directory, so claims_dir came out as "../claims", which the engine read as
+# "outside the repository, nothing to evaluate" — its deliberate exit-0 escape
+# hatch, meant for a tarball checkout with no git at all. The hook then printed
+# nothing, exited 0, and committed a hand-edited LOCKED claim, while
+# "check --validate" on the identical tree reported lock-content-drift. The
+# entry point CI runs and the entry point the hook runs disagreed, and the one
+# that disagreed was the hook's.
+#
+# Both halves are asserted, because "refuses" alone would also be satisfied by a
+# hook that refuses this layout unconditionally.
+echo "hook-smoke-test: gating a project whose claims_dir points outside its own directory ..."
+SPLIT="$TMP/split-claims-dir"
+mkdir -p "$SPLIT/docs" "$SPLIT/claims"
+cat >"$SPLIT/docs/project.config.yaml" <<'YAML'
+schema_version: 1
+facets:
+  - contract
+modules:
+  - widget
+claims_dir: ../claims
+YAML
+(
+	cd "$SPLIT"
+	git init -q .
+	git config user.email hook-smoke@example.invalid
+	git config user.name "hook smoke test"
+	git config commit.gpgsign false
+)
+(
+	cd "$SPLIT/docs"
+	"$BIN" claim new "$CLAIM_ID" \
+		--body "the widget answers within 200ms." \
+		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+		--format text >/dev/null
+	"$BIN" check --format text >/dev/null
+	"$BIN" claim lock "$CLAIM_ID" --reason "approved for the smoke test" --format text >/dev/null
+)
+# The fixture only means something if the claim really did land outside the
+# config's directory.
+[ -f "$SPLIT/claims/$CLAIM_ID.yaml" ] ||
+	fail "claims_dir: ../claims did not put the claim beside the config; the fixture cannot prove anything"
+
+(cd "$SPLIT" && sh "$INSTALLER" --yes) >"$TMP/split-install.out" 2>&1 ||
+	fail "install into the split-claims_dir fixture failed: $(cat "$TMP/split-install.out")"
+
+# Half one: honest work still commits.
+(cd "$SPLIT" && git add -A && git commit -qm "a project whose claims live beside its config") >"$TMP/split-commit1.out" 2>&1 ||
+	fail "the gate refused an honest commit in a repository whose claims_dir points outside the config's directory: $(cat "$TMP/split-commit1.out")"
+
+# Half two: the gate is ON.
+tamper "$SPLIT"
+(cd "$SPLIT" && git add -A)
+if (cd "$SPLIT" && git commit -qm "sneak an edit past review behind a ../claims layout") >"$TMP/split-commit2.out" 2>&1; then
+	fail "a tampered locked claim was committed in a claims_dir: ../claims layout — the gate skipped the whole project and said nothing: $(cat "$TMP/split-commit2.out")"
+fi
+grep -qi 'refused' "$TMP/split-commit2.out" ||
+	fail "the refusal did not say so in words a human can act on: $(cat "$TMP/split-commit2.out")"
+if grep -qi 'skipped\|skipping' "$TMP/split-commit2.out"; then
+	fail "the hook reported a SKIPPED gate on a layout it can evaluate perfectly well: $(cat "$TMP/split-commit2.out")"
+fi
+
+# --- 18 · an UNTRACKED project.config.yaml over tracked claims ---------------
+#
+# Reading the config from the index (case 14) closed the unstaged-edit bypass,
+# but it fell back to the WORKTREE config whenever the config was merely not
+# TRACKED — and an untracked config is a working-tree file, editable without
+# staging anything. Point its claims_dir at a directory of PRISTINE copies,
+# stage a tampered locked claim, and the gate audited the copies, agreed with
+# every ledger record, printed "check --staged: OK" and passed the commit: the
+# same bypass as case 14, reached through the fallback instead of the file.
+#
+# The pristine copies are what make it silent. An EMPTY decoy leaves the ledger
+# holding records for claims the gate can no longer see, and lock-ledger-
+# abandoned refuses the commit for the wrong reason; a decoy that satisfies
+# every record refuses nothing at all.
+#
+# The fallback exists for the first commit of a project, and it survives for
+# exactly that: an index with no claims and no ledger in it. Here the index has
+# both, so there is no honest reading of the run, and the refusal is a hard
+# error rather than the skip-and-pass that hides it.
+echo "hook-smoke-test: an untracked project.config.yaml must not judge tracked claims ..."
+UNTRACKED="$TMP/untracked-config"
+new_project "$UNTRACKED"
+# The archive copy: ordinary-looking, tracked, and exactly what the ledger
+# approved.
+mkdir -p "$UNTRACKED/decoy"
+cp "$UNTRACKED/claims/$CLAIM_ID.yaml" "$UNTRACKED/decoy/"
+# Commit the claims and the ledger WITHOUT the config, before the hook exists —
+# the hook would (correctly, after this fix) refuse to be the thing that creates
+# this state.
+(cd "$UNTRACKED" && git add claims decoy .dossierx-lock-store.json .dossierx-comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
+	fail "could not build the untracked-config fixture: $(cat "$TMP/untracked-commit1.out")"
+(cd "$UNTRACKED" && git ls-files --error-unmatch project.config.yaml) >/dev/null 2>&1 &&
+	fail "the fixture tracked project.config.yaml; this case must leave it untracked"
+
+(cd "$UNTRACKED" && sh "$INSTALLER" --yes) >"$TMP/untracked-install.out" 2>&1 ||
+	fail "install into the untracked-config fixture failed: $(cat "$TMP/untracked-install.out")"
+
+tamper "$UNTRACKED"
+(cd "$UNTRACKED" && git add claims)
+# The redirect, in the untracked config nobody is committing.
+sed 's/^claims_dir: claims$/claims_dir: decoy/' "$UNTRACKED/project.config.yaml" >"$UNTRACKED/project.config.yaml.tmp"
+mv "$UNTRACKED/project.config.yaml.tmp" "$UNTRACKED/project.config.yaml"
+grep -q 'claims_dir: decoy' "$UNTRACKED/project.config.yaml" ||
+	fail "the claims_dir redirect did not take"
+
+if (cd "$UNTRACKED" && git commit -qm "sneak an edit past review behind an untracked config") >"$TMP/untracked-commit2.out" 2>&1; then
+	fail "a tampered locked claim was committed while project.config.yaml was untracked — the gate judged tracked content against a worktree config: $(cat "$TMP/untracked-commit2.out")"
+fi
+grep -qi 'refused' "$TMP/untracked-commit2.out" ||
+	fail "the refusal did not say so in words a human can act on: $(cat "$TMP/untracked-commit2.out")"
+grep -q 'project.config.yaml' "$TMP/untracked-commit2.out" ||
+	fail "the refusal did not name the untracked config, so nobody can act on it: $(cat "$TMP/untracked-commit2.out")"
+
+# --- 19 · a SKIPPED gate is not a pass --------------------------------------
+#
+# "check --staged" exits 0 with data.skipped when there is no index to evaluate.
+# That is deliberate — running it by hand outside a repository, or in CI over a
+# tarball checkout, must not fail — and it stays. What must not stay is the hook
+# treating it as a pass: check_one branched on the exit code and on error.code
+# and on nothing else, and --format json puts the warning in the envelope rather
+# than on the terminal, so a skipped run was indistinguishable from a clean one.
+# No output, exit 0, commit lands, gate never ran.
+#
+# The reachable shape is claims_dir resolving OUTSIDE the repository altogether,
+# where no commit could carry the claims and the engine genuinely has nothing to
+# judge. Silence is the wrong answer there too: the hook is installed to guard
+# these claims, and "I could not look at them" is a refusal, not an approval.
+echo "hook-smoke-test: a SKIPPED gate must not be reported as a pass ..."
+SKIPPED="$TMP/skipped-gate"
+mkdir -p "$SKIPPED/repo" "$SKIPPED/outside-claims"
+cat >"$SKIPPED/repo/project.config.yaml" <<'YAML'
+schema_version: 1
+facets:
+  - contract
+modules:
+  - widget
+claims_dir: ../outside-claims
+YAML
+(
+	cd "$SKIPPED/repo"
+	git init -q .
+	git config user.email hook-smoke@example.invalid
+	git config user.name "hook smoke test"
+	git config commit.gpgsign false
+	"$BIN" claim new "$CLAIM_ID" \
+		--body "the widget answers within 200ms." \
+		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
+		--format text >/dev/null
+	"$BIN" check --format text >/dev/null
+	"$BIN" claim lock "$CLAIM_ID" --reason "approved for the smoke test" --format text >/dev/null
+)
+# The fixture only means something if the claims really are outside the repo.
+[ -f "$SKIPPED/outside-claims/$CLAIM_ID.yaml" ] ||
+	fail "the claims did not land outside the repository; the fixture cannot prove anything"
+(cd "$SKIPPED/repo" && "$BIN" check --staged --format json) 2>&1 | grep -q '"skipped": true' ||
+	fail "this fixture no longer produces a skipped run; the case cannot prove anything"
+
+(cd "$SKIPPED/repo" && sh "$INSTALLER" --yes) >"$TMP/skipped-install.out" 2>&1 ||
+	fail "install into the skipped-gate fixture failed: $(cat "$TMP/skipped-install.out")"
+
+if (cd "$SKIPPED/repo" && git add -A && git commit -qm "claims live outside the repository") >"$TMP/skipped-commit.out" 2>&1; then
+	fail "a commit passed on a SKIPPED gate — the hook reported OK over a project it never looked at: $(cat "$TMP/skipped-commit.out")"
+fi
+grep -qi 'refused' "$TMP/skipped-commit.out" ||
+	fail "the skipped-gate refusal did not say so in words a human can act on: $(cat "$TMP/skipped-commit.out")"
+grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
+	fail "the skipped-gate refusal did not point at the likely cause: $(cat "$TMP/skipped-commit.out")"
+# And the documented escape hatch still gets the work committed, because a
+# refusal nobody can get past is a refusal that gets the hook uninstalled.
+(cd "$SKIPPED/repo" && git commit -qm "claims live outside the repository" --no-verify) >"$TMP/skipped-commit2.out" 2>&1 ||
+	fail "--no-verify did not get past the skipped-gate refusal: $(cat "$TMP/skipped-commit2.out")"
+
+echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them."

@@ -208,42 +208,39 @@ const (
 	// so a build order a human deliberately released stays silent.
 	RuleBuildOrderLedgerAbandoned = "build-order-ledger-abandoned"
 
-	// RuleBuildOrderLedgerOrphan: an artifact that is byte-for-byte the one a
-	// human approved EXCEPT that its own `"locked"` flag now says false, while
-	// its ledger record still stands unreleased.
+	// RuleBuildOrderLedgerOrphan: an artifact whose own `"locked"` flag says
+	// false while its ledger record still stands unreleased.
 	//
 	// It is the build-order twin of lock-ledger-orphan, and it closes the
 	// cheapest bypass in this whole gate: one boolean, in the audited file,
 	// disarmed every rule above it. Both forward rules skip an unlocked artifact
 	// (correctly — an unlocked artifact is a proposal nobody has approved), and
 	// the reverse sweep skips one that is present (correctly — it is the forward
-	// loop's business). So editing `"locked": true` to `"locked": false` and
-	// changing nothing else removed the artifact from every rule's evidence set
-	// at once, and `check` reported ok. The approved implementation sequence is
-	// still sitting there for an agent to follow, and the ledger still says a
-	// human approved it; the only thing that changed is the flag that decides
-	// whether anyone checks.
+	// loop's business). So editing `"locked": true` to `"locked": false`
+	// removed the artifact from every rule's evidence set at once, and `check`
+	// reported ok. The approved implementation sequence is still sitting there
+	// for an agent to follow, and the ledger still says a human approved it; the
+	// only thing that changed is the flag that decides whether anyone checks.
 	//
-	// The predicate is exact rather than "unlocked artifact + standing record",
-	// and that is what keeps it off correct state. The honest re-propose window
-	// — "build-order propose" overwriting a stale locked order with a fresh
-	// unlocked one, before the lock that follows — also produces an unlocked
-	// artifact under a standing record, and refusing THAT would refuse every
-	// commit between the two halves of the documented flow. The two are told
-	// apart by re-signing the artifact as if its locked flag were still true: if
-	// that hash matches the record, the file IS the approved artifact and the
-	// flag is the only thing anybody touched. A re-proposal is a recomputation
-	// from claims that had to have moved for propose to be allowed at all (a
-	// locked, non-stale order refuses to be re-proposed), so it never
-	// re-signs to the approved hash.
+	// The predicate is "unlocked artifact + STANDING record", with no exception,
+	// and what makes that safe to state so plainly is that the honest
+	// re-propose window no longer produces it. "build-order propose" now
+	// RELEASES the module's record as part of overwriting a locked order with a
+	// fresh unlocked one (see lock.ReleaseBuildOrderApproval and the propose
+	// command's call to it) — which is simply the truth being written down: the
+	// approved order it vouched for is gone, replaced by a proposal nobody has
+	// approved. A released record is not standing, so every commit between the
+	// two halves of the documented propose-then-lock flow stays silent.
 	//
-	// WHAT IT DOES NOT CATCH: flipping the flag AND editing the phases in the
-	// same edit. That artifact re-signs to something else, so it is
-	// indistinguishable here from an honest re-proposal, and it stays a known
-	// gap. Closing it needs "propose" to RELEASE the standing record
-	// (lock.ReleaseBuildOrderApproval exists for exactly that and has no caller
-	// yet), after which any unlocked artifact under a STANDING record is a
-	// finding with no exceptions.
+	// The predicate USED to be exact instead — re-sign the artifact as if its
+	// locked flag were still true and require that hash to match the record —
+	// because without the release there was no other way to tell the honest
+	// window apart from a hand flip. That exactness was itself the hole: it
+	// caught flipping the flag ALONE, and missed flipping the flag AND editing
+	// the phases in the same edit, since a content edit re-signs to something
+	// else and was therefore indistinguishable from a re-proposal. The strictly
+	// more damaging attack was the one that got through. Wiring the release into
+	// propose is what let the exception go, and with it that gap.
 	RuleBuildOrderLedgerOrphan = "build-order-ledger-orphan"
 
 	// RuleBuildOrderUnreadable: a build-order artifact file that IS there and
@@ -420,12 +417,19 @@ func buildOrderGate(in ledgerInputs) []lock.Finding {
 		// one shape that cannot be an honest re-proposal. See
 		// RuleBuildOrderLedgerOrphan.
 		if !o.Locked {
-			if standing && o.LockedHash == record.Hash {
+			if standing {
+				// Whether the phases were edited too changes only the wording.
+				// Both are the same finding: an artifact saying it needs nobody's
+				// approval, under a record saying somebody gave it.
+				what := "with its own \"locked\" flag set to false and nothing else changed"
+				if o.LockedHash != record.Hash {
+					what = "with its own \"locked\" flag set to false AND its content changed"
+				}
 				findings = append(findings, lock.Finding{
 					Rule: RuleBuildOrderLedgerOrphan,
 					Message: fmt.Sprintf(
-						"module %q's build order (%s) is the artifact approved on %s (%q) with its own \"locked\" flag set to false and nothing else changed — its lock-ledger record still stands, unreleased. An unlocked artifact is audited by nothing (it is meant to be a fresh proposal nobody has approved yet), so flipping that one boolean takes an approved implementation sequence out of the gate while leaving it in place for an agent to follow. Restore \"locked\": true, or release the approval honestly by re-proposing the order (dossierx build-order propose --module %s) and locking the result.",
-						o.Module, o.Path, record.At, record.Reason, o.Module),
+						"module %q's build order (%s) is the artifact approved on %s (%q) %s — its lock-ledger record still stands, unreleased. An unlocked artifact is audited by nothing (it is meant to be a fresh proposal nobody has approved yet), so clearing that one boolean takes an approved implementation sequence out of the gate while leaving it in place for an agent to follow. An honest re-proposal releases the record as it overwrites the artifact, so a standing record here means nothing released it. Restore the artifact from version control, or discard the approved order deliberately by re-proposing it (dossierx build-order propose --module %s) and locking the result.",
+						o.Module, o.Path, record.At, record.Reason, what, o.Module),
 				})
 			}
 			continue
@@ -474,20 +478,13 @@ func buildOrderGate(in ledgerInputs) []lock.Finding {
 // lock-ledger-absent, and an in-memory store assembled by a caller must not have
 // every module it did not know about reported as deleted.
 //
-// It deliberately does NOT fire on an artifact that is PRESENT but unlocked.
-// That state is the honest re-propose window — "build-order propose" overwrites
-// a locked artifact with a fresh unlocked one and does not (yet) release the
-// record — so reporting it here would refuse every commit between a re-propose
-// and the lock that follows it.
-//
-// The hand-flipped `"locked": false` that used to hide in that same window is
-// now caught by the forward loop instead, and precisely: an artifact that
-// re-signs to its own record once the flag is put back is the approved artifact
-// with one boolean changed, which no re-proposal can be (see
-// RuleBuildOrderLedgerOrphan). What remains uncovered is a flip made TOGETHER
-// with a content edit, and closing that still needs the release wired into
-// propose (see lock.ReleaseBuildOrderApproval), after which every unlocked
-// artifact under a standing record is a finding.
+// It deliberately does NOT fire on an artifact that is PRESENT but unlocked —
+// that is the forward loop's business, not a deletion. The forward loop reports
+// it as RuleBuildOrderLedgerOrphan whenever the record still STANDS, which it no
+// longer does after an honest re-propose: "build-order propose" releases the
+// module's record as it overwrites the artifact. So the window between a
+// re-propose and the lock that follows it stays silent here and there, without
+// either rule having to guess which unlocked artifact is honest.
 func abandonedBuildOrders(orders []buildOrderState, store *lock.Store) []lock.Finding {
 	if store == nil || !store.FileExists() {
 		return nil

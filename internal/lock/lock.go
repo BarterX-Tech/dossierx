@@ -130,10 +130,27 @@ type Store struct {
 	// while locked claims exist" (never adopt — see AdoptLedger).
 	fileExists bool
 
+	// ledgerKeyOnDisk records whether the decoded file carried a "ledger" KEY,
+	// as opposed to carrying ledger RECORDS. The two differ by exactly one
+	// attacker edit — emptying the map instead of deleting the key — and the key
+	// alone is already conclusive: it did not exist before schema 2, so a store
+	// that claims to predate the ledger cannot honestly have one. See
+	// Store.LedgerDowngraded.
+	ledgerKeyOnDisk bool
+
 	// rebaselined is the claim ids MigrateLegacyStore re-armed dependency
 	// baselines for on this load — read through Rebaselined() so a caller can
 	// name them in its envelope. See MigrateLegacyStore.
 	rebaselined []string
+
+	// commentDigestsAdopted is the claim ids SweepCommentDigests took COMMENT
+	// DIGEST coverage of on this run — read through CommentDigestsAdopted() for
+	// the same reason rebaselined is read through Rebaselined(): adoption
+	// records "whatever the file said just now" as the truth, and a caller that
+	// cannot name what it adopted cannot warn about it. It rides on the store
+	// rather than in PrepareStore's return so the four commands that already
+	// call PrepareStore keep compiling and can surface it when they are ready.
+	commentDigestsAdopted []string
 }
 
 // OnDiskVersion returns the schema version this store was decoded from, or 0
@@ -218,11 +235,16 @@ func LoadStore(path string) (*Store, error) {
 	// map[dependentID]map[depID]hash shape: capture "hashes" as raw bytes
 	// first, decide by schema version whether to keep or drop it, and only
 	// then decode the ones we keep.
+	//
+	// "ledger" is captured as raw bytes for the same reason "hashes" is, plus one
+	// of its own: whether the KEY was there at all is evidence, and a decoded map
+	// cannot answer that — `"ledger": {}` and no ledger key both decode to an
+	// empty map. See Store.ledgerKeyOnDisk.
 	var onDisk struct {
-		Version  int                     `json:"version"`
-		Hashes   json.RawMessage         `json:"hashes"`
-		LockedAt map[string]string       `json:"locked_at"`
-		Ledger   map[string]LedgerRecord `json:"ledger"`
+		Version  int               `json:"version"`
+		Hashes   json.RawMessage   `json:"hashes"`
+		LockedAt map[string]string `json:"locked_at"`
+		Ledger   json.RawMessage   `json:"ledger"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
@@ -230,8 +252,15 @@ func LoadStore(path string) (*Store, error) {
 	if onDisk.LockedAt != nil {
 		s.LockedAt = onDisk.LockedAt
 	}
-	if onDisk.Ledger != nil {
-		s.Ledger = onDisk.Ledger
+	if len(onDisk.Ledger) > 0 {
+		s.ledgerKeyOnDisk = true
+		var ledger map[string]LedgerRecord
+		if err := json.Unmarshal(onDisk.Ledger, &ledger); err != nil {
+			return nil, fmt.Errorf("lock: parse store %s ledger: %w", path, err)
+		}
+		if ledger != nil {
+			s.Ledger = ledger
+		}
 	}
 	// Remember what was actually on disk (see Store.diskVersion/fileExists).
 	//
@@ -401,6 +430,24 @@ func (s *Store) Rebaselined() []string {
 		return nil
 	}
 	return s.rebaselined
+}
+
+// CommentDigestsAdopted returns the claim ids whose comment blocks
+// SweepCommentDigests took coverage of on this run, sorted; empty when nothing
+// was adopted.
+//
+// It exists because adoption must never be SILENT. What an adoption establishes
+// is only "these were the threads on disk just now" — never that anybody
+// approved them — so the run that adopts is exactly the run a human should look
+// at, and a command that reports ok:true with no findings on that run has not
+// told the whole truth. Same contract as Rebaselined: the ids are on the store
+// so the caller can put them in its machine envelope rather than making a
+// consumer read a second stream.
+func (s *Store) CommentDigestsAdopted() []string {
+	if s == nil {
+		return nil
+	}
+	return s.commentDigestsAdopted
 }
 
 // announceRebaseline writes the legacy-baseline re-arm notice, on the same
@@ -619,6 +666,59 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	if claim.Status == model.StatusLocked {
 		return claim, fmt.Errorf("%w: claim %q is already locked, and lock is the draft -> locked transition, not a re-approval. Re-locking would overwrite its ledger record with a hash of whatever the file says NOW, which is how a hand edit to a locked claim gets blessed. To change it: dossierx claim unlock %s --reason \"...\", make the edit, then lock it again",
 			ErrAlreadyLocked, claim.ID, claim.ID)
+	}
+
+	// THE SAME GATE, ON THE PREDICATE THE ATTACKER DOES NOT WRITE. The check
+	// above reads claim.Status — a line in the audited file — so it was
+	// disarmed by editing that line, and the whole refusal above cost one hand
+	// edit to bypass:
+	//
+	//	dossierx claim lock <id> --reason …    record written
+	//	edit the body by hand                  check reports lock-content-drift
+	//	dossierx claim lock <id> --reason …    refused, already_locked (above)
+	//	edit "status: locked" -> "status: draft"
+	//	dossierx claim lock <id> --reason …    SUCCEEDED — draft -> locked, and
+	//	                                       RecordApproval replaced the record's
+	//	                                       hash with a hash of the TAMPERED bytes
+	//
+	// After that run every gate is green, permanently, and there is no
+	// released_at/released_by anywhere in the ledger: the one command that is
+	// allowed to withdraw an approval (unlock) never ran, so nothing records
+	// that the approval this lock overwrote was ever given up.
+	//
+	// The right question is not what the file's status line says but whether a
+	// STANDING, unreleased approval still vouches for this claim. A draft claim
+	// holding one IS lock-ledger-orphan by definition (see audit.go's rule of
+	// that name) — it was locked, and something took it out of locked without
+	// going through unlock — so locking it is never the draft -> locked
+	// transition; it is a re-signing of content the ledger already speaks for.
+	// The same predicate is what `claim reaudit --confirm` and `claim show`
+	// already ask before they trust a record (cmd/dossierx's
+	// standingLedgerRecord), so all three now agree about what "still approved"
+	// means.
+	//
+	// It is deliberately UNCONDITIONAL on content: refusing only when the hash
+	// disagrees would bless the flip-back-and-relock of unedited content, which
+	// is the released-record bypass audit.go's RuleLockLedgerReleased exists for,
+	// arriving from the other direction.
+	//
+	// RELEASED records are not standing, which is what keeps this off the one
+	// recovery every other refusal in this package points at: unlock -> fix ->
+	// lock stays open, because unlock stamps the release first. And a claim with
+	// NO record (a pre-ledger project, or a ledger someone deleted) is not
+	// refused here either — that is lock-ledger-missing/absent, a finding the
+	// gate already owns, and turning it into a lock refusal would leave an
+	// honest project with no way to lock anything.
+	//
+	// It reuses ErrAlreadyLocked rather than adding a second sentinel because
+	// the LEDGER's answer to "is this locked?" is yes: the record stands. The
+	// CLI maps that sentinel to already_locked and hints at unlock, which is
+	// half of the recovery; the message carries the other half (restore), which
+	// is the one to prefer — restoring the file gives back the content that was
+	// approved, while unlocking accepts the edit and asks a human to say so.
+	if rec, ok := ledgerRecordFor(store, claim.ID); ok && !rec.Released() {
+		return claim, fmt.Errorf("%w: claim %q says status: draft, but the lock ledger still holds a STANDING approval for it from %s (%q) — nothing released it, so it left locked outside the approval path and the gate reports it as lock-ledger-orphan. Locking it here would replace that approval's hash with a hash of whatever the file says NOW, blessing bytes nobody approved. Restore the claim file from version control (status: locked, with the approved content), or — if the change is wanted — restore it and then release the approval on the record: dossierx claim unlock %s --reason \"...\", make the edit, and lock it again",
+			ErrAlreadyLocked, claim.ID, rec.At, rec.Reason, claim.ID)
 	}
 
 	lintClaims := withLockedCandidate(claims, claim)

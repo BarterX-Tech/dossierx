@@ -911,3 +911,153 @@ func TestSaveDoesNotRecreateADeletedDigestStore(t *testing.T) {
 		t.Fatalf("expected the deletion to stand so check can report it, but the digest store was re-created (%v)", err)
 	}
 }
+
+// coveredProject builds the ordinary state every rule in this file is about: a
+// lock store on disk at the ledger schema, one locked claim with a STANDING
+// approval, and the comment digest store the approval wrote beside it. It
+// returns the reopened store — reopened because fileExists/diskVersion are read
+// at load time, and "already covered" is precisely what the second open sees.
+func coveredProject(t *testing.T, c model.Claim) (model.Claim, *Store) {
+	t.Helper()
+	c.Status = model.StatusLocked
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	seed, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	RecordApproval(seed, c, Approval{Actor: "alice", Reason: "approved"})
+	if err := seed.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore (reopen): %v", err)
+	}
+	if !store.LedgerCovered() {
+		t.Fatalf("fixture is not a ledger-covered project: version %d, exists %v", store.OnDiskVersion(), store.FileExists())
+	}
+	return c, store
+}
+
+func digestFor(t *testing.T, store *Store, id string) (string, bool) {
+	t.Helper()
+	digests, err := digest.LoadStore(digest.StorePathBeside(store.path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	return digests.Digest(id)
+}
+
+// TestSweepDoesNotAdoptIntoACoveredProjectWhoseDigestStoreWasDeleted is the
+// laundering path plain `dossierx check` carried. The sweep called digest.Adopt
+// with no guard at all, so the digest store was re-derived from whatever the
+// claim files said NOW:
+//
+//	edit a locked claim's comments by hand  -> comment-ledger-drift, correctly
+//	rm .dossierx-comment-digest.json        -> comment-digest-absent, correctly
+//	dossierx check                          -> ONE ordinary run adopts the edited
+//	                                           block as the truth: ok:true, both
+//	                                           findings gone, permanently green
+//
+// A human's open objection on a LOCKED claim is erased and the commit then
+// passes the hook and CI. Absence must never adopt in a covered project — the
+// same rule AdoptLedger has always applied to the ledger itself (an absent lock
+// store is indistinguishable from a deleted one, so `rm` must not be a bypass),
+// and the same one internal/comments' recordCommentDigest applies at its own
+// adoption point.
+func TestSweepDoesNotAdoptIntoACoveredProjectWhoseDigestStoreWasDeleted(t *testing.T) {
+	silenceAnnouncements(t)
+
+	objection := model.Comment{
+		ID: "c-aaaaaa", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+		Created: "2026-07-24T10:00:00Z", Body: "this contradicts the schema claim",
+	}
+	locked, store := coveredProject(t, model.Claim{
+		ID: "widget.contract.main", Facet: "contract", Module: "widget",
+		Body: "approved body", Comments: []model.Comment{objection},
+	})
+
+	// The tamper: the objection edited straight out of the YAML, and the digest
+	// store that would have caught it deleted in the same commit.
+	tampered := locked
+	tampered.Comments = nil
+	digestPath := digest.StorePathBeside(store.path)
+	if err := os.Remove(digestPath); err != nil {
+		t.Fatalf("remove digest store: %v", err)
+	}
+
+	PrepareStore(store, []model.Claim{tampered})
+
+	if recorded, known := digestFor(t, store, tampered.ID); known {
+		t.Fatalf("the sweep adopted the tampered comment block as the truth (%q): a deleted digest store must never re-derive coverage from the claim files", recorded)
+	}
+	if _, err := os.Stat(digestPath); !os.IsNotExist(err) {
+		t.Fatalf("expected the deletion to stand so check can report comment-digest-absent, got %v", err)
+	}
+}
+
+// The same launder with the digest store left in place and ONE entry deleted —
+// the variant that is cheaper to hide in a review diff than removing the file,
+// and that the file-scoped guard above does not see. A claim under a STANDING
+// approval had its digest recorded at the moment of that approval
+// (RecordApproval), so a missing entry there is never "a claim the store has
+// not met yet": it is comment-digest-missing, a finding, and adopting would
+// clear it.
+func TestSweepDoesNotAdoptAClaimHoldingAStandingApproval(t *testing.T) {
+	silenceAnnouncements(t)
+
+	locked, store := coveredProject(t, model.Claim{
+		ID: "widget.contract.main", Facet: "contract", Module: "widget",
+		Body: "approved body",
+		Comments: []model.Comment{{
+			ID: "c-aaaaaa", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+			Created: "2026-07-24T10:00:00Z", Body: "this contradicts the schema claim",
+		}},
+	})
+
+	digests, err := digest.LoadStore(digest.StorePathBeside(store.path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	digests.Forget(locked.ID)
+	if err := digests.Save(); err != nil {
+		t.Fatalf("save digest store: %v", err)
+	}
+
+	tampered := locked
+	tampered.Comments = nil
+	PrepareStore(store, []model.Claim{tampered})
+
+	if recorded, known := digestFor(t, store, tampered.ID); known {
+		t.Fatalf("the sweep adopted a claim under a standing approval (%q), clearing the finding that named the emptied entry", recorded)
+	}
+}
+
+// The sweep's PURPOSE has to survive its guard, or the fix is just a different
+// hole: a claim the store has genuinely never met — authored after this project
+// became covered, still draft, no ledger record — must still be adopted, and the
+// adoption must be REPORTED so no coverage decision is silent.
+func TestSweepStillAdoptsAnUnknownClaimAndReportsIt(t *testing.T) {
+	silenceAnnouncements(t)
+
+	locked, store := coveredProject(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
+	fresh := model.Claim{
+		ID: "widget.contract.new", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "written yesterday",
+		Comments: []model.Comment{{
+			ID: "c-bbbbbb", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+			Created: "2026-07-25T10:00:00Z", Body: "why this shape?",
+		}},
+	}
+
+	PrepareStore(store, []model.Claim{locked, fresh})
+
+	recorded, known := digestFor(t, store, fresh.ID)
+	if !known || recorded != digest.CommentsDigest(fresh) {
+		t.Fatalf("a claim the digest store has never seen must still be adopted, got %q (present=%v)", recorded, known)
+	}
+	adopted := store.CommentDigestsAdopted()
+	if len(adopted) != 1 || adopted[0] != fresh.ID {
+		t.Fatalf("the adoption must be reported so a caller can warn about it, got %v", adopted)
+	}
+}

@@ -326,9 +326,15 @@ func (s *Store) PreLedger() bool {
 //     "version 1" is a contradiction: this project HAS been through a
 //     ledger-aware build.
 //
-//   - a non-empty Ledger map: the ledger key did not exist before schema 2, so a
-//     store that predates the ledger cannot carry records. This half costs
-//     nothing and catches the lazier edit (drop the version, keep the records).
+//   - the LEDGER KEY, present at all: it did not exist before schema 2, so a
+//     store that predates the ledger cannot carry it — with or without records
+//     inside. This half costs nothing and catches the lazier edit (drop the
+//     version, keep the records) AND the one that used to slip past it: this
+//     evidence used to read the map's SIZE, so emptying the map in the same edit
+//     that lowered the version ("ledger": { … } -> {}) satisfied it, and an
+//     emptied map is a smaller diff than a deleted key. The in-memory half
+//     (len(s.Ledger) > 0) is kept beside it for callers that build a store
+//     without a file.
 //
 // WHAT IT DOES NOT CLOSE, stated plainly. An attacker who deletes the digest
 // store as well as the ledger, in the same commit, produces a project that is
@@ -344,7 +350,7 @@ func (s *Store) LedgerDowngraded(digestStorePresent bool) bool {
 	if !s.PreLedger() {
 		return false
 	}
-	return digestStorePresent || len(s.Ledger) > 0
+	return digestStorePresent || s.ledgerKeyOnDisk || len(s.Ledger) > 0
 }
 
 // PreLedgerExempt reports whether a locked artifact WITHOUT a ledger record in
@@ -466,12 +472,15 @@ func ReleaseApproval(store *Store, claimID string, ap Approval) bool {
 // It is the build-order twin of ReleaseApproval, and the act that legitimately
 // releases a build order is "dossierx build-order propose": propose overwrites a
 // locked artifact with a fresh, unlocked one, which is precisely "this approved
-// order no longer stands". Until propose calls it, the ledger keeps a standing
-// record for an artifact that says locked:false, and the check gate cannot tell
-// that honest window apart from a hand-flipped `"locked": false` — so it reports
-// neither (see internal/check.abandonedBuildOrders). Wiring this into propose,
-// after WriteArtifact, is what makes the orphan half of that gate safe to turn
-// on.
+// order no longer stands". propose calls this immediately after WriteArtifact,
+// under the same lock-store sentinel, and that call is what makes the orphan
+// half of the check gate safe to state without exceptions: the honest
+// propose-then-lock window is now the only unlocked artifact whose record is
+// RELEASED, so internal/check can refuse every unlocked artifact under a
+// STANDING record (see check.RuleBuildOrderLedgerOrphan). Before that wiring
+// existed the gate had to guess, by re-signing the artifact as if its locked
+// flag were still true — which caught a lone flag flip and missed a flip made
+// together with a content edit.
 func ReleaseBuildOrderApproval(store *Store, module string, ap Approval) bool {
 	if store == nil {
 		return false
@@ -614,9 +623,10 @@ func announceDowngradeRefusal(path string) {
 	}
 	fmt.Fprintf(ledgerAnnounceWriter,
 		"dossierx: %s says it predates the lock ledger, but this project has already been through a\n"+
-			"  ledger-aware build (its comment digest store exists, or the store still carries ledger\n"+
-			"  records). Nothing was grandfathered: a store's own version field must not be able to\n"+
-			"  re-arm adoption, or editing one number would re-bless every locked claim as-found.\n"+
+			"  ledger-aware build (its comment digest store exists, or the store still carries the\n"+
+			"  ledger key, which did not exist before the ledger). Nothing was grandfathered: a\n"+
+			"  store's own version field must not be able to re-arm adoption, or editing one number\n"+
+			"  would re-bless every locked claim as-found.\n"+
 			"  Restore the lock store from version control — do NOT re-lock, which would record whatever\n"+
 			"  the claims say now as approved.\n",
 		path)
@@ -655,11 +665,61 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool, adopted []strin
 	// restores the store from version control.
 	stale := s.fileExists && s.diskVersion < ledgerSchemaVersion &&
 		!s.LedgerDowngraded(digestStorePresentBeside(s.path))
+
+	// Whether this project was ALREADY ledger-covered is read HERE, before
+	// AdoptLedger — which stamps the current schema version onto the store as
+	// its last act, so asking afterwards would be asking a question this run has
+	// already changed the answer to. A DOWNGRADED store counts as covered: it is
+	// a project that has been through a ledger-aware build whatever its version
+	// field now says, and letting the downgrade re-open comment adoption would
+	// hand the same edit a second laundering path.
+	//
+	// It is the sweep's absence rule (see SweepCommentDigests): in a covered
+	// project a missing digest store is a DELETED one, and adopting there
+	// re-derives coverage from the files the deletion was meant to bless.
+	coveredBefore := s.LedgerCovered() || s.LedgerDowngraded(digestStorePresentBeside(s.path))
+
 	adopted = AdoptLedger(s, claims)
 	if len(adopted) > 0 || stale {
 		changed = true
 	}
-	SweepCommentDigests(s, claims)
+	s.commentDigestsAdopted, _ = SweepCommentDigests(s, claims, coveredBefore)
+
+	// KNOWN GAP, recorded here because it is invisible from the rules
+	// themselves: every comment-digest guard above is armed by coveredBefore,
+	// and coverage is LedgerCovered — the LOCK store existing at this schema
+	// version. A project that has never locked a claim has no lock store at all
+	// (this function deliberately does not create one; see
+	// TestPrepareStoreDoesNotCreateAStoreForAFreshProject, which protects
+	// lock-ledger-ABSENT's evidence), while the sweep DOES create the digest
+	// store. So up to its first lock a project sits with a digest store and no
+	// coverage, and there the comment gate can be cleared by deleting the digest
+	// store: nothing reports the absence, and the next run re-adopts whatever
+	// the claims say.
+	//
+	// Reproduced end to end on a fresh project: a draft claim with an open human
+	// thread refuses to lock (unresolved_comments); hand-forge the thread to
+	// `status: resolved` and `check` correctly reports comment-ledger-drift;
+	// delete .dossierx-comment-digest.json and the next `check` reports ok:true,
+	// re-creates the store around the FORGED block, and `claim lock` then
+	// succeeds, leaving check --validate permanently clean. In a project that
+	// holds even one locked claim the same three edits are refused.
+	//
+	// Stamping the version here to close it was tried and REJECTED, on evidence:
+	// it converts lock-ledger-absent into lock-ledger-missing for a project
+	// whose ledger was deleted (eroding exactly the signal the test above
+	// protects), and it does not actually close the hole — deleting BOTH stores
+	// instead of one restores the crossing and launders the same forged thread
+	// just as completely. Raising the price from one deleted file to two is not
+	// worth a real diagnosis.
+	//
+	// Closing it properly needs evidence this directory cannot hold, for the
+	// same reason LedgerDowngraded's own "what it does not close" paragraph
+	// gives: when every file that could testify is deleted in one commit, the
+	// evidence is gone. The place that evidence still exists is version control,
+	// which is why `check --staged` reads the git index — the pre-commit hook
+	// and CI see the deletion of a tracked store as a staged deletion even when
+	// a worktree run cannot.
 	return changed, adopted
 }
 
@@ -697,6 +757,46 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool, adopted []strin
 // caught by the entry the tamper cannot reach, the OLD id's, which the second
 // half of this function deliberately leaves in place.
 //
+// WHAT ADOPTION IS NOT ALLOWED TO REACH. "It can only ADD entries" is true and
+// was not enough, because there are two ways to turn a RECORDED entry into an
+// absent one, and both were free:
+//
+//	edit a locked claim's comments by hand   -> comment-ledger-drift, correctly
+//	rm .dossierx-comment-digest.json         -> comment-digest-absent, correctly
+//	dossierx check (the writing form)        -> this sweep re-derived the whole
+//	                                            store from the claim files: both
+//	                                            findings gone, ok:true, and the
+//	                                            commit then passes the hook and CI
+//
+// The same run with the file left in place and the ONE tampered id deleted from
+// its map ends identically, and is cheaper to hide in a review diff. A human's
+// open objection on a LOCKED claim is erased permanently by an ordinary command
+// nobody would look twice at.
+//
+// So this sweep now asks the two questions internal/comments' recordCommentDigest
+// already asks at its own adoption point (see the ledgerCovered guard there):
+//
+//   - ledgerCovered: in a project that has been through a ledger-aware build, an
+//     ABSENT digest store is a deleted one, not an upgrade — exactly the rule
+//     AdoptLedger has always applied to the lock ledger itself, where "empty
+//     means adopt everything" would make `rm` the universal bypass. Nothing is
+//     adopted, the file is left absent so check can report comment-digest-absent,
+//     and the recovery is version control (or the reason-carrying `comment
+//     reaudit --claim`), never an adoption an attacker can trigger.
+//   - a STANDING approval: a claim whose lock-ledger record is unreleased had its
+//     comment digest recorded at the instant of that approval (RecordApproval),
+//     so a missing entry for it is never "a claim the store has not met yet" —
+//     it is comment-digest-missing, a finding, and adopting would clear it.
+//     Released records are not standing: an unlocked claim is a draft again, and
+//     its ordinary edits must stay free.
+//
+// The per-id half is skipped on the UPGRADE CROSSING (a pre-ledger project whose
+// digest store does not exist yet) and only there. AdoptLedger runs first inside
+// PrepareStore, so by the time the sweep sees that project every grandfathered
+// claim already holds a standing record — applying the filter there would leave
+// every locked claim in an honest v0.2.x project permanently uncovered, which is
+// the same outage the pre-ledger exemption exists to avoid.
+//
 // THE RELEASE HALF is the only caller of digest.Store.Forget, and it is narrow
 // on purpose: an entry is dropped only when its claim is gone AND its departure
 // erased no review history (see AbandonedCommentDigests). Everything else stays,
@@ -706,7 +806,7 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool, adopted []strin
 // project whose digest store cannot be written is not one whose command should
 // fail, and the consequence of a skipped sweep is a claim that reads as
 // uncovered — never one that reads as approved.
-func SweepCommentDigests(s *Store, claims []model.Claim) (adopted, forgotten []string) {
+func SweepCommentDigests(s *Store, claims []model.Claim, ledgerCovered bool) (adopted, forgotten []string) {
 	if s == nil || s.path == "" {
 		return nil, nil
 	}
@@ -723,15 +823,52 @@ func SweepCommentDigests(s *Store, claims []model.Claim) (adopted, forgotten []s
 		return nil, nil
 	}
 
-	adopted = digest.Adopt(store, claims)
+	// The upgrade crossing: a project that has never been through a
+	// ledger-aware build, whose digest store therefore does not exist yet. This
+	// is the one state in which absence is honest, and the one in which the
+	// whole project is adopted at once.
+	crossing := !store.FileExists() && !ledgerCovered
+
+	// Neither case below matches the third state — a COVERED project with no
+	// digest store, i.e. one that was deleted — and that is the fix: nothing is
+	// adopted, and the file is left absent so check keeps reporting
+	// comment-digest-absent. Re-creating it (even empty) would replace that
+	// finding with silence, which is the deletion getting what it came for.
+	switch {
+	case store.FileExists():
+		adopted = digest.Adopt(store, adoptableClaims(s, claims))
+	case crossing:
+		adopted = digest.Adopt(store, claims)
+	}
+
 	forgotten = releasableCommentDigests(claims, s, store)
 	for _, id := range forgotten {
 		store.Forget(id)
 	}
-	if !store.FileExists() || len(adopted) > 0 || len(forgotten) > 0 {
+	if crossing || len(adopted) > 0 || len(forgotten) > 0 {
 		store.Save() //nolint:errcheck // best-effort: see this function's doc comment
 	}
 	return adopted, forgotten
+}
+
+// adoptableClaims is the subset of claims whose comment block adoption is
+// allowed to reach: everything except a claim holding a STANDING (unreleased)
+// lock-ledger record, whose digest was written at the moment of that approval
+// and whose absence is therefore a finding rather than an introduction. See
+// SweepCommentDigests.
+//
+// It filters the CLAIMS rather than teaching digest.Adopt about the ledger:
+// internal/digest is imported BY this package precisely so it knows nothing
+// about locks, and the ledger is this package's business.
+func adoptableClaims(s *Store, claims []model.Claim) []model.Claim {
+	out := make([]model.Claim, 0, len(claims))
+	for _, c := range claims {
+		if rec, ok := ledgerRecordFor(s, c.ID); ok && !rec.Released() {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 // AbandonedCommentDigests returns the ids whose COMMENT DIGEST entry survives a

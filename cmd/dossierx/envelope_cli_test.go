@@ -355,7 +355,7 @@ func TestEnvelope_FlagThenReaudit(t *testing.T) {
 	if preview.Trigger != "flag" {
 		t.Fatalf("trigger must name why the claim is pending, got %q", preview.Trigger)
 	}
-	if preview.Body == "" {
+	if preview.BodyDiffHTML == "" {
 		t.Fatalf("the preview must carry the proposed body, got %+v", preview)
 	}
 

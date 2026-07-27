@@ -255,7 +255,9 @@ func commentWriteDryRun(would string, cfg *config.Config, claim model.Claim, thr
 		dr.Lacking("--body")
 	} else {
 		dr.Require("body_is_storable", loader.CommentBodyRoundTrips(body),
-			"a body that cannot be stored and read back byte-exact through YAML is refused at the shared input boundary: start it with a non-whitespace character")
+			boolDetail(loader.CommentBodyRoundTrips(body),
+				"this body survives a YAML round trip byte-exact",
+				"a body that cannot be stored and read back byte-exact through YAML is refused at the shared input boundary: start it with a non-whitespace character"))
 	}
 	dr.Require("claim_accepts_comments", claim.Layout != model.LayoutBanner,
 		fmt.Sprintf("layout is %q", claim.Layout))
@@ -272,8 +274,12 @@ func commentWriteDryRun(would string, cfg *config.Config, claim model.Claim, thr
 				break
 			}
 		}
-		dr.Require("thread_exists", found, "thread "+threadID)
-		dr.Require("thread_is_open", open, "a resolved thread cannot take new replies")
+		dr.Require("thread_exists", found, boolDetail(found,
+			"thread "+threadID+" is on this claim",
+			"this claim has no thread "+threadID))
+		dr.Require("thread_is_open", open, boolDetail(open,
+			"thread "+threadID+" is open and can take a reply",
+			"a resolved thread cannot take new replies"))
 	}
 
 	dr.Effect("rewrites " + claim.SourcePath)

@@ -73,8 +73,20 @@ import (
 )
 
 // ErrNoIndex means there is no git index to evaluate: git is not installed, the
-// project is not inside a work tree, or claims_dir sits outside the repository
-// that contains it.
+// project is not inside a work tree, or a path the gate must read sits outside
+// the WORK TREE entirely — not merely outside the config file's own directory.
+//
+// That distinction is the whole of it. This used to fire for
+// `claims_dir: ../claims` — an ordinary monorepo layout, with the config in
+// docs/ and the claims beside it — because every pathspec was computed relative
+// to the config's directory and "../claims" looked, to that arithmetic, like a
+// path git could not resolve. Git resolves it perfectly well; only the
+// arithmetic could not. The consequence was the worst one available: the gate
+// the pre-commit hook and CI both run reported "nothing to evaluate" and exited
+// 0 over a tampered locked claim, while `check --validate` on the identical
+// tree reported lock-content-drift. Specs are now anchored at
+// `git rev-parse --show-toplevel`, so this is reached only when a path really
+// is outside the repository, where no commit could carry it anyway.
 //
 // It is a distinct sentinel because it is NOT a failure. "dossierx check
 // --staged" answers it with a warning and exit 0, on purpose: --staged is what
@@ -84,6 +96,17 @@ import (
 // checks out a tarball, and would teach hook authors to swallow exit codes —
 // which is the one habit that makes every other gate in this release worthless.
 var ErrNoIndex = errors.New("no git index to evaluate")
+
+// ErrUntrackedConfig means project.config.yaml is not in the index while the
+// index DOES hold dossierx content — claims, or a lock ledger — that the gate
+// would have to judge against some configuration.
+//
+// It is emphatically NOT ErrNoIndex. ErrNoIndex is the exit-0 escape hatch for
+// "there is nothing here to evaluate"; this is the opposite condition, "there
+// is something here to evaluate and the only configuration available cannot be
+// trusted to say what it is". See stagedConfig for why an untracked config is
+// attacker-writable in a way a staged one is not.
+var ErrUntrackedConfig = errors.New("project.config.yaml is not tracked, but the index holds claims to judge")
 
 // StagedProject is the project exactly as the git index holds it: the config,
 // the full claim registry, the lock ledger, the comment digest store and every
@@ -106,9 +129,14 @@ type StagedProject struct {
 
 	// ConfigFromIndex reports whether Config came out of the index (true) or is
 	// the caller's worktree config reused because project.config.yaml is not
-	// tracked at all. An untracked config is the first-commit case, where there
-	// is nothing in the index to read and the worktree copy is the only thing
-	// that exists.
+	// tracked at all.
+	//
+	// False is now a much narrower state than it reads. The fallback survives
+	// only for the case it was written for — an index that holds no claim, no
+	// lock ledger and no comment digest store, i.e. a project whose first commit
+	// has not been staged yet — because an untracked config is a WORKTREE file,
+	// and a worktree file is editable without staging anything. Every other
+	// untracked-config run is refused with ErrUntrackedConfig; see stagedConfig.
 	ConfigFromIndex bool
 
 	// Claims is the complete registry, sorted by SourcePath exactly as
@@ -118,12 +146,19 @@ type StagedProject struct {
 	// open, and "the index's copy of claims/foo.yaml" is not a path.
 	Claims []model.Claim
 
-	// FromIndex lists, sorted, the paths (relative to cfg.Dir(), slash form)
-	// whose INDEX content differs from the worktree file — the claims where
-	// "what you are committing" and "what you are looking at" are not the same
-	// bytes. It is reported so a hook's output can say what it actually judged;
-	// an empty list on a dirty-looking tree is a real answer (it means every
-	// tracked claim's worktree copy already matches the index).
+	// FromIndex lists, sorted, the paths whose INDEX content differs from the
+	// worktree file — the claims where "what you are committing" and "what you
+	// are looking at" are not the same bytes. It is reported so a hook's output
+	// can say what it actually judged; an empty list on a dirty-looking tree is
+	// a real answer (it means every tracked claim's worktree copy already
+	// matches the index).
+	//
+	// The paths are REPOSITORY-relative, slash form — git's own form, the one
+	// `git status` prints and the one a reader can paste back into a git
+	// command. They used to be relative to the config file's directory, which
+	// was indistinguishable in the layout everything else assumes (config at the
+	// repository root) and became "../claims/foo.yaml" in the layout that
+	// anchoring at the top level now supports.
 	//
 	// It is REPORTING ONLY. Every claim's content is read from the index
 	// regardless, and this list is computed by comparing the bytes afterwards —
@@ -161,14 +196,14 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	}
 	cfg = sp.Config
 
-	// claims_dir as a git pathspec relative to cfg.Dir(). A ".." prefix means
-	// the claims live outside the directory git was asked about, which git
-	// would reject as "outside repository" — a condition a hook can do nothing
-	// about, so it is reported as "no index to evaluate" rather than as a
-	// failure.
-	claimsSpec, err := relativeSpec(cfg.Dir(), cfg.ClaimsDir)
+	// claims_dir as a git pathspec, anchored at the REPOSITORY TOP LEVEL rather
+	// than at the config file's own directory — see gitRunner.spec. It fails
+	// only when the claims are outside the work tree altogether, which no commit
+	// could carry, so that (and only that) is reported as "no index to
+	// evaluate".
+	claimsSpec, err := g.spec(cfg.ClaimsDir)
 	if err != nil {
-		return StagedProject{}, fmt.Errorf("%w: claims_dir %s is outside %s, so git cannot resolve it", ErrNoIndex, cfg.ClaimsDir, cfg.Dir())
+		return StagedProject{}, fmt.Errorf("%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it", ErrNoIndex, cfg.ClaimsDir, g.dir)
 	}
 
 	// EVERY claim's content comes from the index. Unconditionally, with no
@@ -213,7 +248,7 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		if !isClaimFile(rel) {
 			continue
 		}
-		abs := filepath.Join(cfg.Dir(), filepath.FromSlash(rel))
+		abs := worktreePath(cfg.ClaimsDir, claimsSpec, rel)
 		raw := blobs[rel]
 
 		// FromIndex is derived by comparing bytes we already hold, NOT by asking
@@ -268,10 +303,22 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 // stagedConfig loads project.config.yaml as the INDEX holds it.
 //
 // It returns the caller's own config unchanged, with fromIndex=false, in exactly
-// one case: the config file is not tracked at all. That is the first commit of a
-// project, where there is nothing in the index to read and the worktree copy is
-// the only configuration that exists — and where nothing is being bypassed,
-// because a config that is not in the index is not in the commit either.
+// one case: the config file is not tracked AND the index holds nothing this gate
+// would have to judge — no claim file, no lock ledger, no comment digest store.
+// That is the first commit of a project, where there is nothing in the index to
+// read and the worktree copy is the only configuration that exists, and where
+// nothing is being bypassed because there is nothing there to bypass.
+//
+// ANY OTHER UNTRACKED CONFIG IS A REFUSAL (ErrUntrackedConfig), and the reason
+// is that "not tracked" was doing the work "not staged" was assumed to do. An
+// untracked project.config.yaml is a WORKING-TREE file: it can be rewritten
+// without staging anything, which is precisely the property reading the config
+// from the index exists to deny. Point claims_dir at an empty decoy directory in
+// an untracked config, stage a tampered locked claim, and the gate audited the
+// decoy, found nothing, and passed the commit — the same bypass
+// TestStaged_ConfigComesFromTheIndex closed, reached through the fallback
+// instead of through the file. The refusal is deliberately NOT ErrNoIndex,
+// because ErrNoIndex exits 0.
 //
 // The index's CONTENT is decoded but the WORKTREE directory stays the anchor:
 // claims_dir, the stores and the build-order artifacts are still resolved
@@ -293,15 +340,29 @@ func stagedConfig(g *gitRunner, cfg *config.Config) (*config.Config, bool, error
 		src = filepath.Join(cfg.Dir(), config.FileName)
 	}
 
-	spec, err := relativeSpec(cfg.Dir(), src)
-	if err != nil {
-		return cfg, false, nil
-	}
-	tracked, err := g.lsFiles(spec)
-	if err != nil {
-		return nil, false, err
+	// A config OUTSIDE the work tree cannot be in the index either, so it takes
+	// the same path as an untracked one rather than a silent worktree fallback
+	// of its own.
+	var tracked []string
+	spec, err := g.spec(src)
+	if err == nil {
+		if tracked, err = g.lsFiles(spec); err != nil {
+			return nil, false, err
+		}
 	}
 	if len(tracked) == 0 {
+		held, err := indexHoldsJudgeableContent(g)
+		if err != nil {
+			return nil, false, err
+		}
+		if held != "" {
+			return nil, false, fmt.Errorf(
+				"%w: the commit carries dossierx content (%s) and no %s, so there is no configuration in it "+
+					"to say which files are claims — and the working-tree copy can be edited without staging "+
+					"anything, which is exactly the bypass reading the config from the index prevents. "+
+					"Stage the config (git add %s) and commit it alongside them",
+				ErrUntrackedConfig, held, config.FileName, src)
+		}
 		return cfg, false, nil
 	}
 
@@ -314,6 +375,89 @@ func stagedConfig(g *gitRunner, cfg *config.Config) (*config.Config, bool, error
 		return nil, false, fmt.Errorf("check --staged: the staged %s does not load: %w", config.FileName, err)
 	}
 	return staged, true, nil
+}
+
+// indexHoldsJudgeableContent reports the first thing in the index that this
+// gate would have had to judge — a claim file, the lock ledger, or the comment
+// digest store — as a repository-relative path, or "" when the index holds none
+// of them.
+//
+// It is the test that separates stagedConfig's one legitimate fallback (a
+// project whose first commit has not been staged yet) from the bypass that
+// fallback had become. It asks the WHOLE index rather than the worktree
+// config's claims_dir, and that is the point: the question is being asked
+// precisely because the configuration naming claims_dir cannot be trusted, so
+// consulting it to answer would be circular — an untracked config pointing at
+// an empty decoy directory would report "nothing here" and wave the commit
+// through, which is the defect.
+//
+// "A claim file" means a .yaml/.yml blob that DECODES as a claim, not merely
+// one that is named like one. A repository's ordinary yaml — workflows, linter
+// configs, chart values — fails the engine's strict decode, so the common case
+// of a repository full of unrelated yaml does not turn into a refusal. The
+// direction of any error here is safe by construction: a false positive refuses
+// a commit and says exactly which file and exactly what to stage; a false
+// negative would be a silent pass, and nothing in this function can produce
+// one, because "is this a claim?" is answered by the same decoder the registry
+// is built with.
+//
+// The cost — one ls-files and one cat-file over the repository's yaml — is paid
+// ONLY on the untracked-config path, which the hook reaches only when no
+// project.config.yaml is tracked anywhere in the repository.
+func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
+	entries, err := g.indexEntries()
+	if err != nil {
+		return "", err
+	}
+
+	var candidates []indexEntry
+	for _, e := range entries {
+		switch path.Base(e.path) {
+		case lockStoreFileName, digest.StoreFileName:
+			return e.path, nil
+		}
+		if isClaimFile(e.path) {
+			candidates = append(candidates, e)
+		}
+	}
+	if len(candidates) == 0 {
+		return "", nil
+	}
+
+	blobs, err := g.catFile(candidates)
+	if err != nil {
+		return "", err
+	}
+	// Sorted, so the path named in the refusal is the same one on every run and
+	// on every platform.
+	paths := make([]string, 0, len(blobs))
+	for p := range blobs {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	for _, p := range paths {
+		if c, err := decodeClaim(p, blobs[p]); err == nil && strings.TrimSpace(c.ID) != "" {
+			return p, nil
+		}
+	}
+	return "", nil
+}
+
+// worktreePath maps a repository-relative path git reported back to the
+// WORKING-TREE path a human can open, given the pathspec the listing was scoped
+// to and the absolute directory that pathspec names.
+//
+// It exists because the two namespaces stopped being the same the moment specs
+// were anchored at the repository top level: git answers "claims/foo.yaml" for a
+// project whose claims_dir is "../claims" from a config in docs/, and joining
+// that onto the config's directory would name docs/claims/foo.yaml — a file that
+// does not exist. A finding a human has to act on must name a path they can
+// open.
+func worktreePath(base, spec, rel string) string {
+	if spec == "." || spec == "" {
+		return filepath.Join(base, filepath.FromSlash(rel))
+	}
+	return filepath.Join(base, filepath.FromSlash(strings.TrimPrefix(rel, spec+"/")))
 }
 
 // stagedLedgerInputs loads the lock ledger and the comment digest store as the
@@ -343,7 +487,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 
 	var in ledgerInputs
 
-	lockPath, err := materializeIndexFile(g, cfg.Dir(), dir, storePath(cfg))
+	lockPath, err := materializeIndexFile(g, dir, storePath(cfg))
 	if err != nil {
 		return ledgerInputs{}, err
 	}
@@ -353,7 +497,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 		in.store = store
 	}
 
-	digestPath, err := materializeIndexFile(g, cfg.Dir(), dir, digest.StorePath(cfg))
+	digestPath, err := materializeIndexFile(g, dir, digest.StorePath(cfg))
 	if err != nil {
 		return ledgerInputs{}, err
 	}
@@ -370,7 +514,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	// commit that stages a tampered artifact while the worktree copy still
 	// matches its record.
 	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {
-		path, err := materializeIndexFile(g, cfg.Dir(), dir, buildorder.ArtifactPath(cfg, module))
+		path, err := materializeIndexFile(g, dir, buildorder.ArtifactPath(cfg, module))
 		if err != nil {
 			return nil, err
 		}
@@ -380,19 +524,18 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	return in, nil
 }
 
-// materializeIndexFile writes the index's copy of src (an absolute path under
-// base) into dir and returns the written path. When src is not tracked in the
-// index it writes nothing and returns the path anyway — the store loaders read
-// a missing file as an absent store, which is precisely what "not in the index"
-// means and is the state lock.RuleLockLedgerAbsent exists to catch.
-func materializeIndexFile(g *gitRunner, base, dir, src string) (string, error) {
+// materializeIndexFile writes the index's copy of src (an absolute path) into
+// dir and returns the written path. When src is not tracked in the index it
+// writes nothing and returns the path anyway — the store loaders read a missing
+// file as an absent store, which is precisely what "not in the index" means and
+// is the state lock.RuleLockLedgerAbsent exists to catch.
+func materializeIndexFile(g *gitRunner, dir, src string) (string, error) {
 	out := filepath.Join(dir, filepath.Base(src))
 
-	spec, err := relativeSpec(base, src)
+	spec, err := g.spec(src)
 	if err != nil {
-		// Outside the directory git was asked about: treat as untracked, which
-		// is the conservative reading (an absent ledger is a finding, never a
-		// pass).
+		// Outside the work tree entirely: treat as untracked, which is the
+		// conservative reading (an absent ledger is a finding, never a pass).
 		return out, nil
 	}
 	tracked, err := g.lsFiles(spec)
@@ -462,48 +605,112 @@ func normalizeLineEndings(b []byte) []byte {
 	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
 }
 
-// relativeSpec expresses target as a slash-separated path relative to base,
-// suitable both as a git pathspec (with base as git's working directory) and as
-// the tail of a "./"-prefixed index object name. It fails when target is not
-// under base.
-func relativeSpec(base, target string) (string, error) {
-	rel, err := filepath.Rel(base, target)
-	if err != nil {
-		return "", err
-	}
-	rel = filepath.ToSlash(rel)
-	if rel == ".." || strings.HasPrefix(rel, "../") {
-		return "", fmt.Errorf("%s is not under %s", target, base)
-	}
-	return rel, nil
-}
-
 // ---------------------------------------------------------------------
 // the git binary
 // ---------------------------------------------------------------------
+
+// errOutsideWorkTree is gitRunner.spec's "this path is not in the repository"
+// answer. Callers decide what that means for them: for claims_dir it is
+// ErrNoIndex (nothing a commit could carry), for a store it is "absent from the
+// index", which is a finding rather than a pass.
+var errOutsideWorkTree = errors.New("path is outside the git work tree")
 
 // gitRunner runs git with a fixed working directory. Every command it issues is
 // read-only; nothing here can modify the index, the worktree, or the object
 // store.
 type gitRunner struct {
 	bin string
+
+	// dir is git's working directory, and it is the repository's TOP LEVEL —
+	// not the project's own directory. Everything git reports is therefore
+	// repository-relative, which is the same namespace the index itself uses,
+	// so a pathspec can name any tracked file in the repository regardless of
+	// where the config happens to sit.
 	dir string
+
+	// base is the directory the callers' absolute paths are expressed relative
+	// to (the config's own directory), and prefix is that directory as a
+	// slash-separated path relative to dir — "" when the project sits at the top
+	// level. Together they are all spec() needs to translate a project path into
+	// a repository path.
+	//
+	// prefix comes from git ("rev-parse --show-prefix") rather than from
+	// comparing strings, and that is deliberate: on macOS a temp directory is
+	// reached through /var while git resolves it to /private/var, so any
+	// arithmetic over the two absolute paths would disagree with git about a
+	// path both of them can open.
+	base   string
+	prefix string
 }
 
-// newGitRunner locates git and confirms dir is inside a work tree. Both
-// failures come back as ErrNoIndex — the caller's job is to warn and exit 0,
-// not to explain git to somebody who does not have it.
+// newGitRunner locates git, confirms dir is inside a work tree, and re-anchors
+// itself at that work tree's TOP LEVEL. A missing git and a directory outside
+// any work tree both come back as ErrNoIndex — the caller's job is to warn and
+// exit 0, not to explain git to somebody who does not have it.
+//
+// THE RE-ANCHORING IS THE FIX FOR A HOLE, not tidiness. Pathspecs used to be
+// computed relative to the config's own directory, so an ordinary monorepo
+// layout — docs/project.config.yaml with `claims_dir: ../claims` — produced the
+// spec "../claims", which this package read as "outside the repository" and
+// answered with ErrNoIndex: the exit-0 escape hatch. The claims were not outside
+// anything; git resolves them from the top level without complaint. The gate the
+// pre-commit hook and CI both run therefore evaluated NOTHING, silently, on a
+// layout that every other command in the product handles, and an out-of-band
+// edit to a locked claim committed clean while `check --validate` on the same
+// tree reported lock-content-drift.
 func newGitRunner(dir string) (*gitRunner, error) {
 	bin, err := exec.LookPath("git")
 	if err != nil {
 		return nil, fmt.Errorf("%w: git is not installed or not on PATH", ErrNoIndex)
 	}
-	g := &gitRunner{bin: bin, dir: dir}
+	g := &gitRunner{bin: bin, dir: dir, base: dir}
 	out, err := g.run("rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(string(out)) != "true" {
 		return nil, fmt.Errorf("%w: %s is not inside a git work tree", ErrNoIndex, dir)
 	}
+
+	// One invocation, two answers, in the order they are asked for: the top
+	// level, then this directory's path within it. Asking git for both keeps
+	// the two consistent with each other and with the index, which is what
+	// makes them safe to do path arithmetic with.
+	out, err = g.run("rev-parse", "--show-toplevel", "--show-prefix")
+	if err != nil {
+		return nil, fmt.Errorf("%w: git would not name the work tree containing %s: %w", ErrNoIndex, dir, err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(out), "\r\n", "\n"), "\n")
+	if len(lines) < 2 || strings.TrimSpace(lines[0]) == "" {
+		return nil, fmt.Errorf("%w: git would not name the top level of the work tree containing %s", ErrNoIndex, dir)
+	}
+	g.dir = lines[0]
+	// --show-prefix is slash-terminated and empty at the top level.
+	g.prefix = strings.Trim(lines[1], "/")
 	return g, nil
+}
+
+// spec expresses target — an absolute path, or one relative to the project
+// directory — as a git pathspec relative to the REPOSITORY TOP LEVEL, which is
+// both what the runner's commands are issued from and the namespace git reports
+// paths in.
+//
+// It fails with errOutsideWorkTree only when the result climbs above the top
+// level, i.e. when the path really is outside the repository. "Outside the
+// config file's directory" is not that, and treating it as if it were is the
+// defect newGitRunner's comment describes.
+func (g *gitRunner) spec(target string) (string, error) {
+	rel, err := filepath.Rel(g.base, target)
+	if err != nil {
+		return "", err
+	}
+	// path.Join cleans, so a "../" in rel is consumed by prefix when there is
+	// prefix left to consume and survives when there is not.
+	p := path.Join(g.prefix, filepath.ToSlash(rel))
+	if p == ".." || strings.HasPrefix(p, "../") {
+		return "", fmt.Errorf("%w: %s is not under %s", errOutsideWorkTree, target, g.dir)
+	}
+	if p == "" {
+		p = "."
+	}
+	return p, nil
 }
 
 // run executes git with the runner's directory as cwd and returns stdout.
@@ -564,29 +771,28 @@ func (g *gitRunner) lsFiles(spec string) ([]string, error) {
 	return splitZ(out), nil
 }
 
-// indexBlobs returns the index's content for every path under spec, keyed by
-// path relative to the runner's directory.
-//
-// It reads the OIDs from "git ls-files -s" and streams them through a single
-// "git cat-file --batch", which is what makes "always read from the index"
-// affordable: one subprocess for the whole registry rather than one per claim,
-// and — the part that matters — no consultation of git's stat cache or its
-// per-path skip bits anywhere in the path. An assume-unchanged claim's index
-// content comes back exactly like any other's.
-//
-// cat-file --batch's response per request is "<oid> <type> <size>\n", then
-// <size> raw bytes, then a newline. Sizes are read from that header rather than
-// scanning for a delimiter, because claim bodies contain newlines and NULs are
-// legal in a blob.
-func (g *gitRunner) indexBlobs(spec string) (map[string][]byte, error) {
-	out, err := g.run("ls-files", "-s", "-z", "--", spec)
+// indexEntry is one stage-0 index entry: a repository-relative path and the OID
+// of the blob the commit will carry for it.
+type indexEntry struct {
+	oid  string
+	path string
+}
+
+// indexEntries lists the index's stage-0 entries under specs — or the whole
+// index when no spec is given, which is what indexHoldsJudgeableContent needs.
+func (g *gitRunner) indexEntries(specs ...string) ([]indexEntry, error) {
+	args := []string{"ls-files", "-s", "-z"}
+	if len(specs) > 0 {
+		args = append(args, "--")
+		args = append(args, specs...)
+	}
+	out, err := g.run(args...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Each -s entry is "<mode> SP <oid> SP <stage>\t<path>".
-	var oids []string
-	var paths []string
+	var entries []indexEntry
 	for _, entry := range splitZ(out) {
 		tab := strings.IndexByte(entry, '\t')
 		if tab < 0 {
@@ -604,11 +810,40 @@ func (g *gitRunner) indexBlobs(spec string) (map[string][]byte, error) {
 		if fields[2] != "0" {
 			continue
 		}
-		oids = append(oids, fields[1])
-		paths = append(paths, entry[tab+1:])
+		entries = append(entries, indexEntry{oid: fields[1], path: entry[tab+1:]})
 	}
-	if len(oids) == 0 {
+	return entries, nil
+}
+
+// indexBlobs returns the index's content for every path under spec, keyed by
+// repository-relative path.
+//
+// It reads the OIDs from "git ls-files -s" and streams them through a single
+// "git cat-file --batch", which is what makes "always read from the index"
+// affordable: one subprocess for the whole registry rather than one per claim,
+// and — the part that matters — no consultation of git's stat cache or its
+// per-path skip bits anywhere in the path. An assume-unchanged claim's index
+// content comes back exactly like any other's.
+func (g *gitRunner) indexBlobs(spec string) (map[string][]byte, error) {
+	entries, err := g.indexEntries(spec)
+	if err != nil {
+		return nil, err
+	}
+	return g.catFile(entries)
+}
+
+// catFile fetches the content of every entry in one "git cat-file --batch".
+//
+// The response per request is "<oid> <type> <size>\n", then <size> raw bytes,
+// then a newline. Sizes are read from that header rather than by scanning for a
+// delimiter, because claim bodies contain newlines and NULs are legal in a blob.
+func (g *gitRunner) catFile(entries []indexEntry) (map[string][]byte, error) {
+	if len(entries) == 0 {
 		return map[string][]byte{}, nil
+	}
+	oids := make([]string, 0, len(entries))
+	for _, e := range entries {
+		oids = append(oids, e.oid)
 	}
 
 	raw, err := g.runWithStdin(strings.Join(oids, "\n")+"\n", "cat-file", "--batch")
@@ -616,9 +851,10 @@ func (g *gitRunner) indexBlobs(spec string) (map[string][]byte, error) {
 		return nil, err
 	}
 
-	blobs := make(map[string][]byte, len(paths))
+	blobs := make(map[string][]byte, len(entries))
 	rd := bufio.NewReader(bytes.NewReader(raw))
-	for _, p := range paths {
+	for _, e := range entries {
+		p := e.path
 		header, err := rd.ReadString('\n')
 		if err != nil {
 			return nil, fmt.Errorf("check --staged: git cat-file --batch: short read for %s: %w", p, err)

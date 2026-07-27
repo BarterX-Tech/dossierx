@@ -54,8 +54,24 @@ code path behind the same project-wide lock, so a CLI write and a browser write 
 each other. A raw text edit bypasses the lock and can destroy a comment the human just posted —
 and the ledger reports it as `integrity_failed`. It also **wedges the claim for comments**: every
 comment verb refuses a claim whose block no longer matches the recorded digest
-(`comment_digest_drift`), rather than re-recording the edited block as the new truth. Restore the
-file from git; do not comment your way past it.
+(`comment_digest_drift`), rather than re-recording the edited block as the new truth.
+
+Getting out of that wedge is version control and nothing else. No command in the surface clears a
+recorded digest that disagrees — `check` adopts only claims the store has never seen — so:
+
+- the block on disk was **hand-edited** → restore the claim file;
+- the block on disk is **right** and a commit carried it without `.dossierx-comment-digest.json`
+  → restore the digest store;
+- you cannot tell → restore **both from the same commit**. The engine writes them as a pair and
+  they only agree as a pair. Re-enter anything written since with `comment add` / `comment reply`.
+
+**Never delete `.dossierx-comment-digest.json` to make the refusal go away.** A claim the store
+has never seen reads as *unknown*, not *drifted*, so the delete buries this refusal and the
+`comment-ledger-drift` finding beside it — which is precisely the laundering the store exists to
+catch, and `dossierx check` then reports it as `comment-digest-absent`. The `comment` noun is
+`inbox · list · add · reply` and nothing else — no verb re-blesses a block, so if the human insists
+the one on disk is right and no commit holds a matching pair, say so plainly and stop. Improvising
+here is how the review history gets erased.
 
 ## `dossierx comment inbox`
 
