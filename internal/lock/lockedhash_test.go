@@ -1,9 +1,14 @@
 package lock
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
@@ -308,22 +313,133 @@ func TestLockedClaimHashSeesRowColumnOrder(t *testing.T) {
 	}
 }
 
-// persistedClaimTags returns the yaml tag of every exported, on-disk field of
+// persistedClaimTags returns the on-disk name of every persisted field of
 // model.Claim, sorted — the same set hashStructFields walks.
 func persistedClaimTags() []string {
-	t := reflect.TypeOf(model.Claim{})
-	var tags []string
+	return persistedNames(reflect.TypeOf(model.Claim{}))
+}
+
+// persistedNames is persistedClaimTags over an arbitrary struct type, so the
+// schema tripwire above can itself be tested against shapes model.Claim does not
+// currently have (see TestTheSchemaTripwireSeesAnUntaggedField). It asks
+// PersistedYAMLName rather than re-reading the tags, so the test and the hasher
+// cannot disagree about what is on disk.
+func persistedNames(t reflect.Type) []string {
+	var names []string
 	for i := 0; i < t.NumField(); i++ {
-		sf := t.Field(i)
-		if sf.PkgPath != "" {
+		name, persisted := PersistedYAMLName(t.Field(i))
+		if !persisted {
 			continue
 		}
-		tag := YAMLTagName(sf)
-		if tag == "" || tag == "-" {
-			continue
-		}
-		tags = append(tags, tag)
+		names = append(names, name)
 	}
-	sort.Strings(tags)
-	return tags
+	sort.Strings(names)
+	return names
+}
+
+// taglessSchema is the shape the deny-list used to fail OPEN on: an exported
+// field with no yaml tag at all. yaml.v3 persists it under its lower-cased Go
+// name — it is written to the file and read back from it like any other field —
+// while the old hasher, which skipped anything without a tag, left it out of the
+// signature entirely. A locked claim carrying such a field could be edited with
+// the gate reporting nothing at all, and no ledger edit was needed to do it.
+type taglessSchema struct {
+	Tagged   string `yaml:"tagged"`
+	Untagged string
+	Omitted  string `yaml:",omitempty"`
+	Excluded string `yaml:"-"`
+	//nolint:unused // present precisely to prove unexported fields stay unsigned
+	unexported string
+}
+
+// TestPersistedYAMLNameAgreesWithYAMLv3 pins the fail-closed rule to the only
+// authority that settles it: what yaml.v3 actually writes. A hand-reasoned
+// answer here is how the original bug happened — "no tag means not persisted"
+// sounds right and is false — so the test marshals the struct and compares the
+// keys, rather than restating the rule in a second place.
+func TestPersistedYAMLNameAgreesWithYAMLv3(t *testing.T) {
+	raw, err := yaml.Marshal(taglessSchema{Tagged: "a", Untagged: "b", Omitted: "c", Excluded: "d"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var onDisk map[string]any
+	if err := yaml.Unmarshal(raw, &onDisk); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	written := make([]string, 0, len(onDisk))
+	for k := range onDisk {
+		written = append(written, k)
+	}
+	sort.Strings(written)
+
+	got := persistedNames(reflect.TypeOf(taglessSchema{}))
+	if strings.Join(got, ",") != strings.Join(written, ",") {
+		t.Fatalf("PersistedYAMLName disagrees with yaml.v3 about what is on disk.\n  hasher: %v\n  yaml.v3: %v\n\n"+
+			"Anything yaml.v3 writes is part of what a human approved and must be signed; anything it does not\n"+
+			"write must not be, or moving a file would read as content drift.", got, written)
+	}
+}
+
+// TestLockedClaimHashSignsAnUntaggedExportedField is the defect itself, as a
+// test: the hash must move when a persisted-but-untagged field changes.
+func TestLockedClaimHashSignsAnUntaggedExportedField(t *testing.T) {
+	hashOf := func(v taglessSchema) string {
+		h := sha256.New()
+		hashStructFields(h, reflect.ValueOf(v), lockedClaimHashExcluded)
+		return hex.EncodeToString(h.Sum(nil))
+	}
+
+	base := taglessSchema{Tagged: "a", Untagged: "b", Omitted: "c", Excluded: "d", unexported: "e"}
+
+	edited := base
+	edited.Untagged = "quietly rewritten"
+	if hashOf(edited) == hashOf(base) {
+		t.Errorf("an exported field with no yaml tag is written to the claim file by yaml.v3 and read back from it, " +
+			"but the hash did not move: the deny-list is failing OPEN on the one shape nobody remembered to tag")
+	}
+
+	omitted := base
+	omitted.Omitted = "also rewritten"
+	if hashOf(omitted) == hashOf(base) {
+		t.Errorf("`yaml:\",omitempty\"` names no field but still persists it under the lower-cased Go name; it must be signed")
+	}
+
+	// The other direction: what yaml.v3 does NOT write must not be signed, or
+	// every claim would drift on a source refactor.
+	notOnDisk := base
+	notOnDisk.Excluded = "not on disk"
+	notOnDisk.unexported = "also not on disk"
+	if hashOf(notOnDisk) != hashOf(base) {
+		t.Errorf("`yaml:\"-\"` and unexported fields are not persisted, so they are not part of what was approved")
+	}
+}
+
+// TestTheSchemaTripwireSeesAnUntaggedField closes the loop on the fix. The
+// tripwire (TestEveryPersistedClaimFieldHasALedgerDecision) is what forces a
+// written include/exclude decision for every new field of model.Claim — and it
+// walked the yaml TAGS, so the very shape that slipped past the hasher would
+// have slipped past the test that exists to catch it too. Both now ask
+// PersistedYAMLName, so an untagged field added to the schema fails the build
+// with a decision to write down rather than becoming a silent hole.
+func TestTheSchemaTripwireSeesAnUntaggedField(t *testing.T) {
+	got := persistedNames(reflect.TypeOf(taglessSchema{}))
+	for _, want := range []string{"untagged", "omitted"} {
+		found := false
+		for _, name := range got {
+			if name == want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("the schema tripwire does not see %q as persisted, so an untagged field could be added to model.Claim with no recorded decision; saw %v", want, got)
+		}
+	}
+	for _, never := range []string{"excluded", "unexported"} {
+		for _, name := range got {
+			if name == never {
+				t.Errorf("%q is not persisted by yaml.v3 and must not demand a decision", never)
+			}
+		}
+	}
 }

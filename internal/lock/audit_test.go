@@ -2,6 +2,7 @@ package lock
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -220,6 +221,74 @@ func TestAuditTreatsUnknownAsUnknown(t *testing.T) {
 	}
 	if findings := Audit([]model.Claim{claim}, nil, nil); len(findings) != 0 {
 		t.Fatalf("a nil digest store must disable the comment rules, not fire them; got %+v", findings)
+	}
+}
+
+// preLedgerStore writes a v0.2.x-shaped lock store — on disk, at the schema that
+// predates the ledger, with no ledger key at all — and loads it. It is the state
+// every existing project is in on the day it upgrades.
+func preLedgerStore(t *testing.T) *Store {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.main":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatalf("write pre-ledger store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	return store
+}
+
+// TestAuditGrandfathersAnHonestPreLedgerProjectInMemory is the read-only half of
+// grandfathering, and it is a fix for a gate that accused every honest v0.2.x
+// project of tampering.
+//
+// Adoption runs in the CLI's WRITE path. The read-only commands — "check
+// --validate", "check --staged", and therefore the pre-commit hook and CI —
+// write nothing by design, so they saw a pre-ledger project as N locked claims
+// with no approval records and reported every one of them as
+// lock-ledger-missing, whose recovery text says to set the claim back to draft
+// and lock it again. That is destructive advice handed to a project that has
+// done nothing wrong, and it refused every commit until someone followed it. A
+// read-only command must not demand a write in order to pass.
+func TestAuditGrandfathersAnHonestPreLedgerProjectInMemory(t *testing.T) {
+	store := preLedgerStore(t)
+	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked long before the ledger existed"}
+	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft}
+
+	// No digest store: the file did not exist before this release, so an honest
+	// pre-ledger project has none.
+	if findings := Audit([]model.Claim{locked, draft}, store, nil); len(findings) != 0 {
+		t.Fatalf("a pre-ledger project is mid-upgrade, not tampered with; got %+v", findings)
+	}
+	// IN MEMORY means exactly that: the exemption must not write a record, or the
+	// read-only path would be silently doing the write path's job.
+	if _, ok := store.Record(locked.ID); ok {
+		t.Fatalf("the read-only exemption must not record anything")
+	}
+}
+
+// The exemption is spent only on the one thing a pre-ledger build could not have
+// written. Everything else the gate knows how to say, it still says.
+func TestPreLedgerExemptionDoesNotSuppressTheOtherRules(t *testing.T) {
+	store := preLedgerStore(t)
+	digests, err := digest.LoadStore(filepath.Join(t.TempDir(), "digest.json"))
+	if err != nil {
+		t.Fatalf("digest.LoadStore: %v", err)
+	}
+	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked,
+		Comments: []model.Comment{{ID: "c-abc123", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-27T10:00:00Z", Body: "is this still true?"}}}
+
+	// A recorded digest that no longer matches is comment drift whatever the lock
+	// store's schema version is: comment history is not what grandfathering is
+	// about.
+	digests.Record(claim)
+	edited := claim
+	edited.Comments = nil
+
+	if !hasRule(Audit([]model.Claim{edited}, store, digests), RuleCommentLedgerDrift) {
+		t.Fatalf("expected %s: the pre-ledger exemption covers missing lock records, nothing else", RuleCommentLedgerDrift)
 	}
 }
 

@@ -712,7 +712,7 @@ export const contentSpec: ContentSpec = {
           {
             code: "write_conflict",
             recovery:
-              "The claim file changed under you — usually a reviewer commenting in the viewer. Re-read and retry.",
+              "Contention on a write sentinel — another dossierx process, usually serve, holds it. Retry. If the retry stalls the same ~10s and fails identically, a process died holding it: delete the .lock file the message names. (A claim that changed under you is claim_file_changed, which you re-read rather than retry.)",
           },
         ],
         groups: [

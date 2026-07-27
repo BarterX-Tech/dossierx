@@ -21,6 +21,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 )
 
@@ -655,6 +656,18 @@ func ledgerRecordOf(t *testing.T, cfgPath, id string) lock.LedgerRecord {
 // left it: the file EXISTS, at the old schema version, with no ledger key. That
 // is the only state adoption triggers on — an absent store never adopts, or
 // deleting the ledger would be the universal bypass.
+//
+// The sibling comment digest store has to go too, and that is not fixture
+// tidiness — it is the difference between the two states this helper has to be
+// able to tell apart. lock.Store.LedgerDowngraded treats a
+// .dossierx-comment-digest.json sitting beside a store that says "version 1" as
+// proof the project HAS been through a ledger-aware build, because this build
+// writes that file at the exact instant a project becomes ledger-covered. A
+// genuine v0.2.x project has never had one: the file did not exist before
+// v0.3.0. So a fixture that rewinds only the store is not simulating an honest
+// pre-ledger project at all — it is reproducing the downgrade attack, and the
+// gate is right to refuse it. Rewinding the whole ledger-era footprint is what
+// makes this an upgrade fixture again.
 func rewindStoreToPreLedger(t *testing.T, storeFile string) {
 	t.Helper()
 	raw, err := os.ReadFile(storeFile)
@@ -673,6 +686,10 @@ func rewindStoreToPreLedger(t *testing.T, storeFile string) {
 	}
 	if err := os.WriteFile(storeFile, rewound, 0o644); err != nil {
 		t.Fatalf("write store: %v", err)
+	}
+	digestStore := filepath.Join(filepath.Dir(storeFile), digest.StoreFileName)
+	if err := os.Remove(digestStore); err != nil && !os.IsNotExist(err) {
+		t.Fatalf("remove comment digest store: %v", err)
 	}
 }
 
@@ -817,4 +834,434 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 			t.Fatalf("attempt %d: the refusal wrote to the claim; a retry would duplicate the thread", attempt)
 		}
 	}
+}
+
+// ---------------------------------------------------------------------
+// build-order grandfathering may not be re-armed from inside the ledger
+// ---------------------------------------------------------------------
+
+// TestBuildOrderAdoptionRefusesADowngradedLedger closes the last door the
+// downgrade attack still had open, and it was a complete bypass of the
+// release's headline invariant in ONE ordinary command.
+//
+// The claim half of grandfathering has been guarded since it shipped: adoption
+// keys on the store's own "version" field, so lock.AdoptLedger weighs that claim
+// against evidence the audited file does not own (a sibling comment digest
+// store, or ledger records the old schema could not have held) and refuses when
+// the two contradict. The BUILD-ORDER half — which lives in cmd/, because
+// internal/lock cannot import internal/buildorder — was guarded by nothing but
+// Store.PreLedger.
+//
+// So the whole sequence was: reorder .build-order.widget.json by hand, set the
+// store's "version" back to 1, delete the single build-order:<module> key, and
+// run `dossierx check`. The run adopted the HAND-REORDERED bytes as a
+// grandfathered approval, re-stamped the version, exited 0 with ok:true — and
+// printed the downgrade refusal ("Nothing was grandfathered") on stderr in the
+// same breath, because the claim half had correctly refused. Every later
+// `check --validate` was clean, and the evidence was gone.
+func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
+	cfgPath := twoPhaseBuildOrderFixture(t)
+	dir := filepath.Dir(cfgPath)
+	artifactPath := filepath.Join(dir, ".build-order.widget.json")
+	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("build-order propose: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
+		t.Fatalf("build-order lock: %v", err)
+	}
+
+	// The hand edit. Reversing the phase blocks changes the implementation
+	// sequence an agent would follow without touching a single claim, which is
+	// exactly what RuleBuildOrderContentDrift exists to catch.
+	reverseArtifactPhases(t, artifactPath)
+	if !validateReportsRule(t, cfgPath, "build-order-content-drift") {
+		t.Fatalf("fixture precondition: the hand edit must be reported as drift before the downgrade")
+	}
+
+	// The downgrade: the store says it predates the ledger, while still holding
+	// the claim's own record (and sitting beside the comment digest store), so
+	// both halves of the contradiction lock.Store.LedgerDowngraded weighs are
+	// present.
+	downgradeStoreAndDropKey(t, storeFile, lock.BuildOrderLedgerKey("widget"))
+	if !validateReportsRule(t, cfgPath, "lock-ledger-downgraded") {
+		t.Fatalf("fixture precondition: the downgrade must be reported before the writing run")
+	}
+
+	// The writing run. Its own verdict is not what is on trial here (with the
+	// ledger downgraded it has plenty to report); what matters is that it
+	// adopted nothing and left the evidence intact.
+	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check")
+	for _, w := range env.Warnings {
+		if strings.Contains(w, lock.BuildOrderLedgerKey("widget")) {
+			t.Fatalf("the run announced adopting a build order on a downgraded ledger: %q", w)
+		}
+	}
+	if rec, ok := rawLedgerOf(t, storeFile)[lock.BuildOrderLedgerKey("widget")]; ok {
+		t.Fatalf("a downgraded ledger must never be re-signed; got %+v", rec)
+	}
+
+	// And the gate still says so afterwards. This is the assertion that the
+	// original defect turned false: a second `check --validate` reported ok:true
+	// with zero findings, forever.
+	if !validateReportsRule(t, cfgPath, "lock-ledger-downgraded") {
+		t.Fatalf("the downgrade must still be reported after the writing run; the evidence was destroyed")
+	}
+}
+
+// TestBuildOrderAdoptionStillGrandfathersAnHonestUpgrade is the other half, and
+// it is why the guard above is PreLedgerExempt rather than a flat refusal.
+//
+// A genuine v0.2.x project has a build order locked before this build gave build
+// orders a record, no ledger records at all, and no comment digest store —
+// nothing contradicts its version field, so adoption must still fire. A guard
+// that also refused here would fail every honest upgrade on its first `check`
+// with a build-order-ledger-missing the project had no way to have avoided,
+// which is how a gate gets switched off rather than fixed.
+func TestBuildOrderAdoptionStillGrandfathersAnHonestUpgrade(t *testing.T) {
+	cfgPath := buildOrderFixture(t)
+	dir := filepath.Dir(cfgPath)
+	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("build-order propose: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
+		t.Fatalf("build-order lock: %v", err)
+	}
+
+	// rewindStoreToPreLedger removes the WHOLE ledger-era footprint — records,
+	// version stamp and the sibling digest store — which is what makes this an
+	// upgrade fixture rather than a reproduction of the attack above.
+	rewindStoreToPreLedger(t, storeFile)
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+		t.Fatalf("check on an honest pre-ledger project must succeed: %v", err)
+	}
+	rec, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]
+	if !ok {
+		t.Fatalf("an honest upgrade must still adopt its locked build order")
+	}
+	if !rec.Grandfathered {
+		t.Fatalf("an adopted build order is grandfathered, never approved: %+v", rec)
+	}
+}
+
+// ---------------------------------------------------------------------
+// an unbacked "locked": true must be recoverable, and must never read ok
+// ---------------------------------------------------------------------
+
+// TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten.
+//
+// "build-order lock" writes two files: the artifact, then the ledger record. It
+// used to report the second one's failure as a WARNING on an ok:true envelope,
+// which is a false machine contract — `check --validate` refuses the very next
+// run on a locked build order with no record, so the only consumer that mattered
+// disagreed with the answer the command had just given. An agent reading ok and
+// the exit status concluded the order was approved.
+func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
+	cfgPath := buildOrderFixture(t)
+	dir := filepath.Dir(cfgPath)
+	artifactPath := filepath.Join(dir, ".build-order.widget.json")
+	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("build-order propose: %v", err)
+	}
+	good, err := os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatalf("read store: %v", err)
+	}
+	if err := os.WriteFile(storeFile, []byte("not json at all {{{"), 0o644); err != nil {
+		t.Fatalf("corrupt store: %v", err)
+	}
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved")
+	if err == nil || env.OK {
+		t.Fatalf("a lock whose approval could not be recorded must not report ok:true, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeIntegrityFailed {
+		t.Fatalf("expected %q, got %+v", cliout.CodeIntegrityFailed, env.Error)
+	}
+	// The message has to say what IS on disk. The artifact is locked; telling
+	// the caller only "the write failed" invites a retry of a command whose
+	// first half already happened.
+	if !strings.Contains(env.Error.Message, "written to disk as locked") {
+		t.Fatalf("the refusal must say the artifact is on disk: %+v", env.Error)
+	}
+	if !strings.Contains(env.Error.Hint, "build-order propose --module widget") {
+		t.Fatalf("the refusal must name the recovery: %+v", env.Error)
+	}
+
+	// And the recovery is real. This is the half that used to wedge the module:
+	// the artifact says locked:true, so propose refused ("already_locked") and
+	// lock refused ("already locked and not stale"), and there is no unlock
+	// verb. Restoring the store leaves exactly that state.
+	if err := os.WriteFile(storeFile, good, 0o644); err != nil {
+		t.Fatalf("restore store: %v", err)
+	}
+	if artifact := readArtifactJSON(t, artifactPath); artifact["locked"] != true {
+		t.Fatalf("fixture precondition: the artifact must be locked on disk, got %v", artifact["locked"])
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("re-proposing over an UNBACKED locked artifact must be allowed; it discards nothing: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved for real"); err != nil {
+		t.Fatalf("the recovery must complete: %v", err)
+	}
+	if _, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]; !ok {
+		t.Fatalf("the recovery must leave a standing approval on the record")
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+		t.Fatalf("the repaired project must validate clean: %v", err)
+	}
+}
+
+// TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose.
+//
+// buildorder.Lock's own refusal for a locked, non-stale artifact is "already
+// locked and not stale", classified already_locked — a code whose documented
+// meaning is "there is nothing to do". For an artifact whose locked flag nothing
+// backs that is exactly wrong: `check --validate` is refusing every commit with
+// build-order-ledger-missing, so there is a great deal to do, and the two verbs
+// the finding's own message named were the two that refused.
+func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
+	cfgPath := buildOrderFixture(t)
+	dir := filepath.Dir(cfgPath)
+	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("build-order propose: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
+		t.Fatalf("build-order lock: %v", err)
+	}
+	// The state a crash between the two writes leaves: artifact locked, record
+	// gone, store otherwise current (so this is NOT the pre-ledger path).
+	downgradeStoreAndDropKey(t, storeFile, lock.BuildOrderLedgerKey("widget"))
+	restoreStoreVersion(t, storeFile)
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approving again")
+	if err == nil || env.OK {
+		t.Fatalf("locking an artifact with no standing approval must be refused, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code == cliout.CodeAlreadyLocked {
+		t.Fatalf("already_locked means \"nothing to do\", which is the opposite of this state: %+v", env.Error)
+	}
+	if env.Error.Code != cliout.CodeIntegrityFailed {
+		t.Fatalf("expected %q, got %+v", cliout.CodeIntegrityFailed, env.Error)
+	}
+	if !strings.Contains(env.Error.Hint, "build-order propose --module widget") {
+		t.Fatalf("the refusal must name the one command that unwedges the module: %+v", env.Error)
+	}
+
+	// Preview/write-path parity. A preview that reported only
+	// "not_already_current" would send the reader to already_locked's recovery
+	// ("there is nothing to do") for the one state where there is.
+	dr := dryRunOf(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approving again")
+	if !hasPrecondition(dr, "lock_flag_is_backed_by_an_approval", false) {
+		t.Fatalf("the preview must report the unbacked lock as what blocks it: %+v", dr.Preconditions)
+	}
+}
+
+// TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld reproduces the
+// reported wedge exactly: another process holds .dossierx-lock-store.json.lock
+// — which an ordinary concurrent `check` or `claim lock` does — while
+// "build-order lock" runs.
+//
+// It used to write the artifact first and take that sentinel second, so
+// contention produced a locked artifact with no record, ok:true, exit 0, and a
+// project `check --validate` refused. Taking the sentinel BEFORE the artifact
+// write converts the whole class into a clean refusal that wrote nothing, under
+// a code whose documented recovery — retry — actually works.
+func TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld(t *testing.T) {
+	if testing.Short() {
+		t.Skip("the file lock's acquisition timeout is 10s and is not overridable from this package")
+	}
+	cfgPath := buildOrderFixture(t)
+	dir := filepath.Dir(cfgPath)
+	artifactPath := filepath.Join(dir, ".build-order.widget.json")
+	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("build-order propose: %v", err)
+	}
+	release, err := lock.AcquireFileLock(storeFile)
+	if err != nil {
+		t.Fatalf("hold the lock-store sentinel: %v", err)
+	}
+	defer release()
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved")
+	if err == nil || env.OK {
+		t.Fatalf("a lock that could not take the lock-store sentinel must not report ok:true, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeWriteConflict {
+		t.Fatalf("contention is %q, the one code whose recovery is a retry: %+v", cliout.CodeWriteConflict, env.Error)
+	}
+	if artifact := readArtifactJSON(t, artifactPath); artifact["locked"] == true {
+		t.Fatalf("the refusal must have written nothing; the artifact was left locked with no record")
+	}
+}
+
+// ---------------------------------------------------------------------
+// helpers for the two sections above
+// ---------------------------------------------------------------------
+
+// twoPhaseBuildOrderFixture is buildOrderFixture with a second locked claim in
+// a LATER build phase, so the artifact it produces has two phase blocks to
+// reorder. A single-phase order cannot express the edit the drift rule exists to
+// catch — changing what gets built first — so the fixture that tests that edit
+// has to have somewhere for it to happen.
+func twoPhaseBuildOrderFixture(t *testing.T) string {
+	t.Helper()
+	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+			"build_role: schema\n" +
+			"body: |\n  a locked claim with a build role.\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+		"claims/b.yaml": "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+			"build_role: behavior\n" +
+			"rests_on:\n  - widget.contract.a\n" +
+			"body: |\n  a second locked claim, one phase later.\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+	})
+}
+
+// readArtifactJSON decodes a build-order artifact as a bare map, so a fixture
+// can assert on (and edit) the BYTES on disk rather than whatever
+// buildorder.Status recomputes in memory.
+func readArtifactJSON(t *testing.T, path string) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read artifact: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse artifact: %v", err)
+	}
+	return doc
+}
+
+// reverseArtifactPhases rewrites a build-order artifact with its phase blocks in
+// the opposite order: a hand edit that changes the implementation sequence an
+// agent would follow while touching no claim at all, and that no lint can see.
+func reverseArtifactPhases(t *testing.T, path string) {
+	t.Helper()
+	doc := readArtifactJSON(t, path)
+	phases, ok := doc["phases"].([]any)
+	if !ok || len(phases) < 2 {
+		t.Fatalf("fixture precondition: the artifact needs at least two phase blocks to reorder, got %v", doc["phases"])
+	}
+	for i, j := 0, len(phases)-1; i < j; i, j = i+1, j-1 {
+		phases[i], phases[j] = phases[j], phases[i]
+	}
+	doc["phases"] = phases
+	edited, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal artifact: %v", err)
+	}
+	if err := os.WriteFile(path, edited, 0o644); err != nil {
+		t.Fatalf("write artifact: %v", err)
+	}
+}
+
+// rawLedgerOf reads the store's ledger map WITHOUT asserting the schema
+// version, which readLedger deliberately does. A fixture that has just
+// downgraded the version on purpose needs to read the file it downgraded; the
+// version assertion is right for every other caller and wrong for this one.
+func rawLedgerOf(t *testing.T, storeFile string) map[string]any {
+	t.Helper()
+	raw, err := os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatalf("read store: %v", err)
+	}
+	var doc struct {
+		Ledger map[string]any `json:"ledger"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse store: %v", err)
+	}
+	return doc.Ledger
+}
+
+// downgradeStoreAndDropKey is the ATTACK, as distinct from
+// rewindStoreToPreLedger's honest upgrade: it sets the version back to 1 and
+// removes exactly ONE ledger key, leaving every other record — and the sibling
+// comment digest store — in place. Both halves of the contradiction
+// lock.Store.LedgerDowngraded weighs are therefore present, which is precisely
+// what a genuine pre-ledger project cannot have.
+func downgradeStoreAndDropKey(t *testing.T, storeFile, key string) {
+	t.Helper()
+	raw, err := os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatalf("read store: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse store: %v", err)
+	}
+	ledger, ok := doc["ledger"].(map[string]any)
+	if !ok {
+		t.Fatalf("fixture precondition: the store has no ledger to edit:\n%s", raw)
+	}
+	if _, ok := ledger[key]; !ok {
+		t.Fatalf("fixture precondition: no ledger record for %q:\n%s", key, raw)
+	}
+	delete(ledger, key)
+	doc["ledger"] = ledger
+	doc["version"] = 1
+	edited, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal store: %v", err)
+	}
+	if err := os.WriteFile(storeFile, edited, 0o644); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+}
+
+// restoreStoreVersion puts the schema version back, so a fixture can build the
+// "record simply missing" state (a torn write, a crash) without also building
+// the "store claims to predate the ledger" one. The two are different findings
+// with different recoveries and must be testable apart.
+func restoreStoreVersion(t *testing.T, storeFile string) {
+	t.Helper()
+	raw, err := os.ReadFile(storeFile)
+	if err != nil {
+		t.Fatalf("read store: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse store: %v", err)
+	}
+	doc["version"] = 2
+	edited, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal store: %v", err)
+	}
+	if err := os.WriteFile(storeFile, edited, 0o644); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+}
+
+// validateReportsRule reports whether "check --validate" — the read-only pass,
+// which writes nothing and so cannot itself change the state under test —
+// reports a ledger finding with the given rule name.
+func validateReportsRule(t *testing.T, cfgPath, rule string) bool {
+	t.Helper()
+	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	var data struct {
+		LedgerFindings []struct {
+			Rule string `json:"rule"`
+		} `json:"ledger_findings"`
+	}
+	envData(t, env, &data)
+	for _, f := range data.LedgerFindings {
+		if f.Rule == rule {
+			return true
+		}
+	}
+	return false
 }

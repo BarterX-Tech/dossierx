@@ -174,3 +174,50 @@ func TestNextSteps_DraftExampleSkipsALintBlockedClaim(t *testing.T) {
 		t.Fatalf("the dependency IS lockable and must be the example, got %q", hint)
 	}
 }
+
+// lockedWithOpenThread is a LOCKED claim carrying an unresolved thread. It is
+// review_pending because an open thread is one of the three triggers.
+func lockedWithOpenThread(id string) string {
+	return "id: " + id + "\nfacet: contract\nmodule: widget\nstatus: locked\nreview_pending: true\nlayout: card\n" +
+		"body: |\n  a locked claim.\n" +
+		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"comments:\n" +
+		"  - id: c-406a9f\n    status: open\n    author: human\n" +
+		"    created: \"2026-07-26T10:00:00Z\"\n    body: I am not sure about this.\n    edited: false\n"
+}
+
+// The open-comment hint counted only LOCKED claims, so it disagreed with the two
+// counts printed beside it in the same envelope. Reproduced with one open thread
+// on a locked claim and one on a draft: open_comments said {"widget": 2}, the
+// comments-unresolved lint fired on both, and next_steps said "1 claim(s) with
+// open comment thread(s)" naming only the locked one — while `claim lock` on the
+// draft then refuses with unresolved_comments.
+func TestNextSteps_OpenCommentHintCountsDraftsToo(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/draft.yaml":  draftWithOpenThread("widget.contract.draft"),
+		"claims/locked.yaml": lockedWithOpenThread("widget.contract.overview"),
+	})
+
+	res := check.Status(claims, cfg)
+	var hint string
+	for _, h := range res.NextSteps {
+		if strings.Contains(h, "open comment thread(s)") {
+			hint = h
+		}
+	}
+	if hint == "" {
+		t.Fatalf("expected an open-comment next step, got %v", res.NextSteps)
+	}
+	if !strings.Contains(hint, "2 claim(s)") {
+		t.Fatalf("the hint must count every claim a human has to act on, got %q", hint)
+	}
+	// It must agree with the count in the same envelope, which is the property
+	// that was broken: two sources of truth, one report.
+	total := 0
+	for _, n := range res.OpenComments {
+		total += n
+	}
+	if total != 2 {
+		t.Fatalf("fixture precondition: open_comments must report 2, got %v", res.OpenComments)
+	}
+}

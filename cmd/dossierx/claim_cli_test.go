@@ -782,3 +782,150 @@ func envelopeOf(t *testing.T, args ...string) (cliout.Envelope, error) {
 	}
 	return env, err
 }
+
+// ---------------------------------------------------------------------
+// a lock refusal has to name the rule, not count it
+// ---------------------------------------------------------------------
+
+// buildRoleAdoptedFixture is a module that has ADOPTED build_role — one locked
+// claim carries it — plus a draft claim that does not.
+//
+// That combination is the whole point. build-role-required-for-locked fires
+// only against a LOCKED claim in an adopted module, so against the project as it
+// stands (b still draft) it reports nothing at all: `check --validate` is
+// ok:true with lint_error_count 0. The rule nonetheless refuses `claim lock b`,
+// because the lock gate lints the about-to-be-locked form. Every claim-status
+// lint has this shape — rest-on-locked and roll-up too — which is why "go run
+// check --validate to see the finding" was never an answer.
+func buildRoleAdoptedFixture(t *testing.T) string {
+	t.Helper()
+	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
+		"claims/a.yaml": "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n" +
+			"build_role: schema\n" +
+			"body: |\n  a locked claim that carries a build role.\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+		"claims/b.yaml": "id: widget.contract.b\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"body: |\n  a draft claim with no build role.\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n",
+	})
+}
+
+// TestLockRefusalNamesTheLintRuleThatBlockedIt.
+//
+// The refusal used to carry `details: {"lint_errors": 1, ...}` — a count, and no
+// finding. The router's documented recovery for lint_failed is "read
+// data.lint_findings", which this envelope did not have; `check --validate`
+// reported zero findings; `claim show`'s next_action pointed at that same
+// command; and `check`'s next_steps offered three candidate causes, none of them
+// the real one. The word the agent needed — build_role — was reachable from no
+// command in the surface, and adding `build_role: behavior` made the identical
+// lock succeed. That is an unbreakable loop, and the findings were computed and
+// discarded one line above the refusal.
+func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
+	cfgPath := buildRoleAdoptedFixture(t)
+
+	// The premise, stated as an assertion: the read-only pass sees nothing.
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+		t.Fatalf("fixture precondition: check --validate must be clean, got %v", err)
+	}
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	if err == nil || env.OK {
+		t.Fatalf("locking a claim with no build_role in an adopted module must be refused, got %+v", env)
+	}
+	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
+		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
+	}
+	details, ok := env.Error.Details.(map[string]any)
+	if !ok {
+		t.Fatalf("the refusal must carry structured details, got %#v", env.Error.Details)
+	}
+	findings, ok := details["lint_findings"].([]any)
+	if !ok || len(findings) == 0 {
+		t.Fatalf("the refusal must carry error.details.lint_findings — the key the router tells agents to read: %+v", details)
+	}
+	named := false
+	for _, raw := range findings {
+		f, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("a lint finding must be an object: %#v", raw)
+		}
+		if f["lint"] == "build-role-required-for-locked" && f["claim_id"] == "widget.contract.b" {
+			named = true
+		}
+		// The same snake_case shape check publishes as data.lint_findings, so an
+		// agent that learned one shape can read the other.
+		for _, key := range []string{"lint", "claim_id", "severity", "message"} {
+			if _, present := f[key]; !present {
+				t.Fatalf("lint finding is missing %q: %#v", key, f)
+			}
+		}
+	}
+	if !named {
+		t.Fatalf("the refusal must name the rule and the claim, got %#v", findings)
+	}
+
+	// And the command claim show points at answers the same question. A
+	// next_action naming a command that reports nothing is worse than none.
+	dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.b")
+	lintDetail := ""
+	for _, p := range dr.Preconditions {
+		if p.Name == "lint_clean" {
+			if p.OK {
+				t.Fatalf("the preview must agree with the write path that the lint gate blocks: %+v", p)
+			}
+			lintDetail = p.Detail
+		}
+	}
+	if !strings.Contains(lintDetail, "build-role-required-for-locked") {
+		t.Fatalf("the dry run's lint_clean detail must name the rule, got %q", lintDetail)
+	}
+
+	// Adding the field makes the identical command succeed — which is what makes
+	// the missing rule name the ONLY thing that was ever in the way.
+	claimFile := filepath.Join(filepath.Dir(cfgPath), "claims", "b.yaml")
+	tamper(t, claimFile, "status: draft\n", "status: draft\nbuild_role: behavior\n")
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go"); err != nil {
+		t.Fatalf("with build_role set, the identical lock must succeed: %v", err)
+	}
+}
+
+// TestClaimShowPointsAtACommandThatNamesTheBlockingLint.
+//
+// `claim show`'s next_action for a lint-blocked draft said "-> dossierx check
+// --validate". For the whole family of lints that decide a LOCK that is a dead
+// end: the claim is still draft, so the rule does not fire, and the command
+// reports ok:true with zero findings. The agent is told a finding blocks its
+// lock and sent to a command that reports none.
+func TestClaimShowPointsAtACommandThatNamesTheBlockingLint(t *testing.T) {
+	cfgPath := buildRoleAdoptedFixture(t)
+
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.b")
+	if err != nil {
+		t.Fatalf("claim show: %v", err)
+	}
+	var data struct {
+		NextActions []string `json:"next_actions"`
+	}
+	envData(t, env, &data)
+
+	action := ""
+	for _, a := range data.NextActions {
+		if strings.Contains(a, "lint finding") {
+			action = a
+		}
+	}
+	if action == "" {
+		t.Fatalf("claim show must report the lint gate as what blocks locking: %v", data.NextActions)
+	}
+	if strings.Contains(action, "check --validate") {
+		t.Fatalf("check --validate reports zero of these findings; sending the agent there is the loop: %q", action)
+	}
+	if !strings.Contains(action, "dossierx claim lock widget.contract.b --dry-run") {
+		t.Fatalf("the next_action must name a command that can answer it: %q", action)
+	}
+	// The rule is named here too, so the cheapest read already carries it.
+	if !strings.Contains(action, "build-role-required-for-locked") {
+		t.Fatalf("the next_action must name the rule: %q", action)
+	}
+}

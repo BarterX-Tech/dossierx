@@ -160,7 +160,15 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 		t.Fatalf("expected lock-ledger-missing, got:\n%s", out)
 	}
 
-	stagedGit(t, root, "add", ".dossierx-lock-store.json")
+	// BOTH tracked stores, because an approval now establishes comment coverage in
+	// the same act that it records the approval (lock.RecordApproval writes the
+	// claim's comment digest beside the ledger record). A commit that carries the
+	// claim and the ledger but not the digest store leaves a standing approval with
+	// no entry, which is comment-digest-missing — the finding that closed the
+	// empty-the-map launder. The installed hook's refusal text names all three
+	// stores for exactly this reason, so staging one of them is the fixture being
+	// out of date, not the gate being strict.
+	stagedGit(t, root, "add", ".dossierx-lock-store.json", ".dossierx-comment-digest.json")
 	if out, stderr, err := execCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
 		t.Fatalf("claim + approval staged together must pass: %v\nstdout:%s\nstderr:%s", err, out, stderr)
 	}

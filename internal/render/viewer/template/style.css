@@ -780,13 +780,156 @@ th {
   display: none;
 }
 
+/* ---- status strip (lock-ledger integrity + lint) -----------------------
+   A collapsible bottom-LEFT dock, deliberately clear of the three things that
+   already own screen edges: the desktop comment rail (fixed right), the toast
+   (bottom centre), and the mobile nav toggle (top left). Its z-index sits BELOW
+   the comment overlay/rail (50/60) so an open panel is never obscured by it —
+   the strip is a standing statement about the project, not a modal, and the
+   reader's current task wins.
+
+   Two alarm states, and they are not a severity ramp. --lint is the warn family
+   every other advisory in this viewer uses. --integrity is louder (accent border
+   weight on the leading edge, warn text, deeper shadow) because a lock-ledger
+   finding is not advice: it says a locked claim changed with nobody approving
+   it. Colours are the same inverting :root tokens as everything else, so a
+   project's viewer.theme overrides carry through here too. */
+
+/* Docked clear of the 210px desktop sidebar (its "Generated …" footer sits in
+   exactly this corner); the mobile override below reclaims the full-width left
+   edge, where the sidebar is an off-canvas drawer and owns no space. */
+.status-strip {
+  position: fixed;
+  z-index: 45;
+  left: 226px;
+  bottom: 16px;
+  max-width: min(520px, calc(100vw - 242px));
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font: 13px var(--font-sans);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, .34);
+  overflow: hidden;
+}
+
+.status-strip[hidden] {
+  display: none;
+}
+
+.status-strip--lint {
+  border-color: var(--warn);
+}
+
+.status-strip--integrity {
+  border-color: var(--warn);
+  border-left-width: 4px;
+  background: var(--warn-bg);
+}
+
+.status-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: 0;
+  background: none;
+  color: var(--warn);
+  padding: 10px 14px;
+  font: 600 13px var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.status-strip-summary {
+  flex: 1;
+}
+
+.status-strip-caret {
+  color: var(--muted);
+  transition: transform .15s ease;
+}
+
+.status-strip--open .status-strip-caret {
+  transform: rotate(180deg);
+}
+
+/* The detail list is capped and scrolls internally: a project with forty lint
+   errors must not grow a dock that swallows the page it is describing. */
+.status-strip-body {
+  max-height: 40vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+  padding: 10px 14px 12px;
+}
+
+.status-strip-body[hidden] {
+  display: none;
+}
+
+.status-group + .status-group {
+  margin-top: 12px;
+}
+
+.status-group-head {
+  margin: 0 0 6px;
+  font: 600 11px var(--font-sans);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.status-finding-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.status-finding {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 6px 0;
+  color: var(--ink);
+  line-height: 1.45;
+}
+
+.status-finding + .status-finding {
+  border-top: 1px solid var(--border);
+}
+
+.status-finding-rule,
+.status-finding-claim {
+  font: 11px var(--font-mono);
+}
+
+.status-finding-rule {
+  color: var(--warn);
+}
+
+.status-finding-claim {
+  color: var(--muted);
+}
+
+.status-finding-msg {
+  flex-basis: 100%;
+  font-size: 12px;
+}
+
+@media (prefers-color-scheme: light) {
+  .status-strip {
+    box-shadow: 0 4px 18px rgba(0, 0, 0, .14);
+  }
+}
+
 /* Coarse pointers (touch) need >=44px hit targets on every comment control. */
 @media (pointer: coarse) {
   .comments-rail-close,
   .comment-action,
   .comment-action-text,
   .comment-composer-submit,
-  .comment-composer-input {
+  .comment-composer-input,
+  .status-strip-head {
     min-height: 44px;
   }
 }
@@ -813,6 +956,11 @@ th {
     border-top: 1px solid var(--border);
     border-radius: 14px 14px 0 0;
     box-shadow: 0 -2px 18px rgba(0, 0, 0, .38);
+  }
+  /* The sidebar is an off-canvas drawer here, so the left edge is free again. */
+  .status-strip {
+    left: 16px;
+    max-width: calc(100vw - 32px);
   }
 }
 

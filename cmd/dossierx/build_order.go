@@ -135,16 +135,16 @@ func newBuildOrderProposeCmd() *cobra.Command {
 			path := buildorder.ArtifactPath(cfg, module)
 
 			// What is on disk already, and would a propose DESTROY it? See
-			// approvedOrderWouldBeDiscarded: a locked, non-stale artifact is an
-			// approved implementation sequence with a standing ledger record, and
+			// approvedOrderWouldBeDiscarded: a locked, non-stale artifact WITH A
+			// STANDING LEDGER RECORD is an approved implementation sequence, and
 			// propose rewrites the file in full with locked:false.
 			existing, existingErr := buildorder.Status(path, claims, cfg)
-			discards := approvedOrderWouldBeDiscarded(existing, existingErr)
+			discards := approvedOrderWouldBeDiscarded(cfg, module, existing, existingErr)
 
 			if dryRun {
 				dr := cliout.NewDryRun("propose a build order for module " + module)
 				dr.Require("module_is_orderable", proposeErr == nil, proposeErrDetail(proposeErr))
-				dr.Require("no_approved_order_to_discard", !discards, existingOrderDetail(existing, existingErr))
+				dr.Require("no_approved_order_to_discard", !discards, existingOrderDetail(cfg, module, existing, existingErr))
 				dr.Effect("writes " + path + ", overwriting any existing proposal for this module")
 				if proposeErr == nil {
 					for _, p := range phaseData(artifact) {
@@ -196,6 +196,66 @@ func newBuildOrderProposeCmd() *cobra.Command {
 	return cmd
 }
 
+// buildOrderApprovalStands answers the one question that separates an APPROVED
+// build order from an artifact that merely says `"locked": true`: does the lock
+// ledger carry a standing record that vouches for these exact bytes?
+//
+// It exists because "locked" is a boolean inside the audited file, and this
+// release's whole premise is that such a boolean proves nothing on its own.
+// Two commands used to treat it as proof, and between them they wedged a project
+// that no CLI verb could repair:
+//
+//   - "build-order lock" wrote the artifact and THEN wrote the ledger record, so
+//     a crash — or a concurrent `check`/`claim lock` holding the lock-store
+//     sentinel — left locked:true with no record. `check --validate` then
+//     reported build-order-ledger-missing forever.
+//   - the recovery from that state was neither of the two verbs the messages
+//     named: `propose` refused (already_locked, from the flag) and `lock`
+//     refused (already locked and not stale, from the same flag). There is no
+//     unlock verb. The module was fixable only by hand-editing a dotfile, which
+//     is precisely the move the release exists to make unnecessary.
+//
+// An artifact whose locked flag is unbacked is provably not an approved order,
+// so re-proposing it discards nothing — and the same is true of a locked
+// artifact whose record no longer matches its bytes, which is
+// build-order-content-drift, whose own finding message tells the reader to
+// re-propose and re-lock. Both are false here, which is what makes those
+// documented recoveries actually run.
+//
+// The conservative direction on NO EVIDENCE is the opposite one: a lock store
+// that cannot be read, or an artifact that cannot be hashed, returns true and
+// keeps the refusal. Not knowing whether an approval stands must never be
+// spendable as permission to overwrite one.
+//
+// It reads the store WITHOUT taking the sentinel, exactly as internal/check's
+// read-only ledger gate does: Store.Save writes through a temp file and a
+// rename, so a concurrent write is never observed half-applied.
+func buildOrderApprovalStands(cfg *config.Config, module string) bool {
+	// The RAW artifact, via LoadArtifact rather than Status: the signature in
+	// the ledger is over the bytes WriteArtifact persisted, and Status
+	// recomputes `stale` in memory before returning. Hashing Status's result
+	// would report drift on every locked order whose claims had moved.
+	artifact, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, module))
+	if err != nil || artifact == nil {
+		// No artifact, or one nobody can read: there is nothing here for a
+		// record to vouch for, and propose is the regeneration path.
+		return false
+	}
+	hash, err := buildOrderSignature(artifact)
+	if err != nil {
+		return true
+	}
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil {
+		return true
+	}
+	record, ok := store.Record(lock.BuildOrderLedgerKey(module))
+	if !ok || record.Subject != lock.SubjectBuildOrder || record.Released() {
+		return false
+	}
+	return record.Hash == hash
+}
+
 // approvedOrderWouldBeDiscarded reports whether re-proposing over the artifact
 // already on disk would destroy something a human approved.
 //
@@ -220,17 +280,28 @@ func newBuildOrderProposeCmd() *cobra.Command {
 // nobody can follow the sequence in it anyway, and propose is the regeneration
 // path — refusing there would make a corrupt artifact fixable only by deleting
 // it by hand, which is precisely the hand-editing this release exists to gate.
-func approvedOrderWouldBeDiscarded(existing *buildorder.Artifact, err error) bool {
+//
+// And neither is an artifact whose `locked` flag NOTHING BACKS. The refusal used
+// to read the flag alone, which made every unbacked lock — a torn two-file
+// write, a hand-set boolean, a deleted ledger key — permanently unrecoverable:
+// propose refused because the file said locked, lock refused because the file
+// said locked, and there is no unlock verb. See buildOrderApprovalStands: the
+// question this asks is now "is there a standing approval for these exact
+// bytes?", not "does the audited file claim to be approved?".
+func approvedOrderWouldBeDiscarded(cfg *config.Config, module string, existing *buildorder.Artifact, err error) bool {
 	if err != nil || existing == nil {
 		return false
 	}
-	return existing.Locked && !existing.Stale
+	if !existing.Locked || existing.Stale {
+		return false
+	}
+	return buildOrderApprovalStands(cfg, module)
 }
 
 // existingOrderDetail renders the state of the artifact already on disk as a
 // dry-run precondition detail, so the preview says WHY it is (or is not)
 // blocked rather than only that it is.
-func existingOrderDetail(existing *buildorder.Artifact, err error) string {
+func existingOrderDetail(cfg *config.Config, module string, existing *buildorder.Artifact, err error) string {
 	switch {
 	case errors.Is(err, buildorder.ErrNotProposed):
 		return "no build order proposed yet for this module"
@@ -240,6 +311,12 @@ func existingOrderDetail(existing *buildorder.Artifact, err error) string {
 		return "no build order proposed yet for this module"
 	case existing.Locked && existing.Stale:
 		return fmt.Sprintf("locked=true stale=true (%d claim(s) moved) — re-proposing a stale order is the documented recovery", len(existing.StaleIDs))
+	// The preview has to name the LEDGER, not just the flag, or a caller
+	// staring at locked=true has no way to know why propose is nonetheless
+	// allowed — and "locked=true, blocked:false" reads as a bug rather than as
+	// the recovery it is.
+	case existing.Locked && !buildOrderApprovalStands(cfg, module):
+		return "locked=true, but no standing lock-ledger approval matches this artifact — it is not an approved order, so re-proposing discards nothing"
 	default:
 		return fmt.Sprintf("locked=%v stale=%v", existing.Locked, existing.Stale)
 	}
@@ -380,8 +457,56 @@ func newBuildOrderLockCmd() *cobra.Command {
 					dr.Require("build_order_readable", false, statusErr.Error())
 				default:
 					dr.Require("build_order_proposed", true, path)
+					// buildorder.Lock refuses a STALE order before it looks at
+					// anything else: a bare relock would freeze an order whose
+					// claims have moved. The preview did not evaluate that at
+					// all, and "not_already_current" actively PASSED a stale
+					// order (it reads !locked || stale), so the one artifact
+					// state that always refuses previewed as "blocked: false".
+					// The documented recovery is unchanged and is named here:
+					// re-propose, then lock.
+					dr.Require("build_order_not_stale", !artifact.Stale,
+						fmt.Sprintf("stale=%v (%d claim(s) changed, added or removed: %v); re-run \"dossierx build-order propose --module %s\" first",
+							artifact.Stale, len(artifact.StaleIDs), artifact.StaleIDs, module))
+					// The unbacked-lock gate, previewed for the same reason the
+					// two above are: the write path refuses on it FIRST, and a
+					// preview that reported only "not_already_current" would
+					// send the reader to the already_locked recovery ("there is
+					// nothing to do") for the one state where there is a great
+					// deal to do. See buildOrderApprovalStands.
+					backed := !artifact.Locked || buildOrderApprovalStands(cfg, module)
+					dr.Require("lock_flag_is_backed_by_an_approval", backed,
+						fmt.Sprintf("locked=%v, standing lock-ledger approval matching this artifact=%v; an unbacked flag is not an approved order, so the way out is dossierx build-order propose --module %s and then lock the result",
+							artifact.Locked, backed && artifact.Locked, module))
 					dr.Require("not_already_current", !artifact.Locked || artifact.Stale,
 						fmt.Sprintf("locked=%v stale=%v", artifact.Locked, artifact.Stale))
+					// The hand-edit gate, which is the LAST thing buildorder.Lock
+					// evaluates and used to be the only refusal of its the preview
+					// could not see. An artifact reordered by hand between propose
+					// and lock is never stale (staleness is a locked-artifact
+					// concept and this one is unlocked) and is not already
+					// current, so every precondition above it passed and the run
+					// previewed blocked:false — then exited 1. The predicate is
+					// buildorder's own, exported read-only as HandEditDivergence
+					// precisely so the preview and Lock cannot answer differently.
+					//
+					// A non-nil error is Lock's OTHER hand-edit refusal (the
+					// current claims have no valid order at all, so the artifact
+					// cannot be verified as generated), so it blocks here too —
+					// treating it as "unknown, proceed" would re-open the gap in
+					// the one case where the engine understands the project least.
+					divergence, deriveErr := buildorder.HandEditDivergence(artifact, claims, cfg)
+					switch {
+					case deriveErr != nil:
+						dr.Require("build_order_is_generated", false,
+							fmt.Sprintf("this build order cannot be re-derived from the current claims (%v), so it cannot be verified as generated; fix the claims and re-run \"dossierx build-order propose --module %s\"", deriveErr, module))
+					case divergence != "":
+						dr.Require("build_order_is_generated", false,
+							fmt.Sprintf("%s; the artifact is generated, never hand-edited: re-run \"dossierx build-order propose --module %s\" and lock that order", divergence, module))
+					default:
+						dr.Require("build_order_is_generated", true,
+							"the artifact on disk is exactly what a fresh propose computes")
+					}
 					dr.Propose("phases", phaseData(artifact))
 				}
 				dr.Effect("rewrites " + path + " with locked: true and a content-hash baseline").
@@ -394,6 +519,52 @@ func newBuildOrderLockCmd() *cobra.Command {
 				return cmdResult{}, err
 			}
 
+			// The unbacked lock, refused BEFORE buildorder.Lock so the message
+			// is about the state the caller is actually in.
+			//
+			// buildorder.Lock's own refusal for this shape is "already locked
+			// and not stale", classified already_locked — whose documented
+			// meaning is "there is nothing to do". That is exactly wrong here:
+			// there is a great deal to do, `check --validate` is reporting
+			// build-order-ledger-missing, and the two verbs the finding's own
+			// message names both refused on the same unbacked boolean. Naming
+			// the state and pointing at propose is what turns a wedged module
+			// into a recoverable one. See buildOrderApprovalStands.
+			if existing, statusErr := buildorder.Status(path, claims, cfg); statusErr == nil &&
+				existing.Locked && !existing.Stale && !buildOrderApprovalStands(cfg, module) {
+				return cmdResult{}, cliout.Errorf(cliout.CodeIntegrityFailed,
+					"build-order lock: module %q's build order (%s) already says \"locked\": true, but no standing lock-ledger approval matches it — the flag was written outside the approval path, or its record was lost between the artifact write and the ledger write. There is nothing here for this command to lock: an unbacked flag is not an approved order", module, path).
+					WithHint(fmt.Sprintf("discard the unbacked artifact and approve a fresh one: dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"<the human's words>\"", module, module))
+			}
+
+			// The lock-store sentinel is taken BEFORE the artifact is written,
+			// and held across both writes.
+			//
+			// This command writes TWO files — the artifact (buildorder.Lock) and
+			// the ledger record — and it used to take the sentinel between them,
+			// inside recordBuildOrderApproval. Contention there is not rare: an
+			// ordinary concurrent `dossierx check` or `claim lock` holds this
+			// exact file. The artifact was already on disk saying locked:true
+			// when the record write failed, the command reported ok:true with a
+			// warning, and `check --validate` refused every commit afterwards.
+			// Acquiring first converts that whole class into a clean refusal
+			// with nothing written: write_conflict is a documented, retryable
+			// code, and a retry actually fixes it.
+			//
+			// It does not close the crash-in-between window (only internal/
+			// could, by making Lock take the record as an input), so the ledger
+			// write below is still FATAL rather than a warning, and the refusal
+			// above is the recovery for the state a crash leaves.
+			//
+			// Acquisition order is unchanged and no deadlock is introduced: this
+			// command never takes the claims sentinel, and the project-wide
+			// order is claims -> lock-store -> flag-store.
+			release, err := lock.AcquireFileLock(storePath(cfg))
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteConflict, "build-order lock: %w", err)
+			}
+			defer release()
+
 			artifact, err := buildorder.Lock(path, claims, cfg)
 			if err != nil {
 				return cmdResult{}, cliout.Errorf(buildOrderLockCode(err), "build-order lock: %w", err)
@@ -405,20 +576,17 @@ func newBuildOrderLockCmd() *cobra.Command {
 			// — "nothing already locked changes without your approval on the
 			// record" — an overclaim about half the locked things in a project.
 			//
-			// The ledger write is best-effort and never fails the command: the
-			// artifact itself is already written by the time we get here (Lock
-			// writes it), so failing now would report an error for an operation
-			// that succeeded, and re-running would refuse ("already locked and
-			// not stale"). The warning goes into the envelope AND onto stderr,
-			// so a missing record is visible rather than assumed.
-			var warnings []string
-			if warning := recordBuildOrderApproval(cfg, module, artifact, reason); warning != "" {
-				warnings = append(warnings, warning)
-				fmt.Fprintf(cmd.ErrOrStderr(), "warning: %s\n", warning)
+			// This USED to be best-effort, returning a warning on a run that
+			// still reported ok:true. It cannot be: `check --validate` refuses
+			// the very next run on a build order with no record, so ok:true was
+			// a false machine contract — the one thing an envelope must never
+			// be. An agent reading ok and exit status concluded the order was
+			// approved, and the project was wedged by the time anything noticed.
+			if err := recordBuildOrderApproval(cfg, module, artifact, reason); err != nil {
+				return cmdResult{}, err
 			}
 			return cmdResult{
-				Warnings: warnings,
-				Data:     buildOrderLockData{Module: module, Path: path, LockedAt: artifact.LockedAt, Reason: reason},
+				Data: buildOrderLockData{Module: module, Path: path, LockedAt: artifact.LockedAt, Reason: reason},
 				Text: func() {
 					fmt.Fprintf(cmd.OutOrStdout(), "build-order lock: %s locked at %s\n", module, artifact.LockedAt)
 				},
@@ -432,8 +600,22 @@ func newBuildOrderLockCmd() *cobra.Command {
 }
 
 // recordBuildOrderApproval writes module's freshly-locked build-order artifact
-// into the lock ledger, returning "" on success or a human-facing warning
-// sentence on failure (see the call site for why this never fails the command).
+// into the lock ledger, returning nil on success or a CODED error the command
+// fails on.
+//
+// The caller already holds the lock-store sentinel — deliberately, so that
+// contention refuses the whole operation before the artifact is written rather
+// than after (see the call site). This function therefore takes no sentinel of
+// its own; taking it again here would self-deadlock.
+//
+// Every failure it can still reach leaves the artifact locked with no approval
+// behind it, which is a state `check --validate` refuses. So each one is
+// returned with the code whose documented recovery is the one that applies, and
+// the message says in the same breath what IS on disk and what is not — a
+// half-completed operation reported as a bare "write failed" tells the caller to
+// retry a command whose first half has already happened. The recovery out of all
+// of them is the same one buildOrderApprovalStands unblocked: re-propose, then
+// re-lock.
 //
 // The artifact's signature is hashed HERE rather than in internal/lock because
 // internal/buildorder imports internal/lock (for ContentHash), so computing it
@@ -442,29 +624,31 @@ func newBuildOrderLockCmd() *cobra.Command {
 // hash baseline, and the LockedAt stamp — which is precisely the content
 // buildorder.WriteArtifact just persisted, so a later hand edit of
 // .build-order.<module>.json no longer matches its record.
-func recordBuildOrderApproval(cfg *config.Config, module string, artifact *buildorder.Artifact, reason string) string {
-	release, err := lock.AcquireFileLock(storePath(cfg))
-	if err != nil {
-		return fmt.Sprintf("the build order for %s was locked, but its lock-ledger record could not be written (%v)", module, err)
-	}
-	defer release()
+func recordBuildOrderApproval(cfg *config.Config, module string, artifact *buildorder.Artifact, reason string) error {
+	recovery := fmt.Sprintf("the artifact is on disk and locked, with nothing vouching for it; discard it and approve a fresh one: dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"<the human's words>\"", module, module)
 
 	store, err := lock.LoadStore(storePath(cfg))
 	if err != nil {
-		return fmt.Sprintf("the build order for %s was locked, but the lock ledger could not be read (%v)", module, err)
+		return cliout.Errorf(cliout.CodeIntegrityFailed,
+			"build-order lock: %s's build order was written to disk as locked, but the lock ledger could not be read, so no approval was recorded: %v", module, err).
+			WithHint(recovery)
 	}
 
 	hash, err := buildOrderSignature(artifact)
 	if err != nil {
-		return fmt.Sprintf("the build order for %s was locked, but its content could not be hashed for the lock ledger (%v)", module, err)
+		return cliout.Errorf(cliout.CodeInternal,
+			"build-order lock: %s's build order was written to disk as locked, but its content could not be hashed for the lock ledger, so no approval was recorded: %v", module, err).
+			WithHint(recovery)
 	}
 
 	lock.RecordBuildOrderApproval(store, module, hash,
 		lock.Approval{Actor: lock.DefaultActor(), Reason: reason})
 	if err := store.Save(); err != nil {
-		return fmt.Sprintf("the build order for %s was locked, but its lock-ledger record could not be saved (%v)", module, err)
+		return cliout.Errorf(cliout.CodeWriteFailed,
+			"build-order lock: %s's build order was written to disk as locked, but its lock-ledger record could not be saved: %v", module, err).
+			WithHint(recovery)
 	}
-	return ""
+	return nil
 }
 
 // buildOrderSignature hashes a build-order artifact for the lock ledger:

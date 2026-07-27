@@ -146,8 +146,10 @@ func firstThreadID(t *testing.T, root, cfgPath, id string) string {
 	if code != 0 {
 		t.Fatalf("comment list for %s exited %d (stderr: %s)", id, code, stderr)
 	}
-	// The envelope's threads are model.Comment values, which carry no json
-	// tags, so each thread's fields arrive under their Go names ("ID").
+	// The envelope's threads are projected through cmd/dossierx's
+	// commentThreadView before they are marshalled, so each thread's fields
+	// arrive under the machine contract's snake_case names ("id") — the same
+	// strings internal/serve's viewer API uses, never the Go field names.
 	var env struct {
 		Data struct {
 			Threads []map[string]any `json:"threads"`
@@ -159,7 +161,7 @@ func firstThreadID(t *testing.T, root, cfgPath, id string) string {
 	if len(env.Data.Threads) == 0 {
 		t.Fatalf("expected at least one thread on %s, got none", id)
 	}
-	tid, ok := env.Data.Threads[0]["ID"].(string)
+	tid, ok := env.Data.Threads[0]["id"].(string)
 	if !ok || tid == "" {
 		t.Fatalf("first thread on %s has no id: %v", id, env.Data.Threads[0])
 	}

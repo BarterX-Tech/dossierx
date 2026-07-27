@@ -8,7 +8,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -66,8 +65,11 @@ func TestBareNounIsOneUsageEnvelope(t *testing.T) {
 // failures — records a successful no-op. Both the nouns and the leaves fail
 // loudly here; only the root silently succeeded.
 //
-// "dossierx --help" and "dossierx --version" are unaffected: cobra handles both
-// before RunE, and a caller that ASKED for prose gets prose.
+// "dossierx --help" is unaffected: cobra handles it before RunE, and a caller
+// that ASKED for prose gets prose. "--version" no longer belongs in that
+// sentence — it was cobra's built-in, which had the identical hole (prose on
+// stdout, exit 0, no envelope) and is now answered by the root's own RunE. See
+// TestVersionFlagAnswersInAnEnvelope in machine_contract_test.go.
 func TestBareRootIsOneUsageEnvelope(t *testing.T) {
 	env, _, err := execCLIJSON(t)
 	if err == nil {
@@ -315,26 +317,13 @@ func TestPreLedgerProjectGrandfathersItsLockedBuildOrder(t *testing.T) {
 		t.Fatalf("lock: %v", err)
 	}
 
-	// Rewind the store to what a pre-ledger build would have left behind: an
-	// existing file, at the old schema version, with no ledger at all.
+	// Rewind to what a pre-ledger build would have left behind: an existing
+	// store file, at the old schema version, with no ledger at all, and no
+	// comment digest store beside it. The shared helper is what knows the full
+	// list — rewinding only the store reproduces the downgrade attack instead
+	// of an upgrade, and lock.Store.LedgerDowngraded refuses that on purpose.
 	storeFile := filepath.Join(root, ".dossierx-lock-store.json")
-	raw, err := os.ReadFile(storeFile)
-	if err != nil {
-		t.Fatalf("read store: %v", err)
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		t.Fatalf("parse store: %v", err)
-	}
-	delete(doc, "ledger")
-	doc["version"] = 1
-	rewound, err := json.MarshalIndent(doc, "", "  ")
-	if err != nil {
-		t.Fatalf("marshal store: %v", err)
-	}
-	if err := os.WriteFile(storeFile, rewound, 0o644); err != nil {
-		t.Fatalf("write store: %v", err)
-	}
+	rewindStoreToPreLedger(t, storeFile)
 
 	// The upgrade run. It must not report the build order as unapproved.
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
@@ -352,5 +341,128 @@ func TestPreLedgerProjectGrandfathersItsLockedBuildOrder(t *testing.T) {
 	}
 	if !strings.Contains(string(after), `"grandfathered": true`) {
 		t.Fatalf("an adopted build-order record must be marked grandfathered:\n%s", after)
+	}
+}
+
+// ---------------------------------------------------------------------
+// a removed verb must fail on the REMOVAL, not on the flags it used to take
+// ---------------------------------------------------------------------
+
+// TestRetiredInvocationsNameTheirReplacement runs each removed verb the way an
+// agent carrying pre-v0.3.0 memory actually types it — WITH the flags that verb
+// used to take — and requires a hint naming where the capability went.
+//
+// The flags are the whole test. `dossierx comment resolve <claim> <thread>`
+// already reached requireSubcommand's good message ("comment is a command group
+// and does nothing on its own", hint listing add/inbox/list/reply). Add `--as
+// agent` and cobra failed at flag-parse time with `unknown flag: --as` and no
+// hint at all — which reads as though `comment resolve` exists and merely takes
+// different flags now, and which is unreachable for the good message because
+// parsing runs before the unknown-subcommand handler. SKILL.md anticipates that
+// exact recall; the binary answered the bare form and not the remembered one.
+//
+// The retired TOP-LEVEL names had a second, separate version of the same hole:
+// cobra rejects an unknown root command during Execute, so `dossierx lint`
+// reported `unknown command "lint" for "dossierx"` with an empty command field
+// and no hint whatsoever.
+func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
+	cases := []struct {
+		name     string
+		argv     []string
+		wantHint string
+	}{
+		// The four comment verbs, each with the flags it used to take.
+		{"comment resolve --as", []string{"comment", "resolve", "widget.contract.a", "c-abc123", "--as", "agent"}, "dossierx comment reply"},
+		{"comment reopen --as", []string{"comment", "reopen", "widget.contract.a", "c-abc123", "--as", "human"}, "dossierx comment reply"},
+		{"comment edit --body", []string{"comment", "edit", "widget.contract.a", "c-abc123", "--as", "agent", "--body", "revised"}, "dossierx comment reply"},
+		{"comment delete --as", []string{"comment", "delete", "widget.contract.a", "c-abc123", "--as", "agent"}, "dossierx comment reply"},
+
+		// The retired top-level verbs, with the flags they used to take.
+		{"lint --json", []string{"lint", "--json"}, "dossierx check"},
+		{"catalog --out", []string{"catalog", "--out", ".catalog.json"}, "dossierx check"},
+		{"render --out", []string{"render", "--out", "viewer/index.html"}, "dossierx check"},
+		{"deps <id>", []string{"deps", "widget.contract.a"}, "dossierx claim show"},
+		{"stale --json", []string{"stale", "--json"}, "dossierx claim list --review-pending"},
+		{"coverage --module", []string{"coverage", "--module", "widget"}, "dossierx claim list --migrated"},
+		{"implink set", []string{"implink", "set", "widget.contract.a", "--file", "main.go"}, "dossierx claim link"},
+		{"implink status", []string{"implink", "status", "--module", "widget"}, "dossierx claim show"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env, _, err := execCLIJSON(t, tc.argv...)
+			if err == nil || env.OK {
+				t.Fatalf("a removed verb must fail, got %+v", env)
+			}
+			if env.Error == nil || env.Error.Code != cliout.CodeUsage {
+				t.Fatalf("a removed verb is the CALLER's invocation being wrong, so %q; got %+v", cliout.CodeUsage, env.Error)
+			}
+			// The failure must be about the removal, never about a flag the
+			// removed verb legitimately used to take.
+			if strings.Contains(env.Error.Message, "unknown flag") {
+				t.Fatalf("the failure must be about the removed verb, not its flags: %+v", env.Error)
+			}
+			if !strings.Contains(env.Error.Message, "removed in v0.3.0") {
+				t.Fatalf("the message must say the verb was removed: %+v", env.Error)
+			}
+			if !strings.Contains(env.Error.Hint, tc.wantHint) {
+				t.Fatalf("the hint must name the replacement %q, got %+v", tc.wantHint, env.Error)
+			}
+			// The envelope has to say WHICH call this answers. The root-level
+			// cobra rejection reported command:"" — nothing to correlate with.
+			if env.Command == "" {
+				t.Fatalf("the envelope must name the command it answers: %+v", env)
+			}
+		})
+	}
+}
+
+// TestRetiredCommentVerbsSayResolvingIsTheHumans is the rights half, stated
+// separately because it is the part an agent must not work around.
+//
+// "run this other command instead" is not sufficient guidance for resolve: an
+// agent told only that will go looking for another door. The hint has to say
+// that resolving is the human's approval and lives in the viewer, which is the
+// same rule internal/comments' canAct enforces in code.
+func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
+	env, _, err := execCLIJSON(t, "comment", "resolve", "widget.contract.a", "c-abc123", "--as", "agent")
+	if err == nil {
+		t.Fatal("comment resolve must fail")
+	}
+	if env.Error == nil {
+		t.Fatalf("expected an error envelope, got %+v", env)
+	}
+	for _, want := range []string{"the human", "viewer"} {
+		if !strings.Contains(env.Error.Hint, want) {
+			t.Fatalf("the hint must state the rights rule (%q missing): %+v", want, env.Error)
+		}
+	}
+	if !strings.Contains(env.Error.Message, "the approval the lock gate waits for") {
+		t.Fatalf("the message must say what a Resolve click IS: %+v", env.Error)
+	}
+}
+
+// TestRetiredVerbsAreNotSurface: the stubs answer, and they stay invisible.
+//
+// They must not appear in --help, in requireSubcommand's "run one of:" list, or
+// in the nineteen-leaf count TestSurfaceIsNineteenLeavesUnderSixNouns pins.
+// A removal explanation that advertises itself is a re-addition.
+func TestRetiredVerbsAreNotSurface(t *testing.T) {
+	env, _, err := execCLIJSON(t, "comment")
+	if err == nil {
+		t.Fatal("a bare noun must fail")
+	}
+	if env.Error == nil {
+		t.Fatalf("expected an error envelope, got %+v", env)
+	}
+	for _, gone := range []string{"resolve", "reopen", "edit", "delete"} {
+		if strings.Contains(env.Error.Hint, gone) {
+			t.Fatalf("the comment group's leaf list must not advertise the removed verb %q: %q", gone, env.Error.Hint)
+		}
+	}
+	for _, cmd := range newRootCmd().Commands() {
+		if retired(cmd) && !cmd.Hidden {
+			t.Fatalf("a removal stub must be hidden: %q", cmd.Name())
+		}
 	}
 }

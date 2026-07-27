@@ -112,6 +112,14 @@ type cmdResult struct {
 	Warnings  []string
 	StoppedAt string
 	Text      func()
+
+	// Command overrides the envelope's "command" field, which emit() otherwise
+	// derives from the *cobra.Command it is rendering. It exists for the one
+	// case where the two disagree: a FLAG on the root that answers as a verb
+	// (--version), where commandPath(root) is the empty string but the caller
+	// asked for "version" and has to be able to correlate the response with the
+	// call. Every ordinary command leaves it zero and gets commandPath.
+	Command string
 }
 
 // emittedErr marks an error whose rendering emit() has ALREADY done, so runCLI
@@ -146,6 +154,9 @@ func emit(cmd *cobra.Command, res cmdResult, runErr error) error {
 	}
 
 	name := commandPath(cmd)
+	if res.Command != "" {
+		name = res.Command
+	}
 	env := cliout.Success(name, res.Data, res.Warnings)
 	if runErr != nil {
 		env = cliout.Failure(name, errorForCLI(runErr))

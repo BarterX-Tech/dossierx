@@ -39,6 +39,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -128,6 +129,11 @@ type Store struct {
 	// that never had a ledger" (adopt, once, loudly) from "no store at all
 	// while locked claims exist" (never adopt — see AdoptLedger).
 	fileExists bool
+
+	// rebaselined is the claim ids MigrateLegacyStore re-armed dependency
+	// baselines for on this load — read through Rebaselined() so a caller can
+	// name them in its envelope. See MigrateLegacyStore.
+	rebaselined []string
 }
 
 // OnDiskVersion returns the schema version this store was decoded from, or 0
@@ -227,11 +233,30 @@ func LoadStore(path string) (*Store, error) {
 	if onDisk.Ledger != nil {
 		s.Ledger = onDisk.Ledger
 	}
-	// Remember what was actually on disk (see Store.diskVersion/fileExists):
-	// Version has already been set to the CURRENT version above, so from here
-	// on it is the write format, not a fact about this file.
+	// Remember what was actually on disk (see Store.diskVersion/fileExists).
+	//
+	// Version is set from the FILE, not to the current constant, and that is the
+	// difference between a refusal that reproduces and one that evaporates. It
+	// used to be a write-time constant: every Save re-stamped the current version
+	// no matter what had been loaded, so the very next command that wrote the
+	// store for any reason of its own — `claim unlock`, a lock, a check that
+	// migrated something — silently repaired a downgraded version field. A
+	// reviewer who ran `check --validate` after reading a lock-ledger-downgraded
+	// report saw a clean project, and the two migrations that key on the version
+	// got a fresh chance to fire on the next edit. PrepareStore's stated
+	// invariant ("leaving the file exactly as found keeps the refusal
+	// reproducible") was unreachable, because PrepareStore does not own the only
+	// write.
+	//
+	// So Version is the version this store has EARNED: whatever the file said,
+	// until a migration that actually ran raises it. MigrateLegacyStore sets it
+	// on its success path and AdoptLedger sets it on its own, so an honest
+	// upgrade still stamps forward exactly once — and a store whose adoption was
+	// REFUSED keeps its downgraded version on disk, where the gate keeps
+	// reporting it until a human restores the file.
 	s.fileExists = true
 	s.diskVersion = onDisk.Version
+	s.Version = onDisk.Version
 
 	// Legacy (pre-versioning, schema 0) store: drop its flat hashes, keep
 	// LockedAt, and present it to callers as an already-migrated
@@ -290,6 +315,8 @@ func LoadStore(path string) (*Store, error) {
 // migrate-and-Save sequence, the same as any other load-mutate-save on the
 // shared store file.
 func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
+	rebaselined := map[string]bool{}
+
 	// Any recorded baseline means this store is already at (or past) the
 	// per-dependent schema — a current-version store, or one an earlier call
 	// already re-armed. Re-arming then would clobber real, differing baselines
@@ -312,6 +339,29 @@ func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
 		return false
 	}
 
+	// THIRD guard, and the one that makes the two above worth having: a store
+	// that says it predates per-dependent baselines, in a project that proves it
+	// does not, is not migrated at all.
+	//
+	// The version field lives inside the audited file, so without this the
+	// re-arm was re-armable with a text editor — and re-arming is not a neutral
+	// act, it RECORDS CURRENT CONTENT AS THE APPROVED BASELINE. The reproduction
+	// was three keystrokes wide: take a project where a sanctioned dependency
+	// edit has correctly flipped a dependent to review_pending, delete the
+	// `review_pending: true` line by hand (LockedClaimHash excludes it, so
+	// lock-content-drift cannot see it), set `"version": 0`, and run plain
+	// `dossierx check`. LoadStore drops the hashes for version < 1 — which
+	// defeats the `len(s.Hashes) > 0` guard — the diskVersion guard is defeated
+	// by the same edit, and this function then re-baselined every dependency
+	// from the DRIFTED content. review_pending never came back and check went
+	// green. LedgerDowngraded is the evidence the edit does not control (see it
+	// for both halves and for what it does not close); a store carrying ledger
+	// records, or sitting beside a comment digest store, has provably never been
+	// a schema-0 store.
+	if s.LedgerDowngraded(digestStorePresentBeside(s.path)) {
+		return false
+	}
+
 	for _, c := range claims {
 		if c.Status != model.StatusLocked {
 			continue
@@ -323,13 +373,63 @@ func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
 			}
 			s.recordBaseline(c.ID, dep, ContentHash(depClaim))
 			changed = true
+			rebaselined[c.ID] = true
 		}
 	}
 
 	if changed {
 		s.Version = storeSchemaVersion
+		s.rebaselined = sortedKeys(rebaselined)
+		// A migration that rewrites integrity baselines announces itself, on the
+		// same terms and for the same reason AdoptLedger does: it is a one-time
+		// event that re-arms what "unchanged since approval" MEANS for every
+		// claim named, and a run that does it silently is a run whose ok:true a
+		// human cannot interpret. The ids are also kept on the store
+		// (Store.Rebaselined) so a caller can put them in its envelope rather
+		// than making a consumer read two streams.
+		announceRebaseline(s.rebaselined)
 	}
 	return changed
+}
+
+// Rebaselined returns the claim ids whose dependency baselines MigrateLegacyStore
+// re-armed from current content on this load, sorted; empty when no migration
+// ran. It is how a command surfaces the re-arm in its machine envelope — see
+// MigrateLegacyStore for why a silent re-baseline is not acceptable.
+func (s *Store) Rebaselined() []string {
+	if s == nil {
+		return nil
+	}
+	return s.rebaselined
+}
+
+// announceRebaseline writes the legacy-baseline re-arm notice, on the same
+// writer (and for the same reason) as announceAdoption: the migration is
+// reached from five commands, and a notice each caller has to remember to print
+// is one that a caller will eventually forget.
+func announceRebaseline(ids []string) {
+	if ledgerAnnounceWriter == nil || len(ids) == 0 {
+		return
+	}
+	fmt.Fprintf(ledgerAnnounceWriter,
+		"dossierx: lock store migrated — dependency baselines re-armed for %d already-locked claim(s)\n"+
+			"  from the content on disk just now. Drift that happened BEFORE this run is adopted as the\n"+
+			"  new baseline and will not be reported; drift after it will be. Review these claims:\n",
+		len(ids))
+	for _, id := range ids {
+		fmt.Fprintf(ledgerAnnounceWriter, "    %s\n", id)
+	}
+}
+
+// sortedKeys returns set's keys in sorted order — determinism for an
+// announcement and an envelope that are both diffed between runs.
+func sortedKeys(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // Save writes the store back to its path as JSON.

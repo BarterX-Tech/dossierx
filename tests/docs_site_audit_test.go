@@ -46,6 +46,20 @@
 //   - README's findings table is where a reader decides whether to trust the
 //     gate. A rule in code that README never names is a gate nobody knows they
 //     have; a rule README names that no code declares is one they think they do.
+//
+// Two more join them here, both about a recovery cell that named the wrong
+// remedy rather than none — the failure the skills' own "branch on `code`, never
+// on `message`" rule makes unrecoverable, because the row IS the whole contract:
+//
+//   - `implink_refused` enumerated four causes, all of them the agent's mistake,
+//     and told the reader to fix the tag. The fifth cause is the sanctioned edit
+//     path itself: `claim unlock` leaves a correctly-tagged claim `draft`, and
+//     every `dossierx check` until the relock refuses on it. Following the row
+//     as written deletes a correct claim-to-code link, and it looks like it
+//     worked, because `--validate` and `--staged` scan no source at all.
+//   - `write_conflict`'s only recovery was "Retry." — the one action that cannot
+//     succeed against a sentinel file left behind by a killed process, which no
+//     timeout ever clears.
 package tests
 
 import (
@@ -607,6 +621,137 @@ func splitTableRow(line string) []string {
 		parts[i] = strings.TrimSpace(parts[i])
 	}
 	return parts
+}
+
+// routerRecovery returns the recovery cell of the router skill's error.code
+// table row for code — the exact prose an agent is told to act on once it has
+// branched on `code` (and, per the same skill, told never to regex `message`
+// instead). Fatals when the row is gone, because a code with no row is a worse
+// defect than a row with the wrong words in it.
+func routerRecovery(t *testing.T, code string) string {
+	t.Helper()
+
+	want := "`" + code + "`"
+	for _, line := range strings.Split(readRepoFile(t, filepath.Join("skills", "dossierx", "SKILL.md")), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := splitTableRow(line)
+		if len(cells) < 3 || cells[0] != want {
+			continue
+		}
+		return cells[len(cells)-1]
+	}
+	t.Fatalf("skills/dossierx/SKILL.md's error.code table has no row for %s", want)
+	return ""
+}
+
+// TestSkills_ImplinkRefusedCoversTheMidUnlockTag pins the recovery text for the
+// one implink_refused cause that is NOT the agent's mistake.
+//
+// The reproduction: a locked claim is tagged in source, `check` is green. The
+// human asks for a change, so the agent takes the one sanctioned path — `claim
+// unlock <id>` — and the very next `dossierx check` exits 1 with
+// `implink_refused`, `stopped_at: scan`, and a scan error reading `claim is not
+// locked (status "draft")`. The tag is correct; the claim is simply mid-edit.
+// But the row shipped enumerating four causes (missing file, claim outside
+// --module, escaping path, unknown id), none of which applies, under the
+// instruction "This is your invocation or your tag, not a gate: fix it and
+// re-run" — which points the agent at the one artifact that is right. Deleting
+// the tag to clear the error is a silent, permanent loss of the claim-to-code
+// link, and it "works": `check --validate` and `check --staged` scan no source,
+// so the pre-commit hook and CI stay green either way while the viewer rebuild
+// is the thing failing.
+//
+// Asserted across all three skills an agent in that position is actually
+// holding: the router (where it branches on the code), the claims skill (where
+// unlock → fix → lock is described), and the code-links skill (where the tag
+// convention is taught and the "an invalid tag is a hard failure" framing lives).
+func TestSkills_ImplinkRefusedCoversTheMidUnlockTag(t *testing.T) {
+	router := routerRecovery(t, "implink_refused")
+	lower := strings.ToLower(router)
+
+	// The cause must be named at all — an agent that cannot recognise its own
+	// situation in the row never reaches any recovery.
+	if !strings.Contains(lower, "unlock") && !strings.Contains(lower, "draft") {
+		t.Errorf("skills/dossierx/SKILL.md's implink_refused row never mentions a deliberately unlocked (draft) claim, so an agent mid unlock -> fix -> lock cannot recognise its own case:\n%s", router)
+	}
+	// ...and the recovery must be "finish the relock", not "fix the tag".
+	if !strings.Contains(lower, "claim lock") {
+		t.Errorf("skills/dossierx/SKILL.md's implink_refused row does not name `claim lock` as the recovery for a tag on a mid-edit claim; the only recovery it offers is correcting the tag or the invocation, both of which are already right:\n%s", router)
+	}
+	if !strings.Contains(lower, "do not remove") && !strings.Contains(lower, "not touch the tag") {
+		t.Errorf("skills/dossierx/SKILL.md's implink_refused row never tells the agent to leave the tag alone; deleting it clears the error and silently destroys the claim-to-code link:\n%s", router)
+	}
+
+	// The two companion skills that send an agent into this window.
+	claims := readRepoFile(t, filepath.Join("skills", "dossierx-claims", "SKILL.md"))
+	if !strings.Contains(claims, "implink_refused") {
+		t.Error("skills/dossierx-claims/SKILL.md documents unlock -> fix -> lock without warning that a plain `dossierx check` inside that window fails with implink_refused when the claim is tagged in source")
+	}
+
+	links := readRepoFile(t, filepath.Join("skills", "dossierx-code-links", "SKILL.md"))
+	const hardFailure = "An invalid tag is a **hard failure**"
+	i := strings.Index(links, hardFailure)
+	if i < 0 {
+		t.Fatalf("skills/dossierx-code-links/SKILL.md no longer carries the %q paragraph the tag-refusal guidance hangs off", hardFailure)
+	}
+	para := links[i:]
+	if end := strings.Index(para, "\n4."); end > 0 {
+		para = para[:end]
+	}
+	if !strings.Contains(para, "unlock") {
+		t.Errorf("skills/dossierx-code-links/SKILL.md calls a tag on a not-yet-locked claim an invalid tag without excepting the claim the agent deliberately unlocked, so its own reader treats a correct tag as the mess to clean up:\n%s", para)
+	}
+}
+
+// TestWriteConflictRecoveryNamesTheStaleSentinel pins the recovery for the half
+// of write_conflict that "Retry." cannot fix.
+//
+// internal/lock.AcquireFileLock is an O_CREATE|O_EXCL sentinel file removed only
+// by a deferred os.Remove, so a process killed inside the critical section
+// (SIGKILL, SIGHUP, Ctrl-C) leaves the file behind and every later invocation
+// stalls the full 10s acquire timeout and then fails — forever, identically. The
+// timeout does not clear the file; it only makes each failure arrive faster. The
+// router row shipped offering exactly one recovery, "Retry.", which is the one
+// action that can never succeed in that state, so an agent branching on the code
+// as the skill instructs loops instead of deleting the file the error message
+// already names.
+//
+// The website's copy of the same row was worse than incomplete: it described
+// write_conflict as "the claim file changed under you", which is
+// claim_file_changed's meaning (internal/cliout/codes.go says so explicitly, and
+// the two want opposite responses — re-read the claim vs. retry the write).
+func TestWriteConflictRecoveryNamesTheStaleSentinel(t *testing.T) {
+	recovery := routerRecovery(t, "write_conflict")
+	lower := strings.ToLower(recovery)
+
+	if !strings.Contains(lower, ".lock") {
+		t.Errorf("skills/dossierx/SKILL.md's write_conflict row never names the sentinel file, so an agent hitting a lock left behind by a killed process has nothing to delete:\n%s", recovery)
+	}
+	if !strings.Contains(lower, "delete") && !strings.Contains(lower, "remove") {
+		t.Errorf("skills/dossierx/SKILL.md's write_conflict row offers no recovery beyond retrying; a stale sentinel outlives every retry:\n%s", recovery)
+	}
+	if !strings.Contains(lower, "died") && !strings.Contains(lower, "killed") && !strings.Contains(lower, "crash") {
+		t.Errorf("skills/dossierx/SKILL.md's write_conflict row does not explain that a stale lock means a dead holder, so an agent cannot tell it apart from genuine contention with `dossierx serve`:\n%s", recovery)
+	}
+
+	site := readRepoFile(t, filepath.Join("site", "src", "content.ts"))
+	i := strings.Index(site, `code: "write_conflict"`)
+	if i < 0 {
+		t.Fatal("site/src/content.ts no longer carries a write_conflict entry in its error-code reference")
+	}
+	entry := site[i:]
+	if end := strings.Index(entry, "},"); end > 0 {
+		entry = entry[:end]
+	}
+	if strings.Contains(strings.ToLower(entry), "claim file changed") {
+		t.Errorf("site/src/content.ts describes write_conflict as a changed claim file; that is claim_file_changed, and the two take opposite recoveries (re-read vs. retry):\n%s", entry)
+	}
+	if !strings.Contains(strings.ToLower(entry), ".lock") {
+		t.Errorf("site/src/content.ts's write_conflict recovery never names the sentinel file left behind by a killed process:\n%s", entry)
+	}
 }
 
 // TestREADMENamesEveryLedgerRule is FORMAT.md's bidirectional pin, extended to

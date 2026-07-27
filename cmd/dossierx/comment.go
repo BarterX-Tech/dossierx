@@ -33,7 +33,9 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -53,6 +55,13 @@ func newCommentCmd() *cobra.Command {
 		newCommentAddCmd(),
 		newCommentReplyCmd(),
 	)
+	// The four removed verbs, as hidden stubs that fail with the sentence
+	// naming their removal. Cobra parses flags BEFORE it decides a subcommand is
+	// unknown, so without these `dossierx comment resolve <claim> <thread> --as
+	// agent` — the invocation an agent with pre-v0.3.0 memory actually types —
+	// died on `unknown flag: --as` with no hint, while the same command without
+	// the flag reached the good message. See retired.go.
+	cmd.AddCommand(retiredCommentVerbs()...)
 	return commandGroup(cmd)
 }
 
@@ -129,6 +138,55 @@ const viewHint = `; run "dossierx check" or "dossierx serve" to view`
 // still routes the CLI-retired verbs (edit/delete/resolve/reopen) through the
 // same distinction. Every mutating CLI verb routes its op error through here;
 // every other error (and nil) passes through unchanged.
+// commentOpError is the ONE classifier every mutating comment verb routes its
+// op error through: contention first, then the body/store distinctions
+// friendlyCommentBodyErr draws, then everything else unchanged.
+//
+// Contention has to be handled here because internal/comments takes the
+// project-wide claims sentinel ITSELF (that is the point of Deps owning the
+// locking) and returns lock.AcquireFileLock's error unwrapped. errorForCLI has
+// no sentinel to match it on, so it fell through to `internal` — the code the
+// contract defines as "an unclassified bug; retry and if it persists, report
+// it". The identical contention on the identical sentinel reported
+// `write_conflict` from "claim unlock", which wraps its own acquire. One
+// condition, two answers, and the wrong one told an agent to file a bug about
+// another process simply holding the lock.
+func commentOpError(cfg *config.Config, claimID string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if claimsSentinelContention(cfg, err) {
+		return cliout.Wrap(err, cliout.CodeWriteConflict)
+	}
+	return friendlyCommentBodyErr(claimID, err)
+}
+
+// claimsSentinelContention reports whether err is the project-wide claims
+// sentinel refusing to be taken — the same condition every claim-file writer in
+// cmd/dossierx wraps as cliout.CodeWriteConflict at its own AcquireFileLock call.
+//
+// It matches on the sentinel's PATH, which THIS package computes
+// (lock.ClaimsSentinelPath + the ".lock" suffix AcquireFileLock appends), not on
+// any wording of the message. That distinction is what makes it safe: the path
+// is a value we hold, only internal/lock's two acquire-failure returns ever
+// mention it, and nothing else in the product writes that filename into an
+// error. It classifies BOTH acquire failures (the timeout and the underlying
+// create error) exactly as newUnlockCmd does for the same sentinel, so the two
+// surfaces cannot disagree about the same held lock.
+//
+// It is a stand-in for the structurally right fix, which does not belong in a
+// file this change owns: internal/lock should export a sentinel (ErrLockHeld)
+// that AcquireFileLock wraps, so errorForCLI could classify contention from
+// EVERY package — internal/comments, internal/serve and cmd/dossierx alike —
+// with one errors.Is arm and this function could be deleted. Until it exists,
+// this is the narrowest test available from outside internal/lock.
+func claimsSentinelContention(cfg *config.Config, err error) bool {
+	if err == nil || cfg == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), lock.ClaimsSentinelPath(cfg)+".lock")
+}
+
 func friendlyCommentBodyErr(claimID string, err error) error {
 	if err == nil {
 		return nil
@@ -154,22 +212,54 @@ type commentWriteData struct {
 	Body     string `json:"body"`
 }
 
-// commentWriteDryRun previews a comment add/reply. Its one real precondition is
-// the claim being commentable at all (banner claims cannot carry threads); the
-// rest of what a reviewer needs to know is the side effects, and specifically
-// the one nothing else says out loud: opening a thread on a LOCKED claim flips
-// it to review_pending, which then blocks locking anything that depends on it.
-func commentWriteDryRun(would string, claim model.Claim, threadID, actor, body string) *cliout.DryRun {
+// commentWriteDryRun previews a comment add/reply.
+//
+// Every precondition here is one the WRITE PATH actually enforces, and the list
+// is kept in step with internal/comments' own refusal order (banner claim,
+// actor, body content, body storability, digest integrity, thread state) rather
+// than with what looks interesting to report. A preview that says "blocked:
+// false" for an invocation the real run refuses is worse than no preview: it is
+// the one output an agent is told it may show a human before asking for a yes.
+//
+// Two of the four that used to be missing are pure input validation the write
+// path performs the moment it starts — an --as that is neither "human" nor
+// "agent" (comments.ErrInvalidActor) and a body that cannot survive a YAML
+// round trip (comments.ErrUnsafeBody, probed here through the SAME exported
+// predicate the op uses, loader.CommentBodyRoundTrips, so the two cannot drift).
+// The third is the comment-digest integrity gate, replicated from
+// internal/comments' checkCommentDigest including its "unknown is not drifted"
+// half: a claim with no recorded digest is simply not covered yet, and only a
+// RECORDED digest that disagrees is tampering.
+//
+// What this deliberately does NOT reproduce is the digest store's WRITABILITY
+// probe (comments.ErrCommentDigestUnavailable). Proving the store can be written
+// means taking its sentinel, and a dry run that creates a lock file has had a
+// side effect — which is the one thing --dry-run may never do. A store that
+// cannot be READ is reported, since that covers the common case (a corrupt or
+// unparseable store) with no side effect at all.
+//
+// The rest of what a reviewer needs is the side effects, and specifically the
+// one nothing else says out loud: opening a thread on a LOCKED claim flips it to
+// review_pending, which then blocks locking anything that depends on it.
+func commentWriteDryRun(would string, cfg *config.Config, claim model.Claim, threadID, actor, body string) *cliout.DryRun {
 	dr := cliout.NewDryRun(would)
 
 	if strings.TrimSpace(actor) == "" {
 		dr.Lacking("--as")
+	} else {
+		dr.Require("actor_is_human_or_agent",
+			actor == string(model.CommentRoleHuman) || actor == string(model.CommentRoleAgent),
+			fmt.Sprintf("--as is %q", actor))
 	}
 	if strings.TrimSpace(body) == "" {
 		dr.Lacking("--body")
+	} else {
+		dr.Require("body_is_storable", loader.CommentBodyRoundTrips(body),
+			"a body that cannot be stored and read back byte-exact through YAML is refused at the shared input boundary: start it with a non-whitespace character")
 	}
 	dr.Require("claim_accepts_comments", claim.Layout != model.LayoutBanner,
 		fmt.Sprintf("layout is %q", claim.Layout))
+	commentDigestPrecondition(dr, cfg, claim)
 	if threadID != "" {
 		// Resolved here rather than through an internal/comments lookup because
 		// a dry run must not go through Deps, which owns the claims sentinel and
@@ -196,6 +286,31 @@ func commentWriteDryRun(would string, claim model.Claim, threadID, actor, body s
 	return dr
 }
 
+// commentDigestPrecondition adds the comment-digest integrity gate to a comment
+// write's preview.
+//
+// It is a two-line replication of internal/comments' checkCommentDigest, over
+// the same exported store API that function reads (digest.Store.Digest and
+// digest.CommentsDigest), because the CLI cannot call the unexported original
+// and a preview that ignored this gate would send an agent to compose a comment
+// for a claim whose every write is going to be refused. The refusal is the one
+// in the product whose recovery is version control rather than a retry, so
+// learning about it BEFORE writing the message is the whole value.
+func commentDigestPrecondition(dr *cliout.DryRun, cfg *config.Config, claim model.Claim) {
+	store, err := digest.LoadStore(digest.StorePath(cfg))
+	if err != nil {
+		// A store that will not decode is exactly what the write path refuses on
+		// (ErrCommentDigestUnavailable), reported here without taking its
+		// sentinel — see commentWriteDryRun's doc for why a preview must not.
+		dr.Require("comment_digest_store_readable", false, err.Error())
+		return
+	}
+	recorded, known := store.Digest(claim.ID)
+	dr.Require("comment_block_matches_digest", !known || recorded == digest.CommentsDigest(claim),
+		fmt.Sprintf("a digest for this claim is recorded=%v; the stored comments block still matches it=%v",
+			known, !known || recorded == digest.CommentsDigest(claim)))
+}
+
 func newCommentAddCmd() *cobra.Command {
 	var as, body string
 	var dryRun bool
@@ -207,7 +322,7 @@ func newCommentAddCmd() *cobra.Command {
 			claimID := args[0]
 
 			if dryRun {
-				_, claims, err := loadConfigAndClaims()
+				cfg, claims, err := loadConfigAndClaims()
 				if err != nil {
 					return cmdResult{}, err
 				}
@@ -215,7 +330,7 @@ func newCommentAddCmd() *cobra.Command {
 				if !ok {
 					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "comment add: claim %q not found: %w", claimID, comments.ErrClaimNotFound)
 				}
-				dr := commentWriteDryRun("open a comment thread on "+claimID, claim, "", as, body)
+				dr := commentWriteDryRun("open a comment thread on "+claimID, cfg, claim, "", as, body)
 				return dryRunResult(cmd, "comment add", dr), nil
 			}
 
@@ -233,7 +348,7 @@ func newCommentAddCmd() *cobra.Command {
 			}
 			_, tid, err := deps.Add(claimID, actor, body)
 			if err != nil {
-				return cmdResult{}, friendlyCommentBodyErr(claimID, err)
+				return cmdResult{}, commentOpError(cfg, claimID, err)
 			}
 			return cmdResult{
 				Data: commentWriteData{ClaimID: claimID, ThreadID: tid, Actor: string(actor), Body: body},
@@ -260,7 +375,7 @@ func newCommentReplyCmd() *cobra.Command {
 			claimID, threadID := args[0], args[1]
 
 			if dryRun {
-				_, claims, err := loadConfigAndClaims()
+				cfg, claims, err := loadConfigAndClaims()
 				if err != nil {
 					return cmdResult{}, err
 				}
@@ -268,7 +383,7 @@ func newCommentReplyCmd() *cobra.Command {
 				if !ok {
 					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "comment reply: claim %q not found: %w", claimID, comments.ErrClaimNotFound)
 				}
-				dr := commentWriteDryRun("reply to thread "+threadID+" on "+claimID, claim, threadID, as, body)
+				dr := commentWriteDryRun("reply to thread "+threadID+" on "+claimID, cfg, claim, threadID, as, body)
 				return dryRunResult(cmd, "comment reply", dr), nil
 			}
 
@@ -286,7 +401,7 @@ func newCommentReplyCmd() *cobra.Command {
 			}
 			_, rid, err := deps.Reply(claimID, threadID, actor, body)
 			if err != nil {
-				return cmdResult{}, friendlyCommentBodyErr(claimID, err)
+				return cmdResult{}, commentOpError(cfg, claimID, err)
 			}
 			return cmdResult{
 				Data: commentWriteData{ClaimID: claimID, ThreadID: threadID, ReplyID: rid, Actor: string(actor), Body: body},
@@ -302,14 +417,95 @@ func newCommentReplyCmd() *cobra.Command {
 	return cmd
 }
 
+// commentReplyView and commentThreadView are model.Reply and model.Comment
+// projected into the machine contract, and they exist for one reason: the model
+// types are the ON-DISK shape and carry YAML tags only.
+//
+// encoding/json has no opinion about yaml tags, so an untagged struct marshals
+// under its Go FIELD NAMES. "dossierx comment list" therefore emitted
+// "ID"/"Status"/"Author"/"Created"/"Body"/"Edited"/"Replies"/"ResolvedBy" —
+// PascalCase, in the one place the whole surface promises snake_case. A skill
+// branching on data.threads[].status, exactly as the contract tells it to, read
+// nothing and concluded the thread had no status. It was the only command in the
+// surface that leaked its Go types this way, and the leak was invisible from
+// inside the package because Go reads the field names back just as happily.
+//
+// The fix is a DTO rather than json tags on model.Comment, deliberately. Tagging
+// the model would tie the claim FILE format and the ENVELOPE format together —
+// two contracts that are versioned separately and must be free to move apart —
+// and would put the CLI's output shape in a package whose job is persistence. A
+// projection here costs one conversion per list call and keeps the envelope's
+// vocabulary owned by the code that publishes the envelope.
+//
+// The YAML persistence tags on model.Comment/model.Reply are untouched by this,
+// which matters more than it looks: the comment digest (internal/digest) is
+// computed over the stored block, so a change to how a comment SERIALIZES would
+// register project-wide as tampering.
+type commentReplyView struct {
+	ID      string `json:"id"`
+	Author  string `json:"author"`
+	Created string `json:"created"`
+	Body    string `json:"body"`
+	Edited  bool   `json:"edited"`
+}
+
+type commentThreadView struct {
+	ID     string `json:"id"`
+	Status string `json:"status"`
+	Author string `json:"author"`
+	// Created is RFC 3339 UTC, the same string the inbox sorts and filters on.
+	Created string `json:"created"`
+	Body    string `json:"body"`
+	Edited  bool   `json:"edited"`
+	// Replies is never null: a consumer should be able to range over it
+	// unconditionally, the same guarantee commentListData.Threads gives.
+	Replies    []commentReplyView `json:"replies"`
+	ResolvedBy string             `json:"resolved_by,omitempty"`
+	ResolvedAt string             `json:"resolved_at,omitempty"`
+	ReopenedBy string             `json:"reopened_by,omitempty"`
+	ReopenedAt string             `json:"reopened_at,omitempty"`
+}
+
+// commentThreadViews projects a claim's threads for the envelope. It returns an
+// empty slice, never nil, for the same reason each thread's Replies does.
+func commentThreadViews(threads []model.Comment) []commentThreadView {
+	out := make([]commentThreadView, 0, len(threads))
+	for _, th := range threads {
+		replies := make([]commentReplyView, 0, len(th.Replies))
+		for _, rp := range th.Replies {
+			replies = append(replies, commentReplyView{
+				ID:      rp.ID,
+				Author:  string(rp.Author),
+				Created: rp.Created,
+				Body:    rp.Body,
+				Edited:  rp.Edited,
+			})
+		}
+		out = append(out, commentThreadView{
+			ID:         th.ID,
+			Status:     th.Status,
+			Author:     string(th.Author),
+			Created:    th.Created,
+			Body:       th.Body,
+			Edited:     th.Edited,
+			Replies:    replies,
+			ResolvedBy: string(th.ResolvedBy),
+			ResolvedAt: th.ResolvedAt,
+			ReopenedBy: string(th.ReopenedBy),
+			ReopenedAt: th.ReopenedAt,
+		})
+	}
+	return out
+}
+
 // commentListData is "dossierx comment list"'s machine payload. Threads is the
-// full model.Comment tree, replies included — the envelope's job is to save the
+// full thread tree, replies included — the envelope's job is to save the
 // caller a second call, not to summarize.
 type commentListData struct {
-	ClaimID  string          `json:"claim_id"`
-	OpenOnly bool            `json:"open_only"`
-	Count    int             `json:"count"`
-	Threads  []model.Comment `json:"threads"`
+	ClaimID  string              `json:"claim_id"`
+	OpenOnly bool                `json:"open_only"`
+	Count    int                 `json:"count"`
+	Threads  []commentThreadView `json:"threads"`
 }
 
 func newCommentListCmd() *cobra.Command {
@@ -329,11 +525,10 @@ func newCommentListCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
-			// A nil slice must encode as "[]", not "null", so machine consumers
-			// always parse an array.
-			if threads == nil {
-				threads = []model.Comment{}
-			}
+			// commentThreadViews always returns a slice, so a claim with no
+			// threads encodes as "[]" rather than "null" and a machine consumer
+			// can range over it unconditionally.
+			views := commentThreadViews(threads)
 
 			// The pre-v0.3.0 "--json" flag, which emitted a BARE ARRAY on
 			// stdout, is gone: "--format json" (the default) wraps the same
@@ -341,7 +536,7 @@ func newCommentListCmd() *cobra.Command {
 			// differently-shaped JSON surface on one command was exactly the
 			// inconsistency the machine contract exists to remove.
 			return cmdResult{
-				Data: commentListData{ClaimID: claimID, OpenOnly: openOnly, Count: len(threads), Threads: threads},
+				Data: commentListData{ClaimID: claimID, OpenOnly: openOnly, Count: len(views), Threads: views},
 				Text: func() {
 					out := cmd.OutOrStdout()
 					if len(threads) == 0 {

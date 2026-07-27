@@ -19,6 +19,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -27,6 +28,13 @@ import (
 )
 
 var configPath string
+
+// versionFlag is the value of the root's own --version flag. It is a package
+// global for the same reason configPath and formatFlag are: cobra binds flags to
+// addresses at command-construction time, and newRootCmd() re-registers it on
+// every call, so an in-process test that builds a fresh root never inherits the
+// previous test's value.
+var versionFlag bool
 
 // version, commit, and date are stamped in at release time by goreleaser's
 // -X ldflags (see .goreleaser.yaml, which targets these exact
@@ -105,23 +113,42 @@ func newRootCmd() *cobra.Command {
 	// The message is inlined instead, naming the six nouns the way the noun
 	// errors name their leaves.
 	//
-	// "dossierx --help" and "dossierx --version" are unaffected: cobra handles
-	// both before RunE, and a caller that ASKED for prose gets prose.
+	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
+	// caller that ASKED for prose gets prose. "--version" is NOT in that
+	// category any more — see versionFlag below.
 	root.RunE = envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
+		if versionFlag {
+			return versionResult(cmd), nil
+		}
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills>")
+				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills>")
+			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, version>")
 	})
-	// Setting Version is what makes cobra wire up the built-in --version
-	// flag on the root command. The resolved value (ldflag-stamped, or a
-	// debug.ReadBuildInfo fallback) is used so --version never prints blank.
-	v, _, _ := resolveVersionInfo()
-	root.Version = v
+	// --version, taken back off cobra.
+	//
+	// Setting root.Version is what makes cobra wire up its OWN built-in
+	// --version flag, and cobra's implementation prints a prose line to stdout
+	// and returns before any RunE runs. That is the last hole in the machine
+	// contract of exactly the shape the bare-noun holes had: an invocation that
+	// exits 0 with something on stdout that is not an envelope. An agent that
+	// asked a JSON-by-default binary for the version got a sentence.
+	//
+	// So the flag is registered here instead, and answered by the root's RunE
+	// through the SAME versionResult the "version" leaf returns — one payload,
+	// one text rendering, two doors. It stays exit 0 (DX-AUD-19 pinned that
+	// version reporting works with no project config on disk, and refusing the
+	// flag outright would regress it) and it is deliberately NOT hidden: a flag
+	// that answers correctly should be discoverable in --help.
+	//
+	// It is a LOCAL flag, not a persistent one. Persistent would make
+	// "dossierx claim --version" parse and then be silently ignored by claim's
+	// own RunE, which is the failure mode this is fixing, one level down.
+	root.Flags().BoolVar(&versionFlag, "version", false, "print the version, commit and build date (same payload as \"dossierx version\")")
 	root.PersistentFlags().StringVar(&configPath, "config", "", "path to project.config.yaml (default: search upward from the current directory, like git finds .git)")
 	root.PersistentFlags().StringVar(&formatFlag, "format", formatJSON, "output format: json (the machine contract — one envelope per run) or text (human prose)")
 
@@ -169,6 +196,14 @@ func newRootCmd() *cobra.Command {
 		// consumer is the human anyway. See annotationTextOnly.
 		markTextOnly(newServeCmd()),
 	)
+
+	// The retired top-level verbs, as hidden stubs. They add nothing to the
+	// surface (they are marked, hidden, and excluded from the leaf count) and
+	// exist because cobra rejects an unknown ROOT command during Execute, before
+	// the RunE above can run: `dossierx lint` reported `unknown command "lint"
+	// for "dossierx"` with an empty command field and no hint, for a name the
+	// router documents as one agents will remember. See retired.go.
+	root.AddCommand(retiredTopLevelCmds()...)
 
 	// Cobra's own "completion" group, materialized HERE rather than left to
 	// Execute, so the decision about it can be written down instead of inherited.
@@ -246,6 +281,30 @@ type versionData struct {
 	Date    string `json:"date"`
 }
 
+// versionResult is the ONE answer both doors to the version give: the "version"
+// leaf and the root's --version flag. Sharing it is the whole point — two
+// spellings of one question must not be able to answer differently, which is
+// precisely what happened while --version was cobra's built-in and printed prose
+// that no envelope reader could parse.
+//
+// Command is pinned to "version" rather than left to commandPath, because the
+// flag is answered by the ROOT's RunE and commandPath(root) is the empty string.
+// A caller correlating a response with the call it made needs the name of the
+// thing it asked for, not a blank.
+func versionResult(cmd *cobra.Command) cmdResult {
+	v, c, d := resolveVersionInfo()
+	return cmdResult{
+		Command: "version",
+		Data:    versionData{Name: "dossierx", Version: v, Commit: c, Date: d},
+		Text: func() {
+			out := cmd.OutOrStdout()
+			fmt.Fprintf(out, "dossierx version %s\n", v)
+			fmt.Fprintf(out, "  commit: %s\n", c)
+			fmt.Fprintf(out, "  date:   %s\n", d)
+		},
+	}
+}
+
 // newVersionCmd prints the binary's version, commit, and build date. Unlike
 // every other subcommand it never loads a project config — it describes the
 // binary itself, so it works from anywhere, with or without a project.
@@ -255,16 +314,7 @@ func newVersionCmd() *cobra.Command {
 		Short: "Print the dossierx version, commit, and build date",
 		Args:  cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
-			v, c, d := resolveVersionInfo()
-			return cmdResult{
-				Data: versionData{Name: "dossierx", Version: v, Commit: c, Date: d},
-				Text: func() {
-					out := cmd.OutOrStdout()
-					fmt.Fprintf(out, "dossierx %s\n", v)
-					fmt.Fprintf(out, "  commit: %s\n", c)
-					fmt.Fprintf(out, "  date:   %s\n", d)
-				},
-			}, nil
+			return versionResult(cmd), nil
 		}),
 	}
 }
@@ -381,6 +431,27 @@ func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
 }
 
+// digestStorePresent reports whether the comment digest store is on disk for
+// cfg — the one piece of evidence about the lock store that does not live
+// INSIDE the lock store (see lock.Store.LedgerDowngraded).
+//
+// It mirrors internal/check's identically-named helper, deliberately duplicated
+// rather than shared for the same reason catalogPath and storePath are: cmd/ and
+// check/ must not import each other, and TestPathHelpersResolveAgainstConfigDir
+// fails loudly if the copies disagree about where these files live.
+//
+// A nil cfg is read as ABSENT rather than dereferenced. That is the same
+// conservative direction internal/lock takes for an unreadable digest store: it
+// can only widen the pre-ledger exemption, never manufacture a downgrade
+// accusation out of a caller that had no project to look in.
+func digestStorePresent(cfg *config.Config) bool {
+	if cfg == nil {
+		return false
+	}
+	_, err := os.Stat(digest.StorePath(cfg))
+	return err == nil
+}
+
 // claimsSentinelPath is the base path of the ONE project-wide claim-file
 // write sentinel (lock.AcquireFileLock appends ".lock", so the real lock file
 // is cfg.Dir()/.dossierx-claims.lock). It deliberately lives under cfg.Dir(),
@@ -470,6 +541,25 @@ func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, []
 // current version as its last act. Its two halves are the security property
 // (see Store.PreLedger): a store already at the ledger version never adopts
 // again, and an ABSENT store never adopts at all.
+//
+// And it is PreLedgerExempt, not PreLedger, for the reason
+// Store.LedgerDowngraded spells out at length — this call site used to be the
+// last place the downgrade attack still worked. The claim half of adoption is
+// guarded inside lock.AdoptLedger (which refuses, announces "Nothing was
+// grandfathered" on stderr, and leaves the gate to report every locked claim);
+// the BUILD-ORDER half is this file's, and it was guarded by nothing. The
+// consequence was a complete, one-command bypass of the release's headline
+// invariant: reorder .build-order.<module>.json by hand, set the store's
+// "version" back to 1 and delete the one build-order:<module> ledger key, and
+// the very next ordinary `dossierx check` re-signed the HAND-REORDERED bytes as
+// a grandfathered approval and re-stamped the version — in the same run whose
+// stderr said the downgrade had been refused. `check --validate` was clean
+// forever after, and the evidence that anything happened was gone. Sharing the
+// exemption predicate with lock.Audit (internal/lock/audit.go) and check's
+// buildOrderGate (internal/check/ledger.go) is what makes the three answer
+// identically; an honest v0.2.x project has no digest store and no ledger
+// records, so LedgerDowngraded is false there and adoption still fires.
+//
 // It returns the grandfathered claim ids alongside changed. Discarding them —
 // which is what this did — left the one-time adoption announced on STDERR and
 // nowhere else: `dossierx check` printed ok:true, zero findings, exit 0 on the
@@ -483,10 +573,15 @@ func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, []
 // ids sorted precisely so a caller can do this; there is one call site and it
 // has to.
 func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (bool, []string) {
-	preLedger := store.PreLedger()
+	// Both halves of the evidence are read BEFORE lock.PrepareStore runs:
+	// PrepareStore stamps the current schema version onto the store AND (on a
+	// genuine upgrade) creates the comment digest store, so asking either
+	// question afterwards would be asking it of a project this run had already
+	// changed.
+	preLedgerExempt := store.PreLedgerExempt(digestStorePresent(cfg))
 
 	changed, adopted := lock.PrepareStore(store, claims)
-	if !preLedger {
+	if !preLedgerExempt {
 		return changed, adopted
 	}
 
@@ -1348,9 +1443,72 @@ func containsStr(ss []string, s string) bool {
 // sentinels in internal/lock and delete this; until then TestLockGateCodes
 // pins that the two agree.
 type lockGate struct {
-	LintErrors          int
+	LintErrors int
+
+	// LintFindings is the error-severity half of LintErrors, kept rather than
+	// counted away.
+	//
+	// The count on its own was an unbreakable loop, and it was reproducible in
+	// three commands. `claim lock` refused with code lint_failed and
+	// details {"lint_errors": 1} — a number and no rule name. The router's
+	// documented recovery for lint_failed is "read data.lint_findings", which
+	// this envelope did not have. `claim show`'s next_action pointed at
+	// `dossierx check --validate`, which reports ZERO findings for the whole
+	// class of lints that key off a claim's own status (build-role-required-
+	// for-locked, rest-on-locked, roll-up): the claim is still DRAFT on disk, so
+	// the rule that will refuse the lock does not fire against the project as it
+	// stands. And `check`'s next_steps offered three candidate causes, none of
+	// them the real one. The word the agent needed — build_role — was reachable
+	// from no command in the surface.
+	//
+	// The findings were already computed here (RunAll runs against the
+	// ABOUT-TO-BE-LOCKED form, which is exactly why they are the only correct
+	// answer) and thrown away one line later. Keeping them is what lets the
+	// refusal and the preview both name the rule; see lockLintFindingData.
+	LintFindings []lint.Finding
+
 	UnlockedDoctrineDep string
 	OpenThreads         []string
+}
+
+// lockLintFindingData projects the gate's error-severity findings into the same
+// snake_case shape `check` publishes as data.lint_findings, so an agent that
+// learned one shape can read the other. It is the payload of the lock refusal's
+// error.details.lint_findings — the key the router's lint_failed row has always
+// told agents to read.
+func (g lockGate) lockLintFindingData() []lintFindingData {
+	out := make([]lintFindingData, 0, len(g.LintFindings))
+	for _, f := range g.LintFindings {
+		out = append(out, lintFindingData{
+			Lint:     f.LintName,
+			ClaimID:  f.ClaimID,
+			Severity: string(f.Severity),
+			Message:  f.Message,
+		})
+	}
+	return out
+}
+
+// lintBlockerDetail renders the lint gate as one line a human or an agent can
+// act on: the count, then the rules that produced it, named.
+//
+// It is the dry run's lint_clean detail and `claim show`'s next_action text. The
+// old detail was "%d error-level lint finding(s)" and nothing else, which named
+// a quantity of a thing the caller could not see.
+func (g lockGate) lintBlockerDetail() string {
+	if g.LintErrors == 0 {
+		return "0 error-level lint finding(s)"
+	}
+	names := make([]string, 0, len(g.LintFindings))
+	seen := map[string]bool{}
+	for _, f := range g.LintFindings {
+		if seen[f.LintName] {
+			continue
+		}
+		seen[f.LintName] = true
+		names = append(names, f.LintName)
+	}
+	return fmt.Sprintf("%d error-level lint finding(s) (%s)", g.LintErrors, strings.Join(names, ", "))
 }
 
 // blocked reports whether any gate would refuse the lock.
@@ -1397,6 +1555,7 @@ func evaluateLockGates(claim model.Claim, claims []model.Claim, cfg *config.Conf
 	for _, f := range lint.RunAll(lintClaims, cfg) {
 		if f.Severity != lint.SeverityWarning {
 			g.LintErrors++
+			g.LintFindings = append(g.LintFindings, f)
 		}
 	}
 	if cfg != nil && cfg.HubGatingEnabled() {
@@ -1446,8 +1605,12 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 		fmt.Sprintf("status is %q", claim.Status))
 
 	g := evaluateLockGates(claim, claims, cfg)
-	dr.Require("lint_clean", g.LintErrors == 0,
-		fmt.Sprintf("%d error-level lint finding(s)", g.LintErrors))
+	// The detail NAMES the rules. A preview whose blocked precondition reads
+	// "1 error-level lint finding(s)" tells the caller only that something is
+	// wrong, and the rules that block a lock are precisely the ones a read-only
+	// `check --validate` cannot report (they key off the locked form of a claim
+	// that is still draft), so there was nowhere else to look.
+	dr.Require("lint_clean", g.LintErrors == 0, g.lintBlockerDetail())
 	if cfg != nil && cfg.HubGatingEnabled() {
 		detail := "no unlocked doctrine dependency"
 		if g.UnlockedDoctrineDep != "" {
@@ -1581,10 +1744,19 @@ func newLockCmd() *cobra.Command {
 				// regex "unresolved comment thread(s)" out of a sentence to
 				// learn it must ask the human to click Resolve is exactly the
 				// coupling this release exists to remove.
+				//
+				// lint_findings rides alongside lint_errors, not instead of it:
+				// the count is what the terminal line prints, and the findings
+				// are the only form an agent can act on. A refusal that said
+				// "1 error-level lint finding" and named neither the rule nor
+				// the claim sent the agent to `check --validate`, which reports
+				// zero of them (the claim is still draft; the rule that refuses
+				// keys off the locked form) — an unbreakable loop. See lockGate.
 				gate := evaluateLockGates(claim, claims, cfg)
 				return cmdResult{}, cliout.Errorf(gate.code(), "lock: %w", err).
 					WithDetails(map[string]any{
 						"lint_errors":         gate.LintErrors,
+						"lint_findings":       gate.lockLintFindingData(),
 						"open_threads":        gate.OpenThreads,
 						"unlocked_dependency": gate.UnlockedDoctrineDep,
 					})
@@ -1629,6 +1801,16 @@ type unlockData struct {
 // what lint is complaining about — so the interesting content here is the side
 // effects, which are the parts a reviewer cannot infer: review_pending is
 // cleared, and a pending flag is silently dropped with it.
+//
+// The preview therefore evaluates NO preconditions, and specifically not
+// "claim_is_locked", which it used to. lock.Unlock has no such gate and neither
+// does newUnlockCmd's write path: "dossierx claim unlock" on a draft claim
+// succeeds and exits 0. Declaring it blocked was the disagreement in its most
+// damaging direction — the preview refused the one command that exists as the
+// recovery escape hatch, so an agent following the preview would not reach for
+// the move that gets a wedged project moving again. An already-draft claim is
+// now reported through a side effect instead: the run is honest about being
+// close to a no-op without pretending it will refuse.
 func unlockDryRun(claim model.Claim, cfg *config.Config, flagged bool, reason string) *cliout.DryRun {
 	dr := cliout.NewDryRun("unlock claim "+claim.ID).
 		Transition(string(claim.Status), string(model.StatusDraft))
@@ -1636,8 +1818,9 @@ func unlockDryRun(claim model.Claim, cfg *config.Config, flagged bool, reason st
 	if strings.TrimSpace(reason) == "" {
 		dr.Lacking("--reason")
 	}
-	dr.Require("claim_is_locked", claim.Status == model.StatusLocked,
-		fmt.Sprintf("status is %q", claim.Status))
+	if claim.Status != model.StatusLocked {
+		dr.Effect(fmt.Sprintf("this claim is already %q, so the status does not change; the run still clears review_pending and releases any standing lock-ledger record", claim.Status))
+	}
 
 	dr.Effect("rewrites " + claim.SourcePath).
 		Effect("clears review_pending on this claim")

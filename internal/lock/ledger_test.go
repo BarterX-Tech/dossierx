@@ -2,6 +2,7 @@ package lock
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -364,6 +365,174 @@ func TestAdoptLedgerIsIdempotent(t *testing.T) {
 	}
 }
 
+// writeDowngradedStore rewrites the store file at path the way a hand editor
+// would: the schema version put back to a pre-ledger number and the whole ledger
+// key removed. Everything else is left exactly as the engine wrote it, because
+// that is the point — the attack is one number and one deletion inside the file
+// the gate audits.
+func writeDowngradedStore(t *testing.T, path string) {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read store: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse store: %v", err)
+	}
+	if _, ok := doc["ledger"]; !ok {
+		t.Fatalf("precondition: the store being downgraded should have a ledger to delete; got %s", raw)
+	}
+	doc["version"] = nestedHashSchemaVersion
+	delete(doc, "ledger")
+	edited, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal downgraded store: %v", err)
+	}
+	if err := os.WriteFile(path, edited, 0o644); err != nil {
+		t.Fatalf("write downgraded store: %v", err)
+	}
+}
+
+// TestDowngradingTheStoreCannotReArmGrandfathering is the whole attack, end to
+// end, in the order it was reproduced against a real binary:
+//
+//	lock a claim                        -> record written, gate silent
+//	edit the locked claim's body        -> lock-content-drift, correctly
+//	"version": 2 -> 1, delete "ledger"  -> grandfathering fires AGAIN and adopts
+//	                                       the EDITED body as approved; ok:true
+//
+// The gate's trigger for adoption lived in the file the gate audits, so one
+// number in a text editor re-armed the entire approval path and every finding
+// against the project disappeared. An audit that can be switched off from inside
+// the thing being audited is worse than no audit, because it reports a pass.
+//
+// Both halves are asserted here, because closing only one leaves the hole open:
+// the WRITE path must adopt nothing, and the READ-ONLY path (which grandfathers
+// in memory for honest pre-ledger projects — see PreLedgerExempt) must not
+// extend that exemption to a store whose pre-ledger claim is contradicted.
+func TestDowngradingTheStoreCannotReArmGrandfathering(t *testing.T) {
+	withRegistry(t) // empty registry: the lint gate always passes
+	announced := captureAnnouncements(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	claim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "the approved body"}
+	locked, err := Lock(claim, []model.Claim{claim}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
+	if err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("save store: %v", err)
+	}
+	// The first save is what makes this project ledger-covered, and it creates
+	// the comment digest store beside the lock store at the same instant — the
+	// sibling evidence a downgrade cannot forge away without deleting a second
+	// tracked file.
+	if _, statErr := os.Stat(digest.StorePathBeside(path)); statErr != nil {
+		t.Fatalf("precondition: the first lock must create the comment digest store: %v", statErr)
+	}
+
+	tampered := locked
+	tampered.Body = "quietly rewritten after approval"
+	claims := []model.Claim{tampered}
+
+	writeDowngradedStore(t, path)
+
+	reloaded, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("reload store: %v", err)
+	}
+	if reloaded.OnDiskVersion() >= ledgerSchemaVersion || len(reloaded.Ledger) != 0 {
+		t.Fatalf("precondition: the downgraded store should read as pre-ledger with no records; got version %d, %d record(s)", reloaded.OnDiskVersion(), len(reloaded.Ledger))
+	}
+
+	// The WRITE path.
+	changed, adopted := PrepareStore(reloaded, claims)
+	if len(adopted) != 0 {
+		t.Fatalf("adopted %v from a downgraded store: the audited file must not be able to re-arm the gate", adopted)
+	}
+	if _, ok := reloaded.Record(tampered.ID); ok {
+		t.Fatalf("a downgraded store must not gain a record for the tampered claim")
+	}
+	if changed {
+		t.Errorf("a refused adoption must not rewrite the store: stamping the current version over the downgrade destroys the evidence that an edit happened")
+	}
+	if notice := announced.String(); !strings.Contains(notice, "predates the lock ledger") {
+		t.Errorf("the refusal must be announced as loudly as an adoption; got:\n%s", notice)
+	}
+
+	// The READ-ONLY path.
+	digests, err := digest.LoadStore(digest.StorePathBeside(path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	findings := Audit(claims, reloaded, digests)
+	if !hasRule(findings, RuleLockLedgerDowngraded) {
+		t.Fatalf("expected %s, got %+v", RuleLockLedgerDowngraded, findings)
+	}
+	if !hasRule(findings, RuleLockLedgerMissing) {
+		t.Fatalf("the tampered claim's lost approval must still be reported alongside the cause, got %+v", findings)
+	}
+}
+
+// A store that keeps its ledger records but lowers its version is the lazier
+// half of the same edit, and it needs no sibling file to detect: the ledger key
+// did not exist before schema 2, so a store that predates the ledger cannot be
+// carrying records.
+func TestAStoreThatPredatesTheLedgerCannotCarryLedgerRecords(t *testing.T) {
+	silenceAnnouncements(t)
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	raw := `{"version":1,"hashes":{},"locked_at":{},"ledger":{"widget.contract.other":{"subject":"claim","hash":"stale","at":"2026-01-01T00:00:00Z","actor":"alice","reason":"approved"}}}`
+	if err := os.WriteFile(path, []byte(raw), 0o644); err != nil {
+		t.Fatalf("write store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
+
+	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 0 {
+		t.Fatalf("adopted %v: a store carrying ledger records has been through a ledger-aware build, whatever its version says", adopted)
+	}
+	// No digest store exists in this temp dir, so the ledger map is the only
+	// evidence — which is exactly what is being asserted.
+	if !hasRule(Audit([]model.Claim{locked}, store, nil), RuleLockLedgerDowngraded) {
+		t.Fatalf("expected %s", RuleLockLedgerDowngraded)
+	}
+}
+
+// The honest side of the same predicate: a genuine v0.2.x project (an older
+// store, no comment digest store, no ledger records) still grandfathers exactly
+// as it always did. This is the assertion that makes the two above safe to
+// ship — a guard that also refused honest upgrades would just be a different
+// outage.
+func TestAdoptLedgerStillGrandfathersAGenuinePreLedgerProject(t *testing.T) {
+	silenceAnnouncements(t)
+	freezeClock(t, "2026-07-27T10:00:00Z")
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.main":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatalf("write v1 store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
+
+	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 1 {
+		t.Fatalf("a genuine pre-ledger project must still be grandfathered, adopted = %v", adopted)
+	}
+}
+
 // TestLoadStoreKeepsVersion1NestedBaselines is the schema-bump regression the
 // audit called out ahead of time. The old code dropped the baselines whenever
 // the on-disk version was below the CURRENT one; that read as correct while
@@ -656,12 +825,24 @@ func TestSaveCreatesTheCommentDigestStoreForAFreshProject(t *testing.T) {
 	}
 }
 
-// ...and it is created EMPTY, never adopted. At first creation no claim has been
-// through the comment engine, so a comments: block present at this instant was
-// hand-written; recording it would bless it as the truth. Unknown — never
-// blessed, never accused — is the same default AdoptLedger takes for an absent
-// lock ledger.
-func TestSaveCreatesAnEmptyDigestStoreAndAdoptsNothing(t *testing.T) {
+// ...and an APPROVAL records the approved claim's comment digest beside it, in
+// the same act that records the approval.
+//
+// This inverts what this test used to assert (that a fresh store adopts
+// NOTHING, leaving a hand-written block unknown), and the inversion is the
+// point. "Unknown" sounded conservative and was not: a claim holding a standing
+// approval with no digest entry is indistinguishable from a claim whose entry
+// was deleted, so `{"digests":{}}` erased an unresolved human review with no
+// finding at all while deleting the whole FILE was caught. Coverage that is
+// established by the approval path is coverage the tampered file does not get to
+// decide — see RecordApproval and internal/check's comment-digest-missing.
+//
+// What is given up is stated plainly: a comments block hand-written before the
+// claim's first lock is adopted as-found rather than left unknown. Lock refuses a
+// claim with an UNRESOLVED thread, so what can be adopted here is a resolved
+// history nobody can now attest to — the same caveat grandfathering carries, in
+// exchange for the emptied-map launder being reported.
+func TestApprovalRecordsTheClaimsCommentDigest(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "store.json")
 	store, err := LoadStore(path)
@@ -669,14 +850,15 @@ func TestSaveCreatesAnEmptyDigestStoreAndAdoptsNothing(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	handWritten := model.Claim{
+	approved := model.Claim{
 		ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body",
 		Comments: []model.Comment{{
-			ID: "c-aaaaaa", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
-			Created: "2026-07-24T10:00:00Z", Body: "hand-written, never through the engine",
+			ID: "c-aaaaaa", Status: model.CommentStatusResolved, Author: model.CommentRoleHuman,
+			Created: "2026-07-24T10:00:00Z", Body: "reviewed and resolved before the lock",
+			ResolvedBy: model.CommentRoleHuman, ResolvedAt: "2026-07-24T11:00:00Z",
 		}},
 	}
-	RecordApproval(store, handWritten, Approval{Actor: "test", Reason: "fixture"})
+	RecordApproval(store, approved, Approval{Actor: "test", Reason: "fixture"})
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -685,8 +867,12 @@ func TestSaveCreatesAnEmptyDigestStoreAndAdoptsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load digest store: %v", err)
 	}
-	if _, ok := digests.Digest(handWritten.ID); ok {
-		t.Fatalf("expected the fresh digest store to adopt nothing, but %s was recorded", handWritten.ID)
+	recorded, ok := digests.Digest(approved.ID)
+	if !ok {
+		t.Fatalf("expected the approval to record %s's comment digest, so an emptied digest map is a finding", approved.ID)
+	}
+	if want := digest.CommentsDigest(approved); recorded != want {
+		t.Fatalf("recorded digest %q, want the approved claim's own %q", recorded, want)
 	}
 }
 

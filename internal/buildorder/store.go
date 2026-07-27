@@ -344,6 +344,34 @@ func derivableClaims(module string, claims []model.Claim) []model.Claim {
 // flagging the whole frozen coverage stale; Lock answers it by refusing, because
 // freezing an order the engine cannot re-derive is precisely the thing that must
 // not be signed into the ledger.
+// HandEditDivergence is structuralDivergence's read-only export: it answers
+// "would Lock refuse this artifact as hand-edited, and why?" without writing
+// anything, so a PREVIEW can reach the same verdict the write path will.
+//
+// It exists because "build-order lock --dry-run" could not see this gate at all.
+// Every other refusal Lock makes had a matching precondition in the preview, but
+// the hand-edit gate is the last one Lock evaluates and it was invisible: a
+// reversed-by-hand artifact previewed blocked:false and then exited 1. A dry run
+// that says "this will work" about a run that refuses is worse than no dry run,
+// because the whole contract of --dry-run is that an agent may trust it before
+// committing to a write.
+//
+// The obvious alternative — re-deriving the comparison inside cmd/dossierx — is
+// exactly what must not happen: two copies of "is this artifact generated?" drift
+// apart, and the direction they drift is unknowable, so the preview could equally
+// start refusing runs that succeed. Sharing THIS function is what makes the two
+// answers the same answer by construction. Lock still owns the refusal, its
+// wording and its error sentinel; this only exposes the predicate underneath.
+//
+// The contract matches structuralDivergence exactly: "" means a fresh propose
+// would produce this artifact, a non-empty string is the human-facing reason it
+// would not, and a non-nil error means the current claims have no valid order at
+// all — which Lock also refuses, so a caller must treat it as a refusal and not
+// as "unknown, proceed".
+func HandEditDivergence(a *Artifact, claims []model.Claim, cfg *config.Config) (string, error) {
+	return structuralDivergence(a, claims, cfg)
+}
+
 func structuralDivergence(a *Artifact, claims []model.Claim, cfg *config.Config) (string, error) {
 	phases, excluded, err := computePhases(derivableClaims(a.Module, claims), cfg, a.Module)
 	if err != nil {
@@ -523,6 +551,22 @@ func Status(path string, claims []model.Claim, cfg *config.Config) (*Artifact, e
 // A freshly-proposed artifact (never locked, so no hash baseline) is never
 // stale and is the normal thing Lock acts on.
 func Lock(path string, claims []model.Claim, cfg *config.Config) (*Artifact, error) {
+	// The artifact's OWN sentinel, held across this whole load-mutate-write.
+	//
+	// The build-order artifact had no sentinel on either of its writers, so the
+	// module's approved implementation sequence was the one generated artifact in
+	// the engine that two concurrent commands could each load, mutate and
+	// overwrite — the same unguarded shape that lost `claim link`'s writes to a
+	// concurrent scan. The lock-store sentinel a caller may already hold is a
+	// DIFFERENT file and serializes a different thing (the ledger), so it does
+	// not cover this; the two are taken in a fixed order (lock store, then
+	// artifact) by the one command that takes both.
+	release, err := lock.AcquireFileLock(path)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
+
 	a, err := LoadArtifact(path)
 	if err != nil {
 		return nil, err

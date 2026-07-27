@@ -38,10 +38,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
+
+// nowFunc is this package's clock, overridable in tests so a recorded
+// re-adoption's timestamp can be asserted deterministically instead of racing
+// real time — the same pattern internal/lock.nowFunc follows.
+var nowFunc = time.Now
 
 // StoreSchemaVersion is the on-disk schema version of the comment digest
 // store. Version 1 is its first shipped shape.
@@ -102,11 +108,41 @@ type Store struct {
 	// empty case is what makes a hand-added thread detectable.
 	Digests map[string]string `json:"digests"`
 
+	// Reaudits records every human-authorised RE-ADOPTION of a claim's comment
+	// block: who asked for it, when, and in whose words (see Store.Reaudit).
+	//
+	// It is on the record, in the tracked file, for the reason unlock stamps
+	// ReleasedAt/By/Reason on a ledger record instead of deleting it: the one
+	// operation that legitimately makes a drift finding go away must leave
+	// evidence that it happened, or it is indistinguishable from the tampering
+	// it clears. It is append-only and `omitempty`, so a project that has never
+	// needed the recovery keeps a store shaped exactly as before.
+	Reaudits map[string][]Reaudit `json:"reaudits,omitempty"`
+
 	path string
 
 	// fileExists records whether the store file was present at load, so a
 	// caller can adopt on first creation (see Adopt).
 	fileExists bool
+}
+
+// Reaudit is one human-authorised re-adoption of a claim's comment block into
+// the digest store — the recovery for a digest that LAGS its claim file, which a
+// crash between the claim save and the digest refresh (or a commit carrying one
+// file and not the other) leaves behind. See Store.Reaudit.
+type Reaudit struct {
+	// At is the RFC3339Nano UTC time the re-adoption was recorded.
+	At string `json:"at"`
+	// Actor is who the machine says ran the command. Provenance, not identity,
+	// exactly as lock.LedgerRecord.Actor is.
+	Actor string `json:"actor"`
+	// Reason is the human's own words for why the block on disk is the block to
+	// trust. It is the only part a machine cannot generate for itself, which is
+	// why the command that writes it requires one.
+	Reason string `json:"reason"`
+	// Digest is the value adopted, so a reader of the diff can see WHICH block
+	// this re-adoption blessed rather than only that one happened.
+	Digest string `json:"digest"`
 }
 
 // FileExists reports whether the store file was present when this store was
@@ -132,8 +168,9 @@ func LoadStore(path string) (*Store, error) {
 	}
 
 	var onDisk struct {
-		Version int               `json:"version"`
-		Digests map[string]string `json:"digests"`
+		Version  int                  `json:"version"`
+		Digests  map[string]string    `json:"digests"`
+		Reaudits map[string][]Reaudit `json:"reaudits"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("digest: parse store %s: %w", path, err)
@@ -141,6 +178,7 @@ func LoadStore(path string) (*Store, error) {
 	if onDisk.Digests != nil {
 		s.Digests = onDisk.Digests
 	}
+	s.Reaudits = onDisk.Reaudits
 	s.fileExists = true
 	return s, nil
 }
@@ -220,11 +258,63 @@ func (s *Store) Record(c model.Claim) {
 	s.Digests[c.ID] = CommentsDigest(c)
 }
 
+// Reaudit re-adopts c's CURRENT comment block as the recorded truth, and
+// records who authorised it and why (see Store.Reaudits).
+//
+// It is the ONLY sanctioned way a comment-ledger-drift finding is cleared
+// without restoring the claim file, and it exists because the state that
+// produces that finding is not always tampering. The engine saves the claim
+// first and refreshes the digest second (see Record for why that order is the
+// only safe one), so a crash in between — or a commit that carries the claim
+// file and not the digest store, which reproduces the same state for every
+// teammate who pulls — leaves a digest that LAGS the file. The refusal that
+// follows is total: every comment op on that claim is refused, because the
+// integrity check runs before the mutation, so the advice the engine used to
+// give ("restore the claim file from version control") discarded the comment the
+// human had actually written and there was no other way out.
+//
+// It is deliberately per-claim and reason-carrying rather than a blanket
+// re-adopt. Blessing a comment block is exactly what an attacker wants an
+// integrity tool to do, so the act is narrowed to one named claim and leaves the
+// human's words in the tracked file beside the value it adopted.
+func (s *Store) Reaudit(c model.Claim, actor, reason string) {
+	s.Record(c)
+	if s.Reaudits == nil {
+		s.Reaudits = map[string][]Reaudit{}
+	}
+	s.Reaudits[c.ID] = append(s.Reaudits[c.ID], Reaudit{
+		At:     nowFunc().UTC().Format(time.RFC3339Nano),
+		Actor:  actor,
+		Reason: reason,
+		Digest: s.Digests[c.ID],
+	})
+}
+
 // Forget drops a claim's digest entry — for a claim that no longer exists. It
 // is not called on delete-a-thread (that is an ordinary Record of the new,
 // smaller comment block).
+//
+// Its ONE caller is lock.SweepCommentDigests, and only for an entry whose
+// departure is accounted for: a claim that recorded NO threads (deleting it
+// erases no review history) or one whose lock-ledger record was released by an
+// honest unlock. Everything else is left in place on purpose — an orphaned entry
+// that recorded real threads is the evidence internal/check's
+// comment-digest-abandoned rule is built from, and it is evidence precisely
+// because a rename cannot reach it.
 func (s *Store) Forget(claimID string) {
 	delete(s.Digests, claimID)
+}
+
+// EmptyCommentsDigest is CommentsDigest of claimID with NO comment threads —
+// the value a covered claim's entry holds when its comment block is empty.
+//
+// It exists so a caller can ask "did this entry ever record any review
+// history?" without holding the claim it describes, which is exactly the
+// question about a claim that is no longer in the project (see Store.Forget and
+// lock.AbandonedCommentDigests). It is derived from CommentsDigest rather than
+// spelled out, so the two can never disagree about what "no threads" hashes to.
+func EmptyCommentsDigest(claimID string) string {
+	return CommentsDigest(model.Claim{ID: claimID})
 }
 
 // Adopt records a digest for every claim that does not already have one, and

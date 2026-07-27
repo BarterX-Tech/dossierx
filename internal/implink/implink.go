@@ -192,59 +192,86 @@ func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol
 	if cfg == nil {
 		return nil, fmt.Errorf("implink: cfg must not be nil")
 	}
-	module = strings.TrimSpace(module)
-	claimID = strings.TrimSpace(claimID)
-	file = strings.TrimSpace(file)
-	if module == "" {
-		return nil, fmt.Errorf("implink: module must not be empty")
-	}
-	if claimID == "" {
-		return nil, fmt.Errorf("implink: claim id must not be empty")
-	}
-	if file == "" {
-		return nil, fmt.Errorf("implink: file must not be empty")
-	}
+	path := ArtifactPath(cfg, strings.TrimSpace(module))
 
-	claim, ok := findByID(claims, claimID)
-	if !ok {
-		return nil, fmt.Errorf("implink: claim %q not found", claimID)
-	}
-	if claim.Module != module {
-		return nil, fmt.Errorf("implink: claim %q belongs to module %q, not %q", claimID, claim.Module, module)
-	}
-	if claim.Status != model.StatusLocked {
-		return nil, fmt.Errorf("implink: claim %q is not locked (status %q); only a locked claim can be linked", claimID, claim.Status)
-	}
-
-	if filepath.IsAbs(file) {
-		return nil, fmt.Errorf("implink: file %q must be a project-relative path, not absolute", file)
-	}
-	absDir, err := filepath.Abs(cfg.Dir())
-	if err != nil {
-		return nil, fmt.Errorf("implink: resolve project dir %q: %w", cfg.Dir(), err)
-	}
-	absFile, err := filepath.Abs(filepath.Join(absDir, file))
-	if err != nil {
-		return nil, fmt.Errorf("implink: resolve file %q: %w", file, err)
-	}
-	rel, err := filepath.Rel(absDir, absFile)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return nil, fmt.Errorf("implink: file %q must resolve to a path inside the project directory, not escape it via \"..\"", file)
-	}
-	hash, err := hashFile(filepath.Join(cfg.Dir(), file))
-	if err != nil {
-		return nil, fmt.Errorf("implink: file %q does not exist (looked relative to %s): %w", file, cfg.Dir(), err)
-	}
-	file = filepath.ToSlash(file)
-
-	path := ArtifactPath(cfg, module)
 	artifact, err := LoadArtifact(path)
 	if err != nil {
 		if !errors.Is(err, ErrNoArtifact) {
 			return nil, err
 		}
-		artifact = &Artifact{Module: module}
+		artifact = &Artifact{Module: strings.TrimSpace(module)}
 	}
+	if err := applyLink(artifact, claims, cfg, module, claimID, file, symbol); err != nil {
+		return nil, err
+	}
+	if err := WriteArtifact(artifact, path); err != nil {
+		return nil, err
+	}
+	return artifact, nil
+}
+
+// applyLink is Set's validation and in-memory mutation, without the load or the
+// write. It exists so Scan can apply MANY links to one artifact under a single
+// acquisition of that artifact's sentinel and persist the result once, instead
+// of running a whole load-mutate-write cycle per tag.
+//
+// THE CALLER OWNS THE SENTINEL, and that is not a matter of taste here: the
+// artifact is a whole-file overwrite, so two writers that each load, mutate and
+// write independently lose one of the two updates outright. That was
+// reproducible — `dossierx check &` then `dossierx claim link` a second later
+// dropped the link in half of ten runs, and `claim link` exists precisely for
+// the cases scanning cannot reach, so a re-scan never restores it. Both callers
+// in this tree hold lock.AcquireFileLock(ArtifactPath(cfg, module)) across their
+// load-mutate-write: cmd/dossierx's claim link takes it around Set, and Scan
+// takes it once per module around the whole batch.
+func applyLink(artifact *Artifact, claims []model.Claim, cfg *config.Config, module, claimID, file, symbol string) error {
+	if cfg == nil {
+		return fmt.Errorf("implink: cfg must not be nil")
+	}
+	module = strings.TrimSpace(module)
+	claimID = strings.TrimSpace(claimID)
+	file = strings.TrimSpace(file)
+	if module == "" {
+		return fmt.Errorf("implink: module must not be empty")
+	}
+	if claimID == "" {
+		return fmt.Errorf("implink: claim id must not be empty")
+	}
+	if file == "" {
+		return fmt.Errorf("implink: file must not be empty")
+	}
+
+	claim, ok := findByID(claims, claimID)
+	if !ok {
+		return fmt.Errorf("implink: claim %q not found", claimID)
+	}
+	if claim.Module != module {
+		return fmt.Errorf("implink: claim %q belongs to module %q, not %q", claimID, claim.Module, module)
+	}
+	if claim.Status != model.StatusLocked {
+		return fmt.Errorf("implink: claim %q is not locked (status %q); only a locked claim can be linked", claimID, claim.Status)
+	}
+
+	if filepath.IsAbs(file) {
+		return fmt.Errorf("implink: file %q must be a project-relative path, not absolute", file)
+	}
+	absDir, err := filepath.Abs(cfg.Dir())
+	if err != nil {
+		return fmt.Errorf("implink: resolve project dir %q: %w", cfg.Dir(), err)
+	}
+	absFile, err := filepath.Abs(filepath.Join(absDir, file))
+	if err != nil {
+		return fmt.Errorf("implink: resolve file %q: %w", file, err)
+	}
+	rel, err := filepath.Rel(absDir, absFile)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("implink: file %q must resolve to a path inside the project directory, not escape it via \"..\"", file)
+	}
+	hash, err := hashFile(filepath.Join(cfg.Dir(), file))
+	if err != nil {
+		return fmt.Errorf("implink: file %q does not exist (looked relative to %s): %w", file, cfg.Dir(), err)
+	}
+	file = filepath.ToSlash(file)
 
 	now := nowFunc().UTC().Format(time.RFC3339Nano)
 
@@ -276,11 +303,7 @@ func Set(claims []model.Claim, cfg *config.Config, module, claimID, file, symbol
 	// content" reasoning as catalog.Document's alphabetical-by-id claim
 	// order, not a claim about authored/call order mattering semantically.
 	sortArtifact(artifact)
-
-	if err := WriteArtifact(artifact, path); err != nil {
-		return nil, err
-	}
-	return artifact, nil
+	return nil
 }
 
 func sortArtifact(a *Artifact) {

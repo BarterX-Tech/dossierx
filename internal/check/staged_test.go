@@ -12,6 +12,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -175,8 +176,14 @@ func TestStaged_LedgerIsReadFromTheIndex(t *testing.T) {
 		t.Fatalf("a locked claim staged without its approval record must be refused: got %v", rulesOf(res.LedgerFindings))
 	}
 
-	// Stage the ledger as well and the same commit passes.
-	git(t, cfg.Dir(), "add", ".dossierx-lock-store.json")
+	// Stage the ledger as well and the same commit passes. The comment digest
+	// store goes with it, because an approval now records the approved claim's
+	// comment digest in the same act that records the approval (see
+	// lock.RecordApproval and comment-digest-missing): "the claim and its
+	// approval must travel together" includes the coverage the approval
+	// established, or the very next commit could drop the entry that makes an
+	// edited-away review reportable.
+	git(t, cfg.Dir(), "add", ".dossierx-lock-store.json", digest.StoreFileName)
 	sp, err = check.Staged(cfg)
 	if err != nil {
 		t.Fatalf("Staged (after add): %v", err)
@@ -465,5 +472,50 @@ func TestStaged_ConfigComesFromTheIndex(t *testing.T) {
 	}
 	if !hasRule(check.StatusStaged(sp, cfg).LedgerFindings, lock.RuleLockContentDrift) {
 		t.Fatalf("an unstaged claims_dir edit disarmed the gate")
+	}
+}
+
+// FromIndex is documented as "the files where index and worktree disagree", and
+// under core.autocrlf=true — the Windows default, and the configuration the
+// windows-latest CI leg runs in — it was saturated on a perfectly clean tree:
+// git stores LF in the index and checks out CRLF, so a byte comparison called
+// every claim different. Reproduced on macOS by setting the config and forcing a
+// fresh checkout: `git status --porcelain` empty, and check --staged reporting
+// "2 claim(s) from the git index (2 differ from the working tree)".
+//
+// The verdict was never wrong (YAML parsing normalises line breaks, so hashes
+// and lint agree either way) — the REPORT was, and a field that is
+// unconditionally saturated on one platform carries no signal at all.
+func TestStaged_FromIndexIgnoresGitsOwnLineEndingConversion(t *testing.T) {
+	cfg := stagedFixture(t)
+
+	// Turn on the conversion and force git to rewrite the worktree through it.
+	git(t, cfg.Dir(), "config", "core.autocrlf", "true")
+	if err := os.Remove(filepath.Join(cfg.ClaimsDir, "locked.yaml")); err != nil {
+		t.Fatalf("remove claim for a fresh checkout: %v", err)
+	}
+	git(t, cfg.Dir(), "checkout", "--", "claims/locked.yaml")
+
+	raw, err := os.ReadFile(filepath.Join(cfg.ClaimsDir, "locked.yaml"))
+	if err != nil {
+		t.Fatalf("read checked-out claim: %v", err)
+	}
+	if !strings.Contains(string(raw), "\r\n") {
+		t.Skip("this git did not apply core.autocrlf on checkout; the case under test cannot arise here")
+	}
+	if porcelain(t, cfg.Dir()) != "" {
+		t.Fatalf("fixture precondition: the tree must be clean, got %q", porcelain(t, cfg.Dir()))
+	}
+
+	sp, err := check.Staged(cfg)
+	if err != nil {
+		t.Fatalf("Staged: %v", err)
+	}
+	if len(sp.FromIndex) != 0 {
+		t.Fatalf("a clean tree under core.autocrlf must report no differing files, got %v", sp.FromIndex)
+	}
+	// The verdict is unchanged: the same clean project still passes.
+	if res := check.StatusStaged(sp, cfg); len(res.LedgerFindings) != 0 {
+		t.Fatalf("expected a clean gate, got %v", rulesOf(res.LedgerFindings))
 	}
 }

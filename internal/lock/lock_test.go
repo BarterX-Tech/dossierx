@@ -491,8 +491,16 @@ func TestLoadStoreMigratesLegacyFlatFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore must not error on a legacy flat store: %v", err)
 	}
-	if store.Version != storeSchemaVersion {
-		t.Fatalf("expected legacy store migrated to current schema version %d, got %d", storeSchemaVersion, store.Version)
+	// LoadStore reports the version the file EARNED, not the one the next Save
+	// would like to write: a legacy store loads as version 0 and is stamped
+	// forward only by a migration that actually runs (MigrateLegacyStore /
+	// AdoptLedger). Stamping here instead is what used to make a downgraded
+	// version field repair itself on the next ordinary write — see LoadStore.
+	// (MigrateLegacyStore's own re-arm, and the version it then stamps, are
+	// asserted by TestMigrateLegacyStore*; this test is about LoadStore alone,
+	// which is why it does not run the migration here.)
+	if store.Version != 0 {
+		t.Fatalf("expected legacy store to keep its on-disk version 0 until a migration raises it, got %d", store.Version)
 	}
 	if len(store.Hashes) != 0 {
 		t.Fatalf("expected legacy flat hashes dropped on migration, got %v", store.Hashes)

@@ -348,6 +348,73 @@ func (d *Deps) Delete(claimID, threadID, replyID string, actor model.CommentRole
 	})
 }
 
+// ErrReasonRequired: a recovery that re-adopts a comment block was called
+// without the human's words. It is a sentinel because the CLI classifies it, and
+// because the reason is the entire difference between this operation and the
+// tampering it clears — a machine can generate everything else in the record.
+var ErrReasonRequired = errors.New("comments: a reason is required: the re-adoption records the human's own words for why the comment block on disk is the one to trust")
+
+// ReauditDigest re-adopts ONE claim's stored comment block into the comment
+// digest store, and records who authorised it and why. It is the recovery for
+// ErrCommentDigestDrift, and it is the only path that clears that refusal
+// without restoring the claim file from version control.
+//
+// WHY IT HAD TO EXIST. The refusal is total: checkCommentDigest runs before the
+// mutation inside mutate, so once a claim's recorded digest lags its file, every
+// comment op on that claim is refused — and the state is reachable without any
+// tampering at all. A crash between the claim save and the digest refresh leaves
+// it, and so does an ordinary commit that carries the claim file but not
+// .dossierx-comment-digest.json, which reproduces it for every teammate who
+// pulls. The documented recovery ("restore the claim file from version control")
+// throws away the comment the human just wrote, and there was no other verb.
+//
+// It is on the same footing as `claim unlock`: always available, never gated,
+// and never silent. The reason is REQUIRED and is written into the store beside
+// the adopted value (digest.Store.Reaudit), so the one operation that can make
+// an integrity finding disappear leaves evidence in the tracked file that it
+// happened.
+//
+// It writes NO claim file: the claim on disk is already what the human means to
+// keep. It takes the claims sentinel anyway, so it reads a claim nobody is
+// mid-write on, and takes the digest sentinel underneath it — claims -> digest,
+// the one direction this codebase ever takes them (see internal/digest's package
+// comment).
+func (d *Deps) ReauditDigest(claimID string, actor model.CommentRole, reason string) (model.Claim, error) {
+	if err := validateActor(actor); err != nil {
+		return model.Claim{}, err
+	}
+	if strings.TrimSpace(reason) == "" {
+		return model.Claim{}, ErrReasonRequired
+	}
+
+	release, err := lock.AcquireClaimsLock(d.Cfg)
+	if err != nil {
+		return model.Claim{}, err
+	}
+	defer release()
+
+	claims, err := loader.LoadClaims(d.Cfg.ClaimsDir)
+	if err != nil {
+		return model.Claim{}, err
+	}
+	idx := claimIndex(claims, claimID)
+	if idx < 0 {
+		return model.Claim{}, fmt.Errorf("comments: claim %q: %w", claimID, ErrClaimNotFound)
+	}
+
+	digests, releaseDigests, err := d.openCommentDigest()
+	if err != nil {
+		return model.Claim{}, err
+	}
+	defer releaseDigests()
+
+	digests.Reaudit(claims[idx], string(actor), strings.TrimSpace(reason))
+	if err := digests.Save(); err != nil {
+		return model.Claim{}, fmt.Errorf("comments: re-adopt %q's comment digest: %w", claimID, err)
+	}
+	return claims[idx], nil
+}
+
 // List returns the comment threads on claimID from the caller's loaded
 // snapshot (Deps.Claims). openOnly filters to threads still status: open. It is
 // read-only — no lock, no write. An unknown claim id is ErrClaimNotFound.
@@ -537,7 +604,7 @@ func checkCommentDigest(store *digest.Store, c model.Claim) error {
 	if !known || recorded == digest.CommentsDigest(c) {
 		return nil
 	}
-	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed: restore the claim file from version control, then retry", ErrCommentDigestDrift, c.ID)
+	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed. If the block on disk is wrong, restore the claim file from version control. If it is RIGHT — a crash between the claim write and the digest write, or a commit that carried the claim file without .dossierx-comment-digest.json — ask the human and run: dossierx comment reaudit --claim %s --reason \"<their words>\", which re-adopts this one claim's block and records who authorised it", ErrCommentDigestDrift, c.ID, c.ID)
 }
 
 // recordCommentDigest refreshes the digest store's entry for the claim just
@@ -550,10 +617,19 @@ func checkCommentDigest(store *digest.Store, c model.Claim) error {
 // first would leave a digest describing a mutation that never happened, so an
 // honest concurrency refusal would be reported forever after as tampering.
 // Second, if this process dies between the save and this refresh, the recorded
-// digest LAGS the file and the gate reports comment-ledger-drift — a false
-// positive a human can see and clear by re-running the gate after any comment
-// op. Both failure modes are loud; neither is silently wrong, which is the only
-// ordering property an integrity record has to have.
+// digest LAGS the file and the gate reports comment-ledger-drift. Both failure
+// modes are loud; neither is silently wrong, which is the only ordering property
+// an integrity record has to have.
+//
+// THAT SECOND STATE IS NOT SELF-CLEARING, and this comment used to claim it was
+// ("a false positive a human can see and clear by re-running the gate after any
+// comment op"). It is false by construction: checkCommentDigest runs BEFORE fn
+// inside the same mutate, so every comment op on that claim is refused — add,
+// reply, everything — and the advice the refusal gave was to restore the claim
+// file, which discards the comment the human actually wrote. The recovery is the
+// explicit, reason-carrying one: `dossierx comment reaudit --claim <id> --reason
+// "…"` (Deps.ReauditDigest), which re-adopts that ONE claim's block and records
+// who authorised it in the digest store itself.
 //
 // On a store file that does not exist yet, every claim's current comment block
 // is adopted at once (digest.Adopt), so a project upgrading into this feature

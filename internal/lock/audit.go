@@ -34,6 +34,24 @@ const (
 	// you have to restore the ledger from version control.
 	RuleLockLedgerAbsent = "lock-ledger-absent"
 
+	// RuleLockLedgerDowngraded is project-scoped: the lock store says it
+	// predates the lock ledger, and the project around it says otherwise.
+	//
+	// It is the read-only half of the guard AdoptLedger enforces on the write
+	// path (see Store.LedgerDowngraded for the evidence and the attack). The two
+	// have to exist together: without the write-path half, one edited number
+	// re-arms grandfathering and re-blesses tampered content as approved;
+	// without THIS half, a read-only command — `check --validate`, `check
+	// --staged`, the pre-commit hook, CI — would see the downgraded store, take
+	// it for an honest v0.2.x project, grandfather it in memory and report
+	// nothing at all.
+	//
+	// It is reported FIRST and does not replace the per-claim findings under it:
+	// the downgrade is the cause, "these locked claims have no standing
+	// approval" is what it cost, and a reader needs both to know what to
+	// restore.
+	RuleLockLedgerDowngraded = "lock-ledger-downgraded"
+
 	// RuleLockLedgerMissing: a locked claim with no ledger record. Something
 	// wrote status: locked without going through the approval path — most
 	// often a hand edit, which walks straight past the lint gate, hub gating,
@@ -120,14 +138,47 @@ type Finding struct {
 // claim's comments have drifted. That distinction (unknown vs. drifted) is the
 // same one Store.Baseline draws for dependency hashes, and for the same reason:
 // an integrity check must never manufacture a finding out of missing evidence.
+//
+// digests is also EVIDENCE ABOUT THE LOCK STORE, which is the second, less
+// obvious reason it is passed here. Its presence is what tells an honest
+// pre-ledger project (grandfathered in memory, silently — see
+// Store.PreLedgerExempt) apart from a lock store that was edited back to a
+// pre-ledger version to re-arm that same grandfathering (refused, loudly — see
+// Store.LedgerDowngraded). Both are decided once, up front, from the state the
+// caller loaded.
 func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding {
 	var findings []Finding
 	unrecordedLocks := 0
+
+	// Has this project ever been through a ledger-aware build? The comment
+	// digest store's presence is the evidence that does not live in the file
+	// being audited, and it is taken from the store the CALLER loaded — so
+	// "check --staged" reads the INDEX's answer, exactly as it reads the
+	// index's ledger. A nil digest store (one that failed to decode, already
+	// reported as lock-ledger-unreadable) is not evidence of anything and is
+	// read as absent, which is the conservative direction: it can only make the
+	// pre-ledger exemption WIDER, and the exemption's other half — the ledger
+	// map itself — still applies.
+	digestsPresent := digests != nil && digests.FileExists()
+
+	// preLedgerExempt: this project locked things before this build gave locks a
+	// record, so a locked claim without one is an upgrade state, not a tamper.
+	// Grandfathering it here — in memory, writing nothing — is what lets the
+	// read-only commands pass an honest v0.2.x project instead of accusing every
+	// claim in it. See Store.PreLedgerExempt.
+	preLedgerExempt := store.PreLedgerExempt(digestsPresent)
 
 	for _, c := range claims {
 		record, hasRecord := ledgerRecordFor(store, c.ID)
 
 		switch {
+		// The pre-ledger exemption is spent HERE and only here: on a locked
+		// claim whose record was never written because the build that locked it
+		// had nowhere to write one. Every other rule below needs a record to
+		// exist, and a genuinely pre-ledger store has none — so nothing else has
+		// to know about the exemption.
+		case c.Status == model.StatusLocked && !hasRecord && preLedgerExempt:
+
 		case c.Status == model.StatusLocked && !hasRecord:
 			unrecordedLocks++
 			findings = append(findings, Finding{
@@ -232,6 +283,20 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 			Message: fmt.Sprintf(
 				"%d claim(s) are locked but the lock ledger is missing entirely. The ledger is a tracked, committed file: restore it from version control rather than re-locking, because re-locking would record whatever the claims say NOW as approved.",
 				unrecordedLocks),
+		})
+	}
+
+	// The downgrade is the other project-scoped rule, and it is deliberately
+	// evaluated whether or not any claim is locked. A store edited back to a
+	// pre-ledger version is a statement about the LEDGER, not about any one
+	// claim: reporting it only when it happened to cost a record would let the
+	// same edit land quietly in the commit before the one that uses it.
+	if store.LedgerDowngraded(digestsPresent) {
+		findings = append(findings, Finding{
+			Rule: RuleLockLedgerDowngraded,
+			Message: fmt.Sprintf(
+				"the lock store says it predates the lock ledger (schema version %d), but this project has already been through a ledger-aware build — its comment digest store is present, or the store itself still carries ledger records. A store's own version field is what triggers the one-time grandfathering of already-locked artifacts, so a store that can lower its own version can re-adopt every locked claim as-found and clear any finding against it. Nothing was grandfathered on this run. Restore the lock store from version control; do not re-lock, which would record whatever the claims say NOW as approved.",
+				store.OnDiskVersion()),
 		})
 	}
 

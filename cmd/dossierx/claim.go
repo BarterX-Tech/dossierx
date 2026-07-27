@@ -315,8 +315,20 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 	if claim.Status != model.StatusLocked {
 		gate := evaluateLockGates(claim, claims, cfg)
 		switch {
+		// The rules NAMED, and the next command pointed at the one that can
+		// name them again.
+		//
+		// This used to read "-> dossierx check --validate", and for the whole
+		// family of lints that decide a LOCK that was a dead end: rest-on-locked,
+		// roll-up and build-role-required-for-locked all key off a claim's own
+		// status, so against the project as it stands — with this claim still
+		// draft — `check --validate` reports ok:true and zero findings. The
+		// agent was told a finding blocks the lock, sent to a command that
+		// reports none, and left with no CLI path to the rule's name.
+		// evaluateLockGates lints the ABOUT-TO-BE-LOCKED form, so the answer is
+		// right here; --dry-run is where the same answer lives in full.
 		case gate.LintErrors > 0:
-			actions = append(actions, fmt.Sprintf("%d error-level lint finding(s) block locking -> dossierx check --validate", gate.LintErrors))
+			actions = append(actions, fmt.Sprintf("%s block locking -> dossierx claim lock %s --dry-run", gate.lintBlockerDetail(), id))
 		case gate.UnlockedDoctrineDep != "":
 			actions = append(actions, fmt.Sprintf("dependency %s is doctrine and still draft -> lock it first", gate.UnlockedDoctrineDep))
 		case len(gate.OpenThreads) > 0:

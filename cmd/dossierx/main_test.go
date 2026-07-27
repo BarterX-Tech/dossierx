@@ -312,6 +312,15 @@ func TestSurfaceIsNineteenLeavesUnderSixNouns(t *testing.T) {
 			if child.Name() == "help" || child.Name() == "completion" {
 				continue
 			}
+			// The removal stubs (see retired.go) are not surface: every one of
+			// them does exactly one thing, which is to fail with the sentence
+			// naming its replacement. They are excluded by their MARK rather
+			// than by Hidden, so a real leaf can never be smuggled past this
+			// count by hiding it — and TestRetiredInvocationsNameTheirReplacement
+			// pins the set itself, so they are still counted, just elsewhere.
+			if retired(child) {
+				continue
+			}
 			leaf = false
 			name := child.Name()
 			if prefix != "" {

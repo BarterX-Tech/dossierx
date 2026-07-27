@@ -25,6 +25,7 @@
 package implink
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -34,6 +35,7 @@ import (
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -120,11 +122,32 @@ func (r *ScanReport) Summary() string {
 // cfg.SourceDirs is empty — the zero-cost-when-unused contract every
 // optional feature in this engine follows; a project that has never set
 // source_dirs sees no behavior change at all from this function existing.
+//
+// IT WALKS FIRST AND WRITES SECOND, one artifact write per module, holding that
+// module's sentinel (lock.AcquireFileLock over its ArtifactPath) across the
+// whole batch. Both halves of that matter, and the first one is the bug it
+// fixes: Scan used to call Set once per tag, and Set is a bare
+// load-mutate-write with no sentinel at all, so a `dossierx claim link` running
+// concurrently with a `dossierx check` was a plain lost update. `claim link`
+// took the sentinel and check ignored it; measured on a project with 6000 tags,
+// five of ten runs reported claim link ok:true and left no trace of the link in
+// the artifact. That is unrecoverable data — `claim link` exists precisely for
+// the links scanning cannot reach, so a re-scan never restores them.
+//
+// Holding the sentinel means a scan can now FAIL where it used to write
+// regardless (another process holds the lock, or the ten-second acquisition
+// times out). That is the correct direction for a writer: the caller's run stops
+// and says so, instead of silently discarding somebody else's write. The batch
+// also removes the N-renames-per-scan the per-tag write cost.
 func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 	report := &ScanReport{}
 	if cfg == nil || len(cfg.SourceDirs) == 0 {
 		return report, nil
 	}
+
+	// Every tag that named a real, locked claim, in walk order, keyed by the
+	// module whose artifact it belongs in. Nothing is written during the walk.
+	pending := map[string][]ScanMatch{}
 
 	for _, root := range cfg.SourceDirs {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
@@ -183,14 +206,7 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 					continue
 				}
 
-				if _, err := Set(claims, cfg, claim.Module, claimID, relFile, symbol); err != nil {
-					report.Errors = append(report.Errors, ScanError{
-						File: relFile, Line: lineNo, ClaimID: claimID,
-						Message: err.Error(),
-					})
-					continue
-				}
-				report.Matches = append(report.Matches, ScanMatch{
+				pending[claim.Module] = append(pending[claim.Module], ScanMatch{
 					ClaimID: claimID, File: relFile, Line: lineNo, Symbol: symbol,
 				})
 			}
@@ -199,6 +215,10 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 		if err != nil {
 			return nil, fmt.Errorf("implink: scan %q: %w", root, err)
 		}
+	}
+
+	if err := reconcile(report, pending, claims, cfg); err != nil {
+		return nil, err
 	}
 
 	sort.Slice(report.Matches, func(i, j int) bool {
@@ -215,6 +235,75 @@ func Scan(claims []model.Claim, cfg *config.Config) (*ScanReport, error) {
 	})
 
 	return report, nil
+}
+
+// reconcile applies every pending tag to its module's artifact and persists each
+// module's artifact ONCE, under that module's own sentinel.
+//
+// The sentinel is the whole point (see Scan): it is the same lock
+// "dossierx claim link" takes over the same path, so the two writers are finally
+// serialized against each other instead of each doing an unguarded
+// load-mutate-write. A failure to acquire it is returned to the caller rather
+// than swallowed — a scan that cannot take the lock must not write, and a
+// writer that cannot write must say so.
+//
+// A per-tag reconciliation failure is recorded in the report exactly as before
+// and does not abandon the module: the remaining tags are still applied, and the
+// artifact is still written, so one bad tag cannot cost a module every link it
+// legitimately has.
+func reconcile(report *ScanReport, pending map[string][]ScanMatch, claims []model.Claim, cfg *config.Config) error {
+	// Map iteration is random and this function writes files; the order modules
+	// are locked in is therefore fixed, which also keeps two concurrent scans
+	// from taking two modules' sentinels in opposite orders.
+	modules := make([]string, 0, len(pending))
+	for module := range pending {
+		modules = append(modules, module)
+	}
+	sort.Strings(modules)
+
+	for _, module := range modules {
+		if err := reconcileModule(report, module, pending[module], claims, cfg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func reconcileModule(report *ScanReport, module string, matches []ScanMatch, claims []model.Claim, cfg *config.Config) error {
+	path := ArtifactPath(cfg, module)
+
+	release, err := lock.AcquireFileLock(path)
+	if err != nil {
+		return fmt.Errorf("implink: reconcile module %q: %w", module, err)
+	}
+	defer release()
+
+	artifact, err := LoadArtifact(path)
+	if err != nil {
+		if !errors.Is(err, ErrNoArtifact) {
+			return err
+		}
+		artifact = &Artifact{Module: module}
+	}
+
+	applied := 0
+	for _, m := range matches {
+		if err := applyLink(artifact, claims, cfg, module, m.ClaimID, m.File, m.Symbol); err != nil {
+			report.Errors = append(report.Errors, ScanError{
+				File: m.File, Line: m.Line, ClaimID: m.ClaimID, Message: err.Error(),
+			})
+			continue
+		}
+		applied++
+		report.Matches = append(report.Matches, m)
+	}
+	if applied == 0 {
+		// Nothing to persist. Writing anyway would rewrite (and re-stamp) an
+		// artifact this scan did not change, which is exactly the needless churn
+		// the batch exists to remove.
+		return nil
+	}
+	return WriteArtifact(artifact, path)
 }
 
 // captureSymbol applies symbolPatterns to the few lines immediately

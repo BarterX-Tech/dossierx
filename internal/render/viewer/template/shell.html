@@ -76,6 +76,33 @@
   </aside>
   <div id="commentsToast" class="comments-toast" role="status" aria-live="polite" hidden></div>
 
+  <!-- Status strip — the project's health, fed client-side by GET /api/status.
+       It carries TWO kinds of finding and keeps them visibly apart: the
+       LOCK-LEDGER gate's integrity findings (a locked claim whose approval
+       record is missing, released, drifted or abandoned) and the lint errors.
+       They are not the same thing and must not read as the same thing — a lint
+       is advice about how a claim is written, a ledger finding is a refusal
+       about whether it was ever approved — so integrity is rendered first, in
+       its own group, and it alone turns the strip red.
+
+       It lives OUTSIDE .layout for the same reason the comment chrome does: an
+       SSE fragment swap replaces only <main class="content-area"> and
+       <nav id="nav">, and the one banner that must survive a re-render is the
+       one saying this project's lock ledger is in dispute.
+
+       It exists ONLY against a live serve. The reachability probe reveals it,
+       exactly as it reveals the composer; a static file:// viewer has no
+       /api/status to poll, and a strip baked into the rendered HTML would be
+       permanently stale — which for an integrity verdict is worse than absent,
+       because a stale green strip is an assurance nobody checked. -->
+  <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
+    <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
+      <span id="statusStripSummary" class="status-strip-summary"></span>
+      <span class="status-strip-caret" aria-hidden="true">▾</span>
+    </button>
+    <div id="statusStripBody" class="status-strip-body" hidden></div>
+  </section>
+
   <script>
     (function () {
       'use strict';
@@ -966,6 +993,144 @@
         });
       }
 
+      // ---- status strip (lock-ledger integrity + lint) ------------------
+      //
+      // WHY THIS EXISTS AT ALL. v0.3.0's promise is that a LOCKED claim cannot
+      // change without an approval record, and everything that enforces it —
+      // the lock ledger, the gate in internal/check, "check --staged", the
+      // pre-commit hook, CI — speaks to an AGENT through a JSON envelope or a
+      // terminal. The human's only surface is this page. So a project whose
+      // ledger had been tampered with rendered here exactly like a sound one:
+      // every claim readable, every lock icon in place, nothing said. The agent
+      // could see the refusal and the human could not, which inverts who the
+      // promise is for.
+      //
+      // The server-side half is deliberate and stays that way: check.Status
+      // REPORTS the gate where check.Run REFUSES, so a disputed ledger never
+      // blanks the viewer — a reader must be able to open the very claim that
+      // is under dispute and read it. This strip is the other half of that
+      // bargain. The page keeps rendering; it just stops rendering silently.
+      //
+      // PRESENTATION follows the lint-error shape (rule/name, claim id,
+      // message, one row each) because a reader already knows how to scan it —
+      // but integrity findings are a separate, first group with their own
+      // heading, and they alone set the strip's alarm state. Folding them into
+      // the lint list would make "nobody approved this lock" look like "this
+      // claim has no edges".
+
+      var stripEl = document.getElementById('statusStrip');
+      var stripToggle = document.getElementById('statusStripToggle');
+      var stripSummary = document.getElementById('statusStripSummary');
+      var stripBody = document.getElementById('statusStripBody');
+      // stripExpanded is sticky across refreshes so a poll (or an SSE tick) never
+      // collapses a list the reader is in the middle of. stripUserToggled records
+      // that the reader has taken control of it: until then an INTEGRITY verdict
+      // opens itself, because a collapsed one-line summary is how a tamper
+      // warning gets ignored. Once they have collapsed it by hand, later polls
+      // respect that.
+      var stripExpanded = false;
+      var stripUserToggled = false;
+
+      function countLabel(n, word) {
+        return n + ' ' + word + (n === 1 ? '' : 's');
+      }
+
+      // findingRow renders one finding. EVERY value here is server data about a
+      // claim (rule names, claim ids, gate messages) and every one of them goes
+      // through textContent — this function creates no innerHTML sink, which is
+      // the whole escaping contract of this block restated for the strip.
+      function findingRow(name, claimID, message) {
+        var row = el('li', 'status-finding');
+        row.appendChild(textEl('span', 'status-finding-rule', name || ''));
+        if (claimID) {
+          row.appendChild(textEl('span', 'status-finding-claim', claimID));
+        }
+        row.appendChild(textEl('span', 'status-finding-msg', message || ''));
+        return row;
+      }
+
+      function findingGroup(heading, rows) {
+        var group = el('div', 'status-group');
+        group.appendChild(textEl('p', 'status-group-head', heading));
+        var list = el('ul', 'status-finding-list');
+        rows.forEach(function (r) { list.appendChild(r); });
+        group.appendChild(list);
+        return group;
+      }
+
+      // renderStatusStrip paints one /api/status payload. An empty verdict hides
+      // the strip entirely rather than showing a green badge: the viewer already
+      // reads as "fine" by default, and a persistent all-clear chip would be one
+      // more thing to stop noticing.
+      function renderStatusStrip(data) {
+        if (!stripEl || !stripBody || !stripSummary) { return; }
+        var ledger = (data && data.ledger_findings) || [];
+        var lintErrors = (data && data.lint_errors) || [];
+
+        if (!ledger.length && !lintErrors.length) {
+          stripEl.hidden = true;
+          stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
+          stripBody.textContent = '';
+          return;
+        }
+
+        stripBody.textContent = '';
+        if (ledger.length) {
+          stripBody.appendChild(findingGroup(
+            'Lock ledger — these claims were changed without an approval record',
+            ledger.map(function (f) { return findingRow(f.rule, f.claim_id, f.message); })
+          ));
+        }
+        if (lintErrors.length) {
+          stripBody.appendChild(findingGroup(
+            'Lint errors',
+            lintErrors.map(function (f) { return findingRow(f.lint, f.claim_id, f.message); })
+          ));
+        }
+
+        // The summary leads with integrity whenever there is any, however many
+        // lint errors sit behind it — the reader needs the worst fact first.
+        var summary = ledger.length
+          ? 'Integrity: ' + countLabel(ledger.length, 'lock-ledger finding')
+          : 'Lint: ' + countLabel(lintErrors.length, 'error');
+        if (ledger.length && lintErrors.length) {
+          summary += ' · ' + countLabel(lintErrors.length, 'lint error');
+        }
+        stripSummary.textContent = summary; // textContent — never markup
+
+        stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
+        stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
+        if (ledger.length && !stripUserToggled) { stripExpanded = true; }
+        setStripExpanded(stripExpanded);
+        stripEl.hidden = false;
+      }
+
+      function setStripExpanded(expanded) {
+        stripExpanded = !!expanded;
+        if (stripBody) { stripBody.hidden = !stripExpanded; }
+        if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
+        if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
+      }
+
+      // refreshStatus polls the endpoint. A FAILED poll deliberately leaves the
+      // last verdict on screen untouched: a transient fetch failure (the server
+      // restarting mid-reload) must never be able to clear an integrity warning,
+      // because "the warning went away" and "the warning was fixed" would then
+      // look identical to the reader.
+      function refreshStatus() {
+        if (!mounted) { return; }
+        apiGet('/api/status').then(function (data) {
+          renderStatusStrip(data);
+        }).catch(function () { /* keep the last verdict; the next tick recovers */ });
+      }
+
+      if (stripToggle) {
+        stripToggle.addEventListener('click', function () {
+          stripUserToggled = true;
+          setStripExpanded(!stripExpanded);
+        });
+      }
+
       // ---- reachability probe -----------------------------------------
       // A relative fetch('/api/ping') with a ~1s AbortController timeout, wrapped
       // so its rejection can NEVER abort the rest of init. Success requires
@@ -997,6 +1162,11 @@
             // server rendered hidden become visible. It must follow `mounted =
             // true` — syncEmptyChips reads it.
             syncEmptyChips();
+            // Same reasoning for the status strip: /api/status only exists
+            // behind a live serve, so this is the first moment the project's
+            // lint health and lock-ledger verdict can be known at all. It must
+            // follow `mounted = true` — refreshStatus reads it.
+            refreshStatus();
             // A confirmed live serve is the ONLY place live reload is wired: the
             // EventSource needs a server behind the page. startLiveReload is
             // idempotent and no-ops on a hook-less (marker-absent) shell.
@@ -1122,6 +1292,14 @@
       // capacity-1) are coalesced into one in-flight swap plus at most one
       // trailing re-fetch, so two events can never interleave two swaps.
       function onServerChanged() {
+        // Re-poll the strip on every tick, independently of the fragment swap.
+        // A claim file changing on disk is EXACTLY the event that turns a sound
+        // ledger into a disputed one — hand-editing a locked claim is the tamper
+        // the gate exists to catch — so the verdict has to be re-read whenever
+        // the claims do. It is a separate request on purpose: it must still run
+        // when the fragment fetch is coalesced away below, and a failing status
+        // poll must not abort the re-render (or the reverse).
+        refreshStatus();
         if (reloadInFlight) { reloadPending = true; return; }
         reloadInFlight = true;
         apiGet('/api/fragment').then(function (frag) {

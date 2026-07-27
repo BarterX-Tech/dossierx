@@ -71,8 +71,13 @@ func decodedBool(t *testing.T, decoded map[string]json.RawMessage, key string) b
 
 // ---------------------------------------------------------------------
 // DX-AUD-19: the binary can report its version, via both the `version`
-// subcommand and cobra's built-in --version flag. Neither needs a project
-// config on disk.
+// subcommand and the --version flag. Neither needs a project config on disk.
+//
+// The flag was cobra's built-in until it was taken back (see newRootCmd): the
+// built-in printed prose on stdout and exited 0 without reaching any RunE, so it
+// was the last invocation in the surface that answered outside the envelope.
+// These two tests assert the PROSE surface, which is what --format text still
+// gets; machine_contract_test.go asserts the envelope both doors now emit.
 // ---------------------------------------------------------------------
 
 func TestCLI_VersionSubcommand(t *testing.T) {

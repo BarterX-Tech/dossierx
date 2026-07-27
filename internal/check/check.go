@@ -50,6 +50,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -106,6 +107,21 @@ type Result struct {
 	// and "check --staged" — test this slice themselves and say so.
 	LedgerFindings []lock.Finding
 
+	// BuildOrders is one entry per module that HAS a build-order artifact,
+	// with staleness recomputed live against the current claims (never read off
+	// the artifact's own persisted "stale" field, which nothing refreshes).
+	//
+	// It exists because check reported nothing at all about build orders, and a
+	// locked one going stale is a NORMAL consequence of the sanctioned lifecycle:
+	// unlock a covered claim, edit it, re-lock it, and the module's approved
+	// implementation sequence no longer matches the claims — `build-order status`
+	// says stale:true while `check`, `check --validate` and `check --staged`ndash;
+	// the loop command, the pre-commit hook and CI — all said ok:true with no
+	// mention of it. The build-order skill tells an agent to act "whenever a
+	// locked build order reports stale"; this is the field that lets it, without
+	// parsing a hint string.
+	BuildOrders []BuildOrderReport
+
 	// OK is true once every fail-fast step passed and the run reached the
 	// "check: OK" line. The reporting fields below are populated only then.
 	OK bool
@@ -121,6 +137,48 @@ type Result struct {
 	ImplinkStatusStdout []string
 	ImplinkStatusStderr []string
 	NextSteps           []string
+}
+
+// BuildOrderReport is one module's build-order state as check found it: whether
+// an artifact exists, whether it is locked, and whether it is stale RIGHT NOW.
+//
+// Stale/StaleIDs are recomputed from the claims on every run (buildorder.Status,
+// which is read-only), never taken from the artifact's own persisted fields. The
+// artifact writes `"stale": false` at lock time and nothing ever revises it, so
+// the file on disk goes on asserting false while the order is stale — reading it
+// would make this report repeat the lie rather than replace it.
+type BuildOrderReport struct {
+	Module   string   `json:"module"`
+	Locked   bool     `json:"locked"`
+	Stale    bool     `json:"stale"`
+	StaleIDs []string `json:"stale_ids,omitempty"`
+}
+
+// buildOrderReports returns one BuildOrderReport per module in cfg.Modules that
+// HAS an artifact, in cfg.Modules order. A module with no artifact is omitted
+// entirely (that is the ordinary state of most modules, and nextSteps already
+// has its own hint for a fully-locked module that has never proposed one), and a
+// module whose artifact cannot be read is omitted too — the ledger gate reports
+// that as build-order-unreadable, and a report that guessed at its contents
+// would be worse than one that says nothing.
+func buildOrderReports(cfg *config.Config, claims []model.Claim) []BuildOrderReport {
+	if cfg == nil {
+		return nil
+	}
+	var out []BuildOrderReport
+	for _, module := range cfg.Modules {
+		a, err := buildorder.Status(buildorder.ArtifactPath(cfg, module), claims, cfg)
+		if err != nil || a == nil {
+			continue
+		}
+		out = append(out, BuildOrderReport{
+			Module:   module,
+			Locked:   a.Locked,
+			Stale:    a.Stale,
+			StaleIDs: a.StaleIDs,
+		})
+	}
+	return out
 }
 
 // Run executes the check pipeline against claims (already loaded and
@@ -233,10 +291,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	res.OK = true
 	res.OrientationNotes = orientationNotes(cfg, claims)
 	res.OpenComments = openCommentCounts(claims)
+	res.BuildOrders = buildOrderReports(cfg, claims)
 	stdout, stderr, implinkHints := implinkStatus(cfg, claims)
 	res.ImplinkStatusStdout = stdout
 	res.ImplinkStatusStderr = stderr
-	res.NextSteps = nextSteps(cfg, claims, implinkHints)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
 	return res, nil
 }
 
@@ -337,11 +396,16 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs) Result {
 
 	res.OK = true
 	res.OpenComments = openCommentCounts(claims)
+	// Build-order state is recomputed here too, for --validate, --staged and the
+	// serve strip: buildorder.Status is a read (it never writes the artifact
+	// back), so it belongs on the non-writing path exactly as implink.Status
+	// does.
+	res.BuildOrders = buildOrderReports(cfg, claims)
 	// The impl-link hints come from the READ-ONLY implink.Status (drift/unlinked),
 	// the same source Run's nextSteps uses — NOT implink.Scan, which is the
 	// mutating reconcile and stays out of the memory-only status path.
 	_, _, implinkHints := implinkStatus(cfg, claims)
-	res.NextSteps = nextSteps(cfg, claims, implinkHints)
+	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
 	return res
 }
 
@@ -519,7 +583,7 @@ func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Con
 	return errs
 }
 
-func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) []string {
+func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, buildOrders []BuildOrderReport) []string {
 	var hints []string
 
 	// Best-effort: a load error just degrades the drift/flag partition to "none"
@@ -533,21 +597,48 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 		flagStore = nil
 	}
 
+	// The pre-ledger upgrade step, FIRST because it is the only hint here about
+	// the project rather than about a claim.
+	//
+	// A project that locked claims before this build gave locks a record is
+	// grandfathered IN MEMORY by the read-only gate (lock.Store.PreLedgerExempt),
+	// which is what lets `check --validate` and `check --staged` pass it instead
+	// of accusing every locked claim of tampering. But in-memory is exactly that:
+	// nothing is written, so the same run happens again tomorrow, and the
+	// adoption a human should be reviewing has never been recorded anywhere they
+	// can read it. The write path (any `dossierx check` or claim command) is what
+	// puts the grandfathered records in the lock store, announces them, and lets
+	// this hint go away — so the read-only path SAYS SO instead of demanding it.
+	if store != nil && store.PreLedgerExempt(digestStorePresent(cfg)) {
+		hints = append(hints, "this project's locks predate the lock ledger and are being grandfathered in memory -> run dossierx check (the writing form) once, then commit the updated .dossierx-lock-store.json, so the adoption is on the record")
+	}
+
 	var draftIDs []string
 	var drafts []model.Claim         // the same claims, for the lock-gate evaluation
-	var commentPending []model.Claim // review_pending with >=1 open thread
+	var commentPending []model.Claim // ANY claim with >=1 open thread, draft or locked
 	var reauditTriggered []string    // review_pending from an ACTIVE drift/flag trigger
 	var reauditTriggerless []string  // review_pending but NO active trigger at all
 	for _, c := range claims {
+		// The open-thread hint is keyed on the THREADS, not on the claim's lock
+		// state, and it sits outside the switch below for that reason. It used to
+		// be appended only inside the locked+review_pending arm, which made the
+		// hint disagree with the two counts printed beside it in the same
+		// envelope: a DRAFT claim carrying an open thread was reported by
+		// open_comments and by the comments-unresolved lint, and by no next_step
+		// at all — while `claim lock` on it refuses with unresolved_comments. A
+		// draft's thread is exactly as much a thing the human has to act on as a
+		// locked one's (it is the gate that stops the claim locking), and a hint
+		// that undercounts the work is a hint an agent uses to conclude there is
+		// none.
+		if len(c.OpenThreadIDs()) > 0 {
+			commentPending = append(commentPending, c)
+		}
 		switch {
 		case c.Status == model.StatusDraft:
 			draftIDs = append(draftIDs, c.ID)
 			drafts = append(drafts, c)
 		case c.Status == model.StatusLocked && c.ReviewPending:
 			drift, flag, open := comments.PendingTriggers(c, claims, store, flagStore)
-			if open > 0 {
-				commentPending = append(commentPending, c)
-			}
 			// Partition the reaudit next-step by WHY the claim is review_pending so
 			// its label is accurate:
 			//   - an ACTIVE drift/flag trigger -> "from drift/flag".
@@ -619,13 +710,47 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 	}
 	hints = append(hints, implinkHints...)
 
+	// The build-order hints. There used to be exactly one — "fully locked, no
+	// artifact yet" — reached through a branch that tested only for
+	// ErrNotProposed and discarded every other answer, so the two states a
+	// project actually spends time in were both silent:
+	//
+	//   - a LOCKED order that has gone STALE. That is the ordinary outcome of the
+	//     fully sanctioned lifecycle (unlock a covered claim, edit it, re-lock),
+	//     and it means the approved implementation sequence no longer matches the
+	//     claims. `build-order status` reported stale:true while `check`,
+	//     `check --staged` and therefore the hook and CI said ok:true and named
+	//     only the dependent claim's review_pending. The skill tells an agent to
+	//     act "whenever a locked build order reports stale"; the loop command
+	//     never reported it.
+	//   - an artifact that exists and is UNLOCKED — an abandoned propose->lock
+	//     flow, silent forever, with next_steps null.
+	//
+	// The states come from buildOrders (recomputed live, never from the
+	// artifact's persisted "stale" field), so the hint and Result.BuildOrders can
+	// never disagree.
+	reported := make(map[string]bool, len(buildOrders))
+	for _, bo := range buildOrders {
+		reported[bo.Module] = true
+		switch {
+		case bo.Locked && bo.Stale:
+			hints = append(hints, fmt.Sprintf(
+				"module %q's locked build order is stale (%d claim(s) changed: %s) -> dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"…\"",
+				bo.Module, len(bo.StaleIDs), strings.Join(bo.StaleIDs, ", "), bo.Module, bo.Module))
+		case !bo.Locked:
+			hints = append(hints, fmt.Sprintf(
+				"module %q has a proposed build order that was never locked -> dossierx build-order lock --module %s --reason \"…\"",
+				bo.Module, bo.Module))
+		}
+	}
+
 	byModule := make(map[string][]model.Claim, len(cfg.Modules))
 	for _, c := range claims {
 		byModule[c.Module] = append(byModule[c.Module], c)
 	}
 	for _, module := range cfg.Modules {
 		mClaims := byModule[module]
-		if len(mClaims) == 0 {
+		if len(mClaims) == 0 || reported[module] {
 			continue
 		}
 		fullyLocked := true
@@ -665,6 +790,18 @@ func renderOutPath(cfg *config.Config) string {
 
 func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+}
+
+// digestStorePresent reports whether the comment digest store is on disk for
+// cfg. It is the evidence lock.Store.PreLedgerExempt weighs against a store that
+// claims to predate the ledger (see lock.Store.LedgerDowngraded), read here from
+// the WORKING TREE because that is where the rest of nextSteps' advisory inputs
+// come from — this is a hint about what to run next, never a verdict, and the
+// verdict's copy of the same question comes out of ledgerInputs (the index,
+// under --staged).
+func digestStorePresent(cfg *config.Config) bool {
+	_, err := os.Stat(digest.StorePath(cfg))
+	return err == nil
 }
 
 func flagStorePath(cfg *config.Config) string {

@@ -126,6 +126,12 @@ Both ends require `--reason`, and both take `--dry-run`. Preview, show the human
 get a yes, then run it. `--reason` is where their approval is carried into the record — never
 fabricate one.
 
+The window between the two ends is not a steady state. If any source file carries a
+`dossierx-claim:` tag for that id, a plain `dossierx check` in the middle of it fails with
+`implink_refused` and `claim is not locked (status "draft")` — the tag is fine, the claim is
+simply mid-edit. Finish the relock; do not touch the tag, and do not leave the claim unlocked to
+silence it.
+
 `dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
 the findings), `unresolved_comments` (reply, and let the human click Resolve),
 `dependency_not_locked` (a doctrine dependency is still draft), and `already_locked` — a claim

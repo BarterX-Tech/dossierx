@@ -13,10 +13,13 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -75,15 +78,46 @@ func newClaimLinkCmd() *cobra.Command {
 						dr.Lacking(required.name)
 					}
 				}
+				// The preview reproduces implink.Set's refusals IN ITS ORDER —
+				// claim exists, claim belongs to --module, claim is locked, file
+				// is project-relative, file exists — because a preview that
+				// checked only some of them answered "blocked: false" for
+				// invocations the real run refuses outright. Three of the five
+				// were missing: a --file that does not exist, a --file that is
+				// absolute or escapes the project directory, and a --claim
+				// belonging to a different module than --module. All three are
+				// ordinary agent mistakes (a path typo, a stale module name), so
+				// they were exactly the cases a preview is for.
 				if claimID != "" {
 					claim, ok := loader.FindByID(claims, claimID)
 					dr.Require("claim_exists", ok, claimID)
-					// implink.Set refuses a claim that is not locked: an
-					// implementation link asserts "this code implements a
-					// reviewed fact", and a draft claim is not yet a fact.
 					if ok {
+						// The module test comes BEFORE the locked test, matching
+						// implink.Set: a claim named with the wrong --module is a
+						// caller error whatever its status, and reporting it as
+						// not-locked would send the agent to lock a claim that was
+						// never the one it meant.
+						if module != "" {
+							dr.Require("claim_is_in_module", claim.Module == module,
+								fmt.Sprintf("claim %q belongs to module %q", claimID, claim.Module))
+						}
+						// implink.Set refuses a claim that is not locked: an
+						// implementation link asserts "this code implements a
+						// reviewed fact", and a draft claim is not yet a fact.
 						dr.Require("claim_is_locked", claim.Status == model.StatusLocked,
 							fmt.Sprintf("status is %q", claim.Status))
+					}
+				}
+				if file != "" {
+					inside, detail := fileIsInsideProject(cfg, file)
+					dr.Require("file_is_project_relative", inside, detail)
+					if inside {
+						// implink.Set hashes the file to take its drift baseline,
+						// and a file it cannot open is the refusal an agent hits
+						// most: the link records a project-RELATIVE path, so a
+						// path that was correct in the agent's own cwd is not.
+						resolved := filepath.Join(cfg.Dir(), file)
+						dr.Require("file_exists", fileExists(resolved), resolved)
 					}
 				}
 				dr.Effect("rewrites " + path).
@@ -174,6 +208,32 @@ func newClaimLinkCmd() *cobra.Command {
 	cmd.Flags().StringVar(&symbol, "symbol", "", "optional symbol (function/type/etc) within --file")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what linking would do, and write nothing")
 	return cmd
+}
+
+// fileIsInsideProject reproduces implink.Set's path contract for the dry run: a
+// --file must be RELATIVE and must resolve to somewhere inside the project
+// directory. It returns the verdict plus the detail string the precondition
+// reports.
+//
+// The rule is duplicated here rather than reached through internal/implink
+// because Set performs it as part of a write and exposes no read-only form. It
+// is deliberately the same three tests in the same order (absolute, resolve,
+// escape) so the two cannot disagree about a path either accepts; the write path
+// remains the authority, and this only ever has to STOP being wrong about a
+// refusal it would perform.
+func fileIsInsideProject(cfg *config.Config, file string) (ok bool, detail string) {
+	if filepath.IsAbs(file) {
+		return false, fmt.Sprintf("%q is absolute; a link records a project-relative path so it means the same thing on every machine", file)
+	}
+	absDir, err := filepath.Abs(cfg.Dir())
+	if err != nil {
+		return false, fmt.Sprintf("cannot resolve the project directory %q: %v", cfg.Dir(), err)
+	}
+	rel, err := filepath.Rel(absDir, filepath.Join(absDir, file))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return false, fmt.Sprintf("%q escapes the project directory via \"..\"", file)
+	}
+	return true, file
 }
 
 // linkTarget renders "<file>" or "<file>#<symbol>" for a dry run's would-phrase.

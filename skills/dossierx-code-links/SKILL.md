@@ -44,8 +44,15 @@ The everyday case, and the only thing most implementation work needs.
    the tag and links it — no separate command. A claim may have any number of tagged files; a file
    may carry tags for any number of claims.
 3. An invalid tag is a **hard failure**: an unknown claim id (check for a typo) or a claim that is
-   not locked yet makes `dossierx check` exit non-zero and name exactly what is wrong. Deliberate —
-   an unbacked or stale tag must never sit silently wrong in the codebase.
+   not locked yet makes `dossierx check` exit non-zero (`implink_refused`, `stopped_at: scan`) and
+   name exactly what is wrong. Deliberate — an unbacked or stale tag must never sit silently wrong
+   in the codebase. **One of those two shapes is not a bad tag.** While you hold a claim open to
+   edit it — `claim unlock` … fix … `claim lock` — its already-correct tags name a `draft` claim,
+   so every `dossierx check` in between fails with `claim is not locked (status "draft")`. That is
+   the unlock you asked for, mid-flight: finish the relock and the same `check` goes green. Never
+   delete or retarget a tag to clear it, and never leave the claim unlocked to keep `check` quiet —
+   `check --validate` and `check --staged` scan no source, so a hook and a CI run stay green while
+   the viewer rebuild you actually need is the thing failing.
 4. Symbol capture (the `#function_name` a reader sees later) is a best-effort text heuristic over
    common declaration shapes below the tag line, not a real parser. File-level linking is reliable
    regardless.

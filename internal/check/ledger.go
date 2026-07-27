@@ -58,9 +58,8 @@ import (
 // gate fails closed, loudly, and says which of the two stores failed.
 const RuleLedgerUnreadable = "lock-ledger-unreadable"
 
-// RuleCommentDigestAbsent is project-scoped: claims carry comment threads, this
-// project is already covered by the lock ledger, and the COMMENT DIGEST STORE is
-// not there.
+// RuleCommentDigestAbsent is project-scoped: this project is already covered by
+// the lock ledger, and the COMMENT DIGEST STORE is not there.
 //
 // It narrows the cheapest bypass in the comment half of the gate. comment-
 // ledger-drift compares a claim's comment block against a recorded digest, and a
@@ -75,34 +74,31 @@ const RuleLedgerUnreadable = "lock-ledger-unreadable"
 //
 // The trigger is deliberately NOT "the digest store is missing". It is "missing,
 // in a project whose LOCK STORE says it has already been through a ledger-aware
-// build" (lock.Store.LedgerCovered), AND at least one claim actually carries
-// comments. Both qualifiers exist to keep it off correct state:
+// build" (lock.Store.LedgerCovered). That qualifier keeps it off the one state
+// that is innocent: a project upgrading INTO this feature has no digest store
+// and has done nothing wrong. Its lock store is still at the pre-ledger version,
+// so it is exempt — and lock.PrepareStore CREATES the digest store at the very
+// moment it stamps that version (as does Store.Save at the moment it creates a
+// lock store for a fresh project), so a project crosses both lines together and
+// never sees this finding.
 //
-//   - A project upgrading INTO this feature has no digest store and has done
-//     nothing wrong. Its lock store is still at the pre-ledger version, so it is
-//     exempt — and lock.PrepareStore CREATES the digest store at the very moment
-//     it stamps that version (as does Store.Save at the moment it creates a lock
-//     store for a fresh project), so a project crosses both lines together and
-//     never sees this finding.
-//   - A project with no comment threads anywhere has nothing for the store to
-//     record, so its absence says nothing.
+// IT USED TO HAVE A SECOND QUALIFIER — at least one claim still carrying a
+// comment thread — and that qualifier WAS the hole. It was computed from the
+// state under audit, so the complete launder cost nothing: delete a claim's only
+// thread AND the digest store in the same commit, and the project has no
+// comments anywhere, so the count was zero and the rule whose whole job is to
+// report the missing store said nothing. The PARTIAL launder was reported and
+// the TOTAL one was not — the exact inversion an integrity gate cannot afford,
+// and the same shape as "deleting the file is quieter than editing it" that
+// lock-ledger-abandoned exists to prevent. A trigger may only be built out of
+// evidence that survives the tamper it is looking for; lock coverage survives,
+// the claims do not.
 //
-// WHAT THIS RULE DOES NOT CATCH, stated plainly because the second qualifier is
-// what limits it. An attacker who deletes a claim's ONLY thread and the digest
-// store in one commit leaves a project with no comments anywhere, so `commented`
-// is zero and this rule stays silent. It fires on the PARTIAL launder (threads
-// survive somewhere in the project) and on the bare deletion; it does not fire
-// on the total one.
-//
-// That qualifier cannot simply be dropped. check --staged reads both stores out
-// of the git INDEX (see stagedLedgerInputs), so "no digest store in the index"
-// is also the state of every project that has not committed one yet — including
-// a brand-new project that has never been commented on. Firing there would make
-// the pre-commit hook and CI refuse every commit until someone git-adds a file
-// they have no reason to know about, which is a strictly worse failure than the
-// residue above. Closing it properly needs positive evidence that the project
-// HAD threads (a per-claim "this claim is digest-uncovered" marker, or a count
-// carried in the lock store), not a broader absence test.
+// What dropping it costs, stated plainly: `check --staged` now refuses a commit
+// whose INDEX carries a lock ledger but no digest store beside it — a project
+// that never `git add`ed the file the engine wrote for it. That is a real state
+// with a one-command fix, and the message names it. The alternative was a rule a
+// two-file commit walks straight through.
 //
 // Recovery is version control, exactly as for lock-ledger-absent: the file is
 // tracked, so restoring it is what brings the evidence back. Re-creating it by
@@ -110,6 +106,58 @@ const RuleLedgerUnreadable = "lock-ledger-unreadable"
 // attacker wants — internal/comments refuses to adopt in a covered project for
 // that reason.
 const RuleCommentDigestAbsent = "comment-digest-absent"
+
+// RuleCommentDigestMissing is per-claim, and it is comment-digest-absent's other
+// half: the digest STORE is there, and this claim — which holds a STANDING
+// (unreleased) lock-ledger record — has no entry in it.
+//
+// The rule exists because the store was protected against deletion and not
+// against being EMPTIED, and emptying it is strictly cheaper to hide in a review
+// diff than the `rm` the absence rule catches. The full launder, reproduced:
+// unlock a claim, open a human thread on it ("I do not agree…"), and `claim
+// lock` correctly refuses with unresolved_comments naming the thread. Then
+// hand-delete the `comments:` block from the YAML AND overwrite the digest store
+// with `{"version":1,"digests":{}}` — and `claim lock --reason "the human agreed
+// offline"` succeeds, writing a REAL, non-grandfathered ledger record, after
+// which `check --validate` reports ok:true and no findings. Measured on the same
+// tampered claim: delete the FILE -> ok:false ['comment-digest-absent']; leave
+// the file and empty the map -> ok:true, [].
+//
+// COVERAGE, NOT FILE PRESENCE, IS THE TRIGGER, and the predicate is built only
+// out of the LEDGER RECORD, which the tamper does not control: every approval
+// records the claim's comment digest in the same act that records the approval
+// (lock.RecordApproval), so a standing record without an entry is a statement
+// about the digest store, not about the claim. It is silent exactly where it
+// should be — a project with no ledger coverage at all is not asked (nothing has
+// been approved here), an uncommented DRAFT has no record so it is not asked
+// either, and a released record describes a claim that is allowed to be out of
+// the approval path.
+//
+// comment-digest-absent stays as the project-scoped CAUSE: when the whole file
+// is gone, this rule is suppressed rather than repeating the same cause once per
+// claim.
+const RuleCommentDigestMissing = "comment-digest-missing"
+
+// RuleCommentDigestAbandoned is the reverse sweep for comments, symmetric with
+// lock-ledger-abandoned: a digest entry whose claim id is no longer anywhere in
+// the project, and which recorded review history.
+//
+// It is what makes the RENAME launder visible. Hand-delete a claim's `comments:`
+// block alone and comment-ledger-drift fires (correct). Delete the block AND
+// change `id:` in the same edit and every rule that starts from the claim went
+// quiet, because the claim the store knows about no longer exists and the claim
+// that exists is one the store has never seen — verified ok:true, zero findings,
+// zero lint errors, after which `claim lock <new id>` succeeded on a claim whose
+// human review had been erased. The old id's entry survives that edit, because
+// it is not reachable from the file the tamper rewrote, and that is exactly the
+// property a trigger has to have.
+//
+// It does not fire on the two departures that are accounted for — an entry that
+// recorded no threads at all, and a claim whose ledger record was released by an
+// honest unlock — and lock.SweepCommentDigests drops those entries so they do
+// not accumulate. See lock.AbandonedCommentDigests, which owns the predicate for
+// both this rule and that sweep so the gate and the sweep cannot disagree.
+const RuleCommentDigestAbandoned = "comment-digest-abandoned"
 
 // The BUILD-ORDER ledger rules.
 //
@@ -159,6 +207,66 @@ const (
 	// It fires only on UNRELEASED records (see lock.ReleaseBuildOrderApproval),
 	// so a build order a human deliberately released stays silent.
 	RuleBuildOrderLedgerAbandoned = "build-order-ledger-abandoned"
+
+	// RuleBuildOrderLedgerOrphan: an artifact that is byte-for-byte the one a
+	// human approved EXCEPT that its own `"locked"` flag now says false, while
+	// its ledger record still stands unreleased.
+	//
+	// It is the build-order twin of lock-ledger-orphan, and it closes the
+	// cheapest bypass in this whole gate: one boolean, in the audited file,
+	// disarmed every rule above it. Both forward rules skip an unlocked artifact
+	// (correctly — an unlocked artifact is a proposal nobody has approved), and
+	// the reverse sweep skips one that is present (correctly — it is the forward
+	// loop's business). So editing `"locked": true` to `"locked": false` and
+	// changing nothing else removed the artifact from every rule's evidence set
+	// at once, and `check` reported ok. The approved implementation sequence is
+	// still sitting there for an agent to follow, and the ledger still says a
+	// human approved it; the only thing that changed is the flag that decides
+	// whether anyone checks.
+	//
+	// The predicate is exact rather than "unlocked artifact + standing record",
+	// and that is what keeps it off correct state. The honest re-propose window
+	// — "build-order propose" overwriting a stale locked order with a fresh
+	// unlocked one, before the lock that follows — also produces an unlocked
+	// artifact under a standing record, and refusing THAT would refuse every
+	// commit between the two halves of the documented flow. The two are told
+	// apart by re-signing the artifact as if its locked flag were still true: if
+	// that hash matches the record, the file IS the approved artifact and the
+	// flag is the only thing anybody touched. A re-proposal is a recomputation
+	// from claims that had to have moved for propose to be allowed at all (a
+	// locked, non-stale order refuses to be re-proposed), so it never
+	// re-signs to the approved hash.
+	//
+	// WHAT IT DOES NOT CATCH: flipping the flag AND editing the phases in the
+	// same edit. That artifact re-signs to something else, so it is
+	// indistinguishable here from an honest re-proposal, and it stays a known
+	// gap. Closing it needs "propose" to RELEASE the standing record
+	// (lock.ReleaseBuildOrderApproval exists for exactly that and has no caller
+	// yet), after which any unlocked artifact under a STANDING record is a
+	// finding with no exceptions.
+	RuleBuildOrderLedgerOrphan = "build-order-ledger-orphan"
+
+	// RuleBuildOrderUnreadable: a build-order artifact file that IS there and
+	// cannot be decoded (or cannot be hashed once decoded).
+	//
+	// It is the build-order twin of RuleLedgerUnreadable, and it exists because
+	// corrupting the approved implementation sequence was strictly QUIETER than
+	// deleting it. Deleting the artifact is caught by the reverse sweep
+	// (build-order-ledger-abandoned, a refusal); truncating the same file
+	// mid-token — `{ "module": "widget", "locked": tr` — left
+	// collectBuildOrderStates with Present=false and Unreadable=true, which the
+	// forward loop skips (it audits present artifacts) and the reverse sweep also
+	// skips (an unreadable file is not evidence of deletion). Nothing else read
+	// the flag: its doc comment deferred the case to "check's own build-order
+	// reporting", which was never built. So `check` exited 0 over a destroyed
+	// implementation sequence.
+	//
+	// It is its OWN rule rather than folded into either existing one precisely
+	// because it is neither: the artifact was not deleted, and its content cannot
+	// be compared to anything. The recovery is the lock store's recovery, for the
+	// same reason — restore the file from version control, never re-propose,
+	// which would record whatever the claims say NOW as the approved order.
+	RuleBuildOrderUnreadable = "build-order-unreadable"
 )
 
 // buildOrderState is one module's build-order artifact as the gate's evidence
@@ -182,14 +290,31 @@ type buildOrderState struct {
 	Path   string
 	Hash   string
 
+	// LockedHash is the signature this artifact WOULD have if its own `locked`
+	// flag said true, with every other byte left exactly as found. For a locked
+	// artifact it is identical to Hash; for an unlocked one it is what makes
+	// "somebody flipped one boolean" separable from "somebody re-proposed",
+	// which is the whole of RuleBuildOrderLedgerOrphan.
+	LockedHash string
+
 	// Present is true when an artifact file was found and decoded.
 	Present bool
 	// Locked is the artifact's own locked flag (meaningful only when Present).
 	Locked bool
 	// Unreadable is true when a file IS there but could not be read, decoded or
 	// hashed. Distinct from !Present on purpose: absence is evidence about the
-	// ledger, a corrupt file is not (see collectBuildOrderStates).
+	// ledger, a corrupt file is not (see collectBuildOrderStates) — so it stays
+	// out of the reverse sweep and is reported by its own rule,
+	// RuleBuildOrderUnreadable, in the forward loop. It used to be audited by
+	// NOTHING, on the strength of a doc comment deferring it to a reporter that
+	// was never built, which made corrupting an approved implementation sequence
+	// quieter than deleting it.
 	Unreadable bool
+
+	// Err is the decode/hash failure behind Unreadable, kept so the finding can
+	// name the actual error rather than "something went wrong" — the same reason
+	// ledgerInputs keeps storeErr/digestErr.
+	Err error
 }
 
 // collectBuildOrderStates reduces every module's artifact, as read by the
@@ -220,39 +345,98 @@ func collectBuildOrderStates(cfg *config.Config, load func(module string) (*buil
 			// reverse sweep is looking for when a record still stands.
 		case err != nil:
 			state.Unreadable = true
+			state.Err = err
 		default:
 			hash, hashErr := buildOrderSignature(artifact)
 			if hashErr != nil {
 				state.Unreadable = true
+				state.Err = hashErr
+				break
+			}
+			// The as-if-locked signature is computed from a COPY: the gate is
+			// read-only, and mutating the decoded artifact would leak into
+			// whatever else the caller does with it.
+			relocked := *artifact
+			relocked.Locked = true
+			lockedHash, lockedErr := buildOrderSignature(&relocked)
+			if lockedErr != nil {
+				state.Unreadable = true
+				state.Err = lockedErr
 				break
 			}
 			state.Present = true
 			state.Locked = artifact.Locked
 			state.Hash = hash
+			state.LockedHash = lockedHash
 		}
 		states = append(states, state)
 	}
 	return states
 }
 
-// buildOrderGate evaluates the two build-order ledger rules over the locked
-// artifacts the caller collected.
+// buildOrderGate evaluates the build-order ledger rules over the artifacts the
+// caller collected.
 //
 // A nil store means the ledger could not be read at all, which
 // RuleLedgerUnreadable has already reported; adding "and every build order is
 // unapproved" on top would be noise attributing one cause to many symptoms.
-func buildOrderGate(orders []buildOrderState, store *lock.Store) []lock.Finding {
+//
+// It takes the whole ledgerInputs rather than the store alone because the
+// pre-ledger exemption needs the SAME evidence lock.Audit needs: whether this
+// project has ever been through a ledger-aware build (see
+// lock.Store.PreLedgerExempt). A build order locked by a v0.2.x build has no
+// record either, and reporting it as build-order-ledger-missing — telling the
+// human to re-propose and re-lock an order they never touched — was the same
+// false accusation the claim half used to make.
+func buildOrderGate(in ledgerInputs) []lock.Finding {
+	store := in.store
 	if store == nil {
 		return nil
 	}
+	preLedgerExempt := store.PreLedgerExempt(in.digests != nil && in.digests.FileExists())
 
 	var findings []lock.Finding
-	for _, o := range orders {
-		if !o.Present || !o.Locked {
+	for _, o := range in.buildOrders {
+		// The corrupt artifact, reported before anything else about this module:
+		// like the unreadable lock store, it is a statement about the gate's own
+		// EVIDENCE, and it is the cause of every rule below saying nothing about
+		// this module. See RuleBuildOrderUnreadable.
+		if o.Unreadable {
+			findings = append(findings, lock.Finding{
+				Rule: RuleBuildOrderUnreadable,
+				Message: fmt.Sprintf(
+					"module %q's build-order artifact (%s) is there but could not be read: %v. No build-order rule can say anything about this module on this run — a corrupt artifact is not evidence that it was deleted, and it cannot be compared to the approval record either, so the approved implementation sequence is unaudited. Restore the file from version control; do NOT re-propose, which would record whatever the claims say now as the approved order.",
+					o.Module, o.Path, o.Err),
+			})
 			continue
 		}
-		record, ok := store.Record(lock.BuildOrderLedgerKey(o.Module))
-		if !ok || record.Subject != lock.SubjectBuildOrder {
+		if !o.Present {
+			continue
+		}
+		record, hasRecord := store.Record(lock.BuildOrderLedgerKey(o.Module))
+		standing := hasRecord && record.Subject == lock.SubjectBuildOrder && !record.Released()
+
+		// The unlocked artifact: audited by exactly one rule, and only in the
+		// one shape that cannot be an honest re-proposal. See
+		// RuleBuildOrderLedgerOrphan.
+		if !o.Locked {
+			if standing && o.LockedHash == record.Hash {
+				findings = append(findings, lock.Finding{
+					Rule: RuleBuildOrderLedgerOrphan,
+					Message: fmt.Sprintf(
+						"module %q's build order (%s) is the artifact approved on %s (%q) with its own \"locked\" flag set to false and nothing else changed — its lock-ledger record still stands, unreleased. An unlocked artifact is audited by nothing (it is meant to be a fresh proposal nobody has approved yet), so flipping that one boolean takes an approved implementation sequence out of the gate while leaving it in place for an agent to follow. Restore \"locked\": true, or release the approval honestly by re-proposing the order (dossierx build-order propose --module %s) and locking the result.",
+						o.Module, o.Path, record.At, record.Reason, o.Module),
+				})
+			}
+			continue
+		}
+
+		if !hasRecord || record.Subject != lock.SubjectBuildOrder {
+			if preLedgerExempt {
+				// Locked before this project had a ledger to record it in.
+				// Grandfathered in memory, exactly as a locked claim is.
+				continue
+			}
 			findings = append(findings, lock.Finding{
 				Rule: RuleBuildOrderLedgerMissing,
 				Message: fmt.Sprintf(
@@ -270,7 +454,7 @@ func buildOrderGate(orders []buildOrderState, store *lock.Store) []lock.Finding 
 			})
 		}
 	}
-	return append(findings, abandonedBuildOrders(orders, store)...)
+	return append(findings, abandonedBuildOrders(in.buildOrders, store)...)
 }
 
 // abandonedBuildOrders is the reverse sweep: the LEDGER's own build-order
@@ -293,12 +477,17 @@ func buildOrderGate(orders []buildOrderState, store *lock.Store) []lock.Finding 
 // It deliberately does NOT fire on an artifact that is PRESENT but unlocked.
 // That state is the honest re-propose window — "build-order propose" overwrites
 // a locked artifact with a fresh unlocked one and does not (yet) release the
-// record — so reporting it would refuse every commit between a re-propose and
-// the lock that follows it. Closing that half needs the release wired into
-// propose (see lock.ReleaseBuildOrderApproval); until then, a hand-flipped
-// `"locked": false` stays invisible and is a known gap rather than a rule that
-// fires on correct state, which is the one thing that makes a gate get turned
-// off.
+// record — so reporting it here would refuse every commit between a re-propose
+// and the lock that follows it.
+//
+// The hand-flipped `"locked": false` that used to hide in that same window is
+// now caught by the forward loop instead, and precisely: an artifact that
+// re-signs to its own record once the flag is put back is the approved artifact
+// with one boolean changed, which no re-proposal can be (see
+// RuleBuildOrderLedgerOrphan). What remains uncovered is a flip made TOGETHER
+// with a content edit, and closing that still needs the release wired into
+// propose (see lock.ReleaseBuildOrderApproval), after which every unlocked
+// artifact under a standing record is a finding.
 func abandonedBuildOrders(orders []buildOrderState, store *lock.Store) []lock.Finding {
 	if store == nil || !store.FileExists() {
 		return nil
@@ -458,16 +647,96 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 
 	if f, ok := commentDigestAbsent(claims, in); ok {
 		findings = append(findings, f)
+	} else {
+		// Only when the store is THERE: with the file gone, the finding above is
+		// the one cause, and repeating it once per locked claim would bury it.
+		findings = append(findings, commentDigestCoverage(claims, in)...)
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
-	return append(findings, buildOrderGate(in.buildOrders, in.store)...)
+	return append(findings, buildOrderGate(in)...)
 }
 
 // commentDigestAbsent evaluates RuleCommentDigestAbsent (see it for the whole
 // argument). It is reported with the other cause-level findings, before
 // lock.Audit's per-claim output, because when it fires it explains why the
 // comment rules below said nothing at all.
+//
+// IT DOES NOT LOOK AT THE CLAIMS. It used to: the rule fired only when at least
+// one claim still carried a comment thread, on the reasoning that a project with
+// no threads has nothing for the store to record. That qualifier was computed
+// from the very state an attacker controls, and it made the TOTAL launder free —
+// delete a claim's only thread AND the digest store in one commit, and the count
+// is zero, so the rule that exists to report the deleted store stayed silent
+// about the deletion that hid the deleted thread. A gate whose trigger is
+// derived from the tampered evidence is not a gate.
+//
+// The remaining qualifier is the one that cannot be tampered into: has this
+// project already been through a ledger-aware build (lock.Store.LedgerCovered)?
+// A covered project is one whose lock store exists at the ledger schema — and
+// this build creates the digest store at the very instant it creates or stamps
+// that lock store (lock.Store.Save's ensureCommentDigestStore for a fresh
+// project, lock.PrepareStore's adoptCommentDigests for one migrating across), so
+// coverage without a digest store is a state the product does not produce. A
+// project that predates the ledger, or has never locked anything, is not covered
+// and is not asked about.
+//
+// The case this newly reports is the one flagged in the old note as needing a
+// broader test: `check --staged` in a project whose lock store is in the index
+// but whose digest store was never `git add`ed. That commit really does carry a
+// ledger with no comment evidence beside it, and the fix — stage the file the
+// engine already wrote — is one command, which the message names. Refusing it is
+// the right side of the trade now that the alternative is a rule with a hole in
+// the middle.
+// commentDigestCoverage evaluates the two coverage rules that read the digest
+// store's CONTENT rather than its existence: comment-digest-missing (a standing
+// approval with no entry) and comment-digest-abandoned (an entry with no claim).
+//
+// They are computed together because they are the two halves of one question —
+// does the set of entries still line up with the set of claims the approval path
+// has been through? — and because both are silent on exactly the same
+// preconditions: an unreadable store (nil, already reported), an absent one (the
+// caller reports the project-scoped cause instead), and a project that has never
+// been through a ledger-aware build (nothing here has been approved, so there is
+// nothing to be covered).
+func commentDigestCoverage(claims []model.Claim, in ledgerInputs) []lock.Finding {
+	if in.store == nil || in.digests == nil || !in.digests.FileExists() {
+		return nil
+	}
+	if !in.store.LedgerCovered() {
+		return nil
+	}
+
+	var findings []lock.Finding
+	for _, c := range claims {
+		record, ok := in.store.Record(c.ID)
+		if !ok || record.Subject != lock.SubjectClaim || record.Released() {
+			continue
+		}
+		if _, known := in.digests.Digest(c.ID); known {
+			continue
+		}
+		findings = append(findings, lock.Finding{
+			Rule:    RuleCommentDigestMissing,
+			ClaimID: c.ID,
+			Message: fmt.Sprintf(
+				"claim %q holds a standing lock-ledger approval from %s (%q) but has no entry in %s, so its comment threads are not being checked against anything. Every approval records the claim's comment digest in the same act, so an approved claim with no entry means the entry was removed — emptying the map is how an unresolved review is edited away without the deletion of the file itself being reported. Restore %s from version control, or git add it if this commit is the one that updated it. Do NOT run a comment op to re-create the entry: that records whatever the claim says NOW as the truth, which is exactly what removing it was for.",
+				c.ID, record.At, record.Reason, digest.StoreFileName, digest.StoreFileName),
+		})
+	}
+
+	for _, id := range lock.AbandonedCommentDigests(claims, in.store, in.digests) {
+		findings = append(findings, lock.Finding{
+			Rule:    RuleCommentDigestAbandoned,
+			ClaimID: id,
+			Message: fmt.Sprintf(
+				"%s records comment threads for claim %q, which is no longer in the project: the claim file was deleted, or its id was changed — and changing the id in the same edit that deletes a comments block is how an unresolved review disappears with nothing reported against the claim that replaces it. Restore the claim (under its recorded id) from version control, or — if the removal was intended — restore it, resolve or delete its threads through dossierx so the removal is on the record, and delete it again.",
+				digest.StoreFileName, id),
+		})
+	}
+	return findings
+}
+
 func commentDigestAbsent(claims []model.Claim, in ledgerInputs) (lock.Finding, bool) {
 	// A store that failed to DECODE is a different condition, already reported
 	// as lock-ledger-unreadable above; nil here means exactly that.
@@ -477,19 +746,10 @@ func commentDigestAbsent(claims []model.Claim, in ledgerInputs) (lock.Finding, b
 	if !in.store.LedgerCovered() {
 		return lock.Finding{}, false
 	}
-	commented := 0
-	for _, c := range claims {
-		if len(c.Comments) > 0 {
-			commented++
-		}
-	}
-	if commented == 0 {
-		return lock.Finding{}, false
-	}
 	return lock.Finding{
 		Rule: RuleCommentDigestAbsent,
 		Message: fmt.Sprintf(
-			"%d claim(s) carry comment threads but the comment digest store (%s) is missing, so comment-thread drift is not being checked AT ALL on this run. Either that file was deleted — which is how an edited-away review thread stops being reported — or the threads were written into the YAML by hand, outside the engine that records them. Restore the file from version control rather than re-creating it: a re-created store records whatever the claims say NOW as the truth, which is exactly what a deletion was for.",
-			commented, digest.StoreFileName),
+			"this project has a lock ledger but no comment digest store (%s), so comment-thread drift is not being checked AT ALL on this run — for any of its %d claim(s). The engine writes that file the moment a project acquires a lock ledger, so its absence means it was deleted (which is how an edited-away review thread stops being reported, and it stays quiet even when the last thread went with it) or it is not part of this commit. Restore it from version control, or git add it if this commit is the one that created it. Do not re-create it by running a comment op: a re-created store records whatever the claims say NOW as the truth, which is exactly what a deletion was for.",
+			digest.StoreFileName, len(claims)),
 	}, true
 }

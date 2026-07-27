@@ -5,6 +5,7 @@
 package check_test
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
@@ -454,33 +456,153 @@ func TestRun_DeletingTheDigestStoreIsReported(t *testing.T) {
 	}
 }
 
-// The two qualifiers that keep the rule off correct state.
+// downgradeLockStore rewrites cfg's lock store the way v0.2.x left it — the
+// schema version back at the pre-ledger number, no ledger key — and optionally
+// removes the comment digest store beside it.
 //
-// A project with no comment threads has nothing for the store to record, so its
-// absence says nothing at all — and a project that predates the ledger (its lock
-// store is still at the older schema, or there is no lock store because nothing
-// has ever been locked) is mid-upgrade, not tampered with.
-func TestRun_DigestStoreAbsenceIsSilentWithoutCommentsOrLedgerCoverage(t *testing.T) {
-	t.Run("no comments anywhere", func(t *testing.T) {
-		cfg, claims := project(t, baseConfig, map[string]string{
-			"claims/locked.yaml": lockedClaim("widget.contract.locked"),
-		})
-		// Establish the state under test rather than assuming it: a fresh
-		// project now acquires its digest store at the moment lock.Store.Save
-		// first creates the lock store (so that "ledger-covered with no digest
-		// store" is unambiguous), and this subtest is about what happens when
-		// that file is NOT there. Removing it is what puts the project in the
-		// shape being asserted about; tolerating IsNotExist keeps the subtest
-		// correct whichever way the fixture happens to leave it.
+// The two flavours are the whole point of the fixture. WITHOUT the digest store
+// this is exactly the shape of a genuine project upgrading from v0.2.x (that
+// file did not exist before v0.3.0). WITH it, the same bytes are a project that
+// has demonstrably already been through a ledger-aware build and had its store
+// hand-edited back. The gate has to pass the first and refuse the second, and
+// the only thing separating them is the sibling file.
+func downgradeLockStore(t *testing.T, cfg *config.Config, keepDigestStore bool) {
+	t.Helper()
+	path := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read lock store: %v", err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse lock store: %v", err)
+	}
+	doc["version"] = 1
+	delete(doc, "ledger")
+	edited, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatalf("marshal downgraded store: %v", err)
+	}
+	if err := os.WriteFile(path, edited, 0o644); err != nil {
+		t.Fatalf("write downgraded store: %v", err)
+	}
+	if !keepDigestStore {
 		if err := os.Remove(digest.StorePath(cfg)); err != nil && !os.IsNotExist(err) {
-			t.Fatalf("precondition: remove digest store: %v", err)
+			t.Fatalf("remove digest store: %v", err)
 		}
-		res, err := check.Run(claims, cfg)
-		if err != nil {
-			t.Fatalf("a project with no comment threads must not be accused: %v (%v)", err, rulesOf(res.LedgerFindings))
-		}
-	})
+	}
+}
 
+// A legitimate pre-ledger (v0.2.x) project must PASS the read-only commands.
+//
+// "check --validate" and "check --staged" both write nothing on purpose, and
+// grandfathering only ever ran in the CLI's write path — so every project that
+// locked claims before this release had each of them reported as
+// lock-ledger-missing (and each locked build order as build-order-ledger-missing)
+// by the pre-commit hook and by CI, with recovery text telling the human to set
+// their locked claims back to draft and re-lock them. That is a gate firing on
+// correct state, with destructive advice attached, at the exact moment a project
+// upgrades. The read-only path now grandfathers in memory instead and says what
+// to run, as advice, in next steps.
+func TestStatus_PreLedgerProjectIsGrandfatheredNotAccused(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/a.yaml": orderedClaim("widget.contract.a"),
+	})
+	lockBuildOrder(t, cfg, claims, "widget")
+	downgradeLockStore(t, cfg, false)
+
+	res := check.Status(claims, cfg)
+	if len(res.LedgerFindings) != 0 {
+		t.Fatalf("a project that locked things before the ledger existed has done nothing wrong; got %v", rulesOf(res.LedgerFindings))
+	}
+
+	found := false
+	for _, h := range res.NextSteps {
+		if strings.Contains(h, "predate the lock ledger") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("the upgrade must be reported as a next step rather than passing silently, got %#v", res.NextSteps)
+	}
+}
+
+// The same bytes, with the sibling file that proves this project has already
+// been through a ledger-aware build, are a downgrade — and the read-only path
+// must not extend the pre-ledger exemption to them. Otherwise the fix for the
+// honest project would hand the attacker a quieter version of the same bypass:
+// edit one number, and check --staged reports nothing at all.
+func TestStatus_DowngradedLockStoreIsRefusedNotGrandfathered(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/a.yaml": orderedClaim("widget.contract.a"),
+	})
+	lockBuildOrder(t, cfg, claims, "widget")
+	downgradeLockStore(t, cfg, true)
+
+	res := check.Status(claims, cfg)
+	for _, want := range []string{lock.RuleLockLedgerDowngraded, lock.RuleLockLedgerMissing, check.RuleBuildOrderLedgerMissing} {
+		if !hasRule(res.LedgerFindings, want) {
+			t.Fatalf("expected %s, got %v", want, rulesOf(res.LedgerFindings))
+		}
+	}
+}
+
+// The TOTAL launder: delete a claim's only comment thread AND the digest store
+// in one commit.
+//
+// This is the case the rule used to miss, and it missed it for the worst
+// possible reason — its own trigger was computed from the tampered state. The
+// rule only fired when some claim still carried a thread, so removing the LAST
+// one removed the evidence that any had ever existed, and the deleted store went
+// unreported. Deleting more had to stop buying more silence: the partial launder
+// was caught and the total one was free.
+func TestRun_DeletingTheOnlyThreadAndTheDigestStoreIsStillReported(t *testing.T) {
+	const commented = "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+		"body: |\n  a draft claim.\n" +
+		"governed_by:\n  type: none\n  reason: fixture\n" +
+		"comments:\n" +
+		"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n"
+
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/locked.yaml":    lockedClaim("widget.contract.locked"),
+		"claims/commented.yaml": commented,
+	})
+	if _, err := check.Run(claims, cfg); err != nil {
+		t.Fatalf("precondition: expected a clean run before the launder, got %v", err)
+	}
+
+	// The launder, in one commit: the thread goes out of the YAML, and the file
+	// that would have reported the edit goes with it. Nothing else changes.
+	if err := os.WriteFile(filepath.Join(cfg.ClaimsDir, "commented.yaml"), []byte(draftClaim("widget.contract.one")), 0o644); err != nil {
+		t.Fatalf("delete the thread: %v", err)
+	}
+	if err := os.Remove(digest.StorePath(cfg)); err != nil {
+		t.Fatalf("remove digest store: %v", err)
+	}
+	laundered, err := loader.LoadClaims(cfg.ClaimsDir)
+	if err != nil {
+		t.Fatalf("reload claims: %v", err)
+	}
+	for _, c := range laundered {
+		if len(c.Comments) > 0 {
+			t.Fatalf("precondition: the laundered project must carry no comment threads at all; %s still has %d", c.ID, len(c.Comments))
+		}
+	}
+
+	res, err := check.Run(laundered, cfg)
+	if err == nil {
+		t.Fatalf("the total launder must not be quieter than the partial one, got a clean run")
+	}
+	if !hasRule(res.LedgerFindings, check.RuleCommentDigestAbsent) {
+		t.Fatalf("expected %s, got %v", check.RuleCommentDigestAbsent, rulesOf(res.LedgerFindings))
+	}
+}
+
+// The one qualifier that keeps the rule off correct state: a project that
+// predates the ledger (its lock store is still at the older schema, or there is
+// no lock store because nothing has ever been locked) is mid-upgrade, not
+// tampered with.
+func TestRun_DigestStoreAbsenceIsSilentWithoutLedgerCoverage(t *testing.T) {
 	t.Run("not yet ledger-covered", func(t *testing.T) {
 		cfg, claims := project(t, baseConfig, map[string]string{
 			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +

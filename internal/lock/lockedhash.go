@@ -23,9 +23,10 @@
 //     one edit that most needs a signature. So LockedClaimHash exists.
 //
 // LockedClaimHash is therefore built as a DENY-LIST over reflection rather than
-// an allowlist over named fields: it hashes every persisted (yaml-tagged) field
-// of model.Claim EXCEPT the three engine-managed ones below. A field added to
-// model.Claim tomorrow is covered by default — the failure mode of a deny-list
+// an allowlist over named fields: it hashes every field of model.Claim that
+// yaml.v3 puts on disk (see PersistedYAMLName, which decides that question and
+// decides it fail-closed) EXCEPT the three engine-managed ones below. A field
+// added to model.Claim tomorrow is covered by default — the failure mode of a deny-list
 // is "we hashed something we did not need to" (a spurious drift report, loud
 // and recoverable), while the failure mode of an allowlist is "we silently
 // stopped signing a field" (a blessed tamper, silent and permanent). The
@@ -108,18 +109,26 @@ func LockedClaimHash(c model.Claim) string {
 }
 
 // hashStructFields writes every exported, yaml-persisted field of the struct v
-// into h as "tag=<encoded value>\n", skipping any tag in exclude.
+// into h as "name=<encoded value>\n", skipping any name in exclude.
 //
-// Fields are emitted in yaml-tag alphabetical order, NOT struct declaration
+// Fields are emitted in on-disk-name alphabetical order, NOT struct declaration
 // order, on purpose: reordering the fields of model.Claim is a pure source
 // refactor that changes nothing on disk, and it must not invalidate every
 // ledger record in every project.
 //
-// A field with no yaml tag, or the tag "-" (model.Claim.SourcePath, which the
-// loader fills in from the filesystem), is not persisted and so is not part of
-// what was approved — it is skipped. exclude applies only at this level;
-// nested structs (model.Governed) hash all of their own fields, since the
-// deny-list names top-level claim fields.
+// WHICH FIELDS ARE PERSISTED IS DECIDED BY persistedYAMLName, NOT BY "does it
+// have a yaml tag". This used to skip every field whose tag was "" or "-", and
+// the "" half was a hole in the deny-list: yaml.v3 persists an exported field
+// with NO yaml tag under its lower-cased Go name, so such a field would be
+// written to the claim file, read back from it, and yet excluded from the very
+// signature that is supposed to cover "every field a claim persists". A
+// deny-list that fails open on the shape nobody remembered to tag is not a
+// deny-list. Only `yaml:"-"` (model.Claim.SourcePath, which the loader fills in
+// from the filesystem) is genuinely not on disk, and it is the only thing
+// skipped here.
+//
+// exclude applies only at this level; nested structs (model.Governed) hash all
+// of their own fields, since the deny-list names top-level claim fields.
 func hashStructFields(h io.Writer, v reflect.Value, exclude map[string]bool) {
 	t := v.Type()
 	type taggedField struct {
@@ -129,12 +138,9 @@ func hashStructFields(h io.Writer, v reflect.Value, exclude map[string]bool) {
 	fields := make([]taggedField, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
-		if sf.PkgPath != "" {
-			continue // unexported: never marshalled, never on disk
-		}
-		tag := YAMLTagName(sf)
-		if tag == "" || tag == "-" {
-			continue // not persisted
+		tag, persisted := PersistedYAMLName(sf)
+		if !persisted {
+			continue
 		}
 		if exclude[tag] {
 			continue
@@ -252,12 +258,14 @@ func canonicalMapKey(k reflect.Value) string {
 	return fmt.Sprint(k.Interface())
 }
 
-// YAMLTagName returns the on-disk field name of struct field sf — the part of
-// its `yaml:"..."` tag before the first comma — or "" if it has no yaml tag at
-// all. It is exported because the ledger's schema-decision test walks
-// model.Claim's tags with exactly the rules the hasher uses; a second,
-// hand-rolled tag parser in the test could disagree with this one and pass
-// while the hasher silently skipped a field.
+// YAMLTagName returns the NAME PART of struct field sf's `yaml:"..."` tag — what
+// comes before the first comma — or "" when the field has no yaml tag at all, or
+// has one that names nothing (`yaml:",omitempty"`, `yaml:",inline"`).
+//
+// It answers only "what does the tag say"; it deliberately does NOT answer "is
+// this field on disk, and under what name". That second question is
+// PersistedYAMLName's, and the two must not be confused: an empty answer here
+// means the tag is silent, not that the field is absent from the file.
 func YAMLTagName(sf reflect.StructField) string {
 	tag, ok := sf.Tag.Lookup("yaml")
 	if !ok {
@@ -265,4 +273,55 @@ func YAMLTagName(sf reflect.StructField) string {
 	}
 	name, _, _ := strings.Cut(tag, ",")
 	return name
+}
+
+// PersistedYAMLName returns the name yaml.v3 would write struct field sf under,
+// and whether the field is persisted at all. It is the single authority on what
+// LockedClaimHash signs, and it is written to FAIL CLOSED: a field is treated as
+// on disk unless it is provably not.
+//
+// The three cases, in the order they are decided:
+//
+//   - UNEXPORTED (PkgPath != ""): never marshalled by yaml.v3, so never on disk.
+//     Not persisted.
+//
+//   - `yaml:"-"`: the author said "do not persist this" and yaml.v3 obeys.
+//     model.Claim.SourcePath is the only one in the schema — the loader fills it
+//     in from wherever the file happens to live, so signing it would make moving
+//     a claim file read as content drift. Not persisted.
+//
+//   - EVERYTHING ELSE, including a field with no yaml tag whatsoever: persisted.
+//     When the tag names nothing — no tag, `yaml:",omitempty"`, `yaml:",inline"`
+//     — yaml.v3 falls back to the LOWER-CASED Go field name, and so does this.
+//
+// That last case is the one this function exists for. The old rule ("no tag
+// means not persisted") got it backwards: an exported field added to model.Claim
+// without a yaml tag WOULD be written into every claim file under its lowercased
+// name and read back out of it, while being invisible to the hash that certifies
+// a locked claim's content. The tamper it enabled needs no ledger edit at all —
+// change that field on a locked claim and the gate reports nothing. Signing a
+// field yaml.v3 turns out not to write costs a spurious drift report, which is
+// loud and recoverable; not signing one it does write is a blessed edit, which
+// is silent and permanent. An `,inline` field is hashed as a nested struct under
+// its lowercased name rather than as promoted keys: the LABEL differs from what
+// is on disk, the CONTENT is still fully signed, and fail-closed is the property
+// that matters. (model.Claim uses no inline fields today; the schema-decision
+// test in lockedhash_test.go forces a written decision before it can.)
+//
+// It is exported for the same reason its predecessor was: the ledger's
+// schema-decision test walks model.Claim with exactly the rules the hasher uses,
+// and a second, hand-rolled copy in the test could disagree with this one and
+// pass while the hasher silently skipped a field.
+func PersistedYAMLName(sf reflect.StructField) (string, bool) {
+	if sf.PkgPath != "" {
+		return "", false
+	}
+	name := YAMLTagName(sf)
+	if name == "-" {
+		return "", false
+	}
+	if name == "" {
+		return strings.ToLower(sf.Name), true
+	}
+	return name, true
 }

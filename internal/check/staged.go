@@ -223,7 +223,23 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		// consults no cache. A worktree file that cannot be read (staged
 		// deletion, permissions) counts as differing — it certainly is not
 		// identical.
-		if onDisk, readErr := os.ReadFile(abs); readErr != nil || !bytes.Equal(onDisk, raw) {
+		//
+		// LINE ENDINGS ARE NORMALISED ON BOTH SIDES FIRST, and that is what makes
+		// the field mean the same thing on all three CI platforms. Under
+		// core.autocrlf=true — the Windows default, and the configuration the
+		// windows-latest leg runs in — git stores LF in the index and checks out
+		// CRLF, so a byte comparison reported EVERY claim as differing on a
+		// perfectly clean tree: "2 claim(s) from the git index (2 differ from the
+		// working tree)" with `git status --porcelain` empty. The field is
+		// documented as "the files where index and worktree disagree", and a field
+		// that is unconditionally saturated on one platform carries no signal at
+		// all. Normalising here preserves the anti-stat-cache property the
+		// paragraph above defends — the comparison still consults no git cache,
+		// only bytes — while dropping exactly the difference git itself introduced
+		// on the way to disk. The verdict was never affected (YAML parsing
+		// normalises line breaks, so hashes and lint agree either way); the report
+		// was.
+		if onDisk, readErr := os.ReadFile(abs); readErr != nil || !bytes.Equal(normalizeLineEndings(onDisk), normalizeLineEndings(raw)) {
 			sp.FromIndex = append(sp.FromIndex, rel)
 		}
 
@@ -427,6 +443,23 @@ func decodeClaim(sourcePath string, raw []byte) (model.Claim, error) {
 func isClaimFile(rel string) bool {
 	ext := strings.ToLower(path.Ext(rel))
 	return ext == ".yaml" || ext == ".yml"
+}
+
+// normalizeLineEndings collapses CRLF to LF so the index copy of a claim and the
+// worktree copy of the same claim can be compared for CONTENT rather than for
+// the line-ending convention git applied on checkout. See the FromIndex
+// comparison in Staged for why the difference is git's own doing and why
+// reporting it as a disagreement made the field useless on Windows.
+//
+// It is deliberately a plain byte substitution rather than anything smarter: a
+// lone CR (a classic-Mac line ending, or a CR inside a quoted YAML scalar) is
+// left exactly as it is, so this can only ever erase the one transformation
+// core.autocrlf performs, never a real difference between the two copies.
+func normalizeLineEndings(b []byte) []byte {
+	if !bytes.Contains(b, []byte("\r\n")) {
+		return b
+	}
+	return bytes.ReplaceAll(b, []byte("\r\n"), []byte("\n"))
 }
 
 // relativeSpec expresses target as a slash-separated path relative to base,
