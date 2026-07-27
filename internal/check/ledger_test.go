@@ -226,6 +226,13 @@ func TestRun_NoDigestStoreMeansUnknownNotDrifted(t *testing.T) {
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
+	// Undo the fixture's arming: this test is about a project that has NEVER had
+	// a digest store. (The claim here is a DRAFT, so nothing armed the lock
+	// ledger either — which is what keeps comment-digest-absent out of it too:
+	// that rule fires only once a project is ledger-covered.)
+	if err := os.Remove(digest.StorePath(cfg)); err != nil {
+		t.Fatalf("remove digest store: %v", err)
+	}
 	claims[0].Comments = nil
 
 	res, err := check.Run(claims, cfg)
@@ -359,4 +366,137 @@ func itoa(n int64) string {
 		n /= 10
 	}
 	return string(digits)
+}
+
+// A lint error must not SILENCE the ledger gate.
+//
+// The two partitions answer different questions and have different recoveries —
+// a lint finding is fixed by editing the claim, a ledger finding by unlock ->
+// fix -> lock or by restoring the ledger — so an agent told "lint_failed,
+// data.ledger_findings: []" concludes the integrity gate ran and passed. It had
+// not run at all: the fail-fast returned before it. The commit in this test is
+// exactly the shape that made it matter — one hand-edited locked claim and one
+// unrelated typo'd rests_on in a still-draft claim, staged together.
+func TestLintErrorStillReportsTheLedgerGate(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
+		"claims/draft.yaml":  draftClaim("widget.contract.draft") + "rests_on:\n  - widget.contract.nope\n",
+	})
+
+	// The hand edit to the LOCKED claim, after the fixture armed its approval.
+	for i := range claims {
+		if claims[i].ID == "widget.contract.locked" {
+			claims[i].Body = "a locked claim, quietly rewritten.\n"
+		}
+	}
+
+	for _, tc := range []struct {
+		name string
+		res  check.Result
+	}{
+		{"Status", check.Status(claims, cfg)},
+		{"Run", runResult(t, claims, cfg)},
+	} {
+		if len(tc.res.LintErrors) == 0 {
+			t.Fatalf("%s: precondition: expected the dangling rests_on to be an error-severity lint finding", tc.name)
+		}
+		if !hasRule(tc.res.LedgerFindings, lock.RuleLockContentDrift) {
+			t.Fatalf("%s: a lint error suppressed the ledger gate: ledger_findings=%v", tc.name, rulesOf(tc.res.LedgerFindings))
+		}
+	}
+}
+
+// runResult drives check.Run and returns its Result, ignoring the (expected)
+// fail-fast error — the assertion above is about what the Result CARRIES when
+// the run stops early, not about the error.
+func runResult(t *testing.T, claims []model.Claim, cfg *config.Config) check.Result {
+	t.Helper()
+	res, err := check.Run(claims, cfg)
+	if err == nil {
+		t.Fatalf("expected Run to stop at the lint step")
+	}
+	return res
+}
+
+// Deleting the digest store used to launder a comment tamper permanently.
+//
+// The sequence was: hand-delete an unresolved thread (comment-ledger-drift fires,
+// correctly), then delete .dossierx-comment-digest.json. Every claim goes back to
+// "unknown", which is never "drifted", so the finding vanished before any command
+// ran — and the unresolved review the human had left was gone with it, no gate,
+// no trace but the deleted file in the diff. This is the same guard the lock
+// ledger has always had as lock-ledger-absent.
+func TestRun_DeletingTheDigestStoreIsReported(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
+		"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+			"body: |\n  a draft claim.\n" +
+			"governed_by:\n  type: none\n  reason: fixture\n" +
+			"comments:\n" +
+			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
+	})
+	// The fixture armed both stores, so this project IS ledger-covered — the
+	// state every project is in after one run of a ledger-aware build.
+	if _, err := check.Run(claims, cfg); err != nil {
+		t.Fatalf("precondition: expected a clean run before the deletion, got %v", err)
+	}
+
+	if err := os.Remove(digest.StorePath(cfg)); err != nil {
+		t.Fatalf("remove digest store: %v", err)
+	}
+
+	res, err := check.Run(claims, cfg)
+	if err == nil {
+		t.Fatalf("expected the deleted digest store to fail the run, got nil")
+	}
+	if !hasRule(res.LedgerFindings, check.RuleCommentDigestAbsent) {
+		t.Fatalf("expected %s, got %v", check.RuleCommentDigestAbsent, rulesOf(res.LedgerFindings))
+	}
+}
+
+// The two qualifiers that keep the rule off correct state.
+//
+// A project with no comment threads has nothing for the store to record, so its
+// absence says nothing at all — and a project that predates the ledger (its lock
+// store is still at the older schema, or there is no lock store because nothing
+// has ever been locked) is mid-upgrade, not tampered with.
+func TestRun_DigestStoreAbsenceIsSilentWithoutCommentsOrLedgerCoverage(t *testing.T) {
+	t.Run("no comments anywhere", func(t *testing.T) {
+		cfg, claims := project(t, baseConfig, map[string]string{
+			"claims/locked.yaml": lockedClaim("widget.contract.locked"),
+		})
+		// Establish the state under test rather than assuming it: a fresh
+		// project now acquires its digest store at the moment lock.Store.Save
+		// first creates the lock store (so that "ledger-covered with no digest
+		// store" is unambiguous), and this subtest is about what happens when
+		// that file is NOT there. Removing it is what puts the project in the
+		// shape being asserted about; tolerating IsNotExist keeps the subtest
+		// correct whichever way the fixture happens to leave it.
+		if err := os.Remove(digest.StorePath(cfg)); err != nil && !os.IsNotExist(err) {
+			t.Fatalf("precondition: remove digest store: %v", err)
+		}
+		res, err := check.Run(claims, cfg)
+		if err != nil {
+			t.Fatalf("a project with no comment threads must not be accused: %v (%v)", err, rulesOf(res.LedgerFindings))
+		}
+	})
+
+	t.Run("not yet ledger-covered", func(t *testing.T) {
+		cfg, claims := project(t, baseConfig, map[string]string{
+			"claims/commented.yaml": "id: widget.contract.one\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
+				"body: |\n  a draft claim.\n" +
+				"governed_by:\n  type: none\n  reason: fixture\n" +
+				"comments:\n" +
+				"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
+		})
+		// Nothing is locked, so there is no lock store: the shape of a project
+		// that has not yet run a ledger-aware build.
+		if err := os.Remove(digest.StorePath(cfg)); err != nil {
+			t.Fatalf("remove digest store: %v", err)
+		}
+		res, err := check.Run(claims, cfg)
+		if err != nil {
+			t.Fatalf("a project that is not ledger-covered must not be accused: %v (%v)", err, rulesOf(res.LedgerFindings))
+		}
+	})
 }

@@ -820,10 +820,19 @@ func TestEnvelope_BuildOrderProposeThenLock(t *testing.T) {
 	}
 }
 
-// TestBuildOrderLockCodes pins buildOrderLockCode's classification of the two
-// refusals buildorder.Lock can produce. Only ErrNotProposed is a sentinel; the
-// already-locked refusal is matched on a fragment of its own prose, so this is
-// the guard that catches that message being reworded.
+// TestBuildOrderLockCodes pins buildOrderLockCode's classification of the THREE
+// refusals buildorder.Lock can produce. ErrNotProposed and ErrStale are
+// sentinels; the already-locked refusal is still matched on a fragment of its
+// own prose, so this is the guard that catches that message being reworded.
+//
+// The stale case is the one that shipped wrong. cliout.CodeBuildOrderStale was
+// declared, documented in the build-order skill as the ONE route to
+// "re-propose, then re-lock", and never emitted by anything: the stale refusal
+// fell through to build_order_refused, whose three documented recoveries ("lock
+// every claim in the module", "give each claim a build_role", "resolve the open
+// threads") the stale artifact has already satisfied. An agent branching on
+// code, exactly as the router skill instructs, got a dead branch and a set of
+// recoveries that could not apply.
 func TestBuildOrderLockCodes(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 
@@ -847,6 +856,39 @@ func TestBuildOrderLockCodes(t *testing.T) {
 	}
 	if env.Error.Code != cliout.CodeAlreadyLocked {
 		t.Fatalf("expected already_locked, got %q (%s)", env.Error.Code, env.Error.Message)
+	}
+
+	// Move a covered claim underneath the frozen order, which is what makes it
+	// stale: unlock, edit the body (changing its content hash), lock again.
+	for _, args := range [][]string{
+		{"claim", "unlock", "widget.contract.a", "--reason", "reopening to fix the wording"},
+	} {
+		if _, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+	}
+	claimFile := filepath.Join(filepath.Dir(cfgPath), "claims", "a.yaml")
+	raw, err := os.ReadFile(claimFile)
+	if err != nil {
+		t.Fatalf("read claim: %v", err)
+	}
+	edited := strings.Replace(string(raw), "a locked claim with a build role.", "a rewritten claim with a build role.", 1)
+	if edited == string(raw) {
+		t.Fatalf("fixture precondition: the body substitution did not apply")
+	}
+	if err := os.WriteFile(claimFile, []byte(edited), 0o644); err != nil {
+		t.Fatalf("edit claim: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "re-approved"); err != nil {
+		t.Fatalf("re-lock the edited claim: %v", err)
+	}
+
+	env, _, err = execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock the stale order")
+	if err == nil {
+		t.Fatal("locking a stale build order must fail rather than freezing an outdated order")
+	}
+	if env.Error.Code != cliout.CodeBuildOrderStale {
+		t.Fatalf("expected build_order_stale, got %q (%s)", env.Error.Code, env.Error.Message)
 	}
 }
 

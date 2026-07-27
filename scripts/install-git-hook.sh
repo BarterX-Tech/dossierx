@@ -69,7 +69,7 @@
 
 set -eu
 
-marker='# dossierx-hook: pre-commit v1'
+marker='# dossierx-hook: pre-commit v3'
 
 # ---------------------------------------------------------------------------
 # The hook body.
@@ -85,7 +85,7 @@ marker='# dossierx-hook: pre-commit v1'
 hook_body() {
 	cat <<'PRECOMMIT_HOOK'
 #!/bin/sh
-# dossierx-hook: pre-commit v1
+# dossierx-hook: pre-commit v3
 #
 # Refuses a commit that changes a LOCKED claim without an approval record.
 #
@@ -117,9 +117,9 @@ hook_body() {
 # ENVIRONMENT
 #
 #   DOSSIERX_BIN     path to the dossierx binary (default: "dossierx" on PATH)
-#   DOSSIERX_CONFIG  path to project.config.yaml. Only needed when the repo
-#                    holds MORE THAN ONE dossierx project; with one, the hook
-#                    finds it via the index.
+#   DOSSIERX_CONFIG  path to project.config.yaml. Never required: the hook finds
+#                    every project in the repository via the index and checks
+#                    each one. Set this to narrow the hook to a single project.
 #   DOSSIERX_SKIP_HOOK=1  skip this run
 
 set -u
@@ -145,85 +145,161 @@ if ! command -v "$bin" >/dev/null 2>&1; then
 	exit 1
 fi
 
-# Locate the project config. git runs hooks from the top level of the working
+# Locate EVERY project config. git runs hooks from the top level of the working
 # tree, and dossierx searches UPWARD from the working directory, so a project
 # that does not live at the repository root would never be found. Asking the
 # INDEX (rather than walking the filesystem) is both faster and correctly
 # scoped to tracked files.
-config=${DOSSIERX_CONFIG:-}
-if [ -z "$config" ] && [ ! -f project.config.yaml ]; then
-	matches=$(git ls-files -- 'project.config.yaml' '*/project.config.yaml' 2>/dev/null || true)
-	count=$(printf '%s' "$matches" | grep -c . || true)
-	if [ "$count" = "1" ]; then
-		config=$matches
-	elif [ "${count:-0}" -gt 1 ]; then
-		printf '%s\n' \
-			'dossierx: this repository contains more than one project.config.yaml;' \
-			'          set DOSSIERX_CONFIG to the one this hook should check.' >&2
-	fi
+#
+# A repository may hold more than one dossierx project, and the hook checks all
+# of them. It used to print "set DOSSIERX_CONFIG" and fall through with no
+# config at all: the binary then searched upward from the repository root, found
+# nothing, returned config_not_found, and the skip case below waved the commit
+# through — so a monorepo, the one layout where that message fires, was exactly
+# the layout with NO GATE. Refusing every commit instead would have been the
+# other wrong answer: a hook that blocks honest work in a monorepo gets
+# uninstalled, and an uninstalled hook checks nothing either. So: check each.
+#
+# The index query is asked FIRST and unconditionally, never behind a
+# "does the repository root have one?" short-circuit. A root project and a
+# subdirectory project is a real layout, and short-circuiting on the root config
+# would check the root project and silently ignore every other one — the same
+# fail-open in a different shape. The worktree fallback below is only for a
+# root config that is not tracked yet (the very first commit of a project),
+# which is the one case the index cannot see.
+#
+# "-c core.quotepath=false" is load-bearing, not tidiness. core.quotepath
+# defaults to TRUE, and with it on, git prints any path holding a byte outside
+# ASCII as a C-quoted string WITH the surrounding double quotes baked in: a
+# project at "café/project.config.yaml" comes back from ls-files as the literal
+# 14-plus-character text "caf\303\251/project.config.yaml", quotes included.
+# That string is then handed to "dossierx --config", names no file that exists,
+# comes back config_not_found — and because the hook cannot tell a config it
+# discovered itself from one that vanished, it refuses. Every commit, on every
+# branch, for every developer, including commits touching no claim at all. The
+# gate installed to protect the claims would instead have to be uninstalled.
+# quotepath=false emits the raw bytes with no quoting, so the newline-separated
+# read loop below keeps working exactly as it did. We deliberately do NOT switch
+# to -z: git's bundled sh on Windows has no dependable "read -d ''", and this
+# body runs under that sh. internal/check/staged.go's git runner prepends the
+# same override to every invocation for the same reason.
+configs=${DOSSIERX_CONFIG:-}
+if [ -z "$configs" ]; then
+	configs=$(git -c core.quotepath=false ls-files -- 'project.config.yaml' '*/project.config.yaml' 2>/dev/null || true)
+fi
+if [ -z "$configs" ] && [ -f project.config.yaml ]; then
+	configs=project.config.yaml
 fi
 
 run_check() {
-	if [ -n "$config" ]; then
-		"$bin" --config "$config" check --staged --format "$1" 2>&1
+	# $1 = config path, "" meaning "let dossierx search upward"; $2 = format.
+	if [ -n "$1" ]; then
+		"$bin" --config "$1" check --staged --format "$2" 2>&1
 	else
-		"$bin" check --staged --format "$1" 2>&1
+		"$bin" check --staged --format "$2" 2>&1
 	fi
 }
 
-# The JSON run is the branch: error.code is the only stable signal, and
-# matching on prose would break the first time a message is reworded. The
-# human-readable re-run happens only on the failure path, where a second
-# ~200ms read-only pass is worth a report someone can act on.
-report=$(run_check json)
-status=$?
-if [ "$status" -eq 0 ]; then
-	exit 0
-fi
+# check_one <config> — run the gate for ONE project. Returns 0 to allow the
+# commit and 1 to refuse it, having said why on stderr.
+check_one() {
+	cfg=$1
 
-case "$report" in
-*'unknown flag: --staged'* | *'unknown flag "--staged"'*)
-	printf '%s\n' \
-		'dossierx: COMMIT REFUSED — this dossierx build has no "check --staged",' \
-		'          so the hook cannot see what you are committing.' \
-		'' \
-		'  upgrade:  go install github.com/BarterX-Tech/dossierx/cmd/dossierx@latest' \
-		'  or remove the hook: scripts/install-git-hook.sh --uninstall' \
-		>&2
-	exit 1
-	;;
-esac
+	# The JSON run is the branch: error.code is the only stable signal, and
+	# matching on prose would break the first time a message is reworded. The
+	# human-readable re-run happens only on the failure path, where a second
+	# ~200ms read-only pass is worth a report someone can act on.
+	report=$(run_check "$cfg" json)
+	if [ $? -eq 0 ]; then
+		return 0
+	fi
 
-# No project here is not a violation. A repository can hold a dossierx project
-# in one branch and not another, and a hook that blocks every commit on a
-# branch without claims would just get uninstalled. CI still fails on the
-# branch that does have them.
-case "$report" in
-*'"code"'*'"config_not_found"'*)
-	printf '%s\n' 'dossierx: no project.config.yaml found; skipping the claim-integrity check.' >&2
-	exit 0
-	;;
-esac
+	case "$report" in
+	*'unknown flag: --staged'* | *'unknown flag "--staged"'*)
+		printf '%s\n' \
+			'dossierx: COMMIT REFUSED — this dossierx build has no "check --staged",' \
+			'          so the hook cannot see what you are committing.' \
+			'' \
+			'  upgrade:  go install github.com/BarterX-Tech/dossierx/cmd/dossierx@latest' \
+			'  or remove the hook: scripts/install-git-hook.sh --uninstall' \
+			>&2
+		return 1
+		;;
+	esac
 
-printf '%s\n' 'dossierx: COMMIT REFUSED — staged claims did not pass the integrity gate.' '' >&2
-run_check text >&2 || true
-printf '\n%s\n' \
+	# No project here is not a violation. A repository can hold a dossierx
+	# project in one branch and not another, and a hook that blocks every commit
+	# on a branch without claims would just get uninstalled. CI still fails on
+	# the branch that does have them.
+	#
+	# But that reasoning only holds when this hook found NOTHING to check. A
+	# config_not_found for a config we are holding in our hand is the binary and
+	# the hook disagreeing about where the project is — a stale DOSSIERX_CONFIG,
+	# an index entry with no file on disk, a path the binary rejected — and none
+	# of those is "there is no project here". A bug in the gate must refuse.
+	case "$report" in
+	*'"code"'*'"config_not_found"'*)
+		if [ -n "$cfg" ]; then
+			printf '%s\n' \
+				'dossierx: COMMIT REFUSED — this hook passed dossierx a project config' \
+				"          it reported config_not_found for (--config $cfg)." \
+				'          That is a broken configuration, not an absent project, so' \
+				'          the claim-integrity gate never ran.' \
+				'' \
+				'  check that the path exists on disk (DOSSIERX_CONFIG, or a' \
+				'  project.config.yaml that is in the index but not the worktree)' \
+				'  or skip once: git commit --no-verify' >&2
+			return 1
+		fi
+		printf '%s\n' 'dossierx: no project.config.yaml found; skipping the claim-integrity check.' >&2
+		return 0
+		;;
+	esac
+
+	if [ -n "$cfg" ]; then
+		printf '%s\n' "dossierx: COMMIT REFUSED — staged claims did not pass the integrity gate ($cfg)." '' >&2
+	else
+		printf '%s\n' 'dossierx: COMMIT REFUSED — staged claims did not pass the integrity gate.' '' >&2
+	fi
+	run_check "$cfg" text >&2 || true
+	printf '\n%s\n' \
 'The approval path for anything already LOCKED is unlock -> fix -> lock:
 
   1. dossierx claim unlock <id> --reason "<why the human agreed to reopen it>"
   2. make the edit — or revert it, if the change was not meant to happen
   3. dossierx claim lock   <id> --reason "<the human approval, in their words>"
 
-Then stage BOTH the claim file and the lock ledger (.dossierx-lock-store.json,
-.dossierx-comment-digest.json) and commit again — the ledger is a tracked file
-and CI reads it.
+Then stage the claim file AND the tracked stores it moved
+(.dossierx-lock-store.json, .dossierx-comment-digest.json,
+.dossierx-flag-store.json) and commit again — the ledger is a tracked file and
+CI reads it.
 
 reaudit is the DRIFT tool, not the general edit tool; it will refuse a claim
 that is not already review_pending.
 
 To commit anyway: git commit --no-verify. CI runs the same gate on the pull
 request, so this postpones the refusal rather than removing it.' >&2
-exit 1
+	return 1
+}
+
+# Nothing discovered: run once with no --config so the binary gets its own say
+# (it may find a config this hook's index query cannot see), and let check_one's
+# config_not_found case decide whether that is a skip.
+if [ -z "$configs" ]; then
+	check_one "" || exit 1
+	exit 0
+fi
+
+# One iteration per discovered project, stopping at the first refusal. The list
+# is newline-separated and read with IFS= so a path containing spaces survives;
+# the loop runs in a pipeline subshell, so its refusal travels back as the
+# pipeline's exit status rather than as a variable.
+rc=0
+printf '%s\n' "$configs" | while IFS= read -r cfg; do
+	[ -n "$cfg" ] || continue
+	check_one "$cfg" || exit 1
+done || rc=1
+exit $rc
 PRECOMMIT_HOOK
 }
 
@@ -462,5 +538,14 @@ printf '%s\n' "" \
 	"    (scripts/ci/dossierx-check.yml); CI is the authority." \
 	"  · it does not check anything you did not stage. --staged reads the index." \
 	"" \
-	"Commit .dossierx-lock-store.json and .dossierx-comment-digest.json — they" \
-	"are tracked artifacts, and the gate is vacuous without them."
+	"Three project-root files are TRACKED ARTIFACTS. Commit them; never" \
+	".gitignore them:" \
+	"  .dossierx-lock-store.json      the lock ledger the gate compares against —" \
+	"                                 without it in the repository the gate is" \
+	"                                 vacuous" \
+	"  .dossierx-comment-digest.json  the review history's fingerprint" \
+	"  .dossierx-flag-store.json      the pending \"dossierx claim flag\" triggers." \
+	"                                 A review_pending claim whose flag entry did" \
+	"                                 not travel with it reaudits to an EMPTY" \
+	"                                 proposal, and --confirm then clears the flag" \
+	"                                 having applied nothing."

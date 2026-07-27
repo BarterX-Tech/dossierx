@@ -53,17 +53,38 @@ const StoreSchemaVersion = 1
 // and a re-adoption — same contract as internal/lock's LockedClaimHash.
 const digestVersion = 1
 
-// storeFileName is the digest store's filename. It sits next to the lock store
+// StoreFileName is the digest store's filename. It sits next to the lock store
 // under the config file's own directory (never cwd), the same convention
 // claims_dir, .catalog.json and the lock store follow, and outside claims_dir
 // so it is never itself decoded as a claim.
-const storeFileName = ".dossierx-comment-digest.json"
+//
+// It is exported because a finding about the file's ABSENCE has to name it, and
+// the one caller that raises such a finding (internal/check's
+// comment-digest-absent rule) evaluates stores that may have been materialized
+// out of the git index into a temp directory — so the honest thing to print is
+// the project-relative name, not the path the gate happened to read.
+const StoreFileName = ".dossierx-comment-digest.json"
 
 // StorePath returns the digest store's path for cfg. Callers that need to
 // serialize on it acquire lock.AcquireFileLock(StorePath(cfg)) — INSIDE the
 // claims sentinel; see this package's doc comment.
 func StorePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), storeFileName)
+	return filepath.Join(cfg.Dir(), StoreFileName)
+}
+
+// StorePathBeside returns the digest store's path for a project identified by
+// its LOCK STORE's path — the two files are siblings in the config file's own
+// directory, by construction (see storeFileName and internal/lock's own path
+// helper).
+//
+// It exists for exactly one caller: internal/lock's PrepareStore, which
+// grandfathers a pre-ledger project and must create the digest store at the same
+// moment, and which is handed a *lock.Store rather than a *config.Config. Taking
+// the path from the store it already has beats widening a signature that four
+// commands call, and the two paths cannot drift apart because both are derived
+// from the same directory.
+func StorePathBeside(lockStorePath string) string {
+	return filepath.Join(filepath.Dir(lockStorePath), StoreFileName)
 }
 
 // Store is the on-disk record of each claim's comment-block digest as of the
@@ -137,6 +158,36 @@ func (s *Store) Save() error {
 		return fmt.Errorf("digest: write store %s: %w", s.path, err)
 	}
 	return nil
+}
+
+// CheckWritable reports whether Save could persist this store, WITHOUT writing
+// it — by creating and removing a probe file exactly where Save's temp file
+// would go (see atomicWriteFile: same directory, so the rename stays on one
+// filesystem).
+//
+// It exists so a caller can find out that the store is unwritable BEFORE it
+// commits the change the store is supposed to record. internal/comments is that
+// caller, and the ordering matters more there than anywhere else: its write path
+// saves the claim first and refreshes the digest second (Record explains why
+// that order is the only safe one), so a store it cannot write turns into "the
+// comment is on disk AND the op reported failure" — and an agent's ordinary
+// response to a failure is to retry, appending the same thread again on every
+// attempt. Probing first turns that into a clean refusal that wrote nothing.
+//
+// It is a probe, not a guarantee: the directory can become unwritable between
+// the probe and the Save, and on Windows a rename over a read-only FILE can fail
+// even when the directory is writable. It removes the common, persistent causes
+// — a read-only project directory, a full disk, a directory that does not exist
+// — not the racing ones.
+func (s *Store) CheckWritable() error {
+	dir := filepath.Dir(s.path)
+	probe, err := os.CreateTemp(dir, filepath.Base(s.path)+".probe-*")
+	if err != nil {
+		return fmt.Errorf("digest: the comment digest store %s cannot be written: %w", s.path, err)
+	}
+	name := probe.Name()
+	probe.Close()          //nolint:errcheck // the probe's content is never read
+	return os.Remove(name) //nolint:gocritic // removing our own probe is the last step
 }
 
 // Digest returns the recorded comment digest for claimID and whether one

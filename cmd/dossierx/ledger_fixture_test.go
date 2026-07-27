@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -64,9 +65,53 @@ func armLedgerFixture(t *testing.T, cfgPath string) {
 		// Nothing locked: leave the project exactly as it was. Creating a store
 		// file for a project that has never locked anything would change what
 		// the very next command sees on disk, for no benefit.
+		//
+		// The digest store is skipped too, and deliberately: the
+		// comment-digest-absent rule only fires on a LEDGER-COVERED project, so
+		// a project with no approvals cannot trip it and arming it here would
+		// only add a file no command would have written.
 		return
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("arm ledger: save store: %v", err)
+	}
+	armCommentDigestFixture(t, cfg, claims)
+}
+
+// armCommentDigestFixture records the comment digest for every claim carrying a
+// hand-written `comments:` block, as the comment engine does as its last act on
+// every write.
+//
+// It is the exact counterpart of armLedgerFixture's own job, for the second
+// store this release added. A comment thread only ever reaches a claim through
+// internal/comments, which records its digest before it returns — so "threads on
+// disk in a ledger-covered project, no digest store" is not a state the product
+// can produce, and the gate correctly reads it as the store having been DELETED
+// (comment-digest-absent), which is the one move that makes an edited-away
+// review thread permanently invisible.
+//
+// It runs only after the ledger was actually armed, and only when some claim
+// really carries threads, so a fixture that means to trip comment-digest-absent
+// still does so by simply not calling armLedgerFixture — the same
+// no-blessing-by-accident property the ledger half has.
+func armCommentDigestFixture(t *testing.T, cfg *config.Config, claims []model.Claim) {
+	t.Helper()
+	commented := false
+	for _, c := range claims {
+		if len(c.Comments) > 0 {
+			commented = true
+			break
+		}
+	}
+	if !commented {
+		return
+	}
+	store, err := digest.LoadStore(digest.StorePath(cfg))
+	if err != nil {
+		t.Fatalf("arm comment digests: load store: %v", err)
+	}
+	digest.Adopt(store, claims)
+	if err := store.Save(); err != nil {
+		t.Fatalf("arm comment digests: save store: %v", err)
 	}
 }

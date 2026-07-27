@@ -3,6 +3,7 @@ package digest
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -125,7 +126,7 @@ func TestEmptyCommentsAreRecordedNotAbsent(t *testing.T) {
 // and the release's guarantee that it has no such authority would be false.
 func TestStoreRoundTripsThroughItsOwnFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, storeFileName)
+	path := filepath.Join(dir, StoreFileName)
 	store, err := LoadStore(path)
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
@@ -212,8 +213,43 @@ func TestStorePathIsResolvedAgainstTheConfigDir(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	want := filepath.Join(dir, storeFileName)
+	want := filepath.Join(dir, StoreFileName)
 	if got := StorePath(cfg); got != want {
 		t.Fatalf("StorePath = %q, want %q", got, want)
+	}
+}
+
+// CheckWritable is the probe internal/comments runs BEFORE it saves a comment,
+// so that an unwritable store is a clean refusal rather than "the comment was
+// written and the op reported failure" — the combination a retrying agent turns
+// into duplicate threads.
+func TestCheckWritableDetectsAnUnwritableDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("directory permission bits do not gate file creation on Windows")
+	}
+	dir := t.TempDir()
+	store, err := LoadStore(filepath.Join(dir, StoreFileName))
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if err := store.CheckWritable(); err != nil {
+		t.Fatalf("a writable directory must probe clean: %v", err)
+	}
+
+	if err := os.Chmod(dir, 0o555); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o755) }) //nolint:errcheck // best-effort restore so TempDir cleanup works
+
+	if err := store.CheckWritable(); err == nil {
+		t.Fatalf("expected CheckWritable to refuse an unwritable directory")
+	}
+	// And the probe leaves nothing behind on the way through.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("the probe left files behind: %v", entries)
 	}
 }

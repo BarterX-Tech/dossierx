@@ -1088,3 +1088,132 @@ func TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale(t *testing.T) {
 		t.Fatalf("expected stale_claim_ids to include the rests_on-reordered claim %q, got %v", "widget.contract.c", st.StaleIDs)
 	}
 }
+
+// ---------------------------------------------------------------------
+// The hand-edit gate (ErrHandEdited)
+// ---------------------------------------------------------------------
+
+// Reversing the phase blocks between propose and lock used to be frozen
+// verbatim: recomputeStale early-returns on an UNLOCKED artifact, and an
+// unlocked artifact is the only input Lock accepts, so the structural
+// re-derivation never ran on what Lock was actually about to sign. The order an
+// implementing agent follows — and the ledger record taken over it — were both
+// the attacker's.
+func TestLock_RefusesAReversedPhaseSequence(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.orient", "widget", model.BuildRoleOrientation),
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+	}
+
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if len(a.Phases) != 3 {
+		t.Fatalf("precondition: expected three phase blocks, got %d", len(a.Phases))
+	}
+	// The hand edit: build behavior before schema before orientation.
+	for i, j := 0, len(a.Phases)-1; i < j; i, j = i+1, j-1 {
+		a.Phases[i], a.Phases[j] = a.Phases[j], a.Phases[i]
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+
+	locked, err := Lock(path, claims, nil)
+	if !errors.Is(err, ErrHandEdited) {
+		t.Fatalf("expected Lock to refuse a hand-reordered artifact with ErrHandEdited, got %v", err)
+	}
+	if locked != nil {
+		t.Fatalf("a refused lock must return no artifact, got %+v", locked)
+	}
+
+	// And nothing was written: the artifact on disk is still unlocked, so the
+	// refusal cannot be laundered by reading it back.
+	onDisk, err := LoadArtifact(path)
+	if err != nil {
+		t.Fatalf("LoadArtifact: %v", err)
+	}
+	if onDisk.Locked {
+		t.Fatalf("a refused lock must leave the artifact unlocked on disk")
+	}
+}
+
+// The same gate, on the other hand-editable field a reader would never notice:
+// ClaimEntry.File is where the viewer and an implementing agent are told to look
+// for the claim's source.
+func TestLock_RefusesARepointedClaimFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{mc("widget.contract.schema", "widget", model.BuildRoleSchema)}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	a.Phases[0].Claims[0].File = "/etc/passwd"
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+
+	if _, err := Lock(path, claims, nil); !errors.Is(err, ErrHandEdited) {
+		t.Fatalf("expected ErrHandEdited for a repointed ClaimEntry.File, got %v", err)
+	}
+}
+
+// Adding an id to `excluded` by hand takes a claim out of the build sequence
+// entirely — the quietest possible edit, since the phases still read correctly.
+func TestLock_RefusesASmuggledExclusion(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	a.Excluded = append(a.Excluded, "widget.contract.behavior")
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+
+	if _, err := Lock(path, claims, nil); !errors.Is(err, ErrHandEdited) {
+		t.Fatalf("expected ErrHandEdited for a hand-added exclusion, got %v", err)
+	}
+}
+
+// The gate must be SILENT on the honest path — propose, then lock, unedited —
+// or it would refuse every legitimate build order in every project.
+func TestLock_AcceptsAFreshlyProposedArtifact(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".build-order.widget.json")
+
+	claims := []model.Claim{
+		mc("widget.contract.orient", "widget", model.BuildRoleOrientation),
+		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
+		mc("widget.contract.behavior", "widget", model.BuildRoleBehavior, "widget.contract.schema"),
+		mc("widget.contract.spare", "widget", model.BuildRoleOutOfScope),
+	}
+	a, err := Propose(claims, nil, "widget")
+	if err != nil {
+		t.Fatalf("Propose: %v", err)
+	}
+	if err := WriteArtifact(a, path); err != nil {
+		t.Fatalf("WriteArtifact: %v", err)
+	}
+
+	locked, err := Lock(path, claims, nil)
+	if err != nil {
+		t.Fatalf("an unedited, freshly-proposed artifact must lock: %v", err)
+	}
+	if !locked.Locked || locked.Stale {
+		t.Fatalf("expected locked=true stale=false, got %+v", locked)
+	}
+}

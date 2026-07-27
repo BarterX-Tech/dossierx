@@ -149,6 +149,22 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		}
 	}
 	if len(res.LintErrors) > 0 {
+		// The gate still runs. A lint error stops the PIPELINE — no catalog, no
+		// viewer, no scan — but it must not stop the ledger REPORT, and the two
+		// used to be the same return: a project with one dangling rests_on in a
+		// draft claim reported ledger_findings: [] no matter what had been done
+		// to its locked ones, and an empty array is indistinguishable from "the
+		// ledger is clean". The documented recovery for lint_failed is "fix the
+		// findings and re-run", so the integrity finding surfaced only after the
+		// typo was fixed — or, if that hook run was bypassed, never.
+		//
+		// The gate is a pure read over the claims and the two stores (ledger.go),
+		// so a lint error cannot make it wrong: it can only make it incomplete in
+		// the same way the claims themselves are. The caller's exit-code
+		// precedence is unchanged — cmd/dossierx tests LintErrors first, so this
+		// still reports lint_failed / stopped_at "lint"; what changes is that
+		// data.ledger_findings is populated rather than silently empty.
+		res.LedgerFindings = ledgerGate(claims, loadLedgerInputs(cfg))
 		return res, fmt.Errorf("lint: %d error-level finding(s)", len(res.LintErrors))
 	}
 
@@ -263,7 +279,18 @@ func Status(claims []model.Claim, cfg *config.Config) Result {
 // contract exactly: no writes of any kind, no review_pending reconcile, no
 // catalog, no viewer, no impl-link scan. The caller enforces — it inspects
 // LintErrors and LedgerFindings and decides the exit status.
+// The config it evaluates against is sp.Config — project.config.yaml AS THE
+// INDEX HOLDS IT — not the caller's worktree config. That is not a detail: cfg
+// supplies the facet and module vocabularies, the doctrine facet, and the hub
+// gating switch, so linting staged claims against a worktree config would let
+// an unstaged config edit change the verdict on a commit that does not contain
+// it. The cfg parameter survives only as the fallback for the case
+// StagedProject documents — a project.config.yaml that is not tracked at all,
+// where sp.Config already IS the caller's config.
 func StatusStaged(sp StagedProject, cfg *config.Config) Result {
+	if sp.Config != nil {
+		cfg = sp.Config
+	}
 	return status(sp.Claims, cfg, sp.ledger)
 }
 
@@ -284,18 +311,29 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs) Result {
 			res.LintErrors = append(res.LintErrors, f)
 		}
 	}
-	if len(res.LintErrors) > 0 {
-		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
-		// reporting below empty exactly as the disk-writing Run leaves it.
-		return res
-	}
-
 	// The ledger gate is EVALUATED here but does not decide anything: see
 	// Result.LedgerFindings for why Status reports where Run refuses. OK stays
 	// lint-driven so serve's status strip keeps rendering a project whose
 	// ledger is in dispute — the alternative is a viewer that goes dark exactly
 	// when a human most needs to read the claim that is in dispute.
+	//
+	// It runs ABOVE the lint fail-fast below, and that ordering is load-bearing
+	// for the two ENFORCING callers this body also serves. "check --validate"
+	// and "check --staged" (and therefore the pre-commit hook and CI) read
+	// LedgerFindings; when the gate sat under the fail-fast, a single unrelated
+	// error-severity lint finding emptied it, so a commit that hand-edited a
+	// locked claim AND typo'd a draft's rests_on was reported as a lint problem
+	// only. Fix the typo, commit again, and the integrity finding had never been
+	// shown. The gate is a pure read (ledger.go) and cannot be made wrong by a
+	// lint error, so there is nothing to gain by deferring it and one whole
+	// class of silence to lose.
 	res.LedgerFindings = ledgerGate(claims, in)
+
+	if len(res.LintErrors) > 0 {
+		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
+		// reporting below empty exactly as the disk-writing Run leaves it.
+		return res
+	}
 
 	res.OK = true
 	res.OpenComments = openCommentCounts(claims)
@@ -402,6 +440,85 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 // comments.PendingTriggers, read against the lock and flag stores loaded
 // best-effort (a load error degrades to "no drift/flag"). The value form of
 // cmd/dossierx.reportNextSteps.
+// firstLockableDraft returns the id of the first draft claim in drafts that
+// would survive ALL THREE of lock.Lock's gates, or "" if none would.
+//
+// It evaluates them in lock.Lock's own order — lint, hub gating, open threads —
+// so the claim it names is a claim the real command would accept.
+//
+// The LINT gate is the one that cannot be skipped, and the reason is that it is
+// evaluated against the ABOUT-TO-BE-LOCKED form, not the current one. Two lints
+// key off a claim's own status: rest-on-locked (a locked claim's rests_on
+// targets must themselves be locked) and roll-up (a locked banner's
+// module-mates must be locked). So a project can pass `check` completely
+// cleanly and still have `claim lock <id>` refuse with lint_failed — which is
+// exactly what happened on a module drafted alongside its own dependencies, the
+// ordinary case, where the first draft in load order rests on a sibling that is
+// also still draft.
+//
+// It is evaluated LAZILY, stopping at the first claim that passes, because that
+// is what keeps the cost proportionate: naming an example is an advisory line,
+// and in the common case the answer is the first or second candidate. The two
+// cheap gates are tested first so a full lint pass is only spent on a candidate
+// that could still qualify.
+func firstLockableDraft(drafts []model.Claim, claims []model.Claim, cfg *config.Config) string {
+	for _, c := range drafts {
+		if c.HasOpenThreads() || hasUnlockedDoctrineDep(c, claims, cfg) {
+			continue
+		}
+		if lintErrorsForCandidate(c, claims, cfg) == 0 {
+			return c.ID
+		}
+	}
+	return ""
+}
+
+// hasUnlockedDoctrineDep is lock.Lock's hub-gating refusal as a pure read: a
+// dependency in the doctrine facet must itself be locked first.
+func hasUnlockedDoctrineDep(c model.Claim, claims []model.Claim, cfg *config.Config) bool {
+	if cfg == nil || !cfg.HubGatingEnabled() {
+		return false
+	}
+	deps := make([]string, 0, len(c.Mirrors)+len(c.RestsOn))
+	deps = append(deps, c.Mirrors...)
+	deps = append(deps, c.RestsOn...)
+	for _, dep := range deps {
+		for _, d := range claims {
+			if d.ID == dep && d.Facet == cfg.DoctrineFacet && d.Status != model.StatusLocked {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// lintErrorsForCandidate counts the error-severity findings the lint suite would
+// raise if c were locked RIGHT NOW — the corpus with c's own entry replaced by
+// its locked form, which is precisely what lock.Lock lints. Linting the
+// still-draft entry instead would report zero for the very claims this is meant
+// to filter out.
+func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config) int {
+	candidate := c
+	candidate.Status = model.StatusLocked
+	candidate.ReviewPending = false
+
+	lintClaims := make([]model.Claim, len(claims))
+	copy(lintClaims, claims)
+	for i := range lintClaims {
+		if lintClaims[i].ID == c.ID {
+			lintClaims[i] = candidate
+		}
+	}
+
+	errs := 0
+	for _, f := range lint.RunAll(lintClaims, cfg) {
+		if f.Severity != lint.SeverityWarning {
+			errs++
+		}
+	}
+	return errs
+}
+
 func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) []string {
 	var hints []string
 
@@ -417,6 +534,7 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 	}
 
 	var draftIDs []string
+	var drafts []model.Claim         // the same claims, for the lock-gate evaluation
 	var commentPending []model.Claim // review_pending with >=1 open thread
 	var reauditTriggered []string    // review_pending from an ACTIVE drift/flag trigger
 	var reauditTriggerless []string  // review_pending but NO active trigger at all
@@ -424,6 +542,7 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 		switch {
 		case c.Status == model.StatusDraft:
 			draftIDs = append(draftIDs, c.ID)
+			drafts = append(drafts, c)
 		case c.Status == model.StatusLocked && c.ReviewPending:
 			drift, flag, open := comments.PendingTriggers(c, claims, store, flagStore)
 			if open > 0 {
@@ -462,8 +581,23 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string) 
 	//   - "claim lock" is printed WITH --reason, because --reason is required on
 	//     the writing path. A hint of "dossierx claim lock <id>" names a real
 	//     command that then refuses, which is worse than naming none.
+	//
+	// The third consequence is the example id. draftIDs[0] is whichever draft
+	// claim happens to sort first, which is not the same thing as a draft claim
+	// that would actually LOCK: all three of lock.Lock's gates can refuse it,
+	// and the lint gate refuses it while the project as a whole lints clean
+	// (rest-on-locked and roll-up are evaluated against the ABOUT-TO-BE-LOCKED
+	// form). Naming such a claim produces a command that exists, reads as
+	// recommended, and then exits 1 — and the agent, which the skills tell to
+	// trust next_actions rather than re-derive the lifecycle, acts on it. So the
+	// example is the first draft that passes every gate, and when none does the
+	// hint says so instead of pretending to know where to start.
 	if len(draftIDs) > 0 {
-		hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. %s)", len(draftIDs), draftIDs[0]))
+		if example := firstLockableDraft(drafts, claims, cfg); example != "" {
+			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. %s)", len(draftIDs), example))
+		} else {
+			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (none is lockable yet: every draft is blocked by a lint error, an open comment thread, or an unlocked dependency)", len(draftIDs)))
+		}
 	}
 	if len(commentPending) > 0 {
 		// There is deliberately NO command here. "comment resolve" was removed

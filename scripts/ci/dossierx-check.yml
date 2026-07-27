@@ -29,16 +29,45 @@
 # WHAT IT DEPENDS ON BEING COMMITTED
 # ---------------------------------------------------------------------------
 #
-# The lock ledger and the comment digest are TRACKED FILES:
+# Three project-root stores are TRACKED FILES:
 #
 #   .dossierx-lock-store.json      what was approved, when, by whom, and on
 #                                  whose words, per locked claim
 #   .dossierx-comment-digest.json  the review history's fingerprint
+#   .dossierx-flag-store.json      the pending "claim flag" triggers a later
+#                                  "claim reaudit" reads back to build its diff.
+#                                  Nothing in this workflow compares it to
+#                                  anything, but a review_pending claim whose
+#                                  flag entry did not travel with it reaudits to
+#                                  an EMPTY proposal, and confirming that empty
+#                                  proposal clears the flag having changed
+#                                  nothing.
 #
 # Do not add them to .gitignore. Without the ledger in the repository, CI has
-# nothing to compare the claims against and this workflow is theatre — and
-# dossierx says so out loud: locked claims with no ledger is a hard error
-# (lock-ledger-absent), not a silent pass.
+# nothing to compare the claims against and this workflow is theatre.
+#
+# One generated file joins them the moment you approve it: a LOCKED
+# .build-order.<module>.json. While it is locked:false it is ordinary output that
+# `build-order propose` rewrites in full, but a locked one is the sequence a
+# human approved and the artifact an implementing agent builds from, so this
+# workflow compares it against its record (build-order-content-drift,
+# build-order-ledger-missing) — and can only do that if it was committed.
+#
+# WHAT THE ABSENT-LEDGER ERROR DOES AND DOES NOT COVER
+#
+# dossierx says so out loud when the ledger FILE is missing: locked claims with
+# no ledger file is a hard error (lock-ledger-absent), not a silent pass. That
+# guarantee is about absence only. A ledger file that is PRESENT but was written
+# by a pre-v0.3.0 build is a different case: dossierx grandfathers it, recording
+# each already-locked claim's current content as though it had been approved,
+# and reports that on stderr rather than failing.
+#
+# So if you are upgrading a project that locked claims before v0.3.0: run
+# `dossierx check` once locally, read what it adopted, and COMMIT the rewritten
+# .dossierx-lock-store.json. Until that commit lands, every CI run checks out
+# the old-format store, re-grandfathers it against whatever the claims say on
+# that run, throws the result away with the runner's disk, and exits 0 — a green
+# check that compared the claims against themselves.
 
 name: dossierx
 

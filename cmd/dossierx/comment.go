@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -52,7 +53,7 @@ func newCommentCmd() *cobra.Command {
 		newCommentAddCmd(),
 		newCommentReplyCmd(),
 	)
-	return cmd
+	return commandGroup(cmd)
 }
 
 // parseActor validates the shared --as flag and converts it to a
@@ -107,14 +108,35 @@ const viewHint = `; run "dossierx check" or "dossierx serve" to view`
 //     guidance is wrong for it, so it translates to a DISTINCT, claim-SCOPED
 //     message that names the offending claim and points at its stored body —
 //     never ErrUnsafeBody's text, never the raw internal yaml/round-trip detail.
+//   - comments.ErrCommentDigestUnavailable is neither of those: it is the whole
+//     op refused BEFORE anything was written, because the comment digest store
+//     could not be opened. Its own message is already the right guidance, so it
+//     is only reclassified, not reworded.
+//
+// The ErrCommentDigestUnavailable arm is the one that MUST be here rather than
+// left to fall through. Without it the refusal reports as `internal`, which the
+// error-code contract defines as an unclassified bug — and the documented
+// response to an unclassified failure is a retry. That is exactly wrong twice
+// over: this refusal is deterministic (a retry keeps failing identically until
+// the store is restored from version control), and treating it as a transient
+// internal fault is what the atomicity work in internal/comments exists to stop
+// callers doing. The code carries the one fact a caller needs to decide —
+// nothing was written — so a retry is safe but pointless.
 //
 // This is symmetric with serve's writeOpError, which maps ErrUnsafeBody -> 400
-// unsafe_body and ErrClaimNotRoundTrippable -> 422 claim_not_serializable — and
-// which still routes the CLI-retired verbs (edit/delete/resolve/reopen) through
-// the same distinction. Every mutating CLI verb routes its op error through
-// here; every other error (and nil) passes through unchanged.
+// unsafe_body, ErrClaimNotRoundTrippable -> 422 claim_not_serializable and
+// ErrCommentDigestUnavailable -> 503 comment_digest_unavailable — and which
+// still routes the CLI-retired verbs (edit/delete/resolve/reopen) through the
+// same distinction. Every mutating CLI verb routes its op error through here;
+// every other error (and nil) passes through unchanged.
 func friendlyCommentBodyErr(claimID string, err error) error {
-	if err != nil && errors.Is(err, loader.ErrClaimNotRoundTrippable) && !errors.Is(err, comments.ErrUnsafeBody) {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, comments.ErrCommentDigestUnavailable) {
+		return cliout.Wrap(err, cliout.CodeCommentDigestUnavailable)
+	}
+	if errors.Is(err, loader.ErrClaimNotRoundTrippable) && !errors.Is(err, comments.ErrUnsafeBody) {
 		return cliout.Errorf(cliout.CodeClaimNotSerializable, "comment: claim %q has a stored body that can't be re-serialized to YAML (likely a hand-edited leading tab or blank line in a body:); fix that claim's body and retry", claimID)
 	}
 	return err
@@ -418,19 +440,79 @@ type commentInboxData struct {
 }
 
 // threadLastActivity is the timestamp a thread should be sorted and filtered
-// by: its newest reply's Created, or the thread's own if it has none.
+// by: the NEWEST of everything that has happened to it — its own creation, its
+// newest reply, its last resolve, and its last reopen.
 //
-// Replies are appended in order by internal/comments (it never reorders or
-// back-dates), so the last element is the newest and no scan is needed. The
-// values are RFC 3339 UTC strings produced by one clock, which makes them
-// lexicographically comparable — so this returns the raw string and the
-// callers compare with <, rather than parsing to time.Time and inventing a
-// policy for a malformed timestamp that the engine cannot produce.
+// The lifecycle stamps are in here, not just the messages, and REOPEN is the
+// one that makes it load-bearing. A reopen is the human saying "this is not
+// settled after all"; it puts the thread back in the inbox but adds no message,
+// so a last-activity derived only from Created stamps leaves the reopened
+// thread dated to its last reply. An agent polling with "--since <cursor>" —
+// which the skills instruct it to do, and whose cursor has necessarily advanced
+// past that older reply — then filters the reopened thread straight back out
+// and never sees it. The thread the human deliberately reopened is the one
+// thread the loop cannot afford to drop.
+//
+// ResolvedAt is folded in for symmetry and for the ordering: a thread that was
+// resolved and reopened carries both, reopen is the later of the two, and
+// taking the maximum means neither field's presence can drag the answer
+// backwards.
+//
+// The values are RFC 3339 UTC strings produced by one clock, which makes them
+// lexicographically comparable — so this compares raw strings rather than
+// parsing to time.Time and inventing a policy for a malformed timestamp the
+// engine cannot produce. Author tracks whichever event won, so last_author
+// names who actually acted last.
 func threadLastActivity(th model.Comment) (at string, author model.CommentRole) {
-	if n := len(th.Replies); n > 0 {
-		return th.Replies[n-1].Created, th.Replies[n-1].Author
+	at, author = th.Created, th.Author
+	consider := func(when string, who model.CommentRole) {
+		if when > at {
+			at, author = when, who
+		}
 	}
-	return th.Created, th.Author
+	if n := len(th.Replies); n > 0 {
+		// Replies are appended in order by internal/comments (it never reorders
+		// or back-dates), so the last element is the newest.
+		consider(th.Replies[n-1].Created, th.Replies[n-1].Author)
+	}
+	consider(th.ResolvedAt, th.ResolvedBy)
+	consider(th.ReopenedAt, th.ReopenedBy)
+	return at, author
+}
+
+// parseSinceCursor validates --since.
+//
+// An unparseable value used to be accepted and compared lexicographically
+// against RFC 3339 stamps, which failed in the worst available direction:
+// "yesterday" sorts ABOVE every timestamp beginning with a digit, so every open
+// thread was filtered out and the command answered "0 open threads" with exit
+// 0. An agent told by the skills that an empty inbox means the human has left
+// nothing cannot distinguish that from the truth. Worse, the bad value was then
+// echoed back as the cursor, so every subsequent poll inherited it and the
+// inbox stayed empty for the rest of the session.
+//
+// A malformed cursor is a caller error and is reported as one. Empty stays
+// legal — it means "everything", which is what the first poll wants.
+//
+// It also NORMALIZES to the exact UTC form the engine writes, and that half is
+// not cosmetic. Every comparison in the inbox is a string comparison — the
+// stored timestamps come from one clock in one format, which makes them
+// lexicographically ordered — so an offset cursor like "2026-07-26T12:00:00
+// +05:00" would parse happily and then compare as the characters "2026-07-26T12
+// …", an hour that is really 07:00 UTC. The filter would silently answer for
+// the wrong instant. Converting to UTC first makes the comparison mean what the
+// caller asked.
+func parseSinceCursor(since string) (string, error) {
+	if since == "" {
+		return "", nil
+	}
+	t, err := time.Parse(time.RFC3339, since)
+	if err != nil {
+		return "", cliout.Errorf(cliout.CodeBadRequest,
+			"comment inbox: --since %q is not an RFC 3339 timestamp: %v", since, err).
+			WithHint("pass the previous call's data.cursor verbatim, or omit --since to see every open thread")
+	}
+	return t.UTC().Format(time.RFC3339), nil
 }
 
 func newCommentInboxCmd() *cobra.Command {
@@ -447,6 +529,13 @@ func newCommentInboxCmd() *cobra.Command {
 			"the viewer is the approval the lock gate is waiting for. Reply; do not try to close.",
 		Args: cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
+			// Validated and normalized BEFORE anything is loaded: a malformed
+			// cursor can only produce a wrong answer, and a wrong answer here
+			// reads exactly like "the human left you nothing".
+			since, err := parseSinceCursor(since)
+			if err != nil {
+				return cmdResult{}, err
+			}
 			_, claims, err := loadConfigAndClaims()
 			if err != nil {
 				return cmdResult{}, err

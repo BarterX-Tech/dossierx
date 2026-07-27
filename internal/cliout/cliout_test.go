@@ -96,11 +96,13 @@ func TestExitCodesStayInTheDocumentedThreeFamilies(t *testing.T) {
 	all := []Code{
 		CodeBadRequest, CodeInvalidActor, CodeReadOnly, CodeClaimNotFound, CodeThreadNotFound,
 		CodeReplyNotFound, CodeBannerClaim, CodeEmptyBody, CodeUnsafeBody, CodeClaimNotSerializable,
-		CodeRightsDenied, CodeThreadResolved, CodeThreadOpen, CodeClaimFileChanged, CodeInternal,
+		CodeRightsDenied, CodeThreadResolved, CodeThreadOpen, CodeClaimFileChanged,
+		CodeCommentDigestDrift, CodeCommentDigestUnavailable, CodeInternal,
 		CodeConfigNotFound, CodeInvalidConfig, CodeInvalidClaim, CodeLintFailed, CodeNotLocked,
 		CodeAlreadyLocked, CodeReviewPending, CodeNotReviewPending, CodeWrongState,
 		CodeUnresolvedComments, CodeDependencyNotLocked, CodeStructuredLayout, CodeNotProposed,
-		CodeBuildOrderStale, CodeBuildOrderRefused, CodeNoArtifact, CodeImplinkRefused,
+		CodeBuildOrderStale, CodeBuildOrderRefused, CodeBuildOrderHandEdited,
+		CodeNoArtifact, CodeImplinkRefused,
 		CodeUnknownModule, CodeMissingFlag, CodeUnsupportedFormat, CodeUsage, CodeWriteConflict,
 		CodeWriteFailed,
 	}

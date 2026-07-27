@@ -35,12 +35,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
@@ -347,7 +349,57 @@ func (s *Store) Save() error {
 	if err := atomicWriteFile(s.path, raw, 0o644); err != nil {
 		return fmt.Errorf("lock: write store %s: %w", s.path, err)
 	}
+	// A store being written for the FIRST time is a project crossing into
+	// ledger-covered, and it must acquire its comment digest store at the same
+	// instant. PrepareStore's adoptCommentDigests already does this for the
+	// project that MIGRATES across (a pre-ledger store being stamped); this is
+	// the other door into the same room, and it was open. A fresh project that
+	// reaches ledger-covered through its first "claim lock" never goes through a
+	// migration, so it ended up ledger-covered with no digest store — which is
+	// indistinguishable on disk from a project whose digest store was DELETED,
+	// and that ambiguity is the whole reason check's comment-digest-absent rule
+	// still has to require a surviving thread before it will fire.
+	//
+	// The gate is s.fileExists, read from LOAD time, and it is what keeps this
+	// from becoming the laundering path itself: a project whose lock store is
+	// already on disk never reaches here, so deleting the digest store from a
+	// covered project is never quietly undone by the next lock.
+	if !s.fileExists {
+		ensureCommentDigestStore(s.path)
+	}
 	return nil
+}
+
+// ensureCommentDigestStore creates an EMPTY comment digest store beside the lock
+// store at path, if there is not one there already.
+//
+// Empty, never adopted: at first creation no claim has been through the comment
+// engine, so there is nothing legitimate to record. A hand-written comments:
+// block present at this moment stays UNKNOWN to the digest rules — never
+// blessed, never accused — which is the same conservative default AdoptLedger
+// takes for an absent lock ledger, and the opposite of what adopting would do.
+//
+// Best-effort by design: a project that cannot write this file is not one whose
+// lock should fail. The cost of it not being written is that the project looks
+// like one that predates this behaviour, which is the state everything here
+// already tolerates.
+func ensureCommentDigestStore(lockStorePath string) {
+	if lockStorePath == "" {
+		return
+	}
+	path := digest.StorePathBeside(lockStorePath)
+
+	release, err := AcquireFileLock(path)
+	if err != nil {
+		return
+	}
+	defer release()
+
+	store, err := digest.LoadStore(path)
+	if err != nil || store.FileExists() {
+		return
+	}
+	store.Save() //nolint:errcheck // best-effort: see this function's doc comment
 }
 
 // atomicWriteFile writes data to path without ever leaving a reader able to
@@ -402,6 +454,13 @@ func ContentHash(c model.Claim) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
+// ErrAlreadyLocked is Lock's refusal of a claim that is already locked. It is a
+// sentinel because the CLI has to classify it into cliout.CodeAlreadyLocked and
+// the skills document a recovery for that code (unlock -> fix -> lock); matching
+// on prose would silently reclassify the refusal the first time the sentence is
+// reworded. See Lock for why re-locking has to be a refusal rather than a no-op.
+var ErrAlreadyLocked = errors.New("lock: claim is already locked")
+
 // Lock transitions claim from draft to locked. It is refused (with a
 // non-nil error) if running the full lint suite against claims produces
 // any error-severity finding — matching "dossierx lint"/"dossierx check"'s own
@@ -437,6 +496,31 @@ func ContentHash(c model.Claim) string {
 // a hand-flipped status, and the gate would refuse the honest lock. Putting it
 // in the signature makes forgetting it a compile error.
 func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *Store, ap Approval) (model.Claim, error) {
+	// FIRST gate, ahead of lint, hub gating and the comment gate: Lock is the
+	// draft -> locked transition, and it is not a re-signing tool.
+	//
+	// Without this the ledger has a laundering path made of one ordinary
+	// command. Hand-edit a locked claim's body; "check" correctly reports
+	// lock-content-drift against the ledger record. Then run
+	//
+	//	dossierx claim lock <id> --reason "..."
+	//
+	// and RecordApproval below overwrites the record with a hash of the EDITED
+	// content. The finding disappears, no unlock ever happened, and the ledger
+	// now attests that a human approved bytes they never saw — which is the
+	// precise thing the ledger exists to make impossible. The dry run already
+	// advertised "claim_is_draft" as a precondition; the real run simply did not
+	// enforce it, so the preview and the command disagreed about the one gate
+	// that mattered.
+	//
+	// The recovery is the approval path the whole release is built on: unlock
+	// (which RELEASES the record, on the record), fix, lock. That path is
+	// unchanged and always available — Unlock has no gates by design.
+	if claim.Status == model.StatusLocked {
+		return claim, fmt.Errorf("%w: claim %q is already locked, and lock is the draft -> locked transition, not a re-approval. Re-locking would overwrite its ledger record with a hash of whatever the file says NOW, which is how a hand edit to a locked claim gets blessed. To change it: dossierx claim unlock %s --reason \"...\", make the edit, then lock it again",
+			ErrAlreadyLocked, claim.ID, claim.ID)
+	}
+
 	lintClaims := withLockedCandidate(claims, claim)
 	findings := lint.RunAll(lintClaims, cfg)
 	errCount := 0

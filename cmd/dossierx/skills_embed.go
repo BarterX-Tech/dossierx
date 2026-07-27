@@ -76,7 +76,7 @@ func newSkillsCmd() *cobra.Command {
 		Short: "Install the embedded DossierX agent skills (dossierx router, claims, comments, build-order, code-links) in whatever form this repo's harness reads",
 	}
 	cmd.AddCommand(newSkillsExportCmd())
-	return cmd
+	return commandGroup(cmd)
 }
 
 // skillsExportForm is one written form in the export's machine payload. The

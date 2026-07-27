@@ -39,6 +39,7 @@ so it follows the same rule as `claim lock`: preview, show the human, get a yes,
 | a module claim has an open thread | `build_order_refused` | reply; the human resolves in the viewer |
 | a locked claim has no `build_role` | `build_order_refused` | set it, then re-propose |
 | a same-phase `rests_on` cycle | `build_order_refused` | fix the edges — this is a real modelling error, never silently dropped |
+| the artifact was edited by hand | `build_order_hand_edited` | the claims are fine and the artifact is not — re-`propose` to discard the edit, then `lock` what the engine derived |
 | nothing proposed yet | `not_proposed` | run `propose` |
 | the locked order is stale | `build_order_stale` | re-`propose`, then re-`lock` |
 | unknown `--module` | `unknown_module` | you typo'd it; a wrong module must not answer with an empty report |
@@ -79,6 +80,13 @@ Read `.build-order.<module>.json` and build strictly phase by phase, in the orde
 lists. Paths in it are project-relative by design — this artifact is meant to be shared, not to
 record one machine's directory layout. Within `behavior` and `api`, the listed order already
 accounts for every `rests_on` edge; do not re-derive your own order from the claim bodies.
+
+Read it; never edit it. A **locked** artifact is an approved one: `build-order lock` records its
+signature in the same ledger a `claim lock` writes to, and `dossierx check` reports a hand edit as
+`build-order-content-drift` — reordering phases, moving a claim into `excluded`, or refreshing the
+frozen `hashes` so it stops reporting `stale` are all the same act as editing a locked claim.
+Commit the locked artifact along with the ledger; the sequence a human approved has to travel with
+the repository for CI to check it.
 
 As each claim's code lands, ground it — that is **[[dossierx-code-links]]**, the natural next step
 after finishing a claim from this sequence.

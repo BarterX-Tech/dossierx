@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -526,4 +527,201 @@ func hasRule(findings []Finding, rule string) bool {
 		}
 	}
 	return false
+}
+
+// The migration bridge for the COMMENT DIGEST store.
+//
+// internal/check reports a ledger-covered project with no digest store as
+// comment-digest-absent, which is what stops "delete the file and the
+// comment-ledger-drift finding disappears" from being free. That rule keys on
+// the LOCK store's version — the digest store's absence cannot be evidence about
+// itself — so the two have to cross the line together: the same PrepareStore
+// that stamps a pre-ledger store must also create the digest store, adopting the
+// threads the project already has. Otherwise every upgrading project with a
+// comment thread fails check the moment it upgrades.
+func TestPrepareStoreCreatesTheCommentDigestStoreOnUpgrade(t *testing.T) {
+	silenceAnnouncements(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{}}`), 0o644); err != nil {
+		t.Fatalf("write v1 store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	commented := model.Claim{
+		ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body",
+		Comments: []model.Comment{{
+			ID: "c-aaaaaa", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+			Created: "2026-07-24T10:00:00Z", Body: "please clarify",
+		}},
+	}
+	claims := []model.Claim{commented}
+
+	PrepareStore(store, claims)
+
+	digestPath := digest.StorePathBeside(path)
+	digests, err := digest.LoadStore(digestPath)
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	if !digests.FileExists() {
+		t.Fatalf("expected the upgrade to create %s, so the project is covered from the moment it becomes ledger-covered", digestPath)
+	}
+	recorded, ok := digests.Digest(commented.ID)
+	if !ok || recorded != digest.CommentsDigest(commented) {
+		t.Fatalf("expected the existing thread adopted as found, got %q (present=%v)", recorded, ok)
+	}
+}
+
+// An EXISTING digest store is never touched by the upgrade. Adoption records
+// whatever is on disk as the truth, so re-running it over a store that already
+// has entries would re-bless a hand-edited comment block — the exact laundering
+// the digest exists to prevent.
+func TestPrepareStoreNeverOverwritesAnExistingDigestStore(t *testing.T) {
+	silenceAnnouncements(t)
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{}}`), 0o644); err != nil {
+		t.Fatalf("write v1 store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	// A digest store recorded BEFORE someone edited the thread out of the YAML.
+	withThread := model.Claim{
+		ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body",
+		Comments: []model.Comment{{
+			ID: "c-aaaaaa", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+			Created: "2026-07-24T10:00:00Z", Body: "please clarify",
+		}},
+	}
+	digests, err := digest.LoadStore(digest.StorePathBeside(path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	digests.Record(withThread)
+	if err := digests.Save(); err != nil {
+		t.Fatalf("save digest store: %v", err)
+	}
+
+	tampered := withThread
+	tampered.Comments = nil
+	PrepareStore(store, []model.Claim{tampered})
+
+	reloaded, err := digest.LoadStore(digest.StorePathBeside(path))
+	if err != nil {
+		t.Fatalf("reload digest store: %v", err)
+	}
+	if recorded, _ := reloaded.Digest(withThread.ID); recorded != digest.CommentsDigest(withThread) {
+		t.Fatalf("the upgrade re-recorded the tampered comment block as the truth")
+	}
+}
+
+// The OTHER door into ledger-covered. A fresh project never runs a migration —
+// its first "claim lock" creates the lock store outright — so
+// TestPrepareStoreCreatesTheCommentDigestStoreOnUpgrade's guarantee did not
+// reach it, and it ended up ledger-covered with no digest store. That state is
+// byte-for-byte the state of a project whose digest store was DELETED, and that
+// ambiguity is what forces check's comment-digest-absent rule to demand a
+// surviving thread before it will fire. Save closes it: creating the lock store
+// creates the digest store in the same breath.
+func TestSaveCreatesTheCommentDigestStoreForAFreshProject(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if store.FileExists() {
+		t.Fatalf("precondition: a fresh project has no lock store yet")
+	}
+
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	digests, err := digest.LoadStore(digest.StorePathBeside(path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	if !digests.FileExists() {
+		t.Fatalf("expected the first Save to create %s, so a fresh project crosses both lines at once", digest.StorePathBeside(path))
+	}
+}
+
+// ...and it is created EMPTY, never adopted. At first creation no claim has been
+// through the comment engine, so a comments: block present at this instant was
+// hand-written; recording it would bless it as the truth. Unknown — never
+// blessed, never accused — is the same default AdoptLedger takes for an absent
+// lock ledger.
+func TestSaveCreatesAnEmptyDigestStoreAndAdoptsNothing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	handWritten := model.Claim{
+		ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body",
+		Comments: []model.Comment{{
+			ID: "c-aaaaaa", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+			Created: "2026-07-24T10:00:00Z", Body: "hand-written, never through the engine",
+		}},
+	}
+	RecordApproval(store, handWritten, Approval{Actor: "test", Reason: "fixture"})
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	digests, err := digest.LoadStore(digest.StorePathBeside(path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	if _, ok := digests.Digest(handWritten.ID); ok {
+		t.Fatalf("expected the fresh digest store to adopt nothing, but %s was recorded", handWritten.ID)
+	}
+}
+
+// Save must never RESTORE a digest store that was deleted from an
+// already-covered project: that would make the next lock silently undo the
+// deletion and clear the finding that named it, which is the laundering the
+// digest store exists to prevent. The guard is Store.fileExists, read at load
+// time, so an existing lock store never triggers creation.
+func TestSaveDoesNotRecreateADeletedDigestStore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "store.json")
+
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save (first): %v", err)
+	}
+	digestPath := digest.StorePathBeside(path)
+	if err := os.Remove(digestPath); err != nil {
+		t.Fatalf("remove digest store: %v", err)
+	}
+
+	// Re-open the way a later command does: the lock store is on disk now, so
+	// this project is already covered and is NOT crossing any line.
+	reopened, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore (reopen): %v", err)
+	}
+	if err := reopened.Save(); err != nil {
+		t.Fatalf("Save (second): %v", err)
+	}
+
+	if _, err := os.Stat(digestPath); !os.IsNotExist(err) {
+		t.Fatalf("expected the deletion to stand so check can report it, but the digest store was re-created (%v)", err)
+	}
 }

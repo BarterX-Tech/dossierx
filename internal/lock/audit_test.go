@@ -1,6 +1,7 @@
 package lock
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -116,6 +117,52 @@ func TestAuditCatchesTheOrphanedLockRecord(t *testing.T) {
 	}
 }
 
+// TestAuditCatchesTheRelockedReleasedRecord is the orphan rule's mirror image,
+// and the cheapest complete bypass of the approval path that existed before it:
+//
+//	dossierx claim lock <id>    -> record written
+//	dossierx claim unlock <id>  -> record RELEASED (kept, stamped ReleasedAt),
+//	                               status: draft
+//	edit the YAML: status back to locked
+//
+// Nothing fired. lock-ledger-missing did not, because a record is present;
+// lock-content-drift did not, because LockedClaimHash excludes status and the
+// body is whatever it was; lock-ledger-orphan did not, because that rule is
+// about a DRAFT claim holding an UNreleased record. The claim ends up locked
+// with its approval withdrawn, which is the exact state the ledger exists to
+// make impossible.
+//
+// The body is left untouched on purpose: the point is that content equality is
+// not evidence of approval, so the rule must fire with the hash still matching.
+func TestAuditCatchesTheRelockedReleasedRecord(t *testing.T) {
+	locked, store := lockedWithRecord(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
+	released := Unlock(locked, store, Approval{Actor: "alice", Reason: "reopening for a fix"})
+
+	// The hand edit: status: draft -> status: locked, nothing else changed.
+	relocked := released
+	relocked.Status = model.StatusLocked
+
+	findings := Audit([]model.Claim{relocked}, store, nil)
+	if !hasRule(findings, RuleLockLedgerReleased) {
+		t.Fatalf("expected %s for a locked claim whose only record was released; got %+v", RuleLockLedgerReleased, findings)
+	}
+	// It must not ALSO be reported as drift: the content really does still
+	// match what was approved, and a false drift finding sends the reader
+	// hunting for an edit that never happened.
+	if hasRule(findings, RuleLockContentDrift) {
+		t.Fatalf("the content still hashes to what was approved; %s is a false report here: %+v", RuleLockContentDrift, findings)
+	}
+
+	// And the approval record a genuine re-lock writes clears it, so the rule
+	// cannot fire on honest work — RecordApproval is the write Lock performs
+	// once its three gates pass, which is exactly what a released record is
+	// missing.
+	RecordApproval(store, relocked, Approval{Actor: "alice", Reason: "re-approved"})
+	if findings := Audit([]model.Claim{relocked}, store, nil); len(findings) != 0 {
+		t.Fatalf("a properly re-locked claim must be silent, got %+v", findings)
+	}
+}
+
 // TestAuditCatchesHandEditedComments: deleting an unresolved thread straight out
 // of the YAML is how a claim gets past the lock gate with a review still open.
 func TestAuditCatchesHandEditedComments(t *testing.T) {
@@ -220,5 +267,109 @@ func TestAuditOrderIsDeterministic(t *testing.T) {
 	}
 	if first[1].ClaimID != "widget.contract.a" || first[3].ClaimID != "widget.contract.c" {
 		t.Fatalf("expected per-claim findings sorted by id, got %+v", first)
+	}
+}
+
+// TestAuditCatchesTheDeletedLockedClaim is the reverse sweep, and the hole every
+// other rule in this file shares by construction: they all iterate the CLAIMS
+// and look for a record that disagrees. A claim whose file was DELETED has no
+// entry to iterate, so `rm claims/whatever.yaml` on a locked claim produced a
+// completely silent gate — while being the most destructive edit available to
+// anyone holding the repository. Reviewed content simply vanished, and the
+// ledger went on carrying a standing approval for a claim that was not there.
+func TestAuditCatchesTheDeletedLockedClaim(t *testing.T) {
+	locked, store := savedStoreWithRecord(t, model.Claim{ID: "widget.contract.gone", Facet: "contract", Module: "widget", Body: "approved body"})
+	survivor, _ := lockedWithRecord(t, model.Claim{ID: "widget.contract.here", Facet: "contract", Module: "widget", Body: "still here"})
+	RecordApproval(store, survivor, Approval{Actor: "alice", Reason: "approved"})
+
+	// The claim set the loader would now produce: everything EXCEPT the deleted
+	// one. Its record is still standing in the ledger.
+	findings := Audit([]model.Claim{survivor}, store, nil)
+	if !hasRule(findings, RuleLockLedgerAbandoned) {
+		t.Fatalf("expected %s for a locked claim whose file was deleted; got %+v", RuleLockLedgerAbandoned, findings)
+	}
+	for _, f := range findings {
+		if f.Rule == RuleLockLedgerAbandoned && f.ClaimID != locked.ID {
+			t.Fatalf("the finding must name the deleted claim, got %q", f.ClaimID)
+		}
+	}
+
+	// The HONEST path stays silent. Unlock stamps ReleasedAt and keeps the
+	// record, so unlock-then-delete is a human deciding on the record that the
+	// claim should go — a rule that fired there would make the documented
+	// recovery itself a finding.
+	Unlock(locked, store, Approval{Actor: "alice", Reason: "agreed to drop it"})
+	if findings := Audit([]model.Claim{survivor}, store, nil); hasRule(findings, RuleLockLedgerAbandoned) {
+		t.Fatalf("unlock-then-delete must be silent, got %+v", findings)
+	}
+}
+
+// savedStoreWithRecord is lockedWithRecord with the store actually PERSISTED, so
+// Store.FileExists() reports true. The abandoned rule is scoped to a store whose
+// file is real: an absent ledger is already reported once as
+// lock-ledger-absent, and firing there as well would accuse every claim of
+// having been deleted whenever the ledger is the thing that is missing.
+func savedStoreWithRecord(t *testing.T, c model.Claim) (model.Claim, *Store) {
+	t.Helper()
+	c.Status = model.StatusLocked
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	seed, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	RecordApproval(seed, c, Approval{Actor: "alice", Reason: "approved"})
+	if err := seed.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore (reopen): %v", err)
+	}
+	return c, store
+}
+
+// TestLockRefusesAnAlreadyLockedClaim closes the cheapest laundering path the
+// ledger had: one ordinary command, no unlock, no hand edit of the ledger.
+//
+//	edit a LOCKED claim's body          -> check reports lock-content-drift
+//	dossierx claim lock <id> --reason … -> RecordApproval overwrites the record
+//	                                       with a hash of the EDITED content
+//
+// The finding disappears and the ledger now attests that a human approved bytes
+// they never saw. The dry run had advertised "claim_is_draft" as a precondition
+// all along; only the real run failed to enforce it.
+func TestLockRefusesAnAlreadyLockedClaim(t *testing.T) {
+	locked, store := lockedWithRecord(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
+	approvedHash := LockedClaimHash(locked)
+
+	tampered := locked
+	tampered.Body = "quietly rewritten"
+
+	if _, err := Lock(tampered, []model.Claim{tampered}, nil, store, Approval{Actor: "mallory", Reason: "re-approved"}); !errors.Is(err, ErrAlreadyLocked) {
+		t.Fatalf("expected ErrAlreadyLocked when re-locking a locked claim, got %v", err)
+	}
+
+	// The record must be UNTOUCHED — a refusal that still wrote would be no
+	// refusal at all.
+	record, ok := store.Record(locked.ID)
+	if !ok || record.Hash != approvedHash {
+		t.Fatalf("the ledger record was rewritten by a refused lock: %+v", record)
+	}
+	if record.Reason != "approved" || record.Actor != "alice" {
+		t.Fatalf("the refused lock overwrote the approval's provenance: %+v", record)
+	}
+	// And the drift is still reported, which is the whole point.
+	if findings := Audit([]model.Claim{tampered}, store, nil); !hasRule(findings, RuleLockContentDrift) {
+		t.Fatalf("the tamper must still be reported after a refused re-lock, got %+v", findings)
+	}
+
+	// The documented recovery must not be blocked BY THIS GATE: once unlock has
+	// released the record and set the claim back to draft, the already-locked
+	// refusal is gone. (Whatever the lint suite then says about this bare
+	// fixture claim is a different gate's business and is covered elsewhere.)
+	released := Unlock(tampered, store, Approval{Actor: "alice", Reason: "reopening"})
+	if _, err := Lock(released, []model.Claim{released}, nil, store, Approval{Actor: "alice", Reason: "re-approved properly"}); errors.Is(err, ErrAlreadyLocked) {
+		t.Fatalf("unlock must clear the already-locked refusal, got %v", err)
 	}
 }

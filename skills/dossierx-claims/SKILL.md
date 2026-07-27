@@ -126,9 +126,13 @@ Both ends require `--reason`, and both take `--dry-run`. Preview, show the human
 get a yes, then run it. `--reason` is where their approval is carried into the record — never
 fabricate one.
 
-`dossierx claim lock` refuses on three gates, each with its own `error.code`: `lint_failed` (fix
-the findings), `unresolved_comments` (reply, and let the human click Resolve), and
-`dependency_not_locked` (a doctrine dependency is still draft).
+`dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
+the findings), `unresolved_comments` (reply, and let the human click Resolve),
+`dependency_not_locked` (a doctrine dependency is still draft), and `already_locked` — a claim
+that is *already* `locked` is not re-locked. That last one matters most when a gate has just
+complained: re-locking a drifted or flagged claim would sign whatever the file now says, clear
+`review_pending` with no diff shown, and strand the human's flag where `reaudit` can no longer
+reach it. `unlock` → fix → `lock`, or restore the file from git.
 
 ## `review_pending` — and why `reaudit` is not the edit tool
 
@@ -169,7 +173,9 @@ Every legitimate approval records a hash of what was approved. `dossierx check` 
 `--validate`, and `--staged`, which is what the git pre-commit hook runs over the index) compares
 the world against that ledger and fails with `integrity_failed` on: a locked claim with no
 record, a locked claim whose content moved, a draft claim still holding a record (someone flipped
-`locked` → `draft` to dodge review), or a comment block changed outside the engine.
+`locked` → `draft` to dodge review), a locked claim whose **file was deleted** while its record
+still stands (there is no `claim delete` verb — `unlock` first, then delete), or a comment block
+changed outside the engine.
 
 The recovery is never "re-lock it so the hashes match" — that launders the edit. Restore the file
 from version control, or take it through unlock → fix → lock so the change is on the record. The

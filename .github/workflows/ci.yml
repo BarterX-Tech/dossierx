@@ -67,6 +67,59 @@ jobs:
         shell: bash
         run: bash scripts/hook-smoke-test.sh
 
+  # viewer-tests/ is a SEPARATE Go module (its own go.mod, requiring chromedp) so
+  # that chromedp and its transitive dependencies can never enter the engine's
+  # go.mod, which stays cobra + yaml.v3. The price of that isolation is that the
+  # root "go test ./..." above cannot see this module at all — for a while
+  # nothing else could either, and the browser suite was executed by no job and
+  # no Makefile target on any machine but a maintainer's. Every Go test stayed
+  # green while the viewer's inline JavaScript — the comment panel wiring, the
+  # empty comment chip's click handler, the edge labels — was covered by
+  # markup assertions only. This job is what makes the green mean something.
+  #
+  # The browser is the runner image's preinstalled Google Chrome; no third-party
+  # action is used to fetch one. It is resolved EXPLICITLY into
+  # DOSSIERX_TEST_BROWSER rather than left to the suite's own probe, because that
+  # probe t.Skip()s when it finds nothing — a runner image that quietly dropped
+  # Chrome would turn this job green while running zero assertions, which is the
+  # exact failure this job exists to end. Set explicitly, the harness t.Fatal()s
+  # on a path that is not there.
+  viewer:
+    name: viewer (headless chrome)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: true
+          # Two modules, two go.sum files; the default only sees the root one.
+          cache-dependency-path: |
+            go.sum
+            viewer-tests/go.sum
+
+      - name: Locate a headless-capable Chrome
+        run: |
+          for c in /usr/bin/google-chrome /usr/bin/chromium /usr/bin/chromium-browser; do
+            if [ -x "$c" ]; then
+              echo "using $c"
+              echo "DOSSIERX_TEST_BROWSER=$c" >>"$GITHUB_ENV"
+              exit 0
+            fi
+          done
+          echo "no Chrome/Chromium found on this runner image; the viewer suite" >&2
+          echo "would silently SKIP rather than run, so this job fails instead." >&2
+          exit 1
+
+      - name: Viewer browser suite
+        working-directory: viewer-tests
+        # No -race: this suite is I/O bound on a browser and a subprocess, and
+        # the code under test is JavaScript in a page, not Go.
+        run: go test -count=1 ./...
+
   lint:
     name: lint
     runs-on: ubuntu-latest

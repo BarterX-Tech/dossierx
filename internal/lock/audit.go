@@ -40,6 +40,24 @@ const (
 	// and the unresolved-comment gate as though all three had passed.
 	RuleLockLedgerMissing = "lock-ledger-missing"
 
+	// RuleLockLedgerReleased: a LOCKED claim whose record exists but was
+	// RELEASED by an unlock. Unlock deliberately keeps the record and stamps
+	// ReleasedAt rather than deleting it, so the evidence a claim was ever
+	// locked survives — but that means "a record exists" is satisfied by a
+	// record that says the opposite of an approval.
+	//
+	// Without this rule the whole approval path is bypassable in two ordinary
+	// commands and one hand edit: lock, unlock (which releases the record and
+	// sets status: draft), then edit "status: draft" back to "status: locked"
+	// in the YAML. lock-ledger-missing does not fire, because a record is
+	// present. lock-content-drift does not fire either, because
+	// LockedClaimHash deliberately EXCLUDES status — so as long as the body is
+	// restored to what was approved before the flip, the hash still matches.
+	// And lock-ledger-orphan is the mirror case (draft claim, UNreleased
+	// record), so it does not fire either. The claim ends up locked, with no
+	// standing approval, and every gate silent.
+	RuleLockLedgerReleased = "lock-ledger-released"
+
 	// RuleLockContentDrift: a locked claim whose current content no longer
 	// hashes to what its ledger record says was approved. This is the rule
 	// that covers the nine fields ContentHash cannot see — including raw_html
@@ -53,6 +71,23 @@ const (
 	// is edited freely and can be re-locked later, and before the ledger there
 	// was nothing at all to notice it had ever been locked.
 	RuleLockLedgerOrphan = "lock-ledger-orphan"
+
+	// RuleLockLedgerAbandoned: a standing (unreleased) CLAIM ledger record whose
+	// claim is no longer in the project at all — the claim file was deleted.
+	//
+	// Every other rule here iterates the CLAIMS and looks for a disagreeing
+	// record. A deleted claim has no entry to iterate, so it slipped past all of
+	// them: `rm claims/whatever.yaml` on a LOCKED claim produced a completely
+	// silent gate, and deleting a claim is the most destructive edit available
+	// to anyone holding the repository. This rule is the reverse sweep — the
+	// LEDGER is iterated and each standing record is asked whether its claim is
+	// still there.
+	//
+	// It fires only on UNRELEASED records, which is what keeps the honest path
+	// quiet: unlock stamps ReleasedAt and leaves the record behind, so
+	// unlock-then-delete (a human deciding on the record that the claim should
+	// go) is silent, while delete-alone is a refusal.
+	RuleLockLedgerAbandoned = "lock-ledger-abandoned"
 
 	// RuleCommentLedgerDrift: a claim whose comment block no longer matches
 	// the digest recorded at the engine's last comment write — a thread or
@@ -103,6 +138,22 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 					c.ID, c.ID),
 			})
 
+		// Evaluated BEFORE the content check, because a released record is the
+		// more fundamental fact and the one that explains the state: the
+		// content may well still match, since the hash excludes status and a
+		// hand-flipped claim is usually flipped back to exactly what was
+		// approved. Reporting drift here (when there is none) or nothing at all
+		// (which is what shipped) would both send the reader looking for the
+		// wrong thing.
+		case c.Status == model.StatusLocked && record.Released():
+			findings = append(findings, Finding{
+				Rule:    RuleLockLedgerReleased,
+				ClaimID: c.ID,
+				Message: fmt.Sprintf(
+					"claim %q is locked, but its only ledger record was RELEASED by an unlock on %s: a released record is a record of an approval that was withdrawn, not a standing approval. Something set status: locked outside the approval path — the content hash cannot see it, because the hash deliberately excludes status. Set it back to status: draft and lock it properly (dossierx claim lock %s --reason \"...\").",
+					c.ID, record.ReleasedAt, c.ID),
+			})
+
 		case c.Status == model.StatusLocked && record.Hash != LockedClaimHash(c):
 			findings = append(findings, Finding{
 				Rule:    RuleLockContentDrift,
@@ -135,6 +186,34 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 						c.ID),
 				})
 			}
+		}
+	}
+
+	// The reverse sweep: the ledger's own records, checked against the claims
+	// that DO exist. Every rule above starts from a claim, so a claim that was
+	// deleted outright is invisible to all of them — see
+	// RuleLockLedgerAbandoned.
+	//
+	// It is skipped entirely when the store file is absent. An absent ledger is
+	// already reported once, as lock-ledger-absent, and an in-memory store built
+	// by a caller that passed a subset of the project's claims must not have
+	// every claim it did not pass reported as deleted.
+	if store != nil && store.FileExists() {
+		present := make(map[string]bool, len(claims))
+		for _, c := range claims {
+			present[c.ID] = true
+		}
+		for key, record := range store.Ledger {
+			if record.Subject != SubjectClaim || record.Released() || present[key] {
+				continue
+			}
+			findings = append(findings, Finding{
+				Rule:    RuleLockLedgerAbandoned,
+				ClaimID: key,
+				Message: fmt.Sprintf(
+					"claim %q has a standing lock-ledger record from %s (%q) but no longer exists in the project: a LOCKED claim's file was deleted without going through the approval path, so nothing recorded that the human agreed to drop reviewed content. Restore the claim file from version control, or — if the deletion was intended — restore it, run dossierx claim unlock %s --reason \"...\", and delete it again so the release is on the record.",
+					key, record.At, record.Reason, key),
+			})
 		}
 	}
 

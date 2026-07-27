@@ -154,10 +154,30 @@ type Config struct {
 	// against the process's current working directory. Unexported so it
 	// can't be set directly from YAML.
 	dir string
+
+	// path is the absolute path of the config file this was loaded from, ""
+	// for a config decoded from bytes with no file behind it. It exists for
+	// "check --staged", which has to look this exact file up in the git index
+	// and cannot assume it is named FileName — --config accepts any path.
+	// Unexported so it can't be set directly from YAML.
+	path string
 }
 
 // Dir returns the absolute directory the config file lives in.
 func (c *Config) Dir() string { return c.dir }
+
+// Path returns the absolute path of the config file this was loaded from, or ""
+// when it was decoded from bytes. Callers that need to find the SAME file
+// somewhere else (the git index, above all) must use this rather than assuming
+// Dir()+FileName: --config takes an arbitrary path, and a project whose config
+// is named something else would otherwise be looked up as a file that is not
+// there — which, for a gate, means silently falling back to weaker evidence.
+func (c *Config) Path() string { return c.path }
+
+// FileName is the project config's fixed filename. The upward search in
+// cmd/dossierx and the index lookup in internal/check both name it, so it is a
+// constant rather than a literal repeated at each site.
+const FileName = "project.config.yaml"
 
 // LoadConfig reads, strictly decodes, and validates the project config at
 // path. "Strict" means an unknown YAML field is a hard error, not silently
@@ -176,7 +196,28 @@ func LoadConfig(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("config: resolve absolute path for %s: %w", path, err)
 	}
-	dir := filepath.Dir(absPath)
+	cfg, err := DecodeConfig(raw, filepath.Dir(absPath), path)
+	if err != nil {
+		return nil, err
+	}
+	cfg.path = absPath
+	return cfg, nil
+}
+
+// DecodeConfig is LoadConfig with the bytes already in hand and the anchor
+// directory supplied separately.
+//
+// It exists for "dossierx check --staged", which has to evaluate the project
+// against the config THE INDEX HOLDS while still resolving claims_dir and the
+// stores against the real working-tree directory — the index's copy of the file
+// has no directory of its own to be relative to. Splitting the read from the
+// decode is what keeps that caller on this exact strict-decode-and-validate
+// path instead of growing a second, drifting copy of it.
+//
+// name is used only in error messages, so a caller reading from somewhere other
+// than the filesystem can still say which file it means.
+func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
+	path := name
 
 	var cfg Config
 	dec := yaml.NewDecoder(strings.NewReader(string(raw)))

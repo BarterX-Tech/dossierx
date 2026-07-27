@@ -40,10 +40,11 @@ Set up DossierX in this repository.
 5. Run `dossierx check --format text` and show me the output. Do not tell me
    it works; show me it exiting 0.
 6. Tell me to commit `.dossierx-lock-store.json` — and
-   `.dossierx-comment-digest.json` once it appears — together with the claim
-   files. They are tracked artifacts: the ledger is what CI compares the
-   claims against, and the gate is vacuous without them. Never add them to
-   .gitignore.
+   `.dossierx-comment-digest.json` and `.dossierx-flag-store.json` once they
+   appear — together with the claim files. All three are tracked artifacts:
+   the ledger is what CI compares the claims against, the gate is vacuous
+   without it, and a flag that does not travel with its claim reaudits to an
+   empty proposal on the next machine. Never add them to .gitignore.
 7. Tell me to run `dossierx serve`. That is the only DossierX command I run.
 
 Draft claims are yours: write, restructure and delete them freely, that is
@@ -78,7 +79,9 @@ Open the URL it prints. That is a local viewer of every claim, facet, build orde
 5. You click **Resolve**. That click *is* the approval — and it is load-bearing, because a claim cannot be locked while it carries an unresolved thread.
 6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>"`.
 
-Advisory rights are enforced in the engine, not by convention: an agent may only act on its own messages, so it can resolve, reopen, edit or delete only the threads and messages it authored itself. Everything you wrote is yours to close.
+Closing a thread is yours alone, and in v0.3.0 that is structural rather than polite: `dossierx comment` is `inbox · list · add · reply` and nothing else — resolve, reopen, edit and delete were removed from the CLI in this release and are reachable only from the viewer and `dossierx serve`'s HTTP API, which is to say, only from your click.
+
+Underneath that, the older guarantee still holds and is enforced in the engine rather than by convention: an agent may only act on its own messages, so even over the HTTP API it cannot touch a thread or a message you authored. Everything you wrote is yours to close.
 
 A static `file://` export of the viewer is read-only by design — comments need `dossierx serve`.
 
@@ -135,25 +138,34 @@ Claims are YAML in git, so nothing can *prevent* an edit. The goal is that no ou
 
 Every legitimate approval — `claim lock`, a confirmed `claim reaudit`, `build-order lock` — writes a record into the **lock ledger**: the hash of exactly what was approved, when, by which account, and the human's own `--reason` words. Unlocking marks the record released rather than deleting it, so the evidence that a claim was ever locked survives. Comment history gets the same treatment in its own digest store, which is why `serve` never needs write access to the lock store.
 
-Two files hold this, at the project root, next to `project.config.yaml`:
+Three files hold the review state, at the project root, next to `project.config.yaml`:
 
 | File | Holds |
 |---|---|
 | `.dossierx-lock-store.json` | the lock ledger — per locked claim and locked build order: `{hash, at, actor, reason}` |
 | `.dossierx-comment-digest.json` | the review history's fingerprint |
+| `.dossierx-flag-store.json` | the pending `claim flag` triggers: each flagged claim's `{claim_says, now_does, reason, flagged_at}`, parked until a confirmed `claim reaudit` consumes it |
 
-**Both are tracked artifacts. Commit them; never `.gitignore` them** — the lock store the moment anything is locked, the digest once anyone comments. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip.
+**All three are tracked artifacts. Commit them; never `.gitignore` them** — the lock store the moment anything is locked, the digest once anyone comments, the flag store the moment anything is flagged. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip.
 
-These are the exception, not the rule. `.catalog.json` and `viewer/` are *generated* — regenerated in full by every `dossierx check` — and are safe to `.gitignore`.
+The flag store is not part of the gate — nothing compares it to anything — but it is not optional either. `claim flag` writes the before/after there and sets `review_pending` on the claim; `claim reaudit` reads it back to produce the diff it asks you to confirm. If the claim travels to another machine and the flag store does not, that claim arrives `review_pending` with nothing to propose, and confirming the empty proposal clears the flag having changed nothing.
+
+These are the exception, not the rule. `.catalog.json` and `viewer/` are *generated* — regenerated in full by every `dossierx check` — and are safe to `.gitignore`. `.build-order.<module>.json` starts out in that generated category and leaves it the moment you lock one: a **locked** build order is an approved artifact the gate compares against its record, so commit it like the stores above.
 
 The gate names each disagreement:
 
 | Finding | What it caught |
 |---|---|
 | `lock-ledger-missing` | a claim is `locked` with no approval record — e.g. `status: draft` flipped to `locked` by hand, walking past the lint, hub-gating and unresolved-comment gates |
+| `lock-ledger-released` | a claim is `locked` on a record an `unlock` already **released** — lock, unlock, then hand-edit `status:` back. A released record is a withdrawn approval, not a standing one, and the content hash cannot see it because the hash excludes `status` |
 | `lock-content-drift` | a locked claim's content no longer matches what was approved — including fields the dependency-drift hash never covered, such as `raw_html`, `build_role`, `section` and `order` |
 | `lock-ledger-orphan` | a `draft` claim still holding an *unreleased* record — `locked` flipped back to `draft` to dodge review |
+| `lock-ledger-abandoned` | a locked claim's **file was deleted** while its approval record still stands. There is no `claim delete` verb, so `rm` was the one change to a locked claim that no rule saw: every other finding starts from the claims that exist. Unlock first, then delete |
 | `comment-ledger-drift` | a review thread edited or deleted outside the engine |
+| `comment-digest-absent` | claims carry threads but `.dossierx-comment-digest.json` is **gone**, so the rule above is checking nothing at all. Deleting the store was how an edited-away thread stopped being reported: a claim the store has never seen is *unknown*, never *drifted*. Restore the file from version control — re-creating it records whatever the claims say now. Only fires once a project is ledger-covered, so an upgrade never trips it |
+| `build-order-content-drift` | a locked `.build-order.<module>.json` no longer matches the sequence that was approved — phases reordered by hand, a claim moved into `excluded`, or the frozen `hashes` baseline spliced so the order stops reporting `stale` |
+| `build-order-ledger-missing` | a build-order artifact says `locked: true` with no approval record behind it |
+| `build-order-ledger-abandoned` | a locked build order's **artifact is gone** while its approval record still stands — the `.build-order.<module>.json` was deleted, or the module was dropped from `modules:` so nothing audits it any more. The two rules above both start from the file, so deleting it was quieter than editing it. Release the build order first, then remove it |
 
 The gate runs as the **last** step of `check`, after the catalog and viewer have been written: a tampered project still regenerates its documentation, it just does not exit 0. It is deliberately not a lint — one tampered claim must not be able to freeze locking project-wide.
 

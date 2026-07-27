@@ -20,6 +20,31 @@ Race-detector runs (matching CI) are strongly encouraged before opening a PR:
 go test -race ./...
 ```
 
+### The two suites `go test ./...` does not reach
+
+`go test ./...` covers the root module and nothing else. Two suites live outside it on
+purpose, and CI runs both — if you touch what they cover, run them too.
+
+```sh
+make viewer-test   # viewer-tests/, a separate module
+make hook-test     # scripts/hook-smoke-test.sh
+```
+
+**`make viewer-test`** drives the built binary and a real headless browser through the
+viewer's inline JavaScript (the comment panel, the comment chip, the edge labels). It is a
+separate Go module because it needs `chromedp`, and the engine's `go.mod` stays cobra +
+yaml.v3 — `go test ./...` therefore cannot descend into it. It **skips** when it finds no
+Chrome/Chromium; set `DOSSIERX_TEST_BROWSER=/path/to/chrome` to point it at one, which also
+turns "no browser" from a skip into a failure. The root module tests the viewer's *markup*
+(`internal/render`); this is the only thing that tests its *behaviour*.
+
+**`make hook-test`** is the pre-commit gate's suite. The gate is shell driving a real binary
+against a real git repository, so no Go test can cover it; CI runs this on Linux, macOS and
+Windows, because the hook body executes under git's own bundled `sh`.
+
+`tests/nested_module_coverage_test.go` fails the build if a nested module is ever added
+without a CI job *and* a Makefile target, so this list cannot quietly go stale.
+
 ## Linting
 
 ```sh

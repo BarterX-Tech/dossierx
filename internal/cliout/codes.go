@@ -69,6 +69,32 @@ const (
 	// claim file changed on disk between load and save, so the write was
 	// refused rather than silently clobbering the other writer.
 	CodeClaimFileChanged Code = "claim_file_changed"
+	// CodeCommentDigestDrift is a comment write refused because the claim's
+	// STORED comments block no longer matches the digest recorded at the
+	// engine's last comment write to it — the block was edited out of band.
+	//
+	// The refusal is the whole point. Every comment op ends by re-recording the
+	// digest from whatever the file now says, so without this gate the first
+	// comment written to a hand-edited claim would silently adopt the tampered
+	// block as the new truth and clear the `comment-ledger-drift` finding that
+	// named it. An integrity record that any ordinary write launders is not a
+	// record. Restoring the claim file from version control is the recovery;
+	// re-running the op is not.
+	CodeCommentDigestDrift Code = "comment_digest_drift"
+	// CodeCommentDigestUnavailable is a comment write refused BEFORE anything
+	// was changed because the comment digest store could not be opened for
+	// writing: it does not decode, its sentinel is held, or its directory is not
+	// writable.
+	//
+	// It is distinct from CodeInternal for the reason that made it necessary.
+	// The digest refresh used to happen after the claim was already saved and
+	// its failures were returned as unclassified errors, so the caller was told
+	// "internal" for an op that HAD written — and the natural response to an
+	// unclassified failure is a retry, which appended the same thread again on
+	// every attempt. Nothing is written when this code is returned, so a retry
+	// is safe and will keep failing identically until the store is restored;
+	// that is what the code is for.
+	CodeCommentDigestUnavailable Code = "comment_digest_unavailable"
 	// CodeInternal is an unclassified failure. Its presence in a transcript is
 	// a bug report, not a branch target.
 	CodeInternal Code = "internal"
@@ -144,6 +170,20 @@ const (
 	// CodeBuildOrderRefused is buildorder's own refusal of a propose/lock (a
 	// module with unlocked claims, a missing build_role, a dependency cycle).
 	CodeBuildOrderRefused Code = "build_order_refused"
+	// CodeBuildOrderHandEdited is "dossierx build-order lock" refusing to freeze
+	// an artifact that is not what a fresh propose computes — the phase sequence,
+	// a claim's placement, its File, or the excluded set was changed by hand.
+	//
+	// It is deliberately NOT CodeBuildOrderRefused. Every documented recovery for
+	// that code is a repair to the CLAIMS (lock the remaining ones, resolve a
+	// thread, set a missing build_role, break a rests_on cycle), and an agent
+	// that reads this refusal as one of those goes and inspects claims that are
+	// already correct, finds nothing to fix, and loops. Here the claims are fine
+	// and the ARTIFACT is wrong, so the recovery is the one move that discards
+	// it: re-run "build-order propose --module <m>" and lock what the engine
+	// derives. Splitting the code is what makes those two situations
+	// distinguishable without parsing the message.
+	CodeBuildOrderHandEdited Code = "build_order_hand_edited"
 	// CodeNoArtifact is an implementation-link operation on a module with no
 	// link artifact yet.
 	CodeNoArtifact Code = "no_artifact"

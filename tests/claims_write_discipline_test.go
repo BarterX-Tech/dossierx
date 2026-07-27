@@ -257,15 +257,25 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 	}
 
 	// Several writers pounding ONE shared claim file with lock<->unlock cycles.
-	// lock and unlock are each idempotent on an already-in-that-state claim, so
-	// every op must exit 0; the claims sentinel is what keeps their whole-file
-	// rewrites from interleaving.
+	// The claims sentinel is what keeps their whole-file rewrites from
+	// interleaving, and THAT is what this test is about.
+	//
+	// "claim lock" is NOT idempotent, deliberately: locking an already-locked
+	// claim is refused (already_locked), because re-locking rewrites the claim's
+	// lock-ledger record with a hash of whatever the file says now, which is how
+	// a hand edit to a locked claim would get blessed without an unlock. Under
+	// this storm another writer legitimately wins the race and leaves the hot
+	// claim locked, so that refusal is an EXPECTED outcome here and not a
+	// corruption signal. Any OTHER failure still fails the test.
+	//
+	// Unlock stays unconditionally allowed (it is the recovery escape hatch and
+	// has no gates), so it must always exit 0.
 	for w := 0; w < 3; w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for k := 0; k < 2; k++ {
-				if _, stderr, code := run(t, root, "claim", "lock", hotID, "--reason", "test fixture"); code != 0 {
+				if _, stderr, code := run(t, root, "claim", "lock", hotID, "--reason", "test fixture"); code != 0 && !strings.Contains(stderr, "already locked") {
 					t.Errorf("concurrent lock %s: exit %d: %s", hotID, code, stderr)
 					return
 				}

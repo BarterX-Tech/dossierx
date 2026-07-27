@@ -62,7 +62,7 @@ func newClaimCmd() *cobra.Command {
 		newReauditCmd(),
 		newClaimLinkCmd(),
 	)
-	return cmd
+	return commandGroup(cmd)
 }
 
 // ---------------------------------------------------------------------
@@ -193,6 +193,39 @@ type claimCommentCounts struct {
 	OpenThreadIDs []string `json:"open_thread_ids"`
 }
 
+// claimLedgerView is a claim's LOCK-LEDGER state — the half of "what is the
+// state of this claim?" that claim show could not see.
+//
+// Without it, show and "check --validate" returned opposite verdicts about the
+// same tree: show reported a tampered locked claim as locked, not
+// review_pending, settled, while the gate reported lock-content-drift. An agent
+// asked to orient itself on a claim reads show, and show is where next_actions
+// come from — so the missing field was not cosmetic, it made show recommend
+// unlock -> relock on exactly the claim for which the skills forbid it.
+//
+// It is omitted entirely (omitempty on a pointer) for a claim with no record at
+// all: a draft claim in a project that has never locked anything has no ledger
+// state to report, and emitting a block of zero values would invite a consumer
+// to read "recorded: false" as a finding when it is the ordinary case. The gate
+// owns the reporting of a MISSING record for a locked claim (lock-ledger-missing).
+type claimLedgerView struct {
+	// Recorded: a ledger record for this claim exists.
+	Recorded bool `json:"recorded"`
+	// Grandfathered: the record was ADOPTED on upgrade, never approved. Its
+	// hash is what was on disk on adoption day — see lock.AdoptLedger.
+	Grandfathered bool `json:"grandfathered"`
+	// Released: an unlock released the record. A released record describes a
+	// claim that is allowed to be draft and allowed to change.
+	Released bool `json:"released"`
+	// ContentMatches: the claim's current content still hashes to what the
+	// STANDING record approved. It is true whenever nothing standing
+	// contradicts the file (including a released record), and false only for a
+	// real disagreement — see standingLedgerRecord.
+	ContentMatches bool   `json:"content_matches"`
+	ApprovedAt     string `json:"approved_at,omitempty"`
+	ApprovedReason string `json:"approved_reason,omitempty"`
+}
+
 // claimShowData is "dossierx claim show"'s machine payload: everything the two
 // verbs it replaced (deps, implink status) reported, plus lock state, review
 // state, discussion, and next_actions — in one call, because the loop this
@@ -217,7 +250,29 @@ type claimShowData struct {
 	Edges         claimEdgesData     `json:"edges"`
 	ImplementedIn []claimLinkView    `json:"implemented_in"`
 	Comments      claimCommentCounts `json:"comments"`
+	Ledger        *claimLedgerView   `json:"ledger,omitempty"`
 	NextActions   []string           `json:"next_actions"`
+}
+
+// claimLedgerViewFor projects the lock store's record for claim into the
+// payload, or nil when there is no record to report.
+func claimLedgerViewFor(store *lock.Store, claim model.Claim) *claimLedgerView {
+	if store == nil {
+		return nil
+	}
+	rec, ok := store.Record(claim.ID)
+	if !ok || rec.Subject != lock.SubjectClaim {
+		return nil
+	}
+	_, _, matches := standingLedgerRecord(store, claim)
+	return &claimLedgerView{
+		Recorded:       true,
+		Grandfathered:  rec.Grandfathered,
+		Released:       rec.Released(),
+		ContentMatches: matches,
+		ApprovedAt:     rec.At,
+		ApprovedReason: rec.Reason,
+	}
 }
 
 // claimReviewTrigger names why a claim is review_pending, from the three
@@ -253,7 +308,7 @@ func claimReviewTrigger(claim model.Claim, claims []model.Claim, store *lock.Sto
 // it once, in the binary, from the same gates the write paths enforce
 // (evaluateLockGates is literally lock.Lock's refusal order), so the advice can
 // never disagree with what the command would actually do.
-func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Config, trigger string, links []claimLinkView) []string {
+func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Config, trigger string, links []claimLinkView, ledger *claimLedgerView) []string {
 	var actions []string
 	id := claim.ID
 
@@ -272,15 +327,36 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 		return actions
 	}
 
-	switch trigger {
-	case "comments":
-		actions = append(actions, "review_pending because of open discussion -> reply on the thread; only the human can resolve it")
-	case "drift", "flag":
-		actions = append(actions, fmt.Sprintf("review_pending from %s -> dossierx claim reaudit %s (preview), then --confirm --reason \"<their words>\"", trigger, id))
-	case "none":
-		actions = append(actions, fmt.Sprintf("review_pending with no active trigger -> dossierx claim reaudit %s, or unlock -> fix -> lock", id))
-	default:
-		actions = append(actions, fmt.Sprintf("locked and settled -> to change it: dossierx claim unlock %s --reason \"<their words>\", edit, relock", id))
+	// THE INTEGRITY BRANCH, ahead of every other locked-claim action.
+	//
+	// A locked claim whose content no longer matches the standing approval on
+	// its lock-ledger record is not in any of the four states below. It is the
+	// one case where the advice this function otherwise gives is actively
+	// harmful: "unlock, edit, relock" RELEASES the record and then re-signs the
+	// tampered bytes under a fresh approval, the standing lock-content-drift
+	// finding disappears, and no human ever sees the diff. The router skill says
+	// so in as many words on the integrity_failed row — "Do not re-lock to make
+	// it go away" — and show was the one surface telling an agent to do exactly
+	// that, with no way to know better, because it carried no ledger state at
+	// all.
+	//
+	// reaudit --confirm is not offered either: it now refuses this claim for the
+	// same reason (see the pre-reaudit integrity gate in main.go), so offering it
+	// would violate this function's own contract that every command it prints
+	// would actually succeed.
+	if ledger != nil && ledger.Recorded && !ledger.Released && !ledger.ContentMatches {
+		actions = append(actions, fmt.Sprintf("this claim's content no longer matches the approval on its lock-ledger record -> restore %s from version control; do NOT unlock and relock, that would re-sign content nobody approved (dossierx check --validate names the finding)", claim.SourcePath))
+	} else {
+		switch trigger {
+		case "comments":
+			actions = append(actions, "review_pending because of open discussion -> reply on the thread; only the human can resolve it")
+		case "drift", "flag":
+			actions = append(actions, fmt.Sprintf("review_pending from %s -> dossierx claim reaudit %s (preview), then --confirm --reason \"<their words>\"", trigger, id))
+		case "none":
+			actions = append(actions, fmt.Sprintf("review_pending with no active trigger -> dossierx claim reaudit %s, or unlock -> fix -> lock", id))
+		default:
+			actions = append(actions, fmt.Sprintf("locked and settled -> to change it: dossierx claim unlock %s --reason \"<their words>\", edit, relock", id))
+		}
 	}
 
 	drifted := 0
@@ -291,6 +367,21 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 	}
 	switch {
 	case drifted > 0:
+		// "or claim flag it" is only offered when claim flag would actually
+		// RUN. flag.go hard-refuses any claim whose rendered content lives
+		// outside Body — table rows, steps, raw HTML — because a flag-sourced
+		// reaudit rewrites Body only and would clear review_pending while
+		// leaving the rendered content stale (DX-AUD-11). Suggesting it anyway
+		// cost the agent the real work of composing --claim-says/--now-does
+		// /--reason, usually after asking its human for the wording, to be told
+		// structured_layout at exit 1 — and the route that does work was never
+		// named. This function's contract is that its advice can never disagree
+		// with what the command would do, so the layout gate is consulted here,
+		// through the very function flag.go refuses with.
+		if lay := flagStructuredLayout(claim); lay != "" {
+			actions = append(actions, fmt.Sprintf("%d implementation link(s) drifted -> re-run dossierx claim link, or if the code is right and the claim is wrong: dossierx claim unlock %s --reason \"<their words>\", edit, relock (a %s layout cannot be flagged)", drifted, id, lay))
+			break
+		}
 		actions = append(actions, fmt.Sprintf("%d implementation link(s) drifted -> re-run dossierx claim link, or dossierx claim flag %s if the code is right and the claim is wrong", drifted, id))
 	case len(links) == 0 && claim.Module != "":
 		actions = append(actions, fmt.Sprintf("no implementation link yet -> dossierx claim link --module %s --claim %s --file <path>", claim.Module, id))
@@ -347,6 +438,7 @@ func newClaimShowCmd() *cobra.Command {
 			if store != nil {
 				lockedAt = store.LockedAt[id]
 			}
+			ledger := claimLedgerViewFor(store, claim)
 
 			data := claimShowData{
 				ClaimID:       claim.ID,
@@ -374,7 +466,8 @@ func newClaimShowCmd() *cobra.Command {
 				},
 				ImplementedIn: links,
 				Comments:      counts,
-				NextActions:   claimNextActions(claim, claims, cfg, trigger, links),
+				Ledger:        ledger,
+				NextActions:   claimNextActions(claim, claims, cfg, trigger, links, ledger),
 			}
 			if data.ImplementedIn == nil {
 				data.ImplementedIn = []claimLinkView{}
@@ -401,6 +494,12 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 	fmt.Fprintf(out, "  facet/module:       %s / %s\n", d.Facet, d.Module)
 	if d.LockedAt != "" {
 		fmt.Fprintf(out, "  locked at:          %s\n", d.LockedAt)
+	}
+	// Printed ONLY in the disagreement case. A line on every clean claim would
+	// train the reader to skim past the one that matters, which is the same
+	// reasoning reportLedgerFindings prints nothing on a clean run.
+	if d.Ledger != nil && d.Ledger.Recorded && !d.Ledger.Released && !d.Ledger.ContentMatches {
+		fmt.Fprintln(out, "  lock ledger:        CONTENT DOES NOT MATCH THE APPROVAL ON RECORD (see dossierx check --validate)")
 	}
 	fmt.Fprintf(out, "  outgoing mirrors:   %v\n", d.Edges.Mirrors)
 	fmt.Fprintf(out, "  outgoing rests_on:  %v\n", d.Edges.RestsOn)
@@ -510,6 +609,20 @@ func newClaimListCmd() *cobra.Command {
 				if err := requireKnownModule(cfg, module); err != nil {
 					return cmdResult{}, cliout.Errorf(cliout.CodeUnknownModule, "claim list: %w", err)
 				}
+			}
+			// --facet gets the same membership test --module has, and for the
+			// reason cliout.CodeUnknownModule already states about modules: "an
+			// empty report for a typo'd module looks exactly like success". A
+			// human says "show me the contracts facet", the project declares
+			// `contract`, and an unchecked filter answers ok:true / count 0 /
+			// exit 0 — indistinguishable from the truth, and every decision after
+			// it is made against an empty set. The config declares facets: the
+			// same way it declares modules:, and "claim new" already refuses an
+			// undeclared facet with this exact shape (see parseClaimID).
+			if facet != "" && !containsStr(cfg.Facets, facet) && facet != config.ReservedOverviewFacet {
+				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
+					"claim list: unknown facet %q; this project declares: %s", facet, strings.Join(cfg.Facets, ", ")).
+					WithHint("run: dossierx claim list (unfiltered) to see what is there")
 			}
 
 			// The drift lookup is built once per module rather than per claim:

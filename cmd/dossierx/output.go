@@ -177,6 +177,57 @@ func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error
 	}
 }
 
+// requireSubcommand is the RunE every NOUN carries — the command groups (claim,
+// comment, build-order, skills) that exist only to hold leaves and do no work of
+// their own.
+//
+// Without it, cobra's default for a parent with no Run/RunE is to print its help
+// text and return nil. That breaks the machine contract in both halves at once:
+// the bytes on stdout are help prose rather than the one envelope --format json
+// promises, and the process exits 0, so an agent that checked only the status
+// concludes its call succeeded. `dossierx claim` is not a successful claim
+// operation; it is an incomplete invocation, and the contract has a code for
+// exactly that.
+//
+// An unknown leaf reaches here too. Cobra's legacyArgs lets a non-root parent
+// take arbitrary positional arguments, so "dossierx claim bogus" is not rejected
+// as an unknown command — it arrives here with args, and naming what was
+// actually typed is more useful than a generic complaint.
+func requireSubcommand(cmd *cobra.Command, args []string) error {
+	noun := commandPath(cmd)
+
+	leaves := make([]string, 0, len(cmd.Commands()))
+	for _, sub := range cmd.Commands() {
+		if !sub.Hidden && sub.Name() != "help" {
+			leaves = append(leaves, sub.Name())
+		}
+	}
+	sort.Strings(leaves)
+	available := strings.Join(leaves, ", ")
+
+	if len(args) > 0 {
+		return cliout.Errorf(cliout.CodeUsage,
+			"%s: unknown subcommand %q; %s is a command group and does nothing on its own", noun, args[0], noun).
+			WithHint(fmt.Sprintf("run one of: dossierx %s <%s>", noun, available))
+	}
+	return cliout.Errorf(cliout.CodeUsage,
+		"%s: a subcommand is required; %s is a command group and does nothing on its own", noun, noun).
+		WithHint(fmt.Sprintf("run one of: dossierx %s <%s>", noun, available))
+}
+
+// commandGroup stamps requireSubcommand onto a noun and returns it, so the
+// wiring in each group's constructor is one line and no group can be added
+// without it.
+func commandGroup(cmd *cobra.Command) *cobra.Command {
+	cmd.RunE = envelopeRunE(func(c *cobra.Command, args []string) (cmdResult, error) {
+		return cmdResult{}, requireSubcommand(c, args)
+	})
+	// Cobra prints usage on a RunE error unless silenced, which would put help
+	// prose back on the very stream the envelope owns.
+	cmd.SilenceUsage = true
+	return cmd
+}
+
 // dryRunResult wraps a completed dry-run report as the command's result.
 //
 // A dry run ALWAYS succeeds: the command was asked a question and answered it.
@@ -359,6 +410,8 @@ func errorForCLI(err error) *cliout.Error {
 		code = cliout.CodeThreadResolved
 	case errors.Is(err, comments.ErrThreadOpen):
 		code = cliout.CodeThreadOpen
+	case errors.Is(err, comments.ErrCommentDigestDrift):
+		code = cliout.CodeCommentDigestDrift
 	case errors.Is(err, loader.ErrClaimFileChanged):
 		code = cliout.CodeClaimFileChanged
 	case errors.Is(err, buildorder.ErrNotProposed):

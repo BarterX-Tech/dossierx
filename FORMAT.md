@@ -240,11 +240,15 @@ edge, each with a different meaning:
   invalidated outright.
 - **`governed_by`** — names the doctrine claim (by id) that backs this
   claim's authority, or explicitly declares `type: none` with a required
-  `reason` when no such doctrine claim exists. When the project config
-  sets `doctrine_facet`, a claim naming a claim in that facet as a
-  dependency cannot be locked until the doctrine claim itself is locked
-  (hub-gating). If `doctrine_facet` is unset, hub-gating does not run at
-  all.
+  `reason` when no such doctrine claim exists. Note that `governed_by` is
+  **not** itself a gated edge: when the project config sets
+  `doctrine_facet`, hub-gating refuses to lock a claim whose **`mirrors`
+  or `rests_on`** names an unlocked claim in that facet — those two lists
+  are the whole of what it walks. A doctrine claim named *only* by
+  `governed_by` is not gated, so to have hub-gating cover it, name it as a
+  `rests_on` dependency as well. If `doctrine_facet` is unset, hub-gating
+  does not run at all. What `governed_by` is checked for is that the
+  authority chain terminates — see `governed-cycle` below.
 
 ### Graph invariants
 
@@ -289,19 +293,29 @@ is a statement about whether a human ever approved it, and the two must not
 share a severity ladder — registering these as lints would let one tampered
 file freeze locking project-wide and stop the viewer regenerating.
 
-### The two ledger files are tracked artifacts
+### The project-root stores are tracked artifacts
 
 | File | Holds |
 |---|---|
 | `.dossierx-lock-store.json` | the lock ledger: per locked claim and per locked build-order artifact, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
 | `.dossierx-comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
+| `.dossierx-flag-store.json` | each flagged claim's pending `claim flag` trigger: `{claim_says, now_does, reason, flagged_at}`, consumed and deleted by a confirmed `claim reaudit` |
 
-Both live beside `project.config.yaml`. **Commit them; never `.gitignore`
-them.** The gate compares the claims on disk against these records, so a
+All three live beside `project.config.yaml`. **Commit them; never `.gitignore`
+them.** The gate compares the claims on disk against the first two, so a
 project that does not track them has no gate — a claim and its approval have to
-travel in the same commit for CI to be able to check either one. Both are
+travel in the same commit for CI to be able to check either one. All three are
 engine-written: hand-editing them is the same act as hand-editing a locked
 claim, and it is visible in exactly the same way (the diff).
+
+The flag store is not evidence and no finding reads it, which is why it is
+listed here rather than under the findings below. It is still required to
+travel with the claims: `claim flag` writes the before/after there and sets
+`review_pending` on the claim itself, and `claim reaudit` reads it back to build
+the diff it asks a human to confirm. A `review_pending` claim that arrives on a
+machine without its flag entry reaudits to an EMPTY proposal, and confirming
+that empty proposal clears `review_pending` having applied nothing — the one
+state in which a trigger disappears with no edit and no record.
 
 ### What is signed, and what is not
 
@@ -333,16 +347,87 @@ would certify the one edit that most needs a signature.
 |---|---|
 | `lock-ledger-absent` | Locked claims exist, so the ledger file must exist. Deleting it is not a way to re-bless a project; it is a project-scoped refusal you fix by restoring the file from version control. |
 | `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate, hub-gating and the unresolved-comment gate as though all three had passed. |
+| `lock-ledger-released` | A `locked` claim's record is a *standing* approval. Unlocking marks the record released rather than deleting it, so flipping `status:` back to `locked` by hand leaves a released record in place — which satisfies "a record exists" while recording the opposite of an approval, and passes the hash check because the hash deliberately excludes `status`. |
 | `lock-content-drift` | A locked claim's content still hashes to what was approved. Covers every field above, including the ones `ContentHash` cannot see. |
 | `lock-ledger-orphan` | A `draft` claim holds no *unreleased* record. Unlocking releases a record and keeps it; flipping `locked` back to `draft` by hand does not, and that is the cheapest way to dodge review. |
+| `lock-ledger-abandoned` | An unreleased record still has the claim it approved. Deleting a locked claim's *file* removes the node from every per-claim rule below at once — they are all driven by the claims that exist — so removal was the one change to a locked claim that produced no finding at all. There is no `claim delete` verb: `unlock` first, then delete, so the withdrawal is on the record. |
 | `comment-ledger-drift` | A claim's comment block matches the digest recorded at the last engine write. Deleting an unresolved thread by hand is how a claim would otherwise slip past the lock gate with a review still open. |
+| `comment-digest-absent` | Claims carry comment threads, so the digest the rule above compares against must exist. A claim the store has never seen is *unknown*, never *drifted* — correct, since a gate must not manufacture a finding out of missing evidence, but it made the file a delete-to-clear switch: hand-delete an unresolved thread, delete `.dossierx-comment-digest.json` in the same commit, and the finding that named the edit was gone before any command ran. Project-scoped, and gated on the project already being ledger-covered *and* some claim actually carrying threads, so a project upgrading into the feature never sees it. |
+| `build-order-content-drift` | A locked `.build-order.<module>.json` still matches the artifact that was approved. The sequence is what an implementing agent builds from, so reordering two phases by hand, moving a claim into `excluded`, or splicing the frozen `hashes` baseline so the order never reports `stale` again all change what gets built without changing any claim. |
+| `build-order-ledger-missing` | A build-order artifact carrying `locked: true` has an approval record. `locked` in that file is a claim about a human's `--reason`, and a hand-set one is the same act as a hand-set `status: locked` on a claim. |
+| `build-order-ledger-abandoned` | An unreleased build-order record still has the artifact it approved. The two build-order rules above are both driven by the artifacts that exist, so deleting `.build-order.<module>.json` — or dropping the module from `modules:`, which stops anything auditing it — silenced them both at once and made removal strictly quieter than editing. It fires on *unreleased* records only, so a build order a human deliberately released stays silent. This is the build-order twin of `lock-ledger-abandoned`, and exists for the same reason. |
 | `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |
+
+`comment-digest-absent` is the comment half's answer to `lock-ledger-absent`,
+and it is **narrower on purpose**. The lock ledger guards the trust boundary —
+approved content, including the only unescaped-HTML render path in the engine —
+so its file's absence is a flat refusal. The comment digest guards a
+review-workflow gate, where a flat refusal would reject every project that
+carries comments but has never written one through a build that had this store:
+the read-only paths the hook and CI run (`check --staged`, `check --validate`)
+never adopt, so those projects could not commit at all until someone commented.
+
+So the trigger carries two qualifiers, and both are load-bearing:
+
+- **The project must already be ledger-covered.** The digest store's absence
+  cannot be keyed on the digest store's own history — the file whose absence is
+  the question cannot also be the evidence — so it is keyed on the lock store's
+  schema version (`lock.Store.LedgerCovered`). A project still on an older lock
+  store is mid-upgrade and exempt. `lock.PrepareStore` **creates** the digest
+  store, adopting every claim's current threads, at the same moment it stamps
+  that version, so an upgrading project crosses both lines together and never
+  sees the finding. That adoption never overwrites an existing store and is
+  best-effort: a migration must not fail on it.
+- **Some claim must actually carry threads.** A project with no comments
+  anywhere has nothing for the store to record, so its absence says nothing.
+
+That second qualifier is also the rule's limit, and it is worth stating
+outright: an attacker who deletes a claim's **only** thread *and* the digest
+store in one commit leaves a project with no comments anywhere, so the rule
+stays silent. It catches the bare deletion, and the partial case where threads
+survive elsewhere in the project — not the total one. The qualifier cannot just
+be widened: `check --staged` reads both stores out of the git *index*, so "no
+digest store" is equally the state of a project that has simply never committed
+one, and firing there would make the pre-commit hook refuse every commit in a
+brand-new project. Closing the residue needs positive evidence that threads once
+existed, not a broader absence test.
+
+The recovery is version control, not a re-run. Re-creating the store by running
+a comment op would record whatever the claims say *now*, which is exactly what
+the deletion was for — so `internal/comments` refuses to adopt wholesale in a
+covered project. A comment write into a covered project whose store is gone
+records only the claim it touched; every other claim stays *unknown* — never
+blessed, never accused. `comment-ledger-drift` continues to cover the edit
+itself whenever the digest is present.
+
+Three of the rules above are not about a claim's *content*, and each exists
+because "nothing already locked changes without an approval on the record" was
+otherwise satisfiable by changing something other than a claim body.
+`lock-ledger-abandoned` covers the node disappearing: every other per-claim rule
+starts from the claims that exist, so `rm claims/foo.yaml` walked past all of
+them at once and left an unreleased approval pointing at nothing. The two
+`build-order-*` rules cover the artifact an implementing agent actually reads:
+`.build-order.<module>.json` is generated, but a **locked** one is generated,
+approved and then frozen, and its `hashes` baseline is the only thing that makes
+`stale` mean anything. A locked build order is checked against its record for
+the same reason a locked claim is — the record is written by
+`build-order lock`, and a record nothing ever reads is not a gate.
+
+Commit `.build-order.<module>.json` once it is locked, for the same reason you
+commit the ledger: both rules read the artifact off disk, so an approved order
+that never travels with the repository is an approval CI has nothing to compare
+against. While it is still `locked: false` it is ordinary generated output that
+`propose` rewrites in full.
 
 ### Adoption, once
 
 A project that locked claims before the ledger existed adopts them on the first
-run of a build that has it: each already-locked claim gets a record marked
-`grandfathered`, and the adoption announces itself. The flag stays on the
+plain `dossierx check` — the run that writes: each already-locked claim gets a
+record marked `grandfathered`, and the adoption announces itself. The read-only
+forms, `check --validate` and `check --staged`, write nothing and therefore
+adopt nothing, so an upgrading project must run plain `check` once and **commit
+the rewritten `.dossierx-lock-store.json`**. Until that commit lands, every CI
+run and every hook run starts from the old-format store again. The flag stays on the
 record permanently, because an adopted hash is content that was *observed*, not
 content anyone approved — re-lock those claims deliberately when you get to
 them. Adoption triggers on an older store file being present, never on an

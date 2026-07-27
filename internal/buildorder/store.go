@@ -47,6 +47,43 @@ var nowFunc = time.Now
 // file error.
 var ErrNotProposed = errors.New("buildorder: no build-order artifact proposed yet")
 
+// ErrStale is returned (wrapped) by Lock when the artifact it was asked to lock
+// has gone stale under its claims.
+//
+// It is a SENTINEL rather than prose for the same reason ErrNotProposed is: the
+// CLI has to classify this refusal into cliout.CodeBuildOrderStale, the agent
+// skills document that code as the one route to "re-propose, then re-lock", and
+// the alternative — matching a fragment of the message — silently reclassifies
+// the refusal the first time anyone rewords it. Before this sentinel existed the
+// stale case fell through to the generic build_order_refused, whose documented
+// recoveries all assume a precondition the stale case has already met.
+var ErrStale = errors.New("buildorder: the build order is stale")
+
+// ErrHandEdited is returned (wrapped) by Lock when the artifact it was asked to
+// freeze is not what a fresh Propose over the current claims would produce.
+//
+// It exists because the staleness check could not see this case even in
+// principle. recomputeStale early-returns on an UNLOCKED artifact — staleness is
+// a locked-artifact concept, and an unlocked artifact has no approved baseline
+// to be stale against — and an unlocked artifact is the ONLY input Lock accepts.
+// So the structural re-derivation that keeps a LOCKED order honest never ran on
+// Lock's own input: propose, reverse the phase blocks by hand (or repoint a
+// ClaimEntry.File at an arbitrary path), then lock, and the fabricated order was
+// frozen, stamped stale:false, and signed into the lock ledger over the tampered
+// bytes. Every later `check` compared the artifact against that record and
+// agreed, forever, because the record was taken AFTER the edit.
+//
+// The artifact is machine-generated (see WriteArtifact) — FORMAT.md and the
+// skills both say so — and this is the one moment the engine can enforce it, so
+// the recovery is always the same: re-run "dossierx build-order propose --module
+// <m>" and lock the freshly-derived order.
+//
+// It is a SENTINEL for the same reason ErrStale is: cmd/dossierx classifies a
+// Lock refusal into a stable cliout code that the skills document a recovery
+// for, and matching a fragment of prose silently reclassifies the refusal the
+// first time anyone rewords it.
+var ErrHandEdited = errors.New("buildorder: the build-order artifact was edited by hand")
+
 // ArtifactPath returns the on-disk path for module's build-order artifact,
 // resolved against cfg's own directory (never the process cwd) — the same
 // convention internal/lock.Store's path and catalog's .catalog.json follow.
@@ -241,14 +278,7 @@ func recomputeStale(a *Artifact, claims []model.Claim, cfg *config.Config) {
 	// (Propose's completeness gate), so a still-draft claim is not yet part of
 	// the build order — this mirrors the addition loop's guard and keeps
 	// computePhases from erroring on an incomplete draft.
-	var derivable []model.Claim
-	for _, c := range claims {
-		if c.Module == a.Module && c.Status != model.StatusLocked {
-			continue
-		}
-		derivable = append(derivable, c)
-	}
-	if phases, excluded, err := computePhases(derivable, cfg, a.Module); err == nil {
+	if phases, excluded, err := computePhases(derivableClaims(a.Module, claims), cfg, a.Module); err == nil {
 		markStructuralDrift(a, phases, excluded, staleSet)
 	} else if len(staleSet) == 0 {
 		// A fresh propose would ERROR (an invalid/empty build_role, a
@@ -272,6 +302,131 @@ func recomputeStale(a *Artifact, claims []model.Claim, cfg *config.Config) {
 	sort.Strings(staleIDs)
 	a.StaleIDs = staleIDs
 	a.Stale = len(staleIDs) > 0
+}
+
+// derivableClaims is the claim set a fresh derivation of module's order is run
+// over: every claim in the project EXCEPT module's own non-locked ones. A fresh
+// propose refuses a module with any non-locked claim (Propose's completeness
+// gate), so a still-draft claim is not yet part of the build order, while other
+// modules' claims must stay in — computePhases reads them for the same-module vs
+// cross-module edge distinction. Shared by recomputeStale and by Lock's
+// hand-edit refusal so the two can never re-derive against different inputs and
+// disagree about what a fresh propose would produce.
+func derivableClaims(module string, claims []model.Claim) []model.Claim {
+	var derivable []model.Claim
+	for _, c := range claims {
+		if c.Module == module && c.Status != model.StatusLocked {
+			continue
+		}
+		derivable = append(derivable, c)
+	}
+	return derivable
+}
+
+// structuralDivergence re-derives module's order from the CURRENT claims and
+// reports, as a human-facing sentence, the first way a disagrees with it — or ""
+// when a is exactly what a fresh propose would produce. It compares the three
+// things that decide what gets built and in what order: the PHASE SEQUENCE, each
+// claim's phase/within-phase position/recorded File, and the excluded set.
+//
+// The phase sequence is compared explicitly rather than left to the per-claim
+// signatures, and that is not redundant: a signature is
+// phase/position-within-phase/File, so reversing the phase BLOCKS — behavior
+// built before schema, the single most damaging reordering available — leaves
+// every per-claim signature byte-identical. markStructuralDrift (the locked
+// artifact's staleness re-derivation) has the same shape and the same blind
+// spot; for a locked artifact the ledger's content hash covers it, but at Lock
+// time there is no record yet, which is exactly the gap this function fills.
+//
+// The error return is NOT the same condition: it means the current claim set has
+// no valid order AT ALL (an invalid build_role, a phase-order violation, a
+// cycle), so there is nothing to compare against. recomputeStale answers that by
+// flagging the whole frozen coverage stale; Lock answers it by refusing, because
+// freezing an order the engine cannot re-derive is precisely the thing that must
+// not be signed into the ledger.
+func structuralDivergence(a *Artifact, claims []model.Claim, cfg *config.Config) (string, error) {
+	phases, excluded, err := computePhases(derivableClaims(a.Module, claims), cfg, a.Module)
+	if err != nil {
+		return "", err
+	}
+
+	if stored, fresh := phaseNames(a.Phases), phaseNames(phases); !equalStringSlices(stored, fresh) {
+		return fmt.Sprintf("the phase sequence on disk is %v, but a fresh propose computes %v", stored, fresh), nil
+	}
+
+	stored := phaseSignatures(a.Phases)
+	fresh := phaseSignatures(phases)
+	misplaced := make(map[string]bool)
+	for id, sig := range stored {
+		if fresh[id] != sig {
+			misplaced[id] = true
+		}
+	}
+	for id, sig := range fresh {
+		if stored[id] != sig {
+			misplaced[id] = true
+		}
+	}
+	if len(misplaced) > 0 {
+		return fmt.Sprintf("%d claim(s) are placed differently from a fresh propose (phase, position or source file): %v",
+			len(misplaced), sortedKeys(misplaced)), nil
+	}
+
+	storedEx := make(map[string]bool, len(a.Excluded))
+	for _, id := range a.Excluded {
+		storedEx[id] = true
+	}
+	freshEx := make(map[string]bool, len(excluded))
+	for _, id := range excluded {
+		freshEx[id] = true
+	}
+	differing := make(map[string]bool)
+	for id := range storedEx {
+		if !freshEx[id] {
+			differing[id] = true
+		}
+	}
+	for id := range freshEx {
+		if !storedEx[id] {
+			differing[id] = true
+		}
+	}
+	if len(differing) > 0 {
+		return fmt.Sprintf("the excluded set disagrees with a fresh propose on %d claim(s): %v",
+			len(differing), sortedKeys(differing)), nil
+	}
+	return "", nil
+}
+
+// phaseNames projects phase blocks to their ordered phase names — the sequence
+// an implementing agent reads top to bottom.
+func phaseNames(phases []PhaseBlock) []string {
+	names := make([]string, 0, len(phases))
+	for _, p := range phases {
+		names = append(names, p.Phase)
+	}
+	return names
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sortedKeys(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // markStructuralDrift compares a fresh derivation (phases/excluded from
@@ -376,12 +531,36 @@ func Lock(path string, claims []model.Claim, cfg *config.Config) (*Artifact, err
 	recomputeStale(a, claims, cfg)
 	if a.Stale {
 		return nil, fmt.Errorf(
-			"buildorder: %q's build order is stale (%d claim(s) changed, added, or removed: %v); a bare relock would freeze an outdated order, so re-run \"dossierx build-order propose --module %s\" first, then lock",
-			a.Module, len(a.StaleIDs), a.StaleIDs, a.Module,
+			"%w: %q's build order is stale (%d claim(s) changed, added, or removed: %v); a bare relock would freeze an outdated order, so re-run \"dossierx build-order propose --module %s\" first, then lock",
+			ErrStale, a.Module, len(a.StaleIDs), a.StaleIDs, a.Module,
 		)
 	}
 	if a.Locked {
 		return nil, fmt.Errorf("buildorder: %q is already locked and not stale; nothing to relock", a.Module)
+	}
+
+	// The hand-edit gate (ErrHandEdited). Everything above this point trusted
+	// the artifact's own bytes: recomputeStale early-returns on an unlocked
+	// artifact, and an unlocked artifact is the only input that reaches here, so
+	// the structural re-derivation that keeps a LOCKED order honest had never
+	// been run against Lock's actual input. Reversing the phase blocks by hand
+	// between propose and lock therefore froze the reversed order, wrote
+	// stale:false over it, and — because the ledger record is taken AFTER the
+	// edit — made every subsequent `check` agree with the fabrication. This is
+	// the one moment the engine can hold the artifact to being generated rather
+	// than authored, so it does.
+	divergence, err := structuralDivergence(a, claims, cfg)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"%w: %q's build order cannot be re-derived from the current claims (%v), so it cannot be verified as generated; fix the claims and re-run \"dossierx build-order propose --module %s\", then lock the fresh order",
+			ErrHandEdited, a.Module, err, a.Module,
+		)
+	}
+	if divergence != "" {
+		return nil, fmt.Errorf(
+			"%w: %q's build order on disk is not what a fresh propose computes — %s. The artifact is generated, never hand-edited: re-run \"dossierx build-order propose --module %s\" and lock that order, so what a human approves is what the engine derived",
+			ErrHandEdited, a.Module, divergence, a.Module,
+		)
 	}
 
 	byID := make(map[string]model.Claim, len(claims))

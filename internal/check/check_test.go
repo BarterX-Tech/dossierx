@@ -52,7 +52,28 @@ func project(t *testing.T, cfgBody string, files map[string]string) (*config.Con
 		t.Fatalf("load claims: %v", err)
 	}
 	armLedger(t, cfg, claims)
+	armDigestsIfCommented(t, cfg, claims)
 	return cfg, claims
+}
+
+// armDigestsIfCommented records the comment digest for a fixture that hand-writes
+// a `comments:` block, when there is one to record.
+//
+// It says what those fixtures mean, exactly as armLedger does for hand-written
+// "status: locked": a comment thread only ever gets onto a claim through the
+// engine, which records its digest as its last act — so "threads on disk, no
+// digest store" is not a state the product produces. The gate reads that state
+// as the digest store having been DELETED (comment-digest-absent), which is the
+// one move that makes an edited-away review thread permanently invisible.
+// Fixtures that want the absence report it deliberately; see ledger_test.go.
+func armDigestsIfCommented(t *testing.T, cfg *config.Config, claims []model.Claim) {
+	t.Helper()
+	for _, c := range claims {
+		if len(c.Comments) > 0 {
+			armDigests(t, cfg, claims)
+			return
+		}
+	}
 }
 
 func draftClaim(id string) string {

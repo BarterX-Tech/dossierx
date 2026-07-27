@@ -106,10 +106,12 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
   `--reason`: the one part of the record a machine cannot generate for itself. `claim unlock`
   **releases** a record rather than deleting it, so the evidence that a claim was ever locked
   survives the window in which it matters.
-- **`.dossierx-lock-store.json` and `.dossierx-comment-digest.json` are TRACKED ARTIFACTS.**
-  Commit them; never `.gitignore` them. CI compares the claims against the ledger, so a project
-  that does not track it has no gate. Documented in README, FORMAT.md, the skills, the hook
-  installer's own output, and the CI workflow template.
+- **`.dossierx-lock-store.json`, `.dossierx-comment-digest.json` and `.dossierx-flag-store.json`
+  are TRACKED ARTIFACTS.** Commit them; never `.gitignore` them. CI compares the claims against
+  the ledger, so a project that does not track it has no gate; and a `review_pending` claim whose
+  flag-store entry did not travel with it reaudits to an *empty* proposal, whose `--confirm`
+  clears the human's flag having applied nothing. Documented in README, FORMAT.md, the skills,
+  the hook installer's own output, and the CI workflow template.
 - **A new hash, `LockedClaimHash`, separate from `ContentHash`.** It is a **deny-list** over
   every persisted claim field except `status`, `review_pending` and `comments` (each excluded
   because the engine rewrites it as ordinary bookkeeping), so a field added to the schema
@@ -121,33 +123,59 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
 - **The comment digest lives in its own store** (`internal/digest`, `.dossierx-comment-digest.json`),
   refreshed on every legitimate comment write. Putting it in the lock store would have made
   `dossierx serve` a lock-store writer and falsified this release's own headline guarantee.
-- **Six named findings**, stable strings the hook, CI and the skills branch on:
+- **Ten named findings**, stable strings the hook, CI and the skills branch on:
   `lock-ledger-absent` (locked claims but no ledger file — a hard error, never a silent pass,
   because "no ledger means bless everything" would make `rm` the universal bypass),
-  `lock-ledger-missing`, `lock-content-drift`, `lock-ledger-orphan`, `comment-ledger-drift`, and
+  `lock-ledger-missing`, `lock-ledger-released` (a `locked` claim whose only record was released
+  by an unlock — a released record is not a standing approval, and the hash still matches because
+  the hash excludes `status`, so `lock` → `unlock` → hand-edit `status:` back was otherwise a
+  complete bypass that fired no rule at all), `lock-content-drift`, `lock-ledger-orphan`,
+  `lock-ledger-abandoned` (an unreleased record whose claim FILE is gone — every other per-claim
+  rule is driven by the claims that exist, so deleting one walked past all of them at once and
+  there is no `claim delete` verb to have made it deliberate), `comment-ledger-drift`,
+  `build-order-content-drift` and `build-order-ledger-missing` (a locked
+  `.build-order.<module>.json` is what an implementing agent actually builds from; its approval
+  record was being written and never read, so reordering the phases or splicing the frozen
+  `hashes` baseline changed the plan with no finding anywhere), and
   `lock-ledger-unreadable` (a ledger that exists but will not parse fails closed and loudly).
   The gate is deliberately **not** a lint: registering these in the lint registry would let one
   tampered file freeze locking project-wide and stop the viewer regenerating. It runs as
   `check`'s last step, after the catalog and viewer are written — a disputed project still
   regenerates its documentation, it just does not exit 0.
 - **`dossierx check --staged`** judges the **git index** — what the commit will actually
-  contain — reading content with `git show :<path>` rather than the worktree, and writing
-  nothing at all. Outside a work tree it warns and exits 0.
+  contain — and writes nothing at all. `project.config.yaml`, every claim, the lock ledger, the
+  comment digest and every locked build order all come from that one snapshot, so no unstaged
+  edit can change the verdict on a commit that does not carry it. Claim content is read through
+  a single `git cat-file --batch` over the index's own object ids, never conditionally off disk:
+  git's stat cache and its `assume-unchanged` / `skip-worktree` bits are attacker-writable, and
+  a gate whose evidence source they can choose is not a gate. Outside a work tree it warns and
+  exits 0.
 - **A pre-commit hook installer**, `scripts/install-git-hook.sh` (plus `install-git-hook.ps1`
   for PowerShell). It **asks before writing anything**, resolves `core.hooksPath` instead of
   assuming `.git/hooks` (so a repo using husky/lefthook is installed into *its* hook directory,
   never hijacked), handles linked worktrees, refuses to replace a foreign hook without
   `--force`, and is a no-op when re-run. The hook body is embedded in the one file so an agent
-  can drop it into a project that has the binary but not this repository.
+  can drop it into a project that has the binary but not this repository. In a repository holding
+  **more than one** DossierX project the hook checks **every** one of them, in index order;
+  `DOSSIERX_CONFIG` narrows it to a single project but is never required. It also refuses the
+  commit — rather than reporting "no project here, skipping" — when it located a config that
+  `dossierx` then returned `config_not_found` for, since a gate that cannot run must not pass.
 - **A CI workflow template**, `scripts/ci/dossierx-check.yml`, to copy into a consuming
   project. **CI is the authority, not the hook**: git does not run `pre-commit` for a clean
   merge, a rebase, a cherry-pick or a revert, `--no-verify` is one keystroke away, and most
   contributors never installed the hook. If you adopt one of the two, adopt CI.
 - **Grandfathering, once and loudly.** A project that locked claims before the ledger existed
-  adopts them on first run of a build that has it, each record marked `grandfathered` — an
+  adopts them on the first **plain `dossierx check`** — the run that writes. The read-only forms
+  (`check --validate`, `check --staged`) write nothing and therefore adopt nothing, so upgrade a
+  pre-v0.3.0 project by running plain `check` once and **committing the rewritten
+  `.dossierx-lock-store.json`** before leaning on the hook or CI. Each record is marked
+  `grandfathered` — an
   adopted hash is content that was *observed*, not approved, and the flag stays on the record
   permanently so nobody mistakes the two. Adoption triggers only on an older store file being
-  *present*; an absent store never adopts.
+  *present*; an absent store never adopts. **Already-locked build orders are adopted on the same
+  run and on the same terms** — a `.build-order.<module>.json` could be locked before this
+  release gave build orders a record, and without adoption every such project would fail its
+  first `check` on a `build-order-ledger-missing` it had no way to have avoided.
 
 ### Added — graph integrity and readability
 
@@ -171,6 +199,29 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
 
 ### Fixed
 
+- **A comment op refused because the digest store is unreadable now reports
+  `comment_digest_unavailable`, not `internal`.** `internal` is defined as an unclassified
+  failure — "a bug report, not a branch target" — and the reflex it invites is a retry. This
+  refusal is deterministic and keeps failing identically until `.dossierx-comment-digest.json`
+  is restored, so classifying it as internal sent a caller into a retry loop over a write. The
+  code carries the fact that makes it actionable: **nothing was written**.
+- **`build-order lock` refusing a hand-edited artifact now reports `build_order_hand_edited`,
+  not `build_order_refused`.** Every recovery documented for `build_order_refused` is a repair
+  to the *claims* (lock the remaining ones, resolve a thread, set a missing `build_role`, break
+  a `rests_on` cycle). In this refusal the claims are correct and the *artifact* is not, so an
+  agent following any of them inspected correct claims, found nothing to fix, and looped. The
+  recovery for the new code is the one that works: re-`propose`, then `lock`.
+- **A fresh project now acquires its comment digest store at the moment its lock store is
+  created**, not only when an older project migrates across. A project that reached
+  ledger-covered through its first `claim lock` never ran a migration, so it ended up
+  ledger-covered with no digest store — on disk, indistinguishable from a project whose digest
+  store had been **deleted**. Deleting the store from an already-covered project is still never
+  silently re-created, so the deletion stays visible to the gate.
+- **`FORMAT.md` no longer states that `governed_by` is hub-gated.** Hub gating walks `mirrors`
+  and `rests_on` only, so a doctrine claim named *only* by `governed_by` is not gated — a reader
+  who believed otherwise would drop the redundant `rests_on` edge and lock against an unapproved
+  doctrine claim. `FORMAT.md` also no longer claims there is deliberately no comment-digest
+  absence rule; `comment-digest-absent` ships, and its real boundary is now documented.
 - **The viewer's 💬 chip now appears on every card, not only on cards that already have a
   thread** — so the first comment on a claim can actually be opened, which was the whole
   premise of the human review loop. Two gates were involved and both had to move together: the
@@ -192,6 +243,82 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
 - **Generated viewers no longer advertise a deleted command.** Every `viewer/index.html`
   carried `generated by dossierx render … re-run "dossierx render"`; the banner now names
   `dossierx check`, which is the command that actually regenerates it.
+- **`claim lock` refuses a claim that is already `locked`** (`already_locked`), instead of
+  re-signing the ledger over whatever the file currently says. Re-locking was the single command
+  that laundered every gate this release adds: it re-stamped the approval over drifted content,
+  re-snapshotted the dependency baselines, cleared `review_pending` with no diff shown, and left
+  the human's `claim flag` entry stranded where `reaudit` could no longer reach it — all at
+  exit 0, on the verb the drift finding itself names. `lock --dry-run` had reported
+  `blocked: true` for this case all along; the write path now agrees with its own preview.
+- **A comment write no longer re-blesses a tampered `comments:` block.** Every comment operation
+  recorded the digest unconditionally, so a single ordinary `comment reply` — on an unrelated
+  thread, on the same claim — erased a standing `comment-ledger-drift` finding and made a
+  forged `resolved` the recorded truth. The digest is now compared against the claim as it was
+  read, and a disagreement refuses the write (`comment_digest_drift`) rather than overwriting the
+  record. Adoption on a never-seen store is unchanged.
+- **The pre-commit hook no longer refuses every commit in a repository whose project lives
+  under a non-ASCII path.** git's `core.quotepath` defaults to *true*, so the hook's
+  `git ls-files` discovery query got a project at `café/project.config.yaml` back as the
+  C-quoted string `"caf\303\251/project.config.yaml"` — surrounding double quotes and all.
+  Handed to `--config`, that names no file, `dossierx` answers `config_not_found`, and the
+  hook's (correct) rule that a config it discovered but cannot open is a refusal rather than a
+  skip did the rest: **every** commit refused, on every branch, for every developer, including
+  commits touching no claim at all, until somebody uninstalled the gate. Discovery now passes
+  `-c core.quotepath=false`, the same override `check --staged`'s git runner has always used.
+  Pinned by a `scripts/hook-smoke-test.sh` case that asserts both halves — an honest commit
+  still passes, and a tampered locked claim is still refused — because "still refuses" alone is
+  satisfied by a hook that refuses unconditionally, which was the bug. The hook body's marker is
+  now `pre-commit v3`; re-run the installer to pick it up.
+- **The viewer's browser suite is actually run.** `viewer-tests/` is a separate Go module (it
+  needs `chromedp`; the engine's `go.mod` stays cobra + yaml.v3), which means the root
+  `go test ./...` cannot descend into it — and until now nothing else did either: no CI job, no
+  Makefile target. Its assertions against the viewer's inline JavaScript, including this
+  release's comment-chip suite, had only ever executed on a maintainer's laptop while CI was
+  green on three platforms. There is now a `viewer` CI job running it against the runner's
+  headless Chrome, and a `make viewer-test` target (plus `make hook-test`) so both
+  outside-the-root-module suites are reachable locally. The job sets `DOSSIERX_TEST_BROWSER`
+  explicitly, because the suite *skips* when it cannot find a browser and a skip in CI is
+  indistinguishable from a pass. `tests/nested_module_coverage_test.go` fails the build if a
+  nested module is ever added without both.
+- **`check --staged` reads `project.config.yaml` from the index as well.** It read the claims,
+  the lock ledger and the comment digest from the git index and the config from the working tree,
+  so an UNSTAGED one-line `claims_dir:` edit pointing at an empty directory enumerated zero
+  claims, audited zero claims and passed every commit that followed. The gate now judges one
+  consistent snapshot.
+- **`check --staged` no longer trusts `git diff` to decide which files it may read from the
+  worktree.** git deliberately omits paths carrying the assume-unchanged or skip-worktree bit, so
+  those were precisely the paths whose worktree copy was read in place of the index blob —
+  the substitution `--staged` exists to prevent. Both cases are pinned end to end in
+  `scripts/hook-smoke-test.sh`.
+- **`review_pending` reconciliation consults the flag store.** `check` re-derived only two of the
+  three triggers, so a `review_pending: true` line deleted by hand (or by a bad merge) on a
+  *flagged* claim was never restored and never reported: the claim vanished from
+  `claim list --review-pending`, `reaudit` refused it, and the recorded doc/code mismatch became
+  unreachable. It now uses the same shared predicate the comment ops and `reaudit` use.
+- **`comment inbox` no longer drops a thread the human REOPENED.** `last_activity` was the newest
+  reply's timestamp, or the thread's own creation time — never the resolve or reopen — so a
+  reopened thread's activity sorted *before* any cursor the agent already held and disappeared
+  from every incremental `--since` poll, which is exactly the message the inbox exists to deliver.
+- **`comment inbox --since` validates its argument.** A malformed value answered `ok: true` with
+  an empty inbox and echoed the bad value back as the next cursor, so the failure was
+  self-perpetuating and byte-indistinguishable from "the human left you nothing new". It is now
+  refused (`bad_request`) and normalized to UTC before comparison.
+- **`build-order lock` on a stale order returns `build_order_stale`**, the code the skill's
+  refusal table has always documented, instead of the generic `build_order_refused` whose three
+  documented recoveries do not apply — leaving an agent that branches on `error.code` (as it is
+  told to) with no reachable path to "re-propose, then re-lock".
+- **`check`'s next steps only name a claim that would actually lock.** It named the first draft
+  claim in load order without evaluating the gates, so on a module drafted alongside its own
+  dependencies — including this repository's own shipped fixture — the one command an agent is
+  told to trust exited 1 with `lint_failed`. The example is now chosen through the same gate
+  evaluation `claim show` reports, and when nothing is lockable yet it says so.
+- **A noun with no subcommand emits an envelope.** `dossierx claim`, `comment`, `build-order` and
+  `skills` printed help prose on stdout and exited 0, so an agent that dropped a subcommand got
+  the success signal plus output its JSON parse throws on — and no way to tell that from a
+  command that genuinely had nothing to report. They now behave like any other bad invocation:
+  one envelope, `usage`, exit 1, with `error.hint` naming the available leaves. An unknown leaf
+  (`dossierx claim nonsense`) lands in the same place and names what was typed.
+  `dossierx version` is the verb that reports the version; `--version` is unchanged.
 
 ### Changed
 - The CLI is **19 leaf commands under 6 nouns**, down from 26. A test pins the exact set, so

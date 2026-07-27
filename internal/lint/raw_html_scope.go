@@ -163,12 +163,21 @@ func (RawHTMLScope) Check(claims []model.Claim, cfg *config.Config) []Finding {
 
 // MockupGateFindings runs ONLY the RawHTML mockup gate (checkMockupGate) over
 // claims and returns its error-severity findings, with Severity normalized the
-// same way RunAll does. It is the subset internal render/catalog enforce as a
-// security gate before ever emitting .RawHTML into the client-shared viewer
-// (DX-AUD-08) — deliberately NOT the full RunAll suite, whose warning-severity
-// relationship lints (orphan, body-edge-hint) must not block a plain
-// render/catalog during draft authoring. A clean project (no mockup claims, or
-// only gate-passing ones) yields a nil slice.
+// same way RunAll does. It is the subset a renderer enforces as a security gate
+// before emitting .RawHTML into the client-shared viewer (DX-AUD-08) —
+// deliberately NOT the full RunAll suite, whose warning-severity relationship
+// lints (orphan, body-edge-hint) must not block a render during draft authoring.
+// A clean project (no mockup claims, or only gate-passing ones) yields a nil
+// slice.
+//
+// Its caller is internal/serve's renderViewer (see disarmUngatedMockups there),
+// which has no lint step of its own: "dossierx check" fails at lint before it
+// ever renders, but serve loads-builds-renders, so without this the payload a
+// human ran serve to go LOOK at was the payload serve executed. The standalone
+// "render"/"catalog" verbs that used to be the callers were retired in v0.3.0,
+// which left this function with none at all for a release — the shape of dead
+// safety code, so if a future change removes serve's call, delete this too
+// rather than leaving the comment asserting a gate nothing runs.
 func MockupGateFindings(claims []model.Claim, cfg *config.Config) []Finding {
 	var findings []Finding
 	for _, c := range claims {

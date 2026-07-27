@@ -57,8 +57,14 @@ as well as success. `--format text` is the human prose you paste into chat for a
 
 Branch on `error.code` and on fields inside `data`. **Never** regex `message` or `hint`:
 `code` is a promise, prose is not. `stopped_at` names the pipeline step a partial run reached
-(`config`, `load`, `reconcile`, `lint`, `catalog`, `render`, `scan`), and `data` still carries
-whatever a failed run managed to produce.
+(`config`, `load`, `reconcile`, `lint`, `catalog`, `render`, `scan`, `ledger`), and `data` still
+carries whatever a failed run managed to produce. `ledger` is the one worth reading closely: it
+means the catalog and the viewer WERE regenerated and only the commit is refused, so the
+documentation the human is reading is current — a gate, not an outage.
+
+A **noun with no leaf** (`dossierx claim` on its own) is an ordinary failed invocation — one
+envelope, `usage`, exit 1 — not help text at exit 0. Ask for the version with `dossierx version`,
+the verb that answers in an envelope.
 
 Exit status is one of three, unchanged since v0.1: `0` success · `1` failure (a lint error, a
 refused gate, a write error) · `2` not found, or not in the state the command requires.
@@ -75,8 +81,12 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `dependency_not_locked` | 1 | a doctrine dependency is still draft. Lock it first (with approval), then retry. |
 | `not_review_pending` | 2 | you reached for `claim reaudit` on a claim that is not drifting. The general edit path is unlock → fix → lock. |
 | `review_pending` | 2 | the claim IS pending, and that is what blocks you. `dossierx claim show <id>` names the trigger. |
-| `already_locked` | 1 | your model of the world was wrong. `dossierx claim show <id>` before deciding anything else. |
+| `already_locked` | 1 | the claim (or build order) is **already** locked, and `lock` refuses rather than re-signing it — a second lock would stamp a fresh approval over content nobody approved and clear `review_pending` with no diff. To change it: `unlock` → fix → `lock`. If a gate reported drift on it, restore the file from git instead. |
+| `comment_digest_drift` | 1 | the claim's `comments:` block was changed outside the engine, so this write is refused rather than silently re-recording the tampered block as the truth. Restore the claim file from version control, then retry. |
+| `comment_digest_unavailable` | 1 | the comment digest store could not be opened, so the write was refused **before anything changed**. Nothing was written, so a retry is safe — but it will keep failing identically until `.dossierx-comment-digest.json` is restored from version control (or a stale `.dossierx-comment-digest.json.lock` left by a crash is removed). Tell the human; do not loop on it. |
+| `build_order_hand_edited` | 1 | `.build-order.<module>.json` is not what a fresh `propose` computes — a phase sequence, a claim's placement, or the `excluded` set was edited by hand. The **claims are fine**; the artifact is not, so none of `build_order_refused`'s recoveries apply. Re-run `build-order propose --module <m>` to discard the edit, then `lock` what the engine derived. |
 | `not_locked` | 2 | flagging and linking need a locked claim. |
+| `implink_refused` | 1 | `claim link` could not record the link, or `check`'s source scan rejected a `dossierx-claim:` tag — a file that does not exist, a claim outside `--module`, a path that is absolute or escapes the project, or a tag naming an unknown id. This is your invocation or your tag, not a gate: fix it and re-run. Do not branch on which; show the human the message and correct the argument. |
 | `structured_layout` | 1 | `claim flag` rewrites `body` only; this claim renders from `rows`/`steps`/`raw_html`. Use unlock → fix → lock. |
 | `rights_denied` | 1 | the advisory-rights rule. You tried to act on a human's message. **Do not retry as another role.** Reply instead. |
 | `missing_flag` | 1 | a required `--reason`/`--as`/`--module` was omitted. `--reason` carries the human's approving words; do not invent them. |

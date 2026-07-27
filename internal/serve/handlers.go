@@ -560,6 +560,21 @@ func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, cliout.CodeThreadOpen)
 	case errors.Is(err, loader.ErrClaimFileChanged):
 		writeError(w, http.StatusConflict, cliout.CodeClaimFileChanged)
+	case errors.Is(err, comments.ErrCommentDigestDrift):
+		// 409: the STORED comment block disagrees with the integrity record, so
+		// this write would launder a hand edit. Same family as
+		// claim_file_changed — the server's picture of the file is not the
+		// file — but not the same cause, and the recovery is version control
+		// rather than a reload-and-retry, so it keeps its own code.
+		writeError(w, http.StatusConflict, cliout.CodeCommentDigestDrift)
+	case errors.Is(err, comments.ErrCommentDigestUnavailable):
+		// 503: the integrity store the write path depends on cannot be opened,
+		// so the op was refused BEFORE anything was written. It is a service
+		// condition rather than a fault in the request — the same request will
+		// succeed once the store is restored — and it must not fall through to
+		// the 500 default: an unclassified error is what a client retries, and
+		// retrying used to be the thing that appended the same thread again.
+		writeError(w, http.StatusServiceUnavailable, cliout.CodeCommentDigestUnavailable)
 	default:
 		s.writeInternal(w, err)
 	}

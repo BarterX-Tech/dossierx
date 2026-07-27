@@ -40,6 +40,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -226,6 +227,73 @@ func RecordBuildOrderApproval(store *Store, module, hash string, ap Approval) {
 	})
 }
 
+// PreLedger reports whether this store was loaded from a file written by a
+// build that PREDATES the lock ledger — the one condition under which adopting
+// existing locks is honest rather than a bypass.
+//
+// It is the same predicate AdoptLedger keys on, exported because build-order
+// artifacts have to be grandfathered on exactly the same terms and cannot be
+// reached from this package (internal/buildorder imports internal/lock, so the
+// edge cannot run the other way). Callers must consult it BEFORE PrepareStore,
+// which stamps the current version as its last act.
+//
+// Both halves matter. A store at the current version never adopts again: after
+// the upgrade, a locked artifact without a record is a finding, not an
+// invitation. And an ABSENT store never adopts at all, because absence is
+// indistinguishable from someone deleting the ledger to re-bless a tampered
+// project — which would make `rm .dossierx-lock-store.json` the universal
+// bypass.
+func (s *Store) PreLedger() bool {
+	return s != nil && s.fileExists && s.diskVersion < ledgerSchemaVersion
+}
+
+// LedgerCovered is PreLedger's complement over the same evidence: this project's
+// lock store is on disk AND already at the ledger schema, so this build (or one
+// like it) has run here and written it.
+//
+// It exists because "has this project been through a ledger-aware build?" is the
+// only migration-safe trigger available to the COMMENT DIGEST rules, which have
+// no equivalent of their own. The digest store's absence cannot be keyed on the
+// digest store's own history — the file whose absence is the question cannot
+// also be the evidence — so it is keyed on this instead: a project still at an
+// older lock-store version is mid-upgrade and exempt, a project already stamped
+// current is not. See internal/check's comment-digest-absent rule, and
+// PrepareStore, which creates the digest store at the same moment it stamps this
+// version so an upgrading project crosses both lines together.
+func (s *Store) LedgerCovered() bool {
+	return s != nil && s.fileExists && s.diskVersion >= ledgerSchemaVersion
+}
+
+// AdoptBuildOrderApproval grandfathers one module's already-locked build-order
+// artifact into the ledger, and reports whether it wrote anything.
+//
+// It is the build-order twin of AdoptLedger's per-claim adoption, for projects
+// that locked a build order before this release gave build orders a record. The
+// Grandfathered flag stays on permanently and says honestly what was
+// established: these are the bytes that were on disk on adoption day, not bytes
+// anybody approved.
+//
+// An existing record is never overwritten — an adoption must not be able to
+// quietly replace a real approval.
+func AdoptBuildOrderApproval(store *Store, module, hash string) bool {
+	if store == nil {
+		return false
+	}
+	key := BuildOrderLedgerKey(module)
+	if _, exists := store.Record(key); exists {
+		return false
+	}
+	store.putRecord(key, LedgerRecord{
+		Subject:       SubjectBuildOrder,
+		Hash:          hash,
+		At:            nowFunc().UTC().Format(time.RFC3339Nano),
+		Actor:         DefaultActor(),
+		Reason:        "grandfathered: this build order was locked before this project had a lock ledger; content adopted as-found, never approved",
+		Grandfathered: true,
+	})
+	return true
+}
+
 // ReleaseApproval marks claimID's ledger record released by a legitimate
 // unlock, KEEPING the record (see LedgerRecord's doc comment for why deleting
 // it would be a laundering path and would leave lock-ledger-orphan without a
@@ -245,6 +313,37 @@ func ReleaseApproval(store *Store, claimID string, ap Approval) bool {
 	r.ReleasedBy = ap.Actor
 	r.ReleasedReason = ap.Reason
 	store.putRecord(claimID, r)
+	return true
+}
+
+// ReleaseBuildOrderApproval marks module's build-order record released, KEEPING
+// the record for the same reason ReleaseApproval keeps a claim's: the evidence
+// that this module's order was ever approved is what a later sweep needs, and
+// deleting it would make removal quieter than editing. It reports whether a
+// record was there to release.
+//
+// It is the build-order twin of ReleaseApproval, and the act that legitimately
+// releases a build order is "dossierx build-order propose": propose overwrites a
+// locked artifact with a fresh, unlocked one, which is precisely "this approved
+// order no longer stands". Until propose calls it, the ledger keeps a standing
+// record for an artifact that says locked:false, and the check gate cannot tell
+// that honest window apart from a hand-flipped `"locked": false` — so it reports
+// neither (see internal/check.abandonedBuildOrders). Wiring this into propose,
+// after WriteArtifact, is what makes the orphan half of that gate safe to turn
+// on.
+func ReleaseBuildOrderApproval(store *Store, module string, ap Approval) bool {
+	if store == nil {
+		return false
+	}
+	key := BuildOrderLedgerKey(module)
+	r, ok := store.Record(key)
+	if !ok || r.Subject != SubjectBuildOrder {
+		return false
+	}
+	r.ReleasedAt = nowFunc().UTC().Format(time.RFC3339Nano)
+	r.ReleasedBy = ap.Actor
+	r.ReleasedReason = ap.Reason
+	store.putRecord(key, r)
 	return true
 }
 
@@ -364,5 +463,50 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool, adopted []strin
 	if len(adopted) > 0 || stale {
 		changed = true
 	}
+	if stale {
+		adoptCommentDigests(s, claims)
+	}
 	return changed, adopted
+}
+
+// adoptCommentDigests creates the COMMENT DIGEST store, adopting every claim's
+// current comment block, at the single moment a project crosses from pre-ledger
+// to ledger-covered.
+//
+// It is here, rather than in internal/comments, because this is the only place
+// that can tell an UPGRADING project from a tampered one, and the distinction is
+// the whole security property of the rule it enables. internal/check reports
+// `comment-digest-absent` when a ledger-covered project has no digest store —
+// which is how "delete .dossierx-comment-digest.json and the comment-ledger-drift
+// finding disappears forever" stopped being free. That rule cannot key on the
+// digest store's own history (the file whose absence is the question cannot also
+// be the evidence), so it keys on the lock store's version, and this is what
+// makes the two consistent: a project upgrading into the feature gets its digest
+// store at the same instant its lock store is stamped, so it never sees the
+// finding, while a project that was already stamped never gets a free
+// re-adoption.
+//
+// It adopts only when the file does NOT exist — an existing store is never
+// touched, so this can never re-bless a claim — and it is BEST-EFFORT: a project
+// whose digest store cannot be written here is not one whose migration should
+// fail, and the worst consequence is the absence finding, which names the file
+// and says to restore it.
+func adoptCommentDigests(s *Store, claims []model.Claim) {
+	if s == nil || s.path == "" {
+		return
+	}
+	path := digest.StorePathBeside(s.path)
+
+	release, err := AcquireFileLock(path)
+	if err != nil {
+		return
+	}
+	defer release()
+
+	store, err := digest.LoadStore(path)
+	if err != nil || store.FileExists() {
+		return
+	}
+	digest.Adopt(store, claims)
+	store.Save() //nolint:errcheck // best-effort: see this function's doc comment
 }

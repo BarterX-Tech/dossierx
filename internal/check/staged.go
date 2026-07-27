@@ -50,6 +50,8 @@
 package check
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -58,10 +60,12 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -81,10 +85,32 @@ import (
 // which is the one habit that makes every other gate in this release worthless.
 var ErrNoIndex = errors.New("no git index to evaluate")
 
-// StagedProject is the project exactly as the git index holds it: the full
-// claim registry with staged blobs substituted in, plus the lock ledger and
-// comment digest store read from the same index.
+// StagedProject is the project exactly as the git index holds it: the config,
+// the full claim registry, the lock ledger, the comment digest store and every
+// locked build order, all read from that one index.
 type StagedProject struct {
+	// Config is project.config.yaml AS THE INDEX HOLDS IT, and it is what the
+	// rest of this value was assembled against.
+	//
+	// It is read from the index for exactly the reason the claims are. The
+	// config names claims_dir, the module list, the doctrine facet and the hub
+	// gating switch — every input that decides WHICH files the gate looks at
+	// and what it demands of them. Read from the worktree, one unstaged line is
+	// a complete bypass: stage a tampered locked claim, edit `claims_dir:
+	// claims` to `claims_dir: decoy` in the working tree only, and the gate
+	// dutifully audits an empty directory, reports nothing, and lets the commit
+	// through. The commit itself still carries the real claims_dir, because that
+	// edit was never staged. Reading the config from the index closes it: the
+	// gate is evaluated against the configuration the commit will actually have.
+	Config *config.Config
+
+	// ConfigFromIndex reports whether Config came out of the index (true) or is
+	// the caller's worktree config reused because project.config.yaml is not
+	// tracked at all. An untracked config is the first-commit case, where there
+	// is nothing in the index to read and the worktree copy is the only thing
+	// that exists.
+	ConfigFromIndex bool
+
 	// Claims is the complete registry, sorted by SourcePath exactly as
 	// loader.LoadClaims sorts it, with SourcePath pointing at the WORKING-TREE
 	// location of each claim even for content that came out of the index. That
@@ -93,10 +119,16 @@ type StagedProject struct {
 	Claims []model.Claim
 
 	// FromIndex lists, sorted, the paths (relative to cfg.Dir(), slash form)
-	// whose content was read out of the index rather than off disk. It is
-	// reported so a hook's output can say what it actually judged; an empty
-	// list on a dirty-looking tree is a real answer, not a bug (it means every
+	// whose INDEX content differs from the worktree file — the claims where
+	// "what you are committing" and "what you are looking at" are not the same
+	// bytes. It is reported so a hook's output can say what it actually judged;
+	// an empty list on a dirty-looking tree is a real answer (it means every
 	// tracked claim's worktree copy already matches the index).
+	//
+	// It is REPORTING ONLY. Every claim's content is read from the index
+	// regardless, and this list is computed by comparing the bytes afterwards —
+	// see Staged for why asking git which files differ cannot be allowed to
+	// decide where content is read from.
 	FromIndex []string
 
 	// ledger is the gate's input state, built from the index. Unexported: a
@@ -119,6 +151,16 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 
+	// The CONFIG comes out of the index first, and everything below is resolved
+	// against it — see StagedProject.Config for why a worktree config makes the
+	// whole gate bypassable with one unstaged line.
+	var sp StagedProject
+	sp.Config, sp.ConfigFromIndex, err = stagedConfig(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	cfg = sp.Config
+
 	// claims_dir as a git pathspec relative to cfg.Dir(). A ".." prefix means
 	// the claims live outside the directory git was asked about, which git
 	// would reject as "outside repository" — a condition a hook can do nothing
@@ -129,47 +171,60 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, fmt.Errorf("%w: claims_dir %s is outside %s, so git cannot resolve it", ErrNoIndex, cfg.ClaimsDir, cfg.Dir())
 	}
 
-	// The index's own file list is the authority on WHICH claims exist, and
-	// using it (rather than the changed-files list alone) is what makes three
-	// otherwise-invisible cases come out right: a claim staged for DELETION is
-	// gone from the index and so must not be linted; a claim that is merely
-	// UNTRACKED is not part of the commit and must not be linted either; and a
-	// claim staged for ADDITION is in the index before it is in any commit and
-	// must be.
-	indexed, err := g.lsFiles(claimsSpec)
+	// EVERY claim's content comes from the index. Unconditionally, with no
+	// worktree shortcut for the ones git says are clean.
+	//
+	// There used to be one: "git diff" was asked which paths differed, those
+	// were fetched from the index, and the rest were read off disk as a cheaper
+	// equivalent. It is not an equivalent. "git diff" consults git's stat cache
+	// and honours the per-path skip bits, so a single
+	//
+	//	git update-index --assume-unchanged claims/whatever.yaml
+	//
+	// makes git report a modified file as clean — and the gate then read the
+	// clean WORKTREE copy while the tampered blob sat in the index waiting to be
+	// committed. The refusal disappeared and the commit landed. The same is true
+	// of --skip-worktree, of a racily-clean stat entry, and of anything else
+	// that ever teaches git's cache a lie. A gate whose evidence source is
+	// chosen by a mutable, attacker-writable bit is not a gate.
+	//
+	// The cost is one "git cat-file --batch" for the whole registry, which is a
+	// single subprocess either way.
+	//
+	// indexBlobs is ALSO the authority on WHICH claims exist — the file list and
+	// the content come from one query rather than two that could disagree. That
+	// is what makes three otherwise-invisible cases come out right: a claim
+	// staged for DELETION is gone from the index and so must not be linted; a
+	// claim that is merely UNTRACKED is not part of the commit and must not be
+	// linted either; and a claim staged for ADDITION is in the index before it is
+	// in any commit and must be.
+	blobs, err := g.indexBlobs(claimsSpec)
 	if err != nil {
 		return StagedProject{}, err
 	}
 
-	// Which of those files' worktree copies differ from the index. This is the
-	// precise question — "git diff" with no revision compares worktree against
-	// index — and it is asked because it is also the cheap answer: for every
-	// path it does NOT list, the worktree file IS the index content, so it can
-	// be read straight off disk instead of costing a git subprocess.
-	dirty, err := g.dirtyAgainstIndex(claimsSpec)
-	if err != nil {
-		return StagedProject{}, err
+	rels := make([]string, 0, len(blobs))
+	for rel := range blobs {
+		rels = append(rels, rel)
 	}
+	sort.Strings(rels)
 
-	var sp StagedProject
-	for _, rel := range indexed {
+	for _, rel := range rels {
 		if !isClaimFile(rel) {
 			continue
 		}
 		abs := filepath.Join(cfg.Dir(), filepath.FromSlash(rel))
+		raw := blobs[rel]
 
-		var raw []byte
-		if dirty[rel] {
-			raw, err = g.showIndexBlob(rel)
-			if err != nil {
-				return StagedProject{}, err
-			}
+		// FromIndex is derived by comparing bytes we already hold, NOT by asking
+		// git what differs. That keeps the report honest under exactly the
+		// conditions that broke the old shortcut: an assume-unchanged file whose
+		// worktree copy differs is still listed here, because this comparison
+		// consults no cache. A worktree file that cannot be read (staged
+		// deletion, permissions) counts as differing — it certainly is not
+		// identical.
+		if onDisk, readErr := os.ReadFile(abs); readErr != nil || !bytes.Equal(onDisk, raw) {
 			sp.FromIndex = append(sp.FromIndex, rel)
-		} else {
-			raw, err = os.ReadFile(abs)
-			if err != nil {
-				return StagedProject{}, fmt.Errorf("check --staged: read %s: %w", abs, err)
-			}
 		}
 
 		c, err := decodeClaim(abs, raw)
@@ -192,6 +247,57 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 	return sp, nil
+}
+
+// stagedConfig loads project.config.yaml as the INDEX holds it.
+//
+// It returns the caller's own config unchanged, with fromIndex=false, in exactly
+// one case: the config file is not tracked at all. That is the first commit of a
+// project, where there is nothing in the index to read and the worktree copy is
+// the only configuration that exists — and where nothing is being bypassed,
+// because a config that is not in the index is not in the commit either.
+//
+// The index's CONTENT is decoded but the WORKTREE directory stays the anchor:
+// claims_dir, the stores and the build-order artifacts are still resolved
+// against cfg.Dir(), because that is where the files actually live. What comes
+// from the index is the part that decides what the gate looks at — claims_dir,
+// the module list, the doctrine facet, hub gating.
+//
+// A config that is in the index but does not LOAD is a hard error, not a
+// fallback to the worktree. Falling back would restore the bypass in a slightly
+// noisier form: stage a config that fails validation and the gate would go
+// right on reading the worktree's.
+func stagedConfig(g *gitRunner, cfg *config.Config) (*config.Config, bool, error) {
+	// The config's OWN path, not Dir()+FileName: --config takes an arbitrary
+	// path, and looking up a name the project does not use would find nothing
+	// in the index and fall back to the worktree — reopening the bypass for
+	// exactly the projects that named their config something else.
+	src := cfg.Path()
+	if src == "" {
+		src = filepath.Join(cfg.Dir(), config.FileName)
+	}
+
+	spec, err := relativeSpec(cfg.Dir(), src)
+	if err != nil {
+		return cfg, false, nil
+	}
+	tracked, err := g.lsFiles(spec)
+	if err != nil {
+		return nil, false, err
+	}
+	if len(tracked) == 0 {
+		return cfg, false, nil
+	}
+
+	raw, err := g.showIndexBlob(tracked[0])
+	if err != nil {
+		return nil, false, err
+	}
+	staged, err := config.DecodeConfig(raw, cfg.Dir(), src+" (as staged)")
+	if err != nil {
+		return nil, false, fmt.Errorf("check --staged: the staged %s does not load: %w", config.FileName, err)
+	}
+	return staged, true, nil
 }
 
 // stagedLedgerInputs loads the lock ledger and the comment digest store as the
@@ -240,6 +346,20 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	} else {
 		in.digests = digests
 	}
+
+	// The build-order artifacts come from the index for the same reason the
+	// ledger does. A locked build order read from the WORKTREE and compared
+	// against an INDEX ledger record would refuse commits over edits that are
+	// not being committed, and — the direction that matters — would pass a
+	// commit that stages a tampered artifact while the worktree copy still
+	// matches its record.
+	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {
+		path, err := materializeIndexFile(g, cfg.Dir(), dir, buildorder.ArtifactPath(cfg, module))
+		if err != nil {
+			return nil, err
+		}
+		return buildorder.LoadArtifact(path)
+	})
 
 	return in, nil
 }
@@ -378,6 +498,28 @@ func (g *gitRunner) run(args ...string) ([]byte, error) {
 	return out, nil
 }
 
+// runWithStdin is run() with input fed to git's stdin. Only cat-file --batch
+// needs it, and it needs it because the alternative — one "git show" per object
+// — is what made "always read from the index" look expensive enough to shortcut
+// in the first place.
+func (g *gitRunner) runWithStdin(stdin string, args ...string) ([]byte, error) {
+	full := append([]string{"-c", "core.quotepath=false", "-c", "diff.relative=false"}, args...)
+	cmd := exec.Command(g.bin, full...) //nolint:gosec // fixed binary, fixed argv; no shell involved
+	cmd.Dir = g.dir
+	cmd.Stdin = strings.NewReader(stdin)
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return nil, fmt.Errorf("check --staged: git %s: %s", strings.Join(args, " "), msg)
+	}
+	return out, nil
+}
+
 // lsFiles lists the index entries matching spec, as paths relative to the
 // runner's directory (git's default output form when not asked for
 // --full-name), slash-separated.
@@ -389,25 +531,84 @@ func (g *gitRunner) lsFiles(spec string) ([]string, error) {
 	return splitZ(out), nil
 }
 
-// dirtyAgainstIndex returns the set of paths under spec whose WORKTREE content
-// differs from the index — "git diff" with no revision. --relative makes the
-// output relative to the runner's directory, matching lsFiles.
+// indexBlobs returns the index's content for every path under spec, keyed by
+// path relative to the runner's directory.
 //
-// No --diff-filter is applied on purpose. Any path git lists here differs from
-// the index for some reason (content, mode, type, deletion), and "differs" is
-// the entire question being asked: every such path must be read from the index
-// rather than from disk. Filtering would be a way to accidentally read a
-// tampered worktree file.
-func (g *gitRunner) dirtyAgainstIndex(spec string) (map[string]bool, error) {
-	out, err := g.run("diff", "--name-only", "-z", "--relative", "--", spec)
+// It reads the OIDs from "git ls-files -s" and streams them through a single
+// "git cat-file --batch", which is what makes "always read from the index"
+// affordable: one subprocess for the whole registry rather than one per claim,
+// and — the part that matters — no consultation of git's stat cache or its
+// per-path skip bits anywhere in the path. An assume-unchanged claim's index
+// content comes back exactly like any other's.
+//
+// cat-file --batch's response per request is "<oid> <type> <size>\n", then
+// <size> raw bytes, then a newline. Sizes are read from that header rather than
+// scanning for a delimiter, because claim bodies contain newlines and NULs are
+// legal in a blob.
+func (g *gitRunner) indexBlobs(spec string) (map[string][]byte, error) {
+	out, err := g.run("ls-files", "-s", "-z", "--", spec)
 	if err != nil {
 		return nil, err
 	}
-	dirty := map[string]bool{}
-	for _, p := range splitZ(out) {
-		dirty[p] = true
+
+	// Each -s entry is "<mode> SP <oid> SP <stage>\t<path>".
+	var oids []string
+	var paths []string
+	for _, entry := range splitZ(out) {
+		tab := strings.IndexByte(entry, '\t')
+		if tab < 0 {
+			continue
+		}
+		fields := strings.Fields(entry[:tab])
+		if len(fields) < 3 {
+			continue
+		}
+		// Stage != 0 is an unmerged path: the index holds several conflicting
+		// versions and there is no single "what will be committed". Skipping it
+		// here means the claim is absent from the registry, which the lint suite
+		// reports as a dangling reference rather than silently auditing one side
+		// of a conflict.
+		if fields[2] != "0" {
+			continue
+		}
+		oids = append(oids, fields[1])
+		paths = append(paths, entry[tab+1:])
 	}
-	return dirty, nil
+	if len(oids) == 0 {
+		return map[string][]byte{}, nil
+	}
+
+	raw, err := g.runWithStdin(strings.Join(oids, "\n")+"\n", "cat-file", "--batch")
+	if err != nil {
+		return nil, err
+	}
+
+	blobs := make(map[string][]byte, len(paths))
+	rd := bufio.NewReader(bytes.NewReader(raw))
+	for _, p := range paths {
+		header, err := rd.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("check --staged: git cat-file --batch: short read for %s: %w", p, err)
+		}
+		fields := strings.Fields(strings.TrimSpace(header))
+		if len(fields) != 3 {
+			return nil, fmt.Errorf("check --staged: git cat-file --batch: unexpected header %q for %s", strings.TrimSpace(header), p)
+		}
+		size, err := strconv.Atoi(fields[2])
+		if err != nil {
+			return nil, fmt.Errorf("check --staged: git cat-file --batch: unreadable size in %q for %s", strings.TrimSpace(header), p)
+		}
+		content := make([]byte, size)
+		if _, err := io.ReadFull(rd, content); err != nil {
+			return nil, fmt.Errorf("check --staged: git cat-file --batch: short body for %s: %w", p, err)
+		}
+		// The trailing newline cat-file writes after each object.
+		if _, err := rd.Discard(1); err != nil {
+			return nil, fmt.Errorf("check --staged: git cat-file --batch: malformed record for %s: %w", p, err)
+		}
+		blobs[p] = content
+	}
+	return blobs, nil
 }
 
 // showIndexBlob returns the index's content for rel (relative to the runner's

@@ -52,7 +52,10 @@ yourself is how an agent ends up approving its own work.
 Never hand-edit the `comments:` block in a claim file. The verbs and the viewer's API are the same
 code path behind the same project-wide lock, so a CLI write and a browser write cannot clobber
 each other. A raw text edit bypasses the lock and can destroy a comment the human just posted —
-and the ledger reports it as `integrity_failed`.
+and the ledger reports it as `integrity_failed`. It also **wedges the claim for comments**: every
+comment verb refuses a claim whose block no longer matches the recorded digest
+(`comment_digest_drift`), rather than re-recording the edited block as the new truth. Restore the
+file from git; do not comment your way past it.
 
 ## `dossierx comment inbox`
 
@@ -73,10 +76,17 @@ Three fields do the work:
 - **`agent_can_resolve`** — the rights rule, as data. `false` means a human owns this thread and
   you may only reply. Read the field; do not try to remember who authored what.
 - **`agent_has_replied`** — `false` on a human-authored thread is your queue. That is the work.
-- **`cursor`** — echo it back as the next call's `--since`. It is **inclusive** of its own second:
-  comment timestamps have one-second resolution, so an exclusive cursor would silently drop
-  anything landing in the boundary second. Re-reporting a thread you have already seen costs you
-  nothing; missing the human's comment breaks the loop.
+- **`cursor`** — echo it back **verbatim** as the next call's `--since`. It is **inclusive** of its
+  own second: comment timestamps have one-second resolution, so an exclusive cursor would silently
+  drop anything landing in the boundary second. Re-reporting a thread you have already seen costs
+  you nothing; missing the human's comment breaks the loop. Never rebuild the value yourself —
+  `--since` must be an RFC 3339 timestamp and a malformed one is refused (`bad_request`) rather
+  than answered with an empty inbox you would read as "nothing new".
+
+`last_activity` is the newest of the thread's creation, its replies, and the human's own
+**resolve/reopen** clicks — so a thread they reopened after you last polled comes back through
+`--since`, which is the whole point: a reopen is what puts `unresolved_comments` back in front of
+your next `claim lock`.
 
 ## Advisory rights — you reply, you never resolve
 

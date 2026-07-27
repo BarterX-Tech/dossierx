@@ -337,3 +337,133 @@ func claimsEqual(a, b model.Claim) bool {
 	}
 	return a.SourcePath == b.SourcePath
 }
+
+// TestStaged_AssumeUnchangedCannotSubstituteTheWorktree.
+//
+// The gate used to ask "git diff" which paths differed from the index, fetch
+// THOSE from the index, and read the rest off disk as a cheaper equivalent. It
+// is not an equivalent. "git diff" consults git's stat cache and honours the
+// per-path skip bits, so
+//
+//	git update-index --assume-unchanged claims/locked.yaml
+//
+// made git report a modified file as clean — and the gate then read the clean
+// WORKTREE copy while the tampered blob sat in the index waiting to be
+// committed. The refusal vanished and the commit landed. The same holds for
+// --skip-worktree and for any racily-clean stat entry.
+//
+// The bit is set by the ATTACKER, in the repository being audited, which is what
+// makes it disqualifying rather than merely unlucky: a gate whose evidence
+// source is chosen by a mutable, attacker-writable flag is not a gate.
+func TestStaged_AssumeUnchangedCannotSubstituteTheWorktree(t *testing.T) {
+	cfg := stagedFixture(t)
+	claimFile := filepath.Join(cfg.ClaimsDir, "locked.yaml")
+
+	original, err := os.ReadFile(claimFile)
+	if err != nil {
+		t.Fatalf("read fixture claim: %v", err)
+	}
+	tampered := strings.Replace(string(original), "a locked claim.", "a locked claim, quietly rewritten.", 1)
+	if tampered == string(original) {
+		t.Fatalf("fixture precondition: the tamper substitution did not apply")
+	}
+
+	// Stage the tamper, then restore the worktree copy from HEAD. The index now
+	// holds bytes nobody approved; the file on disk looks innocent.
+	if err := os.WriteFile(claimFile, []byte(tampered), 0o644); err != nil {
+		t.Fatalf("tamper worktree: %v", err)
+	}
+	git(t, cfg.Dir(), "add", "claims/locked.yaml")
+	if err := os.WriteFile(claimFile, original, 0o644); err != nil {
+		t.Fatalf("restore worktree: %v", err)
+	}
+
+	// CONTROL: without the bit, the gate already refuses. If this half ever
+	// stops holding, the test below proves nothing.
+	sp, err := check.Staged(cfg)
+	if err != nil {
+		t.Fatalf("Staged (control): %v", err)
+	}
+	if !hasRule(check.StatusStaged(sp, cfg).LedgerFindings, lock.RuleLockContentDrift) {
+		t.Fatalf("control precondition: the staged tamper must already be refused")
+	}
+
+	// Now the attack.
+	git(t, cfg.Dir(), "update-index", "--assume-unchanged", "claims/locked.yaml")
+	t.Cleanup(func() { git(t, cfg.Dir(), "update-index", "--no-assume-unchanged", "claims/locked.yaml") })
+
+	sp, err = check.Staged(cfg)
+	if err != nil {
+		t.Fatalf("Staged (assume-unchanged): %v", err)
+	}
+	if !strings.Contains(sp.Claims[0].Body, "quietly rewritten") {
+		t.Fatalf("the gate read the WORKTREE copy: assume-unchanged substituted the innocent file, body=%q", sp.Claims[0].Body)
+	}
+	if !hasRule(check.StatusStaged(sp, cfg).LedgerFindings, lock.RuleLockContentDrift) {
+		t.Fatalf("assume-unchanged hid the staged tamper from the gate")
+	}
+	// FromIndex is derived by comparing bytes, not by asking git, so it stays
+	// honest under the bit too.
+	if len(sp.FromIndex) != 1 {
+		t.Fatalf("FromIndex must still report the divergence under assume-unchanged, got %v", sp.FromIndex)
+	}
+}
+
+// TestStaged_ConfigComesFromTheIndex.
+//
+// project.config.yaml names claims_dir, the module list, the doctrine facet and
+// the hub gating switch — every input that decides WHICH files the gate looks at
+// and what it demands of them. Read from the WORKTREE, one unstaged line was a
+// complete bypass: stage a tampered locked claim, then point claims_dir at an
+// empty directory in the working tree only. The gate audited nothing, found
+// nothing, and let the commit through — while the commit itself still carried
+// the real claims_dir, because that edit was never staged.
+func TestStaged_ConfigComesFromTheIndex(t *testing.T) {
+	cfg := stagedFixture(t)
+	claimFile := filepath.Join(cfg.ClaimsDir, "locked.yaml")
+
+	original, err := os.ReadFile(claimFile)
+	if err != nil {
+		t.Fatalf("read fixture claim: %v", err)
+	}
+	tampered := strings.Replace(string(original), "a locked claim.", "a locked claim, quietly rewritten.", 1)
+	if err := os.WriteFile(claimFile, []byte(tampered), 0o644); err != nil {
+		t.Fatalf("tamper worktree: %v", err)
+	}
+	git(t, cfg.Dir(), "add", "claims/locked.yaml")
+
+	// The unstaged redirect. The decoy directory must exist, or the redirect
+	// would fail for an uninteresting reason rather than being followed.
+	if err := os.MkdirAll(filepath.Join(cfg.Dir(), "decoy"), 0o755); err != nil {
+		t.Fatalf("mkdir decoy: %v", err)
+	}
+	cfgPath := filepath.Join(cfg.Dir(), "project.config.yaml")
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	redirected := strings.Replace(string(raw), "claims_dir: claims", "claims_dir: decoy", 1)
+	if redirected == string(raw) {
+		t.Fatalf("fixture precondition: the claims_dir substitution did not apply")
+	}
+	if err := os.WriteFile(cfgPath, []byte(redirected), 0o644); err != nil {
+		t.Fatalf("redirect claims_dir: %v", err)
+	}
+
+	sp, err := check.Staged(cfg)
+	if err != nil {
+		t.Fatalf("Staged: %v", err)
+	}
+	if !sp.ConfigFromIndex {
+		t.Fatalf("the config must have come from the index")
+	}
+	if got := filepath.Base(sp.Config.ClaimsDir); got != "claims" {
+		t.Fatalf("the index still says claims_dir: claims; the gate resolved %q", got)
+	}
+	if len(sp.Claims) != 1 {
+		t.Fatalf("the unstaged redirect emptied the registry: %d claim(s)", len(sp.Claims))
+	}
+	if !hasRule(check.StatusStaged(sp, cfg).LedgerFindings, lock.RuleLockContentDrift) {
+		t.Fatalf("an unstaged claims_dir edit disarmed the gate")
+	}
+}

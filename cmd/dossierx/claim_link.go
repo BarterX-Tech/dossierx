@@ -92,6 +92,45 @@ func newClaimLinkCmd() *cobra.Command {
 				return dryRunResult(cmd, "claim link", dr), nil
 			}
 
+			// The two STATE refusals, classified here rather than left to
+			// implink.Set's single error return.
+			//
+			// implink.Set returns plain fmt.Errorf values for four structurally
+			// different refusals — unknown claim, wrong module, not locked,
+			// missing file — and wrapping all of them in implink_refused told an
+			// agent the wrong thing about two of them. The router skill's row for
+			// implink_refused reads "This is your invocation or your tag, not a
+			// gate: fix it and re-run", so an agent that hit the not-locked gate
+			// retried with a corrected --file and never reached the real recovery
+			// (ask the human, lock the claim); an unknown id never reached
+			// "dossierx claim list --match" either. Both codes are documented:
+			// cliout.CodeNotLocked names linking explicitly, and two skills
+			// publish the exit-2 rows.
+			//
+			// The distinction is computed from the SAME seam the dry run already
+			// uses fifteen lines above (claim_exists / claim_is_locked), which is
+			// what makes preview and write path agree about which gate fired
+			// rather than merely agreeing by inspection. The genuinely
+			// caller-error refusals — wrong module, absolute or escaping path,
+			// missing file — stay on implink_refused, where that row's advice is
+			// exactly right.
+			linkClaim, found := loader.FindByID(claims, claimID)
+			if !found {
+				return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound,
+					"claim link: claim %q not found: %w", claimID, errClaimNotFound).
+					WithHint("run: dossierx claim list --match \"<words from the claim>\"")
+			}
+			// The module test is left to implink.Set so the REFUSAL ORDER stays
+			// identical to it: a claim named with the wrong --module is a caller
+			// error (implink_refused) whatever its status, and reporting it as
+			// not_locked would send the agent to lock a claim that was never the
+			// one it meant.
+			if linkClaim.Module == module && linkClaim.Status != model.StatusLocked {
+				return cmdResult{}, cliout.Errorf(cliout.CodeNotLocked,
+					"claim link: claim %q is not locked (status %q); an implementation link asserts that code implements a REVIEWED fact, and a draft claim is not yet one: %w", claimID, linkClaim.Status, errWrongState).
+					WithHint(fmt.Sprintf("ask the human, then: dossierx claim lock %s --reason \"<their words>\"", claimID))
+			}
+
 			// Serializes concurrent "dossierx claim link" invocations that
 			// share this module's artifact file — same reasoning and
 			// pattern as newLockCmd's use of AcquireFileLock over

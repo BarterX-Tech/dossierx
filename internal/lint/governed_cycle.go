@@ -4,9 +4,17 @@
 // governed_by.type is either the "none" sentinel or the id of the doctrine
 // claim that backs this claim's authority — and in the second case it is a
 // real directed edge in the claim graph, not a free-text note: dangling.go
-// resolves it, validated-on-missing.go requires it to point at a live claim,
-// and hub-gating refuses to lock a claim whose doctrine claim is still draft.
-// What nothing checked was whether following that edge ever gets anywhere.
+// resolves it and validated-on-missing.go requires it to point at a live claim.
+//
+// Hub gating is NOT one of the rules that reads this edge, and saying otherwise
+// here would be worse than saying nothing: a reader who believed it would drop
+// the redundant rests_on edge and lock against an unapproved doctrine claim.
+// lock.checkHubGating walks lock.dependencyIDs, which is mirrors ++ rests_on
+// and nothing else (the same list check.hasUnlockedDoctrineDep and the CLI's
+// dry-run twin build), so a doctrine claim named ONLY by governed_by is not
+// gated — to have hub gating cover it, name it as a rests_on dependency too.
+// What nothing checked was whether following the governed_by edge ever gets
+// anywhere.
 // "A is governed by B, B is governed by A" resolved on both ends, satisfied
 // every other rule, and passed the entire registry — while asserting that
 // each claim's authority rests on the other's, which is to say on nothing.
