@@ -301,6 +301,15 @@ Claim files are YAML in git, so nothing in this format can *prevent* a hand
 edit. The invariants below are about something narrower and achievable: no
 out-of-band edit of a **locked** claim is silent.
 
+**DossierX detects; the forge enforces.** That division is the whole design, not
+a caveat on it. Every rule below produces a *named finding* — a stable rule
+string, the claim it is about, and the command that puts things back. Turning
+that finding into something anyone has to obey is the job of branch protection
+and a required CI check, which is why the ledger is worth having at all: it is
+what makes a red check mean "this specific locked claim changed without an
+approval" instead of "something, somewhere, is off". See
+[What the gate detects, what it does not, and where the rest is caught](#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught).
+
 They are enforced by the **lock-ledger gate**, which is not part of the lint
 suite. A lint failure is a statement about a claim's content; a ledger finding
 is a statement about whether a human ever approved it, and the two must not
@@ -466,77 +475,195 @@ that never travels with the repository is an approval CI has nothing to compare
 against. While it is still `locked: false` it is ordinary generated output that
 `propose` rewrites in full.
 
-### Scope is itself audited: `check --staged` reads the parent commit
+### What the gate detects, what it does not, and where the rest is caught
 
-Every rule above judges a **state** — these claims, this ledger, this digest
-store. A state rule is structurally unable to tell evidence that was never there
-from evidence that was *just removed*, and that is not a gap in any one rule; it
-is a gap in the category. It had a two-commit exploit in which no individual rule
-was ever wrong:
+**DossierX detects. The forge enforces.** The ledger's whole job is to turn a
+silent edit into a **named, recoverable finding** — a rule string, the claim it
+is about, and the command that puts things back. Nothing in this repository can
+stop a commit from being written; a `chmod` and a text editor beat any local
+tool. What a finding buys is that the edit cannot be *quiet*. Wire that finding
+to a required status check on a protected branch and the quietness is gone for
+good, because now the edit has to survive a human reading the diff that carries
+it. Read every rule below as evidence production, not as enforcement.
 
-1. Repoint `claims_dir:` at a fresh directory and `git rm .dossierx-lock-store.json`.
-2. Rewrite whatever you like in the locked claims that are now out of scope.
+That framing is what makes the boundary in this section a design decision rather
+than a hole.
 
-After step 1 there is nothing in scope to have a finding about, so every rule
-reported correctly and the project was clean. A fresh clone of the result was
-clean too, so CI agreed.
+#### What IS detected
 
-`check --staged` therefore resolves the **parent** of the commit under judgement
-(`HEAD`, or a merge's first parent) and compares the two, which turns each of
-those disappearances from an absence into a change:
+Every rule in this document judges **one tree** — these claim files, this lock
+store, this digest store, these build-order artifacts, exactly as they are. That
+is the whole evidence base, and within it the coverage is deliberately total: any
+**single-file** tampering with a locked claim is a named finding.
 
-| The commit under judgement | Verdict |
+| The tampering | Named by |
 |---|---|
-| deletes `.dossierx-lock-store.json`, or drops it from the index | refused — a ledger that existed in the parent is a removed approval record, not a project that never had one |
-| deletes `.dossierx-comment-digest.json` | refused, including the commit that also drops the last claim the store had coverage for |
-| deletes a locked `.build-order.<module>.json` | refused — `build-order-ledger-abandoned` sees this from state when the record survives; the parent comparison covers the commit that removes artifact and record together |
-| repoints `claims_dir:` so that locked claims fall out of coverage | refused (see below) |
+| a locked claim's content edited — including `raw_html`, `build_role`, `section`, `order` | `lock-content-drift` |
+| `status: draft` flipped to `locked` by hand, with no approval record | `lock-ledger-missing` |
+| a record deleted from a claim this engine locked | `lock-ledger-deleted` |
+| `status:` edited back to `locked` over a record `unlock` already released | `lock-ledger-released` |
+| `locked` flipped back to `draft` while its record still stands | `lock-ledger-orphan` |
+| a locked claim's **file deleted** while its record still stands | `lock-ledger-abandoned` |
+| the whole lock store removed while locked claims remain | `lock-ledger-absent` |
+| the lock store present but unparseable | `lock-ledger-unreadable` |
+| the lock store's own `version` set back to pre-ledger | `lock-ledger-downgraded` |
+| a pre-v0.3.0 project that never ran the migration | `lock-ledger-adoption-required` |
+| a review thread edited or deleted outside the engine | `comment-ledger-drift` |
+| the digest store removed from a covered project | `comment-digest-absent` |
+| a standing approval whose digest entry was dropped from the map | `comment-digest-missing` |
+| threads present on a claim with no digest entry beside them | `comment-digest-unrecorded` |
+| a digest entry whose claim id was renamed out from under it | `comment-digest-abandoned` |
+| a locked build order's sequence or frozen `hashes` edited | `build-order-content-drift` |
+| a build order claiming `locked: true` with no record | `build-order-ledger-missing` |
+| a locked build order's flag cleared to `false` while its record stands | `build-order-ledger-orphan` |
+| a locked build order's artifact deleted, or its module dropped from `modules:` | `build-order-ledger-abandoned` |
+| a build-order artifact present and undecodable | `build-order-unreadable` |
 
-These are reported as two project-scoped findings, **`integrity-store-removed`**
-(a store the parent commit carried and this one does not) and
-**`claims-scope-narrowed`** (`claims_dir` moved and left tracked claim files
-outside the new scope), under the `integrity_failed` code the gate already uses.
-They are reported **ahead of every other ledger finding**, because a scope change
-is the *cause* of whatever the rules below did or did not manage to see.
+Note the shape of that table. Every artifact in the design is watched by rules
+built out of the *other* artifacts, so removing any single piece of the evidence
+is itself reported by a rule made of the pieces that remain — delete a claim and
+its record accuses you, delete the record and the claim's `locked_at` and
+baselines do, delete the whole store and the locked claims do.
 
-Note what `claims-scope-narrowed` actually keys on: the **stranding**, not the
-move. A `claims_dir` move that takes its claims with it is how a project
-reorganises and is silent here. A move that leaves them behind is how a locked
-claim stops being audited while remaining in the repository, tracked, and still
-reading `status: locked`. "Claim file" means a blob that *decodes* as a claim,
-not one merely named `*.yaml`, so a repository full of ordinary YAML does not
-turn into a refusal.
+#### What is NOT detected
 
-`integrity-store-removed` is deliberately **not** suppressed by the pre-ledger
-exemption: a project that predates the ledger has no ledger to delete and cannot
-reach the rule, while one that has a ledger and drops it is making a statement
-about the approval record for every locked artifact it holds. The whole
-comparison is skipped when `project.config.yaml` is itself no longer tracked, so
-removing a DossierX project wholesale is not a refusal. And where the parent
-commit is not available at all — a shallow checkout that never fetched it — the
-gate says so in its next steps rather than inventing a verdict.
+**Erasing every trace of an artifact's approval at once.** A finding is always
+built out of *surviving* evidence, so a change that removes both sides of a
+disagreement leaves nothing to disagree. There are **two** such shapes, and both
+are conjunctions — either half alone is still refused.
 
-A repository's first commit has no parent and is judged on state alone, which is
-correct — nothing can have been removed from a commit that has no predecessor.
+**Shape 1 — the collapsed scope.** `claims_dir:` repointed at a fresh directory
+AND the lock ledger removed, in the same change. The claims that were locked are
+still in the repository, still tracked, still reading `status: locked` — and no
+longer in scope for anything.
+
+| The change | `check` reports |
+|---|---|
+| repoint `claims_dir` only, ledger left in place | `integrity_failed` — `lock-ledger-abandoned`, once per locked claim whose standing record now names a claim the project cannot see |
+| delete the ledger only, `claims_dir` left in place | `integrity_failed` — project-scoped `lock-ledger-absent`, plus `lock-ledger-missing` per claim it just stopped covering |
+| **both, in one change** | **`ok: true`** |
+
+**Shape 2 — the erased review.** A **draft** claim's `comments:` block deleted
+AND that claim's key dropped from the digest store, in the same change. The claim
+is left looking like one nobody ever commented on, which is what most drafts
+genuinely are.
+
+| The change | `check` reports |
+|---|---|
+| erase the `comments:` block only, digest entry left in place | `integrity_failed` — `comment-ledger-drift`, because the recorded digest still describes threads the claim no longer has |
+| drop the digest entry only, threads left in place | `integrity_failed` — `comment-digest-unrecorded`, because the predicate is the threads themselves |
+| **both, in one change** | **`ok: true`** |
+
+This shape is worth more than its size suggests, and understating it would be
+dishonest: an **open thread on a draft claim is exactly what blocks `claim
+lock`** (`unresolved_comments`). So erasing it buys the lock — the claim then
+locks cleanly, with a fresh record, over a review that was silently deleted.
+
+**It is confined to draft claims.** The same erasure on a **locked** claim is
+refused with no history at all, because the `comments:` block is part of the
+content the lock covers: the tamper surfaces as `lock-content-drift` /
+`comment-digest-missing`.
+
+In both shapes the two files defend each other, and neither can be removed on its
+own. That mutual defence is the design; what it cannot survive is a single change
+that takes both sides.
+
+Both shapes are pinned as passing tests in
+`internal/check/staged_no_parent_test.go`, alongside the "either half alone"
+assertions above — so they stay measured facts rather than folklore, and so
+anything that later closes one of them fails loudly and on purpose.
+
+#### Why it is not detected
+
+Because in both shapes the resulting tree is **indistinguishable from an
+innocent one**.
+
+For shape 1 the innocent twin is a **brand-new project**: a `claims_dir` holding
+nothing locked, with no lock store beside it, is exactly what a project that has
+never locked anything looks like — the first commit of every honest project, and
+every new module added to a monorepo that already uses DossierX. For shape 2 it
+is an **ordinary draft nobody has commented on yet**, which is the majority of
+drafts at any moment. Refusing either would refuse every new project on its first
+day, and every uncommented draft on every other day — the one thing a gate cannot
+do and survive.
+
+Telling the two apart needs evidence from **outside the tree**. Earlier rounds of
+this design put that evidence in the **parent commit**: `check --staged` resolved
+`HEAD` and compared the two, reporting shape 1 as `integrity-store-removed` and
+`claims-scope-narrowed`, and shape 2 as `comment-ledger-drift` against the digest
+the parent commit had recorded. It was removed in v0.3.0, before release, and the
+reasoning is worth keeping because it generalises.
+
+The parent commit is outside the *commit* but it is not outside the *committer*.
+Git history is written by exactly the party the gate is meant to constrain, so
+the comparison is not a check on them — it is a check they can also edit.
+`--orphan`, a rebase, a second config file, a fresh repository: any one of them
+switches the comparison off, and none of them looks unusual in a log. **Every
+in-repo source of that evidence has the same property**, which is why no other
+file was substituted for it.
+
+Worse, it charged real projects for a guarantee it could not deliver. The
+comparison judges the tree and cannot see intent the tree does not record, and
+two ordinary git operations pay that bill:
+
+- **`git revert` of a commit that locked a claim** was refused. A legitimate
+  revert removes that lock's records, and the resulting tree is byte-identical to
+  the one an erasure produces. Git does not run `pre-commit` for `revert`, so the
+  revert landed locally at rc 0 and only CI objected — the worst possible place to
+  discover it.
+- **A project that is new in a commit** was audited against an unrelated retired
+  project's ledger in a monorepo, and refused with findings naming another
+  project's claim ids.
+
+A control that is switched off by a rebase and switched on by a revert is not a
+control. It is a coin flip with a rule name attached, and a rule name people learn
+to route around is worse than no rule, because the next reader trusts it.
+
+#### Where it IS caught
+
+On the forge, which is where it always belonged.
+
+- **Branch protection with a required status check.** `dossierx check` on the
+  merge result decides whether the pull request may merge. Every single-tree rule
+  above runs there, on a tree nobody can rewrite after the fact. The shipped
+  template ([`scripts/ci/dossierx-check.yml`](scripts/ci/dossierx-check.yml)) is
+  one `dossierx check` step and pins no `fetch-depth`: a shallow checkout is a
+  complete tree, which is the whole evidence base.
+- **Review.** Neither shape is subtle in a diff. Shape 1 is a one-line
+  `claims_dir:` edit next to a *deleted tracked file* whose entire stated purpose
+  is to be read in a diff, and it arrives with every locked claim it stranded
+  still sitting in the tree. Shape 2 is a human's own words being deleted from a
+  claim, next to a hand edit of the digest store — and the reviewer most likely to
+  notice is the person whose thread it was, which is why the digest store is worth
+  putting under `CODEOWNERS`.
+- **`CODEOWNERS` on the stores and the config**, if you want the second pair of
+  eyes to be a specific pair.
+
+The trade is honest and it is the right way round. DossierX names every
+tampering that a tree can prove, in a form CI can fail on. It does not pretend to
+adjudicate the history the committer writes. **A red check is meaningful because
+the finding under it is specific, reproducible from the committed tree, and true
+in every clone** — and none of those three properties survived being made to
+depend on which commits happened to be fetched.
 
 #### Moving `claims_dir`
 
-There is **no flag, environment variable or config marker** that exempts a move
-from this, on purpose: an escape hatch on an integrity gate is the attack,
-because the party who reliably remembers to set it is the one who went looking
-for it in the source.
+Because there is no scope rule any more, there is no scope ceremony either. Move
+the claim files, edit `claims_dir:`, stage the claims, the config and the
+unchanged stores together, and commit. A legitimate move passes because every
+locked claim is still reachable and still hashes to its existing record — which
+is what the rules were reading all along.
 
-The gate keys on whether **coverage survived** the move rather than on whether
-the path changed. A repoint is accepted when, after the move, the ledger still
-resolves and every locked claim is still reachable and still hashes to its
-existing record; it is refused when the repoint coincides with the ledger or the
-digest store disappearing, or with locked claims becoming unreachable.
+A move that **strands** locked claims still fails, from state alone: their
+records are left pointing at claims the project can no longer see, which is
+`lock-ledger-abandoned`, once per claim. What is gone is only the ability to
+catch that stranding when the ledger holding those records was deleted in the
+same change.
 
-So the sanctioned procedure carries no ceremony at all: move the claim files
-(byte-identical), edit `claims_dir:`, and stage the claims, the config and the
-unchanged stores in **one commit**. A legitimate move passes because nothing lost
-coverage. The decoy-directory attack fails at its first commit for the same
-reason, which is the property actually worth enforcing.
+There is still **no flag, environment variable or config marker** that exempts
+anything here, and there never will be: an escape hatch on an integrity gate is
+the attack, because the party who reliably remembers to set it is the one who
+went looking for it in the source.
 
 ### Adoption, once, and only when a human asks for it
 

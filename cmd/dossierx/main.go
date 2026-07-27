@@ -1102,16 +1102,20 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 		rules[f.Rule] = true
 	}
 
+	// REMOVED: the first two branches of this switch used to belong to
+	// integrity-store-removed and claims-scope-narrowed, the two findings raised
+	// by comparing the commit under judgement against its PARENT. Both rules are
+	// gone (see internal/check: the comparison was a control over the
+	// committer's own history, which the committer rewrites, and it refused
+	// ordinary reverts and brand-new monorepo projects). The branches went with
+	// them rather than being left as unreachable defence in depth, because this
+	// function's whole contract is that every hint it returns names something a
+	// reader can look up: a recovery keyed on a rule the binary can no longer
+	// emit is dead text that reads as live documentation. Nothing takes their
+	// place — the surviving single-tree rules below already cover each half of
+	// that tamper on its own (lock-ledger-absent when the ledger goes,
+	// lock-ledger-abandoned when claims_dir moves and strands its claims).
 	switch {
-	case rules[check.RuleIntegrityStoreRemoved]:
-		// HISTORY-AWARE, and therefore first: this one is about the COMMIT, not
-		// about the working tree, so no amount of inspecting the files on disk
-		// will explain it. The recovery is a git operation, and the move that
-		// looks helpful — re-creating the store — is the exact bypass the rule
-		// exists to catch.
-		return "this commit DELETES a tracked integrity store (the lock ledger or the comment digest store) that its parent carried, which removes the evidence every other rule reads. Un-stage the deletion: git restore --source=HEAD --staged --worktree -- .dossierx-lock-store.json .dossierx-comment-digest.json (whichever the finding names), then run dossierx check --staged again. Do NOT re-create the store with dossierx migrate --adopt: it refuses this on purpose, because re-creating it is what deleting it was for"
-	case rules[check.RuleClaimsScopeNarrowed]:
-		return "this commit moves claims_dir and leaves tracked claim files OUTSIDE the new scope, so those claims are still in the repository, still locked, and no longer audited by anything. Either move the stranded files into the new claims_dir in this same commit, or revert the claims_dir change in project.config.yaml — then run dossierx check --staged again. data.ledger_findings names each stranded file"
 	case rules[lock.RuleLockLedgerAdoptionRequired]:
 		// The fail-closed adoption refusal. This is the one integrity finding
 		// whose recovery is a command rather than a restore, and it is the whole
@@ -1125,6 +1129,20 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 		return "the lock ledger file is gone while locked claims remain, so there is nothing left that says what was approved. Restore it from version control, then run: dossierx check --validate — an absent ledger is never adopted, so dossierx migrate --adopt will refuse it, deliberately"
 	case rules[lock.RuleLockLedgerDeleted]:
 		return "a claim this engine locked has had its approval record removed from the ledger while other evidence of the lock (locked_at, its dependency baselines) survives. Restore the lock store from version control and run: dossierx check --validate. Re-locking would record the current content as approved, which is what deleting the record was for"
+	case rules[lock.RuleLockLedgerAbandoned]:
+		// ADDED as claims-scope-narrowed's branch was removed, and for its
+		// readers rather than in its place. This rule is per-claim and its
+		// trigger is "a standing record whose claim is not in the project", so
+		// it already fired on the shape the removed rule described — a
+		// claims_dir that moved and left tracked, still-locked claim files
+		// behind — and it is now the ONLY thing that reports it. The finding's
+		// own message names the deleted-file cause (restore it, or unlock and
+		// then delete it) and cannot name the other one, because from inside a
+		// single tree a claim that was deleted and a claim that fell out of
+		// scope are the same absence. So the hint names both causes, which is
+		// exactly what a hint is for: the finding says what is wrong, this says
+		// where to look when the obvious reading does not fit.
+		return "the lock ledger holds standing approval records for claims that are not in the project any more, so content a human approved has left the audit without anything recording that they agreed to drop it. Two causes, and data.ledger_findings names the claims for both: a locked claim's FILE was deleted (restore it from version control), or claims_dir was repointed and left those files outside it (put claims_dir back, or move the files into the new one). If the removal was intended, restore the claim first, run dossierx claim unlock <id> --reason \"...\", and remove it again so the release is on the record. Then run: dossierx check --validate"
 	case rules[check.RuleCommentDigestAbsent], rules[lock.RuleCommentDigestUnrecorded], rules[check.RuleCommentDigestMissing]:
 		return "the comment digest store is missing entries (or the whole file), so review history on those claims is checked against nothing. Restore .dossierx-comment-digest.json from version control — or git add it, if this commit is the one that updated it — then run: dossierx check --validate. Do not run a comment op to re-create an entry: that records whatever the claim says now as the truth"
 	case rules[lock.RuleCommentLedgerDrift]:
@@ -1337,23 +1355,21 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 // because the single most damaging way for this command to be wrong would be to
 // judge the working tree while a reader believed it had judged the commit.
 //
-// IT PRINTS res.NextSteps, and that line is load-bearing rather than cosmetic.
-// --staged's parent-commit comparison (internal/check/history.go) cannot run at
-// all in a SHALLOW clone: the parent's tree is simply not there. That is
-// reported as an advisory in NextSteps rather than as a finding, deliberately —
-// a gate that refuses every default `actions/checkout` gets deleted rather than
-// deepened. But an advisory nothing prints is an advisory nobody acts on, and
-// this path used to print only the counts and the findings, so the ONE
-// configuration where the scope guard silently does not happen (depth-1 CI, the
-// checkout default) was also the one that said nothing about it while exiting 0.
-// A reader in `--format text` had no way to tell "compared, clean" from "could
-// not compare". The JSON envelope always carried it in data.next_steps; this is
-// the text path catching up.
+// IT PRINTS res.NextSteps, in --format text, at parity with the JSON envelope's
+// data.next_steps. That started as the text path catching up on ONE advisory —
+// "this run could not compare the commit against its parent, because the clone
+// is shallow" — which was the single configuration where the old scope guard
+// silently did not happen, and which this path used to say nothing about while
+// exiting 0. That advisory is gone with the parent comparison that produced it,
+// and the printing stays anyway, on its own merits: --staged is the entry point
+// a human meets from a hook, mid-commit, and the ordinary next steps (a claim
+// ready to lock, a build order gone stale) are exactly as worth saying there as
+// they are from plain `check`. The two formats agreeing about what a run said is
+// a property worth keeping for its own sake, not a fix that outlived its bug.
 //
-// They print BEFORE the OK line and are not gated on the findings, because the
-// advisory qualifies the verdict in both directions: a clean run is what it most
-// needs to qualify, and a failing one still wants to say the comparison behind
-// it was partial.
+// They print BEFORE the OK line and are not gated on the findings, because they
+// qualify the verdict in both directions: a clean run is what most needs the
+// qualification, and a failing one still has next steps beyond the refusal.
 func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res check.Result) {
 	out := cmd.OutOrStdout()
 

@@ -50,10 +50,20 @@
 // WHY "HEAD" AND NOT THE WHOLE HISTORY. migrate runs at a keyboard, on a working
 // tree, and what it is being asked to adopt is the working tree. HEAD is the
 // last state a reviewer could have seen, so it is the state the adoption is
-// being smuggled past. Spreading the same tamper across two commits does not
-// help the attacker: the commit that drops the digest store is refused by
-// check.RuleIntegrityStoreRemoved before it can become HEAD, which is that
-// rule's job and not this one's.
+// being smuggled past. Reading further back would not make the answer better: an
+// adoption is a statement about what is on disk NOW against what was last agreed,
+// and "last agreed" is one commit.
+//
+// This paragraph used to hand a case off to check.RuleIntegrityStoreRemoved —
+// the gate rule that compared a commit against its PARENT and refused one that
+// dropped an integrity store. That rule and that comparison were REMOVED (the
+// parent commit is outside the commit but not outside the committer, and the
+// rule refused ordinary reverts), so nothing downstream catches a tamper spread
+// across two commits on this route any more, and saying otherwise here would be
+// borrowing a guarantee that no longer exists. What is left is this file's own
+// two questions, asked of HEAD, which are unaffected: they compare the working
+// tree against the last commit, and both of the reproductions above put the
+// forgery in the working tree.
 //
 // WHY NOTHING HERE EVER REFUSES ON ITS OWN, and why this file has no error
 // return. Git can be absent, the project can live outside a work tree, HEAD can
@@ -62,14 +72,17 @@
 // be the outage the implicit grandfathering it replaced existed to prevent. So
 // the answer is a three-way one — corroborated, refuted, or NOT LOOKED AT — and
 // the third is reported (a warning on the run, a named side effect on the
-// preview) rather than either refusing or passing in silence. That is the same
-// call check.scopeUnverifiedNote makes for a shallow checkout, for the same
-// reason: "nothing was found" and "nothing could be looked for" are different
-// sentences and only one of them is true.
+// preview) rather than either refusing or passing in silence, because "nothing
+// was found" and "nothing could be looked for" are different sentences and only
+// one of them is true.
 //
 // A SHALLOW CLONE IS NOT ONE OF THOSE STATES. Everything here reads HEAD's own
 // tree, which every clone has complete however shallow, so a depth-1 CI checkout
-// is fully corroborated and gets no degradation notice at all.
+// is fully corroborated and gets no degradation notice at all. That is why this
+// file survived the removal of `check --staged`'s parent-commit comparison: that
+// comparison needed a tree a shallow clone does not have, and could be switched
+// off by rewriting the history it read. Nothing here reads history — it reads
+// the one commit the working tree was made from.
 //
 // WHY THE GIT PLUMBING IS HERE RATHER THAN SHARED WITH internal/check. That
 // package's gitRunner is unexported and is built around the INDEX — pathspecs

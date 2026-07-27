@@ -74,10 +74,10 @@ gate already uses — **no new `error.code` was added for it**. It is one findin
 migration, deliberately in place of one `lock-ledger-missing` per claim: repeating "this claim is
 locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is
 actively destructive advice at a project which has done nothing wrong. It is also genuinely
-distinct from its neighbour, and the history-aware gate below is what makes the two
-distinguishable: `lock-ledger-adoption-required` is a project that **never had** a ledger (benign;
-recovery is the migration), `lock-ledger-absent` is one that **had one and no longer does**
-(tampering; recovery is version control).
+distinct from its neighbour, and the **lock store itself** is what tells the two apart, with no git
+history required: `lock-ledger-adoption-required` fires when the store is **present** and still on
+the pre-ledger schema (benign; recovery is the migration), `lock-ledger-absent` when the store
+**file is gone** while locked claims remain (tampering; recovery is version control).
 
 Running it twice is refused, with the new `error.code` **`already_migrated`** and a `data.mode` of
 `already_covered` or `nothing_to_adopt` so a caller can tell the two apart — a migration that can be
@@ -85,54 +85,72 @@ re-run is a laundering command, since deleting one record and re-migrating would
 covered as approved. A pre-commit hook and a CI run fail the same way as `check` — the run that
 would previously have blessed a project quietly now refuses it.
 
-### BREAKING — `check --staged` is git-history aware
+### `check --staged` judges the git index, and only the git index
 
-`--staged` no longer judges the index in isolation: it compares the commit under judgement against
-its parent. From a pre-commit hook the index differs from `HEAD`, so the index is the commit and
-`HEAD` is its parent; on a clean tree in CI the index *is* `HEAD`, so `HEAD` is judged against its
-own parents — and on GitHub's `pull_request` event the checkout is the merge commit, whose first
-parent is the base branch, so the whole pull request is compared against what it merges into.
+`--staged` reads the **git index** — what the commit will actually contain — with `git show`
+instead of the worktree, and writes nothing. That is what makes it meaningful in a pre-commit hook,
+and it is unchanged. What it does **not** do is read git history: it judges one tree, and its
+verdict is identical in every clone, at every depth, on every branch.
 
-This closes the decisive hole the review rounds kept arriving at, which no single-tree rule could
-ever have seen. On a clean, fully-locked, hook-installed project, two commits were enough: repoint
-`claims_dir:` at an empty tracked directory **and** `git rm .dossierx-lock-store.json`, then rewrite
-the now-unscoped locked claims. After the first commit the registry is empty, so there is no locked
-claim for `lock-ledger-missing` to name and none for `lock-ledger-absent` to count; the reverse
-sweep is skipped because the store file is gone. `check`, `--validate`, `--staged` **and a fresh
-clone** all printed zero findings and exited 0, and the hook accepted both commits having correctly
-refused the identical tamper moments earlier. Nothing was broken — the gate was pointed somewhere
-else.
+**Removed before release: the parent-commit comparison.** An earlier build on this branch had
+`--staged` resolve the parent of the commit under judgement and compare the two, reporting a removed
+lock ledger or a repointed `claims_dir` as **`integrity-store-removed`** and
+**`claims-scope-narrowed`**. Both rules are gone, along with the shallow-clone advisory in
+`data.next_steps` that told you to set `fetch-depth: 0`. **The shipped CI template changed with
+them**: it is now a single `dossierx check` step and pins no `fetch-depth`, because a shallow
+checkout is a complete tree and one tree is the whole evidence base. The second `check --staged`
+step is gone from CI too — on a fresh checkout the index, the worktree and `HEAD` are three names
+for one tree, so it re-ran the same rules over the same bytes. `--staged` itself is **not**
+deprecated; its home is the pre-commit hook, where the index and the worktree genuinely differ.
+The diagnosis behind the removed rules was right — a
+change that repoints `claims_dir` *and* deletes the ledger leaves nothing in scope to judge, so the
+gate reports `ok: true` — but the fix was in the wrong layer. The parent commit is outside the
+*commit* and not outside the *committer*: git history is written by exactly the party the gate
+constrains, so `--orphan`, a rebase or a second config file switched the comparison off without
+looking unusual in a log, and every other in-repo source of that evidence has the same property.
+It also could not see intent the tree does not record, and charged two ordinary git operations for
+that: a legitimate **`git revert`** of a commit containing a claim lock was refused (the revert
+removes that lock's records, byte-identical to erasing them) and, because git does not run
+`pre-commit` for `revert`, it landed locally at exit 0 and only CI objected; and a project that was
+**new in a commit** was audited against an unrelated retired project's ledger in a monorepo and
+refused with findings naming another project's claim ids. A control that a rebase disables and a
+revert trips is not a control, so it was removed rather than patched.
 
-Two new findings, both arriving under `integrity_failed` in `data.ledger_findings` like every other
-finding; **no new error code**:
+**What this costs, stated exactly.** Removing it loses **two** detections, both of them changes that
+erase *both sides* of a disagreement at once so that no surviving evidence can name it. Each is a
+conjunction: either half alone is still caught from state.
 
-- **`integrity-store-removed`** — the parent commit carried `.dossierx-lock-store.json` or
-  `.dossierx-comment-digest.json` and this commit does not. It needs no claim to exist, which is the
-  whole point: it reads the previous commit, sees the file that was there, and sees that it is gone.
-  The message names the `git checkout <parent> -- <path>` that restores it.
-- **`claims-scope-narrowed`** — `claims_dir` moved and left tracked claim files outside the new
-  scope. **The trigger is the stranding, not the move.** A move that takes its claims with it
-  (`git mv claims docs/claims`, edit `claims_dir`, commit both together) is accepted silently, as is
-  widening the scope; there is no flag, environment variable or config marker to ask permission
-  with, because an escape hatch on an integrity gate is the attack and a gate with no sanctioned way
-  to reorganise is a gate that gets uninstalled. "Claim file" means a blob that **decodes** as a
-  claim, so a directory that also held a linter config or a chart values file does not turn a
-  reorganisation into a refusal.
+1. **The collapsed scope** — `claims_dir` repointed **and** the lock ledger removed **in the same
+   change**. Repoint only gives `lock-ledger-abandoned` (once per locked claim whose standing record
+   now names a claim the project cannot see); deleting the ledger only gives project-scoped
+   `lock-ledger-absent` plus `lock-ledger-missing` per claim.
+2. **The erased review** — a **draft** claim's `comments:` block deleted **and** that claim's key
+   dropped from the digest store **in the same change**. Erasing the block only gives
+   `comment-ledger-drift`; dropping the key only gives `comment-digest-unrecorded`. This one is
+   sharper than its size suggests: an open thread is exactly what blocks `claim lock`
+   (`unresolved_comments`), so the erasure buys the lock, and the claim then locks cleanly over a
+   review that was deleted. It is **confined to draft claims** — on a locked claim the block is part
+   of the content the lock covers, so the same edit still surfaces as `lock-content-drift` /
+   `comment-digest-missing`.
 
-A **root commit** has no parent and is never refused by either rule. A **shallow clone** whose
-parent is not present cannot be compared at all, and that is reported as an advisory in
-`data.next_steps` naming the fix (`actions/checkout` with `fetch-depth: 0`, which the shipped
-workflow template now sets) rather than as a refusal or as silence — "no scope change was detected"
-and "no scope change could be looked for" are different sentences and only one of them is a pass. A
-pre-commit hook is unaffected, since there the comparison is against `HEAD`, which every clone has.
+There is no cheap single-tree replacement for either, because each resulting tree is
+indistinguishable from an innocent one: "no claims in scope and no ledger" is exactly what a
+brand-new project looks like, and "a draft with no threads and no digest entry" is exactly what most
+drafts look like. A gate that refuses every new project on its first day, or every uncommented
+draft, gets deleted. Both are caught where a control the committer cannot rewrite actually lives:
+**branch protection with a required CI check, plus review of a loud diff** — a `claims_dir:` line
+edited beside a deleted tracked store with every stranded locked claim still in the tree, or a
+human's own words deleted beside a hand edit of the digest store. **DossierX detects; the forge
+enforces.** Both shapes are pinned as passing tests in
+`internal/check/staged_no_parent_test.go`, so they stay measured rather than remembered, and
+[FORMAT.md](FORMAT.md#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught) carries
+the full boundary.
 
-**Anyone with the hook installed must re-run `scripts/install-git-hook.sh`.** The hook body carries
-these two refusals and a scope-specific recovery block, so its marker moves from `pre-commit v4` to
-`pre-commit v5`; the installer compares byte-for-byte, classifies a v4 install as `outdated` and
-replaces it cleanly with no `--force`. A v4 hook keeps working as a v4 hook — it simply does not
-have the parent comparison, which is the half of this release that catches a scope collapse at the
-commit that makes it. **Projects copying the CI workflow template need the `fetch-depth: 0` it now
-pins**: without it the guard degrades to the advisory above, in a run that still goes green.
+Everything else in the gate is untouched and still single-tree: `lock-content-drift`,
+`lock-ledger-missing`, `lock-ledger-deleted`, `lock-ledger-released`, `lock-ledger-orphan`,
+`lock-ledger-abandoned`, `lock-ledger-absent`, `lock-ledger-unreadable`, `lock-ledger-downgraded`,
+`lock-ledger-adoption-required`, `comment-ledger-drift`, the `comment-digest-*` family and the
+`build-order-*` family, plus fail-closed adoption and `dossierx migrate --adopt`.
 
 ### Migration — every retired command and its replacement
 
@@ -310,21 +328,20 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
   project. **CI is the authority, not the hook**: git does not run `pre-commit` for a clean
   merge, a rebase, a cherry-pick or a revert, `--no-verify` is one keystroke away, and most
   contributors never installed the hook. If you adopt one of the two, adopt CI.
-- **Adoption and the history-aware gate**, both covered in full by the two BREAKING sections at
-  the top of this release. In brief: a pre-ledger project is no longer grandfathered by any
-  `check` and is adopted only by `dossierx migrate --adopt`, with claims and already-locked build
-  orders adopted in the same act (splitting the two halves across the ledger line would leave a
-  project half-covered); and `check --staged` compares the commit under judgement against its
-  parent, so deleting a store or stranding claims outside a moved `claims_dir` is a change it
-  reads rather than an absence it has nothing to say about.
+- **Adoption**, covered in full by the BREAKING section at the top of this release. In brief: a
+  pre-ledger project is no longer grandfathered by any `check` and is adopted only by
+  `dossierx migrate --adopt`, with claims and already-locked build orders adopted in the same act
+  (splitting the two halves across the ledger line would leave a project half-covered).
+- **`check --staged` judges the git index and nothing else** — no parent-commit comparison, no git
+  history, the same verdict in every clone. See the `--staged` section above for what that does and
+  does not detect, and where the remainder is caught.
 - **Moving `claims_dir` needs no flag, and there is deliberately no escape hatch.** An exemption
   switch on an integrity gate is the attack, since the party who reliably remembers to set it is
-  the one who read the source looking for it. The rule keys on the **stranding**, not on the
-  move: a repoint that takes its claims with it is how a project reorganises and is silent, so
-  the sanctioned procedure is simply to move the claims and the stores in the **same commit**,
-  keeping the claim files byte-identical. A legitimate move passes with no ceremony; the
-  decoy-directory attack fails because the claims it abandoned are still tracked and now
-  unaudited.
+  the one who read the source looking for it. None is needed either: move the claims and the
+  stores in the **same commit**, keeping the claim files byte-identical, and it passes because
+  every locked claim is still reachable and still hashes to its existing record. A repoint that
+  **strands** locked claims fails from state alone, as `lock-ledger-abandoned` once per claim —
+  their records are left naming claims the project can no longer see.
 
 ### Added — graph integrity and readability
 

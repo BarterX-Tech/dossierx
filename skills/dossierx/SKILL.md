@@ -29,7 +29,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 ## The seven nouns, twenty leaves
 
 ```
-dossierx check                             # the whole pipeline; --validate = read-only, --staged = the git index vs its parent commit
+dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
 dossierx claim  show list new lock unlock flag reaudit link
 dossierx comment inbox list add reply
 dossierx build-order propose status lock
@@ -70,7 +70,7 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `config_not_found` | 2 | not a DossierX project (yet). Do not create one unasked — see Bootstrap below. |
 | `claim_not_found` | 2 | you guessed an id. Run `dossierx claim list --match "<what the human said>"` and confirm the id back to them. |
 | `lint_failed` | 1 | findings are in **`data.lint_findings`** — on `check` and on `claim lock` alike (`claim lock` keeps a second copy under `error.details.lint_findings`). Fix the claims, then re-check **with the command that refused you**: `dossierx check --validate` after a `check` failure, `dossierx claim lock <id> --dry-run` after a `claim lock` failure. Re-running `check --validate` after a lock refusal is a **loop, not a recovery**: it does not re-attempt the lock, and it reports *zero* findings for every rule that keys off a claim's own status (`build-role-required-for-locked`, `rest-on-locked`, `roll-up`) because the claim is still `draft` on disk. The dry run lints the about-to-be-locked form, which is the only form that answers. |
-| `integrity_failed` | 1 | **read `data.ledger_findings` and branch on `rule`** — one code, several causes, and three of them do NOT mean tampering. `lock-ledger-adoption-required` is a pre-v0.3.0 project nobody has adopted (see Adoption). `integrity-store-removed` and `claims-scope-narrowed` come from `--staged`'s parent comparison and are about the commit, not the claims (see `--staged` below). Everything else — `lock-ledger-missing`, `lock-ledger-deleted`, `lock-content-drift`, `lock-ledger-released`, `lock-ledger-orphan`, `lock-ledger-abandoned`, `lock-ledger-downgraded`, `comment-ledger-drift`, the `comment-digest-*` and `build-order-*` families — is a locked artifact moved outside the approval path: **do not re-lock to make it go away**, restore the file from git or unlock → fix → lock. Two of them are now refusals on the WRITE path too, so you will meet them as a failed `claim lock` and not only as a finding: `lock-ledger-deleted` and `comment-digest-unrecorded`. Re-locking was the step that erased each of them, so there is no command that clears either — the recovery is restoring the named store file, and `unlock → fix → lock` is **wrong** here because it signs the edit. |
+| `integrity_failed` | 1 | **read `data.ledger_findings` and branch on `rule`** — one code, several causes, and one of them does NOT mean tampering: `lock-ledger-adoption-required` is a pre-v0.3.0 project nobody has adopted (see Adoption). Everything else — `lock-ledger-missing`, `lock-ledger-deleted`, `lock-content-drift`, `lock-ledger-released`, `lock-ledger-orphan`, `lock-ledger-abandoned`, `lock-ledger-downgraded`, `comment-ledger-drift`, the `comment-digest-*` and `build-order-*` families — is a locked artifact moved outside the approval path: **do not re-lock to make it go away**, restore the file from git or unlock → fix → lock. Two of them are now refusals on the WRITE path too, so you will meet them as a failed `claim lock` and not only as a finding: `lock-ledger-deleted` and `comment-digest-unrecorded`. Re-locking was the step that erased each of them, so there is no command that clears either — the recovery is restoring the named store file, and `unlock → fix → lock` is **wrong** here because it signs the edit. |
 | `unresolved_comments` | 1 | the claim has an open thread. Reply on it; the **human** clicks Resolve in the viewer. That click is the approval this gate waits for. |
 | `dependency_not_locked` | 1 | a doctrine dependency is still draft. Lock it first (with approval), then retry. |
 | `not_review_pending` | 2 | you reached for `claim reaudit` on a claim that is not drifting. The general edit path is unlock → fix → lock. |
@@ -129,14 +129,15 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
    Nothing stops you curling the resolve endpoint. It is simply forgery, and it leaves a record
    positively attesting that a human resolved it.
 
-## Adoption and the history-aware gate — the two v0.3.0 breaking changes
+## Adoption and the staged gate — what v0.3.0 changed under you
 
 **1. A project that locked claims before v0.3.0 does not `check` clean until someone adopts it.**
 You meet it as `integrity_failed` carrying **`lock-ledger-adoption-required`** — project-scoped,
 said once, deliberately *not* one `lock-ledger-missing` per claim, whose "set it back to draft and
-re-lock" recovery would be actively destructive here. Read the rule, not the count. Its neighbour
-is the opposite case: `lock-ledger-adoption-required` = **never had** a ledger (benign; recovery is
-the migration); `lock-ledger-absent` = **had one and no longer does** (tampering; restore from git).
+re-lock" recovery would be actively destructive here. Read the rule, not the count. The **store
+file** tells it from its opposite neighbour, no git history needed: adoption-required = store
+**present** on the pre-ledger schema (benign; run the migration); `lock-ledger-absent` = store
+**file gone** (tampering; restore from git).
 
 ```
 dossierx migrate --adopt --dry-run     # names every artifact it would grandfather, writes nothing
@@ -154,23 +155,26 @@ an honest v0.2.x store from a downgraded one (`locked_at` shipped in v0.2.0).
 | **No `--reason`, deliberately** | other record-writing verbs carry the human's words because a human approved something. Nobody approved this. Each record carries a fixed reason saying so, and `grandfathered: true`, permanently. |
 | **Upgrade step, never a repair** | never run it to quiet a gate on a project that already has a ledger — it would record tampered bytes as approved, and a second run refuses with `already_migrated`. It changes no claim; commit the rewritten stores with the claims they cover. |
 
-**2. `check --staged` judges the commit against its PARENT**, so evidence that *disappears* is a
-change it reads rather than an absence it cannot speak to. That closes the two-commit hole: repoint
-`claims_dir:` and `git rm` the ledger in one commit, rewrite the now-unscoped locked claims in the
-next — every rule correct throughout while scope collapsed, and a fresh clone green. Two findings,
-under `integrity_failed`; **no bespoke error code**:
+**2. `check --staged` judges the GIT INDEX** — what the commit will contain — with `git show` instead
+of the worktree, **writing nothing**; that is what makes a pre-commit hook meaningful. It judges **one
+tree**: no git history, no parent comparison, same verdict in every clone.
+**DossierX detects; the forge enforces** — every rule is evidence production, not prevention, so
+branch protection plus a required CI check is what makes anyone obey it, and is the answer when a
+human asks you to set integrity up.
 
-| rule | the commit | what to do |
-|---|---|---|
-| `integrity-store-removed` | the parent carried `.dossierx-lock-store.json` or `.dossierx-comment-digest.json` and this one does not | the message names the exact `git checkout <parent> -- <path>` that restores it. Genuinely dropping it abandons the approval record for every locked artifact and belongs in a commit of its own |
-| `claims-scope-narrowed` | `claims_dir:` moved **and left tracked claim files outside the new scope** — still tracked, still `status: locked`, audited by nothing | move them into the new directory, revert the edit, or — if they are genuinely being retired — `dossierx claim unlock <id> --reason "…"` and then delete them, so the release is on the record |
+**The two things it does not detect**, so you never report them as safe. Each erases *both sides* of a
+disagreement at once, so `check` returns `ok: true`; either half alone is still refused. (1) Repoint
+`claims_dir:` **and** delete `.dossierx-lock-store.json` — alone, `lock-ledger-abandoned` /
+`lock-ledger-absent`. (2) Delete a **draft** claim's `comments:` block **and** its key in
+`.dossierx-comment-digest.json` — alone, `comment-ledger-drift` / `comment-digest-unrecorded`; this
+erases a human's open thread, the thing that blocks `claim lock`, so the claim locks over a review
+that never happened (on a *locked* claim the same edit is still caught). **Never propose either pair
+to clear a finding or unblock a lock** — they are the bypass itself, and the human resolves threads.
 
-**Moving `claims_dir` is not itself refused and no flag asks permission** — the trigger is the
-*stranding*. A move that takes its claims with it, and one that *widens* scope, both pass silently:
-`git mv claims docs/claims`, edit `claims_dir:`, commit together. A **root commit** has no parent
-and is never refused; a **shallow clone** whose parent is absent cannot be compared, and that is an
-advisory in `data.next_steps` naming `fetch-depth: 0`, not a finding. Never "fix" either by
-deleting more, and never by re-locking.
+**Moving `claims_dir` needs no ceremony and no flag exempts it.** `git mv claims docs/claims`, edit
+`claims_dir:`, stage claims, config and the unchanged stores, commit together — it passes because every
+locked claim still resolves to its record. A move that **strands** them fails as
+`lock-ledger-abandoned`, once per claim; never "fix" that by deleting more or re-locking.
 
 ## Which skill to load
 
@@ -208,9 +212,9 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
 8. Tell them to run `dossierx serve`; that is the only DossierX command they ever run.
 
 **The three project-root stores travel with the claims.** `.dossierx-lock-store.json` is what CI
-compares the claims against — without it the gate is theatre, and dropping it from a commit whose
-parent had it is `integrity-store-removed`. `.dossierx-comment-digest.json` is the same for review
-history (`comment-digest-absent`). `.dossierx-flag-store.json` has **no gate rule behind it at
+compares the claims against — without it the gate is theatre, and dropping it while locked claims
+remain is `lock-ledger-absent`. `.dossierx-comment-digest.json` is the same for review history
+(`comment-digest-absent`). `.dossierx-flag-store.json` has **no gate rule behind it at
 all**: if it does not travel, its claim arrives `review_pending` with nothing to propose and a
 confirmed `claim reaudit` clears the human's flag having changed nothing — silently.
 

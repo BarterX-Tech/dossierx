@@ -26,20 +26,65 @@
 # apply. If you only adopt one of the two, adopt this one.
 #
 # ---------------------------------------------------------------------------
-# WHY IT RUNS TWO COMMANDS, AND WHY fetch-depth: 0
+# WHY IT RUNS ONE dossierx COMMAND, AND WHY IT NEEDS NO GIT HISTORY
 # ---------------------------------------------------------------------------
 #
-# "dossierx check" judges one tree. "dossierx check --staged" additionally
-# compares that tree against its PARENT, which is the only way to see a commit
-# that changes WHAT the gate is allowed to look at — deleting the lock ledger,
-# deleting the comment digest store, or repointing claims_dir away from tracked
-# locked claims. Those edits produce no findings in a single tree, because they
-# remove the evidence every finding would have been made of.
+# REMOVED IN THIS RELEASE, so that nobody re-adds either out of caution: the
+# second step ("dossierx check --staged", the scope guard) and the
+# fetch-depth: 0 that existed to feed it.
 #
-# The comparison needs history. actions/checkout defaults to fetch-depth: 1,
-# which grafts HEAD's parents away entirely, so the checkout step below pins
-# fetch-depth: 0 on purpose. Shortening it does not fail the job — it silently
-# reduces the scope guard to an advisory line in a green run.
+# The previous release made "check --staged" compare the commit under judgement
+# against its PARENT, to catch a commit that shrank its own audit scope —
+# repoint claims_dir at an empty directory AND delete the lock ledger, and there
+# is nothing left in scope for any rule to have an opinion about. The diagnosis
+# was right. The FIX was in the wrong layer: the parent commit is outside the
+# COMMIT but not outside the COMMITTER, and git history is written by the same
+# person the gate is judging, so --orphan, a second config file or a rebase all
+# switch the comparison off. It never bound anyone who did not want to be bound.
+#
+# What it DID bind was ordinary git work, because it could not see intent the
+# tree does not record:
+#
+#   · a plain "git revert" of a commit that contained a lock was REFUSED. A
+#     legitimate revert removes that lock's records, which is byte-identical to
+#     erasing them. git does not run pre-commit for revert either, so it landed
+#     locally at rc=0 and only this job objected.
+#   · a project that is NEW in a commit was audited against an UNRELATED retired
+#     project's ledger in a monorepo, and refused with findings naming another
+#     project's claims.
+#
+# So the comparison is gone, and with it the only thing in this job that ever
+# needed more than one commit. "dossierx check" evaluates ONE tree — which is
+# precisely what a checkout is — and runs every rule that survives: the whole
+# lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
+# -orphan / -abandoned / -absent / -adoption-required / -downgraded,
+# comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
+# the build-order rules.
+#
+# WHAT THAT COSTS, stated exactly rather than reassuringly: TWO detections,
+# both of them changes that erase BOTH SIDES of a disagreement at once, so no
+# surviving evidence can name them. Each is a conjunction — either half alone is
+# still refused:
+#
+#   1. THE COLLAPSED SCOPE. claims_dir repointed AND the lock ledger removed at
+#      the same time. Repoint-only strands the ledger's records over claims
+#      nothing can see (lock-ledger-abandoned); delete-only strands locked
+#      claims with no approval record (lock-ledger-absent).
+#
+#   2. THE ERASED REVIEW. A DRAFT claim's comments: block deleted AND that
+#      claim's key dropped from the digest store at the same time. Block-only
+#      gives comment-ledger-drift; key-only gives comment-digest-unrecorded.
+#      Worth knowing when you decide who reviews these diffs: an OPEN thread is
+#      what blocks `claim lock`, so this erasure buys the lock. It is confined
+#      to DRAFT claims — on a locked claim the block is part of the locked
+#      content, so the same edit is still caught single-tree.
+#
+# There is no cheap single-tree replacement for either: "no claims in scope and
+# no ledger" is exactly what a brand-new project looks like, and "a draft with
+# no threads and no digest entry" is exactly what most drafts look like. A rule
+# that refused those would refuse every project's first commit and every
+# uncommented draft. Both shapes are pinned as passing tests in
+# internal/check/staged_no_parent_test.go.
 #
 # ---------------------------------------------------------------------------
 # WHAT IT DEPENDS ON BEING COMMITTED
@@ -74,16 +119,24 @@
 # dossierx says so out loud when the ledger FILE is missing: locked claims with
 # no ledger file is a hard error (lock-ledger-absent), not a silent pass. That
 # guarantee is about absence only. A ledger file that is PRESENT but was written
-# by a pre-v0.3.0 build is a different case: dossierx grandfathers it, recording
-# each already-locked claim's current content as though it had been approved,
-# and reports that on stderr rather than failing.
+# by a pre-v0.3.0 build is a different case, and it is FAIL-CLOSED: nothing is
+# grandfathered on the quiet any more. The gate refuses the run with
+# lock-ledger-adoption-required until the project has been through the one-time
+# migration, because a build that adopted whatever the claims said on that run
+# would be blessing content nobody approved — on a CI runner, with no human
+# anywhere near it.
 #
-# So if you are upgrading a project that locked claims before v0.3.0: run
-# `dossierx check` once locally, read what it adopted, and COMMIT the rewritten
-# .dossierx-lock-store.json. Until that commit lands, every CI run checks out
-# the old-format store, re-grandfathers it against whatever the claims say on
-# that run, throws the result away with the runner's disk, and exits 0 — a green
-# check that compared the claims against themselves.
+# So if you are upgrading a project that locked claims before v0.3.0, this job
+# will fail until you do this ONCE, locally, at a keyboard:
+#
+#   dossierx migrate --adopt --dry-run   # names every artifact it would adopt
+#   # read that list WITH the human whose approval it stands in for
+#   dossierx migrate --adopt
+#
+# then COMMIT the .dossierx-lock-store.json and .dossierx-comment-digest.json it
+# writes. Until that commit lands, every run here checks out the old-format
+# store and refuses; after it lands, the ledger CI reads is the one a human
+# signed off.
 
 name: dossierx
 
@@ -100,20 +153,19 @@ jobs:
     name: claim integrity
     runs-on: ubuntu-latest
     steps:
-      # fetch-depth: 0 IS LOAD-BEARING. Do not remove it to speed the job up.
+      # NO fetch-depth SETTING HERE, ON PURPOSE. actions/checkout's default —
+      # fetch-depth: 1, a shallow clone whose boundary commit is grafted so HEAD
+      # reports no parents — is everything this job needs, because every rule
+      # below is evaluated against one tree and a shallow checkout is a COMPLETE
+      # tree.
       #
-      # actions/checkout defaults to fetch-depth: 1, which produces a SHALLOW
-      # clone: git grafts the boundary so HEAD reports no parents at all. The
-      # scope guard below (see "dossierx check --staged") compares this commit
-      # against its parent, and with no parent present it cannot compare
-      # anything — so a commit that deleted the lock ledger or repointed
-      # claims_dir would go unreported. The gate says so out loud rather than
-      # passing silently (next_steps names this exact line), but an advisory in
-      # a green job is not a gate.
+      # This used to read "fetch-depth: 0 IS LOAD-BEARING", and it was, for the
+      # parent-commit comparison described in the header. That comparison was
+      # removed; a full clone would now only make the job slower on every push
+      # to a repository with any history. Do not add it back without a consumer
+      # that actually reads more than one commit.
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -140,32 +192,23 @@ jobs:
       - name: dossierx check
         run: dossierx check --format text
 
-      # THE SCOPE GUARD, and the reason this job runs two dossierx commands
-      # instead of one.
+      # THERE IS NO SECOND dossierx STEP ANY MORE, and that is deliberate rather
+      # than an oversight.
       #
-      # Every rule in the step above is evaluated against ONE tree, and what
-      # decides which files those rules even see — claims_dir, and whether there
-      # is a lock ledger to compare them against — is itself data in that tree.
-      # So the scope can be collapsed by the very commit being judged, and no
-      # single-tree rule is in a position to notice: from inside one tree, a
-      # repointed claims_dir and an honestly small project are the same picture.
-      # A verified two-commit tamper walked straight through the step above and
-      # through the pre-commit hook: repoint claims_dir at another tracked
-      # directory AND git rm the ledger, then rewrite the locked claim freely.
+      # This job used to run "dossierx check --staged --format text" here, as
+      # the scope guard. --staged is the one entry point defined against git, so
+      # it was the one that could compare this commit against its parent. With
+      # that comparison removed (see the header for why), --staged in CI reads
+      # the git INDEX of a freshly checked-out tree — which is byte-for-byte the
+      # tree the step above already judged, since a checkout has no staged edits
+      # — so it re-ran the same rules over the same content and could not reach
+      # a different verdict. Adding it back buys a slower job and nothing else.
       #
-      # "check --staged" is the one entry point defined against git, so it is
-      # the one that can compare this commit against its PARENT. On a clean
-      # checkout — which is what CI has — it judges HEAD against HEAD's own
-      # parents, and on a pull_request event HEAD is the MERGE commit whose
-      # first parent is the base branch. That means this step judges the WHOLE
-      # pull request against what it is merging into, which is what catches a
-      # collapse spread across several commits.
-      #
-      # It writes nothing at all, so it is safe to run after the writing step
-      # above; run it FIRST instead if you prefer the scope verdict before the
-      # render.
-      - name: dossierx check --staged (integrity scope)
-        run: dossierx check --staged --format text
+      # "check --staged" itself is NOT deprecated and did not lose anything else:
+      # it still judges the index rather than the worktree, and still writes
+      # nothing, which is exactly what makes the pre-commit hook meaningful
+      # (scripts/install-git-hook.sh). It is CI — where the index, the worktree
+      # and HEAD are the same three names for one tree — that has no use for it.
 
       # Optional, and worth turning on once your claims are stable: fail when
       # the checked-in claim files are not what dossierx would write. It

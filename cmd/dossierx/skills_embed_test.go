@@ -448,10 +448,9 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // the schema and misses the rule about locked claims at the bottom.
 //
 // It was 200 through v0.2.x, sized for a six-noun surface with no upgrade path.
-// v0.3.0 added a seventh noun and two BREAKING changes the router is the only
-// place an agent is guaranteed to read about — the one-time `migrate --adopt`
-// every pre-v0.3.0 project must run before any gate passes, and `--staged`'s
-// parent-commit comparison with its two new findings. Raised to 230 as a
+// v0.3.0 added a seventh noun and a BREAKING change the router is the only place
+// an agent is guaranteed to read about: the one-time `migrate --adopt` every
+// pre-v0.3.0 project must run before any gate passes. Raised to 230 as a
 // deliberate resize rather than quietly per release: the alternative was cutting
 // the adoption section, and an agent that meets `lock-ledger-adoption-required`
 // without having read what adoption IS either loops on a gate it cannot clear or
@@ -459,6 +458,13 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // approved. The four companion skills are unaffected and all still sit well
 // under 200 (claims 200, comments 174, code-links 128, build-order 110), which
 // is the check that this is a surface change and not prose creep.
+//
+// The raise was also justified, at the time, by `--staged`'s parent-commit
+// comparison and its two findings. That machinery was removed, and the ceiling
+// deliberately was NOT lowered to match: this is a MAXIMUM, the router got
+// shorter on its own, and ratcheting a budget down to whatever the current file
+// happens to measure turns every honest sentence added later into a test
+// failure. Lower it only on a decision that the router should be shorter.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 230
 

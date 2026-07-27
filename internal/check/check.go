@@ -406,13 +406,13 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs) Result {
 	// mutating reconcile and stays out of the memory-only status path.
 	_, _, implinkHints := implinkStatus(cfg, claims)
 	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
-	// The scope advisory goes FIRST, ahead of every claim-level hint: it is the
-	// only line here that says something about the RUN rather than about the
-	// project, and what it says is "this run could not check one of the things
-	// you believe it checks". See ledgerInputs.scopeNote.
-	if in.scopeNote != "" {
-		res.NextSteps = append([]string{in.scopeNote}, res.NextSteps...)
-	}
+	// NOTHING IS PREPENDED HERE ANY MORE. A scope advisory used to go first,
+	// ahead of every claim-level hint: under --staged, a shallow checkout could
+	// not reach the parent commit, so the run had to say "this run could not
+	// check one of the things you believe it checks". With the parent comparison
+	// gone (see staged.go's "REMOVED, DELIBERATELY" section) every rule this gate
+	// runs is answerable from the one tree in front of it, so there is no longer
+	// a state in which the gate looked at less than it claims to.
 	return res
 }
 

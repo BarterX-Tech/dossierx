@@ -577,35 +577,16 @@ type ledgerInputs struct {
 	storeErr  error
 	digestErr error
 
-	// scopeFindings are the GIT-HISTORY refusals: an integrity store that the
-	// parent commit carried and this one does not, or a claims_dir move that
-	// stranded tracked claims outside the audited scope. They are populated only
-	// under --staged, because they are the one thing in this gate that cannot be
-	// answered from a single tree — see history.go.
-	//
-	// They live here rather than being returned separately so that every caller
-	// of ledgerGate gets them without a second code path: the pre-commit hook,
-	// CI and serve's status strip all read Result.LedgerFindings, and a refusal
-	// that only one of them could see would be a refusal an edit travels around.
-	scopeFindings []lock.Finding
-
-	// parentFindings are the PER-CLAIM history refusals: an approval the parent
-	// commit recorded that this one has replaced with a self-issued one, or a
-	// review the parent recorded that this one erased together with the digest
-	// entry proving it happened. Like scopeFindings they are populated only
-	// under --staged and for the same reason — no single tree contains the
-	// evidence — but they are reported with lock.Audit's per-claim output rather
-	// than ahead of it, because they are not statements about what the gate
-	// could see. They are the same three rules lock.Audit already owns, decided
-	// from the one place the evidence still exists. See lock.AuditAgainstParent.
-	parentFindings []lock.Finding
-
-	// scopeNote is the one scope answer that is NOT a refusal: a shallow
-	// checkout whose parent commit was never fetched, where the comparison could
-	// not be made at all. It rides in Result.NextSteps because "could not look"
-	// is advice about the run, not evidence about the project — see
-	// scopeReport.Note.
-	scopeNote string
+	// THERE ARE NO HISTORY FIELDS HERE ANY MORE, and that is deliberate. This
+	// struct used to carry scopeFindings, parentFindings and scopeNote — refusals
+	// and one advisory produced by comparing the commit under judgement against
+	// its PARENT commit under --staged. The whole comparison was removed; see
+	// staged.go's "REMOVED, DELIBERATELY" section for what it caught, what its
+	// removal costs (TWO detections — the collapsed scope and the erased review)
+	// and why the parent commit is the wrong place
+	// to look for evidence about the committer. Every field above is answerable
+	// from ONE tree, which is what makes this value mean the same thing on the
+	// worktree path and on the index path.
 }
 
 // loadLedgerInputs reads both stores for cfg out of the WORKING TREE. It is the
@@ -655,14 +636,6 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	var findings []lock.Finding
 
-	// The SCOPE findings come first, ahead of even the unreadable-store causes,
-	// because they are the cause OF those causes: a commit that deleted the
-	// ledger and repointed claims_dir leaves every rule below with nothing to
-	// read, and a reader who sees an empty finding list without being told the
-	// scope collapsed will draw exactly the wrong conclusion — the same
-	// conclusion the whole product drew before this existed.
-	findings = append(findings, in.scopeFindings...)
-
 	if in.storeErr != nil {
 		findings = append(findings, lock.Finding{
 			Rule: RuleLedgerUnreadable,
@@ -689,12 +662,6 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
-
-	// Concatenated, deliberately without de-duplicating: AuditAgainstParent
-	// fires only where the evidence lock.Audit reads is ABSENT from this commit,
-	// so the two lists cannot name the same claim under the same rule. See
-	// lock.AuditAgainstParent's "IT NEVER DOUBLE-REPORTS WITH Audit" paragraph.
-	findings = append(findings, in.parentFindings...)
 	return append(findings, buildOrderGate(in)...)
 }
 

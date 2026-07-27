@@ -47,6 +47,92 @@
 // ledger has the record, it just is not being committed — and the record lands
 // in a later commit, or never. Read from the index, the claim and its approval
 // have to travel together, which is exactly the invariant.
+//
+// ---------------------------------------------------------------------
+// REMOVED, DELIBERATELY: THE COMPARISON AGAINST THE PARENT COMMIT
+// ---------------------------------------------------------------------
+//
+// This file used to have a sibling, history.go, and it is gone. A future reader
+// who finds the hole it filled and reaches for the same fix should read this
+// first, because the hole is real, the diagnosis was right, and the fix was
+// still in the wrong layer.
+//
+// WHAT WAS BUILT. `check --staged` compared the commit under judgement against
+// its PARENT commit and refused two changes no single tree can see: an integrity
+// store the parent carried that this commit deletes or empties
+// (`integrity-store-removed`), and a claims_dir that moved and left tracked claim
+// files outside the new scope (`claims-scope-narrowed`). A per-claim half read
+// the parent's two stores through lock.AuditAgainstParent for approvals this
+// commit had REPLACED rather than removed. It existed because the gate's SCOPE —
+// which files the rules run over, and whether there is a ledger to compare them
+// against — is itself data inside the tree being judged, so one commit could
+// repoint claims_dir AND delete the ledger and leave every individual rule
+// behaving perfectly over an empty registry.
+//
+// WHY IT WAS REMOVED. The parent commit is outside the COMMIT but it is not
+// outside the COMMITTER. Git history is written by the same person the gate is
+// judging, so `git checkout --orphan`, a second config file, an interactive
+// rebase or a squash all move the comparison's other side — the control is
+// evaded by the party it constrains, which is the definition of the wrong layer.
+// And because it reasons about two trees, it has to infer INTENT that neither
+// tree records, which it cannot do. That produced two refusals of ordinary git
+// work, both measured:
+//
+//   - `git revert` OF A COMMIT THAT LOCKED A CLAIM WAS REFUSED. A legitimate
+//     revert removes that lock's ledger record — byte-identical to erasing it —
+//     so the comparison reported `integrity-store-removed` (whole-store revert)
+//     or `lock-ledger-deleted` (single-record revert). Worse, git does not run
+//     pre-commit for revert, so the refusal landed locally at rc=0 and only CI
+//     objected, after the fact, with a message telling the author to restore the
+//     thing they had just deliberately removed.
+//   - A PROJECT THAT IS NEW IN A COMMIT WAS AUDITED AGAINST AN UNRELATED
+//     PROJECT'S LEDGER. In a monorepo, "retire projB and add projC in one
+//     commit" made projC's config absent from the parent, so the parent-config
+//     search fell through to "the one project.config.yaml that vanished" — projB's
+//     — and projC was refused with findings naming projB's ledger and projB's
+//     claims.
+//
+// WHAT THIS COSTS, exactly, measured against the binary that had it: TWO
+// detections, not one. An earlier statement of this cost said ONE, counting only
+// the scope collapse below; that was measured against stagedScope alone and did
+// not account for the per-claim half that read the parent's stores through
+// lock.AuditAgainstParent. Both shapes are the same thing at different
+// granularities — a change that erases BOTH SIDES of a disagreement at once, so
+// that no surviving evidence can name it — and both are CONJUNCTIONS: either
+// half alone is still refused from this one tree.
+//
+//   - THE COLLAPSED SCOPE. claims_dir repointed AND the ledger removed IN THE
+//     SAME CHANGE now passes. Repoint only and the standing record has no claim
+//     left to cover, which is lock-ledger-abandoned; delete the ledger only and
+//     the locked claims have no records, which is lock-ledger-absent.
+//   - THE ERASED REVIEW. A DRAFT claim's `comments:` block deleted AND that
+//     claim's key dropped from the digest store IN THE SAME CHANGE now passes.
+//     Erase the block only and the recorded digest still describes threads the
+//     claim no longer has, which is comment-ledger-drift; drop the key only and
+//     the threads have no entry beside them, which is comment-digest-unrecorded
+//     (whose predicate is the threads themselves — erasing them is exactly what
+//     takes the claim out of that rule's evidence set; see
+//     lock.RuleCommentDigestUnrecorded). This one is sharper than its size
+//     suggests: an OPEN thread on a draft is what BLOCKS `claim lock`, so the
+//     erasure buys the lock, and the claim then locks cleanly over a review that
+//     was deleted. It is confined to DRAFT claims — on a locked claim the block
+//     is part of the content the lock covers, so the same edit is still caught.
+//
+// Both are pinned as PASSING tests in staged_no_parent_test.go, beside the
+// "either half alone is still refused" assertions that keep them honest.
+//
+// AND THERE IS NO CHEAP SINGLE-TREE REPLACEMENT, which is worth saying plainly so
+// nobody spends a day looking for one: "zero claims in scope and no ledger" is
+// also exactly what a brand-new project looks like, and "a draft with no threads
+// and no digest entry" is exactly what most drafts look like — so a rule that
+// refused either shape would refuse every project's first commit, or every
+// uncommented draft. The honest closure for both is evidence that is outside the
+// committer as well as outside the commit — a signature, or a server-side record
+// — not another read of the same person's git history.
+//
+// WHAT STAYED, and it is most of it: --staged still evaluates the GIT INDEX
+// rather than the worktree, still writes nothing, and still runs every
+// single-tree ledger rule. Only the second tree is gone.
 package check
 
 import (
@@ -186,12 +272,6 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 
-	// The CALLER's config path, captured BEFORE the index's copy replaces it:
-	// the decoded index config has no path of its own (config.DecodeConfig takes
-	// a display name), and the scope comparison has to know which FILE this
-	// project is configured by in order to find the parent's copy of it.
-	configSrc := configSource(cfg)
-
 	// The CONFIG comes out of the index first, and everything below is resolved
 	// against it — see StagedProject.Config for why a worktree config makes the
 	// whole gate bypassable with one unstaged line.
@@ -206,40 +286,20 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	// than at the config file's own directory — see gitRunner.spec. It fails
 	// only when the claims are outside the work tree altogether, which no commit
 	// could carry.
-	claimsSpec, claimsSpecErr := g.spec(cfg.ClaimsDir)
-	scope := claimsScope{spec: claimsSpec, outside: claimsSpecErr != nil, dir: cfg.ClaimsDir}
-	if claimsSpecErr != nil {
-		// THE ESCAPE HATCH IS THE LAST ANSWER, NOT THE FIRST. "no commit can
-		// carry claims_dir" is true of the value this commit has and says
-		// nothing whatever about the value its parent had — and this exit is
-		// ErrNoIndex, which the CLI answers with a warning and exit 0.
-		//
-		// So repointing claims_dir OUT of the repository was the cheapest
-		// collapse in the product: one line, no file moved, no store touched,
-		// and every locked claim in the project left tracked, still reading
-		// status: locked, audited by nothing, reported as "there is nothing here
-		// to evaluate". The scope comparison runs FIRST, and a claims_dir that
-		// used to be inside this repository and now points outside it is a
-		// refusal like any other narrowing. Only when the comparison has nothing
-		// to say — no parent, a parent whose claims_dir was outside the work
-		// tree too, a project that is not tracked — does the escape hatch apply,
-		// which is exactly the case it was written for.
-		report, scopeErr := stagedScope(g, cfg, configSrc, scope, sp.ConfigFromIndex)
-		if scopeErr != nil {
-			return StagedProject{}, scopeErr
-		}
-		if len(report.Findings) > 0 {
-			// The registry is empty by construction — the claims are somewhere
-			// this repository cannot name — so the refusal travels on its own,
-			// which is precisely what it is reporting.
-			sp.ledger, err = stagedLedgerInputs(g, cfg)
-			if err != nil {
-				return StagedProject{}, err
-			}
-			sp.ledger.scopeFindings = report.Findings
-			sp.ledger.scopeNote = report.Note
-			return sp, nil
-		}
+	//
+	// THAT IS THE ESCAPE HATCH, and with the parent comparison gone it is once
+	// again the FIRST answer rather than the last. The comparison used to run
+	// ahead of it, because "no commit can carry claims_dir" is true of the value
+	// THIS commit has and says nothing about the value its parent had — a
+	// claims_dir repointed out of the repository stranded every locked claim in
+	// the project and was reported as "nothing to evaluate", exit 0. That
+	// detection needed a second tree and is one of the two shapes named in this
+	// file's REMOVED section; repointing claims_dir on its own is still refused
+	// from this tree alone, as lock-ledger-abandoned, because the standing
+	// approvals in the ledger are left covering claims the registry no longer
+	// holds.
+	claimsSpec, err := g.spec(cfg.ClaimsDir)
+	if err != nil {
 		return StagedProject{}, fmt.Errorf("%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it", ErrNoIndex, cfg.ClaimsDir, g.dir)
 	}
 
@@ -330,62 +390,23 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	sort.Slice(sp.Claims, func(i, j int) bool { return sp.Claims[i].SourcePath < sp.Claims[j].SourcePath })
 	sort.Strings(sp.FromIndex)
 
+	// The two stores and every build-order artifact, from the same index. That
+	// is the LAST thing this function does: everything the gate is evaluated
+	// against now comes from one tree, and nothing here looks at a second one.
+	// See this file's REMOVED section for the comparison that used to sit at
+	// exactly this point and why re-adding it here would be a mistake.
 	sp.ledger, err = stagedLedgerInputs(g, cfg)
 	if err != nil {
 		return StagedProject{}, err
 	}
-
-	// THE SCOPE GUARD, and it is the only thing in this file that looks at more
-	// than one tree.
-	//
-	// Everything above assembles the commit under judgement and hands it to the
-	// same rules the working-tree gate runs, which is correct and is not enough:
-	// WHICH files those rules see is itself data in the commit being judged, so
-	// one commit can repoint claims_dir and delete the ledger and leave every
-	// individual rule behaving perfectly over an empty registry. Comparing
-	// against the PARENT is what turns that from an absence (invisible) into a
-	// change (reportable). See history.go for the reproduction and for what "the
-	// parent" means when nothing is staged.
-	//
-	// It is computed here rather than inside stagedLedgerInputs because it is
-	// not a store: it is a statement about the two commits, and it rides in the
-	// same ledgerInputs only because that is the value the gate is evaluated
-	// against.
-	report, err := stagedScope(g, cfg, configSrc, scope, sp.ConfigFromIndex)
-	if err != nil {
-		return StagedProject{}, err
-	}
-	sp.ledger.scopeFindings = report.Findings
-	sp.ledger.scopeNote = report.Note
-
-	// THE PER-CLAIM HALF OF THE SAME COMPARISON.
-	//
-	// stagedScope above answers the questions that decide what the gate can SEE
-	// — a store that vanished, a claims_dir that stranded claims, a ledger
-	// emptied of the approvals it held. This answers the one that decides what
-	// the gate can BELIEVE: an approval the parent recorded that this commit has
-	// REPLACED rather than removed, and a review the parent recorded that this
-	// commit has erased along with the entry proving it happened. Both survive
-	// every rule that reads one directory, because in one directory the evidence
-	// is genuinely gone — see parentLedgerContent.
-	//
-	// It runs against report.Parents so that both halves compare the same
-	// commits, resolved against the same parent configs, in one pass.
-	parentFindings, err := parentLedgerContent(g, cfg, report.Parents, sp.Claims, sp.ledger)
-	if err != nil {
-		return StagedProject{}, err
-	}
-	sp.ledger.parentFindings = parentFindings
 	return sp, nil
 }
 
 // configSource is the config file's OWN path — not Dir()+FileName, because
 // --config takes an arbitrary path and a project that named its config something
-// else must be compared against the file it actually uses.
-//
-// It is shared by stagedConfig (which reads the index's copy of it) and by
-// Staged (which hands it to the scope comparison to find the PARENT's copy), so
-// the two cannot end up looking for different files.
+// else must be read from the file it actually uses. Looking up a name the
+// project does not use would find nothing in the index and fall back to the
+// worktree, which is the bypass stagedConfig exists to close.
 func configSource(cfg *config.Config) string {
 	if p := cfg.Path(); p != "" {
 		return p

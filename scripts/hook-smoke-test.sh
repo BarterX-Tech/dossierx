@@ -66,16 +66,25 @@
 #                          case therefore asserts BOTH halves: an honest commit
 #                          (and a commit touching no claim at all) still passes,
 #                          and a tampered locked claim is still refused.
-#  18  scope collapse      the two-commit tamper every rule was powerless
-#                          against: repoint claims_dir at another tracked
-#                          directory AND git rm the ledger, then rewrite the
-#                          locked claim freely. Every rule behaved correctly
-#                          over an empty registry, and both commits landed in
-#                          silence. Commit 1 is what must be refused.
-#  19  sanctioned move     the other half of 18, and the one that keeps it from
-#                          being a trap: a claims_dir move that TAKES ITS CLAIMS
-#                          WITH IT still commits, and the gate is still armed
-#                          against a hand-edited locked claim afterwards.
+#  17  split claims_dir    a claims_dir that points OUTSIDE the config's own
+#                          directory ("claims_dir: ../claims") is an ordinary
+#                          monorepo layout; --staged used to read it as "outside
+#                          the repository, nothing to evaluate" and pass.
+#  18  untracked config    an UNTRACKED project.config.yaml must not be allowed
+#                          to judge tracked claims: it is a worktree file,
+#                          editable without staging anything.
+#  19  skipped gate        "check --staged" exits 0 with data.skipped when it had
+#                          no index to judge. In a hook that is not a pass.
+#  20  scope, one half at  the two single-tree defences that survive: git rm the
+#      a time              ledger alone is refused (lock-ledger-absent), and
+#                          repointing claims_dir away from its claims alone is
+#                          refused (lock-ledger-abandoned). The two files defend
+#                          each other. See the case for what is NOT asserted
+#                          here any more, and why.
+#  21  sanctioned move     the case that keeps 20 from being a trap: a claims_dir
+#                          move that TAKES ITS CLAIMS WITH IT still commits, and
+#                          the gate is still armed against a hand-edited locked
+#                          claim afterwards.
 #
 # Usage: bash scripts/hook-smoke-test.sh
 # Exit status: 0 all assertions held; 1 the first one that did not.
@@ -763,25 +772,65 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 (cd "$SKIPPED/repo" && git commit -qm "claims live outside the repository" --no-verify) >"$TMP/skipped-commit2.out" 2>&1 ||
 	fail "--no-verify did not get past the skipped-gate refusal: $(cat "$TMP/skipped-commit2.out")"
 
-# --- 18 · the SCOPE COLLAPSE -------------------------------------------------
+# --- 20 · the SCOPE sabotages, ONE HALF AT A TIME ----------------------------
 #
-# The two-commit tamper that defeated every rule in the engine while every rule
-# behaved correctly:
+# WHAT THIS CASE USED TO ASSERT, AND WHY IT NO LONGER DOES. It used to stage the
+# whole two-commit tamper in one go —
 #
 #	commit 1  claims_dir: claims -> archive (a tracked directory with no claims
 #	          in it) AND git rm the lock ledger
-#	commit 2  rewrite the locked claim freely
+#	commit 2  rewrite the now-unscoped locked claim freely
 #
-# After commit 1 the registry is EMPTY, so there is no locked claim for any rule
-# to name and no store for the reverse sweep to read. Measured before the fix:
-# both commits landed in silence, `check`, `check --validate`, `check --staged`
-# and a fresh clone all exited 0.
+# — and require commit 1 to be refused by name (claims-scope-narrowed,
+# integrity-store-removed). Those two rules came from "check --staged" comparing
+# the commit being made against its PARENT, and that comparison has been REMOVED:
+# the parent commit is outside the COMMIT but not outside the COMMITTER, so
+# --orphan, a second config file or a rebase switched it off at will, while it
+# refused two shapes of ordinary work — a plain "git revert" of a commit that
+# contained a lock, and a NEW project in a monorepo audited against an unrelated
+# retired project's ledger.
 #
-# Commit 1 is what has to be refused — it is the one that moves the gate, and
-# commit 2 only exploits what it did. So this case asserts the refusal at commit
-# 1, and asserts the two things that stop it being a trap: the message names the
-# two rules, and a claims_dir move that TAKES ITS CLAIMS WITH IT still commits.
-echo "hook-smoke-test: refusing a commit that collapses the gate's SCOPE ..."
+# So the combined single-commit tamper is now ACCEPTED, and that is a known,
+# measured, deliberate cost. It is NOT asserted here in either direction:
+# asserting the acceptance would pin the hole open and fail the day somebody
+# closes it properly, and asserting the refusal would fail today.
+#
+# THE COST IS TWO DETECTIONS, NOT ONE. The other is the ERASED REVIEW: a DRAFT
+# claim's comments: block deleted together with that claim's key in the digest
+# store. It has the same conjunction shape and is pinned, with its own two
+# half-tamper assertions, in internal/check/staged_no_parent_test.go — in Go
+# rather than here, because it needs a comment thread and a digest store rather
+# than a hook.
+#
+# WHAT IS ASSERTED HERE IS WHY THE SCOPE COLLAPSE COSTS ONE DETECTION AND NOT
+# TWO. Neither half of the tamper works on its own, because the ledger and the
+# claims defend each other inside a SINGLE tree, with no history involved:
+#
+#	20a  delete the ledger, leave claims_dir alone -> locked claims with no
+#	     approval record anywhere            -> lock-ledger-absent
+#	20b  repoint claims_dir, leave the ledger     -> approval records pointing at
+#	     alone                                       claims nothing can see
+#	                                              -> lock-ledger-abandoned
+#
+# If either of these ever stops refusing, the cost of the scope collapse is no
+# longer one detection, and this case is the thing that says so.
+echo "hook-smoke-test: refusing a deleted lock ledger (single tree) ..."
+LEDGERRM="$TMP/scope-ledger-rm"
+new_project "$LEDGERRM"
+(cd "$LEDGERRM" && git add -A && git commit -qm "baseline") ||
+	fail "could not commit the deleted-ledger fixture baseline"
+(cd "$LEDGERRM" && sh "$INSTALLER" --yes) >"$TMP/ledgerrm-install.out" 2>&1 ||
+	fail "install into the deleted-ledger fixture failed: $(cat "$TMP/ledgerrm-install.out")"
+
+(cd "$LEDGERRM" && git rm -q .dossierx-lock-store.json) ||
+	fail "could not stage the ledger deletion"
+if (cd "$LEDGERRM" && git commit -qm "chore: drop the lock store") >"$TMP/ledgerrm-commit.out" 2>&1; then
+	fail "a commit that deletes the lock ledger while locked claims remain was ACCEPTED — lock-ledger-absent did not fire: $(cat "$TMP/ledgerrm-commit.out")"
+fi
+grep -q 'lock-ledger-absent' "$TMP/ledgerrm-commit.out" ||
+	fail "the refusal did not name lock-ledger-absent, so the single-tree half of the scope defence is not what refused: $(cat "$TMP/ledgerrm-commit.out")"
+
+echo "hook-smoke-test: refusing a claims_dir that strands its claims (single tree) ..."
 SCOPE="$TMP/scope"
 new_project "$SCOPE"
 mkdir -p "$SCOPE/archive"
@@ -791,23 +840,19 @@ printf 'an ordinary tracked directory with no claims in it\n' >"$SCOPE/archive/N
 (cd "$SCOPE" && sh "$INSTALLER" --yes) >"$TMP/scope-install.out" 2>&1 ||
 	fail "install into the scope fixture failed: $(cat "$TMP/scope-install.out")"
 
-# COMMIT 1: repoint claims_dir at the innocent tracked directory, and delete the
-# ledger. Both halves in one commit, exactly as the reproduction had it.
+# Repoint claims_dir at the innocent tracked directory and LEAVE THE LEDGER
+# ALONE. Its records now describe claims that are still in the repository, still
+# reading status: locked, and outside everything the gate can see.
 sed 's|claims_dir: claims|claims_dir: archive|' "$SCOPE/project.config.yaml" >"$SCOPE/project.config.yaml.tmp"
 mv "$SCOPE/project.config.yaml.tmp" "$SCOPE/project.config.yaml"
-(cd "$SCOPE" && git rm -q .dossierx-lock-store.json && git add -A) ||
-	fail "could not stage the scope collapse"
+(cd "$SCOPE" && git add -A) || fail "could not stage the claims_dir repoint"
 if (cd "$SCOPE" && git commit -qm "chore: relocate claims") >"$TMP/scope-commit.out" 2>&1; then
-	fail "a commit that repointed claims_dir and deleted the lock ledger was ACCEPTED — the gate can still be moved out from under itself: $(cat "$TMP/scope-commit.out")"
+	fail "a commit that repointed claims_dir away from its locked claims was ACCEPTED — lock-ledger-abandoned did not fire: $(cat "$TMP/scope-commit.out")"
 fi
-grep -q 'claims-scope-narrowed' "$TMP/scope-commit.out" ||
-	fail "the scope refusal did not name claims-scope-narrowed: $(cat "$TMP/scope-commit.out")"
-grep -q 'integrity-store-removed' "$TMP/scope-commit.out" ||
-	fail "the scope refusal did not name integrity-store-removed: $(cat "$TMP/scope-commit.out")"
-grep -q 'SCOPE of the gate' "$TMP/scope-commit.out" ||
-	fail "the hook did not print the scope recovery text: $(cat "$TMP/scope-commit.out")"
+grep -q 'lock-ledger-abandoned' "$TMP/scope-commit.out" ||
+	fail "the refusal did not name lock-ledger-abandoned, so the single-tree half of the scope defence is not what refused: $(cat "$TMP/scope-commit.out")"
 
-# --- 19 · the SANCTIONED move ------------------------------------------------
+# --- 21 · the SANCTIONED move ------------------------------------------------
 #
 # A gate with no way to reorganise a project is a trap, and a trap gets
 # uninstalled. There is no flag and no escape hatch for this on purpose: a move
@@ -830,7 +875,7 @@ mv "$MOVE/project.config.yaml.tmp" "$MOVE/project.config.yaml"
 
 # And the gate is still ARMED afterwards, rather than merely quiet: the moved
 # claim is still being judged, so a hand edit to it is still refused. An
-# "accepted" that silently audits nothing would be the very failure case 18
+# "accepted" that silently audits nothing would be the very failure case 20
 # exists for, reached through the sanctioned door.
 (cd "$MOVE" && "$BIN" check --staged --format json) >"$TMP/scope-move-status.out" 2>&1 || true
 grep -q '"skipped"' "$TMP/scope-move-status.out" &&
@@ -841,4 +886,4 @@ if (cd "$MOVE" && git commit -qm "docs: tweak") >"$TMP/scope-move-tamper.out" 2>
 	fail "after a sanctioned claims_dir move the gate stopped catching a hand-edited locked claim: $(cat "$TMP/scope-move-tamper.out")"
 fi
 
-echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger or repoints claims_dir away from tracked locked claims, refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it."
+echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it. Doing BOTH of those in one change is one of the two detections this release knowingly gave up with the parent-commit comparison; see case 20, and internal/check/staged_no_parent_test.go for the other (a draft claim's comments block erased together with its digest-store key)."

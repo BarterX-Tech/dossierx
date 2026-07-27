@@ -23,13 +23,18 @@
 # commits through git — editor, agent, script — so one gate covers all of
 # them and there is no per-harness adapter to maintain.
 #
-# From v5 it also refuses a commit that changes the gate's SCOPE: deleting the
-# lock ledger or the comment digest store, or repointing claims_dir away from
-# tracked locked claims. Those are the edits no single-tree rule can report,
-# because from inside one tree a collapsed scope and a small honest project
-# look identical — so "check --staged" compares the commit being made against
-# its parent. See internal/check/history.go for the two-commit reproduction
-# that made it necessary.
+# REMOVED IN v6, so nobody re-adds it: the hook used to carry a second recovery
+# block for two SCOPE refusals (integrity-store-removed, claims-scope-narrowed),
+# which fired when "check --staged" compared the commit being made against its
+# PARENT. That comparison is gone from the engine, so those two rule names no
+# longer exist and a hook that printed advice about them would be explaining a
+# refusal the binary can no longer make. What replaced it is nothing: the gate
+# is single-tree again, and the single-tree rules already refuse each half of
+# that tamper on its own (delete the ledger -> lock-ledger-absent; repoint
+# claims_dir and strand the claims -> lock-ledger-abandoned). See
+# scripts/ci/dossierx-check.yml's header for the full argument, including the
+# TWO detections this knowingly gives up (the collapsed scope, and a DRAFT
+# claim's comments: block erased together with its digest-store key).
 #
 # The hook is FAST FEEDBACK, NOT THE AUTHORITY. Clean merges, rebases,
 # cherry-picks and reverts do not fire pre-commit at all, and --no-verify
@@ -77,8 +82,6 @@
 
 set -eu
 
-marker='# dossierx-hook: pre-commit v5'
-
 # ---------------------------------------------------------------------------
 # The hook body.
 #
@@ -93,21 +96,23 @@ marker='# dossierx-hook: pre-commit v5'
 hook_body() {
 	cat <<'PRECOMMIT_HOOK'
 #!/bin/sh
-# dossierx-hook: pre-commit v5
+# dossierx-hook: pre-commit v6
 #
-# Refuses a commit that changes a LOCKED claim without an approval record, and
-# — since v5 — a commit that changes what the gate is even allowed to LOOK at.
+# Refuses a commit that changes a LOCKED claim without an approval record on the
+# lock ledger.
 #
-# The second half is what v5 adds, and it is the one the first half could not
-# cover. "dossierx check --staged" now compares the commit being made against
-# its PARENT, so a commit that deletes the lock ledger, deletes the comment
-# digest store, or repoints claims_dir away from tracked locked claims is
-# refused as a CHANGE — where before it was an ABSENCE, and an absence is
-# exactly what every rule in a one-tree gate is unable to report. Two commits
-# used to defeat the whole thing: repoint claims_dir at another tracked
-# directory and git rm the ledger, then rewrite the locked claim freely. Every
-# rule behaved correctly over an empty registry, and this hook accepted both
-# commits without a word.
+# v6 REMOVED the second half v5 had added: a recovery block for two SCOPE
+# refusals (integrity-store-removed, claims-scope-narrowed) raised by comparing
+# the commit being made against its PARENT. The engine no longer makes that
+# comparison — it was a control over the committer's own history, which the
+# committer rewrites, and it refused ordinary work (a "git revert" of a commit
+# containing a lock; a NEW project in a monorepo audited against a retired
+# project's ledger). Do not re-add the block: those two rule names do not exist,
+# so it would explain a refusal that cannot happen. The single-tree rules still
+# refuse each half of the tamper on its own — delete the ledger and locked
+# claims go unrecorded (lock-ledger-absent); repoint claims_dir and leave the
+# claims behind and the ledger's records point at nothing (lock-ledger-
+# abandoned).
 #
 # Managed by dossierx's install-git-hook.sh. Do not edit in place: the
 # installer compares this file byte-for-byte with the version it carries, so a
@@ -329,38 +334,16 @@ check_one() {
 	fi
 	run_check "$cfg" text >&2 || true
 
-	# THE SCOPE REFUSALS get their own recovery, printed FIRST, because the
-	# general one below is the wrong advice for them. "unlock -> fix -> lock"
-	# assumes the gate can still see the claim; these two rules fire precisely
-	# when it cannot, and telling someone to re-lock their way out of a deleted
-	# ledger is telling them to record whatever the files say NOW as approved.
-	#
-	# Matching on the rule NAME in the JSON run, never on the prose: rule names
-	# are contract (internal/check/history.go says so), messages are not.
-	case "$report" in
-	*'"integrity-store-removed"'* | *'"claims-scope-narrowed"'*)
-		printf '\n%s\n' \
-'This refusal is about the SCOPE of the gate, not about one claim. Something in
-this commit changes WHAT the gate is able to check:
-
-  integrity-store-removed  the lock ledger or the comment digest store was in
-                           the previous commit and is not in this one. Restore
-                           it from the parent commit (the message above gives
-                           the exact git checkout line). Do NOT re-lock or
-                           re-run a comment op to re-create it: that records
-                           whatever the files say now as approved, which is
-                           what deleting it was for.
-
-  claims-scope-narrowed    claims_dir was repointed and left tracked claim
-                           files outside the new directory, where nothing
-                           audits them. Moving claims_dir is fine and is not
-                           refused — a move that TAKES ITS CLAIMS WITH IT (git
-                           mv the files in the same commit that edits
-                           claims_dir) leaves nothing behind and passes in
-                           silence. So: move the listed files, or revert the
-                           claims_dir edit.' >&2
-		;;
-	esac
+	# REMOVED IN v6: a second recovery block, printed here and matched on the
+	# rule names "integrity-store-removed" and "claims-scope-narrowed". Those
+	# rules came from the parent-commit comparison, which the engine no longer
+	# makes, so the block explained a refusal that can no longer be produced —
+	# and a refusal that names a rule nobody can look up is worse than no advice
+	# at all. Nothing replaces it: the text re-run above already carries the
+	# engine's own per-rule recovery for the single-tree rules that DO fire on
+	# each half of that tamper (lock-ledger-absent, lock-ledger-abandoned), and
+	# those sentences come from the binary, so they cannot drift from it the way
+	# a copy pasted into this hook could.
 
 	printf '\n%s\n' \
 'The approval path for anything already LOCKED is unlock -> fix -> lock:
@@ -483,7 +466,15 @@ configured_hooks_path=$(git config --get core.hooksPath 2>/dev/null || true)
 
 # Classify what is already there. "ours" is decided by the marker line rather
 # than by a full comparison so that an OLDER dossierx hook is still recognised
-# as ours and can be replaced without the foreign-hook ceremony.
+# as ours and can be replaced without the foreign-hook ceremony — the grep is
+# deliberately the VERSIONLESS prefix for exactly that reason.
+#
+# The version therefore lives in the hook body and nowhere else. This script
+# used to also keep a `marker='# dossierx-hook: pre-commit vN'` variable up
+# here, which nothing ever read: a second copy of a version string, free to
+# drift from the one that matters and impossible to notice when it did. It was
+# deleted rather than wired up, because wiring it up would have made the grep
+# version-EXACT and turned every previous hook into a "foreign" one.
 state=absent
 if [ -e "$target" ]; then
 	if grep -q '^# dossierx-hook: pre-commit ' "$target" 2>/dev/null; then

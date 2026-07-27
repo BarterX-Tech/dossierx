@@ -161,6 +161,10 @@ resolve the conversation instead.
 
 ## Integrity — the ledger sees hand edits
 
+**DossierX detects; the forge enforces.** The ledger turns a silent edit into a named finding you
+can act on; branch protection and a required CI check are what make anyone obey it. It judges the
+tree in front of it — no git history, same verdict in every clone.
+
 Every legitimate approval records a hash of what was approved. `dossierx check` (and `--validate`,
 and `--staged`, which the pre-commit hook runs) compares the world against that ledger and fails
 with `integrity_failed` on: a locked claim with no record or with a **deleted** one
@@ -169,13 +173,13 @@ with `integrity_failed` on: a locked claim with no record or with a **deleted** 
 stands (no `claim delete` verb exists — `unlock` first), or a comment block changed outside the
 engine.
 
-**Branch on `rule` inside `data.ledger_findings`, not on the code** — three are not tampering.
+**Branch on `rule` inside `data.ledger_findings`, not on the code** — one is not tampering.
 `lock-ledger-adoption-required` means the project predates the ledger and was never adopted:
 adoption fails closed, and the fix is a human running `dossierx migrate --adopt` once (see
-**[[dossierx]]**). Do not confuse it with `lock-ledger-absent`, which means the project *had* a
-ledger and no longer does. Under `--staged`, `integrity-store-removed` and `claims-scope-narrowed`
-come from the parent-commit comparison and judge the commit, not your claims; to move `claims_dir`
-legitimately, move the claims and the stores in the **same** commit, claim files byte-identical.
+**[[dossierx]]**). Do not confuse it with `lock-ledger-absent`, which means the ledger file is
+**gone** while locked claims remain — the two are told apart by the store itself, not by history.
+To move `claims_dir` legitimately, move the claims and the stores in the **same** commit, claim
+files byte-identical; that passes because every locked claim still resolves to its record.
 
 Everywhere else the recovery is never "re-lock it so the hashes match" — that launders the edit.
 Restore from version control, or go unlock → fix → lock. CI is the authority; the hook is only

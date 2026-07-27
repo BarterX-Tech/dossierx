@@ -434,9 +434,14 @@ func TestMigrateRefusalsNameOnlyRealCommands(t *testing.T) {
 // point is coverage of the mapping — a rule added later that falls to the default
 // branch still gets a hint, and that hint must still name real commands.
 func TestLedgerHintsNameOnlyRealCommands(t *testing.T) {
+	// check.RuleIntegrityStoreRemoved and check.RuleClaimsScopeNarrowed were the
+	// first two entries here. Both were removed with the parent-commit
+	// comparison that raised them; their branches in ledgerRecoveryHint went at
+	// the same time, so listing the string literals here would test a mapping
+	// nothing can reach. The invented rule at the bottom of this table is what
+	// covers the shape they used to occupy: any rule this switch does not know
+	// still gets a hint, and that hint still names real commands.
 	rules := []string{
-		check.RuleIntegrityStoreRemoved,
-		check.RuleClaimsScopeNarrowed,
 		check.RuleLedgerUnreadable,
 		check.RuleCommentDigestAbsent,
 		check.RuleCommentDigestMissing,
