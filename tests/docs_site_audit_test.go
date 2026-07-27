@@ -102,28 +102,52 @@ func normalizeGoComment(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// TestREADME_ReplyRightsNotOvergated asserts the README does not lump `comment
-// reply` into the advisory-rights ("an agent may only act on its own messages")
-// row. Reply is ungated — the core agent-replies-to-human workflow — while
-// resolve/reopen/edit/delete are gated (internal/comments/comments.go canAct).
+// TestREADME_ReplyRightsNotOvergated asserts the README documents the advisory-
+// rights rule (an actor may act only on its own messages —
+// internal/comments/comments.go canAct) WITHOUT sweeping `comment reply` into
+// it. Reply is ungated: it is the core agent-replies-to-human workflow, and a
+// reader who believes it is gated concludes the loop this tool exists for is
+// closed to them.
+//
+// The rights sentence itself is allowed to mention reply, and in v0.3.0 it does
+// — `dossierx comment reply --as agent` is the WORKED EXAMPLE of the rule
+// biting: the reply lands, and what it cannot do is close the human's thread.
+// That is the distinction this test now enforces, because the earlier form
+// (nothing on the rights line may say "reply") could only be satisfied by
+// leaving the most useful illustration out. What must never appear is a claim
+// that replying is itself refused.
 func TestREADME_ReplyRightsNotOvergated(t *testing.T) {
 	readme := readRepoFile(t, "README.md")
 
-	const advisory = "an agent may only act on its own messages"
-	if !strings.Contains(readme, advisory) {
-		t.Fatalf("README no longer documents the advisory-rights gate (%q); it should govern the comment resolve/reopen/edit/delete row", advisory)
+	// The rule must be stated. Matched on its substance rather than one exact
+	// sentence, so the prose can be reworded without silently losing it.
+	statesRule := false
+	for _, line := range strings.Split(readme, "\n") {
+		l := strings.ToLower(line)
+		if strings.Contains(l, "may act only on its own messages") ||
+			strings.Contains(l, "may only act on its own messages") {
+			statesRule = true
+			break
+		}
+	}
+	if !statesRule {
+		t.Fatal("README no longer documents the advisory-rights rule (an actor may act only on its own messages); it governs the comment resolve/reopen/edit/delete row")
 	}
 
-	// The line carrying the advisory-rights parenthetical must not mention
-	// reply: reply is ungated, so lumping it in falsely implies an agent
-	// cannot reply to a human-opened thread.
-	for _, line := range strings.Split(readme, "\n") {
-		if strings.Contains(line, advisory) && strings.Contains(strings.ToLower(line), "reply") {
-			t.Fatalf("README lumps reply into the rights-gated row, implying an agent cannot reply to a human thread (false):\n%s", line)
+	// Reply must never be described as blocked by that rule.
+	for _, false_ := range []string{
+		"cannot reply",
+		"may not reply",
+		"an agent cannot reply",
+		"reply is gated",
+		"reply fails with `rights_denied`",
+	} {
+		if strings.Contains(strings.ToLower(readme), false_) {
+			t.Fatalf("README describes reply as rights-gated (%q); reply is ungated — an agent may reply to a human-opened thread, and that is the whole review loop", false_)
 		}
 	}
 
-	// Reply must be documented as ungated somewhere.
+	// And it must say so positively, or a reader is left inferring it.
 	ungatedReplyDocumented := false
 	for _, line := range strings.Split(readme, "\n") {
 		l := strings.ToLower(line)
@@ -245,15 +269,26 @@ func TestREADME_ThreadClosingIsViewerOnly(t *testing.T) {
 
 	readme := readRepoFile(t, "README.md")
 
-	// The exact sentence that shipped, and any restatement of it. "it can
-	// resolve" is the load-bearing fragment: the claim is not that the rights
-	// rule exists (it does), it is that the agent may exercise it.
+	// The false claims, all CLI-scoped: that the AGENT holds these verbs, or
+	// that they can be invoked as `dossierx comment <verb>`.
+	//
+	// The forbidden list is scoped to the agent-as-subject phrasings on purpose.
+	// It used to forbid the bare fragment "it can resolve, reopen", which v0.3.0
+	// re-introduced in a sentence whose subject is a LOCAL CALLER OF THE VIEWER
+	// API — where the statement is true, and stating it is the point of the
+	// paragraph (see the trust-boundary assertion below). A docs test that
+	// pattern-matches a fragment without its subject blocks the correction it
+	// was written to encourage.
 	for _, false_ := range []string{
 		"so it can resolve",
-		"it can resolve, reopen",
+		"the agent can resolve",
 		"can resolve, reopen, edit or delete only the threads",
+		"dossierx comment resolve",
+		"dossierx comment reopen",
+		"dossierx comment edit",
+		"dossierx comment delete",
 	} {
-		if strings.Contains(readme, false_) {
+		if strings.Contains(strings.ToLower(readme), strings.ToLower(false_)) {
 			t.Fatalf("README still tells the reader an agent can close its own threads (%q); v0.3.0 has no `comment resolve`/`reopen`/`edit`/`delete` on the CLI", false_)
 		}
 	}
@@ -270,6 +305,27 @@ func TestREADME_ThreadClosingIsViewerOnly(t *testing.T) {
 	}
 	if !said {
 		t.Fatal("README does not state that resolve, reopen, edit and delete are reachable only from the viewer (and `dossierx serve`'s HTTP API); the CLI has none of them")
+	}
+
+	// The other half of the same truth, and the one this release exists to fix:
+	// "reachable only from the viewer" must not be left to read as "therefore
+	// only a human can reach them". internal/serve/handlers.go's actorFromString
+	// returns CommentRoleHuman for an absent actor, so ANY local caller of the
+	// write API holds human rights and the record it leaves attests `human`.
+	// Two skills claimed the opposite ("enforced in code"), which is what made
+	// this assertion necessary: an agent that believes the API is a wall treats
+	// curling it as a legitimate move.
+	boundary := false
+	for _, line := range strings.Split(readme, "\n") {
+		l := strings.ToLower(line)
+		if (strings.Contains(l, "local caller") || strings.Contains(l, "anything that can curl")) &&
+			strings.Contains(l, "human rights") {
+			boundary = true
+			break
+		}
+	}
+	if !boundary {
+		t.Fatal("README does not state that the viewer's write API grants full human rights to any local caller; leaving that out lets a reader infer the advisory-rights rule is enforced there, which internal/serve/handlers.go's actorFromString shows it is not")
 	}
 }
 
@@ -363,9 +419,17 @@ func TestSkillRouter_StoppedAtValuesMatchTheBinary(t *testing.T) {
 func TestTrackedStoresAreDocumentedEverywhereTheyAreEnumerated(t *testing.T) {
 	stores := map[string]bool{}
 	storeLit := regexp.MustCompile(`"(\.dossierx-[a-z-]+\.json)"`)
+	// The engine's own names, read from wherever the engine actually declares
+	// them. The lock and comment-digest stores are exported constants in their
+	// owning packages (lock.StoreFileName, digest.StoreFileName); the flag store
+	// is still an inline literal in the two places that build its path. Reading
+	// all four files means this keeps working whether a name is a const or a
+	// literal, which is what the guard below is really checking.
 	for _, rel := range []string{
 		filepath.Join("internal", "check", "check.go"),
 		filepath.Join("internal", "serve", "server.go"),
+		filepath.Join("internal", "lock", "lock.go"),
+		filepath.Join("internal", "digest", "digest.go"),
 	} {
 		for _, m := range storeLit.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
 			stores[m[1]] = true

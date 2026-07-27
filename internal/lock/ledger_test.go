@@ -3,6 +3,7 @@ package lock
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -256,9 +257,25 @@ func TestAdoptLedgerGrandfathersAnOlderStore(t *testing.T) {
 	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft}
 	claims := []model.Claim{locked, draft}
 
-	adopted := AdoptLedger(store, claims)
+	adoption, err := AdoptProject(store, claims)
+	if err != nil {
+		t.Fatalf("AdoptProject: %v", err)
+	}
+	adopted := adoption.Claims
 	if len(adopted) != 1 || adopted[0] != locked.ID {
 		t.Fatalf("adopted = %v, want just the locked claim (a draft has nothing to grandfather)", adopted)
+	}
+	// The migration writes the comment digest store in the same act, so the
+	// project crosses BOTH lines at once: a lock store at the ledger schema with
+	// no digest store beside it is the shape check reports as
+	// comment-digest-absent, and a migration that produced it would hand the
+	// human a finding with a version-control recovery for a file that never
+	// existed.
+	if _, err := os.Stat(digest.StorePathBeside(path)); err != nil {
+		t.Fatalf("adoption must write the comment digest store beside the ledger: %v", err)
+	}
+	if len(adoption.CommentDigests) != 2 {
+		t.Errorf("adoption must record a digest for EVERY claim (including drafts, whose empty digest is what makes a later hand-added thread detectable), got %v", adoption.CommentDigests)
 	}
 	rec, ok := store.Record(locked.ID)
 	if !ok {
@@ -292,8 +309,9 @@ func TestAdoptLedgerRefusesWhenTheStoreFileIsAbsent(t *testing.T) {
 	store := newStore(t) // path points at a file that does not exist
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 
-	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 0 {
-		t.Fatalf("adopted %v from an ABSENT ledger: deleting the ledger must never re-bless a project", adopted)
+	adoption, err := AdoptProject(store, []model.Claim{locked})
+	if !errors.Is(err, ErrAdoptionRefused) {
+		t.Fatalf("AdoptProject on an ABSENT ledger = (%v, %v), want ErrAdoptionRefused: deleting the ledger must never re-bless a project, and the migration command must not become the deletion's second half", adoption, err)
 	}
 	if _, ok := store.Record(locked.ID); ok {
 		t.Fatalf("no record may be created when the ledger file is absent")
@@ -323,8 +341,8 @@ func TestAdoptLedgerNeverRunsOnACurrentStore(t *testing.T) {
 	}
 	handFlipped := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 
-	if adopted := AdoptLedger(store, []model.Claim{handFlipped}); len(adopted) != 0 {
-		t.Fatalf("adopted %v from a CURRENT store: a hand-flipped claim must never grandfather itself", adopted)
+	if _, err := AdoptProject(store, []model.Claim{handFlipped}); !errors.Is(err, ErrAdoptionNotRequired) {
+		t.Fatalf("AdoptProject on a CURRENT store = %v, want ErrAdoptionNotRequired: a hand-flipped claim must never grandfather itself, and re-running the migration must not be a way to re-adopt a covered project", err)
 	}
 	if !hasRule(Audit([]model.Claim{handFlipped}, store, nil), RuleLockLedgerMissing) {
 		t.Fatalf("expected the hand-flipped claim reported as lock-ledger-missing")
@@ -349,16 +367,20 @@ func TestAdoptLedgerIsIdempotent(t *testing.T) {
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "v1"}
 	claims := []model.Claim{locked}
 
-	if adopted := AdoptLedger(store, claims); len(adopted) != 1 {
-		t.Fatalf("first adoption should adopt the locked claim, got %v", adopted)
+	adoption, err := AdoptProject(store, claims)
+	if err != nil || len(adoption.Claims) != 1 {
+		t.Fatalf("first adoption should adopt the locked claim, got (%v, %v)", adoption.Claims, err)
 	}
 	first, _ := store.Record(locked.ID)
 
-	// Content changes, and adoption runs again: the second run must do nothing,
-	// so the tampered content is NOT adopted over the record it would break.
+	// Content changes, and the migration is run again: the second run must
+	// REFUSE, so the tampered content is NOT adopted over the record it would
+	// break. The store is at the ledger schema now — in memory and on disk, since
+	// AdoptProject saves — so a second migration is exactly the "re-adopt a
+	// covered project" the refusal exists for.
 	claims[0].Body = "v2 — edited by hand after adoption"
-	if adopted := AdoptLedger(store, claims); len(adopted) != 0 {
-		t.Fatalf("second adoption must be a no-op, got %v", adopted)
+	if _, err := AdoptProject(store, claims); !errors.Is(err, ErrAdoptionNotRequired) {
+		t.Fatalf("second adoption must be refused, got %v", err)
 	}
 	if again, _ := store.Record(locked.ID); again.Hash != first.Hash {
 		t.Fatalf("a second adoption re-recorded the claim's content — a hand edit would launder itself through the upgrade path")
@@ -452,16 +474,29 @@ func TestDowngradingTheStoreCannotReArmGrandfathering(t *testing.T) {
 		t.Fatalf("precondition: the downgraded store should read as pre-ledger with no records; got version %d, %d record(s)", reloaded.OnDiskVersion(), len(reloaded.Ledger))
 	}
 
-	// The WRITE path.
-	changed, adopted := PrepareStore(reloaded, claims)
-	if len(adopted) != 0 {
-		t.Fatalf("adopted %v from a downgraded store: the audited file must not be able to re-arm the gate", adopted)
+	// The WRITE path, which is now two paths. An ordinary command adopts
+	// NOTHING at all any more, whatever the store's version says...
+	changed := PrepareStore(reloaded, claims)
+	// PrepareStore cannot report an adoption any more — it has no such return —
+	// so the assertion is against the STORE, which is the thing an adoption
+	// would have to change.
+	if len(reloaded.Ledger) != 0 {
+		t.Fatalf("an ordinary command wrote ledger records %+v: nothing is grandfathered implicitly any more", reloaded.Ledger)
 	}
 	if _, ok := reloaded.Record(tampered.ID); ok {
 		t.Fatalf("a downgraded store must not gain a record for the tampered claim")
 	}
 	if changed {
 		t.Errorf("a refused adoption must not rewrite the store: stamping the current version over the downgrade destroys the evidence that an edit happened")
+	}
+
+	// ...and the EXPLICIT migration, the one path that does adopt, refuses this
+	// store and says so as loudly as an adoption would.
+	if _, err := AdoptProject(reloaded, claims); !errors.Is(err, ErrAdoptionRefused) {
+		t.Fatalf("the migration must refuse a downgraded store, got %v", err)
+	}
+	if _, ok := reloaded.Record(tampered.ID); ok {
+		t.Fatalf("a refused migration must not record the tampered claim")
 	}
 	if notice := announced.String(); !strings.Contains(notice, "predates the lock ledger") {
 		t.Errorf("the refusal must be announced as loudly as an adoption; got:\n%s", notice)
@@ -499,8 +534,8 @@ func TestAStoreThatPredatesTheLedgerCannotCarryLedgerRecords(t *testing.T) {
 	}
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 
-	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 0 {
-		t.Fatalf("adopted %v: a store carrying ledger records has been through a ledger-aware build, whatever its version says", adopted)
+	if _, err := AdoptProject(store, []model.Claim{locked}); !errors.Is(err, ErrAdoptionRefused) {
+		t.Fatalf("AdoptProject = %v, want ErrAdoptionRefused: a store carrying ledger records has been through a ledger-aware build, whatever its version says", err)
 	}
 	// No digest store exists in this temp dir, so the ledger map is the only
 	// evidence — which is exactly what is being asserted.
@@ -528,8 +563,9 @@ func TestAdoptLedgerStillGrandfathersAGenuinePreLedgerProject(t *testing.T) {
 	}
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
 
-	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 1 {
-		t.Fatalf("a genuine pre-ledger project must still be grandfathered, adopted = %v", adopted)
+	adoption, err := AdoptProject(store, []model.Claim{locked})
+	if err != nil || len(adoption.Claims) != 1 {
+		t.Fatalf("a genuine pre-ledger project must still be adoptable by the explicit migration, got (%v, %v)", adoption.Claims, err)
 	}
 }
 
@@ -607,11 +643,22 @@ func TestMigrateLegacyStoreDoesNotReArmACurrentStore(t *testing.T) {
 	}
 }
 
-// TestPrepareStoreRunsBothMigrationsInOrder pins the single entry point every
-// writing command uses. Running only one of the two — which is exactly what
-// happens when a new call site copies the older idiom — leaves either drift
-// detection or the ledger unarmed, and neither failure is visible at the time.
-func TestPrepareStoreRunsBothMigrationsInOrder(t *testing.T) {
+// TestPrepareStoreMigratesBaselinesButNeverAdopts is the write-path half of
+// ADOPTION FAILS CLOSED, and it is the inversion of what this test used to
+// assert. PrepareStore ran the ledger grandfathering as its second migration, so
+// EVERY writing command — every `dossierx check`, every claim command — adopted
+// any project that presented the pre-ledger shape. That made adoption something
+// an attacker could trigger with two hand edits, which is what makes an adoption
+// worthless as evidence.
+//
+// So: the baseline migration still runs (it is not an approval, and a project
+// that upgrades must not lose drift detection), the ledger is untouched, and the
+// project is left for the explicit migration to adopt — while the gate says so.
+//
+// The schema version it stamps is the one it EARNED. Stamping the current
+// version here would take this schema-0 store to the LEDGER schema with no
+// record in it, and every locked claim in it would read as covered-but-deleted.
+func TestPrepareStoreMigratesBaselinesButNeverAdopts(t *testing.T) {
 	silenceAnnouncements(t)
 
 	dep := model.Claim{ID: "widget.contract.dep", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "dep v1"}
@@ -629,18 +676,21 @@ func TestPrepareStoreRunsBothMigrationsInOrder(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	changed, adopted := PrepareStore(store, claims)
+	changed := PrepareStore(store, claims)
 	if !changed {
 		t.Fatalf("expected PrepareStore to report the store changed, so the caller saves it")
 	}
-	if len(adopted) != 2 {
-		t.Fatalf("expected both locked claims grandfathered, got %v", adopted)
+	if len(store.Ledger) != 0 {
+		t.Fatalf("an ordinary command grandfathered %+v: adoption must only ever happen through the explicit migration", store.Ledger)
 	}
 	if _, ok := store.Baseline(main.ID, dep.ID); !ok {
-		t.Fatalf("expected the legacy per-dependent baseline re-armed alongside the ledger adoption")
+		t.Fatalf("expected the legacy per-dependent baseline re-armed: an upgrading project must not lose drift detection while it waits to be adopted")
+	}
+	if store.Version >= ledgerSchemaVersion {
+		t.Fatalf("the baseline migration stamped the LEDGER schema (%d) onto a store with no ledger in it: every locked claim would then read as covered-but-unrecorded, and the migration would never be offered", store.Version)
 	}
 
-	// And the whole thing is a no-op on the next run.
+	// And the gate says what is left to do, once, by name.
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
@@ -648,8 +698,23 @@ func TestPrepareStoreRunsBothMigrationsInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore (reload): %v", err)
 	}
-	if changed, adopted := PrepareStore(reloaded, claims); changed || len(adopted) != 0 {
-		t.Fatalf("PrepareStore must be a no-op on an already-migrated store, got changed=%v adopted=%v", changed, adopted)
+	if changed := PrepareStore(reloaded, claims); changed {
+		t.Fatalf("PrepareStore must be a no-op on an already-baselined store, got changed=%v", changed)
+	}
+	if len(reloaded.Ledger) != 0 {
+		t.Fatalf("a second ordinary command adopted %+v", reloaded.Ledger)
+	}
+	if !hasRule(Audit(claims, reloaded, nil), RuleLockLedgerAdoptionRequired) {
+		t.Fatalf("expected %s: a project nothing adopted must be told what to run, not left passing", RuleLockLedgerAdoptionRequired)
+	}
+
+	// The explicit migration is what finishes the job.
+	adoption, err := AdoptProject(reloaded, claims)
+	if err != nil || len(adoption.Claims) != 2 {
+		t.Fatalf("expected both locked claims grandfathered by the migration, got (%v, %v)", adoption.Claims, err)
+	}
+	if findings := Audit(claims, reloaded, nil); hasRule(findings, RuleLockLedgerAdoptionRequired) {
+		t.Fatalf("the migration must clear the refusal it names, got %+v", findings)
 	}
 }
 
@@ -664,8 +729,8 @@ func TestPrepareStoreDoesNotCreateAStoreForAFreshProject(t *testing.T) {
 	store := newStore(t)
 	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft}
 
-	if changed, adopted := PrepareStore(store, []model.Claim{draft}); changed || len(adopted) != 0 {
-		t.Fatalf("expected no work for a fresh project, got changed=%v adopted=%v", changed, adopted)
+	if changed := PrepareStore(store, []model.Claim{draft}); changed {
+		t.Fatalf("expected no work for a fresh project, got changed=%v", changed)
 	}
 }
 
@@ -698,17 +763,25 @@ func hasRule(findings []Finding, rule string) bool {
 	return false
 }
 
-// The migration bridge for the COMMENT DIGEST store.
+// The migration bridge for the COMMENT DIGEST store, now owned by the explicit
+// migration — and the assertion that an ordinary command does NOT build half of
+// it.
 //
 // internal/check reports a ledger-covered project with no digest store as
 // comment-digest-absent, which is what stops "delete the file and the
 // comment-ledger-drift finding disappears" from being free. That rule keys on
 // the LOCK store's version — the digest store's absence cannot be evidence about
-// itself — so the two have to cross the line together: the same PrepareStore
-// that stamps a pre-ledger store must also create the digest store, adopting the
-// threads the project already has. Otherwise every upgrading project with a
-// comment thread fails check the moment it upgrades.
-func TestPrepareStoreCreatesTheCommentDigestStoreOnUpgrade(t *testing.T) {
+// itself — so the two have to cross the line TOGETHER, in one act.
+//
+// While adoption was implicit they did: PrepareStore stamped the ledger schema
+// and created the digest store in the same run. With adoption explicit, an
+// ordinary command that still created the digest store would leave a v0.2.x
+// project carrying a digest store beside a version-1 lock store — exactly the
+// contradiction LedgerDowngraded is built to detect — and the next `check` would
+// report lock-ledger-downgraded against a project whose only fault was being
+// un-migrated. So the sweep leaves a pre-ledger project alone, and AdoptProject
+// writes both files at once.
+func TestAdoptProjectCreatesTheCommentDigestStoreOnUpgrade(t *testing.T) {
 	silenceAnnouncements(t)
 
 	dir := t.TempDir()
@@ -729,16 +802,25 @@ func TestPrepareStoreCreatesTheCommentDigestStoreOnUpgrade(t *testing.T) {
 		}},
 	}
 	claims := []model.Claim{commented}
-
-	PrepareStore(store, claims)
-
 	digestPath := digest.StorePathBeside(path)
+
+	// An ordinary command first: it must leave the un-migrated project exactly
+	// as it found it, digest store included.
+	PrepareStore(store, claims)
+	if _, err := os.Stat(digestPath); err == nil {
+		t.Fatalf("an ordinary command created the digest store beside an un-migrated lock store: the next run would read that pair as a DOWNGRADE and accuse a project that did nothing")
+	}
+
+	if _, err := AdoptProject(store, claims); err != nil {
+		t.Fatalf("AdoptProject: %v", err)
+	}
+
 	digests, err := digest.LoadStore(digestPath)
 	if err != nil {
 		t.Fatalf("load digest store: %v", err)
 	}
 	if !digests.FileExists() {
-		t.Fatalf("expected the upgrade to create %s, so the project is covered from the moment it becomes ledger-covered", digestPath)
+		t.Fatalf("expected the migration to create %s, so the project crosses both lines in one act", digestPath)
 	}
 	recorded, ok := digests.Digest(commented.ID)
 	if !ok || recorded != digest.CommentsDigest(commented) {
@@ -1034,21 +1116,19 @@ func TestSweepDoesNotAdoptAClaimHoldingAStandingApproval(t *testing.T) {
 	}
 }
 
-// The sweep's PURPOSE has to survive its guard, or the fix is just a different
+// The sweep's PURPOSE has to survive its guards, or the fix is just a different
 // hole: a claim the store has genuinely never met — authored after this project
-// became covered, still draft, no ledger record — must still be adopted, and the
-// adoption must be REPORTED so no coverage decision is silent.
-func TestSweepStillAdoptsAnUnknownClaimAndReportsIt(t *testing.T) {
+// became covered, still draft, no ledger record, NO THREADS — must still be
+// adopted, and the adoption must be REPORTED so no coverage decision is silent.
+//
+// Adopting it at its EMPTY digest is what makes a thread hand-added to it
+// afterwards report as drift, which is the whole point of covering a claim
+// nobody has commented on yet.
+func TestSweepStillAdoptsAnUnknownThreadlessClaimAndReportsIt(t *testing.T) {
 	silenceAnnouncements(t)
 
 	locked, store := coveredProject(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
-	fresh := model.Claim{
-		ID: "widget.contract.new", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "written yesterday",
-		Comments: []model.Comment{{
-			ID: "c-bbbbbb", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
-			Created: "2026-07-25T10:00:00Z", Body: "why this shape?",
-		}},
-	}
+	fresh := model.Claim{ID: "widget.contract.new", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "written yesterday"}
 
 	PrepareStore(store, []model.Claim{locked, fresh})
 
@@ -1059,5 +1139,164 @@ func TestSweepStillAdoptsAnUnknownClaimAndReportsIt(t *testing.T) {
 	adopted := store.CommentDigestsAdopted()
 	if len(adopted) != 1 || adopted[0] != fresh.ID {
 		t.Fatalf("the adoption must be reported so a caller can warn about it, got %v", adopted)
+	}
+}
+
+// THE ONE-DELETED-KEY LAUNDER, from both ends. This is the second critical the
+// round-6 review reproduced: in a fully covered project with the digest store
+// present and readable (so comment-digest-absent cannot fire), forge a human's
+// open thread to `status: resolved` and delete that ONE claim's key from the
+// "digests" map. comment-ledger-drift compares against a RECORDED digest and a
+// claim with no entry is "unknown", so the finding was gone; the next ordinary
+// command re-adopted the forged block; and the claim then locked, defeating the
+// gate the whole review loop rests on (a human's open objection blocks the lock).
+//
+// Two things have to hold to close it, and this test asserts both: the sweep must
+// not re-adopt a claim that CARRIES THREADS, and the gate must report the claim
+// as uncovered. The threads themselves are the trigger because they are evidence
+// the tamper cannot remove without giving up what it came for — comments are
+// engine-managed, and the one path that writes a thread records the digest in the
+// same act.
+func TestASingleDeletedDigestKeyIsNeitherReAdoptedNorSilent(t *testing.T) {
+	silenceAnnouncements(t)
+
+	locked, store := coveredProject(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "approved body"})
+	reviewed := model.Claim{
+		ID: "widget.contract.reviewed", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "under review",
+		Comments: []model.Comment{{
+			ID: "c-bbbbbb", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman,
+			Created: "2026-07-25T10:00:00Z", Body: "I do not agree with this yet",
+		}},
+	}
+	claims := []model.Claim{locked, reviewed}
+
+	// The engine's own record of the OPEN thread, as a comment op would leave it.
+	digests, err := digest.LoadStore(digest.StorePathBeside(store.path))
+	if err != nil {
+		t.Fatalf("load digest store: %v", err)
+	}
+	digests.Record(reviewed)
+	if err := digests.Save(); err != nil {
+		t.Fatalf("save digest store: %v", err)
+	}
+
+	// The forgery, and the one deleted key that used to hide it.
+	forged := reviewed
+	forged.Comments = []model.Comment{{
+		ID: "c-bbbbbb", Status: model.CommentStatusResolved, Author: model.CommentRoleHuman,
+		Created: "2026-07-25T10:00:00Z", Body: "I do not agree with this yet",
+		ResolvedBy: model.CommentRoleHuman, ResolvedAt: "2026-07-26T10:00:00Z",
+	}}
+	claims[1] = forged
+
+	digests.Forget(forged.ID)
+	if err := digests.Save(); err != nil {
+		t.Fatalf("save digest store: %v", err)
+	}
+
+	// An ordinary writing command must NOT put the forged block back on the
+	// record. That re-adoption is what made the launder permanent.
+	PrepareStore(store, claims)
+	if recorded, known := digestFor(t, store, forged.ID); known {
+		t.Fatalf("the sweep re-adopted a claim that carries threads (%q): a forged thread is blessed by an ordinary command nobody would look twice at", recorded)
+	}
+
+	// And the gate must say the claim is uncovered, rather than reading it as
+	// unknown and staying silent.
+	reloaded, err := digest.LoadStore(digest.StorePathBeside(store.path))
+	if err != nil {
+		t.Fatalf("reload digest store: %v", err)
+	}
+	findings := Audit(claims, store, reloaded)
+	if !hasRule(findings, RuleCommentDigestUnrecorded) {
+		t.Fatalf("expected %s for a claim carrying threads with no entry, got %+v", RuleCommentDigestUnrecorded, findings)
+	}
+	for _, f := range findings {
+		if f.Rule == RuleCommentDigestUnrecorded && f.ClaimID != forged.ID {
+			t.Errorf("the finding must name the claim whose entry went missing, got %q", f.ClaimID)
+		}
+	}
+	// The claim that still HAS its entry is not accused of anything.
+	if len(findings) != 1 {
+		t.Fatalf("only the uncovered claim may be reported, got %+v", findings)
+	}
+}
+
+// TestLockRefusesUntilTheProjectIsAdopted is the WRITE-path half of "adoption
+// fails closed", and it is the guard that keeps the store's version field
+// honest.
+//
+// A pre-ledger store must not acquire its first ledger record from an ordinary
+// lock. If it did, the file would carry ledger records at a pre-ledger version —
+// which Store.LedgerDowngraded reads, correctly by its own rules, as a hand
+// edit — and the project would be accused of tampering from then on for having
+// done nothing but lock a claim. Stamping the schema instead would be worse: the
+// store would become covered while every other locked claim in it still had no
+// record, turning an honest upgrade into N lock-ledger-deleted findings.
+//
+// The refusal costs one command, and the test's second half is the promise that
+// matters more than the refusal: unlock -> fix -> lock, the sanctioned path
+// everything else points at, works normally the moment the migration has run.
+func TestLockRefusesUntilTheProjectIsAdopted(t *testing.T) {
+	withRegistry(t)
+	silenceAnnouncements(t)
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.old":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatalf("write v0.2.x store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+
+	old := model.Claim{ID: "widget.contract.old", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked months ago"}
+	fresh := model.Claim{ID: "widget.contract.new", Facet: "contract", Module: "widget", Status: model.StatusDraft, Body: "written today"}
+	claims := []model.Claim{old, fresh}
+
+	if _, err := Lock(fresh, claims, testConfig(), store, testApproval()); !errors.Is(err, ErrAdoptionRequired) {
+		t.Fatalf("Lock on an un-migrated project = %v, want ErrAdoptionRequired", err)
+	}
+	if len(store.Ledger) != 0 {
+		t.Fatalf("a refused lock must leave the store exactly as it found it, got %+v", store.Ledger)
+	}
+
+	// The one command that clears it.
+	if _, err := AdoptProject(store, claims); err != nil {
+		t.Fatalf("AdoptProject: %v", err)
+	}
+
+	locked, err := Lock(fresh, claims, testConfig(), store, Approval{Actor: "alice", Reason: "approved"})
+	if err != nil {
+		t.Fatalf("after the migration, locking must work normally: %v", err)
+	}
+
+	// unlock -> fix -> lock, unchanged.
+	drafted := Unlock(locked, store, Approval{Actor: "alice", Reason: "needs a fix"})
+	drafted.Body = "fixed"
+	if _, err := Lock(drafted, []model.Claim{old, drafted}, testConfig(), store, Approval{Actor: "alice", Reason: "approved the fix"}); err != nil {
+		t.Fatalf("unlock -> fix -> lock must never be blocked: %v", err)
+	}
+}
+
+// UNLOCK IS NEVER GATED, including before the migration. It is the recovery
+// escape hatch every other refusal in this package points at, and a project that
+// could not get a claim out of locked would have no way to fix the thing it is
+// being refused for.
+func TestUnlockStillWorksOnAnUnmigratedProject(t *testing.T) {
+	silenceAnnouncements(t)
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.old":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
+		t.Fatalf("write v0.2.x store: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	old := model.Claim{ID: "widget.contract.old", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked months ago"}
+
+	if drafted := Unlock(old, store, Approval{Actor: "alice", Reason: "needs a fix"}); drafted.Status != model.StatusDraft {
+		t.Fatalf("unlock must always work, got status %q", drafted.Status)
 	}
 }

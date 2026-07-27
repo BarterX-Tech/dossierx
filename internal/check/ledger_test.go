@@ -493,18 +493,29 @@ func downgradeLockStore(t *testing.T, cfg *config.Config, keepDigestStore bool) 
 	}
 }
 
-// A legitimate pre-ledger (v0.2.x) project must PASS the read-only commands.
+// A pre-ledger (v0.2.x) project is refused ONCE, by name, and told which command
+// clears it — it is not accused per-claim, and it is not waved through.
 //
-// "check --validate" and "check --staged" both write nothing on purpose, and
-// grandfathering only ever ran in the CLI's write path — so every project that
-// locked claims before this release had each of them reported as
-// lock-ledger-missing (and each locked build order as build-order-ledger-missing)
-// by the pre-commit hook and by CI, with recovery text telling the human to set
-// their locked claims back to draft and re-lock them. That is a gate firing on
-// correct state, with destructive advice attached, at the exact moment a project
-// upgrades. The read-only path now grandfathers in memory instead and says what
-// to run, as advice, in next steps.
-func TestStatus_PreLedgerProjectIsGrandfatheredNotAccused(t *testing.T) {
+// This test asserted the opposite until v0.3.0, and the reason it changed is the
+// whole of the fail-closed decision. Grandfathering used to happen by itself: the
+// read-only gate exempted a store whose own version field said it predated the
+// ledger, and the next writing command adopted whatever was on disk. Review
+// established that NO evidence inside the project directory can tell an honest
+// v0.2.x store from a downgraded one — locked_at shipped in v0.2.0, the version
+// field lives in the file being audited, and deleting the comment digest store
+// alongside the ledger reproduces the honest shape byte for byte. So the
+// exemption was, in the same code path, the bypass.
+//
+// What replaces it is one PROJECT-SCOPED finding rather than an accusation
+// against each locked claim. That distinction is the part worth keeping: the old
+// failure mode was `lock-ledger-missing` fired once per locked claim with
+// recovery text telling the human to set their claims back to draft and re-lock
+// them — a gate firing on correct state with destructive advice attached, at the
+// exact moment a project upgrades. lock-ledger-adoption-required says the true
+// thing instead ("this project has not been migrated") and names the one command
+// that fixes it, which is why the next-step assertion below is as load-bearing as
+// the finding assertion.
+func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
 	})
@@ -512,18 +523,22 @@ func TestStatus_PreLedgerProjectIsGrandfatheredNotAccused(t *testing.T) {
 	downgradeLockStore(t, cfg, false)
 
 	res := check.Status(claims, cfg)
-	if len(res.LedgerFindings) != 0 {
-		t.Fatalf("a project that locked things before the ledger existed has done nothing wrong; got %v", rulesOf(res.LedgerFindings))
+	if got := rulesOf(res.LedgerFindings); len(got) != 1 || got[0] != lock.RuleLockLedgerAdoptionRequired {
+		t.Fatalf("an un-migrated project must be refused exactly once, by %s, and never accused per-claim; got %v",
+			lock.RuleLockLedgerAdoptionRequired, got)
 	}
 
+	// The finding fails the gate; the next step is what tells the reader how to
+	// clear it. Naming the command is the assertion — an agent that is refused
+	// without being given `migrate --adopt` loops on a gate it cannot pass.
 	found := false
 	for _, h := range res.NextSteps {
-		if strings.Contains(h, "predate the lock ledger") {
+		if strings.Contains(h, "predate the lock ledger") && strings.Contains(h, "dossierx migrate --adopt") {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("the upgrade must be reported as a next step rather than passing silently, got %#v", res.NextSteps)
+		t.Fatalf("the upgrade must be reported as a next step naming dossierx migrate --adopt, got %#v", res.NextSteps)
 	}
 }
 

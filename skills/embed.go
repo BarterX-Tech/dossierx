@@ -22,7 +22,7 @@ import "embed"
 // FS holds every skill directory, each containing one SKILL.md.
 //
 // "dossierx" is the ROUTER and is deliberately listed first: it is the one an
-// agent loads always and first (the contract, the six nouns, the two roles,
+// agent loads always and first (the contract, the seven nouns, the two roles,
 // which companion to load for what), and the other four are loaded only when it
 // sends the agent there. RouterName below is the machine-readable half of that
 // statement; the exporter uses it to decide what goes into an always-on

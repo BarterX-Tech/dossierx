@@ -468,7 +468,7 @@ export function Hero() {
           </div>
           <dl className="hero__facts">
             <div>
-              <dt>19</dt>
+              <dt>20</dt>
               <dd>commands your agent runs</dd>
             </div>
             <div>

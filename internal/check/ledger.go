@@ -576,6 +576,25 @@ type ledgerInputs struct {
 	// wrong".
 	storeErr  error
 	digestErr error
+
+	// scopeFindings are the GIT-HISTORY refusals: an integrity store that the
+	// parent commit carried and this one does not, or a claims_dir move that
+	// stranded tracked claims outside the audited scope. They are populated only
+	// under --staged, because they are the one thing in this gate that cannot be
+	// answered from a single tree — see history.go.
+	//
+	// They live here rather than being returned separately so that every caller
+	// of ledgerGate gets them without a second code path: the pre-commit hook,
+	// CI and serve's status strip all read Result.LedgerFindings, and a refusal
+	// that only one of them could see would be a refusal an edit travels around.
+	scopeFindings []lock.Finding
+
+	// scopeNote is the one scope answer that is NOT a refusal: a shallow
+	// checkout whose parent commit was never fetched, where the comparison could
+	// not be made at all. It rides in Result.NextSteps because "could not look"
+	// is advice about the run, not evidence about the project — see
+	// scopeReport.Note.
+	scopeNote string
 }
 
 // loadLedgerInputs reads both stores for cfg out of the WORKING TREE. It is the
@@ -624,6 +643,14 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 // condition each one names is "something changed that nobody approved".
 func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	var findings []lock.Finding
+
+	// The SCOPE findings come first, ahead of even the unreadable-store causes,
+	// because they are the cause OF those causes: a commit that deleted the
+	// ledger and repointed claims_dir leaves every rule below with nothing to
+	// read, and a reader who sees an empty finding list without being told the
+	// scope collapsed will draw exactly the wrong conclusion — the same
+	// conclusion the whole product drew before this existed.
+	findings = append(findings, in.scopeFindings...)
 
 	if in.storeErr != nil {
 		findings = append(findings, lock.Finding{

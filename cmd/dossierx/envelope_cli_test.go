@@ -1,5 +1,5 @@
 // envelope_cli_test.go is the golden-fixture suite for the v0.3.0 machine
-// contract: for every one of the nineteen leaves, it runs the real command tree
+// contract: for every one of the twenty leaves, it runs the real command tree
 // with the default (JSON) format and pins the envelope the agent actually
 // receives.
 //
@@ -102,7 +102,7 @@ func TestUnknownFormatIsRefusedWithACode(t *testing.T) {
 
 // TestEveryLeafButServeEmitsAnEnvelope is the inverse of Phase 1's
 // text-only-opt-out fixture, and it is the stronger statement now that the ten
-// commands that carried the opt-out are gone: with the surface at nineteen
+// commands that carried the opt-out are gone: with the surface at twenty
 // leaves, EVERY leaf except "serve" must answer --format json with exactly one
 // envelope. A leaf that quietly printed prose instead would be a hole in the
 // contract that no per-command test would notice.
@@ -134,6 +134,12 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "build-order", "propose", "--module", "widget", "--dry-run"},
 		{"--config", cfgPath, "build-order", "status", "--module", "widget"},
 		{"--config", cfgPath, "build-order", "lock", "--module", "widget", "--dry-run"},
+		// migrate is previewed rather than run: the fixture project has never
+		// been locked, so a real --adopt correctly refuses (there is no lock
+		// store to migrate), and this test's job is the ENVELOPE, not the
+		// verdict. A dry run is the command's success shape — see
+		// migrate_cli_test.go for the refusals.
+		{"--config", cfgPath, "migrate", "--adopt", "--dry-run"},
 		{"--config", cfgPath, "skills", "export", filepath.Join(root, "skills-out")},
 		{"version"},
 	} {

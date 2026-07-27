@@ -26,6 +26,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 )
 
 // The two legal --format values.
@@ -180,7 +181,7 @@ func emit(cmd *cobra.Command, res cmdResult, runErr error) error {
 
 // envelopeRunE adapts a print-free command body to cobra's RunE signature. A
 // converted command's wiring is therefore always the same one line, which is
-// what keeps the contract uniform across nineteen leaves.
+// what keeps the contract uniform across twenty leaves.
 func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error)) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		res, err := body(cmd, args)
@@ -448,6 +449,27 @@ func errorForCLI(err error) *cliout.Error {
 		code = cliout.CodeNoArtifact
 	case errors.Is(err, errWrongState):
 		code = cliout.CodeWrongState
+	case errors.Is(err, lock.ErrAdoptionRequired):
+		// The fail-closed adoption refusal. It is classified here as well as at
+		// its call site so that any path which surfaces the sentinel without
+		// attaching a code still reports something an agent can branch on:
+		// `internal` for this state would say "file a bug" about a project that
+		// needs one documented command run once. See cliout.CodeAdoptionRequired.
+		code = cliout.CodeAdoptionRequired
+	case errors.Is(err, lock.ErrLedgerRecordDeleted):
+		// A lock refused because the claim's ledger record was DELETED. It is
+		// integrity_failed rather than a code of its own because it is the same
+		// condition `check` reports as lock-ledger-deleted and it has that
+		// family's recovery exactly: restore from version control, never
+		// re-lock. Giving it a bespoke code would invite an agent to look for a
+		// bespoke fix, and the whole point of this refusal is that there is no
+		// command that clears it.
+		code = cliout.CodeIntegrityFailed
+	case errors.Is(err, lock.ErrCommentDigestUnrecorded):
+		// Same family, same reason as ErrLedgerRecordDeleted above: `check`
+		// reports this state as comment-digest-unrecorded, and its recovery is
+		// version control rather than any command.
+		code = cliout.CodeIntegrityFailed
 	}
 	return &cliout.Error{Code: code, Message: err.Error()}
 }

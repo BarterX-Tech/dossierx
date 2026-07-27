@@ -541,6 +541,10 @@ func newBuildOrderLockCmd() *cobra.Command {
 				dr.Effect("rewrites " + path + " with locked: true and a content-hash baseline").
 					Effect("the order becomes the implementation sequence: it goes stale, rather than silently changing, when its claims move")
 				dr.Propose("locked", true).Propose("reason", reason)
+				// The un-migrated project: this command records an approval
+				// (recordBuildOrderApproval), and requireMigratedProject refuses
+				// it there, so the preview evaluates the same gate.
+				migratedPrecondition(dr, cfg)
 				return dryRunResult(cmd, "build-order lock", dr), nil
 			}
 
@@ -593,6 +597,24 @@ func newBuildOrderLockCmd() *cobra.Command {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteConflict, "build-order lock: %w", err)
 			}
 			defer release()
+
+			// THE UN-MIGRATED PROJECT, refused here — under the sentinel, and
+			// before buildorder.Lock writes the artifact, so nothing is on disk
+			// when it fires.
+			//
+			// It is the twin of the refusal lock.Lock makes for a claim, and it
+			// has to exist separately because this command reaches the ledger
+			// through lock.RecordBuildOrderApproval rather than through
+			// lock.Lock. Without it, a build-order lock in a pre-ledger project
+			// writes the first record into a store that says the ledger does not
+			// exist — and Store.Save stamps the current version as it writes, so
+			// every OTHER locked claim in the project would read as
+			// lock-ledger-deleted from that moment on. See requireMigratedProject.
+			if store, storeErr := lock.LoadStore(storePath(cfg)); storeErr == nil {
+				if err := requireMigratedProject(cfg, store, "build-order lock"); err != nil {
+					return cmdResult{}, err
+				}
+			}
 
 			artifact, err := buildorder.Lock(path, claims, cfg)
 			if err != nil {

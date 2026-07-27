@@ -40,6 +40,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render"
 )
@@ -407,7 +408,7 @@ func disarmUngatedMockups(claims []model.Claim, cfg *config.Config) []model.Clai
 // both (never under their own sentinel) only to build the comment Deps, whose
 // review_pending recomputation consults real drift/flag state.
 func (s *Server) storePath() string {
-	return filepath.Join(s.cfg.Dir(), ".dossierx-lock-store.json")
+	return filepath.Join(s.cfg.Dir(), lock.StoreFileName)
 }
 
 func (s *Server) flagStorePath() string {

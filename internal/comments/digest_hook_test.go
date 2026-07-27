@@ -2,6 +2,7 @@ package comments
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -433,4 +434,164 @@ func TestNoReAdoptionInALedgerCoveredProject(t *testing.T) {
 	if _, ok := p.digestStore().Digest(claimA); !ok {
 		t.Fatalf("the claim actually written must still be recorded")
 	}
+}
+
+// makeCovered makes an existing project read as ledger-covered the way any
+// locking build does — a lock store on disk at the current schema.
+//
+// It is a mutator rather than a constructor because the ORDER matters to the
+// tests below. A project acquires comment history first and coverage second
+// (someone comments, then someone locks a claim, or the project is migrated),
+// and building it the other way round produces a shape that is itself a finding:
+// a covered project with no digest store at all is a DELETED digest store
+// (comment-digest-absent), where every claim carrying threads is correctly
+// refused. Seeding through that state would make the fixture, not the tamper,
+// the thing under test.
+func (p *project) makeCovered() {
+	t := p.t
+	t.Helper()
+	lockStorePath := filepath.Join(p.root, ".dossierx-lock-store.json")
+	store, err := lock.LoadStore(lockStorePath)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("save lock store: %v", err)
+	}
+	covered, err := lock.LoadStore(lockStorePath)
+	if err != nil {
+		t.Fatalf("reload lock store: %v", err)
+	}
+	if !covered.LedgerCovered() {
+		t.Fatalf("precondition: expected the project to read as ledger-covered")
+	}
+	p.store = covered
+}
+
+// THE ONE-DELETED-KEY LAUNDER, closed at the write path.
+//
+// internal/lock's audit reports a covered claim that carries threads with no
+// digest entry as comment-digest-unrecorded, and lock.adoptableClaims refuses to
+// re-adopt it on the next `dossierx check`. Both of those are READ paths. This
+// test pins the third door, which is the one an agent walks through by accident:
+// an ordinary `dossierx comment reply`.
+//
+// The attack is two edits and one ordinary command. Drop this claim's single key
+// from .dossierx-comment-digest.json; forge its comments block; then reply on it.
+// checkCommentDigest treated "unknown" as "cannot have drifted" and returned
+// nil, and recordCommentDigest then wrote an entry for the FORGED block — so the
+// claim came out with a digest certifying the forgery and the finding that named
+// it cleared. The edit that laundered the gate was smaller than the edit the gate
+// exists to catch.
+//
+// The laundering op is `comment add`, deliberately — a NEW thread, which touches
+// nothing the forgery did. That is what makes the attack cheap: the attacker
+// does not have to interact with the forged thread at all, and an innocent agent
+// answering the human's next question performs the launder on their behalf. It
+// also keeps the test honest, because every op that DOES touch the forged thread
+// fails for an incidental reason (a rewritten thread id is thread_not_found, a
+// forged-resolved thread is thread_resolved) and would pass this test without
+// the gate ever running.
+//
+// Without the ledgerCovered arm in checkCommentDigest this test fails twice
+// over: Add returns nil, and the digest store ends up holding an entry for the
+// forged block.
+func TestASingleDeletedDigestKeyIsNotLaunderedByAnOrdinaryCommentOp(t *testing.T) {
+	p := newProject(t, map[string]string{"a.yaml": draftAYAML, "b.yaml": commentedBYAML})
+
+	// An ordinary op on b, so the project has a digest store with b's real entry
+	// — the review history this claim legitimately has. THEN the project becomes
+	// ledger-covered, which is the order a real one arrives in.
+	if _, _, err := p.deps().Add(claimB, model.CommentRoleHuman, "the real thread"); err != nil {
+		t.Fatalf("seed Add: %v", err)
+	}
+	if _, ok := p.digestStore().Digest(claimB); !ok {
+		t.Fatalf("precondition: b must have a digest entry after a comment op")
+	}
+	p.makeCovered()
+
+	// THE TAMPER, both halves. Forge the comments block on disk, and delete the
+	// one key that would have caught it.
+	forged := `id: widget.contract.b
+facet: contract
+module: widget
+status: draft
+body: claim b
+comments:
+  - id: c-forged
+    status: resolved
+    author: human
+    created: "2026-07-27T10:00:00Z"
+    body: a thread nobody wrote, marked resolved by nobody
+    edited: false
+governed_by:
+  type: none
+  reason: fixture
+`
+	if err := os.WriteFile(filepath.Join(p.claimsDir, "b.yaml"), []byte(forged), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(digest.StorePath(p.cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	entries, ok := doc["digests"].(map[string]any)
+	if !ok {
+		t.Fatalf("digest store shape changed; got keys %v", doc)
+	}
+	delete(entries, claimB)
+	edited, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(digest.StorePath(p.cfg), edited, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// The ordinary command that used to bless it: a brand-new thread, which does
+	// not touch the forged one and used to succeed.
+	if _, _, err := p.deps().Add(claimB, model.CommentRoleAgent, "an unrelated new thread"); !errors.Is(err, ErrCommentDigestDrift) {
+		t.Fatalf("a comment op on a covered claim whose digest entry was deleted must be refused; got %v", err)
+	}
+
+	// And nothing was written: no entry for the forged block, and no new thread
+	// on the claim file.
+	if _, ok := p.digestStore().Digest(claimB); ok {
+		t.Fatalf("the forged comment block was recorded in the digest store: the refusal must write nothing, or it is the launder with extra steps")
+	}
+	if got := p.claimOnDisk(claimB); len(got.Comments) != 1 || got.Comments[0].ID != "c-forged" {
+		t.Fatalf("the refused op still mutated the claim file: %+v", got.Comments)
+	}
+}
+
+// The same predicate must stay SILENT on the two shapes it would otherwise
+// break, because a gate that refuses correct work gets worked around.
+//
+// A claim with no threads at all: the first comment on a claim is the ordinary
+// case, and an entry is what a comment op CREATES rather than something it
+// requires. An UNCOVERED project: a v0.2.x project's threads predate the digest
+// store entirely and are adopted wholesale on first write — refusing them would
+// block every comment op on every project that has not yet run migrate --adopt,
+// which the project-scoped lock-ledger-adoption-required already reports once.
+func TestTheUnrecordedDigestRefusalIsSilentWhereEvidenceIsHonestlyAbsent(t *testing.T) {
+	t.Run("threadless claim in a covered project", func(t *testing.T) {
+		p := newProject(t, map[string]string{"a.yaml": draftAYAML})
+		p.makeCovered()
+		if _, _, err := p.deps().Add(claimA, model.CommentRoleHuman, "the first thread anyone has opened"); err != nil {
+			t.Fatalf("the first comment on a claim must work in a covered project: %v", err)
+		}
+	})
+
+	t.Run("claim carrying threads in an uncovered project", func(t *testing.T) {
+		// No lock store on disk, so LedgerCovered is false — an honest v0.2.x
+		// project whose threads predate the digest store.
+		p := newProject(t, map[string]string{"a.yaml": draftAYAML, "b.yaml": commentedBYAML})
+		if _, _, err := p.deps().Add(claimB, model.CommentRoleHuman, "another thread"); err != nil {
+			t.Fatalf("a pre-digest-store project's existing threads must still be adoptable: %v", err)
+		}
+	})
 }

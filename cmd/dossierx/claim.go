@@ -212,7 +212,7 @@ type claimLedgerView struct {
 	// Recorded: a ledger record for this claim exists.
 	Recorded bool `json:"recorded"`
 	// Grandfathered: the record was ADOPTED on upgrade, never approved. Its
-	// hash is what was on disk on adoption day — see lock.AdoptLedger.
+	// hash is what was on disk on adoption day — see lock.AdoptProject.
 	Grandfathered bool `json:"grandfathered"`
 	// Released: an unlock released the record. A released record describes a
 	// claim that is allowed to be draft and allowed to change.

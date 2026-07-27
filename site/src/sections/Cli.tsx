@@ -73,7 +73,7 @@ function Transcript({ text }: { text: string }) {
  *
  * It is therefore ordered the way an agent's own skill is ordered: the contract
  * that applies to every command first (one envelope, stable codes, nothing
- * writes unpreviewed), then the codes it will branch on, then the nineteen
+ * writes unpreviewed), then the codes it will branch on, then the twenty
  * commands themselves, then — for an agent that learned the v0.2.0 surface — the
  * migration table, and last the harness-independence argument.
  */
@@ -154,7 +154,7 @@ export function Cli() {
               <i />
             </span>
             <span className="term__title">
-              dossierx · 19 commands · JSON by default
+              dossierx · 20 commands · JSON by default
             </span>
           </div>
 

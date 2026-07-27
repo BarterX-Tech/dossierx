@@ -37,7 +37,7 @@ const (
 	// RuleLockLedgerDowngraded is project-scoped: the lock store says it
 	// predates the lock ledger, and the project around it says otherwise.
 	//
-	// It is the read-only half of the guard AdoptLedger enforces on the write
+	// It is the read-only half of the guard AdoptProject enforces on the write
 	// path (see Store.LedgerDowngraded for the evidence and the attack). The two
 	// have to exist together: without the write-path half, one edited number
 	// re-arms grandfathering and re-blesses tampered content as approved;
@@ -52,11 +52,69 @@ const (
 	// restore.
 	RuleLockLedgerDowngraded = "lock-ledger-downgraded"
 
+	// RuleLockLedgerAdoptionRequired is project-scoped: this project's lock store
+	// predates the lock ledger, so nothing in it carries an approval record — and
+	// this build does not grandfather it in on its own.
+	//
+	// It is the visible half of DECISION "adoption fails closed". The state it
+	// reports is the one that used to be SILENT: PrepareStore adopted it on the
+	// write path and Store.PreLedgerExempt grandfathered it in memory on the read
+	// path, so a project presenting the pre-ledger shape passed every gate. And
+	// presenting that shape is two hand edits — lower "version", delete the
+	// "ledger" key — which is why LedgerDowngraded had to be invented, and why it
+	// is not enough on its own: delete the comment digest store in the same commit
+	// and no evidence in this directory can tell the result from an honest v0.2.x
+	// project (locked_at, the only other pre-ledger artifact, shipped in v0.2.0 and
+	// looks identical either way — verified against git show v0.2.0).
+	//
+	// So the answer is not a better predicate but a refusal: this project fails
+	// the gate until a human runs the one-time migration, which is the only path
+	// in the build that writes a grandfathered record. See AdoptProject.
+	//
+	// It replaces the per-claim lock-ledger-missing findings for these claims
+	// rather than sitting on top of them — one cause, said once, with the command
+	// that clears it. Repeating "this claim is locked but has no record" N times,
+	// each with a recovery that says to set the claim back to draft and re-lock
+	// it, is exactly the destructive advice the old exemption existed to avoid
+	// giving an honest project.
+	RuleLockLedgerAdoptionRequired = "lock-ledger-adoption-required"
+
 	// RuleLockLedgerMissing: a locked claim with no ledger record. Something
 	// wrote status: locked without going through the approval path — most
 	// often a hand edit, which walks straight past the lint gate, hub gating,
 	// and the unresolved-comment gate as though all three had passed.
 	RuleLockLedgerMissing = "lock-ledger-missing"
+
+	// RuleLockLedgerDeleted: a claim THIS ENGINE LOCKED, whose ledger record is
+	// gone. It is lock-ledger-missing's sharper twin, and it exists because the
+	// gate keyed every one of its rules on a record EXISTING — so deleting one
+	// took the claim out of the switch entirely.
+	//
+	// The attack is two edits inside one file plus one line of YAML, and it was
+	// completely silent on HEAD: delete the claim's entry from the "ledger" map,
+	// flip its `status: locked` to `status: draft`, and the claim is an ordinary
+	// draft again — free to edit, and re-lockable afterwards with an
+	// agent-supplied --reason that produces a record indistinguishable from a
+	// human's approval. lock-ledger-missing needs status: locked. lock-ledger-
+	// orphan needs a record. lock-content-drift needs a record. lock-ledger-absent
+	// needs the whole file gone. `check --validate` reported ok:true with zero
+	// findings.
+	//
+	// THE EVIDENCE THE DELETION DOES NOT REACH is in the same store file, one key
+	// away: locked_at, which every lock and every confirmed reaudit stamps and
+	// which nothing in this build removes (unlock does not; see Unlock), and the
+	// claim's own dependency baselines under "hashes", written by the same two
+	// operations. Either one says "this engine locked this claim" about a claim
+	// the ledger now says nothing about, and the only path that legitimately ends
+	// a claim's approval — unlock — KEEPS the record and stamps ReleasedAt on it.
+	// So a record that is absent rather than released was deleted by hand.
+	//
+	// WHAT IT DOES NOT CLOSE, stated plainly: an attacker who deletes the
+	// locked_at entry and the baselines in the same edit as the record leaves
+	// nothing behind to notice. That is three keys in a tracked file instead of
+	// one, in a diff whose whole purpose is to be read, which is the same trade
+	// the ledger itself makes (see ledger.go's "two deliberate non-goals").
+	RuleLockLedgerDeleted = "lock-ledger-deleted"
 
 	// RuleLockLedgerReleased: a LOCKED claim whose record exists but was
 	// RELEASED by an unlock. Unlock deliberately keeps the record and stamps
@@ -113,6 +171,39 @@ const (
 	// unresolved thread by hand is how a claim gets past the lock gate with a
 	// review still open.
 	RuleCommentLedgerDrift = "comment-ledger-drift"
+
+	// RuleCommentDigestUnrecorded: a claim that CARRIES COMMENT THREADS and has
+	// no entry in the comment digest store, in a project the lock ledger already
+	// covers.
+	//
+	// It closes comment-ledger-drift's one escape. That rule compares a claim's
+	// block against a RECORDED digest, and a claim the store has never seen is
+	// "unknown", never "drifted" — correctly, since an integrity check must not
+	// manufacture a finding out of missing evidence. But "unknown" was reachable
+	// by deleting ONE key: on a fully covered project with the store present and
+	// readable (so comment-digest-absent cannot fire), forge `status: resolved,
+	// resolved_by: human` onto a human's open thread — `check` reports
+	// comment-ledger-drift — then drop that claim's key from the "digests" map and
+	// the finding is gone, the claim locks, and the sweep re-adopts the forged
+	// block on the next ordinary command. The gate the whole review loop rests on
+	// (a human's open objection blocks the lock) was cleared by an edit smaller
+	// than the one it was catching.
+	//
+	// THE PREDICATE IS THE THREADS THEMSELVES, which is what makes it survive the
+	// tamper: comments are engine-managed, and the single path that writes a
+	// thread into a claim file (internal/comments' mutate) records the claim's
+	// digest in the same act. So in a covered project, a claim holding threads with
+	// no entry beside them has exactly two explanations — the entry was removed, or
+	// the threads were never written by the engine — and both are the finding.
+	//
+	// It is deliberately silent where the evidence is honestly absent: a project
+	// with no ledger coverage at all (nothing here has been approved), an absent
+	// digest store (comment-digest-absent is the one cause, said once), a claim
+	// with NO threads (adopted at its empty digest, which is what makes a
+	// hand-added thread report as drift later), and a claim holding a STANDING
+	// approval — that one is internal/check's comment-digest-missing, built on the
+	// ledger record instead, and reporting both would name one state twice.
+	RuleCommentDigestUnrecorded = "comment-digest-unrecorded"
 )
 
 // Finding is one ledger-gate disagreement. There is no severity field: unlike a
@@ -156,28 +247,55 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 	// "check --staged" reads the INDEX's answer, exactly as it reads the
 	// index's ledger. A nil digest store (one that failed to decode, already
 	// reported as lock-ledger-unreadable) is not evidence of anything and is
-	// read as absent, which is the conservative direction: it can only make the
-	// pre-ledger exemption WIDER, and the exemption's other half — the ledger
-	// map itself — still applies.
+	// read as absent, which is the conservative direction: it can only widen the
+	// set of projects offered the migration, and the other half of the evidence —
+	// the ledger map itself — still applies.
 	digestsPresent := digests != nil && digests.FileExists()
 
-	// preLedgerExempt: this project locked things before this build gave locks a
-	// record, so a locked claim without one is an upgrade state, not a tamper.
-	// Grandfathering it here — in memory, writing nothing — is what lets the
-	// read-only commands pass an honest v0.2.x project instead of accusing every
-	// claim in it. See Store.PreLedgerExempt.
-	preLedgerExempt := store.PreLedgerExempt(digestsPresent)
+	// adoptionRequired: this project locked things before this build gave locks a
+	// record, and it has not run the one-time migration yet. Its locked claims
+	// are NOT accused one by one (that recovery text is destructive advice for a
+	// project that has done nothing wrong) and they are NOT grandfathered in
+	// memory either, which is what used to happen and what made the whole state
+	// silent. They are reported once, project-scoped, with the command that
+	// clears it. See Store.AdoptionRequired and RuleLockLedgerAdoptionRequired.
+	adoptionRequired := store.AdoptionRequired(digestsPresent)
+
+	// covered: the ledger is in force here — the store is on disk at the ledger
+	// schema, which in this build happens only because AdoptProject or a real
+	// approval put it there. It arms the two rules whose evidence is only
+	// meaningful once every locked claim is supposed to have a record:
+	// lock-ledger-deleted and comment-digest-unrecorded. A downgraded store is
+	// deliberately NOT covered: it gets its own project-scoped finding below, and
+	// piling per-claim findings on top of it would bury the one that names the
+	// cause.
+	covered := store.LedgerCovered()
 
 	for _, c := range claims {
 		record, hasRecord := ledgerRecordFor(store, c.ID)
 
 		switch {
-		// The pre-ledger exemption is spent HERE and only here: on a locked
-		// claim whose record was never written because the build that locked it
-		// had nowhere to write one. Every other rule below needs a record to
-		// exist, and a genuinely pre-ledger store has none — so nothing else has
-		// to know about the exemption.
-		case c.Status == model.StatusLocked && !hasRecord && preLedgerExempt:
+		// The un-migrated project is spent HERE and only here: on a claim whose
+		// record was never written because the build that locked it had nowhere
+		// to write one. Every other rule below needs a record to exist, and a
+		// genuinely pre-ledger store has none — so nothing else has to know.
+		case !hasRecord && adoptionRequired:
+
+		// Evaluated BEFORE lock-ledger-missing, and for both lock states,
+		// because it is the more precise diagnosis wherever it applies: the
+		// claim did not merely arrive at status: locked without a record, it HAD
+		// a record and no longer does. The two need different recoveries —
+		// missing says "lock it properly", deleted says "restore the store" —
+		// and giving the second one the first's advice would tell a human to
+		// re-lock content whose approved bytes are sitting in version control.
+		case !hasRecord && covered && engineLocked(store, c.ID):
+			findings = append(findings, Finding{
+				Rule:    RuleLockLedgerDeleted,
+				ClaimID: c.ID,
+				Message: fmt.Sprintf(
+					"claim %q was locked by dossierx itself — the lock store still carries its own locked_at stamp and/or its dependency baselines — but its lock-ledger record is GONE. Nothing in this build deletes a record: unlock KEEPS it and stamps released_at on it, precisely so the evidence survives. A record that is absent rather than released was deleted by hand, which is how a locked claim is turned back into a freely editable draft (status: %s here) and re-locked later with a reason that reads exactly like a human's approval. Restore the lock store from version control; do NOT re-lock, which would record whatever the claim says NOW as approved.",
+					c.ID, c.Status),
+			})
 
 		case c.Status == model.StatusLocked && !hasRecord:
 			unrecordedLocks++
@@ -228,13 +346,32 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		// claim's review history matters just as much, and the window right
 		// after an unlock is exactly when supervision is weakest.
 		if digests != nil {
-			if recorded, known := digests.Digest(c.ID); known && recorded != digest.CommentsDigest(c) {
+			recorded, known := digests.Digest(c.ID)
+			switch {
+			case known && recorded != digest.CommentsDigest(c):
 				findings = append(findings, Finding{
 					Rule:    RuleCommentLedgerDrift,
 					ClaimID: c.ID,
 					Message: fmt.Sprintf(
 						"claim %q's comment threads were changed outside dossierx. Comments are engine-managed: add, reply, resolve and reopen through the CLI or the viewer, so the review history stays intact and an unresolved thread cannot be edited away.",
 						c.ID),
+				})
+
+			// The drift rule's escape hatch, closed: an entry that is DELETED
+			// rather than edited takes the claim from "drifted" to "unknown",
+			// and unknown is silent. See RuleCommentDigestUnrecorded for the
+			// reproduction and for why the threads themselves are the trigger.
+			// The standing-approval case is excluded because internal/check's
+			// comment-digest-missing already names it from the ledger record's
+			// side; naming one state twice teaches people to skim the list.
+			case !known && covered && digestsPresent && len(c.Comments) > 0 &&
+				!(hasRecord && !record.Released()):
+				findings = append(findings, Finding{
+					Rule:    RuleCommentDigestUnrecorded,
+					ClaimID: c.ID,
+					Message: fmt.Sprintf(
+						"claim %q carries %d comment thread(s) but has no entry in %s, so they are not being checked against anything — a forged or edited thread on this claim would read as unknown rather than drifted, and an unresolved objection edited away would not be reported at all. Comments are engine-managed: the one path that writes a thread records the claim's digest in the same act, so threads without an entry mean the entry was removed or the threads were written by hand. Restore %s from version control (or git add it, if this commit is the one that updated it). Do NOT run a comment op to re-create the entry: that records whatever the claim says NOW as the truth, which is exactly what removing it was for.",
+						c.ID, len(c.Comments), digest.StoreFileName, digest.StoreFileName),
 				})
 			}
 		}
@@ -286,6 +423,27 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		})
 	}
 
+	// The un-migrated project, reported once for the whole project. It fires
+	// whether or not any claim is locked: the migration is what puts this store
+	// on the ledger schema at all, and a project that skips it while it happens
+	// to have nothing locked would simply meet the same refusal later, from a
+	// state where a lock had already been refused. One command, run once, and
+	// every command after it behaves normally.
+	//
+	// It is DELIBERATELY NOT accompanied by the per-claim findings for the same
+	// claims (see the switch above): the cause is the project's, the recovery is
+	// the project's, and lock-ledger-missing's own advice — set it back to draft
+	// and re-lock — would destroy the very approvals the migration is about to
+	// record.
+	if adoptionRequired {
+		findings = append(findings, Finding{
+			Rule: RuleLockLedgerAdoptionRequired,
+			Message: fmt.Sprintf(
+				"this project's lock store predates the lock ledger (schema version %d), so %d locked claim(s) here have no approval record and nothing can say whether they still hold the content that was approved. Nothing is grandfathered automatically any more: adoption records whatever the claims say NOW as approved, so it has to be an explicit act a human runs and reviews, not something an ordinary command does on its own. Run `dossierx migrate --adopt` ONCE, review the claims it names, and commit the updated %s and %s. Until then every gate here fails closed.",
+				store.OnDiskVersion(), countLocked(claims), StoreFileName, digest.StoreFileName),
+		})
+	}
+
 	// The downgrade is the other project-scoped rule, and it is deliberately
 	// evaluated whether or not any claim is locked. A store edited back to a
 	// pre-ledger version is a statement about the LEDGER, not about any one
@@ -307,6 +465,43 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		return findings[i].Rule < findings[j].Rule
 	})
 	return findings
+}
+
+// engineLocked reports whether the STORE says this engine locked claim id at
+// some point, from the two pieces of bookkeeping a deleted ledger record leaves
+// behind (see RuleLockLedgerDeleted):
+//
+//   - locked_at, stamped by every Lock and every confirmed reaudit
+//     (RefreshBaseline), and removed by nothing — not even unlock, which is what
+//     makes it evidence rather than a lock-state mirror.
+//   - the claim's own per-dependent dependency baselines, written by the same two
+//     operations, which is a second key an attacker has to remember. It is only
+//     present for a claim that HAS dependencies, so it widens the rule rather
+//     than replacing locked_at.
+//
+// Neither is proof of an approval — that is what the ledger is for. Both are
+// proof that a record ONCE EXISTED, which is the only question this rule asks.
+func engineLocked(s *Store, id string) bool {
+	if s == nil {
+		return false
+	}
+	if _, ok := s.LockedAt[id]; ok {
+		return true
+	}
+	return len(s.Hashes[id]) > 0
+}
+
+// countLocked counts the locked claims in the set under audit — for the
+// adoption-required message, which is more useful when it says how much work the
+// migration is about to record than when it says only that one is needed.
+func countLocked(claims []model.Claim) int {
+	n := 0
+	for _, c := range claims {
+		if c.Status == model.StatusLocked {
+			n++
+		}
+	}
+	return n
 }
 
 // ledgerRecordFor returns the CLAIM record for id, if any. It filters on

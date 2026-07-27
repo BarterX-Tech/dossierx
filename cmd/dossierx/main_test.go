@@ -267,14 +267,20 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsNineteenLeavesUnderSixNouns pins the headline of the v0.3.0
+// TestSurfaceIsTwentyLeavesUnderSevenNouns pins the headline of the v0.3.0
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
 // getting more capable. Adding a leaf should be a decision someone makes on
 // purpose and writes down here, not something that accretes.
-func TestSurfaceIsNineteenLeavesUnderSixNouns(t *testing.T) {
+//
+// It moved from nineteen-under-six to twenty-under-seven exactly once, for
+// "migrate", and the decision is recorded rather than assumed: ledger adoption
+// became fail-closed (lock.AdoptProject), and the deliberate one-time act that
+// replaces it could not be a flag on an existing verb without putting an
+// irreversible, content-blessing write behind a command CI runs every commit.
+func TestSurfaceIsTwentyLeavesUnderSevenNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -296,6 +302,7 @@ func TestSurfaceIsNineteenLeavesUnderSixNouns(t *testing.T) {
 		"build-order status":  true,
 		"build-order lock":    true,
 
+		"migrate":       true,
 		"serve":         true,
 		"skills export": true,
 		"version":       true,
@@ -344,8 +351,8 @@ func TestSurfaceIsNineteenLeavesUnderSixNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 19 {
-		t.Errorf("the surface is 19 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 20 {
+		t.Errorf("the surface is 20 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 

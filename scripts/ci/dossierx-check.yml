@@ -26,6 +26,22 @@
 # apply. If you only adopt one of the two, adopt this one.
 #
 # ---------------------------------------------------------------------------
+# WHY IT RUNS TWO COMMANDS, AND WHY fetch-depth: 0
+# ---------------------------------------------------------------------------
+#
+# "dossierx check" judges one tree. "dossierx check --staged" additionally
+# compares that tree against its PARENT, which is the only way to see a commit
+# that changes WHAT the gate is allowed to look at — deleting the lock ledger,
+# deleting the comment digest store, or repointing claims_dir away from tracked
+# locked claims. Those edits produce no findings in a single tree, because they
+# remove the evidence every finding would have been made of.
+#
+# The comparison needs history. actions/checkout defaults to fetch-depth: 1,
+# which grafts HEAD's parents away entirely, so the checkout step below pins
+# fetch-depth: 0 on purpose. Shortening it does not fail the job — it silently
+# reduces the scope guard to an advisory line in a green run.
+#
+# ---------------------------------------------------------------------------
 # WHAT IT DEPENDS ON BEING COMMITTED
 # ---------------------------------------------------------------------------
 #
@@ -84,8 +100,20 @@ jobs:
     name: claim integrity
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth: 0 IS LOAD-BEARING. Do not remove it to speed the job up.
+      #
+      # actions/checkout defaults to fetch-depth: 1, which produces a SHALLOW
+      # clone: git grafts the boundary so HEAD reports no parents at all. The
+      # scope guard below (see "dossierx check --staged") compares this commit
+      # against its parent, and with no parent present it cannot compare
+      # anything — so a commit that deleted the lock ledger or repointed
+      # claims_dir would go unreported. The gate says so out loud rather than
+      # passing silently (next_steps names this exact line), but an advisory in
+      # a green job is not a gate.
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -111,6 +139,33 @@ jobs:
       # render, so it will not catch a rendering-stage failure.
       - name: dossierx check
         run: dossierx check --format text
+
+      # THE SCOPE GUARD, and the reason this job runs two dossierx commands
+      # instead of one.
+      #
+      # Every rule in the step above is evaluated against ONE tree, and what
+      # decides which files those rules even see — claims_dir, and whether there
+      # is a lock ledger to compare them against — is itself data in that tree.
+      # So the scope can be collapsed by the very commit being judged, and no
+      # single-tree rule is in a position to notice: from inside one tree, a
+      # repointed claims_dir and an honestly small project are the same picture.
+      # A verified two-commit tamper walked straight through the step above and
+      # through the pre-commit hook: repoint claims_dir at another tracked
+      # directory AND git rm the ledger, then rewrite the locked claim freely.
+      #
+      # "check --staged" is the one entry point defined against git, so it is
+      # the one that can compare this commit against its PARENT. On a clean
+      # checkout — which is what CI has — it judges HEAD against HEAD's own
+      # parents, and on a pull_request event HEAD is the MERGE commit whose
+      # first parent is the base branch. That means this step judges the WHOLE
+      # pull request against what it is merging into, which is what catches a
+      # collapse spread across several commits.
+      #
+      # It writes nothing at all, so it is safe to run after the writing step
+      # above; run it FIRST instead if you prefer the scope verdict before the
+      # render.
+      - name: dossierx check --staged (integrity scope)
+        run: dossierx check --staged --format text
 
       # Optional, and worth turning on once your claims are stable: fail when
       # the checked-in claim files are not what dossierx would write. It

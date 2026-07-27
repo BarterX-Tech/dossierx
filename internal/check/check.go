@@ -406,6 +406,13 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs) Result {
 	// mutating reconcile and stays out of the memory-only status path.
 	_, _, implinkHints := implinkStatus(cfg, claims)
 	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
+	// The scope advisory goes FIRST, ahead of every claim-level hint: it is the
+	// only line here that says something about the RUN rather than about the
+	// project, and what it says is "this run could not check one of the things
+	// you believe it checks". See ledgerInputs.scopeNote.
+	if in.scopeNote != "" {
+		res.NextSteps = append([]string{in.scopeNote}, res.NextSteps...)
+	}
 	return res
 }
 
@@ -600,17 +607,20 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 	// The pre-ledger upgrade step, FIRST because it is the only hint here about
 	// the project rather than about a claim.
 	//
-	// A project that locked claims before this build gave locks a record is
-	// grandfathered IN MEMORY by the read-only gate (lock.Store.PreLedgerExempt),
-	// which is what lets `check --validate` and `check --staged` pass it instead
-	// of accusing every locked claim of tampering. But in-memory is exactly that:
-	// nothing is written, so the same run happens again tomorrow, and the
-	// adoption a human should be reviewing has never been recorded anywhere they
-	// can read it. The write path (any `dossierx check` or claim command) is what
-	// puts the grandfathered records in the lock store, announces them, and lets
-	// this hint go away — so the read-only path SAYS SO instead of demanding it.
-	if store != nil && store.PreLedgerExempt(digestStorePresent(cfg)) {
-		hints = append(hints, "this project's locks predate the lock ledger and are being grandfathered in memory -> run dossierx check (the writing form) once, then commit the updated .dossierx-lock-store.json, so the adoption is on the record")
+	// A project that locked claims before this build gave locks a record needs a
+	// one-time migration, and this hint is the human-readable half of the
+	// lock-ledger-adoption-required finding the ledger gate reports beside it. The
+	// finding is what fails the gate; the hint is what says which command clears
+	// it, in the next_steps list an agent reads for its next move.
+	//
+	// It names `dossierx migrate --adopt` and nothing else. It used to say "run
+	// dossierx check (the writing form) once", from the release where adoption
+	// happened as a side effect of any command that opened the lock store for
+	// writing — that is gone (see lock.AdoptProject), and advice to run a command
+	// that no longer adopts would leave an agent looping on a gate it cannot clear
+	// while believing it is following the tool's own instructions.
+	if store != nil && store.AdoptionRequired(digestStorePresent(cfg)) {
+		hints = append(hints, "this project's locks predate the lock ledger and nothing is grandfathered automatically -> run dossierx migrate --adopt --dry-run to see what would be adopted, then dossierx migrate --adopt ONCE, and commit the lock store and comment digest store it writes")
 	}
 
 	var draftIDs []string
@@ -792,7 +802,11 @@ func renderOutPath(cfg *config.Config) string {
 // because staged.go also has to RECOGNISE it — by base name, anywhere in the
 // index — when deciding whether an untracked project.config.yaml is a
 // first-commit project or a bypass (see indexHoldsJudgeableContent).
-const lockStoreFileName = ".dossierx-lock-store.json"
+//
+// It is an alias for lock.StoreFileName rather than a second literal: the engine
+// owns the name, and a copy here could drift from the file the engine actually
+// opens while every test in this package still passed.
+const lockStoreFileName = lock.StoreFileName
 
 func storePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), lockStoreFileName)

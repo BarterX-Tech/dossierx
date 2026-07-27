@@ -297,6 +297,29 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	if err != nil {
 		return StagedProject{}, err
 	}
+
+	// THE SCOPE GUARD, and it is the only thing in this file that looks at more
+	// than one tree.
+	//
+	// Everything above assembles the commit under judgement and hands it to the
+	// same rules the working-tree gate runs, which is correct and is not enough:
+	// WHICH files those rules see is itself data in the commit being judged, so
+	// one commit can repoint claims_dir and delete the ledger and leave every
+	// individual rule behaving perfectly over an empty registry. Comparing
+	// against the PARENT is what turns that from an absence (invisible) into a
+	// change (reportable). See history.go for the reproduction and for what "the
+	// parent" means when nothing is staged.
+	//
+	// It is computed here rather than inside stagedLedgerInputs because it is
+	// not a store: it is a statement about the two commits, and it rides in the
+	// same ledgerInputs only because that is the value the gate is evaluated
+	// against.
+	scope, err := stagedScope(g, cfg, claimsSpec, sp.ConfigFromIndex)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	sp.ledger.scopeFindings = scope.Findings
+	sp.ledger.scopeNote = scope.Note
 	return sp, nil
 }
 

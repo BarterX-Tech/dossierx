@@ -297,7 +297,7 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 	}
 }
 
-// TestPreLedgerProjectGrandfathersItsLockedBuildOrder.
+// TestMigrationGrandfathersAPreLedgerProjectsLockedBuildOrder.
 //
 // Build orders could be locked before this release gave them a ledger record.
 // Without adoption, every such project would fail `check` on upgrade with a
@@ -306,7 +306,13 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 // store file that EXISTS and predates the ledger, the same predicate the
 // per-claim grandfathering uses, so deleting the ledger still cannot re-bless
 // anything.
-func TestPreLedgerProjectGrandfathersItsLockedBuildOrder(t *testing.T) {
+//
+// What performs it is now "dossierx migrate --adopt" rather than the next
+// ordinary command: adoption fails closed, and the build-order half moved with
+// the claim half (see migrate.go's planMigration, and prepareStore, which used to
+// carry it). The property under test is unchanged — an honest upgrade ends with a
+// grandfathered record and a passing gate — only the act that produces it.
+func TestMigrationGrandfathersAPreLedgerProjectsLockedBuildOrder(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 	root := filepath.Dir(cfgPath)
 
@@ -325,9 +331,12 @@ func TestPreLedgerProjectGrandfathersItsLockedBuildOrder(t *testing.T) {
 	storeFile := filepath.Join(root, ".dossierx-lock-store.json")
 	rewindStoreToPreLedger(t, storeFile)
 
-	// The upgrade run. It must not report the build order as unapproved.
+	// The upgrade run: the one-time migration, then the gate it clears.
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "migrate", "--adopt"); err != nil {
+		t.Fatalf("migrate --adopt on an honest pre-ledger project must succeed: %v", err)
+	}
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
-		t.Fatalf("the first check after an upgrade must not fail: %v", err)
+		t.Fatalf("check after the migration must not fail: %v", err)
 	}
 
 	// And the adoption is on the record, marked as an adoption rather than an
@@ -445,7 +454,7 @@ func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
 // TestRetiredVerbsAreNotSurface: the stubs answer, and they stay invisible.
 //
 // They must not appear in --help, in requireSubcommand's "run one of:" list, or
-// in the nineteen-leaf count TestSurfaceIsNineteenLeavesUnderSixNouns pins.
+// in the twenty-leaf count TestSurfaceIsTwentyLeavesUnderSevenNouns pins.
 // A removal explanation that advertises itself is a re-addition.
 func TestRetiredVerbsAreNotSurface(t *testing.T) {
 	env, _, err := execCLIJSON(t, "comment")

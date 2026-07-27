@@ -68,9 +68,23 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 		t.Fatalf("write legacy store: %v", err)
 	}
 
-	// First check after upgrade: migrates the store, but must NOT spuriously
-	// flip main to review_pending (its re-armed baseline equals dep's current
-	// content).
+	// THE MIGRATION COMES FIRST, and for this fixture that ordering is the
+	// point rather than a formality.
+	//
+	// A schema-0 store predates BOTH on-load migrations: the per-dependent
+	// baseline re-arm and the lock ledger. Adoption stamps the current schema
+	// version, and lock.MigrateLegacyStore refuses a store already at schema 1
+	// or later — so if the two ran in the other order this project's
+	// dependency-drift detection would be disarmed permanently, with no command
+	// left that could restore it. migrate.go's migrateLegacyBaselines is what
+	// keeps the pair together now that adoption no longer rides along with an
+	// ordinary command.
+	if _, _, err := execCLI(t, "--config", cfgPath, "migrate", "--adopt"); err != nil {
+		t.Fatalf("migrate --adopt (post-upgrade): %v", err)
+	}
+
+	// First check after the migration: must NOT spuriously flip main to
+	// review_pending (its re-armed baseline equals dep's current content).
 	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check (post-upgrade): %v", err)
 	}
@@ -83,13 +97,12 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 	// The store must have been re-armed and persisted: stamped current schema
 	// version, carrying a nested per-dependent baseline keyed under main.
 	//
-	// Version 2 is the lock-ledger schema. A legacy store IS a store that
-	// exists at an older version, so this same first check also grandfathers
-	// both already-locked claims into the ledger and announces it on stderr —
-	// see lock.AdoptLedger. Asserting the ledger's presence here as well keeps
-	// the two on-load migrations pinned together, since they now run from one
-	// entry point (lock.PrepareStore) and a caller that ran only half of them
-	// would still pass every assertion above.
+	// Version 2 is the lock-ledger schema, stamped by the migration above,
+	// which also grandfathered both already-locked claims into the ledger.
+	// Asserting the ledger's presence here as well is what keeps the two
+	// migrations pinned TOGETHER: they no longer share an entry point, and a
+	// migrate that adopted without re-arming — or a check that re-armed without
+	// being able to adopt — would still pass every assertion above.
 	storeRaw, err := os.ReadFile(storeFile)
 	if err != nil {
 		t.Fatalf("read store after migration: %v", err)

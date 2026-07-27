@@ -25,17 +25,23 @@ import (
 
 // adoptableCommentFixture builds a project that is already COVERED — a locked
 // claim, so armLedgerFixture writes both the lock ledger and the comment digest
-// store — and then adds a DRAFT claim carrying a comment thread that store has
-// never seen.
+// store — and then adds a DRAFT claim, with NO comment block, that the digest
+// store has never seen.
 //
-// Both halves are load-bearing. The covered half is what makes the adoption
+// Every part of that is load-bearing. The covered half is what makes the adoption
 // notable rather than bootstrapping: on a project whose digest store this run
 // CREATES, every block is adopted by definition and prepareStore stays silent
-// (see its comment). The draft, unapproved half is what keeps the claim
-// adoptable at all, since internal/lock's sweep now skips any id holding a
-// standing approval. So this fixture exercises the one adoption path that
-// survives every guard — and it is exactly the shape a hand-added comment block
-// arrives in.
+// (see its comment). The draft half is what keeps the claim adoptable at all,
+// since internal/lock's sweep skips any id holding a standing approval. And the
+// claim carries NO THREADS because the sweep now skips those too — a claim with
+// threads and no entry is lock.RuleCommentDigestUnrecorded, a finding, precisely
+// so that deleting one key from the digests map cannot be undone by the next
+// ordinary command.
+//
+// What is left is the one adoption path that survives every guard, and it is
+// still worth reporting: the claim is recorded at its EMPTY digest, which is the
+// value that makes a thread hand-added to it afterwards report as drift rather
+// than as an unknown.
 func adoptableCommentFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -53,19 +59,14 @@ func adoptableCommentFixture(t *testing.T) string {
 			"    resolved_by: human\n    resolved_at: \"2026-07-26T09:30:00Z\"\n",
 	})
 
-	// Step two, AFTER coverage exists: the claim whose block the digest store
-	// has never seen. It has to be written afterwards — the fixture helper
-	// adopts every claim it can see when it arms the store, so a claim present
-	// at that moment would already have an entry and there would be nothing left
-	// to adopt. Arriving late is also the honest shape of the state under test:
-	// a comment block that appeared without a comment op writing its digest.
+	// Step two, AFTER coverage exists: the claim the digest store has never
+	// seen. It has to be written afterwards — the fixture helper adopts every
+	// claim it can see when it arms the store, so a claim present at that moment
+	// would already have an entry and there would be nothing left to adopt.
 	claim := "id: widget.contract.a\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
-		"body: |\n  a draft claim carrying a comment thread nobody has recorded a digest for.\n" +
+		"body: |\n  a draft claim the comment digest store has never seen.\n" +
 		"governed_by:\n  type: none\n  reason: fixture\n" +
-		"rests_on:\n  - widget.contract.main\n" +
-		"comments:\n" +
-		"  - id: c-8136dd\n    status: open\n    author: human\n" +
-		"    created: \"2026-07-26T10:00:00Z\"\n    body: is this still true?\n    edited: false\n"
+		"rests_on:\n  - widget.contract.main\n"
 	if err := os.WriteFile(filepath.Join(root, "claims", "a.yaml"), []byte(claim), 0o644); err != nil {
 		t.Fatalf("write the late claim: %v", err)
 	}

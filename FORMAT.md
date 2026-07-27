@@ -133,8 +133,22 @@ Do **not** hand-edit `comments`; author it through the engine, which takes the
 project-wide claims lock, re-reads the claim inside it, and writes it back
 safely. Two surfaces reach the same operations: the CLI (`dossierx comment
 add` / `reply` / `list` / `inbox`) and `dossierx serve`'s HTTP API, which is
-what the viewer drives — resolve, reopen, edit and delete are viewer-only, so a
-review history is never rewritten by the party being reviewed. A hand-edited
+what the viewer drives. Resolve, reopen, edit and delete exist only on the
+second one.
+
+**That split is a rule, not a wall, and the two surfaces do not enforce it
+equally.** Advisory rights — an actor acts only on its own messages — are
+enforced in `internal/comments` against the actor it is handed, and on the CLI
+that actor is the required `--as`, so `dossierx comment reply --as agent`
+cannot close a human's thread and fails with `rights_denied`. The viewer's API
+takes the actor from the request body and treats a request that omits `as` as
+`human` (`internal/serve.actorFromString`), so **any local caller reaching
+`dossierx serve` has full human rights** and can resolve, reopen, edit or delete
+a human's thread — leaving a record that positively attests `human`. The server
+binds `127.0.0.1` and applies Host/Origin admission checks, but it does not
+authenticate; the honest statement is that its write API is the same trust level
+as write access to the claim files, which any such caller already has. Do not
+read "viewer-only" as "the party being reviewed cannot reach it". A hand-edited
 thread is detected rather than accepted: see `comment-ledger-drift` under
 Integrity invariants below. Each thread and reply `id` is engine-generated (`c-`/`r-` followed
 by 6 lowercase hex, unique within the claim file); a hand-authored or legacy
@@ -363,14 +377,17 @@ would certify the one edit that most needs a signature.
 | Finding | The invariant it enforces |
 |---|---|
 | `lock-ledger-absent` | Locked claims exist, so the ledger file must exist. Deleting it is not a way to re-bless a project; it is a project-scoped refusal you fix by restoring the file from version control. |
-| `lock-ledger-downgraded` | The lock store says it predates the ledger while the project around it proves otherwise. Grandfathering keys on the store's *own* `version` field, so setting `2` back to `1` and deleting the `ledger` key re-ran adoption and recorded whatever the claims said at that moment as approved — one hand edit to the audited file, and `check` reported ok. A downgrade now has to survive evidence the store does not own: a sibling `.dossierx-comment-digest.json` (this build writes it the instant a project becomes ledger-covered, so a genuine v0.2.x project has never had one), or ledger records still in a store claiming to predate the ledger. Nothing is grandfathered when it fires, and the per-claim findings under it stand. Restore the store from version control — do **not** re-lock, which records the current bytes as approved. |
+| `lock-ledger-downgraded` | The lock store says it predates the ledger while the project around it proves otherwise — its `version` set back from `2` to `1` and the `ledger` key deleted, one hand edit to the audited file. **Read this as tamper evidence, not as a grandfathering guard.** It was written as the latter: adoption used to key on the store's own `version`, so this edit re-ran adoption and recorded whatever the claims said at that moment as approved, and the rule's job was to catch that with evidence the store does not own (a sibling `.dossierx-comment-digest.json`, or ledger records still sitting in a store claiming to predate records). Adoption is no longer automatic — see *Adoption, once* above — so the edit no longer buys approval and this rule is no longer load-bearing for that. It still fires, because a store lying about its own schema version is still a store somebody edited by hand, and the per-claim findings under it still stand. Restore the store from version control. Do **not** re-lock, and do **not** reach for `dossierx migrate --adopt`: on a covered project it refuses, and on an uncovered one it would record the current bytes as the baseline, which is what the downgrade was trying to achieve. |
+| `lock-ledger-adoption-required` | A project that predates the lock ledger must be adopted deliberately before the gate will pass. This is **not** tampering and there is nothing wrong with the claims: the ledger simply does not exist yet, and adoption fails closed rather than manufacturing itself. One project-scoped finding naming the migration, deliberately in place of one `lock-ledger-missing` per claim — repeating "locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is destructive advice at a project that has done nothing wrong. See *Adoption, once* below. Tell it apart from `lock-ledger-absent`, which means the project **had** a ledger and no longer does. |
 | `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate, hub-gating and the unresolved-comment gate as though all three had passed. |
+| `lock-ledger-deleted` | A claim **this engine locked** still has its record. `lock-ledger-missing`'s sharper twin, and it exists because every other rule keyed on a record *existing*, so deleting one removed the claim from the switch entirely: drop its entry from the `ledger` map, flip `status: locked` to `draft`, and it is an ordinary draft — freely editable, and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. The evidence the deletion does not reach is one key away in the same file: `locked_at`, stamped by every lock and confirmed reaudit and removed by nothing in this build, plus the claim's dependency baselines under `hashes`. The only path that legitimately ends an approval is `unlock`, which **keeps** the record and stamps `ReleasedAt` — so a record that is absent rather than released was deleted by hand. Stated plainly: deleting `locked_at` and the baselines in the same edit leaves nothing to notice, which is three keys in a tracked file instead of one, in a diff whose purpose is to be read. |
 | `lock-ledger-released` | A `locked` claim's record is a *standing* approval. Unlocking marks the record released rather than deleting it, so flipping `status:` back to `locked` by hand leaves a released record in place — which satisfies "a record exists" while recording the opposite of an approval, and passes the hash check because the hash deliberately excludes `status`. |
 | `lock-content-drift` | A locked claim's content still hashes to what was approved. Covers every field above, including the ones `ContentHash` cannot see. |
 | `lock-ledger-orphan` | A `draft` claim holds no *unreleased* record. Unlocking releases a record and keeps it; flipping `locked` back to `draft` by hand does not, and that is the cheapest way to dodge review. |
 | `lock-ledger-abandoned` | An unreleased record still has the claim it approved. Deleting a locked claim's *file* removes the node from every per-claim rule below at once — they are all driven by the claims that exist — so removal was the one change to a locked claim that produced no finding at all. There is no `claim delete` verb: `unlock` first, then delete, so the withdrawal is on the record. |
 | `comment-ledger-drift` | A claim's comment block matches the digest recorded at the last engine write. Deleting an unresolved thread by hand is how a claim would otherwise slip past the lock gate with a review still open. |
 | `comment-digest-absent` | A ledger-covered project has the digest store the rule above compares against. A claim the store has never seen is *unknown*, never *drifted* — correct, since a gate must not manufacture a finding out of missing evidence, but it made the file a delete-to-clear switch: hand-delete an unresolved thread, delete `.dossierx-comment-digest.json` in the same commit, and the finding that named the edit was gone before any command ran. Project-scoped, and gated **only** on the project already being ledger-covered, so a project upgrading into the feature never sees it. |
+| `comment-digest-unrecorded` | In a ledger-covered project, a claim **holding threads** has a digest entry beside them. The predicate is the threads themselves, which is what makes it survive the tamper: comments are engine-managed and the single path that writes a thread into a claim file records the claim's digest in the same act, so threads with no entry have exactly two explanations — the entry was removed, or the threads were never written by the engine — and both are the finding. Deliberately silent where the evidence is honestly absent: an uncovered project, an absent store (`comment-digest-absent` is that cause, said once), a claim with no threads, and a claim holding a *standing* approval (that one is `comment-digest-missing`, built on the ledger record instead — reporting both would name one state twice). |
 | `comment-digest-missing` | The digest store is there, and a claim holding a **standing** approval record has no entry in it. The store was protected against deletion and not against being *emptied*, and overwriting it with `{"version":1,"digests":{}}` is strictly cheaper to hide in a review diff than the `rm` the rule above catches: hand-delete an unresolved `comments:` block and empty the map in one edit, and `claim lock` accepted the claim with a real, non-grandfathered record while `check --validate` reported ok. Coverage, not file presence, is the trigger, and the predicate is built only out of the ledger record — every approval writes the claim's comment digest in the same act that writes the record (`lock.RecordApproval`), so a standing record with no entry is a statement about the store, not about the claim. Silent where it should be: a project with no ledger coverage is not asked, an uncommented draft holds no record, and a released record describes a claim that has left the approval path. Suppressed entirely when the whole file is gone, so `comment-digest-absent` stays the single project-scoped cause. |
 | `comment-digest-abandoned` | A digest entry that recorded review history still has the claim it recorded it for. This is the comment half's reverse sweep, symmetric with `lock-ledger-abandoned`, and it is what makes the **rename** launder visible: deleting a claim's `comments:` block alone fires `comment-ledger-drift`, but deleting the block *and* changing `id:` in the same edit went completely quiet — the claim the store knows no longer exists, the claim that exists is one the store has never seen, and `claim lock <new id>` then succeeded on a claim whose human review had been erased. The old id's entry survives that edit precisely because it is not reachable from the file the tamper rewrote. It does not fire on the two accounted-for departures — an entry that recorded no threads, and a claim whose record an honest `unlock` released — and `lock.SweepCommentDigests` drops those entries so they never accumulate. `lock.AbandonedCommentDigests` owns the predicate for both the rule and the sweep, so the gate and the sweep cannot disagree. |
 | `build-order-content-drift` | A locked `.build-order.<module>.json` still matches the artifact that was approved. The sequence is what an implementing agent builds from, so reordering two phases by hand, moving a claim into `excluded`, or splicing the frozen `hashes` baseline so the order never reports `stale` again all change what gets built without changing any claim. |
@@ -449,20 +466,129 @@ that never travels with the repository is an approval CI has nothing to compare
 against. While it is still `locked: false` it is ordinary generated output that
 `propose` rewrites in full.
 
-### Adoption, once
+### Scope is itself audited: `check --staged` reads the parent commit
 
-A project that locked claims before the ledger existed adopts them on the first
-plain `dossierx check` — the run that writes: each already-locked claim gets a
-record marked `grandfathered`, and the adoption announces itself. The read-only
-forms, `check --validate` and `check --staged`, write nothing and therefore
-adopt nothing, so an upgrading project must run plain `check` once and **commit
-the rewritten `.dossierx-lock-store.json`**. Until that commit lands, every CI
-run and every hook run starts from the old-format store again. The flag stays on the
-record permanently, because an adopted hash is content that was *observed*, not
-content anyone approved — re-lock those claims deliberately when you get to
-them. Adoption triggers on an older store file being present, never on an
-absent one: "no ledger means adopt everything" would make deleting the file the
-universal bypass.
+Every rule above judges a **state** — these claims, this ledger, this digest
+store. A state rule is structurally unable to tell evidence that was never there
+from evidence that was *just removed*, and that is not a gap in any one rule; it
+is a gap in the category. It had a two-commit exploit in which no individual rule
+was ever wrong:
+
+1. Repoint `claims_dir:` at a fresh directory and `git rm .dossierx-lock-store.json`.
+2. Rewrite whatever you like in the locked claims that are now out of scope.
+
+After step 1 there is nothing in scope to have a finding about, so every rule
+reported correctly and the project was clean. A fresh clone of the result was
+clean too, so CI agreed.
+
+`check --staged` therefore resolves the **parent** of the commit under judgement
+(`HEAD`, or a merge's first parent) and compares the two, which turns each of
+those disappearances from an absence into a change:
+
+| The commit under judgement | Verdict |
+|---|---|
+| deletes `.dossierx-lock-store.json`, or drops it from the index | refused — a ledger that existed in the parent is a removed approval record, not a project that never had one |
+| deletes `.dossierx-comment-digest.json` | refused, including the commit that also drops the last claim the store had coverage for |
+| deletes a locked `.build-order.<module>.json` | refused — `build-order-ledger-abandoned` sees this from state when the record survives; the parent comparison covers the commit that removes artifact and record together |
+| repoints `claims_dir:` so that locked claims fall out of coverage | refused (see below) |
+
+These are reported as two project-scoped findings, **`integrity-store-removed`**
+(a store the parent commit carried and this one does not) and
+**`claims-scope-narrowed`** (`claims_dir` moved and left tracked claim files
+outside the new scope), under the `integrity_failed` code the gate already uses.
+They are reported **ahead of every other ledger finding**, because a scope change
+is the *cause* of whatever the rules below did or did not manage to see.
+
+Note what `claims-scope-narrowed` actually keys on: the **stranding**, not the
+move. A `claims_dir` move that takes its claims with it is how a project
+reorganises and is silent here. A move that leaves them behind is how a locked
+claim stops being audited while remaining in the repository, tracked, and still
+reading `status: locked`. "Claim file" means a blob that *decodes* as a claim,
+not one merely named `*.yaml`, so a repository full of ordinary YAML does not
+turn into a refusal.
+
+`integrity-store-removed` is deliberately **not** suppressed by the pre-ledger
+exemption: a project that predates the ledger has no ledger to delete and cannot
+reach the rule, while one that has a ledger and drops it is making a statement
+about the approval record for every locked artifact it holds. The whole
+comparison is skipped when `project.config.yaml` is itself no longer tracked, so
+removing a DossierX project wholesale is not a refusal. And where the parent
+commit is not available at all — a shallow checkout that never fetched it — the
+gate says so in its next steps rather than inventing a verdict.
+
+A repository's first commit has no parent and is judged on state alone, which is
+correct — nothing can have been removed from a commit that has no predecessor.
+
+#### Moving `claims_dir`
+
+There is **no flag, environment variable or config marker** that exempts a move
+from this, on purpose: an escape hatch on an integrity gate is the attack,
+because the party who reliably remembers to set it is the one who went looking
+for it in the source.
+
+The gate keys on whether **coverage survived** the move rather than on whether
+the path changed. A repoint is accepted when, after the move, the ledger still
+resolves and every locked claim is still reachable and still hashes to its
+existing record; it is refused when the repoint coincides with the ledger or the
+digest store disappearing, or with locked claims becoming unreachable.
+
+So the sanctioned procedure carries no ceremony at all: move the claim files
+(byte-identical), edit `claims_dir:`, and stage the claims, the config and the
+unchanged stores in **one commit**. A legitimate move passes because nothing lost
+coverage. The decoy-directory attack fails at its first commit for the same
+reason, which is the property actually worth enforcing.
+
+### Adoption, once, and only when a human asks for it
+
+A project that locked claims before the ledger existed is **not** adopted by any
+`check`. It is adopted by one explicit command:
+
+```sh
+dossierx migrate --adopt --dry-run             # names every artifact it would adopt
+dossierx migrate --adopt
+```
+
+`--adopt` is required, so a bare `dossierx migrate` refuses with `missing_flag`
+rather than guessing at a migration nobody named. There is deliberately **no
+`--reason`**: every other record-writing verb takes one because a human approved
+something, and nobody approved this. Each record the migration writes carries a
+fixed reason saying so, plus `grandfathered: true`, permanently — a
+human-supplied reason would make an adoption read like an approval in a ledger
+diff, which is the single thing this command must not do.
+
+Then **commit the rewritten `.dossierx-lock-store.json`** with the claims it now
+covers. Until that commit lands, every CI run and every hook run starts from the
+un-adopted store again.
+
+**Adoption fails closed.** A missing or unreadable ledger never adopts itself, in
+any run — not plain `check`, not `--validate`, not `--staged`. This is a
+deliberate breaking change for every v0.2.x project, and the reasoning is worth
+keeping next to the format it constrains.
+
+Adoption is the one operation in this design that *manufactures approval out of
+nothing*: it takes bytes nobody reviewed and writes a record saying they are the
+approved baseline. Any rule that performs it automatically therefore hands an
+attacker the same primitive the gate exists to deny — "arrive with no ledger"
+becomes a universal bypass, and `rm .dossierx-lock-store.json` is rewarded with a
+clean report. The obvious repair is a predicate that tells an honest pre-ledger
+store from a downgraded one, and that repair does not exist: `locked_at` shipped
+in v0.2.0 (`git show v0.2.0:internal/lock/lock.go`), so no field, no timestamp
+and no sibling file distinguishes the two from inside the directory. Earlier
+builds tried anyway and produced `lock-ledger-downgraded`, which narrowed the
+window without closing it. When no predicate can be trusted, the answer is not a
+cleverer predicate — it is to stop guessing and require a human decision.
+
+Each adopted record is marked as adopted **permanently**, because an adopted hash
+is content that was *observed*, not content anyone approved; re-lock those claims
+deliberately when you get to them. Claims and already-locked build orders are
+adopted in the same act, since a project half-across the ledger line is a state
+with no honest reading. The migration changes no claim's `status`, resolves no
+thread and clears no `review_pending`.
+
+It is an upgrade step and never a recovery tool. On a project that already has
+ledger coverage it refuses, and reaching for it to silence a gate on a covered
+project would record tampered bytes as approved — exactly the outcome fail-closed
+exists to prevent.
 
 ## Project config (`project.config.yaml`)
 

@@ -106,14 +106,29 @@ your next `claim lock`.
 
 ## Advisory rights — you reply, you never resolve
 
-Rights are advisory (`--as` is asserted, not authenticated) and enforced in code as
-`rights_denied`. Honor them strictly, and never "retry as human" to get past one.
+Rights are advisory: `--as` is **asserted, not authenticated**. The engine enforces them against
+the actor it is handed, and refuses with `rights_denied`.
 
 | actor | may act on |
 |---|---|
 | human | anything |
 | agent | only agent-authored messages |
 | anyone | **reply** to any open thread — this is your tool |
+
+**Where that is a wall, and where it is a rule.** On the CLI it is a wall: `--as` is required on
+every mutating comment verb, the engine enforces the table above against it, and `--as agent` on a
+human's thread fails. **On `dossierx serve`'s HTTP API it is only a rule.** That API reads the
+actor out of the request body and treats a request with no `as` field as `human`, so any process
+that can reach the localhost port has full human rights — it can resolve, reopen, edit or delete
+the human's blocking thread, and the record it leaves positively attests `human`. Nothing in the
+code will stop you. This is deliberate: the server is localhost-bound and same-origin-checked, but
+anyone who can curl it can already edit the claim YAML directly, so an API token would move the
+lock rather than add one.
+
+So do not read "enforced" as "impossible", and never treat the viewer API as a second opinion on a
+`rights_denied` you just earned. **Curling `/api/claims/<id>/comments/<tid>/resolve` is forging the
+human's approval**, and the forgery is worse than a hand-edited claim because it leaves a record
+that says a human resolved it. Never "retry as human", on either surface.
 
 When a human opens a thread and you believe you have addressed it: reply — "addressed in
 `internal/foo/bar.go`, please confirm" — and **wait**. Resolving it yourself would declare their

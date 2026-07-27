@@ -66,6 +66,16 @@
 #                          case therefore asserts BOTH halves: an honest commit
 #                          (and a commit touching no claim at all) still passes,
 #                          and a tampered locked claim is still refused.
+#  18  scope collapse      the two-commit tamper every rule was powerless
+#                          against: repoint claims_dir at another tracked
+#                          directory AND git rm the ledger, then rewrite the
+#                          locked claim freely. Every rule behaved correctly
+#                          over an empty registry, and both commits landed in
+#                          silence. Commit 1 is what must be refused.
+#  19  sanctioned move     the other half of 18, and the one that keeps it from
+#                          being a trap: a claims_dir move that TAKES ITS CLAIMS
+#                          WITH IT still commits, and the gate is still armed
+#                          against a hand-edited locked claim afterwards.
 #
 # Usage: bash scripts/hook-smoke-test.sh
 # Exit status: 0 all assertions held; 1 the first one that did not.
@@ -753,4 +763,82 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 (cd "$SKIPPED/repo" && git commit -qm "claims live outside the repository" --no-verify) >"$TMP/skipped-commit2.out" 2>&1 ||
 	fail "--no-verify did not get past the skipped-gate refusal: $(cat "$TMP/skipped-commit2.out")"
 
-echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them."
+# --- 18 · the SCOPE COLLAPSE -------------------------------------------------
+#
+# The two-commit tamper that defeated every rule in the engine while every rule
+# behaved correctly:
+#
+#	commit 1  claims_dir: claims -> archive (a tracked directory with no claims
+#	          in it) AND git rm the lock ledger
+#	commit 2  rewrite the locked claim freely
+#
+# After commit 1 the registry is EMPTY, so there is no locked claim for any rule
+# to name and no store for the reverse sweep to read. Measured before the fix:
+# both commits landed in silence, `check`, `check --validate`, `check --staged`
+# and a fresh clone all exited 0.
+#
+# Commit 1 is what has to be refused — it is the one that moves the gate, and
+# commit 2 only exploits what it did. So this case asserts the refusal at commit
+# 1, and asserts the two things that stop it being a trap: the message names the
+# two rules, and a claims_dir move that TAKES ITS CLAIMS WITH IT still commits.
+echo "hook-smoke-test: refusing a commit that collapses the gate's SCOPE ..."
+SCOPE="$TMP/scope"
+new_project "$SCOPE"
+mkdir -p "$SCOPE/archive"
+printf 'an ordinary tracked directory with no claims in it\n' >"$SCOPE/archive/NOTES.md"
+(cd "$SCOPE" && git add -A && git commit -qm "baseline") ||
+	fail "could not commit the scope fixture baseline"
+(cd "$SCOPE" && sh "$INSTALLER" --yes) >"$TMP/scope-install.out" 2>&1 ||
+	fail "install into the scope fixture failed: $(cat "$TMP/scope-install.out")"
+
+# COMMIT 1: repoint claims_dir at the innocent tracked directory, and delete the
+# ledger. Both halves in one commit, exactly as the reproduction had it.
+sed 's|claims_dir: claims|claims_dir: archive|' "$SCOPE/project.config.yaml" >"$SCOPE/project.config.yaml.tmp"
+mv "$SCOPE/project.config.yaml.tmp" "$SCOPE/project.config.yaml"
+(cd "$SCOPE" && git rm -q .dossierx-lock-store.json && git add -A) ||
+	fail "could not stage the scope collapse"
+if (cd "$SCOPE" && git commit -qm "chore: relocate claims") >"$TMP/scope-commit.out" 2>&1; then
+	fail "a commit that repointed claims_dir and deleted the lock ledger was ACCEPTED — the gate can still be moved out from under itself: $(cat "$TMP/scope-commit.out")"
+fi
+grep -q 'claims-scope-narrowed' "$TMP/scope-commit.out" ||
+	fail "the scope refusal did not name claims-scope-narrowed: $(cat "$TMP/scope-commit.out")"
+grep -q 'integrity-store-removed' "$TMP/scope-commit.out" ||
+	fail "the scope refusal did not name integrity-store-removed: $(cat "$TMP/scope-commit.out")"
+grep -q 'SCOPE of the gate' "$TMP/scope-commit.out" ||
+	fail "the hook did not print the scope recovery text: $(cat "$TMP/scope-commit.out")"
+
+# --- 19 · the SANCTIONED move ------------------------------------------------
+#
+# A gate with no way to reorganise a project is a trap, and a trap gets
+# uninstalled. There is no flag and no escape hatch for this on purpose: a move
+# that takes its claims with it strands nothing, so the rule has nothing to fire
+# on. This is that flow, and it has to COMMIT.
+echo "hook-smoke-test: a claims_dir move that takes its claims with it still commits ..."
+MOVE="$TMP/scope-move"
+new_project "$MOVE"
+(cd "$MOVE" && git add -A && git commit -qm "baseline") ||
+	fail "could not commit the sanctioned-move fixture baseline"
+(cd "$MOVE" && sh "$INSTALLER" --yes) >"$TMP/move-install.out" 2>&1 ||
+	fail "install into the sanctioned-move fixture failed: $(cat "$TMP/move-install.out")"
+
+mkdir -p "$MOVE/docs"
+(cd "$MOVE" && git mv claims docs/claims) || fail "git mv of the claims directory failed"
+sed 's|claims_dir: claims|claims_dir: docs/claims|' "$MOVE/project.config.yaml" >"$MOVE/project.config.yaml.tmp"
+mv "$MOVE/project.config.yaml.tmp" "$MOVE/project.config.yaml"
+(cd "$MOVE" && git add -A && git commit -qm "chore: move claims under docs/") >"$TMP/scope-move.out" 2>&1 ||
+	fail "the sanctioned claims_dir move was REFUSED — the scope guard is a trap: $(cat "$TMP/scope-move.out")"
+
+# And the gate is still ARMED afterwards, rather than merely quiet: the moved
+# claim is still being judged, so a hand edit to it is still refused. An
+# "accepted" that silently audits nothing would be the very failure case 18
+# exists for, reached through the sanctioned door.
+(cd "$MOVE" && "$BIN" check --staged --format json) >"$TMP/scope-move-status.out" 2>&1 || true
+grep -q '"skipped"' "$TMP/scope-move-status.out" &&
+	fail "after the sanctioned move the gate evaluates nothing: $(cat "$TMP/scope-move-status.out")"
+tamper "$MOVE/docs"
+(cd "$MOVE" && git add -A) || fail "could not stage the post-move tamper"
+if (cd "$MOVE" && git commit -qm "docs: tweak") >"$TMP/scope-move-tamper.out" 2>&1; then
+	fail "after a sanctioned claims_dir move the gate stopped catching a hand-edited locked claim: $(cat "$TMP/scope-move-tamper.out")"
+fi
+
+echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger or repoints claims_dir away from tracked locked claims, refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it."

@@ -31,9 +31,9 @@
 //
 // They are HIDDEN (absent from --help, from the completion script, and from
 // requireSubcommand's "run one of:" list) because they are not surface: nothing
-// should discover them, and the six-noun/nineteen-leaf contract is a design
+// should discover them, and the seven-noun/twenty-leaf contract is a design
 // constraint the release argues for. annotationRetired is what keeps
-// TestSurfaceIsNineteenLeavesUnderSixNouns honest about that — it excludes these
+// TestSurfaceIsTwentyLeavesUnderSevenNouns honest about that — it excludes these
 // by MARK, not by hidden-ness, so a real leaf can never be smuggled past the
 // count by hiding it.
 package main
@@ -103,14 +103,14 @@ func retiredCommentVerbs() []*cobra.Command {
 	}
 }
 
-// retiredTopLevelCmds are the verbs v0.3.0 folded into the six nouns. Each hint
+// retiredTopLevelCmds are the verbs v0.3.0 folded into the seven nouns. Each hint
 // is the corresponding row of SKILL.md's "if you remember an older command"
 // table, in the same words, so the binary and the skill cannot drift into
 // disagreeing about where a caller should go next.
 //
 // lock/unlock/flag/reaudit are deliberately NOT here: they moved UNDER a noun
 // that has the same name they had, so `dossierx lock <id>` is already answered
-// by the root with a hint listing the six nouns, and a stub would only add a
+// by the root with a hint listing the seven nouns, and a stub would only add a
 // second, less specific answer.
 func retiredTopLevelCmds() []*cobra.Command {
 	checkHint := `run: dossierx check (add --validate for a read-only pass that writes nothing)`

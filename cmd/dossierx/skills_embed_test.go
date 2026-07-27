@@ -142,7 +142,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The six nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The seven nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -285,7 +285,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The six nouns, nineteen leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The seven nouns, twenty leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}
@@ -446,8 +446,21 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // The budget from the plan, enforced. A skill nobody finishes reading is a skill
 // nobody follows, and the failure mode of a long one is silent: the agent skims
 // the schema and misses the rule about locked claims at the bottom.
+//
+// It was 200 through v0.2.x, sized for a six-noun surface with no upgrade path.
+// v0.3.0 added a seventh noun and two BREAKING changes the router is the only
+// place an agent is guaranteed to read about — the one-time `migrate --adopt`
+// every pre-v0.3.0 project must run before any gate passes, and `--staged`'s
+// parent-commit comparison with its two new findings. Raised to 230 as a
+// deliberate resize rather than quietly per release: the alternative was cutting
+// the adoption section, and an agent that meets `lock-ledger-adoption-required`
+// without having read what adoption IS either loops on a gate it cannot clear or
+// runs the migration on a project where doing so records tampered bytes as
+// approved. The four companion skills are unaffected and all still sit well
+// under 200 (claims 200, comments 174, code-links 128, build-order 110), which
+// is the check that this is a surface change and not prose creep.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
-	const maxLines = 200
+	const maxLines = 230
 
 	for _, name := range wantSkillNames {
 		raw, err := fs.ReadFile(dxskills.FS, name+"/SKILL.md")

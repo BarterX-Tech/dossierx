@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 The agent-first restructure. DossierX has two users with opposite needs: an **agent** that
 operates it, and a **human** who reviews what the agent did. Until now both were half-served by
 one command line. v0.3.0 gives each its own surface and takes the other away — the agent gets a
-19-command machine-readable CLI, the human gets the viewer and one command (`dossierx serve`).
+20-command machine-readable CLI, the human gets the viewer and one command (`dossierx serve`).
 
 Alongside the split, this release closes the gap that made the split worth making: until now a
 locked claim could be hand-edited and **nothing would notice**. The new lock ledger records what
@@ -19,6 +19,120 @@ was approved, when, by whom, and on whose words, and a gate compares the claims 
 
 **This release is not backward compatible at the CLI.** Ten commands were removed and four were
 moved. The migration table below maps every one of them.
+
+### BREAKING — every existing project must run `dossierx migrate --adopt` once
+
+**This is the one change that breaks a project rather than a script, and it breaks on the first
+`dossierx check` after the upgrade.** If your project has ever locked a claim, run this once,
+before you lean on the hook or CI:
+
+```sh
+dossierx migrate --adopt --dry-run   # look first: it names every artifact it would adopt
+dossierx migrate --adopt
+```
+
+then commit the rewritten `.dossierx-lock-store.json` — and the `.dossierx-comment-digest.json` the
+same run creates — in the same commit as the claims they now cover. `--adopt` is required, so a bare
+`dossierx migrate` refuses with `missing_flag` rather than guessing at a migration you did not name.
+`--dry-run` lists every claim and build order it would adopt and writes nothing.
+
+**There is deliberately no `--reason`,** and that is the one place this command breaks the pattern
+every other record-writing verb follows. They take the human's words because a human approved
+something. Nobody approved this. Every record the migration writes carries a fixed reason saying so
+— *"grandfathered by `dossierx migrate --adopt`: locked before this project had a lock ledger;
+content adopted as-found on migration day, never approved by anyone"* — and `grandfathered: true`,
+permanently. A human-supplied reason would make an adoption read like an approval in a ledger diff,
+which is exactly the confusion the fail-closed decision exists to remove.
+
+**Why this is not automatic any more.** Earlier in this release cycle it was: a pre-ledger project
+was grandfathered in on its first plain `check`, which observed whatever the claims said at that
+moment and recorded them as approved. It was convenient and it was unsound, because *adoption is
+the one operation in the design that manufactures approval out of nothing*. A gate that performs it
+on sight rewards deleting the ledger with a clean bill of health over content nobody reviewed, and
+turns "arrive with no ledger" into a universal bypass. Review rounds then tried to distinguish an
+honest v0.2.x store from a deliberately downgraded one using evidence inside the project, and could
+not: `locked_at` shipped in v0.2.0 (verifiable with `git show v0.2.0:internal/lock/lock.go`), so no
+field, no timestamp and no sibling file tells the two apart. When no predicate can be trusted the
+answer is not a cleverer predicate — it is to stop guessing and make a human decide, once.
+
+So **adoption now fails closed, in every run**: a missing or unreadable ledger never grandfathers
+anything on plain `check`, on `--validate`, or on `--staged`. The only code path that writes an
+adopted record is the one a human invokes deliberately.
+
+What the migration does and does not do: it hashes each currently-locked claim and each locked
+build order **exactly as they sit on disk** and records them as the baseline, marked as adopted
+rather than approved, permanently — an adopted hash is content that was *observed*, not reviewed.
+It changes no claim's `status`, resolves no thread, and clears no `review_pending`. Read the claims
+before you run it; nothing in the command can check them for you. It is an upgrade step and never a
+recovery tool: on a project that already has ledger coverage it refuses, and reaching for it to
+silence a gate on a project that *has* a ledger would record tampered bytes as approved, which is
+precisely what the fail-closed rule exists to prevent.
+
+Skipping it is loud rather than silent. `dossierx check` fails on the lock-ledger gate with the new
+project-scoped finding **`lock-ledger-adoption-required`**, under the `integrity_failed` code the
+gate already uses — **no new `error.code` was added for it**. It is one finding naming the
+migration, deliberately in place of one `lock-ledger-missing` per claim: repeating "this claim is
+locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is
+actively destructive advice at a project which has done nothing wrong. It is also genuinely
+distinct from its neighbour, and the history-aware gate below is what makes the two
+distinguishable: `lock-ledger-adoption-required` is a project that **never had** a ledger (benign;
+recovery is the migration), `lock-ledger-absent` is one that **had one and no longer does**
+(tampering; recovery is version control).
+
+Running it twice is refused, with the new `error.code` **`already_migrated`** and a `data.mode` of
+`already_covered` or `nothing_to_adopt` so a caller can tell the two apart — a migration that can be
+re-run is a laundering command, since deleting one record and re-migrating would re-sign the edit it
+covered as approved. A pre-commit hook and a CI run fail the same way as `check` — the run that
+would previously have blessed a project quietly now refuses it.
+
+### BREAKING — `check --staged` is git-history aware
+
+`--staged` no longer judges the index in isolation: it compares the commit under judgement against
+its parent. From a pre-commit hook the index differs from `HEAD`, so the index is the commit and
+`HEAD` is its parent; on a clean tree in CI the index *is* `HEAD`, so `HEAD` is judged against its
+own parents — and on GitHub's `pull_request` event the checkout is the merge commit, whose first
+parent is the base branch, so the whole pull request is compared against what it merges into.
+
+This closes the decisive hole the review rounds kept arriving at, which no single-tree rule could
+ever have seen. On a clean, fully-locked, hook-installed project, two commits were enough: repoint
+`claims_dir:` at an empty tracked directory **and** `git rm .dossierx-lock-store.json`, then rewrite
+the now-unscoped locked claims. After the first commit the registry is empty, so there is no locked
+claim for `lock-ledger-missing` to name and none for `lock-ledger-absent` to count; the reverse
+sweep is skipped because the store file is gone. `check`, `--validate`, `--staged` **and a fresh
+clone** all printed zero findings and exited 0, and the hook accepted both commits having correctly
+refused the identical tamper moments earlier. Nothing was broken — the gate was pointed somewhere
+else.
+
+Two new findings, both arriving under `integrity_failed` in `data.ledger_findings` like every other
+finding; **no new error code**:
+
+- **`integrity-store-removed`** — the parent commit carried `.dossierx-lock-store.json` or
+  `.dossierx-comment-digest.json` and this commit does not. It needs no claim to exist, which is the
+  whole point: it reads the previous commit, sees the file that was there, and sees that it is gone.
+  The message names the `git checkout <parent> -- <path>` that restores it.
+- **`claims-scope-narrowed`** — `claims_dir` moved and left tracked claim files outside the new
+  scope. **The trigger is the stranding, not the move.** A move that takes its claims with it
+  (`git mv claims docs/claims`, edit `claims_dir`, commit both together) is accepted silently, as is
+  widening the scope; there is no flag, environment variable or config marker to ask permission
+  with, because an escape hatch on an integrity gate is the attack and a gate with no sanctioned way
+  to reorganise is a gate that gets uninstalled. "Claim file" means a blob that **decodes** as a
+  claim, so a directory that also held a linter config or a chart values file does not turn a
+  reorganisation into a refusal.
+
+A **root commit** has no parent and is never refused by either rule. A **shallow clone** whose
+parent is not present cannot be compared at all, and that is reported as an advisory in
+`data.next_steps` naming the fix (`actions/checkout` with `fetch-depth: 0`, which the shipped
+workflow template now sets) rather than as a refusal or as silence — "no scope change was detected"
+and "no scope change could be looked for" are different sentences and only one of them is a pass. A
+pre-commit hook is unaffected, since there the comparison is against `HEAD`, which every clone has.
+
+**Anyone with the hook installed must re-run `scripts/install-git-hook.sh`.** The hook body carries
+these two refusals and a scope-specific recovery block, so its marker moves from `pre-commit v4` to
+`pre-commit v5`; the installer compares byte-for-byte, classifies a v4 install as `outdated` and
+replaces it cleanly with no `--force`. A v4 hook keeps working as a v4 hook — it simply does not
+have the parent comparison, which is the half of this release that catches a scope collapse at the
+commit that makes it. **Projects copying the CI workflow template need the `fetch-depth: 0` it now
+pins**: without it the guard degrades to the advisory above, in a run that still goes green.
 
 ### Migration — every retired command and its replacement
 
@@ -47,6 +161,34 @@ Nothing was removed from the **product**: `internal/comments` still implements a
 operations, and `dossierx serve`'s HTTP API — which is what the viewer drives — still exposes
 every one of them. Only the CLI surface shrank.
 
+### Added — two integrity holes closed at the command that used to launder them
+
+Both were found by reproducing them against the shipped binary, and in both the *gate* was already
+correct: `check` named the tampered state at every step. What was missing is that naming it is not
+refusing it, and in each case the next ordinary command wrote the evidence whose absence was the
+finding — so the sequence ended green, permanently.
+
+- **`lock-ledger-deleted` is now a refusal on `claim lock`, not only a finding.** Delete one
+  claim's entry from the `ledger` map, flip `status: locked` to `draft`, rewrite the body, and
+  `dossierx claim lock` used to succeed — `RecordApproval` wrote a *fresh* record over the
+  rewritten content, and every check from then on exited 0 with zero findings. The claim's own
+  `locked_at` stamp and dependency baselines survive the deletion (nothing removes them; `unlock`
+  *releases* a record rather than deleting it), so "this engine locked it and the record is gone"
+  is answerable, and locking is now refused with `integrity_failed`. The recovery is restoring the
+  lock store — **not** `unlock → fix → lock`, which signs the attacker's edit. A claim this engine
+  never locked is untouched by the gate, so a first lock still works normally.
+- **`comment-digest-unrecorded` is now a refusal on `claim lock` and on every comment op.** An
+  approval records the claim's comment digest in the same act, unconditionally — so on a claim
+  whose digest key had been dropped, locking *manufactured* an entry from whatever the comments
+  block said at that moment. Measured on a covered project: a human's open thread blocks the lock;
+  forge `status: resolved` and drop that one key; `check` correctly reports
+  `comment-digest-unrecorded`; `claim lock` then exits 0 and certifies the forged block; every
+  later check exits 0. The human's objection is gone and the record says the review was clean.
+  `dossierx comment add`/`reply` closed the same door from the other side — an *unknown* digest on
+  a covered claim that carries threads is no longer treated as "cannot have drifted". Silent, in
+  both, where evidence is honestly absent: an uncovered project, an absent digest store
+  (`comment-digest-absent` is that cause, said once), and a claim with no threads at all.
+
 ### Added
 - **`dossierx claim` — one noun for everything you do to a claim**: `show`, `list`, `new`,
   `lock`, `unlock`, `flag`, `reaudit`, `link`.
@@ -68,6 +210,10 @@ every one of them. Only the CLI surface shrank.
   the new claim in it, and reports the verdict. The id grammar (`module.facet.slug`, kebab-case
   slug, module and facet the project actually declares) is enforced at the door rather than
   after the write. Draft authoring is deliberately unfrictioned: no `--reason`, no confirmation.
+- **`dossierx migrate --adopt`** — the seventh noun, and the only command in the surface a
+  *human* is expected to run other than `serve`. It exists because adoption stopped being
+  something a `check` does on its own; see the BREAKING section above. `--adopt` and `--reason`
+  are required, `--dry-run` previews.
 - **`dossierx check --validate`** — a read-only run over `internal/check`'s existing non-writing
   seam (the same one `serve`'s status endpoint uses). It exists because cutting `lint` would
   otherwise have turned the per-claim authoring loop into a writer.
@@ -164,18 +310,21 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
   project. **CI is the authority, not the hook**: git does not run `pre-commit` for a clean
   merge, a rebase, a cherry-pick or a revert, `--no-verify` is one keystroke away, and most
   contributors never installed the hook. If you adopt one of the two, adopt CI.
-- **Grandfathering, once and loudly.** A project that locked claims before the ledger existed
-  adopts them on the first **plain `dossierx check`** — the run that writes. The read-only forms
-  (`check --validate`, `check --staged`) write nothing and therefore adopt nothing, so upgrade a
-  pre-v0.3.0 project by running plain `check` once and **committing the rewritten
-  `.dossierx-lock-store.json`** before leaning on the hook or CI. Each record is marked
-  `grandfathered` — an
-  adopted hash is content that was *observed*, not approved, and the flag stays on the record
-  permanently so nobody mistakes the two. Adoption triggers only on an older store file being
-  *present*; an absent store never adopts. **Already-locked build orders are adopted on the same
-  run and on the same terms** — a `.build-order.<module>.json` could be locked before this
-  release gave build orders a record, and without adoption every such project would fail its
-  first `check` on a `build-order-ledger-missing` it had no way to have avoided.
+- **Adoption and the history-aware gate**, both covered in full by the two BREAKING sections at
+  the top of this release. In brief: a pre-ledger project is no longer grandfathered by any
+  `check` and is adopted only by `dossierx migrate --adopt`, with claims and already-locked build
+  orders adopted in the same act (splitting the two halves across the ledger line would leave a
+  project half-covered); and `check --staged` compares the commit under judgement against its
+  parent, so deleting a store or stranding claims outside a moved `claims_dir` is a change it
+  reads rather than an absence it has nothing to say about.
+- **Moving `claims_dir` needs no flag, and there is deliberately no escape hatch.** An exemption
+  switch on an integrity gate is the attack, since the party who reliably remembers to set it is
+  the one who read the source looking for it. The rule keys on the **stranding**, not on the
+  move: a repoint that takes its claims with it is how a project reorganises and is silent, so
+  the sanctioned procedure is simply to move the claims and the stores in the **same commit**,
+  keeping the claim files byte-identical. A legitimate move passes with no ceremony; the
+  decoy-directory attack fails because the claims it abandoned are still tracked and now
+  unaudited.
 
 ### Added — graph integrity and readability
 
@@ -216,12 +365,12 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
 - **A run that adopts a comment digest says so.** `lock.PrepareStore` left the adopted ids on the
   store and `cmd/dossierx` dropped them, so `dossierx check` printed `ok:true`, zero findings,
   exit 0 on the very run that recorded a hand-added comment block as truth. The ids now ride the
-  same channel as the grandfathered ones, reaching `data.comment_digests_adopted` and the
-  envelope warnings — with the recovery that actually applies, which is **not** the re-lock the
-  grandfathering sentence offers: no verb in this binary clears a recorded comment digest, so the
-  only way back is version control. Deliberately silent when the digest store is being *created*
-  (a new project, or the one-time pre-ledger crossing), where every block is adopted by
-  definition and nothing has been laundered.
+  same channel as the adopted claim records, reaching `data.comment_digests_adopted` and the
+  envelope warnings — with the recovery that actually applies, which is **not** a re-lock: no verb
+  in this binary clears a recorded comment digest, so the only way back is version control.
+  Deliberately silent when the digest store is being *created* (a new project, or the one-time
+  `migrate --adopt` crossing), where every block is adopted by definition and nothing has been
+  laundered.
 - **`claim lock --dry-run` no longer previews a lock the real run refuses.** Its
   `claim_is_draft` precondition read the claim file's own `status:` line — the exact line a hand
   edit rewrites — so a claim flipped out of locked without an unlock, still carrying a standing
@@ -378,7 +527,7 @@ deleted straight out of the YAML; a `locked` flipped back to `draft` to dodge re
   `dossierx version` is the verb that reports the version; `--version` is unchanged.
 
 ### Changed
-- The CLI is **19 leaf commands under 6 nouns**, down from 26. A test pins the exact set, so
+- The CLI is **20 leaf commands under 7 nouns**, down from 26. A test pins the exact set, so
   adding to the surface is a decision someone makes on purpose.
 - `--reason` is **required** on `claim lock`, `claim unlock`, `claim reaudit --confirm`, and
   `build-order lock`. Under the new split the human never types these — they say "good, lock it"

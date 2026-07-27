@@ -9,6 +9,7 @@ package lock
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -254,9 +255,16 @@ func TestADowngradedSchemaZeroStoreWritesBackVersionZero(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
 	}
-	changed, adopted := PrepareStore(store, []model.Claim{claim})
-	if changed || len(adopted) != 0 {
-		t.Fatalf("a downgraded store must migrate nothing, got changed=%v adopted=%v", changed, adopted)
+	// The record count BEFORE: this fixture's store legitimately carries one
+	// already (that is what makes it a downgrade rather than a pre-ledger
+	// store), so the assertion is that an ordinary command does not ADD to it.
+	recordsBefore := len(store.Ledger)
+	changed := PrepareStore(store, []model.Claim{claim})
+	if changed {
+		t.Fatalf("a downgraded store must migrate nothing, got changed=%v", changed)
+	}
+	if len(store.Ledger) != recordsBefore {
+		t.Fatalf("an ordinary command adopted into a downgraded store: %d record(s) before, %d after", recordsBefore, len(store.Ledger))
 	}
 	if err := store.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -296,8 +304,8 @@ func TestAnEmptiedLedgerKeyIsStillEvidenceOfADowngrade(t *testing.T) {
 	}
 
 	tampered := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "quietly rewritten"}
-	if adopted := AdoptLedger(store, []model.Claim{tampered}); len(adopted) != 0 {
-		t.Fatalf("an emptied ledger must not re-arm grandfathering, adopted %v", adopted)
+	if _, err := AdoptProject(store, []model.Claim{tampered}); !errors.Is(err, ErrAdoptionRefused) {
+		t.Fatalf("an emptied ledger must not re-arm grandfathering, even through the explicit migration: err = %v", err)
 	}
 	if !hasRule(Audit([]model.Claim{tampered}, store, nil), RuleLockLedgerDowngraded) {
 		t.Fatalf("expected %s", RuleLockLedgerDowngraded)
@@ -329,7 +337,8 @@ func TestAStoreWithNoLedgerKeyStillGrandfathers(t *testing.T) {
 		t.Fatalf("a genuine pre-ledger store must not read as downgraded")
 	}
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
-	if adopted := AdoptLedger(store, []model.Claim{locked}); len(adopted) != 1 {
-		t.Fatalf("a genuine pre-ledger project must still be grandfathered, adopted = %v", adopted)
+	adoption, err := AdoptProject(store, []model.Claim{locked})
+	if err != nil || len(adoption.Claims) != 1 {
+		t.Fatalf("a genuine pre-ledger project must still be adoptable by the explicit migration, got (%v, %v)", adoption.Claims, err)
 	}
 }

@@ -51,7 +51,7 @@ import (
 // LockedClaimHash, which would make every existing ledger record look like
 // content drift — so a bump is a re-adoption event and must be accompanied by a
 // ledgerSchemaVersion bump, which is precisely what re-triggers grandfathering
-// (see AdoptLedger). Stated the other way round: the grandfathering machinery
+// (see AdoptProject). Stated the other way round: the grandfathering machinery
 // IS the hash-migration machinery, so there is exactly one upgrade path to
 // maintain rather than two.
 const lockedClaimHashVersion = 1

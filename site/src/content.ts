@@ -6,7 +6,7 @@
 // v0.3.0 RE-PREMISED THIS FILE. Every earlier draft read as if a person ran the
 // pipeline: "run dossierx lint, then lock the claim, then render the viewer."
 // That was always a half-truth and is now simply wrong. An AGENT operates
-// DossierX — all nineteen commands, JSON by default — and a HUMAN reviews what
+// DossierX — all twenty commands, JSON by default — and a HUMAN reviews what
 // it did, in a browser, with two gestures: comment and Resolve. Copy that blurs
 // the two teaches the wrong mental model before a single command appears, so
 // the roles are named in the hero, given their own section ("Who runs what")
@@ -61,7 +61,7 @@ export interface ContentSpec {
 export const contentSpec: ContentSpec = {
   siteTitle: "DossierX",
   tagline:
-    "DossierX turns a directory of atomic YAML claims into documentation that cannot silently rot — and gives its two readers two different surfaces. Your coding agent operates a nineteen-command JSON CLI. You read the rendered viewer in a browser, comment on any card, and click Resolve. Nothing already locked changes without your approval on the record.",
+    "DossierX turns a directory of atomic YAML claims into documentation that cannot silently rot — and gives its two readers two different surfaces. Your coding agent operates a twenty-command JSON CLI. You read the rendered viewer in a browser, comment on any card, and click Resolve. Nothing already locked changes without your approval on the record.",
   nav: [
     { id: "hero", label: "Overview" },
     { id: "roles", label: "Who runs what" },
@@ -84,11 +84,11 @@ export const contentSpec: ContentSpec = {
         "**DossierX** is a config-driven Go CLI that turns a directory of atomic YAML **claims** — one reviewable fact each — into a linted, dependency-checked, human-reviewable HTML viewer, governed by a lock / review_pending / reaudit lifecycle.\n\nIt has two users and gives them two surfaces. Your **agent** is the operator: it authors draft claims, runs `dossierx check`, links code to the claims it implements, and reads the comment inbox. **You** are the reviewer: you run `dossierx serve`, read the viewer, comment on any card, and resolve the threads you opened. That Resolve click is the approval — and it is load-bearing, because a claim with an open thread cannot lock.\n\nThe gate is narrower than it sounds. Draft claims are the agent's workshop, unfrictioned by design. The invariant is only this: nothing already **locked** changes without your approval on the record — enforced by a lock ledger that rides in git, checked by a pre-commit hook and, authoritatively, by CI.\n\nCLI-first, no public API. The only project-specific input the engine reads is your `project.config.yaml` — point the same binary at any project's config and it becomes that project's documentation engine.",
       data: {
         pitchLine:
-          "An agent-operated, human-approved documentation engine: atomic YAML claims, a nineteen-command JSON CLI for the agent, a browser viewer for the reviewer, and a lock ledger in git so nothing locked moves silently.",
+          "An agent-operated, human-approved documentation engine: atomic YAML claims, a twenty-command JSON CLI for the agent, a browser viewer for the reviewer, and a lock ledger in git so nothing locked moves silently.",
         badges: [
           "Go 1.26",
           "cobra + yaml.v3 only",
-          "19 commands, JSON by default",
+          "20 commands, JSON by default",
           "v0.3.0",
           "github.com/BarterX-Tech/dossierx",
         ],
@@ -104,7 +104,7 @@ export const contentSpec: ContentSpec = {
           {
             id: "agent",
             who: "Your agent",
-            surface: "the CLI · 19 commands · JSON by default",
+            surface: "the CLI · 20 commands · JSON by default",
           },
           {
             id: "human",
@@ -126,7 +126,7 @@ export const contentSpec: ContentSpec = {
       title: "Two surfaces, and a boundary between them.",
       kind: "two-surface",
       contentMd:
-        "The most common misconception about a tool like this is that a person sits down and drives it. Nobody does. Your coding agent operates DossierX — it writes the claims, runs the checks, links the code, and reads the comment inbox. You review what it did.\n\nSo each role gets its own surface and is denied the other's. The agent's surface is the CLI: nineteen commands, one JSON envelope per run, stable error codes to branch on. Your surface is the rendered viewer that `dossierx serve` opens on localhost, where the only two things you do are **comment** and **Resolve**.\n\nNothing stops you typing the nineteen commands — you are the approver, and sniffing for a TTY to refuse you would be theatre. But you should never need to, and the strengths below are labelled honestly: some of this boundary is enforced in code, some is enforced by git, and one line of it is convention backed by a required `--reason`.",
+        "The most common misconception about a tool like this is that a person sits down and drives it. Nobody does. Your coding agent operates DossierX — it writes the claims, runs the checks, links the code, and reads the comment inbox. You review what it did.\n\nSo each role gets its own surface and is denied the other's. The agent's surface is the CLI: twenty commands, one JSON envelope per run, stable error codes to branch on. Your surface is the rendered viewer that `dossierx serve` opens on localhost, where the only two things you do are **comment** and **Resolve**.\n\nNothing stops you typing the twenty commands — you are the approver, and sniffing for a TTY to refuse you would be theatre. But you should never need to, and the strengths below are labelled honestly: some of this boundary is enforced in code, some is enforced by git, and one line of it is convention backed by a required `--reason`.",
       data: {
         surfaces: [
           {
@@ -150,13 +150,13 @@ export const contentSpec: ContentSpec = {
               "Comment on a static file:// export — read-only by design",
             ],
             footnote:
-              "Not stopped from typing the nineteen commands anyway. You are the approver; nothing pretends otherwise.",
+              "Not stopped from typing the twenty commands anyway. You are the approver; nothing pretends otherwise.",
           },
           {
             id: "agent",
             role: "Operator",
             who: "Agent",
-            surface: "the CLI, all 19 commands · JSON by default",
+            surface: "the CLI, all 20 commands · JSON by default",
             command: "dossierx check",
             commandNote: "the whole pipeline, as often as it likes",
             can: [
@@ -195,7 +195,7 @@ export const contentSpec: ContentSpec = {
           {
             strength: "Hard",
             title: "In the code itself",
-            body: "The viewer has no lock controls, so a browser cannot lock. Comment edit and delete are gone from the CLI. Advisory rights let an agent act only on agent-authored messages, so it can reply to your thread and never close it.",
+            body: "The viewer has no lock controls, so a browser cannot lock. Comment edit and delete are gone from the CLI. Advisory rights are enforced against the CLI actor: an agent passing --as agent can reply to your thread and cannot close it. The viewer's own write API is the exception, and it is labelled under Convention below.",
           },
           {
             strength: "Blocked",
@@ -210,7 +210,7 @@ export const contentSpec: ContentSpec = {
           {
             strength: "Convention",
             title: "Named as such",
-            body: "“Ask before locking” lives in the skills, not in a syscall. The required --reason cannot make an unprompted lock impossible — it makes it loud, attributable and reviewable in the ledger.",
+            body: "“Ask before locking” lives in the skills, not in a syscall. The required --reason cannot make an unprompted lock impossible — it makes it loud, attributable and reviewable in the ledger. “You reply, the human resolves” is the same kind of line where the viewer's write API is concerned: it is localhost-bound and same-origin-checked but not authenticated, and a request that omits its actor is treated as human, so any local caller has your rights there. Deliberate — anything that can curl it can already edit the claim YAML — but stated rather than implied.",
           },
         ],
       },
@@ -220,12 +220,12 @@ export const contentSpec: ContentSpec = {
       title: "A surface an agent can trust, and facts a human can.",
       kind: "narrative",
       contentMd:
-        "An agent cannot operate a tool whose answers are English sentences. It needs one response shape, one vocabulary of error codes, and a promise that neither will move under it — so v0.3.0 made the machine contract the product's spine: `--format json` by default, one envelope per invocation, a stable `error.code` to branch on, and `--dry-run` on everything that writes. The surface got *smaller* — twenty-six commands to nineteen — while getting more capable, because every verb that survived is a verb an agent actually needs.\n\nUnderneath it, the original thesis is unchanged. Markdown folders, ADRs and wikis fail the same way: prose can become wrong without producing a machine-readable signal. DossierX replaces page-level trust with atomic facts that can be linted, reviewed, locked, and flagged when their dependencies or implementing code move.\n\nIt began as internal tooling inside a private, multi-module production app that had been burned by silent documentation drift. The public tool keeps the proven claim schema, the check pipeline, the lifecycle, build ordering and code linking, and takes all project-specific structure from `project.config.yaml`. The embedded skills teach an agent the whole loop: author claims, derive a build order, ground finished code in the claim it implements, and review with threaded comments — never touching a locked claim without asking you first.",
+        "An agent cannot operate a tool whose answers are English sentences. It needs one response shape, one vocabulary of error codes, and a promise that neither will move under it — so v0.3.0 made the machine contract the product's spine: `--format json` by default, one envelope per invocation, a stable `error.code` to branch on, and `--dry-run` on everything that writes. The surface got *smaller* — twenty-six commands to twenty — while getting more capable, because every verb that survived is a verb an agent actually needs.\n\nUnderneath it, the original thesis is unchanged. Markdown folders, ADRs and wikis fail the same way: prose can become wrong without producing a machine-readable signal. DossierX replaces page-level trust with atomic facts that can be linted, reviewed, locked, and flagged when their dependencies or implementing code move.\n\nIt began as internal tooling inside a private, multi-module production app that had been burned by silent documentation drift. The public tool keeps the proven claim schema, the check pipeline, the lifecycle, build ordering and code linking, and takes all project-specific structure from `project.config.yaml`. The embedded skills teach an agent the whole loop: author claims, derive a build order, ground finished code in the claim it implements, and review with threaded comments — never touching a locked claim without asking you first.",
       data: {
         principles: [
           {
             title: "One surface per role",
-            body: "The agent gets nineteen commands and a JSON envelope; the human gets a browser and two gestures. Neither gets the other's, which is what makes the roles legible instead of a convention someone has to remember.",
+            body: "The agent gets twenty commands and a JSON envelope; the human gets a browser and two gestures. Neither gets the other's, which is what makes the roles legible instead of a convention someone has to remember.",
           },
           {
             title: "A narrow gate, kept",
@@ -417,7 +417,7 @@ export const contentSpec: ContentSpec = {
             trigger: "Resolve, clicked in the viewer",
             mandate: "Human",
             execute: "Human — the one write they make",
-            note: "Resolving the last open thread clears review_pending, unless drift or a flag also stands, in which case the flag is retained with a printed reason. An agent cannot do this for you: advisory rights let it act only on agent-authored messages.",
+            note: "Resolving the last open thread clears review_pending, unless drift or a flag also stands, in which case the flag is retained with a printed reason. An agent operating the CLI cannot do this for you: advisory rights are enforced against --as, and an agent asserting --as agent is refused.",
           },
           {
             from: "locked",
@@ -476,7 +476,7 @@ export const contentSpec: ContentSpec = {
             role: "agent",
             surface: "terminal + claim",
             title: "Fix, then reply — never resolve",
-            body: "It edits the claim and replies on your thread: “Fixed the rows; the API facet was stale.” It cannot resolve: advisory rights let an agent act only on agent-authored messages, so your thread stays yours.",
+            body: "It edits the claim and replies on your thread: “Fixed the rows; the API facet was stale.” It does not resolve: on the CLI advisory rights refuse it outright, and its skills forbid reaching around them, so your thread stays yours.",
           },
           {
             role: "human",
@@ -652,7 +652,7 @@ export const contentSpec: ContentSpec = {
       title: "The machine contract — what your agent uses.",
       kind: "cli-explorer",
       contentMd:
-        "This is not a tutorial, because nobody is going to type these. It is the contract your agent codes against: nineteen commands, one JSON envelope per invocation, a stable `error.code` to branch on, `--dry-run` on everything that writes, and `--reason` on everything that changes a locked thing.\n\nOne binary serves any project through `project.config.yaml`, discovered by walking up from the working directory the way git finds `.git`. `check` is the CI entry point — it detects drift, lints, catalogs, renders the viewer, verifies the lock ledger and reconciles code links, and reports which of those stages it stopped at. `--validate` runs it read-only; `--staged` judges the git index instead of the working tree, which is what the pre-commit hook runs.",
+        "This is not a tutorial, because nobody is going to type these. It is the contract your agent codes against: twenty commands, one JSON envelope per invocation, a stable `error.code` to branch on, `--dry-run` on everything that writes, and `--reason` on everything that changes a locked thing.\n\nOne binary serves any project through `project.config.yaml`, discovered by walking up from the working directory the way git finds `.git`. `check` is the CI entry point — it detects drift, lints, catalogs, renders the viewer, verifies the lock ledger and reconciles code links, and reports which of those stages it stopped at. `--validate` runs it read-only; `--staged` judges the git index instead of the working tree, which is what the pre-commit hook runs.",
       data: {
         // The three contract facts an agent needs before any individual
         // command matters: the shape of every answer, the vocabulary of every
@@ -900,8 +900,18 @@ export const contentSpec: ContentSpec = {
             ],
           },
           {
-            group: "the three singles",
+            group: "the four singles",
             commands: [
+              {
+                name: "migrate --adopt",
+                usage: 'dossierx migrate --adopt [--dry-run]',
+                summary:
+                  "The one-time, human-run upgrade every pre-v0.3.0 project must perform before check passes again.",
+                detail:
+                  "v0.3.0's one breaking change. A project that locked claims before the lock ledger existed used to be grandfathered in automatically on its first writing check; that is gone, because adoption is the single operation that manufactures approval out of nothing, and a gate that performs it on sight rewards deleting the ledger with a clean report over content nobody reviewed. No evidence inside the directory can tell an honest v0.2.x store from a downgraded one — locked_at shipped in v0.2.0 — so there is no cleverer predicate to reach for. Adoption now fails closed in every run, and only this command clears it. It hashes each currently-locked claim and locked build order exactly as they sit on disk and records them as the baseline, marked adopted rather than approved, permanently. --adopt is required so a bare migrate refuses instead of guessing. There is deliberately NO --reason: every other record-writing verb takes the human's words because a human approved something, and nobody approved this — each record carries a fixed reason saying exactly that, plus grandfathered: true, permanently. Running it twice is refused with already_migrated, because a migration you can re-run is a laundering command. --dry-run lists everything it would adopt and writes nothing. It is an upgrade step, never a recovery tool: on a project that already has a ledger it refuses, and reaching for it to silence a gate would record tampered bytes as approved.",
+                example:
+                  '$ dossierx migrate --adopt --format text\nmigrate --adopt: 36 artifact(s) adopted into the lock ledger as GRANDFATHERED (mode: pre_ledger_store)\n  wrote .dossierx-lock-store.json\n  their recorded content is what was on disk just now, NOT content anyone approved',
+              },
               {
                 name: "serve",
                 usage: "dossierx serve [--port <n>]",
@@ -938,7 +948,7 @@ export const contentSpec: ContentSpec = {
         // learned v0.2.0 will reach for them, and a migration table is cheaper
         // than an error message.
         migration: {
-          title: "26 → 19: what was cut, and where it went",
+          title: "26 → 20: what was cut, and where it went",
           rows: [
             {
               cut: "lint · catalog · render",
@@ -968,7 +978,7 @@ export const contentSpec: ContentSpec = {
             {
               cut: "comment resolve · comment reopen",
               now: "the viewer only",
-              why: "Advisory rights already forbade an agent acting on a human's thread, and every viewer thread is human-authored — so on the CLI these verbs could only ever have acted on the agent's own. Vestigial. They stay where the rights holder is.",
+              why: "Advisory rights already refused a CLI agent acting on a human's thread, and every viewer thread is human-authored — so on the CLI these verbs could only ever have acted on the agent's own. Vestigial. They stay on the surface the rights holder actually uses; the localhost API behind it is not authenticated, so this is a smaller surface rather than a closed one.",
             },
             {
               cut: "— added —",
@@ -1042,7 +1052,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.3.0**, the agent-first restructure: nineteen commands, a JSON envelope on every one of them, a lock ledger enforced through git, and a viewer where every card can be commented on — see the full history below for what's shipped since the engine's public extraction.",
+        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.3.0**, the agent-first restructure: twenty commands, a JSON envelope on every one of them, a lock ledger enforced through git, and a viewer where every card can be commented on — see the full history below for what's shipped since the engine's public extraction.",
       data: {
         releases: [
           {
@@ -1138,10 +1148,12 @@ export const contentSpec: ContentSpec = {
             title: "Agent-first restructure — two surfaces, one gate",
             tag: "Latest release",
             highlights: [
-              "The premise, made explicit: the AGENT operates DossierX and the HUMAN reviews it. Each role gets its own surface — nineteen CLI commands for the agent, the viewer's comment-and-Resolve for the human — and the docs, skills and site are rewritten around that split.",
+              "The premise, made explicit: the AGENT operates DossierX and the HUMAN reviews it. Each role gets its own surface — twenty CLI commands for the agent, the viewer's comment-and-Resolve for the human — and the docs, skills and site are rewritten around that split.",
               "MACHINE CONTRACT: every command emits exactly one JSON envelope ({ok, command, data, warnings, error, stopped_at}), JSON by default, with a shared snake_case error.code vocabulary that the viewer's JSON API and the CLI now literally share. --dry-run on every mutating verb; --reason required on claim lock, claim unlock, claim reaudit --confirm and build-order lock. Exit codes stayed additive: 1 generic, 2 not-found/wrong-state.",
-              "SURFACE: 26 commands became 19 under six nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
+              "SURFACE: 26 commands became 20 under seven nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), migrate --adopt, serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
               "INTEGRITY: a lock ledger, separate from the content hash and built as a deny-list over every persisted field — so a swapped raw_html payload on a locked, allowlisted mockup can no longer pass as unchanged. Hand-flipping status, editing a locked body, re-locking onto a record an unlock already released, deleting a locked claim's file outright, deleting a thread from YAML, or hand-editing a locked build order is now reported as lock-ledger-missing, lock-content-drift, lock-ledger-orphan, lock-ledger-released, lock-ledger-abandoned, comment-ledger-drift, build-order-content-drift or build-order-ledger-missing. The gate rides git: a pre-commit hook running check --staged over the index, with CI as the authority, because merges and rebases never fire pre-commit.",
+              "BREAKING, and it breaks on your first check: every project that locked a claim before v0.3.0 must run `dossierx migrate --adopt` once, then commit the rewritten .dossierx-lock-store.json. Pre-ledger projects used to be grandfathered in automatically on the first writing check; that is gone. Adoption is the one operation that manufactures approval out of nothing, so a gate that performs it on sight rewards deleting the ledger with a clean report over content nobody read — and no evidence inside a project distinguishes an honest v0.2.x store from a downgraded one, since locked_at shipped in v0.2.0. Adoption therefore fails closed everywhere, and only a human running the migration clears it.",
+              "The staged gate got a memory: check --staged now resolves the parent of the commit under judgement and compares the two, so removing the gate's own evidence is a change it reads rather than an absence it has nothing to say about. Deleting the lock store, the comment digest store or a locked build-order artifact, or repointing claims_dir so locked claims fall out of coverage, is reported as one of two new findings — integrity-store-removed and claims-scope-narrowed — under the integrity_failed code the gate already uses; no new error code was added. This closes the two-commit hole where repointing claims_dir and git rm-ing the ledger in one commit, then rewriting the now-unscoped locked claims in the next, left every individual rule behaving correctly while scope quietly collapsed — and a fresh clone was green, so CI passed too. The trigger is the STRANDING, not the move: git mv the claims, edit claims_dir, commit both together, and the gate says nothing — as it does for a move that widens scope. There is no flag to ask permission with, because an escape hatch on an integrity gate is the attack.",
               "BUG FIX, and the reason the loop works at all: a claim with no comments rendered no 💬 chip, so the first comment on any card could never be opened from the viewer — the exact gesture the review loop starts with. Both gates had to move together, since the server emitted the chip only when threads existed and the client hid any chip reading zero, so an empty chip would have vanished the moment it was clicked. Every non-banner card now carries a chip, zero-state included; a static file:// export still hides them, because with no API to answer, read-only is the honest presentation.",
               "Also: self-edges rejected across every edge type and a second cycle pass over governed_by; edge labels in the viewer read as prose instead of raw ids (issue #11); five embedded skills, contract front-loaded, rewritten onto the new surface. Still cobra + yaml.v3 only.",
             ],
@@ -1183,7 +1195,7 @@ export const contentSpec: ContentSpec = {
             wiki: "scrape HTML, hope",
             adr: "prose, no contract",
             markdown: "prose, no contract",
-            dossierx: "19 commands, one JSON envelope, stable error codes",
+            dossierx: "20 commands, one JSON envelope, stable error codes",
           },
           {
             property: "Who can change a reviewed statement",

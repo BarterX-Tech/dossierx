@@ -34,8 +34,8 @@ the five rules are there and are not repeated here.
 
 ## A claim
 
-One YAML document per file. A second `---` document in the same file is a hard load error, not
-a silent drop — split it out.
+One YAML document per file. A second `---` document in the same file is a hard load error — split
+it out.
 
 - `id: module.FACET.slug` — **exactly three** non-empty dot-separated segments. `module` and
   `FACET` must be ones the project declares in `project.config.yaml`; `slug` must be kebab-case
@@ -58,14 +58,14 @@ a silent drop — split it out.
   the target must exist and must not be an unmigrated module), `governed_by: {type, reason}` —
   `reason` is required when `type: none`.
 - `kind: orientation-note` (implied by the reserved `overview` facet) marks a claim that tells a
-  reader how to read the *rest* of the module. It renders as a banner and always sorts ahead of
-  fact claims, so "read top to bottom" already means "read the orientation notes first".
+  reader how to read the *rest* of the module. It renders as a banner and sorts ahead of fact
+  claims, so "read top to bottom" already means "read the orientation notes first".
 
 ## Authoring — `dossierx claim new`, not a text editor
 
 Hand-writing claim YAML is the thing this design gates. Author through the command: it enforces
 the id grammar, the body requirement and the governed-reason rule **before** it writes, then lints
-the project with the new claim in it and reports the verdict.
+the project with the new claim in it.
 
 ```json
 {"ok": true, "command": "claim new", "data": {
@@ -76,38 +76,32 @@ the project with the new claim in it and reports the verdict.
 ```
 
 `--rests-on` / `--mirrors` / `--governed-by` / `--build-role` / `--section` / `--layout` are all
-available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader
-walks nothing else, so a claim written outside it would report success and then be invisible).
-After creation the claim is a **draft** — edit its file freely, as often as you like.
+available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks
+nothing else, so a claim written outside it reports success and is then invisible). After creation
+the claim is a **draft** — edit its file freely.
 
-The loop while authoring is `dossierx check --validate`: it drives the same lint gate `check`
-does, at the same severity, and writes **nothing** — no claim files, no lock store, no
-`.catalog.json`, no viewer. Lint one claim at a time, while that claim is still the thing you are
-looking at. Run the full `dossierx check` when you want the viewer rebuilt and code links scanned.
+The loop while authoring is `dossierx check --validate`: the same lint gate `check` drives, at the
+same severity, writing **nothing** — no claim files, no lock store, no `.catalog.json`, no viewer.
+Run the full `dossierx check` when you want the viewer rebuilt and code links scanned.
 
 ## Finding the claim the human meant
 
-They will say "the retry card in contract". That is not an id, and guessing one costs a
-`claim_not_found` and, worse, risks acting on the wrong claim.
-
-```
-dossierx claim list --match "retry" [--facet contract] [--module widget]
-```
+They will say "the retry card in contract". That is not an id, and guessing costs a
+`claim_not_found` — or worse, acts on the wrong claim. Run
+`dossierx claim list --match "retry" [--facet contract] [--module widget]`.
 
 Each row carries `claim_id`, `title`, `status`, `review_pending`, `drifted`, `open_threads` and a
-`score`. The score is a ranked ladder over the id and the derived title, so a confident hit sits
-well above a tie. **Name the winner and its title back to the human and wait for confirmation**
-before running anything that writes.
+`score` — a ranked ladder over the id and derived title, so a confident hit sits well above a tie.
+**Name the winner and its title back to the human and wait** before running anything that writes.
 
 ## `dossierx claim show` — one call, the whole picture
 
 Prefer it over reading the YAML. It reports status, lock state and `locked_at`, `review_pending`
 plus **which** trigger caused it, both edge directions (`rests_on`/`mirrors` outgoing,
 `depended_on_by`/`mirrored_by` incoming), `implemented_in[]` with per-file drift, comment counts
-with the open thread ids, and `next_actions`.
-
-`next_actions` is computed from the *same* gate evaluation the write path uses, so it can never
-disagree with what the command would actually do. Read it instead of re-deriving the lifecycle:
+with the open thread ids, and `next_actions` — computed from the *same* gate evaluation the write
+path uses, so it can never disagree with what the command would do. Read it rather than
+re-deriving the lifecycle:
 
 ```json
 "next_actions": ["1 open comment thread(s) block locking -> the human resolves them in the viewer; that click is the approval"]
@@ -121,15 +115,14 @@ A draft claim is yours. A locked claim is the human's, and the **only** path thr
 dossierx claim unlock <id> --reason "<their words>"   →   edit the file   →   dossierx claim lock <id> --reason "<their words>"
 ```
 
-Both ends require `--reason`, and both take `--dry-run`. Preview, show the human the
-`side_effects` (locking records a content baseline; unlocking releases it and can flip dependents),
-get a yes, then run it. `--reason` is where their approval is carried into the record — never
-fabricate one.
+Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects`
+(locking records a content baseline; unlocking releases it and can flip dependents), get a yes,
+then run it. `--reason` carries their approval into the record — never fabricate one.
 
 The window between the two ends is not a steady state. If any source file carries a
 `dossierx-claim:` tag for that id, a plain `dossierx check` mid-edit fails with `implink_refused`
-and `claim is not locked (status "draft")` — the tag is fine, the claim is simply mid-edit. Finish
-the relock; do not touch the tag, and never leave the claim unlocked to silence it.
+and `claim is not locked (status "draft")` — the tag is fine, the claim is mid-edit. Finish the
+relock; never touch the tag or leave the claim unlocked to silence it.
 
 `dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
 the findings), `unresolved_comments` (reply, and let the human click Resolve),
@@ -151,47 +144,54 @@ three independent triggers stands:
 | an open comment thread on the claim | anyone commenting (see **[[dossierx-comments]]**) | the **human** resolving it in the viewer |
 
 It is set automatically and never cleared automatically: it clears only once *every* standing
-trigger is gone. `dossierx claim unlock` also clears it, by leaving the locked state entirely.
+trigger is gone. `unlock` also clears it, by leaving the locked state entirely.
 
 **`dossierx claim reaudit` is the drift tool, not the general edit tool.** It refuses any claim
 that is not already locked **and** `review_pending` (`not_review_pending`, exit 2), its
 dependency-drift proposal is a no-change stub today (treat any content diff there as
-illustrative), and it can rewrite `body` and nothing else. If you want to change a locked claim
-for any other reason — new information, a better wording, a `rows` fix, a structural change —
-that is unlock → fix → lock — and the refusal's own `error.hint` spells out both commands with the
-claim id already substituted, so read it rather than re-deriving the path.
+illustrative), and it rewrites `body` and nothing else. Any other change to a locked claim — new
+information, better wording, a `rows` fix, a structural change — is unlock → fix → lock, and the
+refusal's own `error.hint` spells out both commands with the id substituted.
 
-When reaudit *is* right: run it bare first (a preview; writes nothing, renders the before/after
-as a diff), **show the human the diff and wait**, then `--confirm --reason "<their words>"`. On
-rejection do nothing further — the claim stays `locked, review_pending`. Never clear the flag by
-hand. And reaudit refuses a claim whose *only* trigger is an open thread: there is no diff to
-confirm, so resolve the conversation instead.
+When reaudit *is* right: run it bare first (a preview; writes nothing, renders the before/after as
+a diff), **show the human the diff and wait**, then `--confirm --reason "<their words>"`. On
+rejection do nothing — the claim stays `locked, review_pending`, and you never clear a flag by
+hand. Reaudit refuses a claim whose *only* trigger is an open thread: no diff to confirm, so
+resolve the conversation instead.
 
 ## Integrity — the ledger sees hand edits
 
-Every legitimate approval records a hash of what was approved. `dossierx check` (and
-`--validate`, and `--staged`, which is what the git pre-commit hook runs over the index) compares
-the world against that ledger and fails with `integrity_failed` on: a locked claim with no
-record, a locked claim whose content moved, a draft claim still holding a record (someone flipped
-`locked` → `draft` to dodge review), a locked claim whose **file was deleted** while its record
-still stands (there is no `claim delete` verb — `unlock` first, then delete), or a comment block
-changed outside the engine.
+Every legitimate approval records a hash of what was approved. `dossierx check` (and `--validate`,
+and `--staged`, which the pre-commit hook runs) compares the world against that ledger and fails
+with `integrity_failed` on: a locked claim with no record or with a **deleted** one
+(`lock-ledger-deleted`), a locked claim whose content moved, a draft claim still holding a record
+(`locked` → `draft` to dodge review), a locked claim whose **file** was deleted while its record
+stands (no `claim delete` verb exists — `unlock` first), or a comment block changed outside the
+engine.
 
-The recovery is never "re-lock it so the hashes match" — that launders the edit. Restore the file
-from version control, or take it through unlock → fix → lock. CI is the authority; the hook is
-only fast feedback.
+**Branch on `rule` inside `data.ledger_findings`, not on the code** — three are not tampering.
+`lock-ledger-adoption-required` means the project predates the ledger and was never adopted:
+adoption fails closed, and the fix is a human running `dossierx migrate --adopt` once (see
+**[[dossierx]]**). Do not confuse it with `lock-ledger-absent`, which means the project *had* a
+ledger and no longer does. Under `--staged`, `integrity-store-removed` and `claims-scope-narrowed`
+come from the parent-commit comparison and judge the commit, not your claims; to move `claims_dir`
+legitimately, move the claims and the stores in the **same** commit, claim files byte-identical.
+
+Everywhere else the recovery is never "re-lock it so the hashes match" — that launders the edit.
+Restore from version control, or go unlock → fix → lock. CI is the authority; the hook is only
+fast feedback.
 
 **Three project-root files are tracked, committed artifacts**, beside `project.config.yaml` and
-never `.gitignore`d: `.dossierx-lock-store.json` (the ledger; missing → `lock-ledger-absent`, and
-the gate has nothing to compare against), `.dossierx-comment-digest.json` (the review history's
-fingerprint; missing → `comment-digest-absent`), `.dossierx-flag-store.json` (each flagged claim's
-pending `{claim_says, now_does, reason, flagged_at}`).
+never `.gitignore`d: `.dossierx-lock-store.json` (the ledger; missing → `lock-ledger-absent`),
+`.dossierx-comment-digest.json` (review history's fingerprint; missing → `comment-digest-absent`),
+`.dossierx-flag-store.json` (each flagged claim's pending `{claim_says, now_does, reason,
+flagged_at}`).
 
 The flag store is the one to watch, because **no gate rule reads it at all**: losing it is silent.
 The claim still arrives `review_pending`, but `reaudit` has no before/after to propose, and
-confirming that empty proposal clears the human's flag having applied nothing — the one state where
-a trigger disappears with no edit and no record. Commit it with its claim, and treat an empty
-`reaudit` diff on a flagged claim as a missing flag entry: **stop and say so**, do not confirm.
+confirming that empty proposal clears the human's flag having applied nothing. Commit it with its
+claim, and treat an empty `reaudit` diff on a flagged claim as a missing entry: **stop and say
+so**, do not confirm.
 
 ## Portability
 

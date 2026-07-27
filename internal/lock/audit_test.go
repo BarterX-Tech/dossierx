@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/digest"
@@ -240,32 +241,45 @@ func preLedgerStore(t *testing.T) *Store {
 	return store
 }
 
-// TestAuditGrandfathersAnHonestPreLedgerProjectInMemory is the read-only half of
-// grandfathering, and it is a fix for a gate that accused every honest v0.2.x
-// project of tampering.
+// TestAuditRefusesAnUnmigratedProjectOnceByName is the read-only half of
+// ADOPTION FAILS CLOSED, and it replaces the in-memory grandfathering that used
+// to make this state pass silently.
 //
-// Adoption runs in the CLI's WRITE path. The read-only commands — "check
-// --validate", "check --staged", and therefore the pre-commit hook and CI —
-// write nothing by design, so they saw a pre-ledger project as N locked claims
-// with no approval records and reported every one of them as
-// lock-ledger-missing, whose recovery text says to set the claim back to draft
-// and lock it again. That is destructive advice handed to a project that has
-// done nothing wrong, and it refused every commit until someone followed it. A
-// read-only command must not demand a write in order to pass.
-func TestAuditGrandfathersAnHonestPreLedgerProjectInMemory(t *testing.T) {
+// Two things have to be true at once, and only one of them used to be. The gate
+// must NOT accuse the project claim by claim — lock-ledger-missing's recovery
+// says to set the claim back to draft and lock it again, which is destructive
+// advice for a project whose only fault is being a version behind, and it is what
+// the old exemption was written to avoid. And it must NOT pass either, which is
+// what the old exemption did: a project that presents the pre-ledger shape (two
+// hand edits) was grandfathered in memory by every read-only command, so `check
+// --validate`, the pre-commit hook and CI all reported a clean project.
+//
+// So: exactly one finding, project-scoped, naming the one-time command.
+func TestAuditRefusesAnUnmigratedProjectOnceByName(t *testing.T) {
 	store := preLedgerStore(t)
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked long before the ledger existed"}
 	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft}
 
 	// No digest store: the file did not exist before this release, so an honest
 	// pre-ledger project has none.
-	if findings := Audit([]model.Claim{locked, draft}, store, nil); len(findings) != 0 {
-		t.Fatalf("a pre-ledger project is mid-upgrade, not tampered with; got %+v", findings)
+	findings := Audit([]model.Claim{locked, draft}, store, nil)
+	if len(findings) != 1 || findings[0].Rule != RuleLockLedgerAdoptionRequired {
+		t.Fatalf("an un-migrated project must fail with exactly one project-scoped finding, got %+v", findings)
 	}
-	// IN MEMORY means exactly that: the exemption must not write a record, or the
-	// read-only path would be silently doing the write path's job.
+	if findings[0].ClaimID != "" {
+		t.Errorf("the adoption refusal is about the PROJECT, not a claim; got claim_id %q", findings[0].ClaimID)
+	}
+	if !strings.Contains(findings[0].Message, "dossierx migrate --adopt") {
+		t.Errorf("the refusal must name the one command that clears it, got %q", findings[0].Message)
+	}
+	if hasRule(findings, RuleLockLedgerMissing) {
+		t.Errorf("the per-claim accusation must NOT accompany it: its recovery would destroy the approvals the migration is about to record")
+	}
+	// The read-only gate stays read-only: it must not write a record, or it
+	// would be silently doing the migration's job — the very thing that made
+	// implicit adoption a laundering path.
 	if _, ok := store.Record(locked.ID); ok {
-		t.Fatalf("the read-only exemption must not record anything")
+		t.Fatalf("the read-only gate must not record anything")
 	}
 }
 
@@ -522,5 +536,134 @@ func TestLockAllowsADraftClaimWhoseRecordWasReleased(t *testing.T) {
 	}
 	if record, _ := store.Record(draft.ID); record.Hash != LockedClaimHash(relocked) || record.Released() {
 		t.Fatalf("the honest re-lock must record a new standing approval: %+v", record)
+	}
+}
+
+// lockedProjectOnDisk locks c through the real approval path into a real store
+// file and hands back the RELOADED store — a ledger-covered project holding one
+// honest approval, with everything a real lock leaves behind: the record, the
+// locked_at stamp, and the dependency baselines.
+//
+// Reloading matters: the deleted-record rule is armed by Store.LedgerCovered,
+// which reads the version the file was DECODED from, so a fixture that never
+// went through disk would test a state no project is ever in.
+func lockedProjectOnDisk(t *testing.T, c model.Claim) (model.Claim, *Store) {
+	t.Helper()
+	withRegistry(t)
+
+	path := filepath.Join(t.TempDir(), "store.json")
+	seed, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	locked, err := Lock(c, []model.Claim{c}, testConfig(), seed, Approval{Actor: "alice", Reason: "approved"})
+	if err != nil {
+		t.Fatalf("Lock: %v", err)
+	}
+	if err := seed.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore (reopen): %v", err)
+	}
+	if _, stamped := store.LockedAt[locked.ID]; !stamped {
+		t.Fatalf("fixture precondition: a real lock must leave a locked_at stamp")
+	}
+	return locked, store
+}
+
+// TestADeletedLedgerRecordIsReported is the round-6 critical, reproduced here
+// exactly as it was reproduced against the shipped binary: delete ONE claim's
+// entry from the "ledger" map and flip its `status: locked` back to `status:
+// draft`, and every rule in this file went quiet.
+//
+//	lock-ledger-missing   needs status: locked        -> not it, the flip saw to that
+//	lock-ledger-orphan    needs a record to exist     -> not it, the delete saw to that
+//	lock-content-drift    needs a record to compare   -> not it, same
+//	lock-ledger-absent    needs the whole file gone   -> not it, one key was removed
+//
+// `check --validate` reported ok:true with ZERO findings, the claim was then
+// freely editable as an ordinary draft, and re-locking it later wrote a fresh
+// record with an agent-supplied reason indistinguishable from a human's.
+//
+// The evidence the delete does not reach is one key away in the same file:
+// locked_at, which unlock KEEPS (it releases the record instead of deleting it),
+// so a claim the engine locked and the ledger says nothing about had its record
+// removed by hand.
+func TestADeletedLedgerRecordIsReported(t *testing.T) {
+	locked, store := lockedProjectOnDisk(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body"})
+
+	// THE ATTACK, both halves.
+	delete(store.Ledger, locked.ID)
+	tampered := locked
+	tampered.Status = model.StatusDraft
+	tampered.Body = "rewritten now that nothing vouches for it"
+
+	findings := Audit([]model.Claim{tampered}, store, nil)
+	if !hasRule(findings, RuleLockLedgerDeleted) {
+		t.Fatalf("expected %s: a claim this engine locked, whose record is gone, must not be silent; got %+v", RuleLockLedgerDeleted, findings)
+	}
+	for _, f := range findings {
+		if f.Rule == RuleLockLedgerDeleted && !strings.Contains(f.Message, "Restore the lock store") {
+			t.Errorf("the recovery must be a RESTORE, never a re-lock (which records whatever the claim says now): %q", f.Message)
+		}
+	}
+}
+
+// The same deletion with the status left alone reports the deletion too, and
+// reports it INSTEAD OF lock-ledger-missing: the two need different recoveries,
+// and missing's ("set it back to draft and lock it properly") would tell a human
+// to re-approve content whose approved bytes are sitting in version control.
+func TestADeletedRecordIsDistinctFromANeverRecordedOne(t *testing.T) {
+	locked, store := lockedProjectOnDisk(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body"})
+	delete(store.Ledger, locked.ID)
+
+	findings := Audit([]model.Claim{locked}, store, nil)
+	if !hasRule(findings, RuleLockLedgerDeleted) {
+		t.Fatalf("expected %s, got %+v", RuleLockLedgerDeleted, findings)
+	}
+	if hasRule(findings, RuleLockLedgerMissing) {
+		t.Fatalf("a DELETED record must not also be reported as never-recorded: one state, one name, one recovery; got %+v", findings)
+	}
+
+	// And a claim the engine never locked — hand-flipped to locked in a covered
+	// project, no locked_at, no baselines — is still the other rule.
+	handFlipped := model.Claim{ID: "widget.contract.other", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "never locked by anything"}
+	findings = Audit([]model.Claim{handFlipped}, store, nil)
+	if !hasRule(findings, RuleLockLedgerMissing) || hasRule(findings, RuleLockLedgerDeleted) {
+		t.Fatalf("a claim with no locked_at was never locked by this engine: expected %s alone, got %+v", RuleLockLedgerMissing, findings)
+	}
+}
+
+// The honest side, which is what keeps the rule off correct state: unlock ->
+// fix -> lock leaves a locked_at stamp on a DRAFT claim for as long as it is
+// being fixed, and that must stay silent. Unlock releases the record rather than
+// deleting it, and a released record is exactly the evidence that says so.
+func TestAnHonestlyUnlockedClaimIsNotReportedAsDeleted(t *testing.T) {
+	locked, store := lockedProjectOnDisk(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body"})
+
+	drafted := Unlock(locked, store, Approval{Actor: "alice", Reason: "needs a fix"})
+	drafted.Body = "being fixed right now"
+
+	if findings := Audit([]model.Claim{drafted}, store, nil); len(findings) != 0 {
+		t.Fatalf("the sanctioned unlock -> fix -> lock window must be silent, got %+v", findings)
+	}
+}
+
+// And the rule is armed by COVERAGE, not by the stamp alone: an un-migrated
+// project's locked_at stamps are not evidence of a deleted record, because that
+// project never had records to delete. It gets the adoption refusal instead —
+// one finding, with the command that clears it.
+func TestTheDeletedRecordRuleIsSilentOnAnUnmigratedProject(t *testing.T) {
+	store := preLedgerStore(t) // its locked_at names widget.contract.main
+	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked by v0.2.x"}
+
+	findings := Audit([]model.Claim{locked}, store, nil)
+	if hasRule(findings, RuleLockLedgerDeleted) {
+		t.Fatalf("a pre-ledger project's locked_at is not a deleted record: it never had one; got %+v", findings)
+	}
+	if !hasRule(findings, RuleLockLedgerAdoptionRequired) {
+		t.Fatalf("expected %s, got %+v", RuleLockLedgerAdoptionRequired, findings)
 	}
 }
