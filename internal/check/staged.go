@@ -186,6 +186,12 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 
+	// The CALLER's config path, captured BEFORE the index's copy replaces it:
+	// the decoded index config has no path of its own (config.DecodeConfig takes
+	// a display name), and the scope comparison has to know which FILE this
+	// project is configured by in order to find the parent's copy of it.
+	configSrc := configSource(cfg)
+
 	// The CONFIG comes out of the index first, and everything below is resolved
 	// against it — see StagedProject.Config for why a worktree config makes the
 	// whole gate bypassable with one unstaged line.
@@ -199,10 +205,41 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	// claims_dir as a git pathspec, anchored at the REPOSITORY TOP LEVEL rather
 	// than at the config file's own directory — see gitRunner.spec. It fails
 	// only when the claims are outside the work tree altogether, which no commit
-	// could carry, so that (and only that) is reported as "no index to
-	// evaluate".
-	claimsSpec, err := g.spec(cfg.ClaimsDir)
-	if err != nil {
+	// could carry.
+	claimsSpec, claimsSpecErr := g.spec(cfg.ClaimsDir)
+	scope := claimsScope{spec: claimsSpec, outside: claimsSpecErr != nil, dir: cfg.ClaimsDir}
+	if claimsSpecErr != nil {
+		// THE ESCAPE HATCH IS THE LAST ANSWER, NOT THE FIRST. "no commit can
+		// carry claims_dir" is true of the value this commit has and says
+		// nothing whatever about the value its parent had — and this exit is
+		// ErrNoIndex, which the CLI answers with a warning and exit 0.
+		//
+		// So repointing claims_dir OUT of the repository was the cheapest
+		// collapse in the product: one line, no file moved, no store touched,
+		// and every locked claim in the project left tracked, still reading
+		// status: locked, audited by nothing, reported as "there is nothing here
+		// to evaluate". The scope comparison runs FIRST, and a claims_dir that
+		// used to be inside this repository and now points outside it is a
+		// refusal like any other narrowing. Only when the comparison has nothing
+		// to say — no parent, a parent whose claims_dir was outside the work
+		// tree too, a project that is not tracked — does the escape hatch apply,
+		// which is exactly the case it was written for.
+		report, scopeErr := stagedScope(g, cfg, configSrc, scope, sp.ConfigFromIndex)
+		if scopeErr != nil {
+			return StagedProject{}, scopeErr
+		}
+		if len(report.Findings) > 0 {
+			// The registry is empty by construction — the claims are somewhere
+			// this repository cannot name — so the refusal travels on its own,
+			// which is precisely what it is reporting.
+			sp.ledger, err = stagedLedgerInputs(g, cfg)
+			if err != nil {
+				return StagedProject{}, err
+			}
+			sp.ledger.scopeFindings = report.Findings
+			sp.ledger.scopeNote = report.Note
+			return sp, nil
+		}
 		return StagedProject{}, fmt.Errorf("%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it", ErrNoIndex, cfg.ClaimsDir, g.dir)
 	}
 
@@ -314,13 +351,46 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	// not a store: it is a statement about the two commits, and it rides in the
 	// same ledgerInputs only because that is the value the gate is evaluated
 	// against.
-	scope, err := stagedScope(g, cfg, claimsSpec, sp.ConfigFromIndex)
+	report, err := stagedScope(g, cfg, configSrc, scope, sp.ConfigFromIndex)
 	if err != nil {
 		return StagedProject{}, err
 	}
-	sp.ledger.scopeFindings = scope.Findings
-	sp.ledger.scopeNote = scope.Note
+	sp.ledger.scopeFindings = report.Findings
+	sp.ledger.scopeNote = report.Note
+
+	// THE PER-CLAIM HALF OF THE SAME COMPARISON.
+	//
+	// stagedScope above answers the questions that decide what the gate can SEE
+	// — a store that vanished, a claims_dir that stranded claims, a ledger
+	// emptied of the approvals it held. This answers the one that decides what
+	// the gate can BELIEVE: an approval the parent recorded that this commit has
+	// REPLACED rather than removed, and a review the parent recorded that this
+	// commit has erased along with the entry proving it happened. Both survive
+	// every rule that reads one directory, because in one directory the evidence
+	// is genuinely gone — see parentLedgerContent.
+	//
+	// It runs against report.Parents so that both halves compare the same
+	// commits, resolved against the same parent configs, in one pass.
+	parentFindings, err := parentLedgerContent(g, cfg, report.Parents, sp.Claims, sp.ledger)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	sp.ledger.parentFindings = parentFindings
 	return sp, nil
+}
+
+// configSource is the config file's OWN path — not Dir()+FileName, because
+// --config takes an arbitrary path and a project that named its config something
+// else must be compared against the file it actually uses.
+//
+// It is shared by stagedConfig (which reads the index's copy of it) and by
+// Staged (which hands it to the scope comparison to find the PARENT's copy), so
+// the two cannot end up looking for different files.
+func configSource(cfg *config.Config) string {
+	if p := cfg.Path(); p != "" {
+		return p
+	}
+	return filepath.Join(cfg.Dir(), config.FileName)
 }
 
 // stagedConfig loads project.config.yaml as the INDEX holds it.
@@ -358,10 +428,7 @@ func stagedConfig(g *gitRunner, cfg *config.Config) (*config.Config, bool, error
 	// path, and looking up a name the project does not use would find nothing
 	// in the index and fall back to the worktree — reopening the bypass for
 	// exactly the projects that named their config something else.
-	src := cfg.Path()
-	if src == "" {
-		src = filepath.Join(cfg.Dir(), config.FileName)
-	}
+	src := configSource(cfg)
 
 	// A config OUTSIDE the work tree cannot be in the index either, so it takes
 	// the same path as an untracked one rather than a silent worktree fallback

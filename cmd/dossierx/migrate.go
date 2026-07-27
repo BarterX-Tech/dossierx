@@ -44,6 +44,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -157,6 +158,29 @@ const (
 	// and the recovery is version control — never re-locking, which would record
 	// whatever the claims say now as approved.
 	migrateModeDowngraded = "downgraded"
+
+	// migrateModeHistoryCovered: the store claims to predate the ledger, the
+	// project DIRECTORY does not contradict it, and GIT does — the last commit
+	// carried a comment digest store, or a lock store with a "ledger" key.
+	// Refused, on the same terms and with the same recovery as downgraded.
+	//
+	// It is a separate mode rather than a second way to reach downgraded because
+	// data.mode is what tells a caller WHICH evidence produced the refusal, and
+	// these two are found in different places: downgraded is read out of the
+	// project directory, this is read out of the commit history. A reader who
+	// gets "downgraded" and then finds a perfectly consistent directory has been
+	// sent to look in the wrong place. See migrate_history.go, which explains why
+	// no in-directory predicate can reach this state.
+	migrateModeHistoryCovered = "history_covered"
+
+	// migrateModeClaimsModified: an honest pre-ledger project by every other
+	// measure, whose locked claims do not match the content git last committed
+	// for them. Refused: a pre-ledger store holds no record of a locked claim's
+	// approved content, so adoption records whatever is on disk — and what is on
+	// disk has been edited since the last time anybody could have reviewed it.
+	// The recovery is version control, or the approval path, never this command
+	// again.
+	migrateModeClaimsModified = "claims_modified"
 )
 
 // migrateData is "dossierx migrate"'s machine payload.
@@ -235,6 +259,13 @@ type migrationPlan struct {
 	// its business.
 	LegacyBaselines bool
 
+	// History is what git says about this project (migrate_history.go). It is
+	// carried on the plan rather than consulted separately by the preview and by
+	// the write path for the same reason every other input is: the two must
+	// render and apply ONE decision, and a second question asked in only one of
+	// them is how a preview starts disagreeing with its run.
+	History migrateHistory
+
 	LockStorePath          string
 	CommentDigestStorePath string
 }
@@ -271,8 +302,19 @@ func (p migrationPlan) ledgerKeys() []string {
 // refused as already_migrated (recovery: version control) rather than reported as
 // an ordinary migration with one artifact in it. That is the difference between a
 // migration and a laundering command.
-func planMigration(cfg *config.Config, store *lock.Store, digests *digest.Store, claims []model.Claim) migrationPlan {
+//
+// THE LAST TWO BRANCHES ARE NOT lock.AdoptProject's, and they cannot be: they
+// are evidence from the COMMIT HISTORY, and internal/lock reads a directory. So
+// AdoptProject remains the floor — it still refuses everything it refused before
+// — and these are a gate in front of it, evaluated HERE because cmd/dossierx is
+// where this release already shells out to git (check --staged) and because
+// AdoptProject must stay usable by callers with no work tree at all. They are
+// asked LAST, after every in-directory question, so that a project whose own
+// directory already answers gets the precise, cheaper diagnosis and its matching
+// recovery rather than a git-flavoured restatement of it.
+func planMigration(cfg *config.Config, store *lock.Store, digests *digest.Store, claims []model.Claim, history migrateHistory) migrationPlan {
 	plan := migrationPlan{
+		History:                history,
 		RecordCount:            len(store.Ledger),
 		LockStorePath:          storePath(cfg),
 		CommentDigestStorePath: digest.StorePath(cfg),
@@ -294,6 +336,12 @@ func planMigration(cfg *config.Config, store *lock.Store, digests *digest.Store,
 		return plan
 	case store.LedgerDowngraded(digests.FileExists()):
 		plan.Mode = migrateModeDowngraded
+		return plan
+	case history.Covered:
+		plan.Mode = migrateModeHistoryCovered
+		return plan
+	case len(history.Modified) > 0:
+		plan.Mode = migrateModeClaimsModified
 		return plan
 	default:
 		plan.Mode = migrateModePreLedgerStore
@@ -401,16 +449,59 @@ func migrateDryRun(plan migrationPlan, adopt bool) *cliout.DryRun {
 		boolDetail(plan.Mode != migrateModeNothingToAdopt,
 			"this project has locked artifacts with no approval record",
 			"this project has no lock store and nothing locked, so there is no pre-ledger state to grandfather"))
+	// THE NEXT FOUR ARE ONE QUESTION ASKED OF TWO WITNESSES, and their details
+	// say which witness answered. The first two used to be phrased as verdicts on
+	// the project's whole past ("this project has never been through a
+	// ledger-aware build") on evidence that only ever covered the project
+	// DIRECTORY — and git could show both of them false on a project this command
+	// then happily adopted. A precondition that claims more than its evidence
+	// supports is worse than a missing one: it is read as proof, and it was the
+	// document an agent took to a human to get a yes.
 	dr.Require("not_already_migrated",
 		plan.Mode != migrateModeAlreadyCovered,
 		boolDetail(plan.Mode != migrateModeAlreadyCovered,
-			"this project has never been through a ledger-aware build",
+			"the lock store on disk holds no lock-ledger records",
 			fmt.Sprintf("this project already holds %d lock-ledger record(s); adoption is one-time, and re-running it would record whatever is on disk now as approved", plan.RecordCount)))
 	dr.Require("pre_ledger_claim_not_contradicted",
 		plan.Mode != migrateModeDowngraded,
 		boolDetail(plan.Mode != migrateModeDowngraded,
-			"nothing in this project contradicts the store's pre-ledger version",
+			"nothing in the project DIRECTORY contradicts the store's pre-ledger version: its comment digest store is absent and the store carries no ledger key",
 			"the store says it predates the ledger and the project around it says otherwise (its comment digest store exists, or the store still carries the ledger key) — restore the lock store from version control"))
+	//
+	// THESE TWO ARE THE ONLY PRECONDITIONS HERE KEYED ON EVIDENCE RATHER THAN ON
+	// plan.Mode, and they have to be. planMigration's switch returns at the FIRST
+	// state that refuses, so a project that is both already-covered-per-git and
+	// carrying edited claims gets one mode and would leave the other gate
+	// reporting "[ok] every locked claim holds the same approved content" over
+	// claims that demonstrably do not — which is the exact over-claim this round
+	// is here to remove, reintroduced one line lower down. Keying on the evidence
+	// cannot disagree with the write path either: every state that sets one of
+	// these also sets a refusing mode, so a failing gate here always has a
+	// refusing run behind it.
+	dr.Require("history_confirms_pre_ledger",
+		!plan.History.Covered,
+		historyDetail(plan.History, !plan.History.Covered,
+			"the last commit carried no comment digest store and no ledger key either, so version control agrees this project predates the lock ledger",
+			"version control says otherwise: "+plan.History.CoveredBy+". This project HAS been through a ledger-aware build, whatever the store on disk now says",
+			"NOT CHECKED: this project's previously committed state could not be read, so nothing corroborates the store's pre-ledger version"))
+	dr.Require("locked_claims_match_version_control",
+		len(plan.History.Modified) == 0,
+		historyDetail(plan.History, len(plan.History.Modified) == 0,
+			"every locked claim holds the same approved content the last commit holds for it",
+			fmt.Sprintf("%d locked claim(s) differ from the content last committed for them (%s), and a pre-ledger store holds no record of the original to restore from",
+				len(plan.History.Modified), strings.Join(plan.History.Modified, ", ")),
+			"NOT CHECKED: this project's previously committed state could not be read, so nothing corroborates the content about to be adopted"))
+
+	// The degradation notices ride as SIDE EFFECTS rather than as failing
+	// preconditions, and that is the whole of the honest-degrade rule: the write
+	// path does not refuse for want of git, so a preview that reported blocked
+	// here would disagree with its own run — the exact defect this file's
+	// migratedPrecondition comment describes. They are the same sentences the run
+	// emits as warnings (migrateHistory.notes), so the preview and the run cannot
+	// say different things about the same uncorroborated adoption.
+	for _, note := range plan.History.notes() {
+		dr.Effect(note)
+	}
 
 	if plan.LegacyBaselines {
 		dr.Effect("re-arms per-dependent dependency baselines from the content on disk NOW (this store predates them too): drift that happened before this run is adopted as the new baseline and will not be reported; drift after it will be")
@@ -426,6 +517,23 @@ func migrateDryRun(plan migrationPlan, adopt bool) *cliout.DryRun {
 	return dr
 }
 
+// historyDetail is boolDetail for a precondition whose evidence is the commit
+// history, which has THREE answers rather than two: it held, it did not hold, or
+// it could not be looked at.
+//
+// The third needs its own sentence and cannot borrow the passing one. A gate
+// that prints "version control agrees this project predates the lock ledger" on
+// a run where version control was never consulted is not a softer version of the
+// truth, it is a fabricated corroboration — printed, by construction, in the
+// document an agent shows a human to get a yes. Note that it is still reported
+// as a PASS: see migrateDryRun for why "not checked" must not block.
+func historyDetail(h migrateHistory, cond bool, whenTrue, whenFalse, whenUnlooked string) string {
+	if !h.Looked {
+		return whenUnlooked
+	}
+	return boolDetail(cond, whenTrue, whenFalse)
+}
+
 // migrateRefusal turns a non-adopting plan into the refusal the write path
 // returns, with the recovery for that exact state.
 //
@@ -434,17 +542,22 @@ func migrateDryRun(plan migrationPlan, adopt bool) *cliout.DryRun {
 // and a reader who is wedged and following it got "unknown command" at the moment
 // they most needed a way out. TestMigrateRefusalsNameOnlyRealCommands pins it.
 //
-// The four recoveries are deliberately different, and two of them are the
-// OPPOSITE of the obvious move: for a covered project and for a downgraded one,
-// the answer is to restore the lock store from version control, never to re-lock
-// — re-locking records whatever the claims say NOW, which is precisely what the
-// edit that produced the state was for.
+// The six recoveries are deliberately different, and four of them are the
+// OPPOSITE of the obvious move: for a covered project, a downgraded one, one git
+// says was already covered, and one whose claims git says were edited, the answer
+// is to restore from version control, never to re-lock — re-locking records
+// whatever the claims say NOW, which is precisely what the edit that produced the
+// state was for. Where an edit is one the author actually wants, every one of
+// those four says so and names the approval path (unlock -> fix -> lock) as the
+// way to land it, because a refusal with no way forward is a refusal people
+// route around.
 //
-// Two of the four share cliout.CodeAlreadyMigrated (already_covered and
+// Two of the six share cliout.CodeAlreadyMigrated (already_covered and
 // nothing_to_adopt) because they are the same answer to the caller's question —
 // there is nothing here to migrate, do not loop — and data.mode is what tells
-// them apart. The other two are integrity_failed: something is missing or
-// contradicted, and the recovery is version control rather than a command.
+// them apart. The other four are integrity_failed: something is missing,
+// contradicted, or changed, and the recovery is version control rather than a
+// command.
 func migrateRefusal(plan migrationPlan) error {
 	switch plan.Mode {
 	case migrateModeAlreadyCovered:
@@ -466,6 +579,27 @@ func migrateRefusal(plan migrationPlan) error {
 			"migrate: %s says it predates the lock ledger, but this project has already been through a ledger-aware build (its comment digest store is present, or the store still carries the ledger key). Nothing was adopted: a store's own version field must not be able to re-arm adoption, or editing one number would re-bless every locked claim as-found",
 			plan.LockStorePath).
 			WithHint(fmt.Sprintf("restore %s from version control — do NOT re-lock, which would record whatever the claims say now as approved. Then: dossierx check --validate", plan.LockStorePath))
+	case migrateModeHistoryCovered:
+		// The same finding as downgraded, from the one place the evidence
+		// survives an attacker who deleted both in-directory copies of it. The
+		// recovery is the same and is stated the same way, because it IS the
+		// same wrong state: this project has a lock ledger, and what is on disk
+		// is not it.
+		return cliout.Errorf(cliout.CodeIntegrityFailed,
+			"migrate: %s says it predates the lock ledger, and version control says this project was ALREADY covered by it as of the last commit — %s. Nothing was adopted: adoption is a one-time upgrade step, and a project that has been through a ledger-aware build must never be able to re-enter it by having its ledger removed, because that would make deleting two files the way to re-bless every locked claim as-found",
+			plan.LockStorePath, plan.History.CoveredBy).
+			WithHint(fmt.Sprintf("restore the integrity stores from the last commit — git checkout HEAD -- %s %s — and do NOT re-lock, which would record whatever the claims say now as approved. Then: dossierx check --validate. If claims were edited in the same working tree, restore them too and take the edit through the approval path instead: dossierx claim unlock <id> --reason \"...\", make the edit, dossierx claim lock <id> --reason \"...\"",
+				plan.LockStorePath, plan.CommentDigestStorePath))
+	case migrateModeClaimsModified:
+		// The refusal for reproduction B in migrate_history.go: an honest
+		// pre-ledger project by every in-directory measure, whose locked claims
+		// were rewritten between the last commit and this run. It names the
+		// claims, because "something changed" is not something a reader can act
+		// on and the list is exactly what they have to go and look at.
+		return cliout.Errorf(cliout.CodeIntegrityFailed,
+			"migrate: %d locked claim(s) do not match the content version control last committed for them (%s), so adopting now would record an edit nobody approved as the approved baseline every later change is judged against. A pre-ledger store holds no record of the original, which is exactly why this is refused rather than reported: after the adoption there would be nothing left to compare against",
+			len(plan.History.Modified), strings.Join(plan.History.Modified, ", ")).
+			WithHint("restore those claim files from version control — git checkout HEAD -- <path> — and run: dossierx migrate --adopt --dry-run again. If the edit is one you WANT, it belongs on the record rather than inside the adoption: migrate the restored content first, then dossierx claim unlock <id> --reason \"...\", make the edit, and dossierx claim lock <id> --reason \"<the approving words>\"")
 	default:
 		// Unreachable while adopts() and this switch describe the same set; kept
 		// because a fifth mode added without a recovery must not silently become
@@ -531,8 +665,14 @@ func newMigrateCmd() *cobra.Command {
 				if err != nil {
 					return cmdResult{}, err
 				}
-				plan := planMigration(cfg, store, digests, claims)
-				return dryRunResult(cmd, "migrate", migrateDryRun(plan, adopt)), nil
+				plan := planMigration(cfg, store, digests, claims, inspectMigrateHistory(cfg, claims))
+				res := dryRunResult(cmd, "migrate", migrateDryRun(plan, adopt))
+				// The preview carries the same uncorroborated-adoption warnings
+				// the run does, on top of rendering them as side effects. A
+				// caller that branches on warnings must not have to run the
+				// irreversible command to discover it would get one.
+				res.Warnings = plan.History.notes()
+				return res, nil
 			}
 
 			if !adopt {
@@ -571,7 +711,12 @@ func newMigrateCmd() *cobra.Command {
 			if err != nil {
 				return cmdResult{}, err
 			}
-			plan := planMigration(cfg, store, digests, claims)
+			// The history is re-read HERE, under the sentinels and against the
+			// re-loaded claims, rather than carried over from any earlier read:
+			// the whole plan is computed from the state this run is about to
+			// adopt, and a corroboration taken before the locks were held would
+			// be a corroboration of a different tree.
+			plan := planMigration(cfg, store, digests, claims, inspectMigrateHistory(cfg, claims))
 			data := migrateData{
 				Mode:                   plan.Mode,
 				Adopted:                []string{},
@@ -584,7 +729,7 @@ func newMigrateCmd() *cobra.Command {
 				// The refusal still carries data.mode: an agent branching on
 				// already_migrated or integrity_failed needs to know WHICH state
 				// it hit, because the recoveries differ.
-				return cmdResult{Data: data}, migrateRefusal(plan)
+				return cmdResult{Data: data, Warnings: plan.History.notes()}, migrateRefusal(plan)
 			}
 
 			migrateLegacyBaselines(store, claims)
@@ -620,7 +765,7 @@ func newMigrateCmd() *cobra.Command {
 					sort.Strings(data.Adopted)
 					return cmdResult{
 							Data:     data,
-							Warnings: adoptionWarnings(adoptions{Grandfathered: adoption.Claims, CommentDigests: adoption.CommentDigests}),
+							Warnings: append(plan.History.notes(), adoptionWarnings(adoptions{Grandfathered: adoption.Claims, CommentDigests: adoption.CommentDigests})...),
 						}, cliout.Errorf(cliout.CodeWriteFailed,
 							"migrate: the claims were adopted and the build-order records were not: %w", err).
 							WithHint("the claim migration SUCCEEDED and this project is now covered, so dossierx migrate --adopt will correctly refuse from here on. Re-lock each affected module instead: dossierx build-order lock --module <m> --reason \"<the approving words>\" — that records a real approval rather than an adoption")
@@ -628,9 +773,14 @@ func newMigrateCmd() *cobra.Command {
 			}
 			sort.Strings(data.Adopted)
 
+			// The uncorroborated-adoption notices come FIRST, ahead of the
+			// adoption list itself: they qualify everything under them. A reader
+			// who is told "these were adopted as-found" and only afterwards that
+			// nothing checked them against version control has already formed the
+			// wrong impression of the list.
 			return cmdResult{
 				Data:     data,
-				Warnings: adoptionWarnings(adoptions{Grandfathered: data.Adopted, CommentDigests: data.CommentDigestsAdopted}),
+				Warnings: append(plan.History.notes(), adoptionWarnings(adoptions{Grandfathered: data.Adopted, CommentDigests: data.CommentDigestsAdopted})...),
 				Text:     func() { writeMigrateText(cmd, data) },
 			}, nil
 		}),

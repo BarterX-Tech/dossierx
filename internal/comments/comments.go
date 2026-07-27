@@ -528,7 +528,23 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 	// upgrade) or must not be (a deletion) — see recordCommentDigest — and
 	// whether a claim carrying threads with no entry beside them is honest or is
 	// evidence its entry was removed, which is checkCommentDigest's second gate.
-	ledgerCovered := ls.LedgerCovered()
+	//
+	// It asks LedgerEstablished, not LedgerCovered, and the difference is a
+	// refusal an attacker could otherwise disarm from inside the audited file.
+	// LedgerCovered reads the lock store's own version field, so editing it back
+	// to 1 answered "no" here and BOTH gates below switched off — on a store the
+	// project-scoped gate is already reporting as downgraded. See
+	// lock.LedgerEstablished for the reproduction; lock.PrepareStore's comment
+	// sweep has always asked the wider question, and now all three ask it the same
+	// way. An honest un-migrated v0.2.x project is pre-ledger and NOT downgraded,
+	// so it still answers "no" and nothing here changes for it.
+	ledgerCovered := ls.LedgerEstablished(digests.FileExists())
+
+	// The un-migrated project, kept out of the digest store's way entirely — see
+	// recordCommentDigest. This is a separate question from ledgerCovered: a
+	// pre-ledger store answers "no" to both, but the two "no"s mean opposite
+	// things about whether this op may CREATE the digest store.
+	preLedger := ls.PreLedger()
 
 	// The integrity gate, evaluated against the PRE-mutation block and BEFORE fn
 	// runs, so a refusal writes nothing at all. recordCommentDigest at the foot
@@ -558,7 +574,7 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 	// point: every comment write in the product, from the CLI and from serve
 	// alike, funnels through this one function, so one call here covers all of
 	// them and there is no second path to keep in step.
-	if err := d.recordCommentDigest(digests, claims, claims[idx], ledgerCovered); err != nil {
+	if err := d.recordCommentDigest(digests, claims, claims[idx], ledgerCovered, preLedger); err != nil {
 		return model.Claim{}, err
 	}
 	return claims[idx], nil
@@ -749,7 +765,49 @@ func claimFileFor(c model.Claim) string {
 // a write, so reaching this means the world changed underneath a probe taken
 // moments earlier. The message says plainly that the comment WAS saved, because
 // the wrong response to it is a retry — that is what appends the thread twice.
-func (d *Deps) recordCommentDigest(store *digest.Store, claims []model.Claim, c model.Claim, ledgerCovered bool) error {
+func (d *Deps) recordCommentDigest(store *digest.Store, claims []model.Claim, c model.Claim, ledgerCovered, preLedger bool) error {
+	// THE UN-MIGRATED PROJECT IS LEFT ALONE, digest store included, and this is
+	// the one case where the honest answer is to record nothing at all.
+	//
+	// The comment digest store is a SIBLING FILE that only exists once a project
+	// has been through a ledger-aware build — which is precisely why
+	// lock.LedgerDowngraded reads its presence as proof that a store claiming
+	// "version 1" is lying. Creating it beside a genuine v0.2.x lock store
+	// therefore manufactures that contradiction against a project that has done
+	// nothing wrong, and this function was doing it on every comment op:
+	//
+	//	an honest, un-migrated v0.2.x project (lock store at version 1)
+	//	dossierx comment add <draft-claim> …    succeeds, and CREATES
+	//	                                        .dossierx-comment-digest.json
+	//	dossierx check                          lock-ledger-downgraded, from now on
+	//	dossierx migrate --adopt                REFUSED (ErrAdoptionRefused):
+	//	                                        "restore the lock store from
+	//	                                        version control"
+	//
+	// One ordinary comment left the project permanently un-migratable, accused of
+	// tampering, and pointed at a recovery for a file nobody had touched. That is
+	// the outage the whole fail-closed design exists to avoid handing an honest
+	// project on upgrade day.
+	//
+	// lock.SweepCommentDigests already draws exactly this line — its `crossing`
+	// excludes a pre-ledger store with the same reasoning, and says so — and its
+	// closing sentence names who does the work instead: a pre-ledger project's
+	// whole comment store is written by AdoptProject, in the same act that writes
+	// its ledger records. So the cost of recording nothing here is bounded and
+	// temporary: this claim's threads stay UNKNOWN to the digest rules (never
+	// blessed, never accused, which is where every other claim in an un-migrated
+	// project already sits) until the human runs the migration once, and the
+	// migration records every claim's block.
+	//
+	// It is keyed on the store being ABSENT as well as pre-ledger: a pre-ledger
+	// project that somehow already HAS a digest store is a project the gate is
+	// reporting as downgraded, and refusing to refresh an entry there would leave
+	// the recorded digest lagging the file we just wrote — a false
+	// comment-ledger-drift on top of a real finding.
+	if preLedger && !store.FileExists() {
+		return nil
+	}
+
 	// Adoption on first creation is what gives a project upgrading INTO this
 	// feature coverage for the threads it already has. It is gated on the project
 	// NOT already being ledger-covered, because in a covered project "the digest

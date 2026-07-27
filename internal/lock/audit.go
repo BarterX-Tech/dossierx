@@ -114,6 +114,40 @@ const (
 	// nothing behind to notice. That is three keys in a tracked file instead of
 	// one, in a diff whose whole purpose is to be read, which is the same trade
 	// the ledger itself makes (see ledger.go's "two deliberate non-goals").
+	//
+	// THAT IS CLOSED FROM THE ONE PLACE THE EVIDENCE STILL EXISTS — the parent
+	// commit — and this rule is what AuditAgainstParent reports it as, because it
+	// is the same finding with better proof. Verified against the audit on HEAD:
+	// delete ledger[id], locked_at[id] and hashes[id] in one edit, flip the YAML
+	// to draft, rewrite the body, and Audit returns [] while
+	// Store.LedgerRecordDeleted (the write-path gate that should refuse the
+	// re-lock) returns false. The parent commit's store still has all three keys.
+	//
+	// TWO IN-DIRECTORY EVIDENCE SOURCES WERE TRIED AND REJECTED, recorded here so
+	// the next round does not re-derive them:
+	//
+	//   - OTHER CLAIMS' BASELINES that name this claim as a dependency
+	//     (hashes[dependent][id]). Unsound in both directions. Baselines are
+	//     recorded for dependencyIDs = mirrors ++ rests_on, and a LOCKED claim may
+	//     legitimately mirror a DRAFT one — mirror-mismatch compares Layout, Body,
+	//     Rows and Steps and documents status as EXPECTED to differ — so the rule
+	//     would fire on correct state, which is the outage this gate exists to
+	//     avoid. Narrowing it to rests_on does not save it: baselines are never
+	//     removed when an edge is removed, so one written while the target sat in
+	//     mirrors outlives a later draft edit that moves it to rests_on. And in
+	//     the one shape where the inference IS sound (the dependent is currently
+	//     locked and currently rests_on the claim) the error-severity
+	//     rest-on-locked lint already refuses, so the rule buys nothing there.
+	//
+	//   - THE BUILD-ORDER RECORD for the claim's module. A standing build-order
+	//     record does prove every claim in that module was locked when it was
+	//     approved (buildorder.Propose's completeness gate). But it does not say
+	//     WHICH claims those were, and authoring a NEW claim in a module whose
+	//     build order is locked is ordinary work — the artifact simply reports
+	//     stale. The rule would accuse a brand-new draft of having had its record
+	//     deleted, and hand it "restore the lock store from version control".
+	//     Making it sound needs the covered claim ids ON the record, a store-schema
+	//     change its one writer (cmd/dossierx) would have to start supplying.
 	RuleLockLedgerDeleted = "lock-ledger-deleted"
 
 	// RuleLockLedgerReleased: a LOCKED claim whose record exists but was
@@ -196,6 +230,27 @@ const (
 	// no entry beside them has exactly two explanations — the entry was removed, or
 	// the threads were never written by the engine — and both are the finding.
 	//
+	// THE ONE THING IT CANNOT SEE, and the reason AuditAgainstParent exists: the
+	// predicate is the threads, so ERASING THE THREADS TOO takes the claim out of
+	// this rule's own evidence set. Erasing the block ALONE is not silent — the
+	// surviving entry recorded threads, the claim now hashes to the empty digest,
+	// and comment-ledger-drift fires (verified). What is silent is erasing BOTH,
+	// two deletions in one commit:
+	//
+	//	delete the `comments:` block from the claim YAML
+	//	delete the claim's key from the "digests" map
+	//	dossierx check   ok:true, [] — and the sweep then adopts the claim at its
+	//	                 EMPTY digest, so the state is clean permanently
+	//
+	// A human's open thread on a DRAFT claim is the sharpest target: an open
+	// thread is what BLOCKS the lock, so erasing it is exactly what the attack
+	// buys, and the claim locks afterwards with a clean approval record and a
+	// review nobody had. AuditAgainstParent reports it — as comment-ledger-drift,
+	// which is what it is: the parent commit's recorded digest disagrees with the
+	// block on disk, and that rule's own text ("deleting an unresolved thread by
+	// hand is how a claim gets past the lock gate with a review still open") was
+	// already describing this exact act.
+	//
 	// It is deliberately silent where the evidence is honestly absent: a project
 	// with no ledger coverage at all (nothing here has been approved), an absent
 	// digest store (comment-digest-absent is the one cause, said once), a claim
@@ -205,6 +260,15 @@ const (
 	// ledger record instead, and reporting both would name one state twice.
 	RuleCommentDigestUnrecorded = "comment-digest-unrecorded"
 )
+
+// NOTE ON THE RULE SET. AuditAgainstParent — the history-aware half of this gate
+// — introduces NO new rule names, on purpose. It finds the same three states the
+// constants above already name, from evidence one directory cannot hold; the
+// diagnosis and the recovery are identical, and only the message changes to say
+// where the proof came from. A fourth and fifth rule string would have made every
+// consumer that branches on `rule` learn two more names for conditions it
+// already handles, and would have put two rows in FORMAT.md's table describing a
+// gate whose recovery text is word-for-word an existing row's.
 
 // Finding is one ledger-gate disagreement. There is no severity field: unlike a
 // lint, every finding here is a refusal. A gate that reported advisory
@@ -465,6 +529,246 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		return findings[i].Rule < findings[j].Rule
 	})
 	return findings
+}
+
+// AuditAgainstParent re-evaluates three of Audit's rules from evidence Audit
+// cannot reach: it compares the two stores as loaded from the commit under audit
+// (store, digests) against the same two stores as loaded from its PARENT
+// (parent, parentDigests).
+//
+// IT MINTS NO NEW RULE NAMES. The states it finds are the ones the constants
+// above already name — a record deleted rather than released
+// (RuleLockLedgerDeleted), a locked claim dropped without a release on the
+// record (RuleLockLedgerAbandoned), and a comment block that no longer matches
+// the digest the engine recorded for it (RuleCommentLedgerDrift). Each keeps its
+// own recovery, which is already the right one; only the Message changes, to say
+// that the proof came from the previous commit. Two more rule strings would have
+// meant two more names for every consumer that branches on `rule`, and two rows
+// in FORMAT.md whose recovery text duplicates a row already there.
+//
+// What is new is REACH. Each of those three rules keys on evidence in the
+// directory it is auditing — engineLocked's two keys, a surviving ledger record,
+// a surviving digest entry — and each is therefore defeated by deleting that
+// evidence in the same commit as the thing it would have reported.
+//
+// IT COMPARES CONTENT, NOT PRESENCE, and that is the whole point. Every rule in
+// Audit answers from one directory, and both holes it leaves are shaped the same
+// way: the attacker deletes, in one commit, every key that could testify. No
+// predicate over the surviving files can tell that from a project where those
+// keys were never written — the evidence is genuinely gone. It is not gone from
+// the parent commit, and the pre-commit hook and CI are already standing there
+// (see internal/check's staged gate, which materializes both sides).
+//
+// It is the same argument LedgerDowngraded's "WHAT IT DOES NOT CLOSE" paragraph
+// makes about itself, arriving with the missing evidence: a store swapped
+// wholesale for a version-1 one with the digest store deleted beside it is
+// byte-for-byte an honest v0.2.x project, and no rule in this file can say
+// otherwise — but the parent commit's store carrying records that this one does
+// not is conclusive, whatever either file's version field says. So this function
+// deliberately does NOT suppress itself on a pre-ledger or downgraded store.
+//
+// WHAT KEEPS IT SILENT ON LEGITIMATE WORK. Each rule fires only where no engine
+// path can reach:
+//
+//   - unlock -> fix -> lock. Unlock RELEASES a record and keeps it (see
+//     ReleaseApproval); re-locking overwrites it. The record is never absent, so
+//     the lock rule never fires across that sequence.
+//   - a claim deleted after an honest unlock. The record the parent held is
+//     RELEASED, which is the documented deliberate-removal path and is skipped
+//     here for the same reason lock-ledger-abandoned skips it.
+//   - the last comment thread deleted, or a comment reaudit. Both go through
+//     digest.Store.Record, which REWRITES the entry to the empty digest rather
+//     than dropping it — so there is still an entry, and the digest rule needs
+//     there to be none.
+//   - an initial commit, a shallow CI clone, or any run whose parent cannot be
+//     materialized. The caller passes nil and nothing is reported: an integrity
+//     check must never manufacture a finding out of missing evidence, which is
+//     the same rule Audit applies to a nil digest store.
+//   - a project that has not been adopted yet, and the migration itself.
+//     Evidence only GROWS across `migrate --adopt` (grandfathered records
+//     appear, locked_at is untouched), and both rules fire only on evidence that
+//     was REMOVED.
+//   - a whole-file absence. When the commit has no lock store or no digest store
+//     at all, the per-claim rule here is skipped: lock-ledger-absent and
+//     comment-digest-absent already name that cause once, project-scoped, and
+//     repeating it per claim buries the sentence a reader needs.
+//
+// IT NEVER DOUBLE-REPORTS WITH Audit, by construction rather than by filtering.
+// Each rule here fires only when the evidence Audit's version of the same rule
+// reads is ABSENT from this commit — no record and no engineLocked keys for the
+// lock rules, no digest entry for the comment rule — so wherever Audit can speak,
+// this stays quiet, and a caller can concatenate the two lists without
+// de-duplicating them.
+//
+// THE CALLER OWNS PATH RESOLUTION, and it is a precondition rather than
+// something this function can check: the parent's stores must be read from the
+// paths the PARENT's own config points at. A sanctioned move of the project
+// directory (or of claims_dir, when the config moves with it) changes where the
+// stores live, and resolving both sides against the CURRENT config would read an
+// empty store for the parent and report every claim in the project as erased —
+// the outage this whole gate exists to avoid. That is the same derive-scope-from-
+// the-parent discipline internal/check's history gate already applies.
+func AuditAgainstParent(claims []model.Claim, store, parent *Store, digests, parentDigests *digest.Store) []Finding {
+	if parent == nil || !parent.FileExists() {
+		return nil
+	}
+	var findings []Finding
+
+	present := make(map[string]bool, len(claims))
+	for _, c := range claims {
+		present[c.ID] = true
+	}
+
+	// The lock half. It is evaluated per CLAIM the parent knew about — including
+	// claims the commit deleted, because deleting the claim file AND its record in
+	// one commit is invisible to Audit from either end: its per-claim rules start
+	// from a claim that is gone, and its reverse sweep starts from a record that
+	// is gone.
+	if store != nil && store.FileExists() {
+		for _, id := range parentLockedIDs(parent) {
+			if lockEvidence(store, id) {
+				continue
+			}
+			// A RELEASED parent record is an approval the human withdrew on the
+			// record. Whatever happened to the claim afterwards is accounted for,
+			// which is exactly the exemption lock-ledger-abandoned already makes for
+			// the restore -> unlock -> delete flow it tells people to use.
+			if rec, ok := ledgerRecordFor(parent, id); ok && rec.Released() {
+				continue
+			}
+			if present[id] {
+				findings = append(findings, Finding{
+					Rule:    RuleLockLedgerDeleted,
+					ClaimID: id,
+					Message: fmt.Sprintf(
+						"claim %q was locked by dossierx in the PARENT COMMIT — its %s carried the claim's ledger record, its locked_at stamp and/or its dependency baselines — and this commit's %s carries none of them. Nothing in this build removes any of those: unlock KEEPS the record and stamps released_at on it, and locked_at is never deleted at all. Removing all three at once is what turns a locked claim back into a freely editable draft (status: %s here) that can be re-locked later with a reason that reads exactly like a human's approval. Restore %s from version control — the approved content is in git. Do NOT re-lock, which would record whatever the claim says NOW as approved.",
+						id, StoreFileName, StoreFileName, claimStatus(claims, id), StoreFileName),
+				})
+				continue
+			}
+			findings = append(findings, Finding{
+				Rule:    RuleLockLedgerAbandoned,
+				ClaimID: id,
+				Message: fmt.Sprintf(
+					"claim %q held a STANDING lock-ledger approval in the PARENT COMMIT, and this commit deletes the claim file AND every trace of its approval from %s together. Deleting the claim alone is reported from this commit's own %s; deleting the record in the same commit is what made it silent, because that rule reads the record. Restore both from version control — or, if dropping the claim was intended, restore them, run dossierx claim unlock %s --reason \"...\", and delete it again so the release is on the record.",
+					id, StoreFileName, StoreFileName, id),
+			})
+		}
+	}
+
+	// The comment half. Skipped wholesale when either side has no digest store:
+	// an absent parent store is no evidence, and an absent store on this side is
+	// comment-digest-absent, said once.
+	if digests != nil && digests.FileExists() && parentDigests != nil && parentDigests.FileExists() {
+		for _, c := range claims {
+			recorded, known := parentDigests.Digest(c.ID)
+			if !known || recorded == digest.EmptyCommentsDigest(c.ID) {
+				continue
+			}
+			// THE TEST IS "IS THERE STILL AN ENTRY", and it is deliberately NOT
+			// the stronger-looking "does this commit still record review
+			// HISTORY" (an entry that has fallen back to EmptyCommentsDigest).
+			//
+			// The stronger test was written, and it is WRONG — it refuses a
+			// supported product operation. Deleting a comment thread is a real
+			// verb: comments.Deps.Delete, exposed as DELETE
+			// /api/claims/{id}/comments/{tid} and reachable from the viewer,
+			// where canAct lets a HUMAN remove a thread they wrote themselves.
+			// A human who opens a question, thinks better of it and deletes it
+			// leaves exactly this state — parent digest non-empty, this commit's
+			// entry rewritten by Record to EmptyCommentsDigest, claim carrying
+			// no threads — and it is byte-for-byte the state an ERASURE leaves
+			// once the claim is re-locked, because the lock re-records the
+			// digest of the claim as it then stands. Verified end to end against
+			// a running server: the honest DELETE returned 200 and the resulting
+			// commit was refused as comment-ledger-drift.
+			//
+			// So the two are not separable HERE, and the choice is which way to
+			// be wrong. Refusing the honest one is the outage; missing the
+			// erasure is a gap that is still covered wherever the attacker does
+			// NOT re-record (the entry stays absent, and this fires). Closing it
+			// properly needs evidence this comparison does not have — a deletion
+			// recorded at the moment it happens, i.e. Delete writing a tombstone
+			// rather than silently rewriting the entry to empty — which is a
+			// digest-store schema change and a deliberate design decision, not
+			// something to smuggle in behind a predicate that cannot tell the
+			// two apart.
+			if _, stillKnown := digests.Digest(c.ID); stillKnown {
+				continue
+			}
+			findings = append(findings, Finding{
+				Rule:    RuleCommentLedgerDrift,
+				ClaimID: c.ID,
+				Message: fmt.Sprintf(
+					"claim %q had review history on the record in the PARENT COMMIT — %s carried a digest for it recording comment threads — and this commit removes its entry entirely while the claim stays in the project (it carries %d thread(s) now). No engine path does that: deleting a thread through the viewer REWRITES the entry, to the digest of the smaller block, and the only code that drops an entry drops it for a claim that has LEFT the project. Erasing the block and its entry together is how an open objection — the thing that blocks locking — disappears with nothing left in this commit to report it. Restore %s from version control (its entry for this claim is the review history), and check the claim's threads against what the human actually wrote.",
+					c.ID, digest.StoreFileName, len(c.Comments), digest.StoreFileName),
+			})
+		}
+	}
+
+	sort.SliceStable(findings, func(i, j int) bool {
+		if findings[i].ClaimID != findings[j].ClaimID {
+			return findings[i].ClaimID < findings[j].ClaimID
+		}
+		return findings[i].Rule < findings[j].Rule
+	})
+	return findings
+}
+
+// claimStatus returns the status of claim id in claims, for a message that says
+// what the claim looks like NOW; "(gone)" if it is not in the set, which the one
+// caller has already ruled out but which keeps the sentence grammatical rather
+// than empty if that ever changes.
+func claimStatus(claims []model.Claim, id string) string {
+	for _, c := range claims {
+		if c.ID == id {
+			return string(c.Status)
+		}
+	}
+	return "(gone)"
+}
+
+// parentLockedIDs returns, sorted, every claim id the parent store carries LOCK
+// EVIDENCE for — a claim ledger record, a locked_at stamp, or its own dependency
+// baselines. It is the set AuditAgainstParent asks this commit about.
+//
+// It filters ledger records by SubjectClaim for the same reason ledgerRecordFor
+// does: a build-order record must never be read as a claim's approval. Build
+// orders are deliberately out of scope here — their artifact is a file this
+// package cannot read (internal/buildorder imports it, not the other way round),
+// so the history rule for them belongs beside the artifact.
+func parentLockedIDs(parent *Store) []string {
+	seen := map[string]bool{}
+	for key, rec := range parent.Ledger {
+		if rec.Subject == SubjectClaim {
+			seen[key] = true
+		}
+	}
+	for id := range parent.LockedAt {
+		seen[id] = true
+	}
+	for id, deps := range parent.Hashes {
+		if len(deps) > 0 {
+			seen[id] = true
+		}
+	}
+	return sortedKeys(seen)
+}
+
+// lockEvidence reports whether store carries ANY evidence that this engine
+// locked id: a claim ledger record (standing or released — a released record is
+// still a record, and keeping it is the point of ReleaseApproval), a locked_at
+// stamp, or the claim's own dependency baselines.
+//
+// It is engineLocked plus the record itself, and it is the predicate
+// AuditAgainstParent compares the two commits over — "was ANYTHING left behind",
+// not "is the approval still standing", which is what every rule in Audit
+// already asks of this commit alone.
+func lockEvidence(s *Store, id string) bool {
+	if _, ok := ledgerRecordFor(s, id); ok {
+		return true
+	}
+	return engineLocked(s, id)
 }
 
 // engineLocked reports whether the STORE says this engine locked claim id at

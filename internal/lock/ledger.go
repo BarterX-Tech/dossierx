@@ -276,11 +276,19 @@ func (s *Store) CommentDigestUnrecorded(claim model.Claim) bool {
 // strength of evidence that could not be loaded, and the unreadable store is its
 // own finding with its own recovery.
 func commentDigestUnrecorded(s *Store, claim model.Claim) bool {
-	if s == nil || s.path == "" || len(claim.Comments) == 0 || !s.LedgerCovered() {
+	if s == nil || s.path == "" || len(claim.Comments) == 0 {
 		return false
 	}
 	digests, err := digest.LoadStore(digest.StorePathBeside(s.path))
 	if err != nil || digests == nil || !digests.FileExists() {
+		return false
+	}
+	// LedgerEstablished, not LedgerCovered: this is a REFUSAL, and a refusal an
+	// attacker can disarm by editing the audited file's own version field is not
+	// one. See LedgerEstablished. The digest store's presence is read from the
+	// store just loaded, which is the same evidence LedgerDowngraded wants and
+	// which this function has in hand anyway.
+	if !s.LedgerEstablished(digests.FileExists()) {
 		return false
 	}
 	_, known := digests.Digest(claim.ID)
@@ -501,6 +509,52 @@ func digestStorePresentBeside(lockStorePath string) bool {
 // version so an upgrading project crosses both lines together.
 func (s *Store) LedgerCovered() bool {
 	return s != nil && s.fileExists && s.diskVersion >= ledgerSchemaVersion
+}
+
+// LedgerEstablished is the question the WRITE PATHS have to ask instead of
+// LedgerCovered: has a ledger-aware build ever run in this project, WHATEVER the
+// store's version field now says?
+//
+// LedgerCovered reads that version field, which lives inside the audited file,
+// so a store edited back to version 1 answers "no" — and every comment-digest
+// guard armed by it silently disarms. That is not hypothetical: the downgrade
+// is two hand edits (see LedgerDowngraded), and with the guards down the
+// laundering path they exist to close re-opens one file over. On a downgraded
+// store, before this predicate existed:
+//
+//	forge a human's open thread to `status: resolved` in the YAML
+//	drop that claim's key from .dossierx-comment-digest.json
+//	set the lock store's "version": 2 -> 1   (the ledger key stays; the gate
+//	                                          reports lock-ledger-downgraded)
+//	dossierx comment reply <id> …            ACCEPTED — checkCommentDigest's
+//	                                          threads-without-an-entry arm was
+//	                                          armed by LedgerCovered, so it did
+//	                                          not run, and the write RECORDED the
+//	                                          forged block as the truth
+//	dossierx claim lock <id> --reason …      ACCEPTED for the same reason
+//
+// The project-scoped downgrade finding still fires, so the state is not silent —
+// but the evidence it points at is destroyed in the meantime, and the recovery
+// it names (restore the lock store) no longer brings the review history back.
+// A refusal must not be disarmable by the same edit that the gate is already
+// reporting.
+//
+// PrepareStore's comment-digest sweep has always used this wider question,
+// spelled out inline; this is that expression given a name so the sweep, the
+// comment write path (internal/comments' mutate) and the lock write path
+// (commentDigestUnrecorded) cannot answer it three different ways.
+//
+// lock.Audit deliberately does NOT use it, and that asymmetry is the design: a
+// downgraded store gets ONE project-scoped finding naming the cause, and piling
+// per-claim findings on top of it would bury the one sentence a reader needs.
+// REPORTING says it once; REFUSING has to hold everywhere.
+//
+// It stays silent on the honest un-migrated project — a genuine v0.2.x store is
+// pre-ledger and NOT downgraded (no ledger key, no digest store beside it), so
+// it answers "no" and every gate below it stays off, which is what keeps
+// `migrate --adopt` reachable.
+func (s *Store) LedgerEstablished(digestStorePresent bool) bool {
+	return s.LedgerCovered() || s.LedgerDowngraded(digestStorePresent)
 }
 
 // AdoptBuildOrderApproval grandfathers one module's already-locked build-order
@@ -909,7 +963,7 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool) {
 	// `stale` flag this used to compute is gone: a pre-ledger store is left
 	// exactly as found — un-stamped, un-adopted, and reported by the gate — until
 	// the migration runs.
-	covered := s.LedgerCovered() || s.LedgerDowngraded(digestStorePresentBeside(s.path))
+	covered := s.LedgerEstablished(digestStorePresentBeside(s.path))
 
 	s.commentDigestsAdopted, _ = SweepCommentDigests(s, claims, covered)
 

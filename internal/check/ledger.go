@@ -589,6 +589,17 @@ type ledgerInputs struct {
 	// that only one of them could see would be a refusal an edit travels around.
 	scopeFindings []lock.Finding
 
+	// parentFindings are the PER-CLAIM history refusals: an approval the parent
+	// commit recorded that this one has replaced with a self-issued one, or a
+	// review the parent recorded that this one erased together with the digest
+	// entry proving it happened. Like scopeFindings they are populated only
+	// under --staged and for the same reason — no single tree contains the
+	// evidence — but they are reported with lock.Audit's per-claim output rather
+	// than ahead of it, because they are not statements about what the gate
+	// could see. They are the same three rules lock.Audit already owns, decided
+	// from the one place the evidence still exists. See lock.AuditAgainstParent.
+	parentFindings []lock.Finding
+
 	// scopeNote is the one scope answer that is NOT a refusal: a shallow
 	// checkout whose parent commit was never fetched, where the comparison could
 	// not be made at all. It rides in Result.NextSteps because "could not look"
@@ -678,6 +689,12 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
+
+	// Concatenated, deliberately without de-duplicating: AuditAgainstParent
+	// fires only where the evidence lock.Audit reads is ABSENT from this commit,
+	// so the two lists cannot name the same claim under the same rule. See
+	// lock.AuditAgainstParent's "IT NEVER DOUBLE-REPORTS WITH Audit" paragraph.
+	findings = append(findings, in.parentFindings...)
 	return append(findings, buildOrderGate(in)...)
 }
 

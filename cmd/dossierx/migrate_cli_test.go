@@ -390,8 +390,26 @@ func resolvesToALeaf(words []string) bool {
 // are already stuck. Every refusal this command can produce is driven here and
 // its message and hint are checked against the real command tree.
 func TestMigrateRefusalsNameOnlyRealCommands(t *testing.T) {
-	for _, mode := range []string{migrateModeAlreadyCovered, migrateModeNoStore, migrateModeDowngraded, "unknown-future-mode"} {
-		plan := migrationPlan{Mode: mode, LockStorePath: ".dossierx-lock-store.json", CommentDigestStorePath: ".dossierx-comment-digest.json"}
+	modes := []string{
+		migrateModeAlreadyCovered, migrateModeNoStore, migrateModeDowngraded,
+		// The two this round added. Their messages interpolate the history
+		// evidence, so the plan below carries a populated migrateHistory —
+		// otherwise the sentences under test would be the ones nobody sees.
+		migrateModeHistoryCovered, migrateModeClaimsModified,
+		"unknown-future-mode",
+	}
+	for _, mode := range modes {
+		plan := migrationPlan{
+			Mode:                   mode,
+			LockStorePath:          ".dossierx-lock-store.json",
+			CommentDigestStorePath: ".dossierx-comment-digest.json",
+			History: migrateHistory{
+				Looked:    true,
+				Covered:   true,
+				CoveredBy: ".dossierx-comment-digest.json was in the last commit",
+				Modified:  []string{"widget.contract.main"},
+			},
+		}
 		err := migrateRefusal(plan)
 		coded := cliout.As(err)
 		if coded == nil {
