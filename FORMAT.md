@@ -494,10 +494,18 @@ than a hole.
 Every rule in this document judges **one tree** — these claim files, this lock
 store, this digest store, these build-order artifacts, exactly as they are. That
 is the whole evidence base. Within it, every edit that puts one artifact at odds
-with another is a named finding — which is to say every edit of a **locked
-claim's own file**, and every removal of any piece of the evidence around it.
-The table below is that list, and it is meant to be read as a complete one. The
-next section is deliberately not a list at all, for reasons it gives.
+with another is a named finding — every edit to the **approved content** of a
+locked claim, and every removal of any piece of the evidence around it. The
+table below is that list, and it is meant to be read as a complete one. The next
+section is deliberately not a list at all, for reasons it gives.
+
+One field is deliberately outside that sentence. `review_pending` is engine-
+managed bookkeeping, not approved content, so it sits in the locked-claim hash's
+deny-list alongside `status` and `comments` (see `internal/lock/lockedhash.go`).
+Deleting a `review_pending: true` line by hand therefore clears a standing review
+flag without a finding. That is the flag store's business rather than the
+ledger's, and the flag store has no integrity coverage — worth knowing before you
+read the sentence above as covering the file byte for byte.
 
 | The tampering | Named by |
 |---|---|

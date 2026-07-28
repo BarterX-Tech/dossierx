@@ -199,7 +199,9 @@ The gate runs as the **last** step of `check`, after the catalog and viewer have
 
 ### What the gate does not detect, and where that is caught
 
-Every rule above judges **one tree**: these claim files, this ledger, this digest store, these build-order artifacts, exactly as they are. Within that evidence base, every change that leaves a surviving artifact **disagreeing** with the one that moved is caught. An agent that edits a locked claim, a careless hand-edit, a bad merge, a status flipped by hand in either direction, a deleted approval record, an erased comment thread — each one leaves the untouched files disagreeing with the touched one, and the disagreement is a named finding (`lock-content-drift`, `lock-ledger-missing`, `lock-ledger-orphan`, `lock-ledger-deleted`, `comment-ledger-drift`, and the rest of the table above).
+Every rule above judges **one tree**: these claim files, this ledger, this digest store, these build-order artifacts, exactly as they are. Within that evidence base, a change to a locked claim's **approved content** leaves a surviving artifact **disagreeing** with the one that moved, and that disagreement is caught. An agent that edits a locked claim, a careless hand-edit, a bad merge, a status flipped by hand in either direction, a deleted approval record, an erased comment thread — each one is a named finding (`lock-content-drift`, `lock-ledger-missing`, `lock-ledger-orphan`, `lock-ledger-deleted`, `comment-ledger-drift`, and the rest of the table above).
+
+One field sits outside that: `review_pending` is engine-managed bookkeeping rather than approved content, so it is excluded from the locked-claim hash and hand-deleting it clears a review flag silently. [FORMAT.md](FORMAT.md) says where that line falls and why.
 
 What it cannot see is the change that writes **both sides at once**, and the reason is one sentence rather than a list of cases:
 
