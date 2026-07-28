@@ -208,7 +208,10 @@ func Propose(claims []model.Claim, cfg *config.Config, module string) (*Artifact
 	if len(commented) > 0 {
 		sort.Strings(commented)
 		return nil, fmt.Errorf(
-			"buildorder: module %q has %d claim(s) with unresolved comment thread(s): %s — resolve them (dossierx comment resolve <id> <thread-id>) before proposing a build order",
+			// No command is named for the same reason lock.Lock's comment gate
+			// names none: resolving is the human's act in the viewer, and
+			// "comment resolve" left the CLI in v0.3.0.
+			"buildorder: module %q has %d claim(s) with unresolved comment thread(s): %s — the human resolves them in the viewer (\"dossierx serve\") before a build order can be proposed",
 			module, len(commented), strings.Join(commented, ", "),
 		)
 	}
@@ -314,7 +317,11 @@ func computePhases(claims []model.Claim, cfg *config.Config, module string) ([]P
 		ordered, cyclic := layeredTopoSort(stableDisplayOrder(bucket))
 		if len(cyclic) > 0 {
 			return nil, nil, fmt.Errorf(
-				"buildorder: phase %q: rests_on cycle detected among %d claim(s): %s (run \"dossierx lint\" for the full cycle path)",
+				// "dossierx lint" was retired in v0.3.0 — linting is a STAGE of
+				// check, not a verb. --validate is the read-only form, which is
+				// the right one to name here: the caller is diagnosing a graph,
+				// not asking for a regenerated viewer.
+				"buildorder: phase %q: rests_on cycle detected among %d claim(s): %s (run \"dossierx check --validate\" for the full cycle path)",
 				phase, len(cyclic), strings.Join(cyclic, ", "),
 			)
 		}

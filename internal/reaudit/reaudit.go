@@ -33,6 +33,30 @@ type Diff struct {
 	// Note is a short human-readable explanation of why this diff (or
 	// lack of one) was proposed; always shown alongside Body.
 	Note string
+
+	// ResultingBody is the EXACT text Apply will write into claim.Body if this
+	// proposal is confirmed — Body with its markup collapsed, computed by the
+	// same stripMarkup call Apply itself makes, so the two cannot disagree.
+	//
+	// It exists because the preview did not disclose the one thing a human has
+	// to agree to. A flag-sourced proposal renders as a phrase-level diff (the
+	// red claim-says span next to the green now-does span), and both skills
+	// described it that way — but Apply REPLACES THE WHOLE BODY with now-does
+	// (see ProposeFlagDiff for why that is the intended semantics). On a
+	// two-sentence locked claim, `claim reaudit --confirm --reason "confirmed
+	// with the human"` therefore deleted the second sentence and re-signed the
+	// truncated body into the ledger with the human's own words attached to text
+	// they were never shown. Showing the resulting body — not just the diff —
+	// is what makes the confirmation informed.
+	ResultingBody string
+
+	// SideEffects names, in plain sentences, what confirming this proposal does
+	// BEYOND the diff a reader can see in Body. It is empty when there is
+	// nothing beyond it. Today there is exactly one entry it can carry (whole-
+	// body replacement dropping content the diff never mentioned), but it is a
+	// list rather than a bool so a later proposer can add its own without
+	// changing this type or its callers.
+	SideEffects []string
 }
 
 // Matches a full red (removal) <mark> span, content included, so it can be
@@ -82,6 +106,11 @@ func ProposeDiff(claim, changedDep model.Claim) (Diff, error) {
 		ClaimID:  claim.ID,
 		NoChange: true,
 		Body:     claim.Body,
+		// A no-change proposal writes the body back unchanged, so the resulting
+		// body IS the current one. It is still filled in rather than left empty:
+		// a caller that renders ResultingBody must never have to know which
+		// proposer produced the Diff to know whether the field means anything.
+		ResultingBody: stripMarkup(claim.Body),
 		Note: fmt.Sprintf(
 			"stub: ProposeDiff has no real LLM backend yet; dependency %q changed but no proposal was generated",
 			changedDep.ID,
@@ -110,6 +139,15 @@ func ProposeDiff(claim, changedDep model.Claim) (Diff, error) {
 // a surgical in-place phrase edit within a larger body, so replacing the
 // whole body is the correct behavior here, not a limitation.
 //
+// It is, however, a thing the human confirming it has to be TOLD, and that is
+// what Diff.ResultingBody and Diff.SideEffects are for. Body alone renders as a
+// phrase-level diff — one red span, one green span — which reads as a surgical
+// edit and says nothing about the rest of a multi-sentence body going with it.
+// The semantics are intended; the silence was not, and it made `claim reaudit
+// --confirm --reason "…"` sign a truncated body into the ledger under words the
+// human gave for something else. Both fields are populated here so a caller can
+// show the exact resulting text and the loss BEFORE Apply is ever called.
+//
 // Same precondition as ProposeDiff: claim must be locked AND
 // review_pending — enforced here too so this function is just as safe to
 // call directly (e.g. from a future non-CLI caller) without relying on the
@@ -135,8 +173,46 @@ func ProposeFlagDiff(claim model.Claim, flag PendingFlag) (Diff, error) {
 		ClaimID:  claim.ID,
 		NoChange: false,
 		Body:     body,
-		Note:     fmt.Sprintf("flagged: %s", flag.Reason),
+		// ResultingBody is computed through stripMarkup — the SAME function Apply
+		// calls — rather than by re-deriving "it will be NowDoes". Re-deriving it
+		// would be a second implementation of the collapse rule, and a preview
+		// that agrees with Apply only by inspection is exactly what shipped here
+		// before: the preview showed a phrase diff, Apply replaced the body, and
+		// nothing in the payload said so.
+		ResultingBody: stripMarkup(body),
+		SideEffects:   flagDiffSideEffects(claim.Body, flag.ClaimSays),
+		Note:          fmt.Sprintf("flagged: %s", flag.Reason),
 	}, nil
+}
+
+// flagDiffSideEffects returns the disclosure lines for a flag-sourced proposal:
+// today, the one that says the confirmed reaudit replaces the claim's ENTIRE
+// body with --now-does, and how much of the current body that drops.
+//
+// It fires only when there is something to lose — a body that is nothing but
+// the flagged phrase loses nothing, and announcing a side effect that does not
+// happen is how a disclosure becomes noise people skip. What "something to lose"
+// means is deliberately literal: remove the flagged phrase from the current body
+// and count the non-blank lines that remain. Counting LINES rather than
+// characters is what makes the number checkable against the file a human is
+// looking at.
+func flagDiffSideEffects(currentBody, claimSays string) []string {
+	remainder := currentBody
+	if claimSays != "" {
+		remainder = strings.Replace(remainder, claimSays, "", 1)
+	}
+	lost := 0
+	for _, line := range strings.Split(remainder, "\n") {
+		if strings.TrimSpace(line) != "" {
+			lost++
+		}
+	}
+	if lost == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"replaces the claim's entire body with --now-does (%d other line(s) of the current body will be removed)",
+		lost)}
 }
 
 // Apply strips the diff's <mark> markup and returns claim with its Body

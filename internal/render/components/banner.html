@@ -3,8 +3,16 @@
      so box model, padding, font sizes, and the draft/review_pending/locked
      status pill are shared, not reimplemented) — the .claim-banner
      modifier class in style.css changes only the background/border
-     color. */}}
+     color.
+
+     The heading shows the id's readable label via the shared "claimLabel"
+     func (components.go's ClaimLabel), with the machine id kept reachable on
+     the same element through data-claim-id and the hover title — see
+     card.html's head comment for why both, and ClaimLabel for what an
+     unshaped id does. This is the ONLY part of the claim-edge label work
+     that reaches banner.html: it is the one partial that never calls the
+     shared "edges" func, so it has no edges footer to label. */}}
 <section class="claim claim-banner card" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
 </section>

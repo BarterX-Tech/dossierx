@@ -38,9 +38,16 @@
      (docs' "<div class="k">TITLE <span class="pill ...">...</span></div>"
      convention, computed via components.go's pillClass) so a mockup claim
      still reads as an ordinary claim record in the surrounding document —
-     only its body differs. */}}
+     only its body differs. That includes the heading's readable label via
+     the shared "claimLabel" func (components.go's ClaimLabel), with the
+     machine id kept reachable on the same element through data-claim-id and
+     the hover title — see card.html's head comment for why both, and
+     ClaimLabel for what an unshaped id does. Note that claimLabel returns a
+     plain string and is interpolated in ordinary auto-escaping template
+     context here; it is emphatically NOT a second raw-HTML path alongside
+     mockupHTML. */}}
 <section class="claim claim-mockup card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
   {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{else if not .Body}}<p class="claim-empty">No mockup content.</p>{{end}}
   {{edges .}}

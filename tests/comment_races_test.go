@@ -10,25 +10,41 @@ package tests
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/comments"
+	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// countThreads returns the number of comment threads "dossierx comment list
-// --json" reports for id — which also proves the claim file still parses (a
-// torn write would fail the load or the JSON decode).
+// countThreads returns the number of comment threads "dossierx comment list"
+// reports for id — which also proves the claim file still parses (a torn write
+// would fail the load or the envelope decode).
+//
+// The command's pre-v0.3.0 "--json" flag emitted a bare array; the machine
+// surface is the standard envelope now, so this reads data.count.
 func countThreads(t *testing.T, root, cfgPath, id string) int {
 	t.Helper()
-	out, stderr, code := run(t, root, "--config", cfgPath, "comment", "list", id, "--json")
+	out, stderr, code := run(t, root, "--config", cfgPath, "--format", "json", "comment", "list", id)
 	if code != 0 {
-		t.Fatalf("comment list --json for %s exited %d (stderr: %s)", id, code, stderr)
+		t.Fatalf("comment list for %s exited %d (stderr: %s)", id, code, stderr)
 	}
-	var threads []map[string]any
-	if err := json.Unmarshal([]byte(out), &threads); err != nil {
-		t.Fatalf("comment list --json for %s is not valid JSON: %v\nout: %s", id, err, out)
+	var env struct {
+		Data struct {
+			Count   int              `json:"count"`
+			Threads []map[string]any `json:"threads"`
+		} `json:"data"`
 	}
-	return len(threads)
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("comment list for %s is not a single envelope: %v\nout: %s", id, err, out)
+	}
+	if env.Data.Count != len(env.Data.Threads) {
+		t.Fatalf("comment list count/threads disagree for %s: %d vs %d", id, env.Data.Count, len(env.Data.Threads))
+	}
+	return env.Data.Count
 }
 
 // runPair runs two binary invocations concurrently in root and waits for both.
@@ -57,7 +73,7 @@ func TestCommentRace_AddVsLock(t *testing.T) {
 
 		runPair(t, root,
 			[]string{"--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "race body"},
-			[]string{"--config", cfgPath, "lock", "widget.contract.main"},
+			[]string{"--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"},
 		)
 
 		if n := countThreads(t, root, cfgPath, "widget.contract.main"); n != 1 {
@@ -77,13 +93,13 @@ func TestCommentRace_AddVsUnlock(t *testing.T) {
 		root := t.TempDir()
 		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
-		if _, stderr, code := run(t, root, "--config", cfgPath, "lock", "widget.contract.main"); code != 0 {
+		if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 			t.Fatalf("iter %d: lock setup: %s", i, stderr)
 		}
 
 		runPair(t, root,
 			[]string{"--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "race body"},
-			[]string{"--config", cfgPath, "unlock", "widget.contract.main"},
+			[]string{"--config", cfgPath, "claim", "unlock", "widget.contract.main", "--reason", "test fixture"},
 		)
 
 		if n := countThreads(t, root, cfgPath, "widget.contract.main"); n != 1 {
@@ -103,13 +119,13 @@ func TestCommentRace_AddVsFlag(t *testing.T) {
 		root := t.TempDir()
 		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
-		if _, stderr, code := run(t, root, "--config", cfgPath, "lock", "widget.contract.main"); code != 0 {
+		if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 			t.Fatalf("iter %d: lock setup: %s", i, stderr)
 		}
 
 		runPair(t, root,
 			[]string{"--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "race body"},
-			[]string{"--config", cfgPath, "flag", "widget.contract.main", "--claim-says", "x", "--now-does", "y", "--reason", "raced"},
+			[]string{"--config", cfgPath, "claim", "flag", "widget.contract.main", "--claim-says", "x", "--now-does", "y", "--reason", "raced"},
 		)
 
 		if n := countThreads(t, root, cfgPath, "widget.contract.main"); n != 1 {
@@ -122,44 +138,58 @@ func TestCommentRace_AddVsFlag(t *testing.T) {
 	}
 }
 
-// firstThreadID returns the id of the first thread "dossierx comment list
-// --json" reports for id (the fixture always has exactly one).
+// firstThreadID returns the id of the first thread "dossierx comment list"
+// reports for id (the fixture always has exactly one).
 func firstThreadID(t *testing.T, root, cfgPath, id string) string {
 	t.Helper()
-	out, stderr, code := run(t, root, "--config", cfgPath, "comment", "list", id, "--json")
+	out, stderr, code := run(t, root, "--config", cfgPath, "--format", "json", "comment", "list", id)
 	if code != 0 {
-		t.Fatalf("comment list --json for %s exited %d (stderr: %s)", id, code, stderr)
+		t.Fatalf("comment list for %s exited %d (stderr: %s)", id, code, stderr)
 	}
-	var threads []map[string]any
-	if err := json.Unmarshal([]byte(out), &threads); err != nil {
-		t.Fatalf("comment list --json for %s is not valid JSON: %v\nout: %s", id, err, out)
+	// The envelope's threads are projected through cmd/dossierx's
+	// commentThreadView before they are marshalled, so each thread's fields
+	// arrive under the machine contract's snake_case names ("id") — the same
+	// strings internal/serve's viewer API uses, never the Go field names.
+	var env struct {
+		Data struct {
+			Threads []map[string]any `json:"threads"`
+		} `json:"data"`
 	}
-	if len(threads) == 0 {
+	if err := json.Unmarshal([]byte(out), &env); err != nil {
+		t.Fatalf("comment list for %s is not a single envelope: %v\nout: %s", id, err, out)
+	}
+	if len(env.Data.Threads) == 0 {
 		t.Fatalf("expected at least one thread on %s, got none", id)
 	}
-	// "comment list --json" encodes model.Comment with its Go field names (no
-	// json tags), so the thread id is under "ID".
-	tid, ok := threads[0]["ID"].(string)
+	tid, ok := env.Data.Threads[0]["id"].(string)
 	if !ok || tid == "" {
-		t.Fatalf("first thread on %s has no id: %v", id, threads[0])
+		t.Fatalf("first thread on %s has no id: %v", id, env.Data.Threads[0])
 	}
 	return tid
 }
 
-// comment resolve vs flag on the same locked claim, the flag-orphan race: both
-// are review_pending inputs, but resolve CLEARS review_pending (its trigger, the
+// resolve vs flag on the same locked claim, the flag-orphan race: both are
+// review_pending inputs, but resolve CLEARS review_pending (its trigger, the
 // last open thread, is gone) while flag SETS it. Whichever serialized order
 // wins, the claim must end review_pending:true with the flag recorded — never
 // review_pending:false with an orphaned flag. That holds only because resolve
 // re-reads the flag store FRESH inside the claims sentinel; a snapshot taken
-// before the sentinel would miss a flag committed first and clear it. This
-// exercises the real "dossierx comment"/"dossierx flag" wiring end to end.
+// before the sentinel would miss a flag committed first and clear it.
+//
+// The resolve half is driven through internal/comments directly rather than
+// through the CLI, because v0.3.0 removed "comment resolve" from the CLI (it
+// lives in the viewer, where the rights holder is — see cmd/dossierx/comment.go).
+// That is NOT a weaker test: the sentinel it exercises is a real cross-process
+// file lock, this test binary is a genuinely separate process from the "claim
+// flag" subprocess it races, and comments.Deps.Resolve is the exact same code
+// path serve's HTTP handler calls. What is lost is only the argv plumbing,
+// which internal/serve's own tests cover.
 func TestCommentRace_ResolveVsFlag(t *testing.T) {
 	for i := 0; i < raceIterations; i++ {
 		root := t.TempDir()
 		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 		claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "raced claim."})
-		if _, stderr, code := run(t, root, "--config", cfgPath, "lock", "widget.contract.main"); code != 0 {
+		if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 			t.Fatalf("iter %d: lock setup: %s", i, stderr)
 		}
 		// Open a thread on the locked claim (this alone sets review_pending).
@@ -168,10 +198,30 @@ func TestCommentRace_ResolveVsFlag(t *testing.T) {
 		}
 		tid := firstThreadID(t, root, cfgPath, "widget.contract.main")
 
-		runPair(t, root,
-			[]string{"--config", cfgPath, "comment", "resolve", "widget.contract.main", tid, "--as", "human"},
-			[]string{"--config", cfgPath, "flag", "widget.contract.main", "--claim-says", "x", "--now-does", "y", "--reason", "raced"},
-		)
+		cfg, err := config.LoadConfig(cfgPath)
+		if err != nil {
+			t.Fatalf("iter %d: load config: %v", i, err)
+		}
+		deps := &comments.Deps{
+			Cfg:           cfg,
+			LockStorePath: filepath.Join(cfg.Dir(), ".dossierx-lock-store.json"),
+			FlagStorePath: filepath.Join(cfg.Dir(), ".dossierx-flag-store.json"),
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			// A refusal here is a legitimate serialized outcome in principle;
+			// the assertions below are on the resulting STATE either way.
+			deps.Resolve("widget.contract.main", tid, model.CommentRoleHuman) //nolint:errcheck // outcome asserted via on-disk state below
+		}()
+		go func() {
+			defer wg.Done()
+			run(t, root, "--config", cfgPath, "claim", "flag", "widget.contract.main",
+				"--claim-says", "x", "--now-does", "y", "--reason", "raced")
+		}()
+		wg.Wait()
 
 		// The flag stands (flag never gets deleted by resolve), so the claim MUST
 		// still be review_pending — otherwise the flag is orphaned.
@@ -196,7 +246,7 @@ func TestCommentRace_AddVsCheck(t *testing.T) {
 		depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dep, v1."})
 		mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main on dep.", restsOn: []string{"widget.contract.dep"}})
 		for _, id := range []string{"widget.contract.dep", "widget.contract.main"} {
-			if _, stderr, code := run(t, root, "--config", cfgPath, "lock", id); code != 0 {
+			if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 				t.Fatalf("iter %d: lock %s: %s", i, id, stderr)
 			}
 		}

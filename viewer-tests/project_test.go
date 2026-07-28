@@ -113,6 +113,12 @@ type project struct {
 	dir       string
 	config    string
 	claimsDir string
+
+	// base is the URL of the serve process started by ensureServe, cached so a
+	// test that needs the HTTP API before it opens a tab (and newLiveTab, which
+	// opens one) share ONE server rather than racing two on the same project
+	// directory. Empty until ensureServe runs.
+	base string
 }
 
 // newProjectRaw creates a project dir + config with an empty claims/ dir; the
@@ -148,11 +154,20 @@ func newProject(t *testing.T) *project {
 	return p
 }
 
-// run executes `dossierx --config <cfg> <args...>` and returns its combined
-// output, failing the test on a non-zero exit.
+// run executes `dossierx --config <cfg> --format text <args...>` and returns
+// its combined output, failing the test on a non-zero exit.
+//
+// --format text is PINNED here rather than passed at each of the call sites.
+// v0.3.0 made JSON the default output format, so without this every helper
+// below that parses prose (seedComment's thread-id regex, the assertions on
+// human-readable output) would be reading an envelope instead. Pinning it in
+// the one helper is what kept this suite's call sites unchanged across the
+// restructure. pflag takes the LAST occurrence of a repeated flag, so a test
+// that wants the machine surface simply passes "--format", "json" in its own
+// args and wins — the pin is a default, not a lock.
 func (p *project) run(args ...string) string {
 	p.t.Helper()
-	full := append([]string{"--config", p.config}, args...)
+	full := append([]string{"--config", p.config, "--format", "text"}, args...)
 	cmd := exec.Command(p.bin, full...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -173,15 +188,74 @@ func (p *project) seedComment(role, body string) string {
 	return m
 }
 
-// render writes viewer/index.html and returns a file:// URL pointing at it.
+// renderStatic writes viewer/index.html and returns a file:// URL pointing at
+// it.
+//
+// It drives "check", not the "render" verb this called before v0.3.0: rendering
+// stopped being a verb when the surface went 26 -> 19 and became a stage of
+// check. check does strictly more (lint, catalog, the ledger gate) but it
+// writes the same viewer/index.html, which is the only thing this helper is
+// after.
 func (p *project) renderStatic() string {
 	p.t.Helper()
-	p.run("render")
+	p.run("check")
 	out := filepath.Join(p.dir, "viewer", "index.html")
 	if _, err := os.Stat(out); err != nil {
 		p.t.Fatalf("render did not write %s: %v", out, err)
 	}
 	return "file://" + out
+}
+
+// ensureServe returns a running server's base URL, starting one on first call
+// and reusing it after. Two serve processes on one project directory would both
+// watch and write the same claim files, so anything needing both the HTTP API
+// and a browser tab must share a single server.
+func (p *project) ensureServe() string {
+	p.t.Helper()
+	if p.base == "" {
+		p.base, _ = p.serve()
+	}
+	return p.base
+}
+
+// resolveViaAPI resolves thread tid on the test claim through the serve HTTP
+// API, as the given role, and fails the test on any non-200.
+//
+// This exists because there is no CLI path to it any more. "comment resolve"
+// was removed from the CLI in v0.3.0 on purpose: resolving a thread IS the
+// human's approval, so it lives only where the rights holder is — the viewer.
+// The viewer reaches it over this endpoint, so a browser test that needs a
+// pre-resolved thread must go the same way the browser does. This harness also
+// CANNOT reach internal/comments directly: viewer-tests is a separate Go module
+// and internal/ is unreachable from outside the engine's module.
+//
+// The three admission headers are not optional decoration — serve's middleware
+// requires Origin on any mutating request (absent and "null" are both refused),
+// Content-Type: application/json on POST, and a Sec-Fetch-Site that is absent
+// or same-origin. Sending base as the Origin is exactly what the viewer does.
+func (p *project) resolveViaAPI(tid, role string) {
+	p.t.Helper()
+	base := p.ensureServe()
+	url := fmt.Sprintf("%s/api/claims/%s/comments/%s/resolve", base, testClaimID, tid)
+	body := fmt.Sprintf(`{"as":%q}`, role)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader([]byte(body)))
+	if err != nil {
+		p.t.Fatalf("resolve request: %v", err)
+	}
+	req.Header.Set("Origin", base)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		p.t.Fatalf("resolve %s: %v", tid, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		var buf bytes.Buffer
+		_, _ = buf.ReadFrom(resp.Body)
+		p.t.Fatalf("resolve %s: got status %d, want 200\nbody: %s", tid, resp.StatusCode, buf.String())
+	}
 }
 
 // claimBytes returns the on-disk claim YAML (for byte-unchanged assertions).

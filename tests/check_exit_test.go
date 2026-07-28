@@ -43,6 +43,10 @@ func TestCheckExitCode_Parity(t *testing.T) {
 			"id: widget.contract.locked\nfacet: contract\nmodule: widget\nstatus: locked\nlayout: card\n"+
 				"body: |\n  a locked claim.\n"+
 				"governed_by:\n  type: none\n  reason: fixture\n")
+		// "Clean" now includes the lock-ledger gate: a hand-written
+		// "status: locked" with no approval record is exactly what it refuses,
+		// so record the approval this fixture always implied.
+		armLedger(t, root)
 		stdout, stderr, code := run(t, root, "check")
 		if code != 0 {
 			t.Fatalf("expected exit 0 on a clean check, got %d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)

@@ -210,18 +210,29 @@ func TestWatcher_TmpFileDoesNotFire(t *testing.T) {
 
 // Two separate changes, spaced well beyond the debounce window, fire twice —
 // the watcher keeps working after the first notification.
+//
+// Each write changes the file's SIZE as well as its content, deliberately. The
+// fingerprint is (modNano, size), and a filesystem whose modification-time
+// granularity is coarser than the gap between two writes reports both with the
+// same stamp — on Windows that granularity is tens of milliseconds, so an
+// earlier version of this test ("one" -> "two", both 3 bytes, written
+// microseconds after the baseline scan) saw no delta and failed there while
+// passing on macOS and Linux. That is a real property of a zero-dependency
+// mtime poll and is documented on scanFingerprint; this test is about the
+// watcher firing repeatedly, so it does not also try to assert its way around
+// timestamp resolution.
 func TestWatcher_SeparateChangesFireEachTime(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, filepath.Join(dir, "a.yaml"), "one")
 	count, cancel := newTestWatcher(t, dir)
 	defer cancel()
 
-	writeTestFile(t, filepath.Join(dir, "a.yaml"), "two")
+	writeTestFile(t, filepath.Join(dir, "a.yaml"), "two-changed")
 	time.Sleep(250 * time.Millisecond)
 	if got := atomic.LoadInt32(count); got != 1 {
 		t.Fatalf("after first change: %d notifications, want 1", got)
 	}
-	writeTestFile(t, filepath.Join(dir, "a.yaml"), "three")
+	writeTestFile(t, filepath.Join(dir, "a.yaml"), "three-changed-again")
 	time.Sleep(250 * time.Millisecond)
 	if got := atomic.LoadInt32(count); got != 2 {
 		t.Fatalf("after second change: total %d notifications, want 2", got)

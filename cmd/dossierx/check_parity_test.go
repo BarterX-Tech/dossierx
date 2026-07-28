@@ -11,7 +11,7 @@
 // Scope of the "vs v0.1.2" guarantee — one deliberate exception. The output is
 // byte-identical to the pre-extraction command EXCEPT for a single, intentional
 // wording improvement: the drift/flag reaudit next-step now reads "N claim(s)
-// review_pending from drift/flag -> dossierx reaudit <id> ..." (see check.Run's
+// review_pending from drift/flag -> dossierx claim reaudit <id> ..." (see check.Run's
 // nextSteps and fixtures F and I). That one-line reword is the ONLY byte-diff
 // from v0.1.2 and is captured in the goldens below as the intended text — the
 // goldens are the source of truth for the current reporter, not a promise that
@@ -51,6 +51,12 @@ func writeCheckFixture(t *testing.T, root, cfgBody string, files map[string]stri
 			t.Fatalf("write %s: %v", rel, err)
 		}
 	}
+	// Every fixture here that writes "status: locked" means "this claim is
+	// legitimately locked", not "somebody flipped the status by hand" — so the
+	// lock-ledger gate is armed to match. Without it the gate would fire on
+	// nearly every golden in this file, and the parity assertions would be
+	// pinning the output of a project the engine considers tampered with.
+	armLedgerFixture(t, cfgPath)
 	return cfgPath
 }
 
@@ -74,7 +80,7 @@ const parityConfig = "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - wi
 
 // A: draft claims plus an overview (orientation-note) claim — exercises the
 // lint-warning block, catalog/render writes, "check: OK", the orientation
-// summary line, and the "still draft -> lock" next step.
+// summary line, and the "still draft -> claim lock" next step.
 func TestCheckParity_DraftAndOrientation(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
@@ -95,13 +101,13 @@ func TestCheckParity_DraftAndOrientation(t *testing.T) {
 		"check: OK\n" +
 		"orientation notes: module \"widget\": 1 (1 in overview)\n" +
 		"next steps:\n" +
-		"  2 claim(s) still draft -> dossierx lock <id> (e.g. widget.contract.one)\n"
+		"  2 claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. widget.contract.one)\n"
 	assertCheckParity(t, cfgPath, want, "", false)
 }
 
 // B: a locked claim carrying an open comment thread — exercises the
 // comments-unresolved warning, the "open comments" per-module summary, and
-// the "open comment thread(s) -> comment resolve" next step.
+// the "open comment thread(s) -> the human resolves them in the viewer" step.
 func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := writeCheckFixture(t, root, parityConfig, map[string]string{
@@ -121,7 +127,7 @@ func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 		"check: OK\n" +
 		"open comments: module \"widget\": 1\n" +
 		"next steps:\n" +
-		"  1 claim(s) with open comment thread(s) -> dossierx comment resolve <id> <thread-id> (e.g. widget.contract.locked c-aaaaaa)\n"
+		"  1 claim(s) with open comment thread(s) -> the human resolves them in the viewer (dossierx serve); an agent may only reply (e.g. widget.contract.locked c-aaaaaa)\n"
 	assertCheckParity(t, cfgPath, want, "", false)
 }
 
@@ -253,7 +259,7 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 			"body: |\n  a locked claim to flag.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	if _, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.locked",
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.locked",
 		"--claim-says", "old", "--now-does", "new", "--reason", "changed"); err != nil {
 		t.Fatalf("flag setup: %v", err)
 	}
@@ -265,7 +271,7 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 		"render: wrote " + viewer + "\n" +
 		"check: OK\n" +
 		"next steps:\n" +
-		"  1 claim(s) review_pending from drift/flag -> dossierx reaudit <id> (e.g. widget.contract.locked)\n"
+		"  1 claim(s) review_pending from drift/flag -> dossierx claim reaudit <id> (e.g. widget.contract.locked)\n"
 	assertCheckParity(t, cfgPath, want, "", false)
 }
 
@@ -297,13 +303,18 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 
 	// Lock dep (base is authored locked already) so the store captures dep's
 	// per-dependent baseline for base = ContentHash(base v1).
-	if _, stderr, err := execCLI(t, "--config", cfgPath, "lock", "widget.contract.dep"); err != nil {
+	if _, stderr, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock dep: %v (stderr=%s)", err, stderr)
 	}
 	// Drift base: change its body so dep's stored baseline no longer matches.
 	if err := os.WriteFile(basePath, []byte(baseV2), 0o644); err != nil {
 		t.Fatalf("drift base: %v", err)
 	}
+	// base is LOCKED, so rewriting its file in place is exactly what the ledger
+	// gate refuses. The fixture is standing in for the real path — unlock, edit,
+	// lock — which records the new content as approved, so re-record it here.
+	// What is under test is the DEPENDENT's review_pending, not base's approval.
+	armLedgerFixture(t, cfgPath)
 	// A check run reconciles dep -> locked+review_pending (drift detected).
 	if _, stderr, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("drift check: %v (stderr=%s)", err, stderr)
@@ -313,6 +324,7 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 	if err := os.WriteFile(basePath, []byte(baseV1), 0o644); err != nil {
 		t.Fatalf("revert base: %v", err)
 	}
+	armLedgerFixture(t, cfgPath) // the revert is a second approved edit to a locked claim
 
 	catalog := filepath.Join(root, ".catalog.json")
 	viewer := filepath.Join(root, "viewer", "index.html")
@@ -324,7 +336,7 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 		"render: wrote " + viewer + "\n" +
 		"check: OK\n" +
 		"next steps:\n" +
-		"  1 claim(s) review_pending with no active trigger -> dossierx reaudit <id> (e.g. widget.contract.dep)\n"
+		"  1 claim(s) review_pending with no active trigger -> dossierx claim reaudit <id> (e.g. widget.contract.dep)\n"
 	assertCheckParity(t, cfgPath, want, "", false)
 }
 

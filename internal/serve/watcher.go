@@ -92,6 +92,16 @@ func (w *watcher) run(ctx context.Context, baseline map[string]fileStamp) {
 // fileStamp is one claim file's contribution to a tree fingerprint: its
 // modification time (nanoseconds) and size. Any create/modify/delete/rename of a
 // relevant file changes the set of stamps, which is all "changed" needs.
+//
+// KNOWN LIMIT, and the price of a zero-dependency poll: an edit that changes
+// neither the size nor the recorded modification time is invisible. That needs
+// two writes of identical length, close enough together to land inside the
+// filesystem's timestamp granularity — sub-millisecond on APFS and ext4, but
+// tens of milliseconds on Windows. A person editing a claim in an editor never
+// hits it; a program rewriting the same file twice in one tick can. The cost is
+// one missed live-reload in the viewer, which a page refresh fixes, so it does
+// not justify hashing every file on every 500ms tick. Nothing in the integrity
+// gate depends on this — check re-reads the tree itself.
 type fileStamp struct {
 	modNano int64
 	size    int64

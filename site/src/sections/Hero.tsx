@@ -11,6 +11,7 @@ import { getSection } from "./section-utils";
 interface HeroData {
   ctas: { label: string; href: string }[];
   pipeline: string[];
+  roles: { id: "agent" | "human"; who: string; surface: string }[];
 }
 
 const container: Variants = {
@@ -133,7 +134,7 @@ const STACK_FOLDERS: {
   {
     key: "locked-2",
     label: "locked",
-    role: "reaudit --confirm · re-frozen",
+    role: "claim reaudit --confirm · re-frozen",
     variant: "accent",
     tabLeft: "10%",
     rot: 0.4,
@@ -380,7 +381,7 @@ export function Hero() {
           <div className="hero__col">
             <motion.div className="hero__kicker" variants={rise}>
               <span>Open-source documentation engine</span>
-              <span className="hero__kicker-meta">v0.2.0 · Go 1.26</span>
+              <span className="hero__kicker-meta">v0.3.0 · Go 1.26</span>
             </motion.div>
 
             <h1 className="hero__title">
@@ -399,6 +400,18 @@ export function Hero() {
               {contentSpec.tagline}
             </motion.p>
 
+            {/* The two roles, named before anything else on the page. The whole
+                release is this distinction, and a reader who scrolls no further
+                than the fold should still leave with it. */}
+            <motion.dl className="hero__roles" variants={rise}>
+              {data.roles.map((r) => (
+                <div className={`hero__role hero__role--${r.id}`} key={r.id}>
+                  <dt>{r.who}</dt>
+                  <dd>{r.surface}</dd>
+                </div>
+              ))}
+            </motion.dl>
+
             <motion.div className="hero__ctas" variants={rise}>
               {data.ctas.map((cta, i) => (
                 <a
@@ -414,7 +427,7 @@ export function Hero() {
                 </a>
               ))}
               <a href="#cli" className="button button--text">
-                Explore the CLI <span aria-hidden="true">↓</span>
+                Read the machine contract <span aria-hidden="true">↓</span>
               </a>
             </motion.div>
           </div>
@@ -432,8 +445,16 @@ export function Hero() {
         </div>
 
         <motion.div className="hero__ledger" variants={rise}>
-          <div className="hero__workflow" aria-label="DossierX pipeline">
-            <span className="hero__ledger-label">The checked path</span>
+          <div className="hero__workflow" aria-label="The stages inside dossierx check">
+            {/* These five are STAGES of one command, not five commands — three
+                of them were verbs in v0.2.0 and were deleted for being
+                packaging artifacts. They survive as the values check reports in
+                the envelope's stopped_at, which is why an agent still cares
+                about them: "stopped at lint" and "stopped at scan" call for
+                different next moves. */}
+            <span className="hero__ledger-label">
+              Inside <code>dossierx check</code>
+            </span>
             <div className="hero__pipeline">
               {data.pipeline.map((step, index) => (
                 <span className="hero__pipeline-step" key={step}>
@@ -447,16 +468,16 @@ export function Hero() {
           </div>
           <dl className="hero__facts">
             <div>
-              <dt>23</dt>
-              <dd>lint rules</dd>
-            </div>
-            <div>
-              <dt>26</dt>
-              <dd>CLI commands</dd>
+              <dt>20</dt>
+              <dd>commands your agent runs</dd>
             </div>
             <div>
               <dt>1</dt>
-              <dd>human write gate</dd>
+              <dd>command you run</dd>
+            </div>
+            <div>
+              <dt>0</dt>
+              <dd>silent changes to a locked claim</dd>
             </div>
           </dl>
         </motion.div>

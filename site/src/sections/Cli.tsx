@@ -3,6 +3,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { AnimatedReveal } from "../components/AnimatedReveal";
 import { SectionContainer } from "../components/SectionContainer";
 import { SectionHeader } from "../components/SectionHeader";
+import { AgentCompat, type CompatData } from "../components/AgentCompat";
 import { getSection } from "./section-utils";
 
 interface Command {
@@ -16,9 +17,27 @@ interface Group {
   group: string;
   commands: Command[];
 }
+interface ContractFact {
+  title: string;
+  body: string;
+  code?: string;
+}
+interface ErrorCode {
+  code: string;
+  recovery: string;
+}
+interface MigrationRow {
+  cut: string;
+  now: string;
+  why: string;
+}
 interface CliData {
+  contract: ContractFact[];
+  errorCodes: ErrorCode[];
   groups: Group[];
-  globalFlag: { name: string; desc: string };
+  migration: { title: string; rows: MigrationRow[] };
+  compat: CompatData;
+  globalFlags: { name: string; desc: string }[];
 }
 
 interface FlatCommand extends Command {
@@ -47,6 +66,17 @@ function Transcript({ text }: { text: string }) {
   );
 }
 
+/**
+ * The CLI section is a CONTRACT REFERENCE, not a tutorial — the premise of
+ * v0.3.0 is that a human never types any of this, so a page that walks a reader
+ * through "first run lint, then lock" is describing a workflow nobody has.
+ *
+ * It is therefore ordered the way an agent's own skill is ordered: the contract
+ * that applies to every command first (one envelope, stable codes, nothing
+ * writes unpreviewed), then the codes it will branch on, then the twenty
+ * commands themselves, then — for an agent that learned the v0.2.0 surface — the
+ * migration table, and last the harness-independence argument.
+ */
 export function Cli() {
   const section = getSection("cli");
   const data = section.data as unknown as CliData;
@@ -80,10 +110,40 @@ export function Cli() {
   return (
     <SectionContainer id={section.id}>
       <SectionHeader
-        eyebrow="Command line"
+        eyebrow="The machine contract"
         title={section.title}
         contentMd={section.contentMd}
       />
+
+      <div className="contract">
+        {data.contract.map((f, i) => (
+          <AnimatedReveal key={f.title} delay={0.05 * i}>
+            <div className="contract__card">
+              <h3 className="contract__title">{f.title}</h3>
+              <p className="contract__body">{f.body}</p>
+              {f.code && <pre className="contract__code">{f.code}</pre>}
+            </div>
+          </AnimatedReveal>
+        ))}
+      </div>
+
+      <AnimatedReveal>
+        <div className="codes">
+          <h3 className="codes__title">
+            error.code → what the agent does next
+          </h3>
+          <dl className="codes__list">
+            {data.errorCodes.map((c) => (
+              <div className="codes__row" key={c.code}>
+                <dt>
+                  <code>{c.code}</code>
+                </dt>
+                <dd>{c.recovery}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </AnimatedReveal>
 
       <AnimatedReveal>
         <div className="cli">
@@ -93,7 +153,9 @@ export function Cli() {
               <i />
               <i />
             </span>
-            <span className="term__title">dossierx · command reference</span>
+            <span className="term__title">
+              dossierx · 20 commands · JSON by default
+            </span>
           </div>
 
           <div className="cli__search">
@@ -102,7 +164,7 @@ export function Cli() {
               className="cli__input"
               type="text"
               value={query}
-              placeholder="filter commands… (lock, build-order, drift)"
+              placeholder="filter commands… (claim lock, inbox, --dry-run, ledger)"
               aria-label="Filter CLI commands"
               onChange={(e) => setQuery(e.target.value)}
             />
@@ -199,10 +261,44 @@ export function Cli() {
       </AnimatedReveal>
 
       <AnimatedReveal>
-        <p className="note">
-          <code>{data.globalFlag.name}</code> — {data.globalFlag.desc}
-        </p>
+        <div className="globals">
+          {data.globalFlags.map((f) => (
+            <p className="note" key={f.name}>
+              <code>{f.name}</code> — {f.desc}
+            </p>
+          ))}
+        </div>
       </AnimatedReveal>
+
+      <AnimatedReveal>
+        <h3 className="migration__title">{data.migration.title}</h3>
+        <div className="compare__scroll">
+          <table className="transitions">
+            <thead>
+              <tr>
+                <th>Retired</th>
+                <th>Now</th>
+                <th>Why</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.migration.rows.map((r) => (
+                <tr key={r.cut}>
+                  <td>
+                    <code>{r.cut}</code>
+                  </td>
+                  <td>
+                    <code>{r.now}</code>
+                  </td>
+                  <td>{r.why}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </AnimatedReveal>
+
+      <AgentCompat data={data.compat} />
     </SectionContainer>
   );
 }

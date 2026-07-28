@@ -1,0 +1,224 @@
+# dossierx-check.yml — the claim-integrity gate for a project that uses DossierX.
+#
+# COPY THIS FILE INTO YOUR REPOSITORY at .github/workflows/dossierx-check.yml.
+# It is a template and lives under scripts/ on purpose: dropping it into this
+# repository's own .github/workflows/ would run it against a repository that
+# has no claims/ of its own.
+#
+# ---------------------------------------------------------------------------
+# WHY CI, WHEN THERE IS ALREADY A PRE-COMMIT HOOK
+# ---------------------------------------------------------------------------
+#
+# The pre-commit hook (scripts/install-git-hook.sh) is fast feedback. It is not
+# the authority, and treating it as one would be a mistake, because git does
+# not run pre-commit for:
+#
+#   · a clean merge          — no conflicts, no pre-commit, so a locked claim
+#                              edited on a branch lands on main unexamined
+#   · git rebase             — replayed commits do not fire it
+#   · git cherry-pick        — same
+#   · git revert             — same
+#   · git commit --no-verify — deliberate, and one keystroke away
+#   · any contributor who simply never installed the hook, which is everyone
+#     who has not been asked yet
+#
+# This workflow runs the same gate over the merge result, where none of those
+# apply. If you only adopt one of the two, adopt this one.
+#
+# ---------------------------------------------------------------------------
+# WHY IT RUNS ONE dossierx COMMAND, AND WHY IT NEEDS NO GIT HISTORY
+# ---------------------------------------------------------------------------
+#
+# REMOVED IN THIS RELEASE, so that nobody re-adds either out of caution: the
+# second step ("dossierx check --staged", the scope guard) and the
+# fetch-depth: 0 that existed to feed it.
+#
+# The previous release made "check --staged" compare the commit under judgement
+# against its PARENT, to catch a commit that shrank its own audit scope —
+# repoint claims_dir at an empty directory AND delete the lock ledger, and there
+# is nothing left in scope for any rule to have an opinion about. The diagnosis
+# was right. The FIX was in the wrong layer: the parent commit is outside the
+# COMMIT but not outside the COMMITTER, and git history is written by the same
+# person the gate is judging, so --orphan, a second config file or a rebase all
+# switch the comparison off. It never bound anyone who did not want to be bound.
+#
+# What it DID bind was ordinary git work, because it could not see intent the
+# tree does not record:
+#
+#   · a plain "git revert" of a commit that contained a lock was REFUSED. A
+#     legitimate revert removes that lock's records, which is byte-identical to
+#     erasing them. git does not run pre-commit for revert either, so it landed
+#     locally at rc=0 and only this job objected.
+#   · a project that is NEW in a commit was audited against an UNRELATED retired
+#     project's ledger in a monorepo, and refused with findings naming another
+#     project's claims.
+#
+# So the comparison is gone, and with it the only thing in this job that ever
+# needed more than one commit. "dossierx check" evaluates ONE tree — which is
+# precisely what a checkout is — and runs every rule that survives: the whole
+# lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
+# -orphan / -abandoned / -absent / -adoption-required / -downgraded,
+# comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
+# the build-order rules.
+#
+# WHAT THAT COSTS, stated as the principle rather than as a count. Earlier
+# revisions of this comment put a number on it — one, then two, then three —
+# and every number went stale the next time somebody looked harder, so the
+# count is gone and the reason is here instead:
+#
+#   AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE
+#   IT. The claim files, the lock store, the digest store and the build-order
+#   artifacts are the whole evidence base, and every one of them is a tracked
+#   file in the tree the committer is editing.
+#
+# So the line falls between UNCOORDINATED and COORDINATED change, not between
+# clumsy and clever. One file edited, one record removed, one status flipped,
+# one thread erased — the files that were not touched disagree with the one that
+# was, and the disagreement is the finding. That is what a drifting agent, a
+# careless hand-edit and a bad merge all produce, and every rule listed above
+# names one. A claim and the record approving it rewritten TOGETHER, in one
+# commit, by someone entitled to write both, leaves nothing behind to disagree,
+# and `dossierx check` exits 0 — correctly, because there is no evidence in the
+# tree that anything is wrong.
+#
+# No in-repo mechanism closes that, which is why the parent-commit comparison
+# was removed rather than replaced. Where it IS closed is here, on the forge:
+# branch protection, this job as a REQUIRED status check, and a human reading a
+# diff that has to carry both halves.
+#
+# FORMAT.md's "What the gate detects, what it does not, and where the rest is
+# caught" carries the full argument, including one worked example and why it is
+# an example rather than a list. The boundary is pinned in Go, in
+# internal/check/staged_no_parent_test.go and internal/lock/audit_boundary_test.go.
+#
+# ---------------------------------------------------------------------------
+# WHAT IT DEPENDS ON BEING COMMITTED
+# ---------------------------------------------------------------------------
+#
+# Three project-root stores are TRACKED FILES:
+#
+#   .dossierx-lock-store.json      what was approved, when, by whom, and on
+#                                  whose words, per locked claim
+#   .dossierx-comment-digest.json  the review history's fingerprint
+#   .dossierx-flag-store.json      the pending "claim flag" triggers a later
+#                                  "claim reaudit" reads back to build its diff.
+#                                  Nothing in this workflow compares it to
+#                                  anything, but a review_pending claim whose
+#                                  flag entry did not travel with it reaudits to
+#                                  an EMPTY proposal, and confirming that empty
+#                                  proposal clears the flag having changed
+#                                  nothing.
+#
+# Do not add them to .gitignore. Without the ledger in the repository, CI has
+# nothing to compare the claims against and this workflow is theatre.
+#
+# One generated file joins them the moment you approve it: a LOCKED
+# .build-order.<module>.json. While it is locked:false it is ordinary output that
+# `build-order propose` rewrites in full, but a locked one is the sequence a
+# human approved and the artifact an implementing agent builds from, so this
+# workflow compares it against its record (build-order-content-drift,
+# build-order-ledger-missing) — and can only do that if it was committed.
+#
+# WHAT THE ABSENT-LEDGER ERROR DOES AND DOES NOT COVER
+#
+# dossierx says so out loud when the ledger FILE is missing: locked claims with
+# no ledger file is a hard error (lock-ledger-absent), not a silent pass. That
+# guarantee is about absence only. A ledger file that is PRESENT but was written
+# by a pre-v0.3.0 build is a different case, and it is FAIL-CLOSED: nothing is
+# grandfathered on the quiet any more. The gate refuses the run with
+# lock-ledger-adoption-required until the project has been through the one-time
+# migration, because a build that adopted whatever the claims said on that run
+# would be blessing content nobody approved — on a CI runner, with no human
+# anywhere near it.
+#
+# So if you are upgrading a project that locked claims before v0.3.0, this job
+# will fail until you do this ONCE, locally, at a keyboard:
+#
+#   dossierx migrate --adopt --dry-run   # names every artifact it would adopt
+#   # read that list WITH the human whose approval it stands in for
+#   dossierx migrate --adopt
+#
+# then COMMIT the .dossierx-lock-store.json and .dossierx-comment-digest.json it
+# writes. Until that commit lands, every run here checks out the old-format
+# store and refuses; after it lands, the ledger CI reads is the one a human
+# signed off.
+
+name: dossierx
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: claim integrity
+    runs-on: ubuntu-latest
+    steps:
+      # NO fetch-depth SETTING HERE, ON PURPOSE. actions/checkout's default —
+      # fetch-depth: 1, a shallow clone whose boundary commit is grafted so HEAD
+      # reports no parents — is everything this job needs, because every rule
+      # below is evaluated against one tree and a shallow checkout is a COMPLETE
+      # tree.
+      #
+      # This used to read "fetch-depth: 0 IS LOAD-BEARING", and it was, for the
+      # parent-commit comparison described in the header. That comparison was
+      # removed; a full clone would now only make the job slower on every push
+      # to a repository with any history. Do not add it back without a consumer
+      # that actually reads more than one commit.
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26.x'
+
+      # Pin the version rather than tracking @latest: dossierx's gate decides
+      # whether a pull request may merge, so a new release must be something
+      # you adopt on purpose, in a commit someone reviewed — not something that
+      # arrives on a Tuesday and starts failing everyone's builds.
+      - name: Install dossierx
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.3.0
+
+      # The full pipeline: lint, catalog, render, and the lock-ledger gate.
+      # --format text because the audience here is a human reading a failed
+      # job log; drop it if you post-process the output, in which case the JSON
+      # envelope's error.code is the thing to branch on.
+      #
+      # This run DOES write (regenerated claim files, .catalog.json, the
+      # viewer) — that is fine, the writes go nowhere but the runner's disk.
+      # Use "dossierx check --validate" instead if your workflow needs the tree
+      # left untouched, but note it is the read-only LINT pass: it does not
+      # render, so it will not catch a rendering-stage failure.
+      - name: dossierx check
+        run: dossierx check --format text
+
+      # THERE IS NO SECOND dossierx STEP ANY MORE, and that is deliberate rather
+      # than an oversight.
+      #
+      # This job used to run "dossierx check --staged --format text" here, as
+      # the scope guard. --staged is the one entry point defined against git, so
+      # it was the one that could compare this commit against its parent. With
+      # that comparison removed (see the header for why), --staged in CI reads
+      # the git INDEX of a freshly checked-out tree — which is byte-for-byte the
+      # tree the step above already judged, since a checkout has no staged edits
+      # — so it re-ran the same rules over the same content and could not reach
+      # a different verdict. Adding it back buys a slower job and nothing else.
+      #
+      # "check --staged" itself is NOT deprecated and did not lose anything else:
+      # it still judges the index rather than the worktree, and still writes
+      # nothing, which is exactly what makes the pre-commit hook meaningful
+      # (scripts/install-git-hook.sh). It is CI — where the index, the worktree
+      # and HEAD are the same three names for one tree — that has no use for it.
+
+      # Optional, and worth turning on once your claims are stable: fail when
+      # the checked-in claim files are not what dossierx would write. It
+      # catches hand-edited YAML that is valid but non-canonical — the kind of
+      # edit that produces a noisy diff on everyone else's next run.
+      #
+      # - name: Claims are canonical
+      #   run: git diff --exit-code -- claims

@@ -12,9 +12,11 @@ import (
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
+	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
@@ -225,10 +227,11 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------
 
 // handleStatus returns the check pipeline's Result as JSON so the viewer's
-// status strip can show lint health and open-comment counts. It drives
-// internal/check.Status — the MEMORY-ONLY sibling of check.Run — so this read
-// endpoint computes the same lint partition, open-comment counts, and
-// next-steps advisory WITHOUT any of Run's disk writes: it never truncates
+// status strip can show lint health, LOCK-LEDGER INTEGRITY, and open-comment
+// counts. It drives internal/check.Status — the MEMORY-ONLY sibling of
+// check.Run — so this read endpoint computes the same lint partition, the same
+// ledger-gate verdict, the same open-comment counts, and the same next-steps
+// advisory WITHOUT any of Run's disk writes: it never truncates
 // viewer/index.html or .catalog.json (os.WriteFile) and never runs the
 // per-request impl-link Scan that mutates link artifacts. That matters because
 // GET and HEAD are safe methods that skip the CSRF admission gates, so a
@@ -239,6 +242,14 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 // files); the lint partition and OpenComments are exact regardless, and
 // NextSteps is best-effort. A lint failure is data to display, not a reason to
 // fail the endpoint.
+//
+// The ledger gate is read-only in the strongest sense the feature has: it opens
+// the lock store and the comment digest store and compares, and it never
+// creates, adopts or repairs either one. That is the property that makes it
+// safe to hang off a CSRF-exempt GET at all — an endpoint that "fixed" the
+// ledger on a poll would record whatever the files say NOW as approved, which
+// is the outcome a tamperer wants. Nothing here changes that; the endpoint only
+// stops HIDING what the gate found (see statusToDTO).
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
 	if err != nil {
@@ -257,12 +268,12 @@ func (s *Server) handleAddThread(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -285,12 +296,12 @@ func (s *Server) handleReply(w http.ResponseWriter, r *http.Request) {
 	tid := r.PathValue("tid")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -330,12 +341,12 @@ func (s *Server) threadStateChange(w http.ResponseWriter, r *http.Request, op fu
 	tid := r.PathValue("tid")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -359,12 +370,12 @@ func (s *Server) handleEdit(w http.ResponseWriter, r *http.Request) {
 	replyID := r.URL.Query().Get("reply")
 	var req bodyRequest
 	if err := decodeJSONBody(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "bad_request")
+		writeError(w, http.StatusBadRequest, cliout.CodeBadRequest)
 		return
 	}
 	actor, err := actorFromString(req.As)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -390,7 +401,7 @@ func (s *Server) handleDelete(w http.ResponseWriter, r *http.Request) {
 	replyID := r.URL.Query().Get("reply")
 	actor, err := actorFromString(r.URL.Query().Get("as"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 		return
 	}
 	deps, err := s.mutatingDeps()
@@ -492,8 +503,15 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes a structured {"error":"<code>"} body with the given status.
 // code is a stable snake_case token the client can branch on (thread_not_found,
 // reply_not_found, ...), never a raw message.
-func writeError(w http.ResponseWriter, status int, code string) {
-	writeJSON(w, status, map[string]string{"error": code})
+//
+// The codes themselves now live in internal/cliout, shared with the CLI's
+// output envelope, so the browser and the terminal answer the same question
+// with the same word. The WIRE FORMAT here is unchanged — a bare
+// {"error":"<code>"} object, not an envelope — because the viewer's fetch()
+// calls parse it as it is, and reshaping a working API to match a new one would
+// be churn for its own sake.
+func writeError(w http.ResponseWriter, status int, code cliout.Code) {
+	writeJSON(w, status, map[string]string{"error": string(code)})
 }
 
 // writeInternal logs err to stderr and returns a 500 with the error text. This
@@ -523,35 +541,50 @@ func (s *Server) writeInternal(w http.ResponseWriter, err error) {
 func (s *Server) writeOpError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, errReadOnly):
-		writeError(w, http.StatusForbidden, "read_only")
+		writeError(w, http.StatusForbidden, cliout.CodeReadOnly)
 	case errors.Is(err, comments.ErrClaimNotFound):
-		writeError(w, http.StatusNotFound, "claim_not_found")
+		writeError(w, http.StatusNotFound, cliout.CodeClaimNotFound)
 	case errors.Is(err, comments.ErrThreadNotFound):
-		writeError(w, http.StatusNotFound, "thread_not_found")
+		writeError(w, http.StatusNotFound, cliout.CodeThreadNotFound)
 	case errors.Is(err, comments.ErrReplyNotFound):
-		writeError(w, http.StatusNotFound, "reply_not_found")
+		writeError(w, http.StatusNotFound, cliout.CodeReplyNotFound)
 	case errors.Is(err, comments.ErrBannerClaim):
-		writeError(w, http.StatusUnprocessableEntity, "banner_claim")
+		writeError(w, http.StatusUnprocessableEntity, cliout.CodeBannerClaim)
 	case errors.Is(err, comments.ErrEmptyBody):
-		writeError(w, http.StatusBadRequest, "empty_body")
+		writeError(w, http.StatusBadRequest, cliout.CodeEmptyBody)
 	case errors.Is(err, comments.ErrUnsafeBody):
 		// The caller's SUPPLIED body cannot be stored: their input IS at fault.
-		writeError(w, http.StatusBadRequest, "unsafe_body")
+		writeError(w, http.StatusBadRequest, cliout.CodeUnsafeBody)
 	case errors.Is(err, loader.ErrClaimNotRoundTrippable):
 		// The whole claim's STORED bytes will not re-serialize (usually a
 		// pre-existing, hand-edited body) — NOT the caller's input. Distinct code,
 		// and honest that this is not a 400-class bad request.
-		writeError(w, http.StatusUnprocessableEntity, "claim_not_serializable")
+		writeError(w, http.StatusUnprocessableEntity, cliout.CodeClaimNotSerializable)
 	case errors.Is(err, comments.ErrInvalidActor):
-		writeError(w, http.StatusBadRequest, "invalid_actor")
+		writeError(w, http.StatusBadRequest, cliout.CodeInvalidActor)
 	case errors.Is(err, comments.ErrRightsDenied):
-		writeError(w, http.StatusForbidden, "rights_denied")
+		writeError(w, http.StatusForbidden, cliout.CodeRightsDenied)
 	case errors.Is(err, comments.ErrThreadResolved):
-		writeError(w, http.StatusConflict, "thread_resolved")
+		writeError(w, http.StatusConflict, cliout.CodeThreadResolved)
 	case errors.Is(err, comments.ErrThreadOpen):
-		writeError(w, http.StatusConflict, "thread_open")
+		writeError(w, http.StatusConflict, cliout.CodeThreadOpen)
 	case errors.Is(err, loader.ErrClaimFileChanged):
-		writeError(w, http.StatusConflict, "claim_file_changed")
+		writeError(w, http.StatusConflict, cliout.CodeClaimFileChanged)
+	case errors.Is(err, comments.ErrCommentDigestDrift):
+		// 409: the STORED comment block disagrees with the integrity record, so
+		// this write would launder a hand edit. Same family as
+		// claim_file_changed — the server's picture of the file is not the
+		// file — but not the same cause, and the recovery is version control
+		// rather than a reload-and-retry, so it keeps its own code.
+		writeError(w, http.StatusConflict, cliout.CodeCommentDigestDrift)
+	case errors.Is(err, comments.ErrCommentDigestUnavailable):
+		// 503: the integrity store the write path depends on cannot be opened,
+		// so the op was refused BEFORE anything was written. It is a service
+		// condition rather than a fault in the request — the same request will
+		// succeed once the store is restored — and it must not fall through to
+		// the 500 default: an unclassified error is what a client retries, and
+		// retrying used to be the thing that appended the same thread again.
+		writeError(w, http.StatusServiceUnavailable, cliout.CodeCommentDigestUnavailable)
 	default:
 		s.writeInternal(w, err)
 	}
@@ -645,16 +678,70 @@ type findingDTO struct {
 }
 
 // statusDTO is the status strip's data: overall OK, the lint error/warning
-// partition, open-comment counts per module, and the next-step hints — the same
-// fields check.Result carries for the terminal reporter.
+// partition, the lock-ledger gate's findings, open-comment counts per module,
+// and the next-step hints — the same fields check.Result carries for the
+// terminal reporter.
 type statusDTO struct {
 	OK           bool           `json:"ok"`
 	LintErrors   []findingDTO   `json:"lint_errors"`
 	LintWarnings []findingDTO   `json:"lint_warnings"`
 	OpenComments map[string]int `json:"open_comments"`
 	NextSteps    []string       `json:"next_steps"`
+
+	// LedgerFindings is the lock-ledger gate's verdict, and it is on this DTO
+	// for the reason the whole gate exists: v0.3.0's promise is that a LOCKED
+	// claim cannot change without an approval record, and the VIEWER is the only
+	// surface the human who relies on that promise ever looks at. check.Status
+	// has always computed this slice — it REPORTS where check.Run REFUSES, so
+	// that a tampered project still renders the claim under dispute instead of
+	// going dark exactly when someone needs to read it — but the strip's DTO
+	// dropped it, so serve answered a tampered project with `ok: true` and five
+	// clean fields. The agent saw the finding in its JSON envelope; the human saw
+	// a green page. That asymmetry is the failure mode the ledger is meant to
+	// close, reintroduced one layer up.
+	//
+	// It is NOT folded into lint_errors and does not gain a severity, matching
+	// cmd/dossierx's checkData: a lint finding is advice about how a claim is
+	// written, a ledger finding is a refusal about whether it was approved, and
+	// the strip presents the two differently because a reader must not have to
+	// tell them apart by squinting at a rule name. lock.Finding already carries
+	// snake_case JSON tags (it is written to the same machine contract this
+	// endpoint is), so unlike lint.Finding it needs no projection type — reusing
+	// it keeps the browser's field names and the CLI envelope's the same strings.
+	//
+	// Always an array, never null, on the same terms as lint_errors and
+	// next_steps: the client ranges over it without a null test.
+	LedgerFindings []lock.Finding `json:"ledger_findings"`
+
+	// BuildOrders is every module's build-order state with staleness recomputed
+	// live, beside the ledger findings and for the same reason: a locked build
+	// order is the second class of locked artifact in a project, and a human
+	// reading the viewer had no way to see that the approved implementation
+	// sequence had gone stale under the claims they were reading. It is an array,
+	// never null.
+	BuildOrders []check.BuildOrderReport `json:"build_orders"`
 }
 
+// statusToDTO projects a check.Result into the strip's wire form.
+//
+// OK is the one field that is NOT copied through. check.Result.OK is
+// lint-driven on purpose (see check.Result.LedgerFindings: Status must keep
+// reporting a project whose ledger is in dispute, so a ledger finding may not
+// blank the page), but `ok` on this endpoint is the strip's HEADLINE — the
+// single boolean a reader takes as "is this project sound?" — and a green
+// headline sitting on top of a populated ledger_findings array is a worse lie
+// than the omission was. So the two are conjoined here, at the presentation
+// seam, where failing closed costs nothing: the page still renders, every claim
+// is still readable, and the strip says why it is red. That is also exactly the
+// verdict the CLI reaches from the same Result (checkStoppedAt maps a non-empty
+// LedgerFindings to stopped_at "ledger" with ok:false), so a human reading the
+// viewer and an agent reading the envelope are never told different things.
+//
+// This projection is a pure read: it neither loads nor writes the lock and
+// comment-digest stores (check.Status already read them, read-only), because
+// "re-record whatever the files say now" is precisely what an attacker would
+// want an integrity check to do — and GET is CSRF-exempt, so a bare
+// unauthenticated poll would be the trigger.
 func statusToDTO(res check.Result) statusDTO {
 	open := res.OpenComments
 	if open == nil {
@@ -664,12 +751,22 @@ func statusToDTO(res check.Result) statusDTO {
 	if next == nil {
 		next = []string{}
 	}
+	ledger := res.LedgerFindings
+	if ledger == nil {
+		ledger = []lock.Finding{}
+	}
+	orders := res.BuildOrders
+	if orders == nil {
+		orders = []check.BuildOrderReport{}
+	}
 	return statusDTO{
-		OK:           res.OK,
-		LintErrors:   findingsToDTO(res.LintErrors),
-		LintWarnings: findingsToDTO(res.LintWarnings),
-		OpenComments: open,
-		NextSteps:    next,
+		OK:             res.OK && len(ledger) == 0,
+		LintErrors:     findingsToDTO(res.LintErrors),
+		LintWarnings:   findingsToDTO(res.LintWarnings),
+		OpenComments:   open,
+		NextSteps:      next,
+		LedgerFindings: ledger,
+		BuildOrders:    orders,
 	}
 }
 

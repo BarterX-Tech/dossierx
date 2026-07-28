@@ -68,9 +68,23 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 		t.Fatalf("write legacy store: %v", err)
 	}
 
-	// First check after upgrade: migrates the store, but must NOT spuriously
-	// flip main to review_pending (its re-armed baseline equals dep's current
-	// content).
+	// THE MIGRATION COMES FIRST, and for this fixture that ordering is the
+	// point rather than a formality.
+	//
+	// A schema-0 store predates BOTH on-load migrations: the per-dependent
+	// baseline re-arm and the lock ledger. Adoption stamps the current schema
+	// version, and lock.MigrateLegacyStore refuses a store already at schema 1
+	// or later — so if the two ran in the other order this project's
+	// dependency-drift detection would be disarmed permanently, with no command
+	// left that could restore it. migrate.go's migrateLegacyBaselines is what
+	// keeps the pair together now that adoption no longer rides along with an
+	// ordinary command.
+	if _, _, err := execCLI(t, "--config", cfgPath, "migrate", "--adopt"); err != nil {
+		t.Fatalf("migrate --adopt (post-upgrade): %v", err)
+	}
+
+	// First check after the migration: must NOT spuriously flip main to
+	// review_pending (its re-armed baseline equals dep's current content).
 	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check (post-upgrade): %v", err)
 	}
@@ -82,15 +96,25 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 
 	// The store must have been re-armed and persisted: stamped current schema
 	// version, carrying a nested per-dependent baseline keyed under main.
+	//
+	// Version 2 is the lock-ledger schema, stamped by the migration above,
+	// which also grandfathered both already-locked claims into the ledger.
+	// Asserting the ledger's presence here as well is what keeps the two
+	// migrations pinned TOGETHER: they no longer share an entry point, and a
+	// migrate that adopted without re-arming — or a check that re-armed without
+	// being able to adopt — would still pass every assertion above.
 	storeRaw, err := os.ReadFile(storeFile)
 	if err != nil {
 		t.Fatalf("read store after migration: %v", err)
 	}
-	if !strings.Contains(string(storeRaw), `"version": 1`) {
-		t.Fatalf("expected the migrated store stamped version 1, got:\n%s", storeRaw)
+	if !strings.Contains(string(storeRaw), `"version": 2`) {
+		t.Fatalf("expected the migrated store stamped version 2, got:\n%s", storeRaw)
 	}
 	if !strings.Contains(string(storeRaw), "widget.contract.main") {
 		t.Fatalf("expected the migrated store to carry a per-dependent baseline for main, got:\n%s", storeRaw)
+	}
+	if !strings.Contains(string(storeRaw), `"grandfathered": true`) {
+		t.Fatalf("expected the legacy store's already-locked claims grandfathered into the lock ledger, got:\n%s", storeRaw)
 	}
 
 	// Now drift the dependency AFTER migration: the next check must flip main to
@@ -101,6 +125,11 @@ func TestCLI_Check_MigratesLegacyStore_ReArmsDriftDetection(t *testing.T) {
 	if err := os.WriteFile(depPath, []byte(drifted), 0o644); err != nil {
 		t.Fatalf("rewrite dep: %v", err)
 	}
+	// dep is locked, and the rewrite above stands in for the real approval path
+	// (unlock -> edit -> lock), which re-records the approved content. Without
+	// the re-record the ledger gate correctly reports the in-place edit as
+	// tampering, and this test would be measuring that instead of drift re-arming.
+	armLedgerFixture(t, cfgPath)
 	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check (post-drift): %v", err)
 	}

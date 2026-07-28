@@ -15,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
 )
 
@@ -33,21 +34,50 @@ func newServeCmd() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
-				return err
+				return serveFailure(cmd, err)
 			}
 			v, _, _ := resolveVersionInfo()
 
 			srv := serve.New(cfg, v)
 			if err := srv.Listen(port); err != nil {
-				return err
+				return serveFailure(cmd, err)
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "serving: %s\n", srv.URL())
 
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
-			return srv.Serve(ctx)
+			return serveFailure(cmd, srv.Serve(ctx))
 		},
 	}
 	cmd.Flags().IntVar(&port, "port", 0, "port to listen on (0 = a random high port)")
 	return cmd
+}
+
+// serveFailure gives "serve" the one thing its text-only exemption cost it: a
+// machine-readable answer when it does not start.
+//
+// serve is exempt from the one-envelope-per-invocation contract for a real
+// reason — its useful output (the URL) has to appear BEFORE it blocks, which one
+// envelope cannot express (see output.go's annotationTextOnly). But the
+// exemption was applied to the FAILURE path too, and there it bought nothing:
+// a serve that cannot bind its port, or cannot find a config, is an ordinary
+// request/response failure with an ordinary answer. What actually happened was
+// that "dossierx serve" on a taken port wrote NOTHING to stdout at all and
+// exited non-zero, which is the one outcome the machine contract exists to
+// prevent — an agent supervising the human's viewer could not tell a crash from
+// a config error from a port collision without parsing stderr prose.
+//
+// Under --format text nothing changes: the error is handed back and runCLI
+// prints cobra's own "Error: <msg>" line, byte for byte as before. Under JSON it
+// writes one failure envelope to stdout and marks the error as already-rendered
+// so runCLI does not report it twice.
+func serveFailure(cmd *cobra.Command, err error) error {
+	if err == nil || !jsonOutput() {
+		return err
+	}
+	env := cliout.Failure(commandPath(cmd), errorForCLI(err))
+	if writeErr := cliout.Write(cmd.OutOrStdout(), env); writeErr != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "dossierx: could not write the output envelope: %v\n", writeErr)
+	}
+	return &emittedErr{err: err}
 }

@@ -1,9 +1,10 @@
-// flag_implink_cli_test.go covers the CLI wiring for the two Channel
-// A/B additions: "dossierx flag <id> --claim-says --now-does --reason" (which
-// extends the existing reaudit lifecycle with a second, agent-sourced
-// trigger) and "dossierx implink set|status" (the fully agent-autonomous
-// implementation-link feature). Mirrors TestCLI_LockCheckStaleReauditUnlockFlow's
-// style: one on-disk fixture project, driven end to end through execCLI.
+// flag_link_cli_test.go covers the CLI wiring for the two Channel A/B
+// additions, under the names v0.3.0 gave them: "dossierx claim flag <id>
+// --claim-says --now-does --reason" (which extends the reaudit lifecycle with a
+// second, agent-sourced trigger) and "dossierx claim link" (the fully
+// agent-autonomous implementation-link feature, formerly "implink set"; its
+// read side is now part of "claim show"). One on-disk fixture project, driven
+// end to end through execCLI.
 package main
 
 import (
@@ -41,7 +42,7 @@ func TestCLI_Flag_RequiresAllThreeFlags(t *testing.T) {
 	}
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "original body")
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.main", "--claim-says", "x"); err == nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main", "--claim-says", "x"); err == nil {
 		t.Fatalf("expected flag to refuse when --now-does/--reason are missing")
 	}
 }
@@ -50,7 +51,7 @@ func TestCLI_Flag_RefusesUnlockedClaim(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget") // draft claim.
 
-	_, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.overview",
+	_, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.overview",
 		"--claim-says", "a", "--now-does", "b", "--reason", "c")
 	if err == nil {
 		t.Fatalf("expected flag to refuse a draft (not locked) claim")
@@ -61,7 +62,7 @@ func TestCLI_Flag_RefusesUnknownClaim(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	_, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.does-not-exist",
+	_, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.does-not-exist",
 		"--claim-says", "a", "--now-does", "b", "--reason", "c")
 	if err == nil {
 		t.Fatalf("expected flag to refuse an unknown claim id")
@@ -86,7 +87,7 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 	}
 	claimPath := writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "the old assertion")
 
-	flagOut, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.main",
+	flagOut, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
 		"--claim-says", "the old assertion", "--now-does", "the corrected assertion", "--reason", "code changed under it")
 	if err != nil {
 		t.Fatalf("flag: %v (out: %s)", err, flagOut)
@@ -104,7 +105,7 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 	}
 
 	// Propose-only reaudit should show claim-says/now-does as a red/green diff.
-	proposeOut, _, err := execCLI(t, "--config", cfgPath, "reaudit", "widget.contract.main")
+	proposeOut, _, err := execCLI(t, "--config", cfgPath, "claim", "reaudit", "widget.contract.main")
 	if err != nil {
 		t.Fatalf("reaudit (propose-only): %v (out: %s)", err, proposeOut)
 	}
@@ -115,7 +116,7 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 		t.Fatalf("expected the flag's reason surfaced in the proposal note, got: %s", proposeOut)
 	}
 
-	confirmOut, _, err := execCLI(t, "--config", cfgPath, "reaudit", "widget.contract.main", "--confirm")
+	confirmOut, _, err := execCLI(t, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture")
 	if err != nil {
 		t.Fatalf("reaudit --confirm: %v (out: %s)", err, confirmOut)
 	}
@@ -140,7 +141,7 @@ func TestCLI_FlagThenReauditConfirm_EndToEnd(t *testing.T) {
 	// The flag store entry must be consumed (deleted) by the confirmed
 	// reaudit — re-running reaudit now must fall back to exit 2 (not
 	// locked+review_pending), proving there is no leftover pending flag.
-	if _, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.main",
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
 		"--claim-says", "x", "--now-does", "y", "--reason", "z"); err != nil {
 		t.Fatalf("re-flagging after a confirmed reaudit should still work: %v", err)
 	}
@@ -162,7 +163,7 @@ func TestCLI_Flag_AnyLockedClaimCanBeReflagged(t *testing.T) {
 	}
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "flag", "widget.contract.main",
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.main",
 		"--claim-says", "a", "--now-does", "b", "--reason", "c"); err != nil {
 		t.Fatalf("expected flag to succeed on a locked-but-not-yet-pending claim: %v", err)
 	}
@@ -172,7 +173,7 @@ func TestCLI_Flag_AnyLockedClaimCanBeReflagged(t *testing.T) {
 // dossierx implink set / status
 // ---------------------------------------------------------------------
 
-func TestCLI_ImplinkSet_ThenStatus(t *testing.T) {
+func TestCLI_ClaimLink_ThenShow(t *testing.T) {
 	root := t.TempDir()
 	claimsDir := filepath.Join(root, "claims")
 	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
@@ -189,28 +190,34 @@ func TestCLI_ImplinkSet_ThenStatus(t *testing.T) {
 		t.Fatalf("write source: %v", err)
 	}
 
-	setOut, _, err := execCLI(t, "--config", cfgPath, "implink", "set",
+	setOut, _, err := execCLI(t, "--config", cfgPath, "claim", "link",
 		"--module", "widget", "--claim", "widget.contract.main", "--file", "widget.go", "--symbol", "Run")
 	if err != nil {
-		t.Fatalf("implink set: %v (out: %s)", err, setOut)
+		t.Fatalf("claim link: %v (out: %s)", err, setOut)
 	}
 	if !strings.Contains(setOut, "widget.contract.main -> widget.go#Run") {
-		t.Fatalf("expected implink set to echo the claim->file#symbol link, got: %s", setOut)
+		t.Fatalf("expected claim link to echo the claim->file#symbol link, got: %s", setOut)
 	}
 	if _, statErr := os.Stat(filepath.Join(root, ".implementation.widget.json")); statErr != nil {
 		t.Fatalf("expected .implementation.widget.json to exist: %v", statErr)
 	}
 
-	statusOut, _, err := execCLI(t, "--config", cfgPath, "implink", "status", "--module", "widget")
+	// "implink status" reported this; "claim show" absorbed it. The per-claim
+	// answer is strictly more useful than the per-module one was, since the
+	// caller already knows which claim it just linked.
+	showOut, _, err := execCLI(t, "--config", cfgPath, "claim", "show", "widget.contract.main")
 	if err != nil {
-		t.Fatalf("implink status: %v (out: %s)", err, statusOut)
+		t.Fatalf("claim show: %v (out: %s)", err, showOut)
 	}
-	if !strings.Contains(statusOut, "impl-links: 1 linked, 0 drifted") {
-		t.Fatalf("expected a 1 linked, 0 drifted summary, got: %s", statusOut)
+	if !strings.Contains(showOut, "implemented in:     widget.go#Run") {
+		t.Fatalf("expected claim show to report the fresh link, got: %s", showOut)
+	}
+	if strings.Contains(showOut, "DRIFTED") {
+		t.Fatalf("a just-created link cannot be drifted, got: %s", showOut)
 	}
 }
 
-func TestCLI_ImplinkSet_RefusesDraftClaim(t *testing.T) {
+func TestCLI_ClaimLink_RefusesDraftClaim(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget") // draft claim.
 	srcPath := filepath.Join(root, "widget.go")
@@ -218,23 +225,27 @@ func TestCLI_ImplinkSet_RefusesDraftClaim(t *testing.T) {
 		t.Fatalf("write source: %v", err)
 	}
 
-	_, _, err := execCLI(t, "--config", cfgPath, "implink", "set",
+	_, _, err := execCLI(t, "--config", cfgPath, "claim", "link",
 		"--module", "widget", "--claim", "widget.contract.overview", "--file", "widget.go")
 	if err == nil {
-		t.Fatalf("expected implink set to refuse linking a draft (not locked) claim")
+		t.Fatalf("expected claim link to refuse linking a draft (not locked) claim")
 	}
 }
 
-func TestCLI_ImplinkStatus_NothingLinkedYet(t *testing.T) {
+// TestCLI_ClaimShow_NothingLinkedYet is the graceful-degradation case
+// "implink status" used to own: a module that has never linked anything must
+// produce a calm report, not an error, since that is the ordinary state of
+// every project that has not adopted the feature.
+func TestCLI_ClaimShow_NothingLinkedYet(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	out, _, err := execCLI(t, "--config", cfgPath, "implink", "status", "--module", "widget")
+	out, _, err := execCLI(t, "--config", cfgPath, "claim", "show", "widget.contract.overview")
 	if err != nil {
-		t.Fatalf("implink status: %v", err)
+		t.Fatalf("claim show: %v", err)
 	}
-	if !strings.Contains(out, "nothing linked yet") {
-		t.Fatalf("expected a graceful 'nothing linked yet' message, got: %s", out)
+	if !strings.Contains(out, "implemented in:     (nothing linked)") {
+		t.Fatalf("expected a graceful 'nothing linked' report, got: %s", out)
 	}
 }
 
@@ -271,12 +282,13 @@ func TestCLI_Check_ImplinkLine_PresentWhenUsed(t *testing.T) {
 	}
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.main", "widget", "assertion")
 	writeLockedFixtureClaim(t, claimsDir, "widget.contract.unlinked", "widget", "never gets an implink Set call")
+	armLedgerFixture(t, cfgPath) // both are legitimately locked, not hand-flipped
 
 	srcPath := filepath.Join(root, "widget.go")
 	if err := os.WriteFile(srcPath, []byte("package widget v1"), 0o644); err != nil {
 		t.Fatalf("write source: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "implink", "set",
+	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "link",
 		"--module", "widget", "--claim", "widget.contract.main", "--file", "widget.go"); err != nil {
 		t.Fatalf("implink set: %v", err)
 	}
@@ -328,6 +340,10 @@ func icWriteScanFixtureProject(t *testing.T, root, module, claimID string) (cfgP
 		t.Fatalf("write project.config.yaml: %v", err)
 	}
 	writeLockedFixtureClaim(t, claimsDir, claimID, module, "fixture for source-scan tests")
+	// The claim above is hand-authored "status: locked", which the v0.3.0
+	// lock-ledger gate reads as a status flipped outside the approval path.
+	// These fixtures mean "legitimately locked", so say so.
+	armLedgerFixture(t, cfgPath)
 	return cfgPath, srcDir
 }
 
@@ -391,7 +407,7 @@ func TestCLI_Check_NextSteps_ListsDraftAndUnlinkedHints(t *testing.T) {
 	if !strings.Contains(out, "next steps:") {
 		t.Fatalf("expected a next steps block, got: %s", out)
 	}
-	if !strings.Contains(out, "claim(s) still draft -> dossierx lock <id>") {
+	if !strings.Contains(out, "claim(s) still draft -> dossierx claim lock <id> --reason \"…\"") {
 		t.Fatalf("expected a draft-claims hint, got: %s", out)
 	}
 }

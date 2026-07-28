@@ -1,8 +1,8 @@
 // lint_coverage_meta_test.go is the regression gate for the whole
 // testdata/fixture-coverage corpus: TestEveryRegisteredLintHasACoverageFixture
-// iterates internal/lint's actual Registry (not a hardcoded rule-name list,
-// so a future lint rule is picked up automatically), runs "dossierx lint --json"
-// against every directory under testdata/fixture-coverage/lint/* and
+// iterates internal/lint's actual Registry (not a hardcoded rule-name list, so
+// a future lint rule is picked up automatically), runs "dossierx check
+// --validate" against every directory under testdata/fixture-coverage/lint/* and
 // testdata/fixture-coverage/lifecycle/*, unions every lint rule name that
 // fired anywhere across that whole set, and fails with a clear message
 // naming any registered rule that never fired -- catching a future lint
@@ -10,7 +10,6 @@
 package tests
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sort"
@@ -49,11 +48,7 @@ func TestEveryRegisteredLintHasACoverageFixture(t *testing.T) {
 				continue
 			}
 
-			stdout, stderr, _ := run(t, fixtureDir, "--config", cfgPath, "lint", "--json")
-			var findings []lintFinding
-			if err := json.Unmarshal([]byte(stdout), &findings); err != nil {
-				t.Fatalf("fixture %s: lint --json output is not valid JSON: %v\nstdout: %s\nstderr: %s", fixtureDir, err, stdout, stderr)
-			}
+			findings, _ := runValidateFindings(t, fixtureDir, cfgPath)
 			for _, f := range findings {
 				fired[f.LintName] = true
 			}

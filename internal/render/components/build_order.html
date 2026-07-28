@@ -15,18 +15,31 @@
      no new hardcoded colors, and "ps" already means "locked", which is
      exactly what being a member of a locked build-order artifact is. The
      phase itself is shown as its own section-heading label instead, so
-     phase identity is still visually obvious without a new color. */}}
+     phase identity is still visually obvious without a new color.
+
+     Claim headings and rests_on edges both route through the shared label
+     helpers in components.go (the "claimLabel" and "claimEdgeList" template
+     funcs) rather than printing raw ids, exactly as the seven per-layout
+     partials and the shared edges footer now do. rests_on in particular used
+     to be rendered here as its own inline, comma-separated run of <a> tags —
+     a second, drifted copy of what writeIDListItems already emits — because
+     a build-order claim entry is internal/buildorder's own view type, not a
+     model.Claim, so the shared "edges" func cannot reach it. claimEdgeList
+     closes that gap without needing a model.Claim: it derives module/facet
+     context from the rendering entry's own .ID. The machine id stays
+     reachable on the heading via data-claim-id and the hover title, the same
+     contract card.html documents. */}}
 <section class="build-order-module" id="build-order-{{.ModuleID}}">
   <h3 class="section-heading">{{.ModuleLabel}} — build order</h3>
   {{range .Artifact.Phases}}
     <h4 class="section-heading build-order-phase">{{.Phase}}</h4>
     {{range .Claims}}
       <section class="claim claim-card card" id="build-order-{{.ID}}">
-        <div class="k">{{.ID}} <span class="pill ps">locked</span></div>
+        <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill ps">locked</span></div>
         <div class="claim-edges">
           <div class="claim-file">file: <code>{{.File}}</code></div>
           {{if .RestsOn}}
-            <div class="claim-rests-on">rests_on: {{range $i, $r := .RestsOn}}{{if $i}}, {{end}}<a href="#{{$r}}">{{$r}}</a>{{end}}</div>
+            <div class="claim-rests-on">rests_on: {{claimEdgeList .ID .RestsOn}}</div>
           {{end}}
         </div>
       </section>

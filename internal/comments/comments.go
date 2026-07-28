@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -53,6 +54,38 @@ var (
 	// ErrBannerClaim: banner-layout claims are decorative and cannot carry
 	// comment threads (they never render an edges/comment panel).
 	ErrBannerClaim = errors.New("comments: banner claims cannot carry comment threads")
+	// ErrCommentDigestDrift: the claim's STORED comments block does not match
+	// the digest recorded at the engine's last comment write to it, so someone
+	// edited the block out of band. Every mutating op refuses rather than
+	// writing.
+	//
+	// This exists because the write path's LAST act is to re-record the digest
+	// from whatever the file now says. Without a check first, that refresh
+	// launders the tamper: hand-delete an unresolved thread (which is how a
+	// claim gets past the lock gate with a review still open), then run any
+	// comment op on that claim, and the `comment-ledger-drift` finding that had
+	// named the edit is overwritten by a digest of the edited block. The
+	// integrity record would then agree with the tampered file forever. An
+	// integrity record any ordinary write can launder is not a record.
+	//
+	// The recovery is version control, not a retry: nothing the engine can
+	// compute recovers the threads that were deleted.
+	ErrCommentDigestDrift = errors.New("comments: the claim's comment threads were changed outside dossierx")
+	// ErrCommentDigestUnavailable: the comment digest store could not be opened
+	// for writing — it is there but does not decode, its sentinel is held by
+	// another process, or its directory cannot be written.
+	//
+	// It is raised by the PRE-FLIGHT, before fn runs and before anything is
+	// saved, and that is the entire point of it. The write path's last act is to
+	// refresh the digest, so a store that fails at THAT point leaves the comment
+	// on disk and the op reporting failure. An agent's documented response to a
+	// failure is to retry, and each retry appended another identical thread to
+	// the claim while still reporting failure — filling a human's review thread
+	// with duplicates and manufacturing the exact comment-ledger drift the store
+	// exists to detect. Refusing up front makes the failure atomic: nothing is
+	// written, so a retry is safe and idempotent (it fails the same way until the
+	// store is restored).
+	ErrCommentDigestUnavailable = errors.New("comments: the comment digest store could not be opened for writing, so this write was refused before anything was changed: restore .dossierx-comment-digest.json from version control (or remove a stale .dossierx-comment-digest.json.lock left by a crash) and retry")
 )
 
 // nowFunc is the ops' clock, overridable in tests so created/resolved/reopened
@@ -315,6 +348,83 @@ func (d *Deps) Delete(claimID, threadID, replyID string, actor model.CommentRole
 	})
 }
 
+// ErrReasonRequired: a recovery that re-adopts a comment block was called
+// without the human's words. It is a sentinel because the CLI classifies it, and
+// because the reason is the entire difference between this operation and the
+// tampering it clears — a machine can generate everything else in the record.
+var ErrReasonRequired = errors.New("comments: a reason is required: the re-adoption records the human's own words for why the comment block on disk is the one to trust")
+
+// ReauditDigest re-adopts ONE claim's stored comment block into the comment
+// digest store, and records who authorised it and why. It is the recovery for
+// ErrCommentDigestDrift, and it is the only path that clears that refusal
+// without restoring the claim file from version control.
+//
+// WHY IT HAD TO EXIST. The refusal is total: checkCommentDigest runs before the
+// mutation inside mutate, so once a claim's recorded digest lags its file, every
+// comment op on that claim is refused — and the state is reachable without any
+// tampering at all. A crash between the claim save and the digest refresh leaves
+// it, and so does an ordinary commit that carries the claim file but not
+// .dossierx-comment-digest.json, which reproduces it for every teammate who
+// pulls. The documented recovery ("restore the claim file from version control")
+// throws away the comment the human just wrote, and there was no other verb.
+//
+// NOT REACHABLE FROM THE CLI YET, and that is stated here rather than left for
+// a reader to discover: `dossierx comment` is inbox, list, add and reply, so
+// nothing in cmd/dossierx calls this. The gap is real and is why
+// checkCommentDigest's refusal names the version-control restore instead of a
+// verb — a refusal must not send its reader to a command that does not exist.
+// Exposing it needs a `dossierx comment reaudit <claim-id> --reason "…"` leaf
+// (required --reason, --dry-run like every other lifecycle verb, classified
+// through cliout the way the other comment verbs are); until that lands, this is
+// the engine half of a recovery only a test can drive.
+//
+// It is on the same footing as `claim unlock`: always available, never gated,
+// and never silent. The reason is REQUIRED and is written into the store beside
+// the adopted value (digest.Store.Reaudit), so the one operation that can make
+// an integrity finding disappear leaves evidence in the tracked file that it
+// happened.
+//
+// It writes NO claim file: the claim on disk is already what the human means to
+// keep. It takes the claims sentinel anyway, so it reads a claim nobody is
+// mid-write on, and takes the digest sentinel underneath it — claims -> digest,
+// the one direction this codebase ever takes them (see internal/digest's package
+// comment).
+func (d *Deps) ReauditDigest(claimID string, actor model.CommentRole, reason string) (model.Claim, error) {
+	if err := validateActor(actor); err != nil {
+		return model.Claim{}, err
+	}
+	if strings.TrimSpace(reason) == "" {
+		return model.Claim{}, ErrReasonRequired
+	}
+
+	release, err := lock.AcquireClaimsLock(d.Cfg)
+	if err != nil {
+		return model.Claim{}, err
+	}
+	defer release()
+
+	claims, err := loader.LoadClaims(d.Cfg.ClaimsDir)
+	if err != nil {
+		return model.Claim{}, err
+	}
+	idx := claimIndex(claims, claimID)
+	if idx < 0 {
+		return model.Claim{}, fmt.Errorf("comments: claim %q: %w", claimID, ErrClaimNotFound)
+	}
+
+	digests, releaseDigests, err := d.openCommentDigest()
+	if err != nil {
+		return model.Claim{}, err
+	}
+	defer releaseDigests()
+
+	digests.Reaudit(claims[idx], string(actor), strings.TrimSpace(reason))
+	if err := digests.Save(); err != nil {
+		return model.Claim{}, fmt.Errorf("comments: re-adopt %q's comment digest: %w", claimID, err)
+	}
+	return claims[idx], nil
+}
+
 // List returns the comment threads on claimID from the caller's loaded
 // snapshot (Deps.Claims). openOnly filters to threads still status: open. It is
 // read-only — no lock, no write. An unknown claim id is ErrClaimNotFound.
@@ -370,18 +480,87 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 		return model.Claim{}, err
 	}
 
-	if err := fn(&claims[idx]); err != nil {
+	// Open the comment digest store — take its sentinel, decode it, and prove it
+	// can be written — BEFORE fn runs and before anything is saved.
+	//
+	// The store used to be opened at the foot of this function, after the claim
+	// was already on disk, and every failure there was returned as a hard error.
+	// That combination is the worst one available: the comment was written AND
+	// the op reported failure, so a retrying caller appended the same thread
+	// again on every attempt while still being told it had not worked. Doing the
+	// whole open here makes the refusal atomic — nothing is written, and a retry
+	// is safe.
+	//
+	// It also removes a real disagreement. checkCommentDigest deliberately
+	// treated an unreadable store as "not covered" while recordCommentDigest
+	// treated the identical failure as fatal; both now read the ONE store this
+	// opens, so there is only one answer about it.
+	//
+	// The sentinel is held across fn and the claim save, which is wider than the
+	// old momentary hold and costs nothing: every acquisition of the digest
+	// sentinel in the product happens INSIDE this claims sentinel (see
+	// internal/digest's package comment), which we hold, so nothing else can be
+	// waiting on it. The claims -> digest ordering is unchanged, and digest is
+	// still never taken alone.
+	digests, releaseDigests, err := d.openCommentDigest()
+	if err != nil {
 		return model.Claim{}, err
 	}
+	defer releaseDigests()
 
-	// Recompute review_pending against store state RE-READ FRESH inside this
-	// claims sentinel (see reviewStores): a snapshot taken before the sentinel
-	// could miss a `dossierx flag` that committed concurrently and orphan it
-	// with review_pending:false.
+	// The stores are re-read FRESH inside this claims sentinel (see
+	// reviewStores): a snapshot taken before the sentinel could miss a `dossierx
+	// flag` that committed concurrently and orphan it with review_pending:false.
+	//
+	// They are read HERE, before the integrity gate, rather than after fn where
+	// they used to be. Nothing about the ordering changed — the sentinel is held
+	// across both points, so no writer can slip between them — but the gate below
+	// now needs one answer out of the lock store, and a gate that writes nothing
+	// has to have every input it judges on before it decides.
 	ls, fs, err := d.reviewStores()
 	if err != nil {
 		return model.Claim{}, err
 	}
+
+	// Has a ledger-aware build already run in this project? It answers a question
+	// about the project's HISTORY rather than about this op, and two things
+	// depend on it: whether an absent digest store may be adopted wholesale (an
+	// upgrade) or must not be (a deletion) — see recordCommentDigest — and
+	// whether a claim carrying threads with no entry beside them is honest or is
+	// evidence its entry was removed, which is checkCommentDigest's second gate.
+	//
+	// It asks LedgerEstablished, not LedgerCovered, and the difference is a
+	// refusal an attacker could otherwise disarm from inside the audited file.
+	// LedgerCovered reads the lock store's own version field, so editing it back
+	// to 1 answered "no" here and BOTH gates below switched off — on a store the
+	// project-scoped gate is already reporting as downgraded. See
+	// lock.LedgerEstablished for the reproduction; lock.PrepareStore's comment
+	// sweep has always asked the wider question, and now all three ask it the same
+	// way. An honest un-migrated v0.2.x project is pre-ledger and NOT downgraded,
+	// so it still answers "no" and nothing here changes for it.
+	ledgerCovered := ls.LedgerEstablished(digests.FileExists())
+
+	// The un-migrated project, kept out of the digest store's way entirely — see
+	// recordCommentDigest. This is a separate question from ledgerCovered: a
+	// pre-ledger store answers "no" to both, but the two "no"s mean opposite
+	// things about whether this op may CREATE the digest store.
+	preLedger := ls.PreLedger()
+
+	// The integrity gate, evaluated against the PRE-mutation block and BEFORE fn
+	// runs, so a refusal writes nothing at all. recordCommentDigest at the foot
+	// of this function re-records the digest unconditionally; if that ran over a
+	// comment block someone had hand-edited, the write would adopt the tampered
+	// block as the new truth and erase the comment-ledger-drift finding that
+	// named it. Checking here is what makes the digest a record rather than a
+	// rubber stamp.
+	if err := checkCommentDigest(digests, claims[idx], ledgerCovered); err != nil {
+		return model.Claim{}, err
+	}
+
+	if err := fn(&claims[idx]); err != nil {
+		return model.Claim{}, err
+	}
+
 	d.refreshReviewPending(claims, &claims[idx], ls, fs)
 
 	mutateInterlude()
@@ -389,7 +568,267 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 	if err := loader.SaveClaimIfUnchanged(claims[idx], token); err != nil {
 		return model.Claim{}, err
 	}
+
+	// Refresh this claim's comment digest — the integrity record that makes a
+	// hand-edited comment block detectable (internal/digest). This is THE hook
+	// point: every comment write in the product, from the CLI and from serve
+	// alike, funnels through this one function, so one call here covers all of
+	// them and there is no second path to keep in step.
+	if err := d.recordCommentDigest(digests, claims, claims[idx], ledgerCovered, preLedger); err != nil {
+		return model.Claim{}, err
+	}
 	return claims[idx], nil
+}
+
+// openCommentDigest takes the digest store's sentinel, loads the store, and
+// proves it can be written — returning the store and the sentinel's release.
+//
+// All three failures collapse to ErrCommentDigestUnavailable, because to the
+// caller they are one condition with one recovery ("restore the store, then
+// retry") and, far more importantly, because they are all raised at a point
+// where NOTHING has been written. See ErrCommentDigestUnavailable for what the
+// old late-and-fatal ordering cost.
+//
+// It runs INSIDE mutate's claims sentinel and takes the digest store's own
+// sentinel underneath it — claims -> digest, always that way round and never
+// digest alone — so it adds no new lock-ordering hazard to the existing claims
+// -> lock-store -> flag-store discipline.
+func (d *Deps) openCommentDigest() (*digest.Store, func(), error) {
+	path := digest.StorePath(d.Cfg)
+
+	release, err := lock.AcquireFileLock(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w (%w)", ErrCommentDigestUnavailable, err)
+	}
+
+	store, err := digest.LoadStore(path)
+	if err != nil {
+		release()
+		return nil, nil, fmt.Errorf("%w (%w)", ErrCommentDigestUnavailable, err)
+	}
+	if err := store.CheckWritable(); err != nil {
+		release()
+		return nil, nil, fmt.Errorf("%w (%w)", ErrCommentDigestUnavailable, err)
+	}
+	return store, release, nil
+}
+
+// checkCommentDigest refuses a comment write to a claim whose stored comment
+// block no longer matches the digest the engine recorded at its last write.
+//
+// The predicate is deliberately the same one lock.Audit's comment-ledger-drift
+// rule uses, including its "unknown is not drifted" half: a claim with NO
+// recorded digest is simply not covered yet (a project that has never run a
+// comment op, or a claim created since the last one), and refusing there would
+// make the first comment on every new claim impossible. Only a RECORDED digest
+// that DISAGREES is tampering.
+//
+// It reads the store openCommentDigest already loaded under the digest
+// sentinel, rather than loading its own copy. That is not just deduplication:
+// the two used to disagree about the same file — this one swallowed a load
+// failure as "not covered" while the recording half treated it as fatal — and
+// the disagreement is what let a write proceed against a store that could not
+// then be updated. One open, one answer.
+//
+// A store that could not be read never reaches here at all: openCommentDigest
+// refuses first, before anything is written (ErrCommentDigestUnavailable).
+//
+// WHAT THE MESSAGE MAY SAY. It used to end "ask the human and run: dossierx
+// comment reaudit --claim <id> --reason …". Deps.ReauditDigest is real and is
+// exactly that operation, but no CLI verb reaches it — `dossierx comment` is
+// inbox, list, add and reply — so the one moment a reader is wedged and reading
+// this text for a way out, it handed them `unknown command`. A refusal that
+// names a recovery which does not exist is worse than one that names none: it
+// costs a round trip and then leaves the reader improvising, and the
+// improvisation closest to hand is deleting the digest store, which is the
+// laundering the store exists to catch. So the text names only what the binary
+// and git can actually do, and says the delete is not it.
+//
+// THE ONLY TWO RECOVERIES ARE RESTORES, and that is a property of the code
+// rather than a documentation choice. digest.Adopt — the one path that writes an
+// entry for a claim outside a comment op, via lock.SweepCommentDigests on every
+// store-opening command — skips every id that already HAS an entry, precisely so
+// a recorded digest can never be re-blessed by an ordinary command. So no
+// command in this binary clears a recorded-but-disagreeing digest; only putting
+// one of the two files back does. Which file depends on which side is wrong, and
+// the message says both because the engine cannot tell them apart: it knows the
+// pair disagrees, not which half moved.
+// AN UNKNOWN DIGEST IS NOT AUTOMATICALLY FINE, and the ledgerCovered parameter
+// is what tells the two cases apart.
+//
+// "Unknown" used to return nil unconditionally, on the reasonable-sounding
+// ground that a claim the store has never seen cannot have drifted. That left
+// the whole gate one deletion wide. On a ledger-covered project: drop this
+// claim's single key from .dossierx-comment-digest.json, forge its comments
+// block (a thread hand-written as resolved, a reply attributed to the human),
+// then run an ordinary `dossierx comment reply`. The block is unknown, so the
+// check passed; recordCommentDigest at the foot of mutate then wrote an entry
+// for the FORGED block, and the claim came out the far side with a digest that
+// certifies the forgery — clearing the lock-ledger audit's
+// comment-digest-unrecorded finding, which was the only thing still naming it.
+// An edit smaller than the one the gate was built to catch re-blessed itself
+// through the ordinary path.
+//
+// The predicate is the THREADS, because they are what survives the tamper. The
+// single code path that writes a thread (this function's caller) records the
+// claim's digest in the same act, and AdoptProject records an entry for every
+// claim as a project crosses into ledger coverage. So in a covered project
+// "carries threads, has no entry" is not reachable by any honest sequence: either
+// the entry was removed, or the threads were never written by the engine.
+//
+// It is deliberately silent in three places, which is what keeps it off correct
+// state rather than merely strict:
+//
+//   - an UNCOVERED project (no ledger yet). A v0.2.x project's threads predate
+//     the digest store entirely, and the store adopts them wholesale on first
+//     write; accusing them would refuse every comment op on every project that
+//     has not run `migrate --adopt`, and the gate for that is the project-scoped
+//     lock-ledger-adoption-required, said once.
+//   - a claim with NO threads. The first comment on a claim is the ordinary case
+//     and must work: an entry is what a comment op creates, not something it
+//     requires.
+//   - an unreadable store, which openCommentDigest has already refused above.
+//
+// It reuses ErrCommentDigestDrift rather than adding a sentinel because the
+// caller's question is "what do I do now", and the answer is identical to the
+// recorded-but-disagreeing case: restore from version control, never delete the
+// store, and no command in this binary clears it. A second code with the same
+// recovery would only give an agent a second branch to get wrong. The MESSAGE
+// distinguishes them, because a human needs to know whether a key is missing or
+// a hash disagrees.
+func checkCommentDigest(store *digest.Store, c model.Claim, ledgerCovered bool) error {
+	recorded, known := store.Digest(c.ID)
+	if !known {
+		if ledgerCovered && len(c.Comments) > 0 {
+			return fmt.Errorf("%w: claim %q carries %d comment thread(s) but has NO entry in %s, and this project is covered by the lock ledger — a state no honest sequence produces, because the only code path that writes a thread records the claim's digest in the same act. Either the entry was removed from the digest store or the threads were not written by the engine. This write is refused rather than recording the block as the truth: doing that would certify whatever the block says now, which is precisely what removing the entry sets up. DO NOT DELETE %s, and do not re-enter the threads by hand — restore %s from version control (its entry for this claim is the review history), or, if the comments block is what was forged, restore %s. dossierx check names this claim under comment-digest-unrecorded",
+				ErrCommentDigestDrift, c.ID, len(c.Comments), digest.StoreFileName, digest.StoreFileName, digest.StoreFileName, claimFileFor(c))
+		}
+		return nil
+	}
+	if recorded == digest.CommentsDigest(c) {
+		return nil
+	}
+	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed and no command re-blesses a block: the recovery is version control. DO NOT DELETE %s to clear this — a claim the store has never seen reads as unknown rather than drifted, so the delete would bury this refusal and the comment-ledger-drift finding beside it, and dossierx check reports it as comment-digest-absent. Restore whichever side is wrong: the claim file (%s) when its comments block was hand-edited, or %s when a commit carried the claim file without it. If you cannot tell which, restore BOTH from the same commit — the engine writes them as a pair and they only agree as a pair — then re-enter anything written since with dossierx comment add / dossierx comment reply", ErrCommentDigestDrift, c.ID, digest.StoreFileName, claimFileFor(c), digest.StoreFileName)
+}
+
+// claimFileFor names the file to restore, for a message a human acts on.
+// SourcePath is set by the loader on every claim this package ever sees, but it
+// is `yaml:"-"` and so is empty on a claim assembled in memory; the fallback
+// keeps the sentence grammatical rather than printing an empty parenthesis.
+func claimFileFor(c model.Claim) string {
+	if c.SourcePath == "" {
+		return "the claim's YAML file under claims_dir"
+	}
+	return c.SourcePath
+}
+
+// recordCommentDigest refreshes the digest store's entry for the claim just
+// written, into the store openCommentDigest opened (and whose sentinel mutate
+// still holds).
+//
+// It runs AFTER the claim file is saved, not before, for two reasons that pull
+// in the same direction. First, SaveClaimIfUnchanged can legitimately REFUSE
+// (an out-of-band edit landed in the load->save window): recording the digest
+// first would leave a digest describing a mutation that never happened, so an
+// honest concurrency refusal would be reported forever after as tampering.
+// Second, if this process dies between the save and this refresh, the recorded
+// digest LAGS the file and the gate reports comment-ledger-drift. Both failure
+// modes are loud; neither is silently wrong, which is the only ordering property
+// an integrity record has to have.
+//
+// THAT SECOND STATE IS NOT SELF-CLEARING, and this comment used to claim it was
+// ("a false positive a human can see and clear by re-running the gate after any
+// comment op"). It is false by construction: checkCommentDigest runs BEFORE fn
+// inside the same mutate, so every comment op on that claim is refused — add,
+// reply, everything — and the advice the refusal gave was to restore the claim
+// file alone, which discards the comment the human actually wrote.
+//
+// The engine-level recovery is the explicit, reason-carrying Deps.ReauditDigest,
+// which re-adopts that ONE claim's block and records who authorised it in the
+// digest store itself. NO CLI VERB REACHES IT in this release, so the refusal
+// text does not name one — see checkCommentDigest for what it says instead, and
+// why naming a command the binary does not have was worse than naming none. What
+// the CLI can offer today is the restore, and the honest form of it is BOTH
+// files from the same commit: this function and the claim save are one act, so
+// the two files only ever agree as a pair.
+//
+// On a store file that does not exist yet, every claim's current comment block
+// is adopted at once (digest.Adopt), so a project upgrading into this feature
+// gets coverage for the threads it already has instead of only for claims
+// someone happens to comment on afterwards.
+//
+// The one failure left here is Save itself, and it is returned to the caller
+// even though the comment is already on disk, because the alternative is to
+// swallow the one signal that the integrity record has stopped tracking
+// reality. It is now an exceptional path rather than the ordinary one:
+// openCommentDigest has already proved the store loads and its directory takes
+// a write, so reaching this means the world changed underneath a probe taken
+// moments earlier. The message says plainly that the comment WAS saved, because
+// the wrong response to it is a retry — that is what appends the thread twice.
+func (d *Deps) recordCommentDigest(store *digest.Store, claims []model.Claim, c model.Claim, ledgerCovered, preLedger bool) error {
+	// THE UN-MIGRATED PROJECT IS LEFT ALONE, digest store included, and this is
+	// the one case where the honest answer is to record nothing at all.
+	//
+	// The comment digest store is a SIBLING FILE that only exists once a project
+	// has been through a ledger-aware build — which is precisely why
+	// lock.LedgerDowngraded reads its presence as proof that a store claiming
+	// "version 1" is lying. Creating it beside a genuine v0.2.x lock store
+	// therefore manufactures that contradiction against a project that has done
+	// nothing wrong, and this function was doing it on every comment op:
+	//
+	//	an honest, un-migrated v0.2.x project (lock store at version 1)
+	//	dossierx comment add <draft-claim> …    succeeds, and CREATES
+	//	                                        .dossierx-comment-digest.json
+	//	dossierx check                          lock-ledger-downgraded, from now on
+	//	dossierx migrate --adopt                REFUSED (ErrAdoptionRefused):
+	//	                                        "restore the lock store from
+	//	                                        version control"
+	//
+	// One ordinary comment left the project permanently un-migratable, accused of
+	// tampering, and pointed at a recovery for a file nobody had touched. That is
+	// the outage the whole fail-closed design exists to avoid handing an honest
+	// project on upgrade day.
+	//
+	// lock.SweepCommentDigests already draws exactly this line — its `crossing`
+	// excludes a pre-ledger store with the same reasoning, and says so — and its
+	// closing sentence names who does the work instead: a pre-ledger project's
+	// whole comment store is written by AdoptProject, in the same act that writes
+	// its ledger records. So the cost of recording nothing here is bounded and
+	// temporary: this claim's threads stay UNKNOWN to the digest rules (never
+	// blessed, never accused, which is where every other claim in an un-migrated
+	// project already sits) until the human runs the migration once, and the
+	// migration records every claim's block.
+	//
+	// It is keyed on the store being ABSENT as well as pre-ledger: a pre-ledger
+	// project that somehow already HAS a digest store is a project the gate is
+	// reporting as downgraded, and refusing to refresh an entry there would leave
+	// the recorded digest lagging the file we just wrote — a false
+	// comment-ledger-drift on top of a real finding.
+	if preLedger && !store.FileExists() {
+		return nil
+	}
+
+	// Adoption on first creation is what gives a project upgrading INTO this
+	// feature coverage for the threads it already has. It is gated on the project
+	// NOT already being ledger-covered, because in a covered project "the digest
+	// store is not there" is not an upgrade — it is a deleted file, which
+	// internal/check reports as comment-digest-absent, and adopting there would
+	// re-record a hand-edited comment block as the truth and clear the very
+	// finding that named it. Same rule the lock ledger has always applied to
+	// itself (AdoptProject: absence never adopts), for the same reason: an
+	// adoption an attacker can trigger is not an adoption.
+	//
+	// The cost is honest and bounded: in a covered project whose store is gone,
+	// this write covers only the claim it touched, and every other claim stays
+	// UNKNOWN — never blessed, never accused.
+	if !store.FileExists() && !ledgerCovered {
+		digest.Adopt(store, claims)
+	}
+	store.Record(c)
+	if err := store.Save(); err != nil {
+		return fmt.Errorf("comments: THE COMMENT WAS SAVED, but the comment digest could not be written (%w) — do NOT retry the comment op, which would write it a second time; fix the store's directory and run any comment op to refresh the digest", err)
+	}
+	return nil
 }
 
 // refreshReviewPending recomputes review_pending for a LOCKED claim from the

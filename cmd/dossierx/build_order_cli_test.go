@@ -89,7 +89,7 @@ func TestCLI_BuildOrderPropose_RequiresModuleFlag(t *testing.T) {
 	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "status"); err == nil {
 		t.Fatalf("expected status without --module to fail")
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock"); err == nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--reason", "test fixture"); err == nil {
 		t.Fatalf("expected lock without --module to fail")
 	}
 }
@@ -112,7 +112,7 @@ func TestCLI_BuildOrderLock_RefusedWithoutPropose(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := boWriteConfig(t, root, "widget")
 
-	if out, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget"); err == nil {
+	if out, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "test fixture"); err == nil {
 		t.Fatalf("expected lock to refuse when nothing has been proposed (out: %s)", out)
 	}
 }
@@ -162,7 +162,7 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 	}
 
 	// lock
-	lockOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget")
+	lockOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "test fixture")
 	if err != nil {
 		t.Fatalf("lock: %v (out: %s)", err, lockOut)
 	}
@@ -171,7 +171,7 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 	}
 
 	// Re-locking immediately (unchanged) is refused: nothing to relock.
-	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget"); err == nil {
+	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "test fixture"); err == nil {
 		t.Fatalf("expected relocking an unchanged, already-locked artifact to be refused")
 	}
 
@@ -213,7 +213,7 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 	// A bare relock of the stale artifact is refused (FIX-13): it would
 	// otherwise freeze the OLD phase order while clearing staleness. The
 	// refusal points at re-proposing first.
-	if bareRelock, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget"); err == nil {
+	if bareRelock, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "test fixture"); err == nil {
 		t.Fatalf("expected a bare relock of a stale artifact to be refused (out: %s)", bareRelock)
 	} else if !strings.Contains(err.Error(), "propose") {
 		t.Fatalf("expected the stale-relock refusal to direct a re-propose, got: %v", err)
@@ -224,7 +224,7 @@ func TestCLI_BuildOrderFullLifecycle_ProposeStatusLockStale(t *testing.T) {
 	if reproposeOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("re-propose after going stale: %v (out: %s)", err, reproposeOut)
 	}
-	relockOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget")
+	relockOut, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "test fixture")
 	if err != nil {
 		t.Fatalf("expected lock to succeed after re-propose, got: %v (out: %s)", err, relockOut)
 	}

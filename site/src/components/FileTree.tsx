@@ -40,12 +40,20 @@ const TREE: TreeNode[] = [
   {
     name: ".dossierx-lock-store.json",
     kind: "engine-file",
-    note: "content-hash baseline for DetectStale",
+    // The ledger lives here, and the fact that this file is COMMITTED is not
+    // cosmetic: CI-as-authority is vacuous without it, since a locked claim's
+    // hash has nothing to be compared against.
+    note: "content-hash baselines + the lock ledger — commit this, CI depends on it",
+  },
+  {
+    name: ".dossierx-comment-digest.json",
+    kind: "engine-file",
+    note: "comment digests in their OWN store, so a live reviewer's browser is never a writer to the lock store",
   },
   {
     name: ".dossierx-flag-store.json",
     kind: "engine-file",
-    note: "agent-initiated docs-flag drift notes",
+    note: "one-shot drift reports raised by dossierx claim flag",
   },
   {
     name: "viewer/",

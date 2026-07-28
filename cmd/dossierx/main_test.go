@@ -2,15 +2,16 @@
 // which execs the built binary as a subprocess (and so never counts toward
 // this package's own "go test ./... -cover" number), these tests call the
 // package's unexported helpers directly: config discovery (resolveConfigPath),
-// the small pure helpers (containsStr, pickChangedDependency), lint-finding
-// reporting (reportLintFindings), and the store/catalog/render path helpers.
+// the small pure helpers (containsStr, pickChangedDependency, claimTitle, the
+// --match scorer), lint-finding reporting (reportLintFindings), the
+// store/catalog/render path helpers, and the shape of the command tree itself.
 package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -190,7 +191,7 @@ func TestReportLintFindingsEmptyIsClean(t *testing.T) {
 	var buf bytes.Buffer
 	cmd.SetOut(&buf)
 
-	if err := reportLintFindings(cmd, nil, false); err != nil {
+	if err := reportLintFindings(cmd, nil); err != nil {
 		t.Fatalf("expected no error for zero findings, got: %v", err)
 	}
 	if !strings.Contains(buf.String(), "0 findings") {
@@ -206,7 +207,7 @@ func TestReportLintFindingsWarningOnlyDoesNotFail(t *testing.T) {
 	findings := []lint.Finding{
 		{LintName: "orphan", ClaimID: "m.contract.x", Message: "no edges", Severity: lint.SeverityWarning},
 	}
-	if err := reportLintFindings(cmd, findings, false); err != nil {
+	if err := reportLintFindings(cmd, findings); err != nil {
 		t.Fatalf("expected warning-only findings to not fail the command, got: %v", err)
 	}
 	if !strings.Contains(buf.String(), "orphan") {
@@ -222,33 +223,12 @@ func TestReportLintFindingsErrorSeverityFails(t *testing.T) {
 	findings := []lint.Finding{
 		{LintName: "dangling", ClaimID: "m.contract.x", Message: "missing target", Severity: lint.SeverityError},
 	}
-	err := reportLintFindings(cmd, findings, false)
+	err := reportLintFindings(cmd, findings)
 	if err == nil {
 		t.Fatalf("expected an error-severity finding to fail the command")
 	}
 	if !strings.Contains(buf.String(), "1 error(s)") {
 		t.Fatalf("expected error count in output, got: %q", buf.String())
-	}
-}
-
-func TestReportLintFindingsJSON(t *testing.T) {
-	cmd := &cobra.Command{}
-	var buf bytes.Buffer
-	cmd.SetOut(&buf)
-
-	findings := []lint.Finding{
-		{LintName: "dangling", ClaimID: "m.contract.x", Message: "missing target", Severity: lint.SeverityError},
-	}
-	err := reportLintFindings(cmd, findings, true)
-	if err == nil {
-		t.Fatalf("expected an error-severity finding to fail the command even with --json")
-	}
-	var decoded []lint.Finding
-	if jsonErr := json.Unmarshal(buf.Bytes(), &decoded); jsonErr != nil {
-		t.Fatalf("expected valid JSON output, got %v: %q", jsonErr, buf.String())
-	}
-	if len(decoded) != 1 || decoded[0].LintName != "dangling" {
-		t.Fatalf("expected decoded JSON to round-trip the finding, got: %+v", decoded)
 	}
 }
 
@@ -280,5 +260,179 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 	}
 	if got, want := renderOutPath(cfg), filepath.Join(root, "viewer", "index.html"); got != want {
 		t.Fatalf("renderOutPath: got %q, want %q", got, want)
+	}
+}
+
+// ---------------------------------------------------------------------
+// The shape of the surface itself
+// ---------------------------------------------------------------------
+
+// TestSurfaceIsTwentyLeavesUnderSevenNouns pins the headline of the v0.3.0
+// restructure as a test rather than a promise in a changelog.
+//
+// The number is a design constraint: every verb here is something an AGENT
+// does, and the argument for the release is that the surface got SMALLER while
+// getting more capable. Adding a leaf should be a decision someone makes on
+// purpose and writes down here, not something that accretes.
+//
+// It moved from nineteen-under-six to twenty-under-seven exactly once, for
+// "migrate", and the decision is recorded rather than assumed: ledger adoption
+// became fail-closed (lock.AdoptProject), and the deliberate one-time act that
+// replaces it could not be a flag on an existing verb without putting an
+// irreversible, content-blessing write behind a command CI runs every commit.
+func TestSurfaceIsTwentyLeavesUnderSevenNouns(t *testing.T) {
+	want := map[string]bool{
+		"check": true,
+
+		"claim show":    true,
+		"claim list":    true,
+		"claim new":     true,
+		"claim lock":    true,
+		"claim unlock":  true,
+		"claim flag":    true,
+		"claim reaudit": true,
+		"claim link":    true,
+
+		"comment inbox": true,
+		"comment list":  true,
+		"comment add":   true,
+		"comment reply": true,
+
+		"build-order propose": true,
+		"build-order status":  true,
+		"build-order lock":    true,
+
+		"migrate":       true,
+		"serve":         true,
+		"skills export": true,
+		"version":       true,
+	}
+
+	got := map[string]bool{}
+	var walk func(cmd *cobra.Command, prefix string)
+	walk = func(cmd *cobra.Command, prefix string) {
+		children := cmd.Commands()
+		leaf := true
+		for _, child := range children {
+			// cobra injects "help" and "completion" into every tree; they are
+			// framework furniture, not part of the product's surface.
+			if child.Name() == "help" || child.Name() == "completion" {
+				continue
+			}
+			// The removal stubs (see retired.go) are not surface: every one of
+			// them does exactly one thing, which is to fail with the sentence
+			// naming its replacement. They are excluded by their MARK rather
+			// than by Hidden, so a real leaf can never be smuggled past this
+			// count by hiding it — and TestRetiredInvocationsNameTheirReplacement
+			// pins the set itself, so they are still counted, just elsewhere.
+			if retired(child) {
+				continue
+			}
+			leaf = false
+			name := child.Name()
+			if prefix != "" {
+				name = prefix + " " + name
+			}
+			walk(child, name)
+		}
+		if leaf && prefix != "" {
+			got[prefix] = true
+		}
+	}
+	walk(newRootCmd(), "")
+
+	for name := range want {
+		if !got[name] {
+			t.Errorf("missing leaf command: %q", name)
+		}
+	}
+	for name := range got {
+		if !want[name] {
+			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
+		}
+	}
+	if len(got) != 20 {
+		t.Errorf("the surface is 20 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	}
+}
+
+// sortedCommandNames renders a command-name set deterministically for a
+// failure message.
+func sortedCommandNames(set map[string]bool) []string {
+	out := make([]string, 0, len(set))
+	for name := range set {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ---------------------------------------------------------------------
+// claimTitle and the --match scorer
+// ---------------------------------------------------------------------
+
+func TestClaimTitleDerivesTheLabelFromTheSlug(t *testing.T) {
+	cases := map[string]string{
+		"widget.contract.retry-policy": "Retry Policy",
+		"widget.contract.overview":     "Overview",
+		"widget.contract.a-b-c":        "A B C",
+		// Not three segments: the raw id, verbatim. This runs outside the lint
+		// suite, so it must never assume a well-formed id.
+		"not-an-id":     "not-an-id",
+		"two.segments":  "two.segments",
+		"a.b.c.d":       "a.b.c.d",
+		"trailing.dot.": "trailing.dot.",
+	}
+	for id, want := range cases {
+		if got := claimTitle(id); got != want {
+			t.Errorf("claimTitle(%q) = %q, want %q", id, got, want)
+		}
+	}
+}
+
+func TestFuzzyScoreRanksByHowMuchTheCallerGuessed(t *testing.T) {
+	const target = "widget.contract.retry-policy"
+
+	exact := fuzzyScore(target, target)
+	prefix := fuzzyScore("widget.contract", target)
+	contains := fuzzyScore("retry-policy", target)
+	tokens := fuzzyScore("retry contract", target)
+	partial := fuzzyScore("retry nonsense", target)
+	subseq := fuzzyScore("wcrp", target)
+	none := fuzzyScore("zzzz", target)
+
+	// The ladder must be strictly descending: a caller that typed more of the
+	// real thing has to outrank one that typed less, or --match cannot be
+	// trusted to put the right card first.
+	ordered := []int{exact, prefix, contains, tokens, partial, subseq}
+	for i := 1; i < len(ordered); i++ {
+		if ordered[i] >= ordered[i-1] {
+			t.Fatalf("fuzzy tiers must strictly descend, got %v", ordered)
+		}
+	}
+	if none != 0 {
+		t.Fatalf("a non-match must score 0, got %d", none)
+	}
+	if subseq <= 0 {
+		t.Fatalf("an in-order subsequence must still match, got %d", subseq)
+	}
+}
+
+func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T) {
+	claim := model.Claim{ID: "widget.contract.retry-policy", Facet: "contract", Module: "widget"}
+
+	// "retry-policy" is contained in the id itself.
+	direct := claimMatchScore("retry-policy", claim)
+	// "widget contract" appears only across the joined id/title/facet/module
+	// haystack, never as one substring of the id or the title.
+	joined := claimMatchScore("policy widget contract", claim)
+	if direct <= joined {
+		t.Fatalf("a direct id hit (%d) must outrank a joined-haystack hit (%d)", direct, joined)
+	}
+	if joined <= 0 {
+		t.Fatalf("the joined haystack must still match how a human actually speaks, got %d", joined)
+	}
+	if claimMatchScore("completely unrelated words", claim) != 0 {
+		t.Fatalf("an unrelated query must score 0")
 	}
 }

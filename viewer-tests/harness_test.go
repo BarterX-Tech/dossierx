@@ -5,6 +5,13 @@
 // this harness lives under its own module that the root `go build ./...` /
 // `go test ./...` skip entirely.
 //
+// BECAUSE the root module cannot reach it, running it takes a deliberate entry
+// point, and there are exactly two: `make viewer-test` locally, and the
+// `viewer` job in .github/workflows/ci.yml, which runs it on ubuntu-latest
+// against the runner image's preinstalled Chrome. Anything that stops being run
+// by both of those stops being covered at all — the root suite asserts the
+// viewer's MARKUP (internal/render), never its behaviour in a browser.
+//
 // The suite proves the Phase 5 viewer comment UI in a real browser: the
 // reachability probe mounts the write controls only against a live `dossierx
 // serve`, a static file:// viewer stays read-only, and the composer / resolve /
@@ -35,9 +42,13 @@ var (
 // common install locations for Chrome/Chromium on this platform, then the Comet
 // build known to exist on the maintainer's machine. If none is found the test
 // SKIPS with a clear message rather than failing — a machine without a browser
-// simply cannot run the browser suite. This suite is maintainer-run: set
-// DOSSIERX_TEST_BROWSER to a Chrome/Chromium binary to actually run it. It is
-// not yet wired into CI — there is no CI job that runs the chromedp suite.
+// simply cannot run the browser suite.
+//
+// A skip is the right answer on a developer's laptop and the WRONG one in CI,
+// where it is indistinguishable from a pass over zero assertions. So the CI job
+// sets DOSSIERX_TEST_BROWSER explicitly, and the override branch below turns a
+// path that does not exist into a t.Fatal rather than a skip: with the variable
+// set, "no browser" is a failure, and only the unset case can skip quietly.
 func resolveBrowser(t *testing.T) string {
 	t.Helper()
 	if p := os.Getenv("DOSSIERX_TEST_BROWSER"); p != "" {

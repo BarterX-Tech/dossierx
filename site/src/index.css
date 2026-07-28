@@ -704,6 +704,45 @@ svg [tabindex]:focus-visible rect {
   white-space: nowrap;
 }
 
+/* The two roles, stated in the fold. Two hairline-ruled blocks rather than
+   cards: this sits between the subhead and the CTAs, and anything with a border
+   and a background here would read as a second, competing call to action. The
+   left rule carries the role's colour — warm for the human, green for the agent
+   — which is the same mapping .role-pill and the Who-runs-what panels use. */
+.hero__roles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.6rem;
+  margin: 1.9rem 0 0;
+}
+
+.hero__role {
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--border);
+}
+
+.hero__role--agent {
+  border-left-color: var(--ok);
+}
+
+.hero__role--human {
+  border-left-color: var(--accent);
+}
+
+.hero__role dt {
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.hero__role dd {
+  margin: 0.16rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
 /* Hero lifecycle folder stack */
 .herostack {
   display: flex;
@@ -900,6 +939,336 @@ svg [tabindex]:focus-visible rect {
 .herostack__diff-sign {
   display: inline-block;
   width: 1.15em;
+}
+
+/* ---- Who runs what: the two surfaces and the boundary between them ----
+ *
+ * A three-column grid — panel, rail, panel — that collapses to one column with
+ * the rail turned horizontal. The rail is a real grid track rather than a border
+ * on one of the panels so the boundary can carry its own label and read as a
+ * thing in its own right, which is the whole argument of the section.
+ *
+ * The panels are intentionally symmetrical: same width, same structure, same
+ * type sizes. Making either look more important would contradict the copy. */
+.surfaces {
+  margin: 0 0 2.5rem;
+}
+
+.surfaces__grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3.2rem minmax(0, 1fr);
+  align-items: stretch;
+}
+
+.surfaces__grid > * {
+  min-width: 0;
+}
+
+.surfaces__rail {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+/* Two flexible line segments with the label between them, so the label always
+   sits at the vertical centre whatever the panels' height. transform-origin is
+   the top: the line grows downward, like a rule being drawn. */
+.surfaces__rail-line {
+  display: block;
+  width: 0;
+  flex: 1;
+  border-left: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+  transform-origin: top center;
+}
+
+.surfaces__rail-label {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  writing-mode: vertical-rl;
+}
+
+.surface {
+  height: 100%;
+  padding: 1.5rem 1.6rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.surface--human {
+  border-top: 3px solid var(--accent);
+}
+
+.surface--agent {
+  border-top: 3px solid var(--ok);
+}
+
+.surface__head {
+  padding-bottom: 1rem;
+  margin-bottom: 1.1rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.surface__role {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.surface__who {
+  margin: 0.25rem 0 0;
+  font-family: var(--display);
+  font-size: clamp(1.7rem, 3.4vw, 2.3rem);
+  font-weight: 500;
+  line-height: 1.05;
+}
+
+.surface--human .surface__who {
+  color: var(--accent-2);
+}
+
+.surface--agent .surface__who {
+  color: var(--ok);
+}
+
+.surface__where {
+  margin: 0.3rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.86rem;
+}
+
+.surface__cmd {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.9rem 0 0;
+}
+
+.surface__cmd code {
+  font-size: 0.8rem;
+}
+
+.surface__cmd-note {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.surface__cols {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.surface__col-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.surface__col--can .surface__col-label {
+  color: var(--ok);
+}
+
+.surface__col--cannot .surface__col-label {
+  color: var(--text-faint);
+}
+
+.surface__col ul {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.surface__col li {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  align-items: start;
+  gap: 0.6rem;
+  color: var(--text-dim);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* The "cannot" rows are dimmed, not struck through: they are accurate
+   statements about the surface, not failures or deprecations. */
+.surface__col--cannot li {
+  color: var(--text-faint);
+}
+
+.surface__mark {
+  width: 14px;
+  height: 14px;
+  margin-top: 0.32em;
+  flex: none;
+}
+
+.surface__col--can .surface__mark {
+  color: var(--ok);
+}
+
+.surface__col--cannot .surface__mark {
+  color: color-mix(in srgb, var(--text-faint) 85%, transparent);
+}
+
+.surface__foot {
+  margin: 1.15rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+/* What crosses the boundary: the two sentences, one each way. */
+.surfaces__crossings {
+  margin-top: 1.5rem;
+  padding: 1.15rem 1.3rem;
+  border: 1px dashed color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--surface) 45%, transparent);
+}
+
+.surfaces__crossings-label {
+  display: block;
+  margin-bottom: 0.85rem;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.surfaces__crossings ul {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 0.9rem 1.8rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.crossing {
+  display: grid;
+  grid-template-columns: 1.4rem minmax(0, 1fr);
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.crossing__dir {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+}
+
+.crossing--human .crossing__dir {
+  color: var(--accent);
+}
+
+.crossing--agent .crossing__dir {
+  color: var(--ok);
+}
+
+.crossing__text {
+  display: block;
+  font-family: var(--display);
+  font-size: 1.02rem;
+  font-style: italic;
+}
+
+.crossing__note {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+
+/* The honesty grid: how strongly each half of the boundary is actually held. */
+.strengths {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1px;
+  margin: 2.5rem 0 0;
+  border: 1px solid var(--border);
+  background: var(--border);
+}
+
+.strengths > div {
+  min-width: 0;
+}
+
+.strength {
+  height: 100%;
+  padding: 1.25rem 1.3rem;
+  background: var(--surface);
+}
+
+.strength__badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Four different colours for four genuinely different guarantees — enforced in
+   code, refused by git, reported after the fact, and written down as a
+   convention. Giving them one colour would be the visual version of the
+   overclaim this grid exists to avoid. */
+.strength--hard .strength__badge {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 45%, transparent);
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+}
+
+.strength--blocked .strength__badge {
+  color: var(--accent-2);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.strength--detected .strength__badge {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+}
+
+.strength--convention .strength__badge {
+  color: var(--text-faint);
+  border-color: var(--border);
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.strength__title {
+  margin: 0.7rem 0 0.4rem;
+  font-family: var(--display);
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.strength__body {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.82rem;
 }
 
 /* Principle cards: paper notes, not SaaS tiles */
@@ -1471,80 +1840,369 @@ svg [tabindex]:focus-visible rect {
   color: var(--text-faint);
 }
 
-/* The six-step review loop. */
-.cwf {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 0.9rem;
+/* ---- The review loop: a two-lane sequence with a spine ----
+ *
+ * The old shape here was a grid of equal cards, which cannot express the two
+ * things that matter: the work alternates between two parties, and one step is
+ * an approval the next step depends on. So the human's steps sit in the left
+ * lane, the agent's in the right, the engine's span the middle (it belongs to
+ * neither), and the numbered markers walk down a spine between them. Reading the
+ * zigzag is reading the handoffs.
+ *
+ * The spine is an absolutely-positioned sibling, not an ::before on the list, so
+ * framer can scale it from the top without the list reflowing; the markers carry
+ * an opaque background so they punch through it. Below 760px the whole thing
+ * collapses to one lane with the spine on the left — see the responsive block. */
+.rloop-wrap {
+  position: relative;
   margin: 0 0 3.5rem;
+}
+
+.rloop__spine {
+  position: absolute;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  left: 50%;
+  width: 0;
+  border-left: 1px dashed color-mix(in srgb, var(--border) 75%, transparent);
+  transform-origin: top center;
+}
+
+.rloop {
+  display: grid;
+  gap: 1rem;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
-.cwf__step {
-  display: flex;
-  gap: 0.85rem;
+
+.rloop__step {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 3rem minmax(0, 1fr);
+  align-items: start;
+}
+
+.rloop__marker {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-top: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg);
+}
+
+.rloop__num {
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.rloop__reveal {
+  min-width: 0;
+}
+
+.rloop__step--human .rloop__reveal {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.rloop__step--agent .rloop__reveal {
+  grid-column: 3;
+  grid-row: 1;
+}
+
+/* Engine steps get two rows: marker on the spine, card spanning underneath and
+   narrower than a lane — it is scaffolding between two human/agent beats, and
+   giving it a lane of its own would imply a third participant with a surface. */
+.rloop__step--engine {
+  grid-template-rows: auto auto;
+}
+.rloop__step--engine .rloop__marker {
+  grid-row: 1;
+  margin-top: 0;
+}
+.rloop__step--engine .rloop__reveal {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: center;
+  width: min(100%, 34rem);
+  margin-top: 0.6rem;
+}
+
+.rloop__card {
+  position: relative;
   height: 100%;
-  padding: 1.15rem 1.25rem;
+  padding: 1.1rem 1.25rem;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
 }
-.cwf__num {
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  width: 1.7rem;
-  height: 1.7rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
+
+.rloop__step--human .rloop__card {
+  border-left: 3px solid var(--accent);
+}
+.rloop__step--agent .rloop__card {
+  border-left: 3px solid var(--ok);
+}
+.rloop__step--engine .rloop__card {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+/* The approval step. Everything else on this page is a step; this one is the
+   gate, so it gets the warmest treatment on the section and a stamp. */
+.rloop__step--approval .rloop__card {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  box-shadow: 0 10px 26px -20px color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+.rloop__step--approval .rloop__marker {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+.rloop__step--approval .rloop__num {
+  color: var(--surface);
+}
+
+.rloop__stamp {
+  position: absolute;
+  top: -0.72rem;
+  right: 0.9rem;
+  padding: 0.1rem 0.55rem;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
   color: var(--accent-2);
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: 0.56rem;
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
-.cwf__content {
-  min-width: 0;
-}
-.cwf__head {
+
+.rloop__head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.5rem;
-  margin-bottom: 0.4rem;
+  margin-bottom: 0.45rem;
 }
-.cwf__title {
+
+.rloop__surface {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.05em;
+}
+
+.rloop__title {
+  margin: 0 0 0.3rem;
+  font-size: 0.95rem;
   font-weight: 700;
-  font-size: 0.92rem;
 }
-.cwf__text {
+
+.rloop__text {
   margin: 0;
   color: var(--text-dim);
   font-size: 0.84rem;
 }
 
-/* Side-by-side: the recreated viewer card+panel, and the CLI transcript. */
-.cmt-showcase {
+/* ---- One claim, both surfaces, side by side ----
+ *
+ * The terminal half is the site's dark treatment (--code-*) and the viewer half
+ * is paper (--surface). That contrast is load-bearing: they are two different
+ * places, and the eye should not need the labels to know it. Both halves are
+ * recreated in markup rather than screenshotted — a screenshot on a page about
+ * drift would be the one thing on it that drifts, and it would be invisible to a
+ * screen reader. */
+.pair {
+  margin: 0;
+}
+
+.pair__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 1.6rem 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
+  gap: 1.7rem 2rem;
   align-items: start;
 }
-.cmt-showcase > * {
+
+.pair__half {
   min-width: 0;
 }
-.cmt-showcase__label {
+
+.pair__label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0 0 0.7rem;
+  color: var(--text-faint);
   font-family: var(--mono);
   font-size: 0.63rem;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+}
+
+.pair__note {
+  margin: 0.75rem 0 0;
   color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.pair__caption {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.8rem;
+  margin-top: 1.7rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  color: var(--text-dim);
+  font-size: 0.82rem;
+}
+
+/* The agent's terminal. Reuses .term__bar so it is unmistakably the same chrome
+   as the CLI explorer above it. */
+.vterm {
+  overflow: hidden;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius);
+  background: var(--code-bg);
+  box-shadow: 0 26px 54px -38px color-mix(in srgb, var(--text) 60%, transparent);
+}
+
+.vterm__body {
+  max-height: 28rem;
+  margin: 0;
+  padding: 0.9rem 1rem;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 0.71rem;
+  line-height: 1.58;
+  white-space: pre;
+}
+
+.vterm__prompt {
+  color: var(--code-text);
+}
+.vterm__prompt::before {
+  content: "$ ";
+  color: var(--code-ok);
+}
+.vterm__out {
+  color: var(--code-text-dim);
+}
+
+/* JSON tint. Five token classes, which is every token JSON has. */
+.vterm__key {
+  color: var(--code-accent);
+}
+.vterm__str {
+  color: var(--code-ok);
+}
+.vterm__num {
+  color: var(--code-accent-strong);
+}
+.vterm__lit {
+  color: var(--code-accent-strong);
+  font-style: italic;
+}
+
+/* The reviewer's browser. */
+.vbrowser {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface) 45%, var(--bg));
+  box-shadow: 0 26px 54px -40px color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+.vbrowser__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.8rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: color-mix(in srgb, var(--surface) 88%, var(--text));
+}
+
+.vbrowser__dots {
+  display: flex;
+  gap: 0.32rem;
+}
+.vbrowser__dots i {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--text) 20%, transparent);
+}
+
+/* A localhost address with a random high port, because that is literally what
+   serve binds — it says "not on the internet" without a sentence. */
+.vbrowser__url {
+  min-width: 0;
+  flex: 1;
+  padding: 0.14rem 0.6rem;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vbrowser__page {
+  padding: 1rem;
+}
+
+/* The thread id, shown because both surfaces name the same one. */
+.cmt-tid {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 0.62rem;
+}
+
+/* The viewer's two controls, drawn as inert markup. Resolve is prominent on
+   purpose: every other control is deliberately absent, and that is the point. */
+.cmt-actions {
+  display: flex;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.vw-btn {
+  padding: 0.2rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+}
+
+.vw-btn--primary {
+  border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  color: var(--accent-2);
+  font-weight: 700;
 }
 
 /* Recreated claim card (no screenshot). */
-.cmt-vignette {
-  margin: 0;
-}
 .cmt-card {
   padding: 1rem 1.1rem;
   border: 1px solid var(--border);
@@ -1909,6 +2567,126 @@ svg [tabindex]:focus-visible rect {
   font-size: 0.84rem;
 }
 
+/* ---- The machine contract: what applies to every command ----
+ *
+ * Ordered the way the agent's own skill is ordered — the contract first, the
+ * codes it branches on second, the twenty commands third. These three cards
+ * stay on paper rather than joining the dark terminal below them: they are prose
+ * ABOUT the surface, and the one code sample inside them is a response, not
+ * something anyone types. */
+.contract {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1px;
+  margin: 0 0 2.5rem;
+  border: 1px solid var(--border);
+  background: var(--border);
+}
+
+.contract > div {
+  min-width: 0;
+}
+
+.contract__card {
+  height: 100%;
+  padding: 1.3rem 1.35rem;
+  border-top: 3px solid var(--accent);
+  background: var(--surface);
+}
+
+.contract__title {
+  margin: 0 0 0.5rem;
+  font-family: var(--display);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.contract__body {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.83rem;
+}
+
+.contract__code {
+  margin: 0.9rem 0 0;
+  padding: 0.8rem 0.9rem;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  color: var(--code-text-dim);
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  line-height: 1.55;
+  white-space: pre;
+}
+
+/* error.code -> recovery. A definition list because that is what it is: the
+   agent looks up a code it just received and reads what to do next. */
+.codes {
+  margin: 0 0 3rem;
+}
+
+.codes__title,
+.migration__title {
+  margin: 0 0 1rem;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.migration__title {
+  margin-top: 3rem;
+}
+
+.codes__list {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.codes__row {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr);
+  gap: 0.4rem 1.2rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.codes__row dt code {
+  font-size: 0.76rem;
+  white-space: nowrap;
+}
+
+.codes__row dd {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.83rem;
+}
+
+/* Two global flags, stacked as one block: .note carries its own 2rem top margin
+   for use in isolation, which would double up here. */
+.globals {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 2rem;
+}
+
+.globals .note {
+  margin-top: 0;
+}
+
+/* One column for both ends of a transition: the edge is the row's identity, and
+   the two columns v0.3.0 added — who mandates, who executes — earn the space. */
+.transitions__edge {
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  white-space: nowrap;
+}
+
 /* CLI and code stay permanently dark */
 .cli {
   margin: 0;
@@ -2137,6 +2915,209 @@ svg [tabindex]:focus-visible rect {
 }
 .term-out__line--out {
   color: var(--code-text-dim);
+}
+
+/* ---- Any agent, one gate ----
+ *
+ * Two movements stacked vertically: one source fanning OUT to three
+ * destinations, then six tools converging IN on a single git gate. The two
+ * connector fans are SVGs with preserveAspectRatio="none" so they stretch to
+ * whatever width the column happens to be — the same trick the build-order
+ * squiggle uses — and they are revealed with pathLength, so nothing reflows
+ * while they draw.
+ *
+ * Every product name here is set in the site's own type. No third-party logo is
+ * fetched, embedded or redrawn: a wordmark states the compatibility fact without
+ * borrowing anyone's trade dress, and it keeps the page free of external
+ * assets. */
+.compat {
+  margin: 3.5rem 0 0;
+  padding: clamp(1.4rem, 4vw, 2.4rem) clamp(1rem, 3vw, 2rem);
+  border-top: 1px solid var(--text);
+  border-bottom: 1px solid var(--text);
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+}
+
+.compat__head {
+  max-width: 62ch;
+  margin: 0 auto 1.6rem;
+  text-align: center;
+}
+
+.compat__title {
+  margin: 0 0 0.4rem;
+  font-family: var(--display);
+  font-size: clamp(1.5rem, 3.4vw, 2rem);
+  font-weight: 500;
+}
+
+.compat__lede {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.88rem;
+}
+
+.compat__source,
+.compat__gate {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0.95rem 1.2rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+}
+
+.compat__source-label {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--accent-2);
+}
+
+.compat__source-detail {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--text-faint);
+  font-size: 0.78rem;
+}
+
+.compat__fan {
+  display: block;
+  width: 100%;
+  height: 46px;
+  margin: 0 auto;
+}
+
+.compat__fan-path {
+  fill: none;
+  stroke: color-mix(in srgb, var(--border) 90%, transparent);
+  stroke-width: 1.4;
+  vector-effect: non-scaling-stroke;
+}
+
+.compat__targets {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1rem;
+}
+
+.compat__targets > div {
+  min-width: 0;
+}
+
+.compat__target {
+  height: 100%;
+  padding: 1.05rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.compat__harness {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-family: var(--display);
+  font-size: 1.02rem;
+  font-weight: 600;
+}
+
+.compat__path {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 0.72rem;
+}
+
+.compat__note {
+  margin: 0.55rem 0 0;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+/* The hinge between the two movements. */
+.compat__rule {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin: 2.2rem 0 1.2rem;
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 0.63rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.compat__rule::before,
+.compat__rule::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.compat__marks {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem 0.6rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Wordmarks, not logos. */
+.compat__mark {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  background: var(--surface);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+.compat__gate {
+  padding: 1.2rem 1.3rem;
+}
+
+.compat__gate-label code {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.compat__gate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.compat__gate-card {
+  padding: 0.9rem 1rem;
+  border-left: 3px solid var(--warn);
+  background: color-mix(in srgb, var(--surface) 60%, var(--bg));
+}
+
+/* CI is the authority; the hook is fast feedback. Two colours, because the
+   difference is the point and the copy says so out loud. */
+.compat__gate-card--authority {
+  border-left-color: var(--ok);
+}
+
+.compat__gate-card h4 {
+  margin: 0 0 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.compat__gate-card p {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: 0.79rem;
 }
 
 /* Releases */
@@ -2539,6 +3520,32 @@ svg [tabindex]:focus-visible rect {
   .subcommands {
     grid-template-columns: 1fr;
   }
+
+  /* The two surfaces stack, and the boundary rail turns from a vertical rule
+     between them into a horizontal one above the second panel — still a
+     boundary, still labelled, just rotated with the layout. */
+  .surfaces__grid {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .surfaces__rail {
+    flex-direction: row;
+    padding: 1.15rem 0;
+  }
+  /* Rotated, the drawn scaleY would animate the rule's THICKNESS instead of its
+     length, which reads as a flicker rather than a gesture. So the horizontal
+     form opts out of the transform entirely — !important beats framer's inline
+     style — and the boundary is simply present. */
+  .surfaces__rail-line {
+    width: auto;
+    height: 0;
+    border-left: 0;
+    border-top: 1px dashed color-mix(in srgb, var(--border) 80%, transparent);
+    transform: none !important;
+  }
+  .surfaces__rail-label {
+    writing-mode: horizontal-tb;
+  }
 }
 
 @media (max-width: 760px) {
@@ -2644,6 +3651,51 @@ svg [tabindex]:focus-visible rect {
   .cmd__summary {
     display: none;
   }
+
+  .hero__roles {
+    grid-template-columns: 1fr;
+    gap: 0.9rem;
+  }
+
+  /* The review loop collapses to one lane with the spine on the left. The role
+     pill on every card already says who acted, so losing the left/right lanes
+     costs nothing but the zigzag. */
+  .rloop__spine {
+    left: 0.875rem;
+  }
+  .rloop__step,
+  .rloop__step--engine {
+    grid-template-columns: 2.4rem minmax(0, 1fr);
+    grid-template-rows: auto;
+  }
+  .rloop__marker,
+  .rloop__step--engine .rloop__marker {
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    margin-top: 0.9rem;
+  }
+  .rloop__step--human .rloop__reveal,
+  .rloop__step--agent .rloop__reveal,
+  .rloop__step--engine .rloop__reveal {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: stretch;
+    width: auto;
+    margin-top: 0;
+  }
+  .rloop__step--engine .rloop__card {
+    border-left-width: 3px;
+  }
+
+  .strengths,
+  .contract {
+    grid-template-columns: 1fr;
+  }
+  .codes__row {
+    grid-template-columns: 1fr;
+    gap: 0.2rem;
+  }
 }
 
 @media (max-width: 560px) {
@@ -2718,6 +3770,23 @@ svg [tabindex]:focus-visible rect {
   .cmd__group {
     display: none;
   }
+
+  .surface {
+    padding: 1.2rem 1.1rem;
+  }
+  .surfaces__crossings {
+    padding: 1rem 1rem;
+  }
+  /* At this width the two connector fans are 300 user units squeezed into ~300
+     real pixels, so their curves read as noise rather than structure. The cards
+     they join are already stacked vertically and adjacent; the relationship is
+     legible without them. */
+  .compat__fan {
+    height: 26px;
+  }
+  .vterm__body {
+    font-size: 0.66rem;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2727,6 +3796,15 @@ svg [tabindex]:focus-visible rect {
   .herostack__pulse,
   .nav__progress {
     animation: none !important;
+  }
+  /* The four v0.3.0 visuals animate through framer, which reads the same OS
+     preference via useReducedMotion and starts them at rest — but a transform
+     that framer set BEFORE the preference changed would persist, so the drawn
+     rules are pinned to their finished state here too. !important is required to
+     beat framer's inline style. */
+  .surfaces__rail-line,
+  .rloop__spine {
+    transform: none !important;
   }
   *,
   *::before,

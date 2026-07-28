@@ -1,12 +1,14 @@
 package lock
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
@@ -49,6 +51,14 @@ func testConfig() *config.Config {
 	}
 }
 
+// testApproval is the stand-in human approval every Lock/Unlock in this
+// package's tests executes. The ledger write hooks take one by value so a
+// caller cannot record an approval without having something to put in it; a
+// test that wants to assert the RECORDED actor/reason builds its own.
+func testApproval() Approval {
+	return Approval{Actor: "test-actor", Reason: "test approval"}
+}
+
 func testConfigWithDoctrine() *config.Config {
 	cfg := testConfig()
 	cfg.Facets = append(cfg.Facets, "doctrine")
@@ -66,7 +76,7 @@ func TestLockFailsOnLintError(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err == nil {
 		t.Fatalf("expected Lock to be refused when lint has findings, got nil error")
 	}
@@ -92,7 +102,7 @@ func TestLockSucceedsWithOnlyWarningFindings(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed with only warning-severity findings, got error: %v", err)
 	}
@@ -112,7 +122,7 @@ func TestLockSucceedsWithEmptyLintRegistry(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("Lock: unexpected error: %v", err)
 	}
@@ -183,7 +193,7 @@ func TestHubGatingBlocksWhenConfigured(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	_, err = Lock(child, claims, testConfigWithDoctrine(), store)
+	_, err = Lock(child, claims, testConfigWithDoctrine(), store, testApproval())
 	if err == nil {
 		t.Fatalf("expected Lock to be refused: doctrine hub is not yet locked")
 	}
@@ -191,7 +201,7 @@ func TestHubGatingBlocksWhenConfigured(t *testing.T) {
 	// Once the hub is locked, locking the child should succeed.
 	hub.Status = model.StatusLocked
 	claims = []model.Claim{hub, child}
-	got, err := Lock(child, claims, testConfigWithDoctrine(), store)
+	got, err := Lock(child, claims, testConfigWithDoctrine(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed once doctrine hub is locked, got: %v", err)
 	}
@@ -214,7 +224,7 @@ func TestHubGatingSkippedWhenNotConfigured(t *testing.T) {
 	// cfg has no DoctrineFacet set at all: hub-gating must not run, so this
 	// lock succeeds even though "hub" (which isn't even a doctrine claim
 	// here) is still draft.
-	got, err := Lock(child, claims, testConfig(), store)
+	got, err := Lock(child, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed when hub-gating is not configured, got: %v", err)
 	}
@@ -244,14 +254,14 @@ func TestLockEvaluatesLintsAgainstCandidatesPostLockStatus(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	if _, err := Lock(candidate, claims, testConfig(), store); err == nil {
+	if _, err := Lock(candidate, claims, testConfig(), store, testApproval()); err == nil {
 		t.Fatalf("expected Lock to be refused: candidate would rest_on a still-draft target once locked")
 	}
 
 	// Locking the target first, then the candidate, must succeed.
 	target.Status = model.StatusLocked
 	claims = []model.Claim{target, candidate}
-	got, err := Lock(candidate, claims, testConfig(), store)
+	got, err := Lock(candidate, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock to succeed once target is locked, got: %v", err)
 	}
@@ -262,7 +272,7 @@ func TestLockEvaluatesLintsAgainstCandidatesPostLockStatus(t *testing.T) {
 
 func TestUnlockAlwaysAllowed(t *testing.T) {
 	claim := model.Claim{ID: "widget.contract.main", Status: model.StatusLocked, ReviewPending: true}
-	got := Unlock(claim)
+	got := Unlock(claim, nil, testApproval())
 	if got.Status != model.StatusDraft {
 		t.Fatalf("expected status draft after Unlock, got %q", got.Status)
 	}
@@ -329,7 +339,7 @@ func TestLockRefusedOnOpenCommentThread(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(claim, claims, testConfig(), store)
+	got, err := Lock(claim, claims, testConfig(), store, testApproval())
 	if err == nil {
 		t.Fatalf("expected Lock to be refused for a claim with an open comment thread")
 	}
@@ -359,7 +369,7 @@ func TestLockAllowedWhenUnrelatedLockedClaimHasOpenThread(t *testing.T) {
 		t.Fatalf("LoadStore: %v", err)
 	}
 
-	got, err := Lock(b, claims, testConfig(), store)
+	got, err := Lock(b, claims, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("expected Lock of B to succeed while unrelated locked A has an open thread, got: %v", err)
 	}
@@ -392,14 +402,14 @@ func TestPerDependentBaselineNotSharedAcrossDependents(t *testing.T) {
 	}
 
 	// A locks against D v1.
-	lockedA, err := Lock(a, []model.Claim{dep, a, b}, testConfig(), store)
+	lockedA, err := Lock(a, []model.Claim{dep, a, b}, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("lock A: %v", err)
 	}
 
 	// D drifts to v2, then B locks against v2.
 	dep.Body = "dep v2"
-	lockedB, err := Lock(b, []model.Claim{dep, lockedA, b}, testConfig(), store)
+	lockedB, err := Lock(b, []model.Claim{dep, lockedA, b}, testConfig(), store, testApproval())
 	if err != nil {
 		t.Fatalf("lock B: %v", err)
 	}
@@ -483,8 +493,16 @@ func TestLoadStoreMigratesLegacyFlatFormat(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore must not error on a legacy flat store: %v", err)
 	}
-	if store.Version != storeSchemaVersion {
-		t.Fatalf("expected legacy store migrated to current schema version %d, got %d", storeSchemaVersion, store.Version)
+	// LoadStore reports the version the file EARNED, not the one the next Save
+	// would like to write: a legacy store loads as version 0 and is stamped
+	// forward only by a migration that actually runs (MigrateLegacyStore /
+	// AdoptProject). Stamping here instead is what used to make a downgraded
+	// version field repair itself on the next ordinary write — see LoadStore.
+	// (MigrateLegacyStore's own re-arm, and the version it then stamps, are
+	// asserted by TestMigrateLegacyStore*; this test is about LoadStore alone,
+	// which is why it does not run the migration here.)
+	if store.Version != 0 {
+		t.Fatalf("expected legacy store to keep its on-disk version 0 until a migration raises it, got %d", store.Version)
 	}
 	if len(store.Hashes) != 0 {
 		t.Fatalf("expected legacy flat hashes dropped on migration, got %v", store.Hashes)
@@ -539,8 +557,13 @@ func TestMigrateLegacyStoreReArmsBaselines(t *testing.T) {
 	if changed := MigrateLegacyStore(store, claims); !changed {
 		t.Fatalf("expected MigrateLegacyStore to re-arm baselines and report changed=true")
 	}
-	if store.Version != storeSchemaVersion {
-		t.Fatalf("expected store stamped schema version %d, got %d", storeSchemaVersion, store.Version)
+	// It stamps the version IT earned — the per-dependent baseline schema — and
+	// NOT the current one. Stamping the ledger schema here would take this
+	// schema-0 store to "ledger-covered" with no ledger record in it, so every
+	// locked claim would read as covered-but-unrecorded and the one-time adoption
+	// would never be offered.
+	if store.Version != nestedHashSchemaVersion {
+		t.Fatalf("expected store stamped schema version %d, got %d", nestedHashSchemaVersion, store.Version)
 	}
 	if h, ok := store.Baseline(main.ID, dep.ID); !ok || h != ContentHash(dep) {
 		t.Fatalf("expected per-dependent baseline Hashes[%s][%s] re-armed to current dep content", main.ID, dep.ID)
@@ -734,4 +757,271 @@ func TestClaimsSentinelPath_OutsideClaimsDir(t *testing.T) {
 	if _, err := os.Stat(base + ".lock"); !os.IsNotExist(err) {
 		t.Fatalf("expected sentinel lock file to be removed after release, stat err = %v", err)
 	}
+}
+
+// THE LAST STEP OF THE DELETED-RECORD BYPASS, which is the one that made the
+// other three invisible.
+//
+// internal/lock's audit reports the intermediate state correctly
+// (lock-ledger-deleted, asserted in audit_test.go, and it fires whether the
+// claim reads locked or draft). But reporting is not refusing, and the sequence
+// does not stop there. Verified against the binary before this gate existed:
+//
+//	delete the claim's key from "ledger" in .dossierx-lock-store.json
+//	edit "status: locked" -> "status: draft"     check: lock-ledger-deleted, exit 1
+//	rewrite the body                             check: lock-ledger-deleted, exit 1
+//	dossierx claim lock <id> --reason "..."      exit 0 — a FRESH record, over the
+//	                                             rewritten body
+//	dossierx check                               exit 0, ZERO findings, permanently
+//
+// The finding that named the tamper at every step vanished at the last one,
+// because RecordApproval wrote the record whose absence was the evidence. The
+// audit rule's own message ends "do NOT re-lock, which would record whatever the
+// claim says NOW as approved" — this test is what stops the tool from doing it.
+//
+// Without the gate in Lock this fails at the first assertion: the lock returns
+// nil, and Audit then reports nothing at all.
+func TestLockRefusesAClaimWhoseLedgerRecordWasDeleted(t *testing.T) {
+	locked, store := lockedProjectOnDisk(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body"})
+
+	// THE ATTACK: delete the record, flip to draft, rewrite the body.
+	delete(store.Ledger, locked.ID)
+	tampered := locked
+	tampered.Status = model.StatusDraft
+	tampered.Body = "rewritten now that nothing vouches for it"
+
+	_, err := Lock(tampered, []model.Claim{tampered}, testConfig(), store, Approval{Actor: "mallory", Reason: "reads exactly like a human's approval"})
+	if !errors.Is(err, ErrLedgerRecordDeleted) {
+		t.Fatalf("re-locking a claim whose ledger record was deleted must be refused with ErrLedgerRecordDeleted; got %v", err)
+	}
+
+	// The refusal wrote nothing: no record was created, so the finding that
+	// names the tamper survives. A refusal that still recorded would be the
+	// bypass with an error message attached.
+	if _, ok := store.Ledger[locked.ID]; ok {
+		t.Fatalf("the refused lock still wrote a ledger record; the whole point is that no record is created")
+	}
+	if !hasRule(Audit([]model.Claim{tampered}, store, nil), RuleLockLedgerDeleted) {
+		t.Fatalf("after the refusal the gate must still report %s", RuleLockLedgerDeleted)
+	}
+
+	// The recovery must be a RESTORE. Naming unlock here would be actively
+	// wrong: unlocking accepts the attacker's edit and asks a human to sign it.
+	if !strings.Contains(err.Error(), "Restore .dossierx-lock-store.json from version control") {
+		t.Errorf("the refusal must name the restore as the recovery, got %q", err)
+	}
+}
+
+// The gate must not touch the two shapes that look similar and are honest,
+// because a refusal that fires on correct work is worked around rather than
+// obeyed.
+//
+// unlock -> fix -> lock: unlock RELEASES the record rather than deleting it, so
+// a record still exists and this gate never sees the claim. That path is the one
+// every other refusal in this package points at, and it has to stay open.
+//
+// A claim this engine never locked: no locked_at, no dependency baselines, so
+// engineLocked is false. This is the ordinary first lock of a new claim in a
+// covered project, and it is the case the pre-existing comment in Lock worried
+// about when it declined to refuse on a missing record at all.
+func TestTheDeletedRecordLockGateIsSilentOnTheHonestPaths(t *testing.T) {
+	t.Run("unlock then fix then lock", func(t *testing.T) {
+		locked, store := lockedProjectOnDisk(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body"})
+
+		unlocked := Unlock(locked, store, Approval{Actor: "alice", Reason: "needs a correction"})
+		unlocked.Body = "the corrected body, which a human is about to approve"
+
+		if _, err := Lock(unlocked, []model.Claim{unlocked}, testConfig(), store, Approval{Actor: "alice", Reason: "approved the correction"}); err != nil {
+			t.Fatalf("unlock -> fix -> lock must still work; got %v", err)
+		}
+	})
+
+	t.Run("a claim this engine never locked", func(t *testing.T) {
+		_, store := lockedProjectOnDisk(t, model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body"})
+
+		fresh := model.Claim{ID: "widget.contract.fresh", Facet: "contract", Module: "widget", Body: "a brand new claim"}
+		if _, err := Lock(fresh, []model.Claim{fresh}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"}); err != nil {
+			t.Fatalf("the first lock of a new claim must work in a covered project; got %v", err)
+		}
+	})
+}
+
+// THE DELETED DIGEST KEY, closed at the command that used to launder it.
+//
+// The audit reports this state (RuleCommentDigestUnrecorded) and the comment ops
+// refuse to write under it (internal/comments' checkCommentDigest). Neither
+// closes it, because the laundering step is `claim lock`: RecordApproval records
+// the claim's comment digest in the same act as the approval, unconditionally,
+// so on a claim whose entry was deleted it MANUFACTURES one from whatever the
+// block says at that moment.
+//
+// Verified against the binary before this gate existed, on a fully covered
+// project: a human's open thread blocks the lock; forge `status: resolved` in
+// the YAML and drop that one key from "digests"; `dossierx check` correctly
+// reports comment-digest-unrecorded; `dossierx claim lock` then exits 0 AND
+// writes an entry certifying the forged block; and every check from then on
+// exits 0 with zero findings. The human's objection is gone and the record says
+// the review was clean.
+//
+// Without the gate this fails at the first assertion (the lock returns nil) and
+// again at the second (the digest store gains an entry for the forged block).
+func TestLockRefusesAClaimWhoseCommentDigestEntryWasDeleted(t *testing.T) {
+	withRegistry(t)
+
+	dir := t.TempDir()
+	storePath := filepath.Join(dir, "store.json")
+	store, err := LoadStore(storePath)
+	if err != nil {
+		t.Fatalf("LoadStore: %v", err)
+	}
+	// A covered project: a real lock on an unrelated claim creates the store at
+	// the ledger schema, and records that claim's (empty) comment digest beside
+	// it — which is what makes the digest store PRESENT, so comment-digest-absent
+	// is not the finding here.
+	other := model.Claim{ID: "widget.contract.other", Facet: "contract", Module: "widget", Body: "unrelated"}
+	if _, err := Lock(other, []model.Claim{other}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"}); err != nil {
+		t.Fatalf("seed Lock: %v", err)
+	}
+	if err := store.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	store, err = LoadStore(storePath)
+	if err != nil {
+		t.Fatalf("LoadStore (reopen): %v", err)
+	}
+	if !store.LedgerCovered() {
+		t.Fatalf("fixture precondition: the project must read as ledger-covered")
+	}
+
+	digestPath := digest.StorePathBeside(storePath)
+	digests, err := digest.LoadStore(digestPath)
+	if err != nil {
+		t.Fatalf("digest.LoadStore: %v", err)
+	}
+	if !digests.FileExists() {
+		t.Fatalf("fixture precondition: a lock must have created the comment digest store beside the lock store")
+	}
+
+	// The claim under attack: it CARRIES a thread, forged as resolved, and has
+	// no entry in the digest store — the key having been dropped.
+	forged := model.Claim{
+		ID: "widget.contract.main", Facet: "contract", Module: "widget", Body: "the approved body",
+		Comments: []model.Comment{{
+			ID: "c-aaa111", Status: model.CommentStatusResolved, Author: model.CommentRoleHuman,
+			Created: "2026-07-27T10:00:00Z", Body: "this is wrong, please fix",
+		}},
+	}
+	if _, known := digests.Digest(forged.ID); known {
+		t.Fatalf("fixture precondition: the claim under attack must have no digest entry")
+	}
+
+	_, lockErr := Lock(forged, []model.Claim{forged}, testConfig(), store, Approval{Actor: "mallory", Reason: "the thread reads resolved"})
+	if !errors.Is(lockErr, ErrCommentDigestUnrecorded) {
+		t.Fatalf("locking a claim whose comment digest entry was deleted must be refused with ErrCommentDigestUnrecorded; got %v", lockErr)
+	}
+
+	// And the refusal wrote NOTHING. An entry here would be the launder with an
+	// error message attached: the finding would be cleared for every later run.
+	after, err := digest.LoadStore(digestPath)
+	if err != nil {
+		t.Fatalf("digest.LoadStore (reopen): %v", err)
+	}
+	if _, known := after.Digest(forged.ID); known {
+		t.Fatalf("the refused lock still recorded a digest for the forged comment block")
+	}
+	if _, ok := store.Ledger[forged.ID]; ok {
+		t.Fatalf("the refused lock still wrote a ledger record")
+	}
+
+	// The recovery is a restore, and it must not name a comment op or a re-lock:
+	// both record whatever the claim says now as the review history.
+	if !strings.Contains(lockErr.Error(), "Restore .dossierx-comment-digest.json from version control") {
+		t.Errorf("the refusal must name the restore as the recovery, got %q", lockErr)
+	}
+}
+
+// The same gate must be silent on the shapes where the evidence is honestly
+// absent, or it refuses correct work — each of these is one of the three
+// silences RuleCommentDigestUnrecorded documents.
+func TestTheUnrecordedDigestLockGateIsSilentWhereEvidenceIsHonestlyAbsent(t *testing.T) {
+	withRegistry(t)
+
+	covered := func(t *testing.T) (*Store, string) {
+		t.Helper()
+		dir := t.TempDir()
+		storePath := filepath.Join(dir, "store.json")
+		s, err := LoadStore(storePath)
+		if err != nil {
+			t.Fatalf("LoadStore: %v", err)
+		}
+		other := model.Claim{ID: "widget.contract.other", Facet: "contract", Module: "widget", Body: "unrelated"}
+		if _, err := Lock(other, []model.Claim{other}, testConfig(), s, Approval{Actor: "alice", Reason: "approved"}); err != nil {
+			t.Fatalf("seed Lock: %v", err)
+		}
+		if err := s.Save(); err != nil {
+			t.Fatalf("Save: %v", err)
+		}
+		reopened, err := LoadStore(storePath)
+		if err != nil {
+			t.Fatalf("LoadStore (reopen): %v", err)
+		}
+		return reopened, storePath
+	}
+
+	// A threadless claim: an entry is what a comment op CREATES, not something
+	// locking requires. This is the ordinary first lock of a claim nobody has
+	// commented on, and it must not be refused.
+	t.Run("threadless claim in a covered project", func(t *testing.T) {
+		store, _ := covered(t)
+		fresh := model.Claim{ID: "widget.contract.fresh", Facet: "contract", Module: "widget", Body: "no threads here"}
+		if _, err := Lock(fresh, []model.Claim{fresh}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"}); err != nil {
+			t.Fatalf("a claim with no comment threads must lock normally; got %v", err)
+		}
+	})
+
+	// A claim WITH threads that HAS its entry: the honest post-review lock, and
+	// the one this gate most has to leave alone.
+	t.Run("claim whose threads are recorded", func(t *testing.T) {
+		store, storePath := covered(t)
+		reviewed := model.Claim{
+			ID: "widget.contract.reviewed", Facet: "contract", Module: "widget", Body: "reviewed and agreed",
+			Comments: []model.Comment{{
+				ID: "c-bbb222", Status: model.CommentStatusResolved, Author: model.CommentRoleHuman,
+				Created: "2026-07-27T10:00:00Z", Body: "looks right now",
+			}},
+		}
+		// Record it the way a comment op would have.
+		digests, err := digest.LoadStore(digest.StorePathBeside(storePath))
+		if err != nil {
+			t.Fatalf("digest.LoadStore: %v", err)
+		}
+		digests.Record(reviewed)
+		if err := digests.Save(); err != nil {
+			t.Fatalf("digest Save: %v", err)
+		}
+
+		if _, err := Lock(reviewed, []model.Claim{reviewed}, testConfig(), store, Approval{Actor: "alice", Reason: "approved after review"}); err != nil {
+			t.Fatalf("a claim whose threads are recorded must lock normally; got %v", err)
+		}
+	})
+
+	// An UNCOVERED project. Its threads predate the digest store entirely, and
+	// the project-scoped adoption finding is what speaks to it — refusing every
+	// commented claim here would block a v0.2.x project from locking anything.
+	t.Run("uncovered project", func(t *testing.T) {
+		store, err := LoadStore(filepath.Join(t.TempDir(), "store.json"))
+		if err != nil {
+			t.Fatalf("LoadStore: %v", err)
+		}
+		commented := model.Claim{
+			ID: "widget.contract.legacy", Facet: "contract", Module: "widget", Body: "old project",
+			Comments: []model.Comment{{
+				ID: "c-ccc333", Status: model.CommentStatusResolved, Author: model.CommentRoleHuman,
+				Created: "2026-07-27T10:00:00Z", Body: "from before the digest store",
+			}},
+		}
+		if _, err := Lock(commented, []model.Claim{commented}, testConfig(), store, Approval{Actor: "alice", Reason: "approved"}); err != nil {
+			t.Fatalf("an uncovered project must still be able to lock a commented claim; got %v", err)
+		}
+	})
 }

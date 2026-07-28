@@ -26,9 +26,15 @@
      and [text](url) links render like a card/list body's do instead of as
      literal source — inline only, no <p> wrapper inside a <td>. `cell` also
      stringifies non-string cell values (numbers/bools) and maps a nil/absent
-     cell to "", so a ragged row never breaks template execution. */}}
+     cell to "", so a ragged row never breaks template execution.
+
+     The heading shows the id's readable label via the shared "claimLabel"
+     func (components.go's ClaimLabel), with the machine id kept reachable on
+     the same element through data-claim-id and the hover title — see
+     card.html's head comment for why both, and ClaimLabel for what an
+     unshaped id does. */}}
 <section class="claim claim-table card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k">{{.ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
   {{if .Rows}}
   {{$keys := rowKeys .Rows}}

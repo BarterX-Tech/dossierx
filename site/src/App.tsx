@@ -2,6 +2,7 @@ import { useLayoutEffect } from "react";
 import { Nav } from "./components/Nav";
 import { contentSpec } from "./content";
 import { Hero } from "./sections/Hero";
+import { Roles } from "./sections/Roles";
 import { Philosophy } from "./sections/Philosophy";
 import { Claims } from "./sections/Claims";
 import { Lifecycle } from "./sections/Lifecycle";
@@ -43,6 +44,10 @@ export default function App() {
       <Nav siteTitle={contentSpec.siteTitle} items={contentSpec.nav} />
       <main id="main">
         <Hero />
+        {/* "Who runs what" sits second, before any command appears anywhere on
+            the page: every section after it is written assuming the reader knows
+            an agent operates this and a human reviews it. */}
+        <Roles />
         <Philosophy />
         <Claims />
         <Lifecycle />

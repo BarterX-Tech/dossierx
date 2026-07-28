@@ -14,6 +14,10 @@ interface Transition {
   from: string;
   to: string;
   trigger: string;
+  /** Who decides the transition happens — the v0.3.0 half of the story. */
+  mandate: string;
+  /** Who actually runs the command (or clicks the button) that performs it. */
+  execute: string;
   note: string;
 }
 interface LifecycleData {
@@ -131,7 +135,10 @@ const EDGES: DiagEdge[] = [
     color: "var(--accent)",
     tip: [298, 112],
     angle: 55.9,
-    label: "lock",
+    // Every label on this diagram names the command as an AGENT would type it
+    // — the noun included, the --reason that carries the human's approval
+    // included. "lock" alone was a v0.2.0 verb and no longer exists.
+    label: "claim lock --reason",
     lx: 248,
     ly: 42,
     drawAt: DELAYS.lockDraw,
@@ -145,7 +152,7 @@ const EDGES: DiagEdge[] = [
     dashed: true,
     tip: [562, 112],
     angle: 55.9,
-    label: "DetectStale · flag · comment",
+    label: "drift · claim flag · new thread",
     lx: 512,
     ly: 42,
     drawAt: DELAYS.flagDraw,
@@ -158,21 +165,23 @@ const EDGES: DiagEdge[] = [
     color: "var(--ok)",
     tip: [462, 148],
     angle: 235.9,
-    label: "reaudit --confirm",
+    label: "claim reaudit --confirm",
     lx: 512,
     ly: 218,
     drawAt: DELAYS.reauditDraw,
     kind: "draw",
   },
-  // return: comment resolve (review -> locked), the SECOND clearer, nested just
-  // inside the reaudit arc; apex ~175.5 at x=513; end tangent 223.4°
+  // return: Resolve (review -> locked), the SECOND clearer, nested just inside
+  // the reaudit arc; apex ~175.5 at x=513; end tangent 223.4°. This is the one
+  // edge on the diagram a HUMAN both mandates and executes — it is a click in
+  // the viewer, not a command — which is why it keeps the human accent colour.
   {
     id: "resolve",
     d: "M 558 150 C 522 184 504 184 468 150",
     color: "var(--accent)",
     tip: [468, 150],
     angle: 223.4,
-    label: "comment resolve",
+    label: "you click Resolve",
     lx: 512,
     ly: 188,
     drawAt: DELAYS.resolveDraw,
@@ -186,7 +195,7 @@ const EDGES: DiagEdge[] = [
     deemph: true,
     tip: [198, 148],
     angle: 235.9,
-    label: "unlock",
+    label: "claim unlock --reason",
     lx: 248,
     ly: 218,
     drawAt: DELAYS.unlockDraw,
@@ -431,7 +440,7 @@ function LifecycleDiagram() {
         viewBox="0 0 760 260"
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="Lifecycle state diagram: draft locks to locked; locked flags to review_pending via DetectStale, flag, or an open comment thread; reaudit --confirm or resolving the last comment thread returns review_pending to locked; unlock returns locked to draft."
+        aria-label="Lifecycle state diagram. A human mandates each transition and the agent executes it: draft locks to locked via claim lock --reason; locked flags to review_pending automatically on dependency drift, or when the agent runs claim flag, or when a comment thread opens; claim reaudit --confirm or the human clicking Resolve returns review_pending to locked; claim unlock --reason returns locked to draft."
         initial="hidden"
         whileInView="show"
         viewport={{ once: true, margin: "0px 0px -80px 0px" }}
@@ -483,15 +492,15 @@ function LifecycleDiagram() {
             className="legend-swatch"
             style={{ background: "var(--accent)" }}
           />{" "}
-          human action
+          you mandate it
         </span>
         <span>
           <i className="legend-swatch" style={{ background: "var(--warn)" }} />{" "}
-          raised for review (dashed)
+          raised automatically — nobody decided (dashed)
         </span>
         <span>
           <i className="legend-swatch" style={{ background: "var(--ok)" }} />{" "}
-          confirm-before-write gate
+          the agent executes it, with --reason on the record
         </span>
       </div>
     </div>
@@ -525,20 +534,28 @@ export function Lifecycle() {
 
       <AnimatedReveal>
         <div className="compare__scroll">
+          {/* From and To are one column now. They were two, and the two extra
+              columns this table needed — who mandates, who executes — are worth
+              more than the split: the transition itself is the row's identity,
+              the parties are the thing v0.3.0 actually documents. */}
           <table className="transitions">
             <thead>
               <tr>
-                <th>From</th>
-                <th>To</th>
-                <th>Trigger</th>
+                <th>Transition</th>
+                <th>Mandated by</th>
+                <th>Executed by</th>
+                <th>How</th>
                 <th>Note</th>
               </tr>
             </thead>
             <tbody>
               {data.transitions.map((t, i) => (
                 <tr key={i}>
-                  <td>{t.from}</td>
-                  <td>{t.to}</td>
+                  <td className="transitions__edge">
+                    {t.from} <span aria-hidden="true">→</span> {t.to}
+                  </td>
+                  <td>{t.mandate}</td>
+                  <td>{t.execute}</td>
                   <td>
                     <code>{t.trigger}</code>
                   </td>

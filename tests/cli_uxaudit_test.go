@@ -29,9 +29,9 @@ func TestUnknownClaimIDExitsTwo(t *testing.T) {
 	writeFixtureProject(t, root, "widget")
 
 	cases := [][]string{
-		{"lock", "widget.contract.ghost"},
-		{"unlock", "widget.contract.ghost"},
-		{"flag", "widget.contract.ghost", "--claim-says", "a", "--now-does", "b", "--reason", "c"},
+		{"claim", "lock", "widget.contract.ghost", "--reason", "audit fixture"},
+		{"claim", "unlock", "widget.contract.ghost", "--reason", "audit fixture"},
+		{"claim", "flag", "widget.contract.ghost", "--claim-says", "a", "--now-does", "b", "--reason", "c"},
 	}
 	for _, args := range cases {
 		_, stderr, code := run(t, root, args...)
@@ -46,7 +46,7 @@ func TestFlagNotLockedExitsTwo(t *testing.T) {
 	// writeFixtureProject writes one *draft* claim.
 	writeFixtureProject(t, root, "widget")
 
-	_, stderr, code := run(t, root, "flag", "widget.contract.overview",
+	_, stderr, code := run(t, root, "claim", "flag", "widget.contract.overview",
 		"--claim-says", "a", "--now-does", "b", "--reason", "c")
 	if code != 2 {
 		t.Fatalf("expected exit 2 flagging a not-locked (wrong-state) claim, got %d (stderr: %s)", code, stderr)
@@ -54,8 +54,13 @@ func TestFlagNotLockedExitsTwo(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// DX-AUD-21: unknown --module for status subcommands exits non-zero; a
-// known-but-unused module still exits 0 with its normal report.
+// DX-AUD-21: an unknown --module exits non-zero; a known-but-unused module
+// still exits 0 with its normal report.
+//
+// "implink status" was the second command in this pair until v0.3.0 absorbed
+// it into "claim show". "claim list --module" inherits the guarantee: it is the
+// surviving command where a typo'd module would otherwise produce an empty,
+// success-looking answer.
 // ---------------------------------------------------------------------
 
 func TestStatusUnknownModuleExitsNonZero(t *testing.T) {
@@ -64,7 +69,7 @@ func TestStatusUnknownModuleExitsNonZero(t *testing.T) {
 
 	cases := [][]string{
 		{"build-order", "status", "--module", "nope"},
-		{"implink", "status", "--module", "nope"},
+		{"claim", "list", "--module", "nope"},
 	}
 	for _, args := range cases {
 		_, stderr, code := run(t, root, args...)
@@ -89,12 +94,12 @@ func TestStatusKnownButUnusedModuleExitsZero(t *testing.T) {
 		t.Fatalf("expected 'not proposed yet' for a known module, got: %s", out)
 	}
 
-	out2, stderr2, code2 := run(t, root, "implink", "status", "--module", "widget")
+	out2, stderr2, code2 := run(t, root, "claim", "list", "--module", "widget")
 	if code2 != 0 {
-		t.Fatalf("expected exit 0 for a known module with nothing linked, got %d (stderr: %s)", code2, stderr2)
+		t.Fatalf("expected exit 0 for a known module, got %d (stderr: %s)", code2, stderr2)
 	}
-	if !strings.Contains(out2, "nothing linked yet") {
-		t.Fatalf("expected 'nothing linked yet' for a known module, got: %s", out2)
+	if !strings.Contains(out2, "widget.contract.overview") {
+		t.Fatalf("expected the known module's claim listed, got: %s", out2)
 	}
 }
 

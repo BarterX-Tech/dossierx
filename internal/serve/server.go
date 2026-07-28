@@ -38,7 +38,10 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render"
 )
 
@@ -340,7 +343,7 @@ func (s *Server) renderViewer() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serve: load claims: %w", err)
 	}
-	cat, err := catalog.Build(claims, s.cfg)
+	cat, err := catalog.Build(disarmUngatedMockups(claims, s.cfg), s.cfg)
 	if err != nil {
 		return nil, fmt.Errorf("serve: build catalog: %w", err)
 	}
@@ -351,12 +354,61 @@ func (s *Server) renderViewer() ([]byte, error) {
 	return []byte(html), nil
 }
 
+// disarmUngatedMockups returns claims with RawHTMLReviewed cleared on every
+// claim the raw-html mockup gate names, so components.MockupHTML takes its
+// ESCAPING branch for that claim instead of emitting its bytes as trusted
+// markup. claims itself is never mutated (the caller's slice is a fresh load,
+// but a copy keeps that an implementation detail rather than a requirement).
+//
+// WHY THIS EXISTS HERE. render's unescaped path (components.MockupHTML) opens on
+// three of the claim's OWN yaml fields — status: locked, raw_html_reviewed:
+// true, and a module in mockup_modules — and `status` is on LockedClaimHash's
+// deny-list, so a hand-typed "status: locked" is invisible to the content-drift
+// rule too. The lint suite is what normally stands between hostile raw_html and
+// that branch: "dossierx check" fails at the lint step and never renders. Serve
+// does not lint. It loads, builds and renders, so a claim carrying
+// <script>...</script> in raw_html — a claim `check` refuses loudly, exit 1 —
+// was served VERBATIM to the reviewer who ran "dossierx serve" to go look at it.
+// Same-origin script on the serve port passes the admission middleware's
+// Origin/Sec-Fetch-Site checks and can drive every comment mutation endpoint,
+// including resolve/reopen, the one authority an agent must never hold.
+//
+// It DISARMS rather than refuses. The viewer must keep rendering a disputed
+// project — that is the same argument the ledger gate is built on (a tampered
+// claim costs a project its exit status, not its documentation), and it is
+// sharper here, because the human is reading the page precisely in order to see
+// the claim that is in dispute. Escaped, they see exactly what the file says.
+//
+// This is also the only caller of lint.MockupGateFindings. The standalone
+// "render"/"catalog" verbs that used to enforce it were retired in v0.3.0, which
+// left the function with zero callers and its doc comment asserting a gate that
+// no longer ran anywhere.
+func disarmUngatedMockups(claims []model.Claim, cfg *config.Config) []model.Claim {
+	findings := lint.MockupGateFindings(claims, cfg)
+	if len(findings) == 0 {
+		return claims
+	}
+	ungated := make(map[string]bool, len(findings))
+	for _, f := range findings {
+		ungated[f.ClaimID] = true
+	}
+
+	out := make([]model.Claim, len(claims))
+	copy(out, claims)
+	for i := range out {
+		if ungated[out[i].ID] {
+			out[i].RawHTMLReviewed = false
+		}
+	}
+	return out
+}
+
 // storePath and flagStorePath resolve the lock-store and flag-store files under
 // cfg.Dir() (absolute), matching cmd/dossierx and internal/check. serve reads
 // both (never under their own sentinel) only to build the comment Deps, whose
 // review_pending recomputation consults real drift/flag state.
 func (s *Server) storePath() string {
-	return filepath.Join(s.cfg.Dir(), ".dossierx-lock-store.json")
+	return filepath.Join(s.cfg.Dir(), lock.StoreFileName)
 }
 
 func (s *Server) flagStorePath() string {

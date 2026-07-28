@@ -1,135 +1,110 @@
 ---
 name: dossierx-build-order
 description: >-
-  Workflow for deriving and following a dossierx-v1 module's Build Order — the
-  dependency-ordered sequence (orientation → schema → behavior → api →
-  verification) an implementing agent should actually build a fully-locked
-  module in, as opposed to the unrelated human "reading order" the viewer
-  displays claims in. Use this WHENEVER a dossierx-v1 module has just become
-  fully locked and you are about to implement code from it, or whenever you
-  are about to write code against dossierx-v1 claims and want to know what
-  order to build them in. Covers the completeness gate, the topological
-  sort within behavior/api, the propose→lock review step, and what to do
-  when the build order goes stale. Requires the dossierx-claims skill's
-  claim/lock basics first.
+  Deriving and following a DossierX module's Build Order — the dependency-ordered
+  sequence (orientation, schema, behavior, api, verification) an implementing
+  agent should actually build a fully-locked module in, as distinct from the
+  human reading order the viewer displays claims in. Use this WHENEVER a module
+  has just become fully locked and you are about to implement code from it,
+  whenever you are unsure which claim to build next, and whenever a locked build
+  order reports stale. Covers the completeness gate, the topological sort inside
+  behavior and api, the propose then human-approved lock step, and what to do
+  when the order goes stale. Load the DossierX router skill first, and the
+  dossierx-claims skill for the lock basics this assumes.
 ---
 
-# dossierx-v1 Build Order — implementation sequencing
+# DossierX build order — implementation sequencing
 
-Once every claim in a dossierx-v1 module is `status: locked`, Build Order derives the sequence
-an implementing agent should actually follow — not the same thing as the viewer's reading
-order (`section`/`order`), which exists purely for a human browsing the spec top to bottom
-and has no bearing on what to build first.
+Read **[[dossierx]]** for the envelope and error codes, and **[[dossierx-claims]]** for
+`build_role` and the lock lifecycle.
 
-Read **[[dossierx-claims]]** first if you haven't — this skill assumes you already know the
-claim schema and lock lifecycle, in particular `build_role`.
+Once every claim in a module is `locked`, Build Order derives the sequence to **build** it in.
+That is not the viewer's reading order (`section`/`order`), which exists for a human browsing the
+spec and has no bearing on what to write first.
 
-## When to use this
-
-- A module you're about to implement has just had its last claim locked.
-- You're mid-implementation and unsure which claim to build next.
-- `dossierx check`'s "next steps" block says a module is fully locked with no build order yet.
-- A locked build order started reporting `stale` (a covered claim changed, was deleted, or a
-  new claim was locked into the module).
-
-## The five build_role phases
-
-Every locked claim's `build_role` places it in a fixed sequence — phases are never
-reordered or interleaved:
-
-1. **orientation** — context/process claims. Read for background; never build code from
-   these directly.
-2. **schema** — data shapes. Build first: everything below assumes these types exist.
-3. **behavior** — workflow/logic claims, the bulk of the real work. Ordered *within this
-   phase* by a real topological sort over `rests_on` (Kahn's algorithm, layered) — a claim
-   resting on another behavior claim is built strictly after it. A same-phase `rests_on`
-   cycle is a hard error at propose time, never silently dropped from the sequence.
-4. **api** — public entry points, built after the behavior they wrap.
-5. **verification** — test-checklist claims, read last so tests get written against
-   everything already built.
-
-`out-of-scope` claims (deferred/future-scope) are never placed in the sequence, but are
-always still reported as `excluded` — never silently dropped from view.
-
-**`build_role: orientation` and `kind: orientation-note` are different axes — but both
-participate in Build Order.** `build_role` classifies *where in the build sequence* a claim
-sits (this section's five phases); `kind` classifies *what a claim is* — a fact about the
-system (the default) versus reading guidance about the rest of the module
-(`kind: orientation-note`, or the reserved `overview` facet, which implies it — see
-[[dossierx-claims]]). They are orthogonal, but a `kind: orientation-note` claim is **not**
-invisible to Build Order and **does** carry a `build_role`:
-
-- Every claim in a module must be locked before `propose` runs (the completeness gate), and
-  once a module adopts `build_role` the `build-role-required-for-locked` lint hard-fails
-  locking *any* claim — orientation-note claims included — without a valid `build_role`.
-- `propose` likewise rejects a locked claim with no `build_role` set, so an orientation-note
-  claim reaches the build order carrying one.
-- An orientation-note claim's natural `build_role` is **`orientation`** (phase 1): it is
-  read for background — "read Contract, never Internals" — and never itself built from, so
-  it renders in the orientation phase alongside `build_role: orientation` fact claims.
-
-So a claim can be `kind: orientation-note` **and** `build_role: orientation` at once (the
-common case), or either one on its own — but neither one lets a locked claim skip having a
-`build_role` once its module uses the feature.
-
-## Commands
+## The contract
 
 ```
-dossierx build-order propose --module <name>   # derive the sequence, write .build-order.<module>.json
-dossierx build-order status  --module <name>   # proposed / locked / stale + N of M claims covered
-dossierx build-order lock    --module <name>   # freeze the proposed sequence (human confirms)
+dossierx build-order propose --module <name>                      # derive it; writes .build-order.<name>.json
+dossierx build-order status  --module <name>                      # proposed | locked | stale, + N of M covered
+dossierx build-order lock    --module <name> --reason "<their words>"
 ```
 
-`propose` is a completeness gate: it refuses outright, listing every non-locked claim, unless
-100% of the module's claims are locked. This is deliberate — the whole point is that a build
-order only ever gets generated once a module's docs are genuinely done, so it covers every
-claim by construction, nothing skipped.
+`propose` and `lock` both take `--dry-run`. `lock` requires `--reason` — it is a lifecycle action,
+so it follows the same rule as `claim lock`: preview, show the human, get a yes, then run it.
 
-The same gate also refuses a module any of whose claims still carries an **unresolved comment
-thread**, naming the offending claim ids — a module isn't "done" while a review conversation is
-still open on one of its claims. Resolve the threads (`dossierx comment resolve`, see
-**[[dossierx-comments]]**), then re-run `propose`. This mirrors the per-claim lock gate: a
-single claim can't lock with an open thread either.
+| refusal | `error.code` | recovery |
+|---|---|---|
+| a module claim is still draft | `build_order_refused` | lock the remaining claims (each with the human's approval) |
+| a module claim has an open thread | `build_order_refused` | reply; the human resolves in the viewer |
+| a locked claim has no `build_role` | `build_order_refused` | set it, then re-propose |
+| a same-phase `rests_on` cycle | `build_order_refused` | fix the edges — this is a real modelling error, never silently dropped |
+| the artifact was edited by hand | `build_order_hand_edited` | the claims are fine and the artifact is not — re-`propose` to discard the edit, then `lock` what the engine derived |
+| nothing proposed yet | `not_proposed` | run `propose` |
+| the locked order is stale | `build_order_stale` | re-`propose`, then re-`lock` |
+| unknown `--module` | `unknown_module` | you typo'd it; a wrong module must not answer with an empty report |
 
-## The review step
+## The five phases
 
-1. `dossierx build-order propose --module <name>` — writes the proposed sequence. Writes
-   nothing if the module isn't fully locked, if any of its claims still has an open comment
-   thread, or if a same-phase cycle makes the sequence invalid (each case prints exactly
-   what's blocking it).
-2. **Present the proposed sequence and wait for explicit confirmation** before locking —
-   same review discipline as any other dossierx-v1 gate.
-3. `dossierx build-order lock --module <name>` — freezes it. Refuses if nothing was proposed
-   yet, if the order is **stale** (a bare relock would freeze an outdated sequence — re-run
-   `propose` first, see below), or if it's already locked and not stale (nothing to relock).
+Never reordered, never interleaved:
 
-## Following the sequence as an implementing agent
+1. **orientation** — context and process claims. Read for background; never build code directly
+   from one.
+2. **schema** — data shapes. Build first; everything below assumes these types exist.
+3. **behavior** — workflow and logic, the bulk of the work. Ordered *within* the phase by a real
+   topological sort over `rests_on`, so a claim resting on another behavior claim is built strictly
+   after it.
+4. **api** — public entry points, after the behavior they wrap.
+5. **verification** — test-checklist claims, read last so tests are written against everything
+   already built.
 
-Read `.build-order.<module>.json` (project-relative paths only, never absolute — this
-artifact is meant to be shared, not a dump of one machine's directory layout) and build
-strictly phase by phase, in the order each phase lists. Within `behavior`/`api`, the listed
-order already accounts for every `rests_on` dependency — don't re-derive your own order from
-the claim bodies.
+`out-of-scope` claims are never placed in the sequence, but are always still reported as
+`excluded` — never silently dropped from view.
 
-Once each claim's code exists, ground it in the codebase — that's the
-**[[dossierx-code-links]]** skill, the natural next step after finishing a claim from this
-sequence.
+`build_role` and `kind` are different axes. `build_role` says *where in the build sequence* a claim
+sits; `kind: orientation-note` says *what the claim is* — reading guidance rather than a fact about
+the system. They are orthogonal, but an orientation-note claim is **not** invisible to Build Order
+and still needs a `build_role` (naturally `orientation`) before it can lock or be proposed.
 
-## When the build order goes stale
+## The completeness gate — why it refuses so much
 
-`dossierx build-order status --module <name>` reports `stale: true` if, since the sequence was
-locked, a covered claim's content or `build_role` changed (a role change reassigns its phase,
-so the frozen order is now wrong), a covered or excluded claim was deleted, or a new claim was
-locked into the module (coverage the frozen order silently omits). `lock` refuses a stale
-artifact outright — a bare relock would only refresh hashes/flags without recomputing the
-order, freezing an outdated sequence (e.g. after a `rests_on` edit). Re-run `propose`
-(recomputes the order against the current claim set) then `lock` again — same
-review-before-lock discipline as the first time. Never treat a stale build order as still
-authoritative; re-derive it.
+`propose` refuses outright, naming every offending claim, unless **100% of the module's claims are
+locked and none carries an open thread**. That is the point: a build order only exists once a
+module's spec is genuinely finished, so it covers every claim by construction and nothing is
+skipped. Do not work around it by excluding claims — a module that is not done is not ready to be
+built from.
 
-## Portability note
+## Following the sequence
 
-Nothing about Build Order is project-specific — the phase sequence, the completeness gate,
-and the topological sort all operate purely on `build_role`/`rests_on`/`status`, fields every
-dossierx-v1 project already has via `project.config.yaml`. No new config surface is needed for
-this skill beyond what dossierx-claims already requires.
+Read `.build-order.<module>.json` and build strictly phase by phase, in the order each phase
+lists. Paths in it are project-relative by design — this artifact is meant to be shared, not to
+record one machine's directory layout. Within `behavior` and `api`, the listed order already
+accounts for every `rests_on` edge; do not re-derive your own order from the claim bodies.
+
+Read it; never edit it. A **locked** artifact is an approved one: `build-order lock` records its
+signature in the same ledger a `claim lock` writes to, and `dossierx check` reports a hand edit as
+`build-order-content-drift` — reordering phases, moving a claim into `excluded`, or refreshing the
+frozen `hashes` so it stops reporting `stale` are all the same act as editing a locked claim.
+Commit the locked artifact along with the ledger; the sequence a human approved has to travel with
+the repository for CI to check it.
+
+As each claim's code lands, ground it — that is **[[dossierx-code-links]]**, the natural next step
+after finishing a claim from this sequence.
+
+## When it goes stale
+
+`dossierx build-order status --module <name>` reports `stale: true` when, since the order was
+locked, a covered claim's content or `build_role` changed, a covered or excluded claim was deleted,
+or a new claim was locked into the module.
+
+`lock` refuses a stale artifact (`build_order_stale`) rather than refreshing it: a bare relock
+would update hashes without recomputing the sequence, freezing an order that is now wrong — for
+instance after a `rests_on` edit. Re-run `propose` to recompute against the current claim set,
+show the human the new sequence, then `lock` again with their `--reason`. Never treat a stale build
+order as authoritative.
+
+## Portability
+
+Nothing here is project-specific. The phase sequence, the completeness gate and the topological
+sort operate purely on `build_role`, `rests_on` and `status` — fields every DossierX project
+already has. No configuration beyond what **[[dossierx-claims]]** requires.

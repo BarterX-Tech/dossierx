@@ -1,6 +1,7 @@
 package lint
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -53,8 +54,17 @@ func TestRollUp(t *testing.T) {
 				t.Fatalf("findings = %+v, wantErr=%v", findings, tc.wantErr)
 			}
 			for _, f := range findings {
-				if f.Severity != SeverityError {
-					t.Errorf("Severity = %q, want error", f.Severity)
+				// WARNING, not error: a project-wide error-severity roll-up
+				// deadlocked every module in the ordinary locked-banner +
+				// two-drafts shape (see this lint's file comment). The refusal
+				// lives in cmd/dossierx's lock gate, scoped to the banner.
+				if f.Severity != SeverityWarning {
+					t.Errorf("Severity = %q, want warning", f.Severity)
+				}
+				// Both ends are named: the banner the finding hangs off, and the
+				// sibling actually holding it open — the one the caller acts on.
+				if !strings.Contains(f.Message, "widget.status.banner") || !strings.Contains(f.Message, "widget.contract.overview") {
+					t.Errorf("message must name the banner AND the blocking sibling, got %q", f.Message)
 				}
 			}
 		})
