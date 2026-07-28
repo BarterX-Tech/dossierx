@@ -17,7 +17,7 @@ locked claim could be hand-edited and **nothing would notice**. The new lock led
 was approved, when, by whom, and on whose words, and a gate compares the claims against it in
 `dossierx check`, in a pre-commit hook, and in CI.
 
-**This release is not backward compatible at the CLI.** Ten commands were removed and four were
+**This release is not backward compatible at the CLI.** Twelve commands were removed and four were
 moved. The migration table below maps every one of them.
 
 ### BREAKING — every existing project must run `dossierx migrate --adopt` once
@@ -235,8 +235,8 @@ finding — so the sequence ended green, permanently.
   after the write. Draft authoring is deliberately unfrictioned: no `--reason`, no confirmation.
 - **`dossierx migrate --adopt`** — the seventh noun, and the only command in the surface a
   *human* is expected to run other than `serve`. It exists because adoption stopped being
-  something a `check` does on its own; see the BREAKING section above. `--adopt` and `--reason`
-  are required, `--dry-run` previews.
+  something a `check` does on its own; see the BREAKING section above. `--adopt` is required and
+  `--dry-run` previews; there is deliberately no `--reason` (see the BREAKING section).
 - **`dossierx check --validate`** — a read-only run over `internal/check`'s existing non-writing
   seam (the same one `serve`'s status endpoint uses). It exists because cutting `lint` would
   otherwise have turned the per-claim authoring loop into a writer.

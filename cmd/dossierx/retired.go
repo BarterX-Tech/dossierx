@@ -103,14 +103,14 @@ func retiredCommentVerbs() []*cobra.Command {
 	}
 }
 
-// retiredTopLevelCmds are the verbs v0.3.0 folded into the seven nouns. Each hint
+// retiredTopLevelCmds are the verbs v0.3.0 folded into the eight nouns. Each hint
 // is the corresponding row of SKILL.md's "if you remember an older command"
 // table, in the same words, so the binary and the skill cannot drift into
 // disagreeing about where a caller should go next.
 //
 // lock/unlock/flag/reaudit are deliberately NOT here: they moved UNDER a noun
 // that has the same name they had, so `dossierx lock <id>` is already answered
-// by the root with a hint listing the seven nouns, and a stub would only add a
+// by the root with a hint listing the eight nouns, and a stub would only add a
 // second, less specific answer.
 func retiredTopLevelCmds() []*cobra.Command {
 	checkHint := `run: dossierx check (add --validate for a read-only pass that writes nothing)`

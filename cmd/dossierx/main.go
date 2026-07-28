@@ -109,7 +109,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the seven nouns the way the noun
+	// The message is inlined instead, naming the eight nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -164,7 +164,7 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole v0.3.0 surface: seven nouns, twenty leaves, and not one more.
+	// The whole v0.3.0 surface: eight nouns, twenty leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8

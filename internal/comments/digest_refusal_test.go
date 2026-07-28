@@ -13,7 +13,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// realLeafCommands is the v0.3.0 CLI surface, as a set: seven nouns, twenty
+// realLeafCommands is the v0.3.0 CLI surface, as a set: eight nouns, twenty
 // leaves, and nothing else. It is duplicated here rather than imported because
 // internal/comments must not depend on cmd/dossierx — the engine is the thing
 // the CLI wraps, not the other way round — and because the point of the test
@@ -21,7 +21,7 @@ import (
 // without any compiler catching it.
 //
 // The authority for this list is `dossierx --help` plus each noun's own help,
-// and it is restated in skills/dossierx/SKILL.md's "seven nouns, twenty leaves"
+// and it is restated in skills/dossierx/SKILL.md's "eight nouns, twenty leaves"
 // block. If a release adds or removes a verb, this set and that block move
 // together.
 var realLeafCommands = map[string]bool{
@@ -46,7 +46,7 @@ var realLeafCommands = map[string]bool{
 // begin a verb, so flags (`--reason`), punctuation and placeholders (`<id>`) end
 // the match and only the command itself is captured.
 //
-// Two words are captured because three of the seven nouns are groups, and the
+// Two words are captured because three of the eight nouns are groups, and the
 // second word is then either the leaf or the next word of the sentence
 // ("dossierx check reports it as …"). namesARealCommand resolves that ambiguity
 // the only way that cannot produce a false alarm: the pair counts, and failing

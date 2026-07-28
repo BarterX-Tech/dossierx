@@ -86,13 +86,13 @@ Open the URL it prints. That is a local viewer of every claim, facet, build orde
 
 Closing a thread is yours alone **on the CLI**, and in v0.3.0 that is structural rather than polite: `dossierx comment` is `inbox · list · add · reply` and nothing else. Resolve, reopen, edit and delete were removed from the CLI in this release and live only in the viewer and in `dossierx serve`'s HTTP API.
 
-**How far that enforcement actually goes.** Advisory rights — an actor may act only on its own messages — are enforced in the engine, and on the CLI the actor is whatever you passed as `--as`. So `dossierx comment reply --as agent` genuinely cannot close a thread you authored: it fails with `rights_denied`, and an agent following its skills never asserts `--as human` for something it decided. **The viewer's write API is a different trust boundary.** It takes the actor from the request body and treats a request that omits `as` as `human`, so any local caller that can reach `dossierx serve` gets full human rights: it can resolve, reopen, edit or delete your thread, and the record it leaves positively attests `human`. That is a deliberate choice, not an oversight — the server binds `127.0.0.1` and refuses cross-origin requests, but anything that can curl it can already open the claim's YAML in an editor, so a token on the API would move the lock rather than add one. Read the rule as: **enforced for the CLI actor, and the same trust level as filesystem access for the viewer API.** It is the operating rule of the review loop either way, and an agent that goes around it has forged the only approval signal in the design.
+**How far that enforcement actually goes.** Advisory rights — an actor may act only on its own messages — are enforced in the engine, and on the CLI the actor is whatever you passed as `--as`. On the CLI that is now structural rather than enforced: `dossierx comment` is `inbox · list · add · reply`, and none of those can close a thread at all — the verbs that could were removed in this release. An agent following its skills also never asserts `--as human` for something it decided. **The viewer's write API is a different trust boundary.** It takes the actor from the request body and treats a request that omits `as` as `human`, so any local caller that can reach `dossierx serve` gets full human rights: it can resolve, reopen, edit or delete your thread, and the record it leaves positively attests `human`. That is a deliberate choice, not an oversight — the server binds `127.0.0.1` and refuses cross-origin requests, but anything that can curl it can already open the claim's YAML in an editor, so a token on the API would move the lock rather than add one. Read the rule as: **enforced for the CLI actor, and the same trust level as filesystem access for the viewer API.** It is the operating rule of the review loop either way, and an agent that goes around it has forged the only approval signal in the design.
 
 A static `file://` export of the viewer is read-only by design — comments need `dossierx serve`.
 
 ## The CLI surface
 
-Twenty leaf commands under seven nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty leaf commands under eight nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, catalog, render and the lock-ledger gate in one shot
@@ -115,7 +115,7 @@ version                  version, commit, build date (also --version)
 
 Every subcommand takes the global `--config` (a path to `project.config.yaml`; when omitted, DossierX searches upward from the current directory the way `git` finds `.git`) and `--format json|text`.
 
-Upgrading from v0.2.x? Ten commands were removed, four moved, and **every existing project must run `dossierx migrate --adopt` once** — see [Upgrading from v0.2.x](#upgrading-from-v02x-run-migrate---adopt-once) below and [the CHANGELOG's full migration table](CHANGELOG.md).
+Upgrading from v0.2.x? Twelve commands were removed, four moved, and **every existing project must run `dossierx migrate --adopt` once** — see [Upgrading from v0.2.x](#upgrading-from-v02x-run-migrate---adopt-once) below and [the CHANGELOG's full migration table](CHANGELOG.md).
 
 ### The machine contract
 
@@ -307,7 +307,7 @@ Config loading is strict: an unknown top-level or `viewer.theme` field is a hard
 
 ## The skills
 
-DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the seven nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
+DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the eight nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
 
 `dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 2 of the paste block above does this. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. That is why step 2 names `.claude/skills` explicitly: it runs before the config exists, so the guides are in place to be followed while the project is set up. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 

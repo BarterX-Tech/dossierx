@@ -5,7 +5,7 @@ description: >-
   atomic YAML "claims" into a reviewable HTML viewer, and that an agent
   OPERATES while a human REVIEWS. Load this FIRST and ALWAYS in any repo that
   has a project.config.yaml plus a claims/ directory, before running any
-  DossierX command. It is short on purpose: the seven nouns, the JSON envelope,
+  DossierX command. It is short on purpose: the eight nouns, the JSON envelope,
   the exit codes, the error.code to recovery table, the dry-run rule, the five
   rules that never bend, the one-time migrate --adopt every pre-v0.3.0 project
   must run, and which companion skill to load for the work in front of you.
@@ -26,7 +26,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The seven nouns, twenty leaves
+## The eight nouns, twenty leaves
 
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing

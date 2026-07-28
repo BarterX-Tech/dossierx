@@ -1131,7 +1131,7 @@ export const contentSpec: ContentSpec = {
           },
           {
             version: "v0.2.0",
-            date: "2026-07-25",
+            date: "2026-07-26",
             title: "Comments on claims — review, discuss, resolve before locking",
             tag: "Previous release",
             highlights: [
@@ -1144,13 +1144,13 @@ export const contentSpec: ContentSpec = {
           },
           {
             version: "v0.3.0",
-            date: "2026-07-27",
+            date: "2026-07-28",
             title: "Agent-first restructure — two surfaces, one gate",
             tag: "Latest release",
             highlights: [
               "The premise, made explicit: the AGENT operates DossierX and the HUMAN reviews it. Each role gets its own surface — twenty CLI commands for the agent, the viewer's comment-and-Resolve for the human — and the docs, skills and site are rewritten around that split.",
               "MACHINE CONTRACT: every command emits exactly one JSON envelope ({ok, command, data, warnings, error, stopped_at}), JSON by default, with a shared snake_case error.code vocabulary that the viewer's JSON API and the CLI now literally share. --dry-run on every mutating verb; --reason required on claim lock, claim unlock, claim reaudit --confirm and build-order lock. Exit codes stayed additive: 1 generic, 2 not-found/wrong-state.",
-              "SURFACE: 26 commands became 20 under seven nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), migrate --adopt, serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
+              "SURFACE: 26 commands became 20 under eight nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), migrate --adopt, serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
               "INTEGRITY: a lock ledger, separate from the content hash and built as a deny-list over every persisted field — so a swapped raw_html payload on a locked, allowlisted mockup can no longer pass as unchanged. Hand-flipping status, editing a locked body, re-locking onto a record an unlock already released, deleting a locked claim's file outright, deleting a thread from YAML, or hand-editing a locked build order is now reported as lock-ledger-missing, lock-content-drift, lock-ledger-orphan, lock-ledger-released, lock-ledger-abandoned, comment-ledger-drift, build-order-content-drift or build-order-ledger-missing. The gate rides git: a pre-commit hook running check --staged over the index, with CI as the authority, because merges and rebases never fire pre-commit.",
               "BREAKING, and it breaks on your first check: every project that locked a claim before v0.3.0 must run `dossierx migrate --adopt` once, then commit the rewritten .dossierx-lock-store.json. Pre-ledger projects used to be grandfathered in automatically on the first writing check; that is gone. Adoption is the one operation that manufactures approval out of nothing, so a gate that performs it on sight rewards deleting the ledger with a clean report over content nobody read — and no evidence inside a project distinguishes an honest v0.2.x store from a downgraded one, since locked_at shipped in v0.2.0. Adoption therefore fails closed everywhere, and only a human running the migration clears it.",
               "THE MODEL, stated plainly because the boundary matters: DossierX DETECTS and the forge ENFORCES. Every rule produces a named, recoverable finding — a stable rule string, the claim it is about, and the command that restores it — and branch protection with a required CI check is what makes anyone obey it. check --staged judges the GIT INDEX, what the commit will actually contain, writing nothing, which is what makes a pre-commit hook meaningful; it judges ONE TREE and reads no git history, so its verdict is identical in every clone however shallow.",
