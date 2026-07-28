@@ -1,6 +1,10 @@
-// audit_boundary_test.go pins THE BOUNDARY OF THIS GATE — the two per-claim
-// shapes audit.go documents as UNDETECTED (the disowned claim and the erased
-// review), and the single-tree refusals that still stand on either side of them.
+// audit_boundary_test.go pins THE BOUNDARY OF THIS GATE at the rules' own level:
+// per-claim coordinated changes audit.go documents as UNDETECTED (the disowned
+// claim and the erased review), and the single-tree refusals that still stand on
+// either side of them. The cases here are INSTANCES of audit.go's principle — an
+// in-repo ledger cannot attest anything against the person who can write it —
+// not an inventory of it; do not read the set as complete, and do not put a
+// count on it.
 //
 // It is the successor to audit_history_test.go, which was deleted. That file
 // exercised AuditAgainstParent, and it kept PASSING after the parent-commit
@@ -55,7 +59,7 @@ func boundaryProject(t *testing.T) (*Store, *digest.Store) {
 
 // honestLock records everything a real Lock leaves behind for claim c: the
 // locked_at stamp, the dependency baselines, and the ledger record. It is the
-// "all three keys" state the disowned-claim shape has to erase.
+// "all three keys" state the disowned-claim case has to erase.
 func honestLock(t *testing.T, store *Store, c model.Claim, deps ...model.Claim) {
 	t.Helper()
 	if store.LockedAt == nil {
@@ -68,7 +72,7 @@ func honestLock(t *testing.T, store *Store, c model.Claim, deps ...model.Claim) 
 	RecordApproval(store, c, Approval{Actor: "alice", Reason: "approved"})
 }
 
-// TestAuditBoundary_TheDisownedClaimIsNotDetected is SHAPE 2 of audit.go's
+// TestAuditBoundary_TheDisownedClaimIsNotDetected is the DISOWNED CLAIM, one of
 // boundary note, made executable.
 //
 // Deleting a claim's ledger record, its locked_at stamp and its own dependency
@@ -105,7 +109,7 @@ func TestAuditBoundary_TheDisownedClaimIsNotDetected(t *testing.T) {
 	honestLock(t, store, dep)
 
 	if findings := Audit(claims, store, digests); len(findings) != 0 {
-		t.Fatalf("audit.go documents the disowned claim as UNDETECTED. It is now detected as %+v — which is good news, but audit.go's boundary note (RuleLockLedgerDeleted's \"WHAT IT DOES NOT CLOSE\", and shape 2 of THE BOUNDARY OF THIS GATE) still says nothing sees it. Update the prose in the same change as the rule", findings)
+		t.Fatalf("audit.go documents the disowned claim as UNDETECTED. It is now detected as %+v — which is good news, but audit.go's boundary note (RuleLockLedgerDeleted's \"WHAT IT DOES NOT CLOSE\", and THE BOUNDARY OF THIS GATE) still says nothing sees it. Update the prose in the same change as the rule", findings)
 	}
 	// The write path agrees it is blind: Lock would happily record a fresh
 	// approval over the rewritten body.
@@ -115,7 +119,7 @@ func TestAuditBoundary_TheDisownedClaimIsNotDetected(t *testing.T) {
 }
 
 // TestAuditBoundary_EitherHalfOfTheDisownedClaimIsStillRefused is the half that
-// has to keep working, and the reason shape 2 is a CONJUNCTION rather than a
+// has to keep working, and the reason the disowned claim is a CONJUNCTION rather than a
 // hole: an attacker who forgets one key is refused from this one tree.
 func TestAuditBoundary_EitherHalfOfTheDisownedClaimIsStillRefused(t *testing.T) {
 	victim := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "the approved body"}
@@ -143,7 +147,7 @@ func TestAuditBoundary_EitherHalfOfTheDisownedClaimIsStillRefused(t *testing.T) 
 	})
 }
 
-// TestAuditBoundary_TheErasedReviewIsNotDetected is SHAPE 3 of audit.go's
+// TestAuditBoundary_TheErasedReviewIsNotDetected is the ERASED REVIEW, one of
 // boundary note: a human's OPEN thread on a DRAFT claim, erased from the YAML
 // together with the claim's key in the comment digest store.
 //
@@ -174,11 +178,11 @@ func TestAuditBoundary_TheErasedReviewIsNotDetected(t *testing.T) {
 	digests.Forget(reviewed.ID)
 
 	if findings := Audit(claims, store, digests); len(findings) != 0 {
-		t.Fatalf("audit.go documents the erased review as UNDETECTED. It is now detected as %+v — update RuleCommentDigestUnrecorded's \"THE ONE THING IT CANNOT SEE\" and shape 3 of THE BOUNDARY OF THIS GATE in the same change", findings)
+		t.Fatalf("audit.go documents the erased review as UNDETECTED. It is now detected as %+v — update RuleCommentDigestUnrecorded's \"THE ONE THING IT CANNOT SEE\" and THE BOUNDARY OF THIS GATE in the same change", findings)
 	}
 }
 
-// TestAuditBoundary_EitherHalfOfTheErasedReviewIsStillRefused: shape 3 is a
+// TestAuditBoundary_EitherHalfOfTheErasedReviewIsStillRefused: the erased review is a
 // conjunction too. Erase the block alone and the surviving entry disagrees with
 // it; drop the entry alone and the threads have nothing recorded beside them.
 func TestAuditBoundary_EitherHalfOfTheErasedReviewIsStillRefused(t *testing.T) {

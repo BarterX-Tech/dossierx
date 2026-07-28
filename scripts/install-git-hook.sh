@@ -31,15 +31,13 @@
 # refusal the binary can no longer make. What replaced it is nothing: the gate
 # is single-tree again, and the single-tree rules already refuse each half of
 # that tamper on its own (delete the ledger -> lock-ledger-absent; repoint
-# claims_dir and strand the claims -> lock-ledger-abandoned). See
-# scripts/ci/dossierx-check.yml's header for the full argument, including the
-# THREE detections this knowingly gives up: the collapsed scope; the DISOWNED
-# CLAIM (one claim's ledger record, locked_at stamp and hashes baselines deleted
-# together, its status flipped locked -> draft and its body rewritten — the
-# cheapest of the three); and the ERASED REVIEW (a DRAFT claim's comments: block
-# erased together with its digest-store key). FORMAT.md's "What the gate
-# detects, what it does not, and where the rest is caught" is the canonical
-# statement, shape by shape.
+# claims_dir and strand the claims -> lock-ledger-abandoned). What it gives up is
+# the COORDINATED change — a claim and the record approving it rewritten in one
+# commit — and no in-repo mechanism closes that, because an in-repo ledger
+# cannot attest anything against the person who can write it. See
+# scripts/ci/dossierx-check.yml's header for the argument, and FORMAT.md's "What
+# the gate detects, what it does not, and where the rest is caught" for the
+# canonical statement.
 #
 # The hook is FAST FEEDBACK, NOT THE AUTHORITY. Clean merges, rebases,
 # cherry-picks and reverts do not fire pre-commit at all, and --no-verify

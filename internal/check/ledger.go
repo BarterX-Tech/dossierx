@@ -582,10 +582,11 @@ type ledgerInputs struct {
 	// and one advisory produced by comparing the commit under judgement against
 	// its PARENT commit under --staged. The whole comparison was removed; see
 	// staged.go's "REMOVED, DELIBERATELY" section for what it caught, what its
-	// removal costs (THREE detections — the collapsed scope, the disowned claim
-	// and the erased review; an earlier note here said TWO and was wrong, having
-	// credited the per-claim half with one shape when it covered two) and why the
-	// parent commit is the wrong place to look for evidence about the committer.
+	// removal costs (the COORDINATED change — a claim and the record approving it
+	// rewritten together, which leaves nothing behind to disagree; earlier notes
+	// here put a NUMBER on that cost and every number went stale, so the cost is
+	// now stated as the principle it follows from) and why the parent commit is
+	// the wrong place to look for evidence about the committer.
 	// Every field above is answerable from ONE tree, which is what makes this
 	// value mean the same thing on the worktree path and on the index path.
 }

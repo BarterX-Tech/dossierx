@@ -109,9 +109,9 @@ const (
 	// a claim's approval — unlock — KEEPS the record and stamps ReleasedAt on it.
 	// So a record that is absent rather than released was deleted by hand.
 	//
-	// WHAT IT DOES NOT CLOSE, AND THIS BUILD DOES NOT DETECT IT AT ALL — the
-	// DISOWNED CLAIM, shape 2 of the three named in "THE BOUNDARY OF THIS GATE"
-	// below. An attacker who deletes the locked_at entry and the dependency
+	// WHAT IT DOES NOT CLOSE, AND THIS BUILD DOES NOT DETECT IT AT ALL — one
+	// instance of the principle in "THE BOUNDARY OF THIS GATE" below, at this
+	// rule's own target. An attacker who deletes the locked_at entry and the dependency
 	// baselines in the SAME edit as the record leaves nothing behind for this rule
 	// to read: engineLocked's two keys are exactly the two that went. Verified
 	// against this build: delete ledger[id], locked_at[id] and hashes[id] in one
@@ -239,9 +239,9 @@ const (
 	// no entry beside them has exactly two explanations — the entry was removed, or
 	// the threads were never written by the engine — and both are the finding.
 	//
-	// THE ONE THING IT CANNOT SEE, AND NOTHING IN THIS BUILD SEES IT EITHER — the
-	// ERASED REVIEW, shape 3 of the three named in "THE BOUNDARY OF THIS GATE"
-	// below. The predicate is the threads, so ERASING THE THREADS TOO takes the
+	// THE ONE THING IT CANNOT SEE, AND NOTHING IN THIS BUILD SEES IT EITHER — one
+	// instance of the principle in "THE BOUNDARY OF THIS GATE" below, at this
+	// rule's own target. The predicate is the threads, so ERASING THE THREADS TOO takes the
 	// claim out of this rule's own evidence set. Erasing the block ALONE is not
 	// silent — the surviving entry recorded threads, the claim now hashes to the
 	// empty digest, and comment-ledger-drift fires (verified). Dropping the key
@@ -296,62 +296,63 @@ const (
 )
 
 // ---------------------------------------------------------------------
-// THE BOUNDARY OF THIS GATE: THREE SHAPES IT DOES NOT DETECT
+// THE BOUNDARY OF THIS GATE
 // ---------------------------------------------------------------------
 //
-// Stated once, here, because two of the three are also described where the rule
-// they defeat is defined, and a reader who meets only one of those passages will
-// under-count the boundary. There are THREE, not one and not two. An earlier
-// statement of this cost said "exactly one detection"; that was measured against
-// the scope comparison alone and did not account for the per-claim half, which
-// independently covered two more.
+// AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE IT.
 //
-// All three are the same move at different targets: in ONE coordinated change,
-// erase a claim's EVIDENCE together with whatever was left to judge it against —
-// so that no surviving file in the tree can name the disagreement. Each is a
-// CONJUNCTION: either sabotage alone is still a refusal from this one tree, which
-// is why the rules above are still worth having. And each is loud in a diff,
-// which is where they are caught.
+// That sentence is the boundary, and it is stated as a principle because the
+// alternative was tried and failed. Earlier revisions of this comment ENUMERATED
+// the arrangements this gate does not detect. The count went one, then two, then
+// three, then "at least six" — it went stale every time somebody looked harder —
+// and two of the enumerated entries were, on inspection, simply false. A list
+// that keeps growing and is sometimes wrong is worse than no list, because the
+// next reader believes it is complete. So: no list, and no number.
 //
-//  1. SCOPE COLLAPSE. claims_dir repointed AND the lock ledger removed in the
-//     same change: nothing is left in scope to judge, so every rule here runs
-//     perfectly over an empty registry. Repoint only and the standing records
-//     have no claims left to cover, which is lock-ledger-abandoned; delete the
-//     ledger only and the locked claims have no records, which is
-//     lock-ledger-absent.
-//  2. DISOWNED CLAIM. ledger[id], locked_at[id] and (when non-empty) hashes[id]
-//     deleted for one claim, `status: locked` flipped to draft, the body
-//     rewritten. Cheaper than 1 — no claims_dir edit, no store deleted — and
-//     invisible because engineLocked's evidence is exactly what was deleted. A
-//     variant moves the claim file out of scope instead of flipping its status.
-//     See RuleLockLedgerDeleted.
-//  3. ERASED REVIEW. A human's open comment thread deleted from a DRAFT claim
-//     together with that claim's key in the comment digest store, in the same
-//     change, and the claim then locked over a review nobody had. See
-//     RuleCommentDigestUnrecorded.
+// WHAT THE PRINCIPLE MEANS HERE. The claim files, the lock store, the digest
+// store and the build-order artifacts are this gate's entire evidence base, and
+// every one of them is a tracked file in the tree the committer is editing. The
+// line therefore falls between UNCOORDINATED and COORDINATED change:
 //
-// WHY THERE IS NO RULE FOR THEM. All three were once covered by comparing the
-// commit under judgement against its PARENT — `check --staged`'s history half and
-// this file's AuditAgainstParent. That machinery was REMOVED, deliberately, and
-// must not be re-added: the parent commit is outside the COMMIT but not outside
-// the COMMITTER, so `git checkout --orphan`, a second config file or a rebase all
-// move the other side of the comparison, and it could not tell a legitimate
-// `git revert` of a lock commit from an erasure — so it refused ordinary git
-// work. internal/check/staged.go carries the full tombstone.
+//   - UNCOORDINATED — one file edited, one record removed, one status flipped,
+//     one thread erased. The files that were NOT touched disagree with the one
+//     that was, and the disagreement is the finding. Every rule above is one of
+//     those, and that is what a drifting agent, a careless hand-edit and a bad
+//     merge all produce.
+//   - COORDINATED — a claim and the record approving it written TOGETHER, by
+//     someone entitled to write both. Nothing is left over to disagree, so Audit
+//     returns [] and is right to: there is no evidence in the tree that anything
+//     is wrong.
 //
-// And there is no cheap single-tree replacement, which is worth saying plainly so
-// nobody spends a day looking for one: "no claims in scope and no ledger" is also
-// exactly what a brand-new project looks like, and "a draft with no threads and
-// no digest entry" is exactly what most drafts look like. A rule that refused
-// either shape would refuse every project's first commit, or every uncommented
+// The per-rule paragraphs above each say where their own rule's evidence runs
+// out (see RuleLockLedgerDeleted and RuleCommentDigestUnrecorded). Read those as
+// instances of this principle, not as an inventory of it.
+//
+// WHY THERE IS NO RULE FOR IT. The coordinated case was once partly covered by
+// comparing the commit under judgement against its PARENT — `check --staged`'s
+// history half and this file's AuditAgainstParent. That machinery was REMOVED,
+// deliberately, and must not be re-added: the parent commit is outside the
+// COMMIT but not outside the COMMITTER, so `git checkout --orphan`, a second
+// config file or a rebase all move the other side of the comparison, and it
+// could not tell a legitimate `git revert` of a lock commit from an erasure — so
+// it refused ordinary git work. internal/check/staged.go carries the full
+// tombstone.
+//
+// And there is no cheap single-tree replacement, which is worth saying plainly
+// so nobody spends a day looking for one: "no claims in scope and no ledger" is
+// also exactly what a brand-new project looks like, and "a draft with no threads
+// and no digest entry" is exactly what most drafts look like. A rule that
+// refused those would refuse every project's first commit and every uncommented
 // draft — the outage this gate exists to avoid.
 //
 // THE ACCEPTED MODEL, therefore: DOSSIERX DETECTS, THE FORGE ENFORCES. Branch
 // protection, a required CI check running this gate, and human review are what
-// stand between a repository and a coordinated multi-file erasure. Closing these
-// three inside the tool needs evidence outside the committer as well as outside
-// the commit — a signature, or a server-side record — not another read of the
-// same person's git history.
+// stand between a repository and a coordinated change. Moving the boundary
+// rather than working around it needs evidence outside the COMMITTER as well as
+// outside the commit — a signature, or a server-side record — not another read
+// of the same person's git history. FORMAT.md's "What the gate detects, what it
+// does not, and where the rest is caught" is the canonical statement, with one
+// worked example and an explicit note that it is an example rather than a list.
 
 // Finding is one ledger-gate disagreement. There is no severity field: unlike a
 // lint, every finding here is a refusal. A gate that reported advisory

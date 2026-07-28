@@ -185,6 +185,14 @@ Everywhere else the recovery is never "re-lock it so the hashes match" — that 
 Restore from version control, or go unlock → fix → lock. CI is the authority; the hook is only
 fast feedback.
 
+**And know what a clean `check` does and does not prove.** It proves nothing was changed *out of
+step*: the untouched files still agree with the touched one. It cannot prove a claim and its ledger
+record were not rewritten **together** — an in-repo ledger cannot attest anything against the person
+who can write it, and a re-lock mints a record whose hash is correctly that of the new content, while
+`reason`, `at` and `actor` are prose nothing checks. So never report `ok: true` as "nobody tampered",
+and never propose an edit that touches a locked claim and its record in the same breath. FORMAT.md
+states the principle; the diff and a required CI check are where it is caught.
+
 **Three project-root files are tracked, committed artifacts**, beside `project.config.yaml` and
 never `.gitignore`d: `.dossierx-lock-store.json` (the ledger; missing → `lock-ledger-absent`),
 `.dossierx-comment-digest.json` (review history's fingerprint; missing → `comment-digest-absent`),

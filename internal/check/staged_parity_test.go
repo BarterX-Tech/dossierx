@@ -218,8 +218,43 @@ func TestStaged_AgreesWithValidateOnAMatrixOfTamperedTrees(t *testing.T) {
 			wantRule: lock.RuleLockLedgerAbandoned,
 		},
 		{
-			// SHAPE 1, the collapsed scope: both halves in one change. It is a
-			// known, deliberate gap (see staged_no_parent_test.go) and both
+			// A SYMLINK under claims_dir (git mode 120000). Both modes must
+			// ACCEPT it, and the row is here because --staged did not merely
+			// disagree — it ABORTED, with the unclassified `internal` code, so
+			// the pre-commit hook refused every commit in the repository while
+			// --validate read the link and found an ordinary claim. The link
+			// points at a DRAFT, which is the honest version of this layout and
+			// the one that keeps the two modes genuinely comparable: drafts are
+			// free, so no ledger record covers the file either way. The
+			// displacement case — a symlink standing where a LOCKED claim was —
+			// is the deliberate disagreement pinned in
+			// staged_nonregular_test.go, for the same reason as the
+			// claims-outside-the-repository test at the bottom of this file.
+			name: "a symlink under claims_dir",
+			tamper: func(t *testing.T, cfg *config.Config) *config.Config {
+				writeFixtureFile(t, filepath.Join(filepath.Dir(cfg.Dir()), "outside-claims", "extra.yaml"), draftClaim("widget.contract.extra"))
+				symlinkOrSkip(t, filepath.Join("..", "..", "outside-claims", "extra.yaml"), filepath.Join(cfg.ClaimsDir, "extra.yaml"))
+				return cfg
+			},
+		},
+		{
+			// A SUBMODULE GITLINK under claims_dir (git mode 160000). Same
+			// shape, other mode: the oid is a commit in ANOTHER repository and
+			// is not in this one's object store, so `cat-file --batch` answered
+			// "missing" and the run died. The vendored repository holds no
+			// claim, so there is nothing here for either mode to judge and both
+			// must simply carry on.
+			name: "a submodule gitlink under claims_dir",
+			tamper: func(t *testing.T, cfg *config.Config) *config.Config {
+				nestedRepo(t, filepath.Join(cfg.ClaimsDir, "vendored"), map[string]string{
+					"NOTES.md": "another repository entirely\n",
+				})
+				return cfg
+			},
+		},
+		{
+			// The collapsed scope: both halves in one change. It is a
+			// known, deliberate boundary case (see staged_no_parent_test.go) and both
 			// modes must be equally silent about it — a gap the two modes
 			// disagreed about would be a defect on top of the gap.
 			name: "claims_dir repointed OUTSIDE the work tree AND the ledger deleted",

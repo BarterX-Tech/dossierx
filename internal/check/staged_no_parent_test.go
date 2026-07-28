@@ -11,24 +11,25 @@
 //     unrelated one. Both were refused by the comparison, and neither is anything
 //     but ordinary git work.
 //
-//   - WHAT STILL HOLDS FROM ONE TREE. Either half of each shape below is still
-//     refused on its own, because the pieces defend each other: repoint claims_dir
-//     and the standing approvals have no claims left to cover
+//   - WHAT STILL HOLDS FROM ONE TREE. Either half of each coordinated change
+//     below is still refused on its own, because the pieces defend each other:
+//     repoint claims_dir and the standing approvals have no claims left to cover
 //     (lock-ledger-abandoned); delete the ledger and the locked claims have no
-//     approvals (lock-ledger-absent); and so on for the other two.
+//     approvals (lock-ledger-absent); and likewise for every other half-tamper
+//     asserted here.
 //
 //   - WHAT WAS GIVEN UP, written down as passing tests rather than left as
-//     folklore. There are THREE such shapes. This file has said ONE in one round
-//     and TWO in another, and both were under-counts; the three are SHAPE 1, the
-//     collapsed scope (both halves of the scope collapse in one change); SHAPE 2,
-//     the disowned claim (one claim's ledger record, locked_at stamp and
-//     baselines deleted, its status flipped to draft and its body rewritten, in
-//     one change); and SHAPE 3, the erased review (a DRAFT claim's `comments:`
-//     block and its digest entry deleted in one change). All three are here so a
-//     reader who finds them does not conclude the gate is broken and re-add a
-//     comparison against history the committer writes — read staged.go first.
-//     internal/lock/audit_boundary_test.go pins 2 and 3 again at the rules' own
-//     level; these are the end-to-end `check --staged` half.
+//     folklore. The cases below are INSTANCES OF ONE PRINCIPLE, not an inventory:
+//     an in-repo ledger cannot attest anything against the person who can write
+//     it, so a change that rewrites a claim AND the record approving it, together,
+//     leaves nothing behind to disagree. Earlier versions of this comment counted
+//     the instances — one, then two, then three — and every count went stale; do
+//     not add a new one. Adding another instance here is welcome, concluding from
+//     the set that it is complete is not. They are here so a reader who finds one
+//     does not conclude the gate is broken and re-add a comparison against history
+//     the committer writes — read staged.go first.
+//     internal/lock/audit_boundary_test.go pins the same principle again at the
+//     rules' own level; these are the end-to-end `check --staged` half.
 package check_test
 
 import (
@@ -333,9 +334,8 @@ func TestStaged_NewProjectIsNotAuditedAgainstARetiredOnesLedger(t *testing.T) {
 //
 // The lock ledger and claims_dir defend each other: each one's records are the
 // other's alibi, so removing one leaves the other testifying. Only removing both
-// at once gets past both rules — that is SHAPE 1 of the three detections this
-// package gave up (see the test after this one; shapes 2 and 3, the disowned
-// claim and the erased review, are further down).
+// at once gets past both rules — see the COLLAPSED SCOPE test immediately after
+// this one, and the other coordinated cases further down.
 func TestStaged_EitherSabotageAloneIsStillRefused(t *testing.T) {
 	t.Run("claims_dir repointed, ledger left in place", func(t *testing.T) {
 		cfg := singleTreeFixture(t)
@@ -362,8 +362,8 @@ func TestStaged_EitherSabotageAloneIsStillRefused(t *testing.T) {
 	})
 }
 
-// SHAPE 1 — THE COLLAPSED SCOPE, the first of the THREE detections that left
-// with the parent comparison, written down as a PASSING test on purpose.
+// THE COLLAPSED SCOPE — one coordinated change the parent comparison used to
+// refuse, written down as a PASSING test on purpose.
 //
 // Repointing claims_dir AND removing the lock ledger in the SAME change empties
 // the registry and removes the records at once, so neither rule above has an
@@ -371,15 +371,15 @@ func TestStaged_EitherSabotageAloneIsStillRefused(t *testing.T) {
 // counts locked claims that are out of scope. From this one tree the result is
 // indistinguishable from a brand-new project — zero claims, no ledger — which is
 // precisely why there is no cheap single-tree rule to put here. A rule that
-// refused this shape would refuse every project's first commit.
+// refused this arrangement would refuse every project's first commit.
 //
 // IF YOU ARE READING THIS BECAUSE THE TEST FAILED, something re-introduced a
-// detection for this shape. That is not automatically wrong — but read staged.go's
+// detection for this arrangement. That is not automatically wrong — but read staged.go's
 // "REMOVED, DELIBERATELY" section first, and make sure whatever you added is not
 // another comparison against history the committer is free to rewrite, and does
 // not refuse a `git revert` or a new project in a monorepo. Then delete this
 // test and pin the new rule instead.
-func TestStaged_Shape1CollapsedScopeIsUndetected(t *testing.T) {
+func TestStaged_CollapsedScopeIsUndetected(t *testing.T) {
 	cfg := singleTreeFixture(t)
 	collapsed := repointClaimsDir(t, cfg, "archive")
 	git(t, cfg.Dir(), "rm", "-q", ".dossierx-lock-store.json")
@@ -387,7 +387,7 @@ func TestStaged_Shape1CollapsedScopeIsUndetected(t *testing.T) {
 
 	rules, _ := stagedRulesFor(t, collapsed)
 	if len(rules) != 0 {
-		t.Fatalf("this shape is a KNOWN, DELIBERATE gap and this test records it; something now refuses it: %v", rules)
+		t.Fatalf("this is a KNOWN, DELIBERATE boundary case and this test records it; something now refuses it: %v", rules)
 	}
 }
 
@@ -397,8 +397,8 @@ func TestStaged_Shape1CollapsedScopeIsUndetected(t *testing.T) {
 // The claim's own `status:` and the ledger's record are each other's alibi:
 // leave the status locked and a deleted record is lock-ledger-missing; leave the
 // record standing and a claim flipped to draft is lock-ledger-orphan. It takes
-// both, in one change, to leave neither rule an input — which is why shape 2 is
-// a conjunction and not a soft spot, and why deleting this pair of assertions
+// both, in one change, to leave neither rule an input — which is why the disowned
+// claim is a conjunction and not a soft spot, and why deleting this pair of assertions
 // would let the gap test below pass by testing nothing.
 func TestStaged_EitherHalfOfTheDisownedClaimIsStillRefused(t *testing.T) {
 	t.Run("ledger record dropped, the claim left locked", func(t *testing.T) {
@@ -447,16 +447,16 @@ func dropLedgerRecord(t *testing.T, cfg *config.Config, id string) {
 	}
 }
 
-// SHAPE 2 — THE DISOWNED CLAIM, the second of the THREE detections that left
+// THE DISOWNED CLAIM — another coordinated change that left
 // with the parent comparison, and the one the round that measured "TWO" missed.
 //
-// THE SHAPE, in ONE change, on ONE claim:
+// THE CHANGE, in ONE step, on ONE claim:
 //
 //	delete ledger[id], locked_at[id] and hashes[id] from the lock store
 //	flip `status: locked` to `status: draft` in the claim
 //	rewrite the body
 //
-// It is CHEAPER than shape 1 in every dimension a reviewer scans: no claims_dir
+// It is CHEAPER than the collapsed scope in every dimension a reviewer scans: no claims_dir
 // edit, no store deleted, no second directory — one claim's worth of diff and a
 // few keys out of a JSON file. And it is invisible from this tree because every
 // rule that could speak reads evidence the same change removed: lock-ledger-
@@ -471,11 +471,11 @@ func dropLedgerRecord(t *testing.T, cfg *config.Config, id string) {
 // A VARIANT moves the claim file out of the registry's scope instead of flipping
 // its status; it is the same erasure with the same evidence removed.
 //
-// IF YOU ARE READING THIS BECAUSE THE TEST FAILED, see the note on the shape 1
+// IF YOU ARE READING THIS BECAUSE THE TEST FAILED, see the note on the collapsed-scope
 // test above: read staged.go's "REMOVED, DELIBERATELY" section before concluding
 // that re-adding a parent comparison is the fix, then delete this test and pin
 // the new rule instead.
-func TestStaged_Shape2DisownedClaimIsUndetected(t *testing.T) {
+func TestStaged_DisownedClaimIsUndetected(t *testing.T) {
 	cfg := singleTreeFixture(t)
 
 	dropLedgerRecord(t, cfg, "widget.contract.locked")
@@ -488,7 +488,7 @@ func TestStaged_Shape2DisownedClaimIsUndetected(t *testing.T) {
 
 	rules, res := stagedRulesFor(t, cfg)
 	if len(rules) != 0 {
-		t.Fatalf("this shape is a KNOWN, DELIBERATE gap and this test records it; something now refuses it: %v\n%s",
+		t.Fatalf("this is a KNOWN, DELIBERATE boundary case and this test records it; something now refuses it: %v\n%s",
 			rules, joinedMessages(res.LedgerFindings))
 	}
 }
@@ -557,7 +557,7 @@ func erasedReviewFixture(t *testing.T) *config.Config {
 	return cfg
 }
 
-// SHAPE 3 — THE ERASED REVIEW, the third of the THREE detections that left with
+// THE ERASED REVIEW — another coordinated change that left with
 // the parent comparison.
 //
 // This one is NOT the scope collapse and NOT the disowned claim above, and it
@@ -566,7 +566,7 @@ func erasedReviewFixture(t *testing.T) *config.Config {
 // nobody has measured is folklore, and folklore is what gets a comparison
 // against rewritable history re-added.
 //
-// THE SHAPE, on a DRAFT claim in a ledger-covered project, in ONE change:
+// THE CHANGE, on a DRAFT claim in a ledger-covered project, in ONE step:
 //
 //	delete the `comments:` block from the claim YAML
 //	delete that claim's key from the digest store's "digests" map
@@ -599,7 +599,7 @@ func erasedReviewFixture(t *testing.T) *config.Config {
 // above: read staged.go's "REMOVED, DELIBERATELY" section before concluding that
 // re-adding a parent comparison is the fix, then delete this test and pin the new
 // rule instead.
-func TestStaged_Shape3ErasedReviewIsUndetected(t *testing.T) {
+func TestStaged_ErasedReviewIsUndetected(t *testing.T) {
 	cfg := erasedReviewFixture(t)
 	before, err := digest.LoadStore(digest.StorePath(cfg))
 	if err != nil {
@@ -615,7 +615,7 @@ func TestStaged_Shape3ErasedReviewIsUndetected(t *testing.T) {
 
 	rules, res := stagedRulesFor(t, cfg)
 	if len(rules) != 0 {
-		t.Fatalf("this shape is a KNOWN, DELIBERATE gap and this test records it; something now refuses it: %v\n%s",
+		t.Fatalf("this is a KNOWN, DELIBERATE boundary case and this test records it; something now refuses it: %v\n%s",
 			rules, joinedMessages(res.LedgerFindings))
 	}
 }

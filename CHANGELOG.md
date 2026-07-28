@@ -102,9 +102,9 @@ checkout is a complete tree and one tree is the whole evidence base. The second 
 step is gone from CI too — on a fresh checkout the index, the worktree and `HEAD` are three names
 for one tree, so it re-ran the same rules over the same bytes. `--staged` itself is **not**
 deprecated; its home is the pre-commit hook, where the index and the worktree genuinely differ.
-The diagnosis behind the removed rules was right — a
-change that repoints `claims_dir` *and* deletes the ledger leaves nothing in scope to judge, so the
-gate reports `ok: true` — but the fix was in the wrong layer. The parent commit is outside the
+The diagnosis behind the removed rules was right — a change that takes a claim's
+evidence together with whatever was left to judge it against leaves the gate nothing to disagree
+with, so it reports `ok: true` — but the fix was in the wrong layer. The parent commit is outside the
 *commit* and not outside the *committer*: git history is written by exactly the party the gate
 constrains, so `--orphan`, a rebase or a second config file switched the comparison off without
 looking unusual in a log, and every other in-repo source of that evidence has the same property.
@@ -116,57 +116,40 @@ removes that lock's records, byte-identical to erasing them) and, because git do
 refused with findings naming another project's claim ids. A control that a rebase disables and a
 revert trips is not a control, so it was removed rather than patched.
 
-**What this costs, stated exactly.** Removing it loses **three** detections — not one, and not two.
-Two earlier statements of this cost in this branch were wrong and are corrected here: "exactly one
-detection" counted only the scope comparison, and the revision to "two" still missed
-`lock.AuditAgainstParent`, the per-claim half that read the parent's stores. The true number is
-three. All three are changes that erase *every side* of a disagreement at once so that no surviving
-evidence can name it, and each is a conjunction: every half alone is still caught from state.
+**What this costs, and the boundary it leaves.** Removing the comparison gives up the detections
+that needed a second tree: those where one change writes a claim's evidence **and** whatever was
+left to judge it against, so that the single-tree gate has nothing surviving to disagree with.
+Earlier revisions of this entry tried to count those cases and publish the list. The count rose
+every time someone looked harder, and two of the published statements turned out to be false, so
+the list is gone and the boundary is stated as what it always was:
 
-1. **The collapsed scope** — `claims_dir` repointed **and** the lock ledger removed **in the same
-   change**. Repoint only gives `lock-ledger-abandoned` (once per locked claim whose standing record
-   now names a claim the project cannot see); deleting the ledger only gives project-scoped
-   `lock-ledger-absent` plus `lock-ledger-missing` per claim.
-2. **The disowned claim** — one claim's `ledger` record, its `locked_at` stamp **and** its `hashes`
-   baselines deleted from the lock store, its YAML flipped `locked` → `draft`, and its body
-   rewritten, **in the same change**. It is the **cheapest of the three**: no `claims_dir` edit, no
-   store deleted, no other claim touched — three keys out of one JSON file and one word in one YAML
-   file, after which the claim is a freely editable draft that re-locks with an agent-supplied
-   `--reason` reading exactly like a human's approval. The parent comparison reported it as
-   `lock-ledger-deleted`. Single-tree, that rule still fires whenever `locked_at` or a baseline
-   survives the deletion; leaving `status: locked` instead gives `lock-ledger-missing`; leaving the
-   record standing while flipping to draft gives `lock-ledger-orphan`; and the variant that moves
-   the claim file out of `claims_dir` rather than flipping its status gives `lock-ledger-abandoned`
-   unless the same three keys go with it. `claim lock` refuses it on the **write** path too, on the
-   same surviving evidence.
-3. **The erased review** — a **draft** claim's `comments:` block deleted **and** that claim's key
-   dropped from the digest store **in the same change**. Erasing the block only gives
-   `comment-ledger-drift`; dropping the key only gives `comment-digest-unrecorded`. This one is
-   sharper than its size suggests: an open thread is exactly what blocks `claim lock`
-   (`unresolved_comments`), so the erasure buys the lock, and the claim then locks cleanly over a
-   review that was deleted. It is **confined to draft claims**, because `comment-digest-missing`
-   keys on a STANDING lock-ledger record with no digest entry: a locked claim has such a record and
-   is reported, a draft claim has none and is never asked. Measured on a locked claim: erasing the
-   block alone gives `comment-ledger-drift`, erasing it with its digest key gives
-   `comment-digest-missing`. `lock-content-drift` is NOT involved — `comments:` is excluded from the
-   locked-claim hash by design (`internal/lock/lockedhash.go`), since `dossierx serve` writes
-   comments without write authority over the lock store.
+> **An in-repo ledger cannot attest anything against the person who can write it.**
 
-There is no cheap single-tree replacement for any of them, because each resulting tree is
-indistinguishable from an innocent one: "no claims in scope and no ledger" is exactly what a
-brand-new project looks like, "a draft with no record, no `locked_at` and no baselines" is exactly
-what every draft looks like on the day it is written, and "a draft with no threads and no digest
-entry" is exactly what most drafts look like. A gate that refuses every new project on its first
-day, every new draft on the day it is authored, or every uncommented draft, gets deleted. All three
-are caught where a control the committer cannot rewrite actually lives: **branch protection with a
-required CI check, plus review of a loud diff** — each of the three is a hand edit of a tracked JSON
-store whose whole purpose is to be read in a diff, sitting beside the claim change it was made to
-permit. **DossierX detects; the forge enforces.** None of the three is folklore: all three are pinned
-as passing tests in `internal/check/staged_no_parent_test.go`, with the same boundary pinned at the
-audit layer in `internal/lock/audit_boundary_test.go`, each beside its "either half alone is still
-refused" assertions.
-[FORMAT.md](FORMAT.md#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught) carries
-the full boundary, shape by shape.
+The gate catches every change that leaves a surviving file **disagreeing** with the one that moved,
+which is what drift and tampering usually look like: an agent editing a locked claim, a careless
+hand-edit, a bad merge, a status flipped by hand, a deleted approval record, an erased comment
+thread. Each leaves the files nobody touched disagreeing with the one that was, and that
+disagreement is a named finding. What has nothing to disagree with it is not caught — a record's
+`reason`, `at` and `actor` are testimony, not signature, and no rule compares them to anything. Nor
+is **coordinated** change — a claim and its ledger record rewritten together, in one commit, by
+someone entitled to write both. The sharpest form is not a deletion at all: unlock a locked claim, rewrite its body,
+re-lock it (minting a fresh record whose hash correctly covers the new content), then hand-edit
+that record's `reason`, `at` and `actor` back to the original approval's values. `check` and
+`check --staged` both report `ok: true`, over a ledger crediting a human who approved nothing. That
+is an illustration, not an inventory.
+
+No in-repo mechanism closes it, which is the general form of why the parent comparison failed: any
+evidence the tool consults lives in the repository, and the repository is writable by the person
+being gated. It is caught where a control the committer cannot rewrite actually lives — **branch
+protection with a required CI check, plus review of a diff in which such a change is loud**, since
+it is a hand edit of a tracked JSON store whose whole purpose is to be read in a diff, sitting
+beside the claim change it was made to permit. **DossierX detects; the forge enforces.** The
+boundary is pinned rather than asserted, in `internal/check/staged_no_parent_test.go` end to end
+and `internal/lock/audit_boundary_test.go` at the audit layer, each beside its "the uncoordinated
+half is still refused" assertions.
+[FORMAT.md](FORMAT.md#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught) states
+the principle in full, including the one direction that would move it: signing the ledger with a key
+held outside the repository.
 
 Everything else in the gate is untouched and still single-tree: `lock-content-drift`,
 `lock-ledger-missing`, `lock-ledger-deleted`, `lock-ledger-released`, `lock-ledger-orphan`,

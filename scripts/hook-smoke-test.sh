@@ -880,28 +880,24 @@ grep -q 'lock-ledger-abandoned' "$TMP/abandoned-validate.out" &&
 # asserting the acceptance would pin the hole open and fail the day somebody
 # closes it properly, and asserting the refusal would fail today.
 #
-# THE COST IS THREE DETECTIONS, NOT ONE AND NOT TWO. The scope collapse below is
-# only the first of them; both smaller numbers were stated in this branch before
-# the per-claim half of the removed comparison (lock.AuditAgainstParent) was
-# accounted for. The other two are:
+# WHAT THE COST ACTUALLY IS, stated as the principle rather than as a count.
+# Earlier revisions of this comment put a number on it — one, then two, then
+# three — and the number went stale every time somebody looked harder, so it is
+# gone. An IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN
+# WRITE IT: the claim files, the lock store and the digest store are all tracked
+# files in the tree being committed, so a change that rewrites a claim AND the
+# record that approves it, together, leaves nothing behind to disagree. The
+# scope collapse above is one arrangement of that; it is not a list.
 #
-#	· THE DISOWNED CLAIM, and it is the CHEAPEST of the three: one claim's
-#	  ledger record, its locked_at stamp and its hashes baselines deleted from
-#	  the lock store, its YAML flipped locked -> draft and its body rewritten,
-#	  all in one change. No claims_dir edit, no store deleted.
-#	· THE ERASED REVIEW: a DRAFT claim's comments: block deleted together with
-#	  that claim's key in the digest store.
-#
-# Both are pinned, with their own half-tamper assertions, in
+# The boundary is stated in full in FORMAT.md, "What the gate detects, what it
+# does not, and where the rest is caught", and pinned in Go — in
 # internal/check/staged_no_parent_test.go and internal/lock/audit_boundary_test.go
-# — in Go rather than here, because they need a lock store edited key by key, or
-# a comment thread and a digest store, rather than a hook. FORMAT.md's
-# "What the gate detects, what it does not, and where the rest is caught" is the
-# canonical statement of all three.
+# rather than here, because those cases need a lock store edited key by key, or
+# a comment thread and a digest store, rather than a hook.
 #
-# WHAT IS ASSERTED HERE IS WHY THE SCOPE COLLAPSE IS ONE DETECTION AND NOT
-# SEVERAL. Neither half of the tamper works on its own, because the ledger and
-# the claims defend each other inside a SINGLE tree, with no history involved:
+# WHAT IS ASSERTED HERE IS THAT EACH HALF STILL REFUSES ON ITS OWN. Neither half
+# of the tamper works alone, because the ledger and the claims defend each other
+# inside a SINGLE tree, with no history involved:
 #
 #	20a  delete the ledger, leave claims_dir alone -> locked claims with no
 #	     approval record anywhere            -> lock-ledger-absent
@@ -909,8 +905,8 @@ grep -q 'lock-ledger-abandoned' "$TMP/abandoned-validate.out" &&
 #	     alone                                       claims nothing can see
 #	                                              -> lock-ledger-abandoned
 #
-# If either of these ever stops refusing, the scope collapse has cost more than
-# the one detection charged to it, and this case is the thing that says so.
+# If either of these ever stops refusing, the removal cost more than the
+# coordinated case it was accepted for, and this case is the thing that says so.
 echo "hook-smoke-test: refusing a deleted lock ledger (single tree) ..."
 LEDGERRM="$TMP/scope-ledger-rm"
 new_project "$LEDGERRM"
@@ -983,4 +979,4 @@ if (cd "$MOVE" && git commit -qm "docs: tweak") >"$TMP/scope-move-tamper.out" 2>
 	fail "after a sanctioned claims_dir move the gate stopped catching a hand-edited locked claim: $(cat "$TMP/scope-move-tamper.out")"
 fi
 
-echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it. Doing BOTH of those in one change is one of the THREE detections this release knowingly gave up with the parent-commit comparison; see case 20, and internal/check/staged_no_parent_test.go for the other two — the erased review (a draft claim's comments block erased together with its digest-store key) and the cheapest of the three, the disowned claim (one claim's ledger record, locked_at stamp and hashes baselines deleted together, status flipped locked -> draft, body rewritten). FORMAT.md states all three."
+echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it. Doing BOTH of those halves in ONE change is not refused, and that is the boundary rather than a bug: an in-repo ledger cannot attest anything against the person who can write it, so a change that rewrites a claim and the record approving it together leaves nothing behind to disagree. FORMAT.md states the boundary in full; internal/check/staged_no_parent_test.go and internal/lock/audit_boundary_test.go pin it."

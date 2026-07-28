@@ -162,14 +162,14 @@ tree**: no git history, no parent comparison, same verdict in every clone.
 branch protection plus a required CI check is what makes anyone obey it, and is the answer when a
 human asks you to set integrity up.
 
-**The three things it does not detect**, so you never report them as safe (FORMAT.md has all three). Each
-erases *every side* of a disagreement at once, so `check` returns `ok: true`; each half alone is refused.
-(1) Repoint `claims_dir:` **and** delete the lock store — alone, `lock-ledger-abandoned` / `lock-ledger-absent`.
-(2) The cheapest — delete one claim's `ledger` record, `locked_at` stamp **and** `hashes` baselines, flip it
-to `draft`, rewrite the body; alone, a surviving key gives `lock-ledger-deleted`, still `locked` gives
-`lock-ledger-missing`, a standing record `lock-ledger-orphan`. (3) Delete a **draft** claim's `comments:`
-block **and** its digest-store key — alone, `comment-ledger-drift` / `comment-digest-unrecorded`; it erases
-the thread blocking `claim lock`, so the claim locks over a review nobody had. **Never propose any of these.**
+**The boundary: an in-repo ledger cannot attest anything against the person who can write it.** The
+gate catches every change that leaves a surviving file *disagreeing* — one claim edited, one record deleted,
+one status flipped, one thread erased. It cannot catch what nothing disagrees with: a record's `reason`, `at`
+and `actor` are prose no rule checks, and a claim and its record written **together** in one commit leave
+nothing over to object. So: unlock, rewrite, re-lock (a fresh, correct record), then hand-edit that record's
+`reason`, `at` and `actor` back to the original approval's values, and `check` and `check --staged` both
+return `ok: true` over a ledger crediting a human who approved nothing. An illustration, not a list. **Never
+propose editing a locked claim and its record in the same breath; never report `ok: true` as proof nobody did.**
 
 **Moving `claims_dir` needs no ceremony and no flag exempts it.** `git mv claims docs/claims`, edit
 `claims_dir:`, stage claims, config and the unchanged stores, commit together — it passes because every

@@ -92,84 +92,50 @@
 //     — and projC was refused with findings naming projB's ledger and projB's
 //     claims.
 //
-// WHAT THIS COSTS, exactly, measured against the binary that had it: THREE
-// detections — not one, and not two. Both earlier statements of this cost were
-// under-counts, and they are recorded here because the same mistake is easy to
-// make twice. The FIRST said ONE, measured against the scope comparison
-// (stagedScope) alone. The SECOND said TWO, adding the erased review but still
-// crediting the per-claim half — lock.AuditAgainstParent, which read the
-// PARENT's two stores — with only one shape; it independently covered the
-// disowned claim as well. Understating the boundary is worse than the boundary:
-// a gap nobody has measured is folklore, and folklore is what gets a comparison
-// against rewritable history re-added.
+// WHAT THIS COSTS, and it is stated as a PRINCIPLE rather than as a count
+// because counting was tried and failed. Three successive revisions of this
+// comment put a number on the cost — one, then two, then three — and each was an
+// under-count discovered by the next person to look; a later round pushed it to
+// "at least six", and two of the enumerated entries turned out to be false. The
+// number is gone. What replaces it:
 //
-// All three are ONE MOVE AT THREE TARGETS — erase a claim's EVIDENCE together
-// with whatever was left to judge it against, in a single coordinated change, so
-// that no surviving file in the tree can name the disagreement. All three are
-// CONJUNCTIONS: either sabotage alone is still refused from this one tree, which
-// is what makes the surviving rules worth having. And all three are loud in a
-// diff, which is where the forge catches them.
+//	AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE IT.
 //
-//  1. SCOPE COLLAPSE. claims_dir repointed AND the lock ledger removed IN THE
-//     SAME CHANGE now passes: nothing is left in scope to judge, so every rule
-//     runs perfectly over an empty registry. Repoint only and the standing
-//     records have no claims left to cover, which is lock-ledger-abandoned;
-//     delete the ledger only and the locked claims have no records, which is
-//     lock-ledger-absent.
-//  2. DISOWNED CLAIM. For ONE claim, in the same change: delete ledger[id] and
-//     locked_at[id] (and hashes[id] when non-empty), flip `status: locked` to
-//     draft, and rewrite the body. It is CHEAPER than 1 — no claims_dir edit, no
-//     store deleted, one claim's worth of diff — and it is invisible because the
-//     evidence that says "this claim was locked by the engine" is exactly what
-//     was deleted alongside the record. A variant moves the claim file out of
-//     scope instead of flipping its status. Either half alone is still refused,
-//     and the three near-misses are worth naming separately, because they are
-//     three DIFFERENT rules and an earlier condensed spelling of this bullet
-//     ("drop the record only ... which is lock-ledger-missing") was read two
-//     ways by two readers. Measured against a binary built from this tree:
-//     dropping ledger[id] ALONE, with locked_at and the baselines surviving, is
-//     lock-ledger-deleted, because the survivors prove this engine locked it;
-//     dropping ALL THREE keys but leaving `status: locked` is
-//     lock-ledger-missing, a locked claim with no approval at all; flipping the
-//     status ALONE, with the record surviving, is lock-ledger-orphan, a standing
-//     record covering a draft. Only the FULL conjunction — all three keys gone
-//     AND the status flipped AND the body rewritten — is silent. See
-//     lock.RuleLockLedgerDeleted.
-//  3. ERASED REVIEW. A DRAFT claim's `comments:` block deleted AND that claim's
-//     key dropped from the digest store IN THE SAME CHANGE now passes, after
-//     which the claim locks over a review nobody had. Erase the block only and
-//     the recorded digest still describes threads the claim no longer has, which
-//     is comment-ledger-drift; drop the key only and the threads have no entry
-//     beside them, which is comment-digest-unrecorded (whose predicate is the
-//     threads themselves — erasing them is exactly what takes the claim out of
-//     that rule's evidence set; see lock.RuleCommentDigestUnrecorded). This one
-//     is sharper than its size suggests: an OPEN thread on a draft is what BLOCKS
-//     `claim lock`, so the erasure buys the lock. It is confined to DRAFT claims
-//     because check.RuleCommentDigestMissing keys on a STANDING lock-ledger
-//     record with no digest entry: a locked claim has one, so the same edit is
-//     caught there as comment-digest-missing; a draft claim has none, so the
-//     rule is never asked. NOT lock-content-drift — `comments` is excluded from
-//     the locked-claim hash by lock.lockedClaimHashExcluded (dossierx serve
-//     writes comments and has no write authority over the lock store), so no
-//     comments edit on any claim can produce that rule.
+// Everything this gate reads — the claim files, the lock store, the digest
+// store, the build-order artifacts — is a tracked file in the tree the committer
+// is editing. So the line falls between UNCOORDINATED and COORDINATED change,
+// not between clumsy and clever:
 //
-// All three are pinned as PASSING tests in staged_no_parent_test.go, beside the
-// "either half alone is still refused" assertions that keep them honest, and
-// internal/lock/audit_boundary_test.go pins 2 and 3 again from the rules' side.
-// internal/lock/audit.go states the same boundary in the same three terms; the
-// two passages must be corrected together or the next reader will meet only one
-// of them and under-count again.
+//   - UNCOORDINATED: one file edited, one record removed, one status flipped,
+//     one thread erased. The files that were NOT touched disagree with the one
+//     that was, and the disagreement is the finding. Every surviving rule is one
+//     of those, which is what makes them worth having — it is what a drifting
+//     agent, a careless hand-edit and a bad merge all produce.
+//   - COORDINATED: a claim and the record approving it written TOGETHER, by
+//     someone entitled to write both. Nothing is left to disagree, so the run is
+//     clean and it is right to be: there is no evidence in this tree that
+//     anything is wrong.
 //
-// AND THERE IS NO CHEAP SINGLE-TREE REPLACEMENT for any of them, which is worth
-// saying plainly so nobody spends a day looking for one: "zero claims in scope
-// and no ledger" is also exactly what a brand-new project looks like, "a draft
-// with no record and no baselines" is exactly what every honest draft looks
-// like, and "a draft with no threads and no digest entry" is exactly what most
-// drafts look like — so a rule that refused any of the three would refuse every
-// project's first commit, every draft, or every uncommented draft. The honest
-// closure for all three is evidence that is outside the committer as well as
-// outside the commit — a signature, or a server-side record — not another read
-// of the same person's git history.
+// DO NOT REPLACE THIS PARAGRAPH WITH A LIST. An enumeration of the coordinated
+// arrangements goes stale the moment somebody finds another one, and a stale
+// list is worse than no list because the next reader believes it is complete.
+// staged_no_parent_test.go pins several instances as PASSING tests, each beside
+// the "either half alone is still refused" assertions that keep it honest, and
+// internal/lock/audit_boundary_test.go pins the audit-layer side; read those as
+// examples of the principle, not as its inventory. internal/lock/audit.go states
+// the same boundary in the same terms, and FORMAT.md's "What the gate detects,
+// what it does not, and where the rest is caught" is the canonical version, with
+// one worked example (the re-signed approval) explicitly labelled an example.
+//
+// AND THERE IS NO CHEAP SINGLE-TREE REPLACEMENT, which is worth saying plainly
+// so nobody spends a day looking for one: "zero claims in scope and no ledger"
+// is also exactly what a brand-new project looks like, "a draft with no record
+// and no baselines" is exactly what every honest draft looks like, and "a draft
+// with no threads and no digest entry" is exactly what most drafts look like —
+// so a rule that refused those would refuse every project's first commit, every
+// draft, or every uncommented draft. The honest closure is evidence that is
+// outside the COMMITTER as well as outside the commit — a signature, or a
+// server-side record — not another read of the same person's git history.
 //
 // WHAT STAYED, and it is most of it: --staged still evaluates the GIT INDEX
 // rather than the worktree, still writes nothing, and still runs every
@@ -1002,15 +968,33 @@ func (g *gitRunner) lsFiles(spec string) ([]string, error) {
 	return splitZ(out), nil
 }
 
-// indexEntry is one stage-0 index entry: a repository-relative path and the OID
-// of the blob the commit will carry for it.
+// indexEntry is one stage-0 REGULAR-FILE index entry: a repository-relative
+// path and the OID of the blob the commit will carry for it. Symlinks and
+// submodule gitlinks are not entries — see indexEntries for why the oid of one
+// is not content this gate can read.
 type indexEntry struct {
 	oid  string
 	path string
 }
 
-// indexEntries lists the index's stage-0 entries under specs — or the whole
-// index when no spec is given, which is what indexHoldsJudgeableContent needs.
+// indexEntries lists the index's stage-0 REGULAR-FILE entries under specs — or
+// the whole index when no spec is given, which is what
+// indexHoldsJudgeableContent needs.
+//
+// Two of git's index entry fields are filters here rather than data, and both
+// filters mean the same thing: this path has no single blob of content the
+// commit will carry, so it is not in the registry. The stage filter drops
+// unmerged paths, the mode filter drops symlinks and submodule gitlinks; the
+// reasoning for each is at the point it is applied.
+//
+// BOTH FILTERS ALSO REACH indexHoldsJudgeableContent, the whole-index caller,
+// and that is safe in the one direction that matters. The narrowest effect is
+// that a lock ledger or digest store staged as a SYMLINK no longer counts as
+// judgeable content there, so an untracked config beside one takes the fallback
+// instead of ErrUntrackedConfig — and it is not a way through, because the run
+// then materializes that entry through lsFiles, gets a path string where a JSON
+// store should be, and refuses it as unreadable. A store the commit carries only
+// as a link is not a store, and the gate says so either way.
 func (g *gitRunner) indexEntries(specs ...string) ([]indexEntry, error) {
 	args := []string{"ls-files", "-s", "-z"}
 	if len(specs) > 0 {
@@ -1039,6 +1023,53 @@ func (g *gitRunner) indexEntries(specs ...string) ([]indexEntry, error) {
 		// reports as a dangling reference rather than silently auditing one side
 		// of a conflict.
 		if fields[2] != "0" {
+			continue
+		}
+		// Mode != a regular file is an entry whose oid is not claim text, and
+		// reading it as if it were is what used to ABORT THE WHOLE RUN. Both
+		// non-regular modes git can put in an index died here, with the
+		// unclassified "internal" code that internal/cliout/codes.go documents
+		// as "a bug report, not a branch target" and that the router skill's
+		// recovery table has no row for — so through the real pre-commit hook a
+		// single such entry anywhere under claims_dir refused EVERY commit in
+		// the repository, with unlock/fix/lock advice that could not help,
+		// while `check` and `check --validate` accepted the identical tree:
+		//
+		//   120000, A SYMLINK. The blob holds the link TARGET — a path string —
+		//   not a claim, so decodeClaim failed on it. There is nothing here the
+		//   gate can hash meaningfully FROM THE INDEX: resolving the target
+		//   means reading the working tree, which is the one thing --staged may
+		//   never do (see this file's opening argument, and the assume-unchanged
+		//   bypass that closed).
+		//
+		//   160000, A SUBMODULE GITLINK. The oid is a COMMIT in another
+		//   repository, so it is normally not in this repository's object store
+		//   at all: `cat-file --batch` answers "<oid> missing", a two-field
+		//   header, and catFile rejected it. The content lives in a tree this
+		//   commit does not carry.
+		//
+		// SKIPPING IS NOT SILENCE, and that is the whole reason it is the right
+		// answer rather than a shrug. It means the path is ABSENT FROM THE
+		// REGISTRY — exactly what the stage filter above means by it — so an
+		// approval the ledger holds for a claim that a symlink or a gitlink has
+		// displaced now has nothing in scope left to cover, and the single-tree
+		// ledger sweep reports it as lock-ledger-abandoned. What the commit
+		// carries at that path really is a link or a foreign commit id, and the
+		// claim the ledger approved really is not in this commit; saying so is
+		// the honest verdict. Hashing a path string, or dying, is not.
+		//
+		// It also puts --staged back in AGREEMENT WITH --validate on the tree
+		// that matters: an ordinary repository that happens to carry a symlink
+		// or a vendored submodule under claims_dir is now accepted by both,
+		// where it was accepted by one and fatal to the other. The residual
+		// difference is the one already pinned in staged_parity_test.go — when
+		// the non-regular entry DISPLACES a ledger-covered claim, --validate
+		// reads through the link (or into the submodule checkout) off disk and
+		// is satisfied while --staged refuses. That is the same disagreement,
+		// for the same reason, as a claims_dir that genuinely lives outside the
+		// repository, and it is the safe direction: a refusal the author sees at
+		// the keyboard, not a false clean in the mode the hook runs.
+		if fields[0] != "100644" && fields[0] != "100755" {
 			continue
 		}
 		entries = append(entries, indexEntry{oid: fields[1], path: entry[tab+1:]})
