@@ -582,11 +582,12 @@ type ledgerInputs struct {
 	// and one advisory produced by comparing the commit under judgement against
 	// its PARENT commit under --staged. The whole comparison was removed; see
 	// staged.go's "REMOVED, DELIBERATELY" section for what it caught, what its
-	// removal costs (TWO detections — the collapsed scope and the erased review)
-	// and why the parent commit is the wrong place
-	// to look for evidence about the committer. Every field above is answerable
-	// from ONE tree, which is what makes this value mean the same thing on the
-	// worktree path and on the index path.
+	// removal costs (THREE detections — the collapsed scope, the disowned claim
+	// and the erased review; an earlier note here said TWO and was wrong, having
+	// credited the per-claim half with one shape when it covered two) and why the
+	// parent commit is the wrong place to look for evidence about the committer.
+	// Every field above is answerable from ONE tree, which is what makes this
+	// value mean the same thing on the worktree path and on the index path.
 }
 
 // loadLedgerInputs reads both stores for cfg out of the WORKING TREE. It is the

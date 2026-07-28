@@ -723,10 +723,23 @@ grep -q 'project.config.yaml' "$TMP/untracked-commit2.out" ||
 # than on the terminal, so a skipped run was indistinguishable from a clean one.
 # No output, exit 0, commit lands, gate never ran.
 #
-# The reachable shape is claims_dir resolving OUTSIDE the repository altogether,
-# where no commit could carry the claims and the engine genuinely has nothing to
-# judge. Silence is the wrong answer there too: the hook is installed to guard
-# these claims, and "I could not look at them" is a refusal, not an approval.
+# The reachable shape is claims_dir resolving OUTSIDE the repository altogether
+# AND the index holding nothing else the ledger gate could judge — no lock
+# ledger, no comment digest store, no build-order artifact. Then no commit could
+# carry the claims and the engine genuinely has nothing to look at. Silence is
+# the wrong answer there too: the hook is installed to guard these claims, and
+# "I could not look at them" is a refusal, not an approval.
+#
+# WHY THIS FIXTURE STAGES ONE FILE AND NOT "git add -A". It used to stage
+# everything, and that stopped exercising the skipped path: an out-of-work-tree
+# claims_dir whose ledger IS in the index is no longer skipped, it is REFUSED by
+# name (lock-ledger-abandoned) — see case 19b directly below, which is the
+# regression test for that. Staging the whole tree here would have quietly
+# turned this case into a second copy of 19b and left the skipped path, which is
+# the thing case 19 exists to pin, untested. So case 19 stages the config alone
+# — the honest shape of "there is genuinely nothing in this commit to judge" —
+# and asserts the skip is still what happens AT COMMIT TIME, not merely before
+# anything was staged.
 echo "hook-smoke-test: a SKIPPED gate must not be reported as a pass ..."
 SKIPPED="$TMP/skipped-gate"
 mkdir -p "$SKIPPED/repo" "$SKIPPED/outside-claims"
@@ -754,13 +767,19 @@ YAML
 # The fixture only means something if the claims really are outside the repo.
 [ -f "$SKIPPED/outside-claims/$CLAIM_ID.yaml" ] ||
 	fail "the claims did not land outside the repository; the fixture cannot prove anything"
-(cd "$SKIPPED/repo" && "$BIN" check --staged --format json) 2>&1 | grep -q '"skipped": true' ||
-	fail "this fixture no longer produces a skipped run; the case cannot prove anything"
-
 (cd "$SKIPPED/repo" && sh "$INSTALLER" --yes) >"$TMP/skipped-install.out" 2>&1 ||
 	fail "install into the skipped-gate fixture failed: $(cat "$TMP/skipped-install.out")"
 
-if (cd "$SKIPPED/repo" && git add -A && git commit -qm "claims live outside the repository") >"$TMP/skipped-commit.out" 2>&1; then
+# Stage the config ALONE, then prove the run the hook is about to make is really
+# a skipped one. Asserting this AFTER staging is the whole point: the earlier
+# spelling asserted it over an empty index, which is skipped for a reason that
+# has nothing to do with claims_dir, so the precondition passed even once the
+# commit itself had stopped being skipped.
+(cd "$SKIPPED/repo" && git add project.config.yaml)
+(cd "$SKIPPED/repo" && "$BIN" check --staged --format json) 2>&1 | grep -q '"skipped": true' ||
+	fail "this fixture no longer produces a skipped run with the config staged; the case cannot prove anything: $(cd "$SKIPPED/repo" && "$BIN" check --staged --format json 2>&1)"
+
+if (cd "$SKIPPED/repo" && git commit -qm "claims live outside the repository") >"$TMP/skipped-commit.out" 2>&1; then
 	fail "a commit passed on a SKIPPED gate — the hook reported OK over a project it never looked at: $(cat "$TMP/skipped-commit.out")"
 fi
 grep -qi 'refused' "$TMP/skipped-commit.out" ||
@@ -771,6 +790,72 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 # refusal nobody can get past is a refusal that gets the hook uninstalled.
 (cd "$SKIPPED/repo" && git commit -qm "claims live outside the repository" --no-verify) >"$TMP/skipped-commit2.out" 2>&1 ||
 	fail "--no-verify did not get past the skipped-gate refusal: $(cat "$TMP/skipped-commit2.out")"
+
+# --- 19b · an out-of-tree claims_dir with a STANDING LEDGER is judged, not skipped
+#
+# The sabotage: repoint claims_dir at somewhere outside the work tree and leave
+# the lock ledger where it is. Every locked claim vanishes from scope, the
+# ledger still swears they were approved, and nothing in the repository can be
+# compared against them any more.
+#
+# "check --validate" always refused this (lock-ledger-abandoned). "check
+# --staged" did NOT: it saw the claims pathspec fail to resolve inside the work
+# tree, took the "no index to evaluate" exit and reported skipped:true / exit 0
+# — over an index that was carrying the very ledger that proves the claims were
+# locked. Two modes, same tree, opposite verdicts, and the mode the pre-commit
+# hook and CI actually run was the permissive one.
+#
+# That mode disagreement is closed: the skip is now reached only when the index
+# holds no lock ledger, no comment digest store and no build-order artifact —
+# i.e. only when there is genuinely nothing to judge, which is case 19 above.
+# With a ledger present the tree is judged over an empty registry, because no
+# commit can carry those claims, and the ledger's standing records are reported
+# as abandoned.
+#
+# WHICH TREE THIS CASE USES, AND WHY --validate IS EXPECTED TO ACCEPT IT. The
+# fixture reused here is the case-19 project, whose claims GENUINELY live
+# outside the repository — they were authored there, they are on disk there, and
+# nothing was repointed. On that tree the two modes deliberately DISAGREE, and
+# the disagreement is the correct answer rather than a second B1:
+#
+#	--validate judges the WORKING TREE. The claims are present and their
+#	        ledger records match them, so there is nothing wrong to report.
+#	--staged  judges WHAT A COMMIT CAN CARRY. Nothing in this repository can
+#	        carry those claims, so the standing ledger records have no claims
+#	        behind them and are reported abandoned.
+#
+# That is pinned in Go as TestStaged_ClaimsGenuinelyOutsideTheRepositoryAre-
+# RefusedWhereValidateAccepts, and asserted below so it stays measured rather
+# than becoming folklore. The SABOTAGE version — claims that DO live in the
+# repository with claims_dir repointed outside it — is a different tree, and
+# there the two modes agree on lock-ledger-abandoned; that one is pinned by the
+# --staged/--validate parity matrix in internal/check/staged_parity_test.go.
+#
+# The practical consequence: a project laid out this way is now refused with a
+# finding by name, where it used to be refused as an unexplained skip (case 19
+# refuses skips). It was never committable through the hook either way.
+echo "hook-smoke-test: an out-of-tree claims_dir with a standing ledger is judged, not skipped ..."
+(cd "$SKIPPED/repo" && git add -A)
+(cd "$SKIPPED/repo" && git ls-files --error-unmatch .dossierx-lock-store.json) >/dev/null 2>&1 ||
+	fail "the fixture did not stage a lock ledger; case 19b cannot prove anything"
+if (cd "$SKIPPED/repo" && git commit -qm "stage the ledger for claims nothing in this repo can carry") >"$TMP/abandoned-commit.out" 2>&1; then
+	fail "a standing ledger for out-of-scope claims was committed — check --staged took the skip over an index it could have judged: $(cat "$TMP/abandoned-commit.out")"
+fi
+grep -q 'lock-ledger-abandoned' "$TMP/abandoned-commit.out" ||
+	fail "the refusal did not name lock-ledger-abandoned, so --staged and --validate no longer agree on this tree: $(cat "$TMP/abandoned-commit.out")"
+grep -qi 'skipped' "$TMP/abandoned-commit.out" &&
+	fail "the gate still reported a SKIP for a tree whose ledger is in the index: $(cat "$TMP/abandoned-commit.out")"
+# --validate must ACCEPT this same tree, for the reason set out above: the
+# claims really are on disk. Asserting it keeps the one deliberate divergence
+# between the two modes measured. If this ever starts failing, the question to
+# answer is which mode changed and whether the other should have changed with
+# it — do not simply delete the assertion.
+(cd "$SKIPPED/repo" && "$BIN" check --validate --format text) >"$TMP/abandoned-validate.out" 2>&1 ||
+	fail "check --validate refused a project whose claims genuinely live outside the repository; that layout is legal in the working tree: $(cat "$TMP/abandoned-validate.out")"
+grep -q 'lock-ledger-abandoned' "$TMP/abandoned-validate.out" &&
+	fail "check --validate reported lock-ledger-abandoned for claims that are present on disk: $(cat "$TMP/abandoned-validate.out")"
+(cd "$SKIPPED/repo" && git commit -qm "stage the ledger anyway" --no-verify) >"$TMP/abandoned-commit2.out" 2>&1 ||
+	fail "--no-verify did not get past the abandoned-ledger refusal: $(cat "$TMP/abandoned-commit2.out")"
 
 # --- 20 · the SCOPE sabotages, ONE HALF AT A TIME ----------------------------
 #
@@ -795,16 +880,28 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 # asserting the acceptance would pin the hole open and fail the day somebody
 # closes it properly, and asserting the refusal would fail today.
 #
-# THE COST IS TWO DETECTIONS, NOT ONE. The other is the ERASED REVIEW: a DRAFT
-# claim's comments: block deleted together with that claim's key in the digest
-# store. It has the same conjunction shape and is pinned, with its own two
-# half-tamper assertions, in internal/check/staged_no_parent_test.go — in Go
-# rather than here, because it needs a comment thread and a digest store rather
-# than a hook.
+# THE COST IS THREE DETECTIONS, NOT ONE AND NOT TWO. The scope collapse below is
+# only the first of them; both smaller numbers were stated in this branch before
+# the per-claim half of the removed comparison (lock.AuditAgainstParent) was
+# accounted for. The other two are:
 #
-# WHAT IS ASSERTED HERE IS WHY THE SCOPE COLLAPSE COSTS ONE DETECTION AND NOT
-# TWO. Neither half of the tamper works on its own, because the ledger and the
-# claims defend each other inside a SINGLE tree, with no history involved:
+#	· THE DISOWNED CLAIM, and it is the CHEAPEST of the three: one claim's
+#	  ledger record, its locked_at stamp and its hashes baselines deleted from
+#	  the lock store, its YAML flipped locked -> draft and its body rewritten,
+#	  all in one change. No claims_dir edit, no store deleted.
+#	· THE ERASED REVIEW: a DRAFT claim's comments: block deleted together with
+#	  that claim's key in the digest store.
+#
+# Both are pinned, with their own half-tamper assertions, in
+# internal/check/staged_no_parent_test.go and internal/lock/audit_boundary_test.go
+# — in Go rather than here, because they need a lock store edited key by key, or
+# a comment thread and a digest store, rather than a hook. FORMAT.md's
+# "What the gate detects, what it does not, and where the rest is caught" is the
+# canonical statement of all three.
+#
+# WHAT IS ASSERTED HERE IS WHY THE SCOPE COLLAPSE IS ONE DETECTION AND NOT
+# SEVERAL. Neither half of the tamper works on its own, because the ledger and
+# the claims defend each other inside a SINGLE tree, with no history involved:
 #
 #	20a  delete the ledger, leave claims_dir alone -> locked claims with no
 #	     approval record anywhere            -> lock-ledger-absent
@@ -812,8 +909,8 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 #	     alone                                       claims nothing can see
 #	                                              -> lock-ledger-abandoned
 #
-# If either of these ever stops refusing, the cost of the scope collapse is no
-# longer one detection, and this case is the thing that says so.
+# If either of these ever stops refusing, the scope collapse has cost more than
+# the one detection charged to it, and this case is the thing that says so.
 echo "hook-smoke-test: refusing a deleted lock ledger (single tree) ..."
 LEDGERRM="$TMP/scope-ledger-rm"
 new_project "$LEDGERRM"
@@ -886,4 +983,4 @@ if (cd "$MOVE" && git commit -qm "docs: tweak") >"$TMP/scope-move-tamper.out" 2>
 	fail "after a sanctioned claims_dir move the gate stopped catching a hand-edited locked claim: $(cat "$TMP/scope-move-tamper.out")"
 fi
 
-echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it. Doing BOTH of those in one change is one of the two detections this release knowingly gave up with the parent-commit comparison; see case 20, and internal/check/staged_no_parent_test.go for the other (a draft claim's comments block erased together with its digest-store key)."
+echo "hook-smoke-test: PASS — the gate refuses a hand-edited locked claim, in a plain repo, under core.hooksPath, in a linked worktree, in every project of a two-project repository, in both projects when one of them is at the repository root, behind an unstaged claims_dir swap, behind an UNTRACKED config, behind assume-unchanged, under a claims_dir that points outside the config's own directory, and under a non-ASCII directory name — refuses a commit that DELETES the lock ledger (lock-ledger-absent) and, separately, one that repoints claims_dir away from tracked locked claims (lock-ledger-abandoned), refuses rather than reports OK when it could not evaluate anything at all — while still letting honest commits through in every one of them, including a claims_dir move that takes its claims with it. Doing BOTH of those in one change is one of the THREE detections this release knowingly gave up with the parent-commit comparison; see case 20, and internal/check/staged_no_parent_test.go for the other two — the erased review (a draft claim's comments block erased together with its digest-store key) and the cheapest of the three, the disowned claim (one claim's ledger record, locked_at stamp and hashes baselines deleted together, status flipped locked -> draft, body rewritten). FORMAT.md states all three."

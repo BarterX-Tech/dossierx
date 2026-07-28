@@ -116,35 +116,57 @@ removes that lock's records, byte-identical to erasing them) and, because git do
 refused with findings naming another project's claim ids. A control that a rebase disables and a
 revert trips is not a control, so it was removed rather than patched.
 
-**What this costs, stated exactly.** Removing it loses **two** detections, both of them changes that
-erase *both sides* of a disagreement at once so that no surviving evidence can name it. Each is a
-conjunction: either half alone is still caught from state.
+**What this costs, stated exactly.** Removing it loses **three** detections — not one, and not two.
+Two earlier statements of this cost in this branch were wrong and are corrected here: "exactly one
+detection" counted only the scope comparison, and the revision to "two" still missed
+`lock.AuditAgainstParent`, the per-claim half that read the parent's stores. The true number is
+three. All three are changes that erase *every side* of a disagreement at once so that no surviving
+evidence can name it, and each is a conjunction: every half alone is still caught from state.
 
 1. **The collapsed scope** — `claims_dir` repointed **and** the lock ledger removed **in the same
    change**. Repoint only gives `lock-ledger-abandoned` (once per locked claim whose standing record
    now names a claim the project cannot see); deleting the ledger only gives project-scoped
    `lock-ledger-absent` plus `lock-ledger-missing` per claim.
-2. **The erased review** — a **draft** claim's `comments:` block deleted **and** that claim's key
+2. **The disowned claim** — one claim's `ledger` record, its `locked_at` stamp **and** its `hashes`
+   baselines deleted from the lock store, its YAML flipped `locked` → `draft`, and its body
+   rewritten, **in the same change**. It is the **cheapest of the three**: no `claims_dir` edit, no
+   store deleted, no other claim touched — three keys out of one JSON file and one word in one YAML
+   file, after which the claim is a freely editable draft that re-locks with an agent-supplied
+   `--reason` reading exactly like a human's approval. The parent comparison reported it as
+   `lock-ledger-deleted`. Single-tree, that rule still fires whenever `locked_at` or a baseline
+   survives the deletion; leaving `status: locked` instead gives `lock-ledger-missing`; leaving the
+   record standing while flipping to draft gives `lock-ledger-orphan`; and the variant that moves
+   the claim file out of `claims_dir` rather than flipping its status gives `lock-ledger-abandoned`
+   unless the same three keys go with it. `claim lock` refuses it on the **write** path too, on the
+   same surviving evidence.
+3. **The erased review** — a **draft** claim's `comments:` block deleted **and** that claim's key
    dropped from the digest store **in the same change**. Erasing the block only gives
    `comment-ledger-drift`; dropping the key only gives `comment-digest-unrecorded`. This one is
    sharper than its size suggests: an open thread is exactly what blocks `claim lock`
    (`unresolved_comments`), so the erasure buys the lock, and the claim then locks cleanly over a
-   review that was deleted. It is **confined to draft claims** — on a locked claim the block is part
-   of the content the lock covers, so the same edit still surfaces as `lock-content-drift` /
-   `comment-digest-missing`.
+   review that was deleted. It is **confined to draft claims**, because `comment-digest-missing`
+   keys on a STANDING lock-ledger record with no digest entry: a locked claim has such a record and
+   is reported, a draft claim has none and is never asked. Measured on a locked claim: erasing the
+   block alone gives `comment-ledger-drift`, erasing it with its digest key gives
+   `comment-digest-missing`. `lock-content-drift` is NOT involved — `comments:` is excluded from the
+   locked-claim hash by design (`internal/lock/lockedhash.go`), since `dossierx serve` writes
+   comments without write authority over the lock store.
 
-There is no cheap single-tree replacement for either, because each resulting tree is
+There is no cheap single-tree replacement for any of them, because each resulting tree is
 indistinguishable from an innocent one: "no claims in scope and no ledger" is exactly what a
-brand-new project looks like, and "a draft with no threads and no digest entry" is exactly what most
-drafts look like. A gate that refuses every new project on its first day, or every uncommented
-draft, gets deleted. Both are caught where a control the committer cannot rewrite actually lives:
-**branch protection with a required CI check, plus review of a loud diff** — a `claims_dir:` line
-edited beside a deleted tracked store with every stranded locked claim still in the tree, or a
-human's own words deleted beside a hand edit of the digest store. **DossierX detects; the forge
-enforces.** Both shapes are pinned as passing tests in
-`internal/check/staged_no_parent_test.go`, so they stay measured rather than remembered, and
+brand-new project looks like, "a draft with no record, no `locked_at` and no baselines" is exactly
+what every draft looks like on the day it is written, and "a draft with no threads and no digest
+entry" is exactly what most drafts look like. A gate that refuses every new project on its first
+day, every new draft on the day it is authored, or every uncommented draft, gets deleted. All three
+are caught where a control the committer cannot rewrite actually lives: **branch protection with a
+required CI check, plus review of a loud diff** — each of the three is a hand edit of a tracked JSON
+store whose whole purpose is to be read in a diff, sitting beside the claim change it was made to
+permit. **DossierX detects; the forge enforces.** None of the three is folklore: all three are pinned
+as passing tests in `internal/check/staged_no_parent_test.go`, with the same boundary pinned at the
+audit layer in `internal/lock/audit_boundary_test.go`, each beside its "either half alone is still
+refused" assertions.
 [FORMAT.md](FORMAT.md#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught) carries
-the full boundary.
+the full boundary, shape by shape.
 
 Everything else in the gate is untouched and still single-tree: `lock-content-drift`,
 `lock-ledger-missing`, `lock-ledger-deleted`, `lock-ledger-released`, `lock-ledger-orphan`,

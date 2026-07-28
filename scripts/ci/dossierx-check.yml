@@ -61,17 +61,32 @@
 # comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
 # the build-order rules.
 #
-# WHAT THAT COSTS, stated exactly rather than reassuringly: TWO detections,
-# both of them changes that erase BOTH SIDES of a disagreement at once, so no
-# surviving evidence can name them. Each is a conjunction — either half alone is
-# still refused:
+# WHAT THAT COSTS, stated exactly rather than reassuringly: THREE detections —
+# not one, and not two; both smaller numbers were stated in this branch before
+# the per-claim half of the comparison (lock.AuditAgainstParent) was accounted
+# for. All three are changes that erase EVERY SIDE of a disagreement at once, so
+# no surviving evidence can name them. Each is a conjunction — every half alone
+# is still refused:
 #
 #   1. THE COLLAPSED SCOPE. claims_dir repointed AND the lock ledger removed at
 #      the same time. Repoint-only strands the ledger's records over claims
 #      nothing can see (lock-ledger-abandoned); delete-only strands locked
 #      claims with no approval record (lock-ledger-absent).
 #
-#   2. THE ERASED REVIEW. A DRAFT claim's comments: block deleted AND that
+#   2. THE DISOWNED CLAIM, and it is the CHEAPEST of the three: no claims_dir
+#      edit, no store deleted, no other claim touched. One claim's ledger
+#      record, its locked_at stamp and its hashes baselines deleted from the
+#      lock store, its YAML flipped locked -> draft, its body rewritten — all in
+#      one change. The claim is a freely editable draft again and re-locks with
+#      an agent-supplied --reason that reads like a human's approval. Leave any
+#      one of the three keys behind and lock-ledger-deleted fires; leave
+#      status: locked and it is lock-ledger-missing; leave the record standing
+#      and flip to draft and it is lock-ledger-orphan; move the claim file out
+#      of claims_dir instead of flipping status and, without the deletions, it
+#      is lock-ledger-abandoned. `claim lock` refuses it on the write path too,
+#      on the same surviving evidence.
+#
+#   3. THE ERASED REVIEW. A DRAFT claim's comments: block deleted AND that
 #      claim's key dropped from the digest store at the same time. Block-only
 #      gives comment-ledger-drift; key-only gives comment-digest-unrecorded.
 #      Worth knowing when you decide who reviews these diffs: an OPEN thread is
@@ -79,12 +94,18 @@
 #      to DRAFT claims — on a locked claim the block is part of the locked
 #      content, so the same edit is still caught single-tree.
 #
-# There is no cheap single-tree replacement for either: "no claims in scope and
-# no ledger" is exactly what a brand-new project looks like, and "a draft with
-# no threads and no digest entry" is exactly what most drafts look like. A rule
-# that refused those would refuse every project's first commit and every
-# uncommented draft. Both shapes are pinned as passing tests in
-# internal/check/staged_no_parent_test.go.
+# There is no cheap single-tree replacement for any of them: "no claims in scope
+# and no ledger" is exactly what a brand-new project looks like, "a draft with
+# no record, no locked_at and no baselines" is exactly what every draft looks
+# like on the day it is written, and "a draft with no threads and no digest
+# entry" is exactly what most drafts look like. A rule that refused those would
+# refuse every project's first commit, every new draft, and every uncommented
+# draft. None of the three is folklore: all three are pinned as passing tests in
+# internal/check/staged_no_parent_test.go, and at the audit layer in
+# internal/lock/audit_boundary_test.go.
+# FORMAT.md's "What the gate detects, what it does not, and where the rest is
+# caught" carries the full argument — including why this is a designed boundary
+# and not a TODO, and what each shape looks like in a diff.
 #
 # ---------------------------------------------------------------------------
 # WHAT IT DEPENDS ON BEING COMMITTED

@@ -523,14 +523,23 @@ Note the shape of that table. Every artifact in the design is watched by rules
 built out of the *other* artifacts, so removing any single piece of the evidence
 is itself reported by a rule made of the pieces that remain — delete a claim and
 its record accuses you, delete the record and the claim's `locked_at` and
-baselines do, delete the whole store and the locked claims do.
+baselines do, delete the whole store and the locked claims do. Read the next
+section for the exact reading of that sentence: it is true of *every single*
+piece, and false of the three specific combinations that take all the remaining
+pieces in the same change.
 
 #### What is NOT detected
 
 **Erasing every trace of an artifact's approval at once.** A finding is always
-built out of *surviving* evidence, so a change that removes both sides of a
-disagreement leaves nothing to disagree. There are **two** such shapes, and both
-are conjunctions — either half alone is still refused.
+built out of *surviving* evidence, so a change that removes **every side** of a
+disagreement leaves nothing to disagree. There are **three** such shapes — each
+one move at several targets, erasing a claim's evidence together with whatever
+was left to judge it against — and all three are conjunctions: every half, alone,
+is still refused.
+
+They are numbered in the order they were measured, which is not the order of
+importance: **shape 2 is the cheapest of the three** and was the last to be
+found. Read it as the one that matters, not as a footnote on the other two.
 
 **Shape 1 — the collapsed scope.** `claims_dir:` repointed at a fresh directory
 AND the lock ledger removed, in the same change. The claims that were locked are
@@ -543,7 +552,38 @@ longer in scope for anything.
 | delete the ledger only, `claims_dir` left in place | `integrity_failed` — project-scoped `lock-ledger-absent`, plus `lock-ledger-missing` per claim it just stopped covering |
 | **both, in one change** | **`ok: true`** |
 
-**Shape 2 — the erased review.** A **draft** claim's `comments:` block deleted
+**Shape 2 — the disowned claim.** One claim's `ledger` record, its `locked_at`
+stamp and its `hashes` baselines all deleted from the lock store, its YAML
+flipped `status: locked` → `status: draft`, and its body rewritten — in the same
+change. It is **the cheapest of the three**: no `claims_dir` edit, no store
+deleted, no other claim touched. Three keys out of one tracked JSON file, one
+word in one YAML file, and the claim is an ordinary draft again — free to edit,
+and re-lockable afterwards with an agent-supplied `--reason` that reads exactly
+like a human's approval.
+
+It is cheap *because* the lock store keeps three independent traces of a lock and
+the tamper takes all three. Every other rule here is built on one of them
+surviving:
+
+| The change | `check` reports |
+|---|---|
+| delete the `ledger` record only, `locked_at` and baselines left behind | `integrity_failed` — `lock-ledger-deleted`, which reads the surviving `locked_at` as proof this engine locked the claim and says so in as many words |
+| delete all three keys but leave `status: locked` | `integrity_failed` — `lock-ledger-missing`, a locked claim with no approval record at all |
+| flip to `draft` but leave the record standing | `integrity_failed` — `lock-ledger-orphan` |
+| move the claim file out of `claims_dir` but leave the record standing | `integrity_failed` — `lock-ledger-abandoned` |
+| **all three keys plus the status flip, in one change** | **`ok: true`** |
+
+The **variant** substitutes moving the claim file out of `claims_dir` for the
+status flip: same three deletions, and the claim leaves scope instead of leaving
+`locked`. Verified the same way — `ok: true`, with `lock-ledger-abandoned` if the
+move happens without the deletions.
+
+This shape is also refused on the **write** path, which narrows what it buys: as
+long as `locked_at` or a baseline survives, `claim lock` itself refuses the
+re-lock (`lock-ledger-deleted`, the same rule as a finding). Taking all three keys
+is precisely what gets past that refusal too.
+
+**Shape 3 — the erased review.** A **draft** claim's `comments:` block deleted
 AND that claim's key dropped from the digest store, in the same change. The claim
 is left looking like one nobody ever commented on, which is what most drafts
 genuinely are.
@@ -559,40 +599,61 @@ dishonest: an **open thread on a draft claim is exactly what blocks `claim
 lock`** (`unresolved_comments`). So erasing it buys the lock — the claim then
 locks cleanly, with a fresh record, over a review that was silently deleted.
 
-**It is confined to draft claims.** The same erasure on a **locked** claim is
-refused with no history at all, because the `comments:` block is part of the
-content the lock covers: the tamper surfaces as `lock-content-drift` /
+**It is confined to draft claims,** and the reason is the digest rules' trigger,
+not the lock hash. `comment-digest-missing` keys on a **standing (unreleased)
+lock-ledger record** that has no entry in the digest store. A locked claim has
+such a record, so the missing entry is reported; a draft claim has none, so the
+rule is never asked — which is the whole of the gap. Measured on a **locked**
+claim, with no history involved: erasing the `comments:` block alone gives
+`comment-ledger-drift`, and erasing it together with its digest key gives
 `comment-digest-missing`.
 
-In both shapes the two files defend each other, and neither can be removed on its
-own. That mutual defence is the design; what it cannot survive is a single change
-that takes both sides.
+Note what does **not** happen: `lock-content-drift` never fires for a comments
+edit, on a locked claim or any other. `comments:` is one of the three fields
+deliberately excluded from the locked-claim hash (`status`, `review_pending`,
+`comments` — see `internal/lock/lockedhash.go`), because `dossierx serve` writes
+comments and has no write authority over the lock store. Comment integrity is
+carried by the digest store precisely so the lock hash does not have to carry
+it.
 
-Both shapes are pinned as passing tests in
-`internal/check/staged_no_parent_test.go`, alongside the "either half alone"
-assertions above — so they stay measured facts rather than folklore, and so
-anything that later closes one of them fails loudly and on purpose.
+In all three shapes the surviving artifacts defend each other, and no single one
+of them can be removed on its own. That mutual defence is the design; what it
+cannot survive is one change that takes every side at once.
+
+None of the three is folklore — each is pinned as a **passing test**, beside the
+"either half alone is still refused" assertions that keep it honest:
+`internal/check/staged_no_parent_test.go` pins all three end to end through
+`check --staged`, and `internal/lock/audit_boundary_test.go` pins the same
+boundary at the audit layer. Anything that later closes one of them fails there
+loudly and on purpose, and should be replaced by a pin on the new rule.
 
 #### Why it is not detected
 
-Because in both shapes the resulting tree is **indistinguishable from an
-innocent one**.
+Because in every one of the three the resulting tree is **indistinguishable from
+an innocent one**.
 
 For shape 1 the innocent twin is a **brand-new project**: a `claims_dir` holding
 nothing locked, with no lock store beside it, is exactly what a project that has
 never locked anything looks like — the first commit of every honest project, and
 every new module added to a monorepo that already uses DossierX. For shape 2 it
-is an **ordinary draft nobody has commented on yet**, which is the majority of
-drafts at any moment. Refusing either would refuse every new project on its first
-day, and every uncommented draft on every other day — the one thing a gate cannot
-do and survive.
+is a **claim that was never locked**: a draft with no record, no `locked_at` and
+no baselines is what every draft in every project looks like on the day it is
+written, and "this claim has no history in the lock store" is the normal state,
+not the suspicious one. For shape 3 it is an **ordinary draft nobody has
+commented on yet**, which is the majority of drafts at any moment. Refusing any
+of the three would refuse every new project on its first day, every new draft on
+the day it is authored, and every uncommented draft on every other day — the one
+thing a gate cannot do and survive.
 
-Telling the two apart needs evidence from **outside the tree**. Earlier rounds of
+Telling them apart needs evidence from **outside the tree**. Earlier rounds of
 this design put that evidence in the **parent commit**: `check --staged` resolved
 `HEAD` and compared the two, reporting shape 1 as `integrity-store-removed` and
-`claims-scope-narrowed`, and shape 2 as `comment-ledger-drift` against the digest
-the parent commit had recorded. It was removed in v0.3.0, before release, and the
-reasoning is worth keeping because it generalises.
+`claims-scope-narrowed`, shape 2 as `lock-ledger-deleted` against the record the
+parent commit still carried, and shape 3 as `comment-ledger-drift` against the
+digest the parent commit had recorded. **Those first two rule names no longer
+exist**, and the other two only ever fire single-tree now. The comparison was
+removed in v0.3.0, before release, and the reasoning is worth keeping because it
+generalises.
 
 The parent commit is outside the *commit* but it is not outside the *committer*.
 Git history is written by exactly the party the gate is meant to constrain, so
@@ -629,13 +690,22 @@ On the forge, which is where it always belonged.
   template ([`scripts/ci/dossierx-check.yml`](scripts/ci/dossierx-check.yml)) is
   one `dossierx check` step and pins no `fetch-depth`: a shallow checkout is a
   complete tree, which is the whole evidence base.
-- **Review.** Neither shape is subtle in a diff. Shape 1 is a one-line
-  `claims_dir:` edit next to a *deleted tracked file* whose entire stated purpose
-  is to be read in a diff, and it arrives with every locked claim it stranded
-  still sitting in the tree. Shape 2 is a human's own words being deleted from a
-  claim, next to a hand edit of the digest store — and the reviewer most likely to
-  notice is the person whose thread it was, which is why the digest store is worth
-  putting under `CODEOWNERS`.
+- **Review.** None of the three is subtle in a diff — every one of them is a
+  hand edit of a tracked JSON store whose entire stated purpose is to be read in
+  a diff, sitting next to the claim change it was made to cover.
+  - **Shape 1** is a one-line `claims_dir:` edit next to a *deleted* tracked
+    store, and it arrives with every locked claim it stranded still sitting in
+    the tree.
+  - **Shape 2** is three keys vanishing from `.dossierx-lock-store.json` — one
+    of them a `reason` line quoting a human's approval — on the same page as the
+    `status: locked` → `status: draft` flip and the rewritten body they were
+    deleted to permit. A record is never removed by any command in this build
+    (`unlock` keeps it and stamps `released_at`), so a *deletion* in a lock-store
+    diff has no honest explanation but a `git revert`.
+  - **Shape 3** is a human's own words being deleted from a claim, next to a hand
+    edit of the digest store — and the reviewer most likely to notice is the
+    person whose thread it was, which is why the digest store is worth putting
+    under `CODEOWNERS`.
 - **`CODEOWNERS` on the stores and the config**, if you want the second pair of
   eyes to be a specific pair.
 

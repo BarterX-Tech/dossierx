@@ -33,8 +33,13 @@
 # that tamper on its own (delete the ledger -> lock-ledger-absent; repoint
 # claims_dir and strand the claims -> lock-ledger-abandoned). See
 # scripts/ci/dossierx-check.yml's header for the full argument, including the
-# TWO detections this knowingly gives up (the collapsed scope, and a DRAFT
-# claim's comments: block erased together with its digest-store key).
+# THREE detections this knowingly gives up: the collapsed scope; the DISOWNED
+# CLAIM (one claim's ledger record, locked_at stamp and hashes baselines deleted
+# together, its status flipped locked -> draft and its body rewritten — the
+# cheapest of the three); and the ERASED REVIEW (a DRAFT claim's comments: block
+# erased together with its digest-store key). FORMAT.md's "What the gate
+# detects, what it does not, and where the rest is caught" is the canonical
+# statement, shape by shape.
 #
 # The hook is FAST FEEDBACK, NOT THE AUTHORITY. Clean merges, rebases,
 # cherry-picks and reverts do not fire pre-commit at all, and --no-verify

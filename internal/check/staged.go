@@ -92,43 +92,84 @@
 //     — and projC was refused with findings naming projB's ledger and projB's
 //     claims.
 //
-// WHAT THIS COSTS, exactly, measured against the binary that had it: TWO
-// detections, not one. An earlier statement of this cost said ONE, counting only
-// the scope collapse below; that was measured against stagedScope alone and did
-// not account for the per-claim half that read the parent's stores through
-// lock.AuditAgainstParent. Both shapes are the same thing at different
-// granularities — a change that erases BOTH SIDES of a disagreement at once, so
-// that no surviving evidence can name it — and both are CONJUNCTIONS: either
-// half alone is still refused from this one tree.
+// WHAT THIS COSTS, exactly, measured against the binary that had it: THREE
+// detections — not one, and not two. Both earlier statements of this cost were
+// under-counts, and they are recorded here because the same mistake is easy to
+// make twice. The FIRST said ONE, measured against the scope comparison
+// (stagedScope) alone. The SECOND said TWO, adding the erased review but still
+// crediting the per-claim half — lock.AuditAgainstParent, which read the
+// PARENT's two stores — with only one shape; it independently covered the
+// disowned claim as well. Understating the boundary is worse than the boundary:
+// a gap nobody has measured is folklore, and folklore is what gets a comparison
+// against rewritable history re-added.
 //
-//   - THE COLLAPSED SCOPE. claims_dir repointed AND the ledger removed IN THE
-//     SAME CHANGE now passes. Repoint only and the standing record has no claim
-//     left to cover, which is lock-ledger-abandoned; delete the ledger only and
-//     the locked claims have no records, which is lock-ledger-absent.
-//   - THE ERASED REVIEW. A DRAFT claim's `comments:` block deleted AND that
-//     claim's key dropped from the digest store IN THE SAME CHANGE now passes.
-//     Erase the block only and the recorded digest still describes threads the
-//     claim no longer has, which is comment-ledger-drift; drop the key only and
-//     the threads have no entry beside them, which is comment-digest-unrecorded
-//     (whose predicate is the threads themselves — erasing them is exactly what
-//     takes the claim out of that rule's evidence set; see
-//     lock.RuleCommentDigestUnrecorded). This one is sharper than its size
-//     suggests: an OPEN thread on a draft is what BLOCKS `claim lock`, so the
-//     erasure buys the lock, and the claim then locks cleanly over a review that
-//     was deleted. It is confined to DRAFT claims — on a locked claim the block
-//     is part of the content the lock covers, so the same edit is still caught.
+// All three are ONE MOVE AT THREE TARGETS — erase a claim's EVIDENCE together
+// with whatever was left to judge it against, in a single coordinated change, so
+// that no surviving file in the tree can name the disagreement. All three are
+// CONJUNCTIONS: either sabotage alone is still refused from this one tree, which
+// is what makes the surviving rules worth having. And all three are loud in a
+// diff, which is where the forge catches them.
 //
-// Both are pinned as PASSING tests in staged_no_parent_test.go, beside the
-// "either half alone is still refused" assertions that keep them honest.
+//  1. SCOPE COLLAPSE. claims_dir repointed AND the lock ledger removed IN THE
+//     SAME CHANGE now passes: nothing is left in scope to judge, so every rule
+//     runs perfectly over an empty registry. Repoint only and the standing
+//     records have no claims left to cover, which is lock-ledger-abandoned;
+//     delete the ledger only and the locked claims have no records, which is
+//     lock-ledger-absent.
+//  2. DISOWNED CLAIM. For ONE claim, in the same change: delete ledger[id] and
+//     locked_at[id] (and hashes[id] when non-empty), flip `status: locked` to
+//     draft, and rewrite the body. It is CHEAPER than 1 — no claims_dir edit, no
+//     store deleted, one claim's worth of diff — and it is invisible because the
+//     evidence that says "this claim was locked by the engine" is exactly what
+//     was deleted alongside the record. A variant moves the claim file out of
+//     scope instead of flipping its status. Either half alone is still refused,
+//     and the three near-misses are worth naming separately, because they are
+//     three DIFFERENT rules and an earlier condensed spelling of this bullet
+//     ("drop the record only ... which is lock-ledger-missing") was read two
+//     ways by two readers. Measured against a binary built from this tree:
+//     dropping ledger[id] ALONE, with locked_at and the baselines surviving, is
+//     lock-ledger-deleted, because the survivors prove this engine locked it;
+//     dropping ALL THREE keys but leaving `status: locked` is
+//     lock-ledger-missing, a locked claim with no approval at all; flipping the
+//     status ALONE, with the record surviving, is lock-ledger-orphan, a standing
+//     record covering a draft. Only the FULL conjunction — all three keys gone
+//     AND the status flipped AND the body rewritten — is silent. See
+//     lock.RuleLockLedgerDeleted.
+//  3. ERASED REVIEW. A DRAFT claim's `comments:` block deleted AND that claim's
+//     key dropped from the digest store IN THE SAME CHANGE now passes, after
+//     which the claim locks over a review nobody had. Erase the block only and
+//     the recorded digest still describes threads the claim no longer has, which
+//     is comment-ledger-drift; drop the key only and the threads have no entry
+//     beside them, which is comment-digest-unrecorded (whose predicate is the
+//     threads themselves — erasing them is exactly what takes the claim out of
+//     that rule's evidence set; see lock.RuleCommentDigestUnrecorded). This one
+//     is sharper than its size suggests: an OPEN thread on a draft is what BLOCKS
+//     `claim lock`, so the erasure buys the lock. It is confined to DRAFT claims
+//     because check.RuleCommentDigestMissing keys on a STANDING lock-ledger
+//     record with no digest entry: a locked claim has one, so the same edit is
+//     caught there as comment-digest-missing; a draft claim has none, so the
+//     rule is never asked. NOT lock-content-drift — `comments` is excluded from
+//     the locked-claim hash by lock.lockedClaimHashExcluded (dossierx serve
+//     writes comments and has no write authority over the lock store), so no
+//     comments edit on any claim can produce that rule.
 //
-// AND THERE IS NO CHEAP SINGLE-TREE REPLACEMENT, which is worth saying plainly so
-// nobody spends a day looking for one: "zero claims in scope and no ledger" is
-// also exactly what a brand-new project looks like, and "a draft with no threads
-// and no digest entry" is exactly what most drafts look like — so a rule that
-// refused either shape would refuse every project's first commit, or every
-// uncommented draft. The honest closure for both is evidence that is outside the
-// committer as well as outside the commit — a signature, or a server-side record
-// — not another read of the same person's git history.
+// All three are pinned as PASSING tests in staged_no_parent_test.go, beside the
+// "either half alone is still refused" assertions that keep them honest, and
+// internal/lock/audit_boundary_test.go pins 2 and 3 again from the rules' side.
+// internal/lock/audit.go states the same boundary in the same three terms; the
+// two passages must be corrected together or the next reader will meet only one
+// of them and under-count again.
+//
+// AND THERE IS NO CHEAP SINGLE-TREE REPLACEMENT for any of them, which is worth
+// saying plainly so nobody spends a day looking for one: "zero claims in scope
+// and no ledger" is also exactly what a brand-new project looks like, "a draft
+// with no record and no baselines" is exactly what every honest draft looks
+// like, and "a draft with no threads and no digest entry" is exactly what most
+// drafts look like — so a rule that refused any of the three would refuse every
+// project's first commit, every draft, or every uncommented draft. The honest
+// closure for all three is evidence that is outside the committer as well as
+// outside the commit — a signature, or a server-side record — not another read
+// of the same person's git history.
 //
 // WHAT STAYED, and it is most of it: --staged still evaluates the GIT INDEX
 // rather than the worktree, still writes nothing, and still runs every
@@ -158,9 +199,15 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
-// ErrNoIndex means there is no git index to evaluate: git is not installed, the
-// project is not inside a work tree, or a path the gate must read sits outside
-// the WORK TREE entirely — not merely outside the config file's own directory.
+// ErrNoIndex means there is no index CONTENT to evaluate: git is not installed,
+// the project is not inside a work tree, or claims_dir sits outside the WORK
+// TREE entirely — not merely outside the config file's own directory — AND the
+// index holds no store the ledger gate could judge on its own either.
+//
+// That last conjunct is not decoration. An out-of-work-tree claims_dir with a
+// standing lock ledger beside it used to come here on the strength of the
+// pathspec alone, which reported "nothing to evaluate", exit 0, over a tree
+// `check --validate` refused. See stagedWithUnreachableClaims.
 //
 // That distinction is the whole of it. This used to fire for
 // `claims_dir: ../claims` — an ordinary monorepo layout, with the config in
@@ -287,20 +334,27 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	// only when the claims are outside the work tree altogether, which no commit
 	// could carry.
 	//
-	// THAT IS THE ESCAPE HATCH, and with the parent comparison gone it is once
-	// again the FIRST answer rather than the last. The comparison used to run
-	// ahead of it, because "no commit can carry claims_dir" is true of the value
-	// THIS commit has and says nothing about the value its parent had — a
-	// claims_dir repointed out of the repository stranded every locked claim in
-	// the project and was reported as "nothing to evaluate", exit 0. That
-	// detection needed a second tree and is one of the two shapes named in this
-	// file's REMOVED section; repointing claims_dir on its own is still refused
-	// from this tree alone, as lock-ledger-abandoned, because the standing
-	// approvals in the ledger are left covering claims the registry no longer
-	// holds.
+	// AND THAT FAILURE IS NOT, BY ITSELF, THE ESCAPE HATCH. It used to be: this
+	// returned ErrNoIndex here, ahead of stagedLedgerInputs, so a claims_dir
+	// repointed OUT of the work tree while the lock ledger stayed put never
+	// reached the ledger gate at all — `check --staged` reported skipped:true,
+	// ok:true, exit 0, over a tree that `check --validate` refused as
+	// lock-ledger-abandoned. Two modes, one tree, opposite answers, with the
+	// laxer one being the mode the pre-commit hook runs; whichever of the two is
+	// laxer is the one an edit travels through.
+	//
+	// The single-tree ledger rules are exactly the ones that do not need the
+	// claims: lock-ledger-abandoned walks the LEDGER's own records and asks
+	// whether the claims they approve are still in scope, and an unreachable
+	// claims_dir is the most complete way there is of putting them out of scope.
+	// The evidence is right there in the index — the ledger names claims no
+	// commit can carry — so answering "there is nothing here to evaluate" is
+	// false on its own terms. ErrNoIndex means what its doc comment says: no
+	// index CONTENT to judge. That is now decided below, after the stores have
+	// been read, rather than assumed from the claims pathspec alone.
 	claimsSpec, err := g.spec(cfg.ClaimsDir)
 	if err != nil {
-		return StagedProject{}, fmt.Errorf("%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it", ErrNoIndex, cfg.ClaimsDir, g.dir)
+		return stagedWithUnreachableClaims(g, cfg, sp)
 	}
 
 	// EVERY claim's content comes from the index. Unconditionally, with no
@@ -400,6 +454,72 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 	return sp, nil
+}
+
+// stagedWithUnreachableClaims finishes a run whose claims_dir is outside the
+// work tree: the registry is empty, because no commit can carry a file git
+// cannot name, and the verdict is whatever the ledger gate makes of the INDEX's
+// stores standing alone.
+//
+// It is the difference between "this commit contains no claims" and "there is
+// nothing here to evaluate", and only the second is ErrNoIndex. A standing lock
+// ledger whose records name claims that are now unreachable is a refusal
+// (lock-ledger-abandoned) that needs one tree, no history and no claims at all —
+// see the pathspec comment in Staged for the false clean that came of assuming
+// otherwise.
+//
+// The escape hatch survives for the case it was written for and nothing else: a
+// checkout whose claims genuinely live outside the repository AND that carries
+// no lock ledger, no comment digest store and no build-order artifact either. On
+// that tree the gate really is being asked about content the commit does not
+// have, `check --validate` says nothing either, and refusing would break
+// "run check --staged in CI" for a layout the rest of the product supports.
+//
+// WHAT IT COSTS, stated plainly because it is a real cost: a project whose
+// claims live outside the repository and whose lock ledger lives inside it is
+// now refused by --staged, per unreachable approval. That project's approvals
+// really do cover files no commit carries — its ledger is a record about
+// something this repository does not contain — and the same tree is refused by
+// `check --validate` the moment those claims are not where claims_dir points.
+// The alternative is the false clean above, in the mode that runs in the hook.
+func stagedWithUnreachableClaims(g *gitRunner, cfg *config.Config, sp StagedProject) (StagedProject, error) {
+	in, err := stagedLedgerInputs(g, cfg)
+	if err != nil {
+		return StagedProject{}, err
+	}
+	if !holdsGateEvidence(in) {
+		return StagedProject{}, fmt.Errorf(
+			"%w: claims_dir %s is outside the git work tree at %s, so no commit can carry it — and the index holds no lock ledger, no comment digest store and no build-order artifact either, so there is nothing in it to judge",
+			ErrNoIndex, cfg.ClaimsDir, g.dir)
+	}
+	sp.ledger = in
+	return sp, nil
+}
+
+// holdsGateEvidence reports whether the index carries anything the ledger gate
+// can reach a verdict from WITHOUT any claims — a lock ledger, a comment digest
+// store, or a build-order artifact, present or merely unreadable.
+//
+// Unreadable counts, and deliberately: a store that is there and will not decode
+// is reported (lock-ledger-unreadable, build-order-unreadable) precisely so that
+// corrupting the gate's evidence cannot be quieter than deleting it. Treating it
+// as "no evidence" here would restore that inversion through the one door left.
+func holdsGateEvidence(in ledgerInputs) bool {
+	if in.storeErr != nil || in.digestErr != nil {
+		return true
+	}
+	if in.store != nil && in.store.FileExists() {
+		return true
+	}
+	if in.digests != nil && in.digests.FileExists() {
+		return true
+	}
+	for _, o := range in.buildOrders {
+		if o.Present || o.Unreadable {
+			return true
+		}
+	}
+	return false
 }
 
 // configSource is the config file's OWN path — not Dir()+FileName, because

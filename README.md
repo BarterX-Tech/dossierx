@@ -199,30 +199,36 @@ The gate runs as the **last** step of `check`, after the catalog and viewer have
 
 ### What the gate does not detect, and where that is caught
 
-Every rule above judges **one tree**: these claim files, this ledger, this digest store, these build-order artifacts, exactly as they are. Within that evidence base the coverage is total — any single-file tampering with a locked claim is a named finding. What it cannot see is a change that **erases both sides of a disagreement at once**, and there are exactly two such arrangements. Both are worth stating in the README rather than burying them:
+Every rule above judges **one tree**: these claim files, this ledger, this digest store, these build-order artifacts, exactly as they are. Within that evidence base the coverage is total — any single-file tampering with a locked claim is a named finding. What it cannot see is a change that **erases every side of a disagreement at once**, and there are exactly **three** such arrangements. All three are worth stating in the README rather than burying them:
 
-> **1. Repointing `claims_dir:` at a fresh directory *and* removing the lock ledger, in the same change, is not detected.** The claims that were locked stay in the repository, tracked, still reading `status: locked`, and out of scope for everything. `check` reports `ok: true`.
+> **1. The collapsed scope.** Repointing `claims_dir:` at a fresh directory *and* removing the lock ledger, in the same change. The claims that were locked stay in the repository, tracked, still reading `status: locked`, and out of scope for everything. `check` reports `ok: true`.
 >
-> **2. Deleting a *draft* claim's `comments:` block *and* its key in the digest store, in the same change, is not detected.** The claim is left looking like one nobody ever commented on. `check` reports `ok: true` — and because an open thread is what blocks `claim lock`, the claim then locks cleanly over a review that was deleted.
+> **2. The disowned claim.** Deleting one claim's `ledger` record, its `locked_at` stamp *and* its `hashes` baselines from the lock store, flipping its YAML from `status: locked` to `status: draft`, and rewriting its body — in the same change. The claim is an ordinary draft again, free to edit and re-lockable later with a `--reason` that reads like a human's approval. `check` reports `ok: true`. **This is the cheapest of the three**: no `claims_dir` edit, no store deleted, no other claim touched. A variant moves the claim file out of `claims_dir` instead of flipping its status.
+>
+> **3. The erased review.** Deleting a *draft* claim's `comments:` block *and* its key in the digest store, in the same change. The claim is left looking like one nobody ever commented on. `check` reports `ok: true` — and because an open thread is what blocks `claim lock`, the claim then locks cleanly over a review that was deleted.
 
-**Either half alone is still refused** in both shapes, which is what keeps them conjunctions rather than soft spots — verified against the shipped binary:
+**Every half alone is still refused**, which is what keeps these conjunctions rather than soft spots — each row verified against a binary built from this tree:
 
 | The change | `check` reports |
 |---|---|
 | repoint `claims_dir` only | `integrity_failed` — `lock-ledger-abandoned`, once per locked claim whose standing record now names a claim the project cannot see |
 | delete the ledger only | `integrity_failed` — project-scoped `lock-ledger-absent`, plus `lock-ledger-missing` per claim |
-| **both, in one change** | **`ok: true`** |
+| **both, in one change (shape 1)** | **`ok: true`** |
+| delete the `ledger` record only, leaving `locked_at` behind | `integrity_failed` — `lock-ledger-deleted` |
+| delete all three keys but leave `status: locked` | `integrity_failed` — `lock-ledger-missing` |
+| flip to `draft`, or move the file out of scope, leaving the record standing | `integrity_failed` — `lock-ledger-orphan` / `lock-ledger-abandoned` |
+| **all three keys plus the status flip, in one change (shape 2)** | **`ok: true`** |
 | erase a draft's `comments:` block only | `integrity_failed` — `comment-ledger-drift` |
 | drop that claim's digest key only | `integrity_failed` — `comment-digest-unrecorded` |
-| **both, in one change** | **`ok: true`** |
+| **both, in one change (shape 3)** | **`ok: true`** |
 
-Shape 2 is **confined to draft claims**: on a locked claim the `comments:` block is part of the content the lock covers, so the same erasure surfaces as `lock-content-drift` / `comment-digest-missing` with no history involved.
+Shape 2 is also refused on the **write** path while any one of the three keys survives: `claim lock` itself declines the re-lock with `lock-ledger-deleted`. Shape 3 is **confined to draft claims**, because `comment-digest-missing` keys on a **standing lock-ledger record** with no digest entry: a locked claim has one and is reported, a draft claim has none and is never asked. Measured on a locked claim, with no history involved: erasing the `comments:` block alone gives `comment-ledger-drift`; erasing it together with its digest key gives `comment-digest-missing`. `lock-content-drift` plays no part — `comments:` is one of three fields deliberately excluded from the locked-claim hash (`internal/lock/lockedhash.go`), because `dossierx serve` writes comments without write authority over the lock store.
 
-**Why they are not detected.** Each resulting tree is *indistinguishable from an innocent one* — shape 1 from a brand-new project (a `claims_dir` with nothing locked and no store beside it is what every honest first commit and every new monorepo module looks like), shape 2 from an ordinary draft nobody has commented on yet, which is most drafts. Telling them apart needs evidence from outside the tree, and every in-repo source of that evidence is **writable by the same person the gate is meant to constrain**. An earlier build of v0.3.0 used the parent commit for exactly this; it was removed before release, because `git --orphan`, a rebase or a second config file switches such a comparison off without looking unusual, while ordinary `git revert` of a lock commit and a genuinely new project in a monorepo were both refused by it. A control a rebase disables and a revert trips is not a control. [FORMAT.md carries the full reasoning](FORMAT.md#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught).
+**Why they are not detected.** Each resulting tree is *indistinguishable from an innocent one* — shape 1 from a brand-new project (a `claims_dir` with nothing locked and no store beside it is what every honest first commit and every new monorepo module looks like), shape 2 from a claim that was simply never locked (a draft with no record, no `locked_at` and no baselines is what every draft looks like on the day it is written), shape 3 from an ordinary draft nobody has commented on yet, which is most drafts. Telling them apart needs evidence from outside the tree, and every in-repo source of that evidence is **writable by the same person the gate is meant to constrain**. An earlier build of v0.3.0 used the parent commit for exactly this; it was removed before release, because `git --orphan`, a rebase or a second config file switches such a comparison off without looking unusual, while ordinary `git revert` of a lock commit and a genuinely new project in a monorepo were both refused by it. A control a rebase disables and a revert trips is not a control.
 
-**Where they are caught: the forge.** DossierX detects; branch protection enforces. Put `dossierx check` behind a required status check on a protected branch and every single-tree rule above runs on the merge result. Then read the diff — shape 1 is a config line edited next to a deleted tracked file whose entire purpose is to be read in a diff, with every stranded locked claim still beside it; shape 2 is a human's own words being deleted next to a hand edit of the digest store. `CODEOWNERS` on the stores and the config makes that reading someone's job.
+**Where they are caught: the forge.** DossierX detects; branch protection enforces. Put `dossierx check` behind a required status check on a protected branch and every single-tree rule above runs on the merge result. Then read the diff: all three are hand edits of a tracked JSON store whose entire purpose is to be read in a diff, sitting next to the claim change they were made to permit. `CODEOWNERS` on the stores and the config makes that reading someone's job.
 
-This is a designed boundary, not a to-do. The gate reports what a tree can prove, in a form CI can fail on, identically in every clone — and it declines to adjudicate the history the committer writes.
+This is a designed boundary, not a to-do — **[FORMAT.md states the model in full](FORMAT.md#what-the-gate-detects-what-it-does-not-and-where-the-rest-is-caught)**, shape by shape, with what each one looks like in a diff. The gate reports what a tree can prove, in a form CI can fail on, identically in every clone — and it declines to adjudicate the history the committer writes.
 
 #### Moving `claims_dir`
 
