@@ -130,7 +130,7 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 // Envelope and this test has to look at the bytes.
 func captureJSONBytes(t *testing.T, args ...string) []byte {
 	t.Helper()
-	env, _, _ := execCLIJSON(t, args...)
+	env, _, _ := execCLIJSON(t, args...) //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	// Re-marshalling the decoded envelope would re-tag everything through
 	// cliout's own tags and hide the very thing under test, so run again and
 	// keep the raw stdout instead.
@@ -318,8 +318,6 @@ func errText(err error) string {
 	return err.Error()
 }
 
-// TestUnlockDryRunAgreesOnADraftClaim.
-//
 // "claim unlock" has no gates by design — it is the recovery escape hatch, and
 // a project may need it precisely to fix what something else is complaining
 // about — so unlocking an already-draft claim succeeds and exits 0. The preview
@@ -413,8 +411,6 @@ func TestCommentWriteDryRunAgreesWithTheWritePath(t *testing.T) {
 	}
 }
 
-// TestBuildOrderLockDryRunAgreesOnAStaleOrder.
-//
 // buildorder.Lock refuses a STALE order before it looks at anything else — a
 // bare relock would freeze an order whose claims have moved — and the preview
 // not only failed to check it, its "not_already_current" gate actively PASSED a
@@ -464,8 +460,6 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 		"--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock it")
 }
 
-// TestBuildOrderLockDryRunAgreesOnAHandEditedOrder.
-//
 // The hand-edit gate (buildorder.ErrHandEdited) is the LAST refusal Lock makes
 // and it was the only one the preview could not see. It is also the one the
 // preview most needed: an artifact whose phase blocks were reversed by hand
@@ -555,8 +549,6 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 // 4. one condition, one error code
 // ---------------------------------------------------------------------
 
-// TestClaimsSentinelContentionIsAWriteConflictOnEveryVerb.
-//
 // The project-wide claims sentinel is taken by two different kinds of writer:
 // cmd/dossierx takes it directly (lock/unlock/flag/reaudit/new) and wraps the
 // failure as write_conflict, while internal/comments takes it INSIDE its own ops

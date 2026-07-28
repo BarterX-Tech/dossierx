@@ -62,8 +62,6 @@ func armDisclosureFlag(t *testing.T, cfgPath string) {
 	}
 }
 
-// TestReauditDisclosesTheWholeBodyItWillWrite.
-//
 // A confirmed `claim reaudit` REPLACES the body with --now-does; that is
 // deliberate (see ProposeFlagDiff) and is not what this test is about. What it
 // is about is that the human agreeing to it has to be able to SEE it, in every

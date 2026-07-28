@@ -87,7 +87,7 @@ func TestCommentDigest_EmptiedMapIsReportedPerApprovedClaim(t *testing.T) {
 // RELEASED record describes a claim that is allowed to be outside the approval
 // path.
 func TestCommentDigest_MissingEntryIsSilentForDraftsAndReleasedRecords(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
+	cfg, _ := project(t, baseConfig, map[string]string{
 		"claims/draft.yaml":  draftClaim("widget.contract.draft"),
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
 	})
@@ -115,7 +115,7 @@ func TestCommentDigest_MissingEntryIsSilentForDraftsAndReleasedRecords(t *testin
 	if err := os.WriteFile(locked, []byte(strings.Replace(string(raw), "status: locked", "status: draft", 1)), 0o644); err != nil {
 		t.Fatalf("rewrite claim: %v", err)
 	}
-	claims = reload(t, cfg)
+	claims := reload(t, cfg)
 
 	if res := check.Status(claims, cfg); hasRule(res.LedgerFindings, check.RuleCommentDigestMissing) {
 		t.Fatalf("neither a draft nor a released record may be reported as uncovered, got %v", rulesOf(res.LedgerFindings))
@@ -189,7 +189,7 @@ func TestCommentDigest_AbandonedIsSilentForAThreadlessEntry(t *testing.T) {
 // PrepareStore — which every writing command runs — now extends coverage to
 // every claim that has none.
 func TestCommentDigest_SweepCoversAClaimAuthoredAfterTheFirstLock(t *testing.T) {
-	cfg, claims := project(t, baseConfig, map[string]string{
+	cfg, _ := project(t, baseConfig, map[string]string{
 		"claims/first.yaml": lockedClaim("widget.contract.first"),
 	})
 
@@ -200,7 +200,7 @@ func TestCommentDigest_SweepCoversAClaimAuthoredAfterTheFirstLock(t *testing.T) 
 	if err := os.WriteFile(filepath.Join(cfg.ClaimsDir, "second.yaml"), []byte(second), 0o644); err != nil {
 		t.Fatalf("write second claim: %v", err)
 	}
-	claims = reload(t, cfg)
+	claims := reload(t, cfg)
 
 	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
 	store, err := lock.LoadStore(storePath)

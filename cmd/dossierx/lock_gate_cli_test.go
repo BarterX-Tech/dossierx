@@ -17,8 +17,6 @@ import (
 // the lint refusal publishes its findings where the router says to look
 // ---------------------------------------------------------------------
 
-// TestLockLintRefusalCarriesFindingsInTopLevelData.
-//
 // The router skill's lint_failed row reads: "read data.lint_findings, fix the
 // claims, re-run". `claim lock` published them ONLY under
 // error.details.lint_findings, so an agent following the documented recovery
@@ -74,8 +72,6 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 	}
 }
 
-// TestLockRefusalMessageDoesNotDoubleItsVerb.
-//
 // internal/lock's refusals are written to be read on their own and already
 // begin with "lock: "; the CLI added a second one. In a machine contract a
 // duplicated prefix is worse than untidy — it is the sort of thing a consumer
@@ -198,8 +194,6 @@ func TestRollUpStillRefusesTheBannersOwnLock(t *testing.T) {
 	}
 }
 
-// TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow.
-//
 // The refusal is only useful if it names the claim the caller has to ACT on, and
 // for roll-up that is never the claim the finding hangs off: the finding is
 // attached to the banner, and it is cleared by locking a sibling. Both surfaces

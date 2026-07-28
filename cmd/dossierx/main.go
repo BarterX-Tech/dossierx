@@ -1692,11 +1692,6 @@ func (g lockGate) lintBlockerDetail() string {
 	return fmt.Sprintf("%d error-level lint finding(s): %s", g.LintErrors, strings.Join(lines, "; "))
 }
 
-// blocked reports whether any gate would refuse the lock.
-func (g lockGate) blocked() bool {
-	return g.LintErrors > 0 || g.UnlockedDoctrineDep != "" || len(g.OpenThreads) > 0
-}
-
 // code is the machine code for the FIRST gate that would refuse, in lock.Lock's
 // own order.
 func (g lockGate) code() cliout.Code {

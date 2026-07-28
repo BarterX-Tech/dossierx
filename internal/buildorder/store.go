@@ -596,7 +596,7 @@ func Lock(path string, claims []model.Claim, cfg *config.Config) (*Artifact, err
 	divergence, err := structuralDivergence(a, claims, cfg)
 	if err != nil {
 		return nil, fmt.Errorf(
-			"%w: %q's build order cannot be re-derived from the current claims (%v), so it cannot be verified as generated; fix the claims and re-run \"dossierx build-order propose --module %s\", then lock the fresh order",
+			"%w: %q's build order cannot be re-derived from the current claims (%w), so it cannot be verified as generated; fix the claims and re-run \"dossierx build-order propose --module %s\", then lock the fresh order",
 			ErrHandEdited, a.Module, err, a.Module,
 		)
 	}

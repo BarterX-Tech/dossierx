@@ -128,7 +128,7 @@ func TestCLI_CheckStaged_VerdictFollowsTheIndex(t *testing.T) {
 	if env.StoppedAt != "ledger" {
 		t.Fatalf("expected stopped_at=ledger, got %q", env.StoppedAt)
 	}
-	out, _, _ := execCLI(t, "--config", cfgPath, "check", "--staged")
+	out, _, _ := execCLI(t, "--config", cfgPath, "check", "--staged") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	if !strings.Contains(out, "lock-content-drift") {
 		t.Fatalf("expected the finding's rule name in the terminal block, got:\n%s", out)
 	}
@@ -206,7 +206,7 @@ func TestCLI_CheckStaged_OutsideAWorkTreeWarnsAndSucceeds(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected an object payload, got %T", env.Data)
 	}
-	if skipped, _ := data["skipped"].(bool); !skipped {
+	if skipped, _ := data["skipped"].(bool); !skipped { //nolint:errcheck // absent or non-bool both mean "not skipped", which the check handles
 		t.Fatalf("expected data.skipped=true so CI can insist, got %#v", data)
 	}
 	if len(env.Warnings) == 0 || !strings.Contains(strings.Join(env.Warnings, " "), "no git index") {

@@ -202,8 +202,6 @@ func TestThreadLastActivityTracksTheReopen(t *testing.T) {
 	}
 }
 
-// TestCheckReconcilesReviewPendingFromTheFlagStore.
-//
 // review_pending has THREE documented triggers — dependency drift, a pending
 // "dossierx claim flag", and an open comment thread — and check's reconciler
 // only ever knew about two of them. It ran lock.DetectStale (drift) and its own
@@ -231,7 +229,7 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 		"--reason", "the code does not match the claim"); err != nil {
 		t.Fatalf("claim flag: %v", err)
 	}
-	if raw, _ := os.ReadFile(claimFile); !strings.Contains(string(raw), "review_pending: true") {
+	if raw, _ := os.ReadFile(claimFile); !strings.Contains(string(raw), "review_pending: true") { //nolint:errcheck // a missing file fails the assertion below, which is the point
 		t.Fatalf("fixture precondition: flagging must set review_pending")
 	}
 
@@ -297,8 +295,6 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 	}
 }
 
-// TestMigrationGrandfathersAPreLedgerProjectsLockedBuildOrder.
-//
 // Build orders could be locked before this release gave them a ledger record.
 // Without adoption, every such project would fail `check` on upgrade with a
 // build-order-ledger-missing it had no way to have avoided — a gate firing on

@@ -598,17 +598,17 @@ func (d *Deps) openCommentDigest() (*digest.Store, func(), error) {
 
 	release, err := lock.AcquireFileLock(path)
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w (%v)", ErrCommentDigestUnavailable, err)
+		return nil, nil, fmt.Errorf("%w (%w)", ErrCommentDigestUnavailable, err)
 	}
 
 	store, err := digest.LoadStore(path)
 	if err != nil {
 		release()
-		return nil, nil, fmt.Errorf("%w (%v)", ErrCommentDigestUnavailable, err)
+		return nil, nil, fmt.Errorf("%w (%w)", ErrCommentDigestUnavailable, err)
 	}
 	if err := store.CheckWritable(); err != nil {
 		release()
-		return nil, nil, fmt.Errorf("%w (%v)", ErrCommentDigestUnavailable, err)
+		return nil, nil, fmt.Errorf("%w (%w)", ErrCommentDigestUnavailable, err)
 	}
 	return store, release, nil
 }

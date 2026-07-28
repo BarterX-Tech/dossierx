@@ -73,8 +73,6 @@ func adoptableCommentFixture(t *testing.T) string {
 	return cfgPath
 }
 
-// TestCheckAnnouncesAdoptedCommentDigests.
-//
 // The run that adopts must not be able to report ok:true and nothing else. This
 // pins both surfaces the machine contract offers — the warnings a reader of
 // ok/warnings sees, and the data field a consumer acts on — because the whole
@@ -126,8 +124,6 @@ func TestCheckAnnouncesAdoptedCommentDigests(t *testing.T) {
 	}
 }
 
-// TestCheckIsSilentAboutAdoptionWhenNothingWasAdopted.
-//
 // The guard-rail on the test above: a warning that fires on the ordinary run is
 // noise, and noise on every run is how a real warning stops being read. The
 // second `check` over the same project must adopt nothing — the digests are
@@ -155,8 +151,6 @@ func TestCheckIsSilentAboutAdoptionWhenNothingWasAdopted(t *testing.T) {
 	}
 }
 
-// TestFirstCheckOfANewProjectDoesNotWarnAboutAdoption.
-//
 // The other guard-rail, and the one that shaped the rule. On a project whose
 // digest store does not exist yet, PrepareStore CREATES it and adopts every
 // comment block in the project — necessarily, since there is nothing to compare

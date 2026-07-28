@@ -29,8 +29,6 @@ func depsAgainst(t *testing.T, p *project, storePath string) *Deps {
 	return &Deps{Cfg: p.cfg, Claims: claims, LockStore: store, LockStorePath: storePath, FlagStore: p.flags}
 }
 
-// TestACommentOpLeavesAnUnMigratedProjectMigratable.
-//
 // The comment digest store is a SIBLING FILE that only exists once a project has
 // been through a ledger-aware build — which is exactly why lock.LedgerDowngraded
 // reads its presence as proof that a store claiming "version 1" is lying. The
@@ -98,8 +96,6 @@ func TestACommentOpLeavesAnUnMigratedProjectMigratable(t *testing.T) {
 	}
 }
 
-// TestACommentWriteStaysRefusedOnADowngradedStore.
-//
 // mutate armed checkCommentDigest's threads-without-an-entry gate on
 // lock.Store.LedgerCovered, which reads the lock store's own "version" field. So
 // the same edit the gate already reports as lock-ledger-downgraded switched the
@@ -179,14 +175,14 @@ func downgradeLockStore(t *testing.T, path string) {
 	}
 }
 
-func bytesReplaceOnce(in, old, new []byte) []byte {
+func bytesReplaceOnce(in, old, repl []byte) []byte {
 	idx := indexOf(in, old)
 	if idx < 0 {
 		return in
 	}
-	out := make([]byte, 0, len(in)-len(old)+len(new))
+	out := make([]byte, 0, len(in)-len(old)+len(repl))
 	out = append(out, in[:idx]...)
-	out = append(out, new...)
+	out = append(out, repl...)
 	return append(out, in[idx+len(old):]...)
 }
 

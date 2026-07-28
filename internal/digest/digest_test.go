@@ -21,9 +21,9 @@ func claimWithThread() model.Claim {
 	}
 }
 
-func loadTempStore(t *testing.T) (*Store, string) {
+func loadTempStore(t *testing.T) (store *Store, path string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "digest.json")
+	path = filepath.Join(t.TempDir(), "digest.json")
 	s, err := LoadStore(path)
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)

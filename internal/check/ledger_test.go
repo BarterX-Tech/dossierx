@@ -278,7 +278,7 @@ func TestRun_UnreadableDigestStoreDoesNotAccuseLockedClaims(t *testing.T) {
 		t.Fatalf("corrupt digest store: %v", err)
 	}
 
-	res, _ := check.Run(claims, cfg)
+	res, _ := check.Run(claims, cfg) //nolint:errcheck // the run is expected to fail; Result is what this asserts on
 	if !hasRule(res.LedgerFindings, check.RuleLedgerUnreadable) {
 		t.Fatalf("expected lock-ledger-unreadable for the digest store, got %v", rulesOf(res.LedgerFindings))
 	}

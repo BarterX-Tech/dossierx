@@ -55,7 +55,7 @@ type validateEnvelope struct {
 // "--format", "json" is passed explicitly and wins over the "--format text"
 // the run helper prepends, because pflag takes the LAST occurrence of a
 // repeated flag — see run's own doc comment.
-func runValidateFindings(t *testing.T, fixtureDir, cfgPath string) ([]lintFinding, int) {
+func runValidateFindings(t *testing.T, fixtureDir, cfgPath string) (findings []lintFinding, exitCode int) {
 	t.Helper()
 	stdout, stderr, code := run(t, fixtureDir, "--config", cfgPath, "--format", "json", "check", "--validate")
 	var env validateEnvelope

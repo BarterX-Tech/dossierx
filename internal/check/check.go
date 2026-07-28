@@ -532,7 +532,7 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 // and in the common case the answer is the first or second candidate. The two
 // cheap gates are tested first so a full lint pass is only spent on a candidate
 // that could still qualify.
-func firstLockableDraft(drafts []model.Claim, claims []model.Claim, cfg *config.Config) string {
+func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config) string {
 	for _, c := range drafts {
 		if c.HasOpenThreads() || hasUnlockedDoctrineDep(c, claims, cfg) {
 			continue

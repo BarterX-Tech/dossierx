@@ -171,13 +171,6 @@ type migrateHistory struct {
 	Uncorroborated []string
 }
 
-// refutes reports whether git found something that must stop the adoption.
-// NewlyLocked and Uncorroborated are deliberately not part of it — see their
-// field comments.
-func (h migrateHistory) refutes() bool {
-	return h.Looked && (h.Covered || len(h.Modified) > 0)
-}
-
 // notes renders everything git could NOT corroborate, plus everything it
 // corroborated that a human approving the adoption should still see. One list,
 // rendered identically into the preview's side effects and the run's warnings,
@@ -354,7 +347,7 @@ type migrateGit struct {
 // newMigrateGit locates git and confirms the project directory is inside a work
 // tree. Both failures come back as a nil runner and a sentence, never an error:
 // this whole file degrades, it does not refuse.
-func newMigrateGit(cfg *config.Config) (*migrateGit, string) {
+func newMigrateGit(cfg *config.Config) (git *migrateGit, unavailable string) {
 	bin, err := exec.LookPath("git")
 	if err != nil {
 		return nil, "git is not installed or not on PATH, so this project's previously committed state could not be read"
@@ -435,7 +428,7 @@ func (g *migrateGit) headHolds(target string) (bool, error) {
 
 // headBlob returns the bytes HEAD holds for target, with ok=false when that
 // commit did not carry it.
-func (g *migrateGit) headBlob(target string) ([]byte, bool, error) {
+func (g *migrateGit) headBlob(target string) (blob []byte, found bool, err error) {
 	out, ok, err := g.probe("show", g.rev(target))
 	if err != nil || !ok {
 		return nil, false, err

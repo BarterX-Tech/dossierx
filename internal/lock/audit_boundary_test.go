@@ -33,7 +33,7 @@ import (
 // ledger schema with a comment digest store beside it — and returns both stores
 // loaded. Coverage is what arms lock-ledger-deleted and
 // comment-digest-unrecorded, so it is the state every case below needs.
-func boundaryProject(t *testing.T) (*Store, *digest.Store) {
+func boundaryProject(t *testing.T) (locks *Store, digests *digest.Store) {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "store.json")
 	if err := os.WriteFile(path, []byte(`{"version":2,"hashes":{},"locked_at":{},"ledger":{}}`), 0o644); err != nil {
@@ -43,7 +43,7 @@ func boundaryProject(t *testing.T) (*Store, *digest.Store) {
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
 	}
-	digests, err := digest.LoadStore(digest.StorePathBeside(path))
+	digests, err = digest.LoadStore(digest.StorePathBeside(path))
 	if err != nil {
 		t.Fatalf("digest.LoadStore: %v", err)
 	}

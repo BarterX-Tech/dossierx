@@ -62,8 +62,6 @@ func migrateDryRunOf(t *testing.T, cfgPath string, args ...string) cliout.DryRun
 // it never runs silently
 // ---------------------------------------------------------------------
 
-// TestMigrateRequiresTheAdoptFlag.
-//
 // A bare "dossierx migrate" must refuse. The command records content nobody
 // approved as the baseline every later change is judged against, so a default
 // that does it is a default that does it by accident — and the accident is
@@ -87,8 +85,6 @@ func TestMigrateRequiresTheAdoptFlag(t *testing.T) {
 	}
 }
 
-// TestMigrateDryRunReportsAMissingAdoptFlagRatherThanRefusing.
-//
 // The universal preview rule, restated for this verb: --dry-run answers, it never
 // refuses. A caller cannot tell "the preview itself broke" from "the preview says
 // no" if both are non-zero exits, which is why lock's own missing --reason is
@@ -113,7 +109,7 @@ func TestMigrateDryRunReportsAMissingAdoptFlagRatherThanRefusing(t *testing.T) {
 	if dr.Blocked {
 		t.Fatalf("an honest pre-ledger project must preview as adoptable: %+v", dr)
 	}
-	proposed, _ := json.Marshal(dr.Proposed["adopted"])
+	proposed, _ := json.Marshal(dr.Proposed["adopted"]) //nolint:errcheck // marshalling a value just decoded from JSON cannot fail
 	if !strings.Contains(string(proposed), "widget.contract.main") {
 		t.Fatalf("the preview must name every artifact it would grandfather, got %s", proposed)
 	}
@@ -280,8 +276,6 @@ func TestMigrateDryRunAgreesWithTheWritePath(t *testing.T) {
 // it refuses what it must not repair
 // ---------------------------------------------------------------------
 
-// TestMigrateRefusesAnAbsentLedger.
-//
 // The single most important refusal in the command. An absent lock store is
 // indistinguishable from a deleted one, so a migration that adopted there would
 // be the second half of a two-command bypass: `rm .dossierx-lock-store.json &&
@@ -383,8 +377,6 @@ func resolvesToALeaf(words []string) bool {
 	return false
 }
 
-// TestMigrateRefusalsNameOnlyRealCommands.
-//
 // A prior round shipped a refusal instructing its reader to run a verb the CLI
 // does not implement, and the moment a reader follows a hint is the moment they
 // are already stuck. Every refusal this command can produce is driven here and
@@ -421,7 +413,7 @@ func TestMigrateRefusalsNameOnlyRealCommands(t *testing.T) {
 
 	// And the live one, through the real surface, so the wiring is covered too.
 	cfgPath, _ := preLedgerProject(t)
-	env, _, _ := execCLIJSON(t, "--config", cfgPath, "migrate")
+	env, _, _ := execCLIJSON(t, "--config", cfgPath, "migrate") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	if env.Error != nil {
 		namesOnlyRealCommands(t, env.Error.Hint)
 	}
@@ -654,7 +646,7 @@ func TestLockPreviewAgreesWithTheRunOnTheDeletedEvidenceGates(t *testing.T) {
 		if err := json.Unmarshal(raw, &doc); err != nil {
 			t.Fatalf("decode store: %v", err)
 		}
-		delete(doc["ledger"].(map[string]any), "widget.contract.main")
+		delete(doc["ledger"].(map[string]any), "widget.contract.main") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 		edited, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatalf("encode store: %v", err)
@@ -730,7 +722,7 @@ func TestLockPreviewAgreesWithTheRunOnTheDeletedEvidenceGates(t *testing.T) {
 		if err := json.Unmarshal(raw, &doc); err != nil {
 			t.Fatalf("decode digest store: %v", err)
 		}
-		delete(doc["digests"].(map[string]any), "widget.contract.main")
+		delete(doc["digests"].(map[string]any), "widget.contract.main") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 		edited, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatalf("encode digest store: %v", err)

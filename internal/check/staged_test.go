@@ -606,8 +606,6 @@ func claimsEqual(a, b model.Claim) bool {
 	return a.SourcePath == b.SourcePath
 }
 
-// TestStaged_AssumeUnchangedCannotSubstituteTheWorktree.
-//
 // The gate used to ask "git diff" which paths differed from the index, fetch
 // THOSE from the index, and read the rest off disk as a cheaper equivalent. It
 // is not an equivalent. "git diff" consults git's stat cache and honours the
@@ -677,8 +675,6 @@ func TestStaged_AssumeUnchangedCannotSubstituteTheWorktree(t *testing.T) {
 	}
 }
 
-// TestStaged_ConfigComesFromTheIndex.
-//
 // project.config.yaml names claims_dir, the module list, the doctrine facet and
 // the hub gating switch — every input that decides WHICH files the gate looks at
 // and what it demands of them. Read from the WORKTREE, one unstaged line was a

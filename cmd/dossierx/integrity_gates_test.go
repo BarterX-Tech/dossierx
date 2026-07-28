@@ -141,8 +141,6 @@ func TestReauditDryRunPreviewsTheIntegrityGate(t *testing.T) {
 // build-order propose may not discard an approved order
 // ---------------------------------------------------------------------
 
-// TestBuildOrderProposeRefusesToDiscardALockedOrder.
-//
 // propose writes the artifact in FULL, with locked:false and a freshly
 // recomputed sequence, and it takes no --reason and touches no ledger. Run
 // against a locked, current order that is a reason-less, read-looking command
@@ -235,8 +233,6 @@ func TestBuildOrderProposeStillRecomputesAStaleOrder(t *testing.T) {
 // a corrupt ledger is a ledger finding, not a write error
 // ---------------------------------------------------------------------
 
-// TestCheckOnACorruptLedgerReachesTheLedgerRule.
-//
 // internal/check's RuleLedgerUnreadable exists precisely so a corrupt store does
 // not "crash the command with a parse error that reads like a bug", and it
 // carries the one recovery that is correct: restore the ledger from version
@@ -393,8 +389,6 @@ func TestUpgradeFailsClosedUntilTheMigrationRuns(t *testing.T) {
 // claim link's refusals are the codes the skills publish
 // ---------------------------------------------------------------------
 
-// TestClaimLinkRefusalsCarryTheirOwnCodes.
-//
 // Every claim link refusal collapsed to implink_refused at exit 1, whose skill
 // row reads "This is your invocation or your tag, not a gate: fix it and re-run.
 // Do not branch on which". So an agent that hit the not-locked GATE retried with
@@ -448,8 +442,6 @@ func TestClaimLinkRefusalsCarryTheirOwnCodes(t *testing.T) {
 // claim show must not recommend the recovery the skills forbid
 // ---------------------------------------------------------------------
 
-// TestClaimShowOnATamperedClaimNeverSuggestsRelocking.
-//
 // show carried no lock-ledger state at all, so it reported a tampered locked
 // claim as locked / not review_pending / settled — the exact opposite of `check
 // --validate`'s verdict on the same tree — and its next_actions said "to change
@@ -506,8 +498,6 @@ func TestClaimShowOnATamperedClaimNeverSuggestsRelocking(t *testing.T) {
 	}
 }
 
-// TestClaimShowNeverSuggestsFlaggingAStructuredLayout.
-//
 // claim flag structurally refuses any claim whose rendered content lives outside
 // Body — table rows, steps, raw HTML — because a flag-sourced reaudit rewrites
 // Body only and would clear review_pending while leaving the rendered content
@@ -923,7 +913,7 @@ func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 	// The writing run. Its own verdict is not what is on trial here (with the
 	// ledger downgraded it has plenty to report); what matters is that it
 	// adopted nothing and left the evidence intact.
-	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check")
+	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	for _, w := range env.Warnings {
 		if strings.Contains(w, lock.BuildOrderLedgerKey("widget")) {
 			t.Fatalf("the run announced adopting a build order on a downgraded ledger: %q", w)
@@ -1013,8 +1003,6 @@ func TestBuildOrderAdoptionMovedToTheMigrationCommand(t *testing.T) {
 // an unbacked "locked": true must be recoverable, and must never read ok
 // ---------------------------------------------------------------------
 
-// TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten.
-//
 // "build-order lock" writes two files: the artifact, then the ledger record. It
 // used to report the second one's failure as a WARNING on an ok:true envelope,
 // which is a false machine contract — `check --validate` refuses the very next
@@ -1079,8 +1067,6 @@ func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
 	}
 }
 
-// TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose.
-//
 // buildorder.Lock's own refusal for a locked, non-stale artifact is "already
 // locked and not stale", classified already_locked — a code whose documented
 // meaning is "there is nothing to do". For an artifact whose locked flag nothing
@@ -1312,7 +1298,7 @@ func restoreStoreVersion(t *testing.T, storeFile string) {
 // reports a ledger finding with the given rule name.
 func validateReportsRule(t *testing.T, cfgPath, rule string) bool {
 	t.Helper()
-	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check", "--validate") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	var data struct {
 		LedgerFindings []struct {
 			Rule string `json:"rule"`

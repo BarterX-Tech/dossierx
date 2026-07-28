@@ -810,8 +810,6 @@ func buildRoleAdoptedFixture(t *testing.T) string {
 	})
 }
 
-// TestLockRefusalNamesTheLintRuleThatBlockedIt.
-//
 // The refusal used to carry `details: {"lint_errors": 1, ...}` — a count, and no
 // finding. The router's documented recovery for lint_failed is "read
 // data.lint_findings", which this envelope did not have; `check --validate`
@@ -890,8 +888,6 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 	}
 }
 
-// TestClaimShowPointsAtACommandThatNamesTheBlockingLint.
-//
 // `claim show`'s next_action for a lint-blocked draft said "-> dossierx check
 // --validate". For the whole family of lints that decide a LOCK that is a dead
 // end: the claim is still draft, so the rule does not fire, and the command

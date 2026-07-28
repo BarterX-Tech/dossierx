@@ -825,13 +825,13 @@ func migrateLegacyBaselines(store *lock.Store, claims []model.Claim) {
 // deleting it. integrity_failed is the code the ledger gate already reports the
 // same file's unreadability under (cliout.CodeIntegrityFailed names it), so the
 // two surfaces answer in one vocabulary.
-func migrateStores(cfg *config.Config) (*lock.Store, *digest.Store, error) {
-	store, err := lock.LoadStore(storePath(cfg))
+func migrateStores(cfg *config.Config) (store *lock.Store, digests *digest.Store, err error) {
+	store, err = lock.LoadStore(storePath(cfg))
 	if err != nil {
 		return nil, nil, cliout.Errorf(cliout.CodeIntegrityFailed, "migrate: %w", err).
 			WithHint("restore " + storePath(cfg) + " from version control — a migration cannot adopt over records it cannot read, and re-locking would record whatever the claims say now as approved. Then: dossierx check --validate")
 	}
-	digests, err := digest.LoadStore(digest.StorePath(cfg))
+	digests, err = digest.LoadStore(digest.StorePath(cfg))
 	if err != nil {
 		return nil, nil, cliout.Errorf(cliout.CodeCommentDigestUnavailable, "migrate: %w", err).
 			WithHint("restore " + digest.StorePath(cfg) + " from version control, then run: dossierx migrate --adopt --dry-run")

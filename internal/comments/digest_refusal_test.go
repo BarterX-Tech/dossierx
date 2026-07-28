@@ -191,7 +191,11 @@ func driftRefusal(t *testing.T) string {
 	p.addThread(model.CommentRoleHuman, "this contradicts the API facet")
 
 	before := p.readAYAML()
-	stripped := before[:bytes.Index(before, []byte("comments:"))]
+	cut := bytes.Index(before, []byte("comments:"))
+	if cut < 0 {
+		t.Fatalf("the claim carries no comments: block to strip:\n%s", before)
+	}
+	stripped := before[:cut]
 	if err := os.WriteFile(filepath.Join(p.claimsDir, "a.yaml"), stripped, 0o644); err != nil {
 		t.Fatalf("hand-edit the claim: %v", err)
 	}

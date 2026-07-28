@@ -35,8 +35,6 @@ func downgradeStoreVersion(t *testing.T, path string) {
 	}
 }
 
-// TestTheDigestGatesStayArmedOnADowngradedStore.
-//
 // Every comment-digest guard used to be armed by LedgerCovered, which reads the
 // lock store's own "version" field — so the same hand edit the gate already
 // reports as lock-ledger-downgraded ALSO switched the guards off, and the

@@ -30,8 +30,8 @@
 // is what makes the detection path reachable.
 //
 // The actual //go:embed directive lives in
-// github.com/BarterX-Tech/dossierx/skills (see skills/embed.go), not here:
-// go:embed patterns must not contain ".." path elements, so a file under
+// github.com/BarterX-Tech/dossierx/skills (see skills/embed.go), not here.
+// An embed pattern must not contain ".." path elements, so a file under
 // cmd/dossierx/ cannot embed the repo-root skills/ directory directly.
 package main
 

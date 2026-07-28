@@ -738,7 +738,7 @@ func recordBuildOrderApproval(cfg *config.Config, module string, artifact *build
 // project the next `check --validate` refuses is a false machine contract. The
 // recovery named is restoring the artifact, because the approved order is what
 // was just destroyed and version control is the only place it still exists.
-func releaseBuildOrderApproval(cfg *config.Config, module string, path string) error {
+func releaseBuildOrderApproval(cfg *config.Config, module, path string) error {
 	recovery := fmt.Sprintf("the approved order at %s has been overwritten with an unlocked proposal while its approval still stands, which dossierx check reports as build-order-ledger-orphan; restore %s from version control to undo the propose, or re-run this command once the lock ledger is writable and then dossierx build-order lock --module %s --reason \"<the human's words>\"", path, path, module)
 
 	store, err := lock.LoadStore(storePath(cfg))

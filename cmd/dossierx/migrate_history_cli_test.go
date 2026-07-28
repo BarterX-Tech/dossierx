@@ -117,7 +117,7 @@ func storeIsStillPreLedger(t *testing.T, storeFile string) {
 	if _, has := doc["ledger"]; has {
 		t.Fatalf("a refused migration wrote a ledger anyway:\n%s", raw)
 	}
-	if v, _ := doc["version"].(float64); v >= 2 {
+	if v, _ := doc["version"].(float64); v >= 2 { //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 		t.Fatalf("a refused migration stamped the ledger schema anyway:\n%s", raw)
 	}
 }
@@ -136,8 +136,6 @@ func anyContains(list []string, substr string) bool {
 // reproduction A: a covered project that removed its ledger to re-arm adoption
 // ---------------------------------------------------------------------
 
-// TestMigrateRefusesAProjectVersionControlSaysWasAlreadyCovered.
-//
 // The verified break, in ONE commit: on a fully ledger-covered project, delete
 // the "ledger" key, put "version" back to 1, delete the comment digest store,
 // rewrite a locked claim's body, and run "dossierx migrate --adopt". The
@@ -208,8 +206,6 @@ func TestMigrateRefusesAProjectVersionControlSaysWasAlreadyCovered(t *testing.T)
 	storeIsStillPreLedger(t, storeFile)
 }
 
-// TestMigrateReadsTheLedgerKeyOutOfHeadAndNotTheVersionField.
-//
 // The evidence has to be the one an attacker cannot edit away in the tree they
 // are being judged against. Here HEAD's comment digest store is absent (so the
 // stronger piece of evidence is gone) and HEAD's lock store carries an EMPTIED
@@ -276,8 +272,6 @@ func writeStoreDoc(t *testing.T, storeFile string, mutate func(map[string]any)) 
 // reproduction B: a locked claim edited since the last commit
 // ---------------------------------------------------------------------
 
-// TestMigrateRefusesLockedClaimsEditedSinceTheLastCommit.
-//
 // The simpler break, and the one with no forgery in it at all: an honest
 // pre-ledger project, a locked claim rewritten by hand, "dossierx migrate
 // --adopt". A pre-ledger store holds no record of a locked claim's approved
@@ -332,8 +326,6 @@ func TestMigrateRefusesLockedClaimsEditedSinceTheLastCommit(t *testing.T) {
 	storeIsStillPreLedger(t, storeFile)
 }
 
-// TestMigrateIgnoresEditsToDraftClaims.
-//
 // The other half of the same rule, and the one that keeps the gate usable: DRAFT
 // claims are free to edit on purpose, so an upgrader who is midway through
 // editing a draft when they run the migration must not be refused. Only claims
@@ -367,8 +359,6 @@ func TestMigrateIgnoresEditsToDraftClaims(t *testing.T) {
 // the honest paths, which must stay silent
 // ---------------------------------------------------------------------
 
-// TestMigrateAdoptsAnHonestGitProjectInSilence.
-//
 // The upgrade path this whole release turns on: a v0.2.x project, committed,
 // running "dossierx migrate --adopt" once. It must pass, and it must pass
 // QUIETLY — no degradation notice, no advisory about content that could not be
@@ -404,8 +394,6 @@ func TestMigrateAdoptsAnHonestGitProjectInSilence(t *testing.T) {
 	}
 }
 
-// TestMigrateDegradesHonestlyOutsideAWorkTree.
-//
 // A project that is not in git at all still has to be able to migrate — refusing
 // there would break every tarball checkout and every project that has not
 // committed yet, which is the outage implicit grandfathering existed to prevent.
@@ -443,8 +431,6 @@ func TestMigrateDegradesHonestlyOutsideAWorkTree(t *testing.T) {
 	}
 }
 
-// TestMigrateWarnsRatherThanRefusesAClaimLockedSinceTheLastCommit.
-//
 // A claim that reads status: locked here and did not at HEAD is exactly what a
 // hand flip looks like — and also exactly what a "dossierx claim lock" run under
 // the OLD v0.2.x binary, not yet committed when the upgrade happened, looks like.
@@ -489,8 +475,6 @@ func TestMigrateWarnsRatherThanRefusesAClaimLockedSinceTheLastCommit(t *testing.
 	}
 }
 
-// TestMigrateReportsAnUntrackedLockedClaimWithoutRefusingIt.
-//
 // A locked claim git holds no copy of — untracked, newly added, or moved by a
 // claims_dir reorganisation that has not been committed — has no committed state
 // to differ from. Reporting it is honest; refusing it would make an ordinary

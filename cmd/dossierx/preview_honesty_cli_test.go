@@ -19,8 +19,6 @@ import (
 // serve answers on the failure path
 // ---------------------------------------------------------------------
 
-// TestServeFailureEmitsAnEnvelope.
-//
 // serve is the one command exempt from the one-envelope-per-invocation contract,
 // and it has a real reason to be: its useful output (the URL) has to appear
 // before it blocks. The exemption was applied to the FAILURE path too, where it
@@ -67,8 +65,6 @@ func TestServeFailureUnderTextIsUnchanged(t *testing.T) {
 // claim new keeps its own promise in the reserved overview facet
 // ---------------------------------------------------------------------
 
-// TestClaimNewInTheOverviewFacetIsLintClean.
-//
 // `claim new`'s help text promises "the claim it writes is shaped to pass the
 // lint suite immediately". Under the one RESERVED facet it did the opposite,
 // every time: a claim in `overview` IS an orientation note (the facet name is
@@ -133,8 +129,6 @@ func TestClaimNewHonoursAnExplicitLayoutInTheOverviewFacet(t *testing.T) {
 // check --validate reports the ledger gate even when lint failed
 // ---------------------------------------------------------------------
 
-// TestValidateTextPrintsLedgerFindingsAlongsideLintErrors.
-//
 // The ledger block sat behind a `if !res.OK` return, and res.OK is lint-driven.
 // So a project with one unrelated lint error printed no integrity findings at
 // all, while `check` and `check --staged` printed both — the same command, the
@@ -180,8 +174,6 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 // a passing precondition's detail describes the pass
 // ---------------------------------------------------------------------
 
-// TestDryRunDetailsDescribeTheVerdictTheyStandNextTo.
-//
 // cliout.Precondition.Detail is emitted verbatim on BOTH branches — reporting
 // passing gates is the point, since the passes are the evidence — and several
 // call sites had written theirs for the failing branch only. The preview a human
