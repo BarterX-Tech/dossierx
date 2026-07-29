@@ -1,0 +1,14 @@
+id: widget.markdown-cases.table-in-blockquote
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > Comparison:
+  >
+  > | a | b |
+  > | --- | --- |
+  > | 1 | 2 |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a table is legal inside a blockquote, via the block scanner's own recursion

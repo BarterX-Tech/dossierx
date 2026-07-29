@@ -57,6 +57,15 @@
 //   - ATX headings at levels 3 to 6 only. "#" and "##" are reserved for the
 //     viewer's own chrome and render as literal text (markdown-sanity reports
 //     them), as does a run of seven or more.
+//   - GFM pipe tables — a header row, a REQUIRED delimiter row that sets each
+//     column's alignment, and zero or more body rows, becoming a real
+//     <table class="md-table"> whose cells carry a fixed-literal alignment
+//     class. Outer pipes are optional, a short row is padded and a long one
+//     truncated, and "\|" is a literal pipe rather than a cell boundary. Row
+//     splitting happens BEFORE inline parsing, so a code span does not protect
+//     a pipe — see markdown_tables.go, which carries the whole grammar, the
+//     placement rule, and the padding bound that keeps a table's output linear
+//     in its input.
 //   - Blockquotes — one level deep. The "> " prefix is stripped and the
 //     interior recurses into the same block scanner with blockquote
 //     recognition OFF, so lists, headings, rules, task items and fenced code
@@ -71,18 +80,18 @@
 // stated and no cell is filled by implementation choice:
 //
 //	blockquote interior : paragraphs, lists, task items, headings, thematic
-//	                      breaks and fenced code are all legal; a nested
-//	                      quote is literal text.
+//	                      breaks, fenced code and pipe tables are all legal;
+//	                      a nested quote is literal text.
 //	list-item interior  : nested lists, task items and fenced code are legal;
 //	                      every other block construct is literal text (a
-//	                      heading, rule or quote marker indented under an item
-//	                      is item prose, not a block).
-//	table cell          : inline only — RenderInline, no block construct at
+//	                      heading, rule, quote marker or pipe-table row
+//	                      indented under an item is item prose, not a block).
+//	table cell          : inline only — renderInline, no block construct at
 //	                      all, and no <br>.
 //
-// Explicitly out of scope: tables-in-markdown, images, multi-level
-// blockquotes, setext headings, indented (non-fenced) code blocks, and raw
-// inline HTML. FORMAT.md's body field ("markdown string") makes no promise
+// Explicitly out of scope: images, multi-level blockquotes, setext headings,
+// indented (non-fenced) code blocks, and raw inline HTML.
+// FORMAT.md's body field ("markdown string") makes no promise
 // beyond "markdown", so trimming to this subset does not contradict the
 // format spec's contract — it is a documented ceiling, not a silent gap.
 //
@@ -762,16 +771,21 @@ type itemBlock struct {
 // decided by the container matrix, which this function implements by WHERE it
 // tests each construct, not by a per-construct switch:
 //
-//   - thematic break, ATX heading and blockquote are tested only at indent
-//     column 0, so under an open list item they are ordinary item prose. That
-//     is the matrix's list-item row ("other block constructs literal text")
-//     with no extra machinery, and it is why "  ### x" inside an item renders
-//     as the literal text "### x".
+//   - thematic break, ATX heading, blockquote and pipe table are tested only
+//     at indent column 0, so under an open list item they are ordinary item
+//     prose. That is the matrix's list-item row ("other block constructs
+//     literal text") with no extra machinery, and it is why "  ### x" inside
+//     an item renders as the literal text "### x" and why an indented
+//     "  | a | b |" row is item prose rather than a table.
 //   - a fence and a list marker are tested at any indent, which is the
 //     matrix's "nested lists, task items and fenced code are legal inside an
 //     item".
-//   - a table cell never reaches this function at all: RenderInline is the
+//   - a table cell never reaches this function at all: renderInline is the
 //     table-cell entry point, so a cell is inline-only by construction.
+//
+// The pipe table is tested LAST of the column-zero constructs — after the list
+// marker and continuation branches — so a line that already opens or continues
+// a list item is never re-read as a header row. See markdown_tables.go.
 //
 // Block-switch rule: encountering a different block type (a marker line while
 // a paragraph is accumulating, a plain paragraph line while a list is open, a
@@ -1047,6 +1061,40 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 			continue
 		}
 
+		// A GFM pipe table, at indent column 0 only — the same guard hr,
+		// headings and blockquotes use, and the whole of why a table is legal
+		// inside a blockquote (via this function's own recursion) and is
+		// literal item prose inside a list item. It is tested here, AFTER the
+		// list-marker and continuation branches, so a line that already opens
+		// or continues a list item is never re-read as a header row.
+		//
+		// A table interrupts an open paragraph and ends any open list, exactly
+		// as the plain-paragraph branch below would have. See markdown_tables.go
+		// for the grammar, and for why a refused table consumes its own extent
+		// instead of falling through line by line.
+		if w == 0 {
+			if aligns, end, verdict := tableAt(lines, i); verdict != notATable {
+				if verdict == isATable {
+					flushParagraph()
+					flushList()
+					writeTable(b, lines, i, end, aligns)
+				} else {
+					// Refused for padding amplification. The block becomes
+					// ordinary paragraph prose with its source bytes
+					// unchanged: it joins an open paragraph and ends an open
+					// list, exactly as the branch below would have, and it is
+					// CONSUMED so the delimiter row cannot become the next
+					// candidate header and re-walk the same extent.
+					flushList()
+					for j := i; j <= end; j++ {
+						paraSegs = append(paraSegs, newSegment(lines[j]))
+					}
+				}
+				i = end
+				continue
+			}
+		}
+
 		// Plain paragraph line: any open list ends here (a non-indented,
 		// non-marker line is never a list continuation), and an indented line
 		// with no open list to fold into is ordinary prose rather than a
@@ -1159,6 +1207,14 @@ func writeList(b *strings.Builder, l *listNode) {
 // <td> renders the same inline markdown subset a card/list/steps body does,
 // minus the block-level paragraph/list/fence handling Render layers on top (a
 // table cell wants inline content, not a <p>-wrapped block).
+//
+// TWO UNRELATED THINGS ARE CALLED A TABLE CELL and both land here. A
+// "layout: table" claim's structured Rows[].cell is one, via components; a GFM
+// pipe table's cell inside a markdown BODY is the other, via
+// markdown_tables.go. They share this entry point precisely because they want
+// the identical answer — inline markdown, no block layer — and they share
+// nothing else: the claim layout keeps its own rows-shape lint and column
+// ordering, and a pipe table has neither.
 //
 // Render and RenderInline stay in parity by construction: both run the SAME
 // renderInline, so a construct behaves identically in a paragraph, a list

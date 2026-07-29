@@ -1,0 +1,12 @@
+id: widget.markdown-cases.table-escaped-pipe-in-code-span
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | syntax | note |
+  | --- | --- |
+  | `a\|b` | one cell, one code span |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the documented escape exception - an escaped pipe is the only way to put a pipe in a cell's code span

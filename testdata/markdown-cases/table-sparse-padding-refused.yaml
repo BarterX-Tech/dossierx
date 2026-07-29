@@ -1,0 +1,17 @@
+id: widget.markdown-cases.table-sparse-padding-refused
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  |a|b|c|d|e|
+  |-|-|-|-|-|
+  |
+  |
+  |
+  |
+  |
+  |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - padding amplification - a table may not emit more cells than its source has bytes

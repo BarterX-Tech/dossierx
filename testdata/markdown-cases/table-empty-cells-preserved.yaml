@@ -1,0 +1,13 @@
+id: widget.markdown-cases.table-empty-cells-preserved
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a | b | c |
+  | --- | --- | --- |
+  | 1 |  | 3 |
+  |  | 2 |  |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - an interior empty cell keeps its column; only outer pipes are optional

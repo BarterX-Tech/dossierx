@@ -1,0 +1,15 @@
+id: widget.markdown-cases.table-hostile-cell-content
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | probe | rendered |
+  | --- | --- |
+  | <script>alert(1)</script> | escaped |
+  | a & b | ampersand |
+  | "quoted" | quotes |
+  | [x](javascript:alert(1)) | rejected scheme |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - hostile cell content - script tags, ampersands, quotes and a rejected link scheme

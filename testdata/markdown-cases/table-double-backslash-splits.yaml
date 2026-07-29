@@ -1,0 +1,12 @@
+id: widget.markdown-cases.table-double-backslash-splits
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a \\| b |
+  | --- | --- |
+  | c \\| d |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - an escaped backslash is followed by a REAL cell boundary

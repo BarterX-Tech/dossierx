@@ -66,6 +66,11 @@ func assertTagBalance(t *testing.T, out string) {
 		// order openers are met, so "did every tag it opened get closed" is a
 		// real question here in a way it never was for a code span.
 		"strong", "em", "del", "a",
+		// Phase C's tags. A table is the first construct whose element count
+		// is decided by TWO independent things — the delimiter row's arity and
+		// each body row's own — so "did every cell it opened get closed" is the
+		// question the padding/truncation rule has to keep answering yes to.
+		"table", "thead", "tbody", "tr", "th", "td",
 	} {
 		openCount := countOpenTags(out, tag)
 		closeCount := strings.Count(out, "</"+tag+">")

@@ -331,6 +331,77 @@ func costShapes() []costShape {
 			why:  "infoLanguage runs per closed fence and must not be linear in the whole line",
 			gen:  func(n int) string { return repeatTo("```json\nx\n```\n", n) },
 		},
+		// --- phase C: pipe tables -------------------------------------
+		//
+		// Tables are the first construct whose OUTPUT is not bounded by its
+		// input: a short body row emits one cell per HEADER column, so N
+		// columns and M rows amplify N+M bytes into N*M cells. The padding
+		// bound (see markdown_tables.go) is what makes that linear again, and
+		// table-ragged-rows-refused is the row that measures it. The rest guard
+		// the new per-line searches: the unescaped-pipe scan, the delimiter-row
+		// pre-filter, and one splitRow allocation per candidate row.
+		{
+			name: "table-rows-many",
+			why:  "a real table: one splitRow and one inline pass per row, and the extent walked once",
+			gen:  func(n int) string { return tableOf(3, "| a | b | c |\n", n) },
+		},
+		{
+			name: "table-columns-many",
+			why:  "one enormous header: cell count is linear in the row's bytes, not quadratic in it",
+			gen:  wideTable,
+		},
+		{
+			name: "table-pipe-runs-one-line",
+			why:  "many pipes on one line: a solid run that splits into one empty cell per byte",
+			gen:  pipeRunLines,
+		},
+		{
+			name: "table-ragged-rows-padded",
+			why:  "padding: every short row emits one cell per header column, and must stay bounded by them",
+			gen:  func(n int) string { return tableOf(4, "| x |\n", n) },
+		},
+		{
+			name: "table-ragged-rows-refused",
+			why:  "THE amplification shape: N columns x M one-byte rows, refused and CONSUMED, never re-walked",
+			gen:  func(n int) string { return tableOf(24, "|\n", n) },
+		},
+		{
+			// The shape that MAXIMISES padding amplification, and the reason
+			// the padding bound exists at all: spend a sixth of the budget on
+			// columns and the rest on one-byte rows and the cell count is
+			// bytes^2/12 — ~9x10^10 cells, ~800 GB of <td>, from one stored
+			// 1 MiB comment. Every other table row in this sweep sits far below
+			// that ratio, so without this one the bound had never been measured
+			// at the shape it was written for.
+			name: "table-max-amplification",
+			why:  "cells = N*M from N+M bytes: the padding bound must refuse it, and must consume it",
+			gen:  maxAmplificationTable,
+		},
+		{
+			name: "table-escaped-pipes",
+			why:  "the escape walk in splitRow, plus unescapePipes' per-cell rebuild",
+			gen:  func(n int) string { return tableOf(2, `| a \| b | c |`+"\n", n) },
+		},
+		{
+			name: "table-code-span-pipes",
+			why:  "a pipe inside a code span splits, so every row leaves unclosed backtick runs to the inline pass",
+			gen:  func(n int) string { return tableOf(3, "| `a|b` | c |\n", n) },
+		},
+		{
+			name: "table-delimiter-shaped-non-tables",
+			why:  "delimiter-row-shaped lines that never become a table: every line is parsed as one and rejected on arity",
+			gen:  func(n int) string { return repeatTo("|-|-|\n|-|\n", n) },
+		},
+		{
+			name: "table-pipe-prose-never-completes",
+			why:  "pipe-bearing prose: the delimiter pre-filter must reject in O(line) with no allocation",
+			gen:  func(n int) string { return repeatTo("a | b | c\n", n) },
+		},
+		{
+			name: "table-in-blockquote",
+			why:  "tables reached through the quote recursion, where the interior is re-sliced per quote",
+			gen:  func(n int) string { return "> | a | b |\n> | - | - |\n" + repeatTo("> | 1 | 2 |\n", n) },
+		},
 		{
 			name: "prose-control",
 			why:  "the ordinary shape: it must not have paid for any of the repairs",
@@ -405,6 +476,71 @@ func deepeningNestedList(n int) string {
 		sb.WriteString("- a\n")
 	}
 	return sb.String()
+}
+
+// tableOf builds a real pipe table of cols columns whose body is row repeated
+// to about n bytes. The header and delimiter rows are generated to match, so a
+// caller only chooses the raggedness: a row with cols cells is a dense table,
+// and a shorter one exercises padding.
+func tableOf(cols int, row string, n int) string {
+	var sb strings.Builder
+	sb.Grow(n + 8*cols + 64)
+	for _, cell := range []string{" h |", " - |"} {
+		sb.WriteByte('|')
+		for c := 0; c < cols; c++ {
+			sb.WriteString(cell)
+		}
+		sb.WriteByte('\n')
+	}
+	for sb.Len() < n {
+		sb.WriteString(row)
+	}
+	return sb.String()
+}
+
+// wideTable builds ONE table whose header is as wide as the whole body: about
+// n/8 columns, a matching delimiter row and a single body row. Row count is
+// constant, so any cost that is superlinear in a single row's cell count shows
+// up here and nowhere else.
+func wideTable(n int) string {
+	cols := n / 8
+	if cols < 1 {
+		cols = 1
+	}
+	return tableOf(cols, "| x |\n", 0)
+}
+
+// maxAmplificationTable builds the table shape whose emitted cell count is
+// maximal for its byte budget: a header of n/6 columns, a matching delimiter
+// row, and one-byte body rows for the remaining half of the budget. Column
+// count and row count are each linear in n, so the CELL count is quadratic in
+// it — the whole reason markdown_tables.go bounds a table's cells by its own
+// source bytes.
+func maxAmplificationTable(n int) string {
+	cols := n / 6
+	if cols < 1 {
+		cols = 1
+	}
+	var sb strings.Builder
+	sb.Grow(n + 64)
+	sb.WriteString(strings.Repeat("|", cols+1)) // cols empty header cells
+	sb.WriteString("\n|")
+	sb.WriteString(strings.Repeat("-|", cols))
+	sb.WriteByte('\n')
+	for sb.Len() < n {
+		sb.WriteString("|\n")
+	}
+	return sb.String()
+}
+
+// pipeRunLines builds two lines of solid pipes, n/2 bytes each. Every byte is
+// its own cell boundary, which is the maximum cell density a row can reach; the
+// second line is delimiter-SHAPED (nothing but pipes) and is therefore parsed as
+// a delimiter row before being rejected, so this measures the whole candidate
+// path at its densest.
+func pipeRunLines(n int) string {
+	half := n / 2
+	return strings.Repeat("|", half) + "\n" + strings.Repeat("|", half) + "\n"
 }
 
 // costSweepSizes are the four measurement points, an 8x span. Linear work
@@ -1161,12 +1297,25 @@ func costCorpus() []string {
 		// trailing punctuation has to be given back.
 		"<", "<>", "<a", "<a b>", "< a>", "<script>", "<x:y>", "<javascript:x>",
 		"<mailto:a@b>", "<<a:b>>", "*<a:b>*", "`<a:b>`",
+		// Phase C's row-splitting edges: an outer pipe on one side only, an
+		// interior empty cell, a delimiter row that is not one, an arity
+		// mismatch, an escaped pipe at every position a backslash run can put
+		// it, and a pipe inside a code span (which splits).
+		"|", "||", "|||", "|\n|", "|a|\n|-|", "|a|\n|-|-|", "a|b\n-|-",
+		"|a|b|\n|:-|-:|\n|1|2|", "|a|\n|:-:|\n|", "|a|\n|--|\n|1|2|3|",
+		"|a|\n|--|\n|", "|a|b|\n|-|-|\n|1|", "| a |\n---\n| 1 |",
+		`|a\|b|` + "\n|-|", `|a\\|b|` + "\n|-|-|", `|a\\\|b|` + "\n|-|",
+		"|`a|b`|\n|-|-|", "|`a\\|b`|\n|-|", `|a\|` + "\n|-|",
+		"> |a|b|\n> |-|-|\n> |1|2|", "- x\n  |a|b|\n  |-|-|",
+		"|a|b|c|d|e|\n|-|-|-|-|-|\n|\n|\n|\n|\n|\n|\n|\n|",
 	}
 	rng := rand.New(rand.NewSource(0x5EED))
 	// The alphabet is every byte the block and inline scanners special-case.
 	// Phase A added six: the three emphasis delimiters, the angle bracket, and
-	// the two bytes a bare url is detected by.
-	alphabet := []byte("``` \n\\ax[](){}-*.1#_~<>:/hts")
+	// the two bytes a bare url is detected by. Phase C added the pipe, which is
+	// the only byte that is a delimiter at the LINE level rather than the inline
+	// one — so the random shapes now reach row splitting too.
+	alphabet := []byte("``` \n\\ax[](){}-*.1#_~<>:/hts|")
 	for c := 0; c < 400; c++ {
 		n := 1 + rng.Intn(120)
 		buf := make([]byte, n)

@@ -1,0 +1,12 @@
+id: widget.markdown-cases.table-delimiter-arity-mismatch-is-prose
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a | b | c |
+  | --- | --- |
+  | 1 | 2 | 3 |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a delimiter row whose cell count differs from the header's is not a table

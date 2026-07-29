@@ -10,4 +10,4 @@ body: |
   | L2   |   C2   |    R2 |
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests pipe table alignment (not yet supported)
+  reason: markdown renderer test fixture - tests pipe table column alignment classes

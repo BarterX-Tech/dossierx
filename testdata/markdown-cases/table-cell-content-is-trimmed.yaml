@@ -1,0 +1,12 @@
+id: widget.markdown-cases.table-cell-content-is-trimmed
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  |      spaced      |     also spaced     |
+  | --- | --- |
+  |        a         |          b          |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - cell content is trimmed of surrounding whitespace

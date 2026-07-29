@@ -1,0 +1,12 @@
+id: widget.markdown-cases.table-outer-pipes-optional
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Feature | Status
+  ------- | ------
+  tables  | shipped
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - leading and trailing pipes are optional on every row

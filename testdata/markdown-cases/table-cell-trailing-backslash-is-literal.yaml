@@ -1,0 +1,12 @@
+id: widget.markdown-cases.table-cell-trailing-backslash-is-literal
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a\ | b |
+  | --- | --- |
+  | c\ | d |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a cell is single-line, so a trailing backslash is a literal, never a hard break

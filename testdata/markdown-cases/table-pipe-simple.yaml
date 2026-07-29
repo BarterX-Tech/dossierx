@@ -10,4 +10,4 @@ body: |
   | Cell 3   | Cell 4   |
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests pipe table (not yet supported)
+  reason: markdown renderer test fixture - tests the basic GFM pipe table shape
