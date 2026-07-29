@@ -1,0 +1,11 @@
+id: widget.markdown-cases.blockquote-hard-break
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > First line\
+  > Second line
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a hard break threads through blockquote recursion

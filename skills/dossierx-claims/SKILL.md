@@ -45,9 +45,13 @@ it out.
   by hand walks past the lint gate, the doctrine gate and the open-thread gate as though all three
   had passed, and the lock ledger will report it as `integrity_failed` on the next check.
 - `body` (prose) and/or `rows` (a table; every cell must be an authored **string**, so quote
-  numbers and booleans). A claim needs at least one. In both, backtick code spans and
-  `[text](url)` links render; bare URLs are not autolinked; `javascript:`/`data:` URLs are
-  neutralized. That is the whole markdown ceiling — do not reach past it.
+  numbers and booleans). A claim needs at least one. `body` gets the wider **block** ceiling —
+  paragraphs, fenced code, backslash escapes, code spans, links, lists (with task items), thematic
+  breaks, headings (`###`–`######` only — `#`/`##` render as literal text), and one level of
+  blockquote. Every `rows` cell gets the narrower **inline-only** ceiling — code spans and links,
+  no block constructs. In both, `[text](url)` links render with an allowlisted scheme; bare URLs
+  are not autolinked; `javascript:`/`data:` URLs are neutralized. See FORMAT.md's markdown-ceiling
+  section for the full two-ceiling table — do not reach past either one.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required

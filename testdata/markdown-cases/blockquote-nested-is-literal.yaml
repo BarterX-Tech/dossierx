@@ -1,0 +1,12 @@
+id: widget.markdown-cases.blockquote-nested-is-literal
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > Outer quote.
+  > > Inner stays literal.
+  >> Also literal.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - one level only - a second > inside a quote is literal text

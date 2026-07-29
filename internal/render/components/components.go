@@ -299,7 +299,48 @@ func pillClass(status model.Status, reviewPending bool) string {
 // where at least one module has linked at least one file — see that
 // package's attachImplinkOverride.
 func edgesHTML(c model.Claim) template.HTML {
-	return EdgesHTMLWithLinks(c, nil, nil)
+	return EdgesHTMLWithLinks(c, nil, nil, nil)
+}
+
+// TargetStatus is what a claim-edge target pill (see writeClaimRef) needs to
+// know about the claim it points at: just enough of that claim's own
+// Status/ReviewPending pair to decide whether the target is actionable, not
+// the whole model.Claim (the edges footer never had a reason to hold every
+// other claim in memory before this feature, and shouldn't start now).
+type TargetStatus struct {
+	Status        model.Status
+	ReviewPending bool
+}
+
+// targetPillHTML returns the small inline pill writeClaimRef appends after a
+// target's label, or "" when the target carries no pill at all. A pill is
+// shown ONLY for an actionable target — draft, or locked with
+// review_pending — reusing pillClass so a target pill is drawn from the same
+// three-way status→class mapping every claim-head pill already uses. A
+// healthy locked target (the common case) gets nothing: the footer stays
+// quiet and lights up exactly on the case it exists to explain (a claim
+// gated on an edge that isn't ready yet), not on every edge indiscriminately.
+//
+// statuses is nil whenever the caller has no catalog to look targets up in
+// — the default, parse-time "edges"/"claimEdgeList" funcMap bindings can
+// never see the catalog (see this file's Load/loadOne), so every target
+// silently gets no pill under those bindings. Only internal/render's
+// attachEdgesOverride, which does have the whole catalog, ever supplies a
+// non-nil map (see that package's buildTargetStatusLookup).
+func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
+	st, ok := statuses[targetID]
+	if !ok {
+		return ""
+	}
+	actionable := st.Status == model.StatusDraft || (st.Status == model.StatusLocked && st.ReviewPending)
+	if !actionable {
+		return ""
+	}
+	label := string(st.Status)
+	if st.Status == model.StatusLocked && st.ReviewPending {
+		label = "review_pending"
+	}
+	return ` <span class="pill ` + pillClass(st.Status, st.ReviewPending) + `">` + html.EscapeString(label) + `</span>`
 }
 
 // EdgesHTMLWithLinks renders the same shared edges footer as edgesHTML,
@@ -325,7 +366,7 @@ func edgesHTML(c model.Claim) template.HTML {
 // side is edited without the other — the very duplication this project's
 // single-source-of-truth rule (see rests_on's own doc comment) exists to
 // rule out.
-func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []string) template.HTML {
+func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
 	var b strings.Builder
 	b.WriteString(`<ul class="claim-edges">`)
 
@@ -334,7 +375,13 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 			b.WriteString(`<li class="claim-governed governed-none">governed_by: none`)
 			if c.Governed.Reason != "" {
 				b.WriteString(` — `)
-				b.WriteString(html.EscapeString(c.Governed.Reason))
+				// Reason is hand-written prose, not viewer chrome (unlike
+				// Claim.Section below), and routinely names a claim id or a
+				// path — so it goes through the same INLINE-ceiling renderer
+				// every other prose field uses (markdown.RenderInline: code
+				// spans and links, no block constructs) rather than a bare
+				// html.EscapeString.
+				b.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
 			}
 			b.WriteString(`</li>`)
 		} else {
@@ -344,26 +391,26 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 			// different facet from the claim it governs, so this is precisely
 			// the edge whose prefix tier ("Doctrine › Hub") carries information.
 			b.WriteString(`<li class="claim-governed">governed_by: `)
-			writeClaimRef(&b, c.Governed.Type, c.Module, c.Facet)
+			writeClaimRef(&b, c.Governed.Type, c.Module, c.Facet, targetStatuses)
 			b.WriteString(`</li>`)
 		}
 	}
 
 	if len(c.Mirrors) > 0 {
 		b.WriteString(`<li class="claim-mirrors">mirrors:`)
-		writeIDListItems(&b, c.Module, c.Facet, c.Mirrors)
+		writeIDListItems(&b, c.Module, c.Facet, c.Mirrors, targetStatuses)
 		b.WriteString(`</li>`)
 	}
 
 	if len(c.RestsOn) > 0 {
 		b.WriteString(`<li class="claim-rests-on">rests_on:`)
-		writeIDListItems(&b, c.Module, c.Facet, c.RestsOn)
+		writeIDListItems(&b, c.Module, c.Facet, c.RestsOn, targetStatuses)
 		b.WriteString(`</li>`)
 	}
 
 	if len(dependedBy) > 0 {
 		b.WriteString(`<li class="claim-depended-by">depended on by:`)
-		writeIDListItems(&b, c.Module, c.Facet, dependedBy)
+		writeIDListItems(&b, c.Module, c.Facet, dependedBy, targetStatuses)
 		b.WriteString(`</li>`)
 	}
 
@@ -566,11 +613,11 @@ func cell(v any) template.HTML {
 // own bulleted line rather than a run-on comma list. fromModule/fromFacet are
 // the RENDERING claim's own module and facet — the context writeClaimRef
 // elides each target's redundant prefix against.
-func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []string) {
+func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []string, targetStatuses map[string]TargetStatus) {
 	b.WriteString(`<ul class="claim-edge-id-list">`)
 	for _, id := range ids {
 		b.WriteString(`<li>`)
-		writeClaimRef(b, id, fromModule, fromFacet)
+		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses)
 		b.WriteString(`</li>`)
 	}
 	b.WriteString(`</ul>`)
@@ -686,7 +733,16 @@ func ClaimLabel(id string) string {
 // reads the same as the nav entry and tab the reader would click to get there
 // ("Token Ledger · Contract ›" for module "token-ledger"), rather than showing
 // a second, raw spelling of names the chrome already renders capitalized.
-func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string) {
+// targetStatuses supplies the optional C6 status pill (issue #11's last
+// unshipped piece) appended after the target's label: draft, or locked with
+// review_pending — see targetPillHTML for the actionable-only gate. It is
+// nil under the default, parse-time funcMap binding (see this file's
+// funcMap/Load), which has no catalog to look a target's status up in, so
+// every target simply renders with no pill there — the same output this
+// function produced before the pill existed. Only internal/render's
+// attachEdgesOverride, which does have the whole catalog, ever supplies a
+// non-nil map.
+func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
 	esc := html.EscapeString(targetID)
 	b.WriteString(`<a class="claim-ref" href="#`)
 	b.WriteString(esc)
@@ -703,6 +759,7 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string) {
 		b.WriteString(`<span class="claim-ref-label claim-ref-raw">`)
 		b.WriteString(esc)
 		b.WriteString(`</span></a>`)
+		b.WriteString(targetPillHTML(targetID, targetStatuses))
 		return
 	}
 
@@ -722,6 +779,7 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string) {
 	b.WriteString(`<span class="claim-ref-label">`)
 	b.WriteString(html.EscapeString(DisplayCase(slug)))
 	b.WriteString(`</span></a>`)
+	b.WriteString(targetPillHTML(targetID, targetStatuses))
 }
 
 // ClaimEdgeListHTML renders ids as the same nested <ul class="claim-edge-id-
@@ -745,7 +803,12 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string) {
 func ClaimEdgeListHTML(fromID string, ids []string) template.HTML {
 	module, facet, _, _ := splitClaimID(fromID)
 	var b strings.Builder
-	writeIDListItems(&b, module, facet, ids)
+	// build_order.html only ever lists LOCKED claims (see that partial's
+	// own doc comment — attachBuildOrders filters to locked-only
+	// artifacts before this ever executes), and "claimEdgeList" has no
+	// override binding of its own to carry a catalog lookup through the
+	// way "edges" does, so this always renders with no target pill.
+	writeIDListItems(&b, module, facet, ids, nil)
 	return template.HTML(b.String())
 }
 

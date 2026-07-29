@@ -1,0 +1,12 @@
+id: widget.markdown-cases.task-list-item-loose
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - [x] done
+
+  - [ ] todo
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the checkbox precedes the <p> wrapper in a loose task list

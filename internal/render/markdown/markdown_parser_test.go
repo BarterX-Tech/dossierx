@@ -109,7 +109,7 @@ func TestRender_FenceAtColumnZeroClosesAnOpenList(t *testing.T) {
 func TestRender_BlankLineBeforeIndentedFenceKeepsOrderedList(t *testing.T) {
 	body := "1. Install it:\n\n   ```sh\n   go install ./...\n   ```\n\n2. Then run it.\n"
 	got := string(Render(body))
-	want := "<ol><li>Install it:<pre><code>go install ./...\n</code></pre></li><li>Then run it.</li></ol>"
+	want := "<ol><li><p>Install it:</p><pre><code>go install ./...\n</code></pre></li><li><p>Then run it.</p></li></ol>"
 	if got != want {
 		t.Errorf("blank line before an indented fence:\n got: %s\nwant: %s", got, want)
 	}
@@ -119,7 +119,7 @@ func TestRender_BlankLineBeforeIndentedFenceKeepsOrderedList(t *testing.T) {
 func TestRender_BlankLineBeforeIndentedFenceKeepsUnorderedList(t *testing.T) {
 	body := "- Install it:\n\n  ```sh\n  go install ./...\n  ```\n\n- Then run it.\n"
 	got := string(Render(body))
-	want := "<ul><li>Install it:<pre><code>go install ./...\n</code></pre></li><li>Then run it.</li></ul>"
+	want := "<ul><li><p>Install it:</p><pre><code>go install ./...\n</code></pre></li><li><p>Then run it.</p></li></ul>"
 	if got != want {
 		t.Errorf("blank line before an indented fence:\n got: %s\nwant: %s", got, want)
 	}
@@ -132,7 +132,7 @@ func TestRender_BlankLineBeforeIndentedFenceKeepsUnorderedList(t *testing.T) {
 func TestRender_BlankLineBeforeNestedItemAndItsFence(t *testing.T) {
 	body := "- Top\n\n  - Nested\n\n    ```\n    code\n    ```\n\n- Second top\n"
 	got := string(Render(body))
-	want := "<ul><li>Top<ul><li>Nested<pre><code>code\n</code></pre></li></ul></li><li>Second top</li></ul>"
+	want := "<ul><li><p>Top</p><ul><li><p>Nested</p><pre><code>code\n</code></pre></li></ul></li><li><p>Second top</p></li></ul>"
 	if got != want {
 		t.Errorf("blank lines around a nested item's fence:\n got: %s\nwant: %s", got, want)
 	}
@@ -160,8 +160,8 @@ func TestRender_BlankLineNeverRenumbers(t *testing.T) {
 // plain items is an ordinary loose list, not two lists.
 func TestRender_BlankLineBetweenPlainItemsKeepsOneList(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"- a\n\n- b\n", "<ul><li>a</li><li>b</li></ul>"},
-		{"1. a\n\n2. b\n", "<ol><li>a</li><li>b</li></ol>"},
+		{"- a\n\n- b\n", "<ul><li><p>a</p></li><li><p>b</p></li></ul>"},
+		{"1. a\n\n2. b\n", "<ol><li><p>a</p></li><li><p>b</p></li></ol>"},
 	}
 	for _, tc := range cases {
 		if got := string(Render(tc.in)); got != tc.want {
@@ -176,7 +176,7 @@ func TestRender_BlankLineBetweenPlainItemsKeepsOneList(t *testing.T) {
 func TestRender_BlankLineThenIndentedProseContinuesItem(t *testing.T) {
 	body := "1. one\n\n   continued prose\n\n2. two\n"
 	got := string(Render(body))
-	want := "<ol><li>one continued prose</li><li>two</li></ol>"
+	want := "<ol><li><p>one continued prose</p></li><li><p>two</p></li></ol>"
 	if got != want {
 		t.Errorf("blank line before a continuation:\n got: %s\nwant: %s", got, want)
 	}
@@ -188,7 +188,7 @@ func TestRender_BlankLineThenIndentedProseContinuesItem(t *testing.T) {
 func TestRender_BlankLineThenDedentedProseReturnsToTopItem(t *testing.T) {
 	body := "1. Step one\n   - sub a\n\n   More about step one.\n\n2. Step two\n"
 	got := string(Render(body))
-	want := "<ol><li>Step one<ul><li>sub a</li></ul>More about step one.</li><li>Step two</li></ol>"
+	want := "<ol><li><p>Step one</p><ul><li>sub a</li></ul><p>More about step one.</p></li><li><p>Step two</p></li></ol>"
 	if got != want {
 		t.Errorf("dedented continuation after a blank line:\n got: %s\nwant: %s", got, want)
 	}

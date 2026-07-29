@@ -1,0 +1,14 @@
+id: widget.markdown-cases.loose-list-nested-stays-tight
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - Outer one
+
+  - Outer two
+    - inner a
+    - inner b
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - looseness is a property of the list, not of the document

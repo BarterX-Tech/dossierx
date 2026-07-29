@@ -28,22 +28,46 @@
 //     off-origin — is neutralized to escaped literal text with no anchor. Both
 //     the url (in attribute context) and the link text are HTML-escaped. See
 //     renderInline and allowedScheme for the parsing/allowlist boundary.
-//   - Unordered ("-"/"*") and ordered ("1.", "2.", ...) lists, with exactly
-//     one level of nesting (an indented "-"/"*" or "N." item folded under
-//     the immediately preceding top-level item) — new in this package, and
-//     matches the real corpora's maximum depth (confirmed by scanning every
-//     body in the corpus this package was first built against; nothing
-//     goes deeper). Lists are LOOSE: a blank line between items, or between
-//     an item and its indented content, does not end the list — only a
-//     non-indented, non-marker line does (see renderBlocks' loose-list
-//     rule).
+//   - Unordered ("-"/"*") and ordered ("1.", "2.", ...) lists, nested to
+//     UNBOUNDED depth via an indent-keyed depth stack (see renderBlocks' list
+//     indentation rule), with GFM task items ("- [ ]" / "- [x]") rendering a
+//     disabled checkbox, CommonMark looseness (a blank line inside a list
+//     makes the whole list loose and every item's prose is <p>-wrapped) and
+//     an <ol start="n"> whenever an ordered list's first item is not 1.
+//   - Thematic breaks — a line of three or more dashes and nothing else is
+//     ALWAYS an <hr>. There is no setext heading in this subset, so "text"
+//     followed by "---" is a paragraph and then a rule, never an <h2>.
+//   - ATX headings at levels 3 to 6 only. "#" and "##" are reserved for the
+//     viewer's own chrome and render as literal text (markdown-sanity reports
+//     them), as does a run of seven or more.
+//   - Blockquotes — one level deep. The "> " prefix is stripped and the
+//     interior recurses into the same block scanner with blockquote
+//     recognition OFF, so lists, headings, rules, task items and fenced code
+//     inside a quote come free while a second ">" stays literal text.
+//   - Hard line breaks — a trailing backslash or two trailing spaces becomes
+//     a <br>. Both spellings are captured before the line is trimmed and
+//     carried as an offset into the joined block text, so the inline pass
+//     still runs ONCE per paragraph and a future emphasis/strikethrough
+//     construct spans a break for free (see joinSegments).
 //
-// Explicitly out of scope: bold/italic, headings, blockquotes,
-// tables-in-markdown, more than one level of list nesting. None of these
-// appear anywhere in the corpus this engine currently renders, and
-// FORMAT.md's body field ("markdown string") makes no promise beyond
-// "markdown", so trimming to this subset does not contradict the format
-// spec's contract — it is a documented ceiling, not a silent gap.
+// THE CONTAINER MATRIX (gate 0, amendment A2) is implemented exactly as
+// stated and no cell is filled by implementation choice:
+//
+//	blockquote interior : paragraphs, lists, task items, headings, thematic
+//	                      breaks and fenced code are all legal; a nested
+//	                      quote is literal text.
+//	list-item interior  : nested lists, task items and fenced code are legal;
+//	                      every other block construct is literal text (a
+//	                      heading, rule or quote marker indented under an item
+//	                      is item prose, not a block).
+//	table cell          : inline only — RenderInline, no block construct at
+//	                      all, and no <br>.
+//
+// Explicitly out of scope: bold/italic/strikethrough, tables-in-markdown,
+// images, multi-level blockquotes, setext headings, indented (non-fenced)
+// code blocks. FORMAT.md's body field ("markdown string") makes no promise
+// beyond "markdown", so trimming to this subset does not contradict the
+// format spec's contract — it is a documented ceiling, not a silent gap.
 //
 // Pure stdlib (strings/html/html/template) — no new dependency.
 package markdown
@@ -53,6 +77,7 @@ import (
 	"html/template"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -77,7 +102,7 @@ import (
 // inside the scanner is what makes containers survive them.
 func Render(body string) template.HTML {
 	var b strings.Builder
-	renderBlocks(&b, body)
+	renderBlocks(&b, strings.Split(body, "\n"), true)
 	return template.HTML(b.String())
 }
 
@@ -236,17 +261,286 @@ func stripIndent(line string, n int) string {
 	return line[i:]
 }
 
-// orderedMarker matches a top-level-shaped "N. rest of line" list marker
-// (e.g. "14. Context immutability: ..."); group 2 is the item's own text
-// with the marker stripped. It is matched against a line's trimmed content
-// regardless of the line's actual indentation — indentation only decides
-// whether a matching line starts a new top-level item or a nested item
-// under the current top-level item (see renderBlocks).
+// --- thematic breaks ------------------------------------------------------
+
+// thematicBreak reports whether a line's TRIMMED content is a horizontal rule.
+//
+// ONE SPELLING ONLY: three or more dashes and nothing else. "***" and "___"
+// are not rules here — they stay literal text (and are left free for the
+// emphasis delimiters this package's inline pass may grow), so there is
+// exactly one way to write a rule and exactly one thing "---" can mean.
+//
+// That single meaning is the point. This subset has NO setext heading, so a
+// "---" line under a paragraph is unconditionally a rule and never retitles
+// the paragraph above it as an <h2> — which is what makes "#" and "##" being
+// reserved for viewer chrome (see atxHeading) actually hold: there is no back
+// door that produces one.
+//
+// A rule is recognized at indent column 0 only. Indented under an open list
+// item it is item prose, per the container matrix.
+func thematicBreak(trimmed string) bool {
+	if len(trimmed) < 3 {
+		return false
+	}
+	for i := 0; i < len(trimmed); i++ {
+		if trimmed[i] != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+// --- ATX headings ---------------------------------------------------------
+
+// atxHeading recognizes "### text" through "###### text" — levels 3 to 6 and
+// nothing else — returning the level and the heading's inline text.
+//
+// LEVELS 1 AND 2 ARE RESERVED for the viewer's own chrome, so "# x" and "## x"
+// return ok=false and fall through to ordinary paragraph handling: the hashes
+// stay visible as literal text rather than being silently swallowed, and
+// markdown-sanity reports them as "reserved heading level, use ### or deeper".
+// A run of seven or more hashes is likewise not a heading (CommonMark caps at
+// six). This is deliberately a REJECTION, not a silent acceptance at some other
+// level — an author who writes "# Title" must see that it did not become a
+// heading.
+//
+// A heading is recognized at indent column 0 only (indented under an open list
+// item it is item prose, per the container matrix), it interrupts an open
+// paragraph without a blank line before it, and its text runs the full inline
+// pass — code spans, escapes and links today, plus whatever else renderInline
+// grows, since it is the same single scan.
+func atxHeading(trimmed string) (level int, text string, ok bool) {
+	n := 0
+	for n < len(trimmed) && trimmed[n] == '#' {
+		n++
+	}
+	if n == 0 {
+		return 0, "", false
+	}
+	// A hash run must be followed by a space (or be the whole line) to be a
+	// heading marker at all: "###x" is a word, not a heading.
+	if n < len(trimmed) && trimmed[n] != ' ' && trimmed[n] != '\t' {
+		return 0, "", false
+	}
+	if n < 3 || n > 6 {
+		return 0, "", false
+	}
+	return n, trimClosingHashes(strings.TrimSpace(trimmed[n:])), true
+}
+
+// trimClosingHashes removes a CommonMark ATX closing sequence: a trailing run
+// of "#" that is either the entire remaining content or preceded by a space.
+// "### foo ###" is "foo"; "### foo#" keeps its hash, because that run is part
+// of the word.
+func trimClosingHashes(s string) string {
+	end := len(s)
+	for end > 0 && s[end-1] == '#' {
+		end--
+	}
+	if end == len(s) {
+		return s
+	}
+	if end == 0 {
+		return ""
+	}
+	if s[end-1] == ' ' || s[end-1] == '\t' {
+		return strings.TrimRight(s[:end], " \t")
+	}
+	return s
+}
+
+// --- blockquotes ----------------------------------------------------------
+//
+// THE BLOCKQUOTE RULE, in full (amendment A26).
+//
+// A quote opens on a line whose first byte is ">" at indent column 0. Every
+// following line whose first byte is ">" belongs to the same quote; the quote
+// ends at the first line that does not start with one. There is NO lazy
+// continuation — an unprefixed line after a quoted line is a new top-level
+// paragraph, not more quote.
+//
+// The prefix stripped from each line is ">" plus ONE optional space, and
+// nothing else: trailing whitespace is deliberately left alone, because it is
+// what a two-space hard break is made of and stripping it here would silently
+// delete a break inside a quote.
+//
+// The interior then recurses into renderBlocks WITH BLOCKQUOTE RECOGNITION
+// OFF. That single flag is the whole one-level cap, and it is a structural
+// guarantee rather than a depth counter: inside a quote no line can ever open
+// another quote, so "> > x" is one quote containing the literal text "> x",
+// and ">> x" — whose second ">" is not preceded by a space and so survives the
+// one-space strip — is the same thing. Recursion into the same scanner is also
+// what makes the container matrix's blockquote row true for free: paragraphs,
+// lists, task items, headings, thematic breaks and fenced code all work inside
+// a quote because they are the same code paths, and any block construct a
+// later phase adds to renderBlocks works inside a quote on the day it lands.
+//
+// A line that is only ">" (or ">" plus spaces) strips to a blank line, which
+// is a paragraph break INSIDE the quote, not a terminator.
+
+// blockquotePrefix strips a leading ">" plus one optional space from line,
+// reporting ok=false when line does not open/continue a quote.
+func blockquotePrefix(line string) (rest string, ok bool) {
+	if len(line) == 0 || line[0] != '>' {
+		return "", false
+	}
+	rest = line[1:]
+	if len(rest) > 0 && rest[0] == ' ' {
+		rest = rest[1:]
+	}
+	return rest, true
+}
+
+// --- hard line breaks -----------------------------------------------------
+//
+// THE HARD-BREAK RULE, in full (gate 0's hard-break amendment).
+//
+// Two spellings, both captured from the RAW line before it is trimmed — which
+// is the only place the two-space form still exists, since strings.TrimSpace
+// is what a paragraph line meets next:
+//
+//   - two or more trailing spaces, and
+//   - a single unescaped trailing backslash.
+//
+// ESCAPES RESOLVE FIRST, so the backslash form is an ODD-length run of
+// trailing backslashes: "x\\" ends in an escaped backslash and is not a break,
+// "x\" and "x\\\" are. This is the same 15-char escapable set the inline scan
+// uses, decided at the same place, so the two can never disagree.
+//
+// A break marker on the LAST line of a paragraph, item or quote emits nothing
+// — there is nothing to break to. It is markdown-sanity's dangling-backslash
+// finding, and the backslash itself stays visible as literal text (the inline
+// scan's dangling-backslash rule), rather than being silently eaten.
+//
+// THE INLINE UNIT IS STILL THE WHOLE BLOCK. A break is NOT rendered by running
+// the inline pass per line and gluing <br> between the results — that would
+// make every future emphasis/strikethrough delimiter unable to span a break.
+// Instead joinSegments joins the block's lines exactly as before, with one
+// space per line, and returns the byte offsets of the spaces that are hard
+// breaks; renderInline emits <br> at those offsets instead of the space. The
+// inline scan therefore still runs ONCE per block over one string, so any
+// construct that spans a soft line break spans a hard one too.
+//
+// One construct deliberately does not: a code span may not span a hard break
+// (renderInline caps its closing search at the next break offset), so an
+// opening backtick run before a break whose only closer is after it stays
+// literal.
+
+// breakKind records how one source line spelled its hard line break.
+type breakKind uint8
+
+const (
+	brkNone   breakKind = iota // no hard break: an ordinary soft line break
+	brkSpaces                  // two or more trailing spaces
+	brkSlash                   // a single unescaped trailing backslash
+)
+
+// segment is one source line's contribution to a paragraph or a list item's
+// prose run: the line's trimmed text plus how the line ended. Blocks accumulate
+// segments and join them once (see joinSegments); nothing concatenates
+// incrementally, which is what keeps the accumulator linear (see addText).
+type segment struct {
+	text string
+	brk  breakKind
+}
+
+// newSegment captures line's hard-break spelling BEFORE trimming it — the
+// entire reason this function exists rather than a bare strings.TrimSpace at
+// each call site.
+func newSegment(line string) segment {
+	return segment{text: strings.TrimSpace(line), brk: hardBreakOf(line)}
+}
+
+// hardBreakOf reports how line spells a hard break, or brkNone.
+func hardBreakOf(line string) breakKind {
+	if trailingRun(line, ' ') >= 2 {
+		return brkSpaces
+	}
+	// Odd run of trailing backslashes: escapes resolve first, so "\\" is an
+	// escaped literal backslash and only a leftover single "\" is a break.
+	if trailingRun(line, '\\')%2 == 1 {
+		return brkSlash
+	}
+	return brkNone
+}
+
+// trailingRun counts the run of c at the end of s.
+func trailingRun(s string, c byte) int {
+	n := 0
+	for n < len(s) && s[len(s)-1-n] == c {
+		n++
+	}
+	return n
+}
+
+// joinSegments joins a block's prose segments into the single string the inline
+// pass runs over, and returns the ascending byte offsets of the hard breaks
+// inside it.
+//
+// The join is byte-identical to the pre-P4 one for text with no hard break:
+// one space per soft line break, which is exactly what strings.Join(segs, " ")
+// produced. A HARD break is that same separator space, recorded in the returned
+// offsets; renderInline writes <br> in its place. Carrying the break as an
+// offset onto a real separator byte — rather than as an in-band sentinel
+// character — is what keeps the escaping boundary intact (no byte is invented
+// that an author could also have typed, and none is destroyed) and what stops
+// tokens on either side of a break from merging into one: there is always a
+// space between them, so a backtick run, a bracket or an emphasis delimiter can
+// never straddle a break offset.
+//
+// A break on the final segment produces no offset: there is nothing to break
+// to, so it emits nothing. Its backslash is left in the text, where the inline
+// scan renders it as the literal dangling backslash it is.
+func joinSegments(segs []segment) (string, []int) {
+	if len(segs) == 1 {
+		return segs[0].text, nil
+	}
+	var sb strings.Builder
+	var breaks []int
+	for i, s := range segs {
+		text := s.text
+		last := i == len(segs)-1
+		if s.brk == brkSlash && !last {
+			// Consume the backslash that spelled the break; the two-space
+			// spelling was already consumed by TrimSpace.
+			text = text[:len(text)-1]
+		}
+		sb.WriteString(text)
+		if last {
+			break
+		}
+		if s.brk != brkNone {
+			breaks = append(breaks, sb.Len())
+		}
+		sb.WriteByte(' ')
+	}
+	return sb.String(), breaks
+}
+
+// nextBreak returns the first break offset at or after from, or def when there
+// is none. It is how renderInline bounds a code span to one line.
+func nextBreak(breaks []int, from, def int) int {
+	if len(breaks) == 0 {
+		return def
+	}
+	k := sort.Search(len(breaks), func(i int) bool { return breaks[i] >= from })
+	if k == len(breaks) {
+		return def
+	}
+	return breaks[k]
+}
+
+// orderedMarker matches an "N. rest of line" list marker (e.g. "14. Context
+// immutability: ..."); group 1 is the number, which becomes the list's start
+// attribute when it is not 1, and group 2 is the item's own text with the
+// marker stripped. It is matched against a line's trimmed content regardless
+// of the line's actual indentation — indentation decides only WHICH open level
+// the match belongs to (see renderBlocks' list indentation rule).
 var orderedMarker = regexp.MustCompile(`^(\d+)\.\s+(.*)$`)
 
-// unorderedMarker matches a top-level-shaped "- rest of line" or "* rest of
-// line" list marker; group 1 is the item's own text with the marker
-// stripped. Same indentation-independent matching note as orderedMarker.
+// unorderedMarker matches a "- rest of line" or "* rest of line" list marker;
+// group 1 is the item's own text with the marker stripped. Same
+// indentation-independent matching note as orderedMarker.
 var unorderedMarker = regexp.MustCompile(`^[-*]\s+(.*)$`)
 
 // isListMarker reports whether a line's TRIMMED content opens a list item of
@@ -260,17 +554,79 @@ func isListMarker(trimmed string) bool {
 // own indent plus the width of its marker and the whitespace run after it.
 // trimmed is the whole trimmed marker line and itemText is the regex group
 // holding what follows the marker, so the marker's width is just the
-// difference. It is the threshold the loose-list rule compares a
-// post-blank-line indent against.
+// difference. It is the threshold every indent decision is made against: a
+// marker at or past it opens a deeper level, and a continuation line at or
+// past it belongs to that item.
 func contentCol(indent int, trimmed, itemText string) int {
 	return indent + len(trimmed) - len(itemText)
 }
 
-// listNode is one unordered or ordered list block: a flat sequence of
-// items, each of which may carry exactly one nested list (one level of
-// nesting only — a nested item's own nested field is never populated).
+// taskMarker recognizes a GFM task-list checkbox at the head of an unordered
+// item's content: "[ ]", "[x]" or "[X]" followed by whitespace (or by nothing,
+// for an empty item). It returns the checkbox state and the item's remaining
+// content.
+//
+// UNORDERED ITEMS ONLY. "1. [ ] x" is an ordinary numbered item whose text
+// happens to start with a bracket — a numbered checklist is a shape nothing in
+// the corpus writes, and inventing one would put an <input> inside an <ol>
+// where the number and the box compete for the same gutter. That is a pinned
+// ceiling, not an oversight.
+//
+// The marker is defused by the ordinary escape mechanism with no special case:
+// "- \[x] done" no longer begins with "[", so it is not a task item, and the
+// inline scan then resolves "\[" to a literal bracket.
+func taskMarker(itemText string) (state taskState, content string, ok bool) {
+	if len(itemText) < 3 || itemText[0] != '[' || itemText[2] != ']' {
+		return taskNone, "", false
+	}
+	switch itemText[1] {
+	case ' ':
+		state = taskUnchecked
+	case 'x', 'X':
+		state = taskChecked
+	default:
+		return taskNone, "", false
+	}
+	rest := itemText[3:]
+	if rest == "" {
+		return state, "", true
+	}
+	if rest[0] != ' ' && rest[0] != '\t' {
+		return taskNone, "", false
+	}
+	return state, strings.TrimLeft(rest, " \t"), true
+}
+
+// taskState is a list item's checkbox: absent, unchecked or checked. The
+// rendered checkbox is always DISABLED — the viewer is a reading surface, and
+// a live checkbox would offer a state change that has nowhere to be stored.
+type taskState uint8
+
+const (
+	taskNone taskState = iota
+	taskUnchecked
+	taskChecked
+)
+
+// listNode is one unordered or ordered list block: a flat sequence of items,
+// each of which may itself contain further lists to unbounded depth (see the
+// depth stack in renderBlocks).
+//
+// start is the number the first item was written with. It is emitted as
+// <ol start="n"> whenever it is not 1, which is the fix for the release's
+// longest-standing internal bug: orderedMarker has always captured the number
+// and writeList has always thrown it away, so EVERY ordered list restarted at
+// 1 — including the second half of one that a top-level fence split in two.
+//
+// loose is CommonMark looseness, and it is a property of the LIST, not of an
+// item: if a blank line falls inside the list and the list continues past it,
+// every item in that list wraps each of its prose runs in <p>. Marking the
+// list rather than the item is what stops a spaced list from rendering half its
+// items with a paragraph and half without.
 type listNode struct {
 	ordered bool
+	start   int
+	loose   bool
 	items   []*itemNode
 }
 
@@ -283,18 +639,20 @@ type listNode struct {
 // blocks in document order is what makes "a fence can no longer swallow or
 // split the structure around it" true inside an item as well as around it.
 //
-// nested and textIdx are cursors onto whichever nested list / prose run in
-// blocks is currently open, so continuation lines still know where to fold;
-// both are invalidated (textIdx = -1) whenever a different block type opens.
+// textIdx is a cursor onto whichever prose run in blocks is currently open, so
+// continuation lines know where to fold; it is invalidated (textIdx = -1)
+// whenever a different block type opens. There is no longer a nested-list
+// cursor: renderBlocks' depth stack holds the open list at every level, so an
+// item does not need to remember one.
 type itemNode struct {
 	blocks  []itemBlock
-	nested  *listNode
 	textIdx int
+	task    taskState
 }
 
-func newItem(text string) *itemNode {
+func newItem(seg segment) *itemNode {
 	it := &itemNode{textIdx: -1}
-	it.addText(text)
+	it.addText(seg)
 	return it
 }
 
@@ -321,13 +679,13 @@ func newItem(text string) *itemNode {
 // Appending segments and joining once at flush (see writeList) is linear and
 // byte-identical: strings.Join(segs, " ") produces exactly the string the
 // repeated `+= " " + s` produced, for any number of segments including one.
-func (it *itemNode) addText(s string) {
+func (it *itemNode) addText(s segment) {
 	if it.textIdx >= 0 {
 		blk := &it.blocks[it.textIdx]
 		blk.segs = append(blk.segs, s)
 		return
 	}
-	it.blocks = append(it.blocks, itemBlock{kind: blockText, segs: []string{s}})
+	it.blocks = append(it.blocks, itemBlock{kind: blockText, segs: []segment{s}})
 	it.textIdx = len(it.blocks) - 1
 }
 
@@ -348,89 +706,137 @@ const (
 )
 
 // itemBlock's blockText payload is the prose run's SEGMENTS — one per source
-// line folded in by addText — not the joined string. They are joined with a
-// single space exactly once, at render time in writeList; see addText for why
-// the join cannot happen incrementally.
+// line folded in by addText — not the joined string. They are joined exactly
+// once, at render time in writeList (see joinSegments); see addText for why the
+// join cannot happen incrementally.
 type itemBlock struct {
 	kind itemBlockKind
-	segs []string
+	segs []segment
 	html string
 	list *listNode
 }
 
-// renderBlocks scans a whole body (or, once P4 lands, a container's
-// interior) and writes paragraphs, fenced code blocks and lists to b. Every
-// non-blank line is either a fence opener (see the fence rule above), a list
-// marker (top-level or, when indented under a currently open top-level item,
-// nested), a continuation of the currently open item (indented, no marker,
-// with a list open), or plain paragraph prose.
+// renderBlocks scans one container's lines — a whole body, or the interior of
+// a blockquote — and writes paragraphs, thematic breaks, headings,
+// blockquotes, fenced code blocks and lists to b. Every non-blank line is
+// either a fence opener (see the fence rule above), a blockquote line, a
+// thematic break, an ATX heading, a list marker, a continuation of an open
+// list item, or plain paragraph prose.
 //
-// Block-switch rule: encountering a different block type (a marker line
-// while a paragraph is accumulating, a plain paragraph line while a list is
-// open, or a top-level fence) flushes whatever was open before starting the
-// new one — this is what makes list boundaries and paragraph boundaries
-// deterministic without a lookahead. The one construct that does NOT flush is
-// an indented fence under an open list item: it is item content, so the list
-// stays open across it.
+// allowQuote is the one-level blockquote cap: Render passes true, and the
+// recursion a blockquote makes into this same function passes false, so no
+// line inside a quote can open another (see the blockquote rule above). It is
+// the ONLY container flag — everything else about a container's interior is
+// decided by the container matrix, which this function implements by WHERE it
+// tests each construct, not by a per-construct switch:
 //
-// THE LOOSE-LIST RULE. A blank line is the exception to the block-switch
-// rule: it always closes an open PARAGRAPH, but it does not by itself close
-// an open LIST. It only records that a blank line was seen (pendingBlank);
-// the next non-blank line decides, by its indent, whether the list was
-// really over:
+//   - thematic break, ATX heading and blockquote are tested only at indent
+//     column 0, so under an open list item they are ordinary item prose. That
+//     is the matrix's list-item row ("other block constructs literal text")
+//     with no extra machinery, and it is why "  ### x" inside an item renders
+//     as the literal text "### x".
+//   - a fence and a list marker are tested at any indent, which is the
+//     matrix's "nested lists, task items and fenced code are legal inside an
+//     item".
+//   - a table cell never reaches this function at all: RenderInline is the
+//     table-cell entry point, so a cell is inline-only by construction.
 //
-//   - indented to at least the deepest open item's content column — the
-//     column its own text starts at, past its marker — the line is that
-//     item's content and the list continues. This is what makes the
-//     universal documentation shape work: an item, a blank line, then an
-//     indented fence, then a blank line, then the next item.
-//   - indented to at least the TOP-level item's content column but less than
-//     the nested one's: the line dedented back out of the nested item, so
-//     the nested cursor is dropped and the line continues the top-level
-//     item.
+// Block-switch rule: encountering a different block type (a marker line while
+// a paragraph is accumulating, a plain paragraph line while a list is open, a
+// heading/rule/quote at column 0, or a top-level fence) flushes whatever was
+// open before starting the new one — this is what makes list boundaries and
+// paragraph boundaries deterministic without a lookahead. The one construct
+// that does NOT flush is an indented fence under an open list item: it is item
+// content, so the list stays open across it.
+//
+// THE LIST INDENTATION RULE (amendment A24's restored dedent half). Open list
+// levels live on a DEPTH STACK keyed by indent width, replacing the old
+// one-level cap. Each level remembers two columns: its marker column (where
+// its bullet sits) and its content column (where its text starts, past the
+// marker — see contentCol). A line at indent width w is resolved against them:
+//
+//   - a MARKER at w >= the innermost open level's content column OPENS a new,
+//     deeper level nested inside that level's item. That is the only thing
+//     that opens a level, and it is why "- a" / "  - b" nests (2 >= 2) while
+//     "- a" / " - b" does not (1 < 2).
+//   - a MARKER at a smaller w CLOSES levels until w is no longer inside one —
+//     it pops while w < the innermost marker column — and then joins the level
+//     it lands on as a sibling item. A w that matches no level's marker column
+//     exactly snaps DOWN to the nearest enclosing one rather than inventing a
+//     level: an indent is always resolvable, and nothing is ever dropped.
+//   - a CONTINUATION line (indented, no marker) pops while w < the innermost
+//     CONTENT column and then folds into that level's item. So a line that
+//     dedents out of a nested item continues its parent, and a line indented
+//     past everything continues the innermost item.
+//   - INDENT WIDTH IS COLUMNS, NOT BYTES (see indentWidth): a tab is four
+//     columns. leadingSpaces — a byte count — is still what the fence
+//     machinery uses to slice a line, and the two must not be confused.
+//
+// THE LOOSE-LIST RULE, in two halves.
+//
+// CONTINUATION (already shipped): a blank line always closes an open
+// PARAGRAPH, but it does not by itself close an open LIST. It only records
+// that a blank line was seen (pendingBlank); the next non-blank line decides,
+// by its indent, whether the list was really over:
+//
+//   - indented to at least the OUTERMOST item's content column, the line is
+//     list content and the list continues — the indentation rule above then
+//     says which level it lands in. This is what makes the universal
+//     documentation shape work: an item, a blank line, then an indented fence,
+//     then a blank line, then the next item.
 //   - a list marker at any indent: the list continues with another item,
 //     exactly as it would have without the blank line.
 //   - anything else — a non-indented, non-marker line, which includes a
-//     COLUMN-ZERO FENCE — ends the list, as it did before. A column-zero
-//     fence is a top-level block by the fence rule above, blank line or not.
+//     COLUMN-ZERO FENCE, heading or rule — ends the list, as it did before.
 //
-// Before this, a blank line was an unconditional flush, so an item followed
-// by a blank line and an indented fence split the list in two, ejected the
-// code to top level and restarted the numbering — the very failure the
-// fence-in-the-scanner work exists to fix, still reachable through the one
-// way almost everyone actually writes such a list.
-func renderBlocks(b *strings.Builder, text string) {
-	lines := strings.Split(text, "\n")
+// LOOSENESS (new, CommonMark): when a blank line is crossed that way, the list
+// it was crossed IN becomes loose, and every item of that list then wraps each
+// of its prose runs in <p> (see writeList). Which list is "the one it was
+// crossed in" is exactly the list the following line lands in — except for a
+// line that opens a DEEPER level, where the blank separated two blocks inside
+// the PARENT item, so it is the parent's list that goes loose. A nested list
+// with no blank line of its own stays tight inside a loose parent, which is
+// the CommonMark shape and the reason looseness is tracked per list rather
+// than per document.
+func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 	closers := closerRuns(lines)
 
-	var curList *listNode
-	var curTop *itemNode
-	var curNested *itemNode
-	// Content columns of the two open items (see contentCol), used only by
-	// the loose-list rule to judge a line that follows a blank line.
-	var curTopCol, curNestedCol int
-	var paraLines []string
+	// stack is the open list levels, outermost first. stack[0].list is the
+	// root list currently being accumulated; an empty stack means no list is
+	// open.
+	var stack []openLevel
+	var paraSegs []segment
 	// pendingBlank: a blank line was seen with a list open, and the next
 	// non-blank line has yet to say whether that ended the list.
 	pendingBlank := false
 
 	flushParagraph := func() {
-		if len(paraLines) == 0 {
+		if len(paraSegs) == 0 {
 			return
 		}
+		text, breaks := joinSegments(paraSegs)
 		b.WriteString("<p>")
-		b.WriteString(renderInline(strings.Join(paraLines, " ")))
+		b.WriteString(renderInline(text, breaks))
 		b.WriteString("</p>")
-		paraLines = nil
+		paraSegs = nil
 	}
 	flushList := func() {
 		pendingBlank = false
-		if curList == nil {
+		if len(stack) == 0 {
 			return
 		}
-		writeList(b, curList)
-		curList, curTop, curNested = nil, nil, nil
-		curTopCol, curNestedCol = 0, 0
+		writeList(b, stack[0].list)
+		stack = stack[:0]
+	}
+	// snapToContent pops levels whose content column a line at width w does
+	// not reach, and returns the level the line therefore belongs to. It is
+	// the shared resolution step for continuation lines and for an indented
+	// fence, so both land in the same item for the same indent.
+	snapToContent := func(w int) *openLevel {
+		for len(stack) > 1 && w < stack[len(stack)-1].contentCol {
+			stack = stack[:len(stack)-1]
+		}
+		return &stack[len(stack)-1]
 	}
 
 	for i := 0; i < len(lines); i++ {
@@ -440,28 +846,28 @@ func renderBlocks(b *strings.Builder, text string) {
 			flushParagraph()
 			// A blank line ends a paragraph but only ARMS the end of a
 			// list; see the loose-list rule above.
-			if curList != nil {
+			if len(stack) > 0 {
 				pendingBlank = true
 			}
 			continue
 		}
 
-		indent := leadingSpaces(line)
+		// byteIndent slices the line (the fence machinery's unit); w measures
+		// it in columns (the list machinery's unit). They are never
+		// interchangeable, but both are zero for exactly the same lines.
+		byteIndent := leadingSpaces(line)
+		w := indentWidth(line)
 
 		// Resolve a pending blank line before anything else looks at the
 		// open containers, so every branch below sees the list state this
-		// line actually belongs to.
+		// line actually belongs to. looseArm carries the answer forward:
+		// whichever branch consumes this line marks its list loose.
+		looseArm := false
 		if pendingBlank {
 			pendingBlank = false
 			switch {
-			case curNested != nil && indent >= curNestedCol:
-				// Continues the nested item.
-			case curTop != nil && indent >= curTopCol:
-				// Continues the top-level item: the line dedented out
-				// of any nested item.
-				curNested = nil
-			case isListMarker(trimmed):
-				// Another item of the same list.
+			case w >= stack[0].contentCol, isListMarker(trimmed):
+				looseArm = true
 			default:
 				flushList()
 			}
@@ -472,14 +878,14 @@ func renderBlocks(b *strings.Builder, text string) {
 		// ordinary line handling below.
 		if fIndent, runLen, ok := fenceOpener(line); ok {
 			if content, closeIdx, closed := scanFence(lines, closers, i, fIndent, runLen); closed {
-				if indent > 0 && curList != nil && curTop != nil {
+				if byteIndent > 0 && len(stack) > 0 {
 					// Indented under an open item: the block is that
 					// item's content, and the list stays open.
-					target := curTop
-					if curNested != nil {
-						target = curNested
+					lv := snapToContent(w)
+					if looseArm {
+						lv.list.loose = true
 					}
-					target.addBlock(itemBlock{kind: blockHTML, html: preBlock(content)})
+					lv.item.addBlock(itemBlock{kind: blockHTML, html: preBlock(content)})
 				} else {
 					flushParagraph()
 					flushList()
@@ -490,109 +896,219 @@ func renderBlocks(b *strings.Builder, text string) {
 			}
 		}
 
-		if indent == 0 {
-			if m := orderedMarker.FindStringSubmatch(trimmed); m != nil {
+		// Column-zero-only constructs: the container matrix's list-item row
+		// is enforced by this guard and nothing else.
+		if w == 0 {
+			if allowQuote && len(line) > 0 && line[0] == '>' {
 				flushParagraph()
-				if curList == nil || !curList.ordered {
-					flushList()
-					curList = &listNode{ordered: true}
+				flushList()
+				end := i
+				var inner []string
+				for end < len(lines) {
+					rest, ok := blockquotePrefix(lines[end])
+					if !ok {
+						break
+					}
+					inner = append(inner, rest)
+					end++
 				}
-				curTop = newItem(m[2])
-				curTopCol = contentCol(indent, trimmed, m[2])
-				curList.items = append(curList.items, curTop)
-				curNested = nil
+				b.WriteString("<blockquote>")
+				renderBlocks(b, inner, false)
+				b.WriteString("</blockquote>")
+				i = end - 1
 				continue
 			}
-			if m := unorderedMarker.FindStringSubmatch(trimmed); m != nil {
+			if thematicBreak(trimmed) {
 				flushParagraph()
-				if curList == nil || curList.ordered {
-					flushList()
-					curList = &listNode{ordered: false}
-				}
-				curTop = newItem(m[1])
-				curTopCol = contentCol(indent, trimmed, m[1])
-				curList.items = append(curList.items, curTop)
-				curNested = nil
+				flushList()
+				b.WriteString("<hr>")
 				continue
 			}
-			// Plain paragraph line: any open list ends here (a
-			// non-indented, non-marker line is never a list
-			// continuation).
-			flushList()
-			paraLines = append(paraLines, trimmed)
+			if level, text, ok := atxHeading(trimmed); ok {
+				flushParagraph()
+				flushList()
+				tag := "h" + strconv.Itoa(level)
+				b.WriteString("<" + tag + ">")
+				b.WriteString(renderInline(text, nil))
+				b.WriteString("</" + tag + ">")
+				continue
+			}
+		}
+
+		// List markers are matched against the line's TRIMMED content at any
+		// indent; the indentation rule above then decides which level the
+		// match belongs to. A marker with no list open and a non-zero indent
+		// is NOT a list — it is indented prose, exactly as before, so a
+		// stray indented bullet under a paragraph keeps folding into it.
+		ordered, num, itemText, isMarker := listMarker(trimmed)
+		if isMarker && (len(stack) > 0 || w == 0) {
+			flushParagraph()
+			cc := contentCol(w, trimmed, itemText)
+			task := taskNone
+			if !ordered {
+				if st, content, ok := taskMarker(itemText); ok {
+					task, itemText = st, content
+				}
+			}
+			it := newItem(segment{text: itemText, brk: hardBreakOf(line)})
+			it.task = task
+			switch {
+			case len(stack) == 0:
+				lst := &listNode{ordered: ordered, start: num}
+				lst.items = append(lst.items, it)
+				stack = append(stack, openLevel{list: lst, item: it, markerCol: w, contentCol: cc})
+
+			case w >= stack[len(stack)-1].contentCol:
+				// Opens a level: the new list is a block of the item that
+				// encloses it, in document order with that item's prose.
+				parent := &stack[len(stack)-1]
+				if looseArm {
+					parent.list.loose = true
+				}
+				lst := &listNode{ordered: ordered, start: num}
+				lst.items = append(lst.items, it)
+				parent.item.addBlock(itemBlock{kind: blockList, list: lst})
+				stack = append(stack, openLevel{list: lst, item: it, markerCol: w, contentCol: cc})
+
+			default:
+				for len(stack) > 1 && w < stack[len(stack)-1].markerCol {
+					stack = stack[:len(stack)-1]
+				}
+				lv := &stack[len(stack)-1]
+				if lv.list.ordered != ordered {
+					// A flavour change ends this level's list and opens a
+					// sibling of the other flavour in its place — a "-" item
+					// can never join an <ol>.
+					lst := &listNode{ordered: ordered, start: num}
+					lst.items = append(lst.items, it)
+					if len(stack) == 1 {
+						writeList(b, lv.list)
+						stack = append(stack[:0], openLevel{list: lst, item: it, markerCol: w, contentCol: cc})
+					} else {
+						parent := &stack[len(stack)-2]
+						parent.item.addBlock(itemBlock{kind: blockList, list: lst})
+						*lv = openLevel{list: lst, item: it, markerCol: w, contentCol: cc}
+					}
+				} else {
+					if looseArm {
+						lv.list.loose = true
+					}
+					lv.list.items = append(lv.list.items, it)
+					lv.item, lv.markerCol, lv.contentCol = it, w, cc
+				}
+			}
 			continue
 		}
 
-		// indent > 0.
-		if curList != nil && curTop != nil {
-			if m := orderedMarker.FindStringSubmatch(trimmed); m != nil {
-				if curTop.nested == nil || !curTop.nested.ordered {
-					curTop.nested = &listNode{ordered: true}
-					curTop.addBlock(itemBlock{kind: blockList, list: curTop.nested})
-				}
-				curNested = newItem(m[2])
-				curNestedCol = contentCol(indent, trimmed, m[2])
-				curTop.nested.items = append(curTop.nested.items, curNested)
-				continue
+		if len(stack) > 0 && w > 0 {
+			// Continuation line: fold into whichever open item this indent
+			// resolves to, joined with a single space (a soft line break) or
+			// a <br> (a hard one), matching the "wrapped bullet" fix this
+			// package exists to make. If a fence or a nested list intervened,
+			// addText starts a new prose run after it rather than folding
+			// backwards in front of it.
+			lv := snapToContent(w)
+			if looseArm {
+				lv.list.loose = true
 			}
-			if m := unorderedMarker.FindStringSubmatch(trimmed); m != nil {
-				if curTop.nested == nil || curTop.nested.ordered {
-					curTop.nested = &listNode{ordered: false}
-					curTop.addBlock(itemBlock{kind: blockList, list: curTop.nested})
-				}
-				curNested = newItem(m[1])
-				curNestedCol = contentCol(indent, trimmed, m[1])
-				curTop.nested.items = append(curTop.nested.items, curNested)
-				continue
-			}
-			// Continuation line: fold into whichever item is
-			// currently deepest-open, joined with a single space
-			// (soft line break), matching the "wrapped bullet"
-			// fix this package exists to make. If a fence or a
-			// nested list intervened, addText starts a new prose
-			// run after it rather than folding backwards in front
-			// of it.
-			if curNested != nil {
-				curNested.addText(trimmed)
-			} else {
-				curTop.addText(trimmed)
-			}
+			lv.item.addText(newSegment(line))
 			continue
 		}
 
-		// Indented line with no open list item to fold into: treat
-		// as ordinary paragraph prose rather than dropping it.
+		// Plain paragraph line: any open list ends here (a non-indented,
+		// non-marker line is never a list continuation), and an indented line
+		// with no open list to fold into is ordinary prose rather than a
+		// dropped line.
 		flushList()
-		paraLines = append(paraLines, trimmed)
+		paraSegs = append(paraSegs, newSegment(line))
 	}
 
 	flushParagraph()
 	flushList()
 }
 
+// openLevel is one open list level on renderBlocks' depth stack: the list
+// being accumulated at that depth, its currently open item, and the two
+// columns every indent decision is made against (see the list indentation
+// rule).
+type openLevel struct {
+	list       *listNode
+	item       *itemNode
+	markerCol  int
+	contentCol int
+}
+
+// listMarker matches either flavour of list marker against a line's trimmed
+// content, returning the ordered flag, the ordered marker's NUMBER (1 for an
+// unordered item, and 1 for a number too large to be represented, which then
+// simply emits no start attribute), the item's own text and whether anything
+// matched.
+func listMarker(trimmed string) (ordered bool, num int, itemText string, ok bool) {
+	if m := orderedMarker.FindStringSubmatch(trimmed); m != nil {
+		n, err := strconv.Atoi(m[1])
+		if err != nil {
+			n = 1
+		}
+		return true, n, m[2], true
+	}
+	if m := unorderedMarker.FindStringSubmatch(trimmed); m != nil {
+		return false, 1, m[1], true
+	}
+	return false, 0, "", false
+}
+
 // writeList renders a listNode as a real <ul>/<ol>. An item is its blocks in
 // document order: prose runs (through renderInline), fenced code blocks
 // (already rendered and escaped by preBlock — never re-escaped, never
-// re-parsed) and nested lists. List nesting itself is still capped at one
-// level: a nested item never opens a list of its own, because renderBlocks
-// only ever attaches a nested list to the current TOP-level item. (P5
-// replaces that cap with a depth stack; the recursion here is already
-// shape-agnostic.)
+// re-parsed) and nested lists, recursively, to whatever depth renderBlocks'
+// depth stack reached.
+//
+// THE EMITTED MARKUP, frozen here so the stylesheet can be written against it:
+//
+//	<ul> / <ol> / <ol start="n">   n only when the first item is not 1
+//	<li>…</li>                     an ordinary item
+//	<li class="task"><input type="checkbox" disabled[ checked]> …</li>
+//	<li>…<p>…</p>…</li>            prose runs of a LOOSE list's items
+//
+// The checkbox is the first thing inside the <li>, before any <p>, so one CSS
+// rule reaches it in a tight list and a loose one alike. Every attribute here
+// is a fixed literal except start's number, which is re-emitted from a parsed
+// int and so can only ever be digits — the escaping boundary is unchanged.
 func writeList(b *strings.Builder, l *listNode) {
 	tag := "ul"
 	if l.ordered {
 		tag = "ol"
 	}
-	b.WriteString("<" + tag + ">")
+	if l.ordered && l.start != 1 {
+		b.WriteString("<ol start=\"" + strconv.Itoa(l.start) + "\">")
+	} else {
+		b.WriteString("<" + tag + ">")
+	}
 	for _, it := range l.items {
-		b.WriteString("<li>")
+		if it.task == taskNone {
+			b.WriteString("<li>")
+		} else {
+			b.WriteString(`<li class="task"><input type="checkbox" disabled`)
+			if it.task == taskChecked {
+				b.WriteString(" checked")
+			}
+			b.WriteString("> ")
+		}
 		for _, blk := range it.blocks {
 			switch blk.kind {
 			case blockText:
-				// The one place a prose run's segments are joined: a
-				// single space per soft line break, exactly as addText's
-				// old incremental concatenation produced.
-				b.WriteString(renderInline(strings.Join(blk.segs, " ")))
+				// The one place a prose run's segments are joined: a single
+				// space per soft line break and a <br> per hard one, exactly
+				// as addText's old incremental concatenation produced for the
+				// soft case.
+				text, breaks := joinSegments(blk.segs)
+				inline := renderInline(text, breaks)
+				switch {
+				case !l.loose:
+					b.WriteString(inline)
+				case inline != "":
+					b.WriteString("<p>" + inline + "</p>")
+				}
 			case blockHTML:
 				b.WriteString(blk.html)
 			case blockList:
@@ -621,8 +1137,12 @@ func writeList(b *strings.Builder, l *listNode) {
 // both the url (in attribute context) and the link text are HTML-escaped, so
 // re-marking the string as template.HTML reintroduces no un-escaped,
 // attacker-controlled content.
+// A table cell is the one context with no block layer at all, so it also has
+// no hard line break: a cell is single-line by construction, RenderInline is
+// called with no break offsets, and a trailing backslash in a cell is the
+// literal dangling backslash the inline scan already renders.
 func RenderInline(text string) template.HTML {
-	return template.HTML(renderInline(text))
+	return template.HTML(renderInline(text, nil))
 }
 
 // isEscapable reports whether c is in the CLOSED backslash-escapable set
@@ -702,7 +1222,23 @@ func isEscapable(c byte) bool {
 // first wins. A link written inside a code span stays literal because the
 // span opened first and consumed it verbatim; an escaped opener is consumed
 // as a plain byte before it can open anything.
-func renderInline(text string) string {
+//
+// HARD LINE BREAKS reach this scan as BREAKS: the ascending byte offsets, in
+// text, of the separator spaces the block layer decided were hard line breaks
+// (see joinSegments). At such an offset the scan writes a fixed-literal <br>
+// and skips the space. Carrying them out of band rather than as an in-band
+// sentinel is what keeps this function's escaping boundary exact — there is no
+// byte in text that this scan treats as anything other than an author byte,
+// so no author input can forge a break — and it is why the inline unit is
+// still the whole block: a construct that spans a soft line break spans a hard
+// one, because both are just a byte in the same string.
+//
+// The single exception is a CODE SPAN, which may not span a hard break: the
+// closing-run search is capped at the next break offset, so an opening run
+// whose only closer is on the far side of a break is emitted as literal text.
+// The cap is exact rather than approximate because a break offset is always a
+// separator SPACE, so no backtick run can straddle one.
+func renderInline(text string, breaks []int) string {
 	var b strings.Builder
 	// plain is the start of the pending run of ordinary bytes; it is
 	// flushed through html.EscapeString before every construct and once at
@@ -723,8 +1259,24 @@ func renderInline(text string) string {
 		}
 	}
 
+	// bi is the cursor into breaks. It only ever moves forward, exactly as i
+	// does, so the whole break pass is amortized O(1) per byte even when a
+	// construct consumes several breaks at once.
+	bi := 0
+
 	i := 0
 	for i < len(text) {
+		for bi < len(breaks) && breaks[bi] < i {
+			bi++
+		}
+		if bi < len(breaks) && breaks[bi] == i {
+			flushPlain(i)
+			b.WriteString("<br>")
+			i++
+			bi++
+			plain = i
+			continue
+		}
 		c := text[i]
 		if c != '\\' && c != '`' && c != '[' {
 			i++
@@ -748,11 +1300,17 @@ func renderInline(text string) string {
 		case '`':
 			runLen := backtickRun(text, i)
 			contentStart := i + runLen
+			// A code span may not span a hard line break: the search stops
+			// at the next break offset. Slicing text is exact here — a break
+			// offset is a separator space, so no run straddles it.
+			limit := nextBreak(breaks, contentStart, len(text))
 			var closeStart int
 			var ok bool
 			if spans != nil {
-				closeStart, ok = spans.find(contentStart, runLen)
-			} else if closeStart, ok = findBacktickRun(text, contentStart, runLen); !ok {
+				if closeStart, ok = spans.find(contentStart, runLen); ok && closeStart >= limit {
+					ok = false
+				}
+			} else if closeStart, ok = findBacktickRun(text[:limit], contentStart, runLen); !ok {
 				// This search just walked every remaining run without
 				// consuming any of them. Index them once so no later
 				// opener repeats the walk (see backtickIndex).
@@ -1094,15 +1652,43 @@ func schemeOf(url string) (scheme string, ok bool) {
 func isSchemeAlpha(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
 func isSchemeDigit(c byte) bool { return c >= '0' && c <= '9' }
 
-// leadingSpaces counts a line's leading space/tab run, used only to decide
-// top-level vs. nested list-marker/continuation handling in renderBlocks —
-// the exact indent width otherwise never matters (unlike a general Markdown
-// parser, this package doesn't compute list levels from indent width, only
-// from "indented at all, under a currently open top-level item, or not").
+// leadingSpaces counts the BYTES in a line's leading space/tab run. It is a
+// slicing offset, not an indent measurement: fenceOpener, fenceCloses,
+// closerRuns and stripIndent all index into the line with it, so a tab must
+// count as the one byte it occupies.
+//
+// Use indentWidth, never this, for any question about how deeply a line is
+// indented.
 func leadingSpaces(s string) int {
 	n := 0
 	for n < len(s) && (s[n] == ' ' || s[n] == '\t') {
 		n++
 	}
 	return n
+}
+
+// indentWidth measures a line's leading whitespace in COLUMNS: a space is one
+// column and A TAB ADVANCES TO THE NEXT MULTIPLE OF FOUR, the tab width this
+// package pins.
+//
+// Pinning it is a fix, not a formality. Every list decision is made by
+// comparing indents, and leadingSpaces — the only measure this package used to
+// have — counts a tab as ONE, so a tab-indented sub-bullet under a "- " item
+// measured 1 against a content column of 2 and silently failed to nest, while
+// the same document written with four spaces nested correctly. Columns are
+// also what a reader sees, so the rendered nesting now matches the source's
+// visual nesting for every mixture of tabs and spaces.
+func indentWidth(s string) int {
+	col := 0
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case ' ':
+			col++
+		case '\t':
+			col += 4 - col%4
+		default:
+			return col
+		}
+	}
+	return col
 }

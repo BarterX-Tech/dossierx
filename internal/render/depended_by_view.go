@@ -54,6 +54,36 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 	return out
 }
 
+// buildTargetStatusLookup returns, for every claim id in the catalog, the
+// Status/ReviewPending pair components.writeClaimRef needs to decide
+// whether a claim-edge target (governed_by/mirrors/rests_on/depended-on-by)
+// gets a status pill (C6, the last unshipped piece of GitHub issue #11): a
+// pill renders only when the target is actionable — draft, or locked with
+// review_pending — never for a healthy locked target, so the footer stays
+// quiet except on the hub-gating case the pill exists to explain (see
+// components.targetPillHTML).
+//
+// This is the whole reason the pill has to ride attachEdgesOverride rather
+// than living in components.writeClaimRef unconditionally: only a render
+// pass with the full catalog in hand can answer "what is claim X's status"
+// for an arbitrary target id. The default, parse-time "edges" funcMap
+// binding (components.edgesHTML) never sees a catalog at all, so it always
+// passes a nil lookup and every target renders with no pill — degrading
+// exactly the way implinkLookup and dependedByLookup already do.
+func buildTargetStatusLookup(cat *catalog.Catalog) map[string]components.TargetStatus {
+	if cat == nil {
+		return nil
+	}
+	out := make(map[string]components.TargetStatus, len(cat.Claims))
+	for _, c := range cat.Claims {
+		out[c.ID] = components.TargetStatus{Status: c.Status, ReviewPending: c.ReviewPending}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // attachEdgesOverride rebinds every partial in partials' "edges" template
 // func to a single closure combining implinkLookup (internal/implink-
 // sourced "implemented in" lines) and dependedByLookup (this file's
@@ -83,12 +113,12 @@ func buildDependedByLookup(cat *catalog.Catalog) map[string][]string {
 // project with no implink/depended-by data still hits the early return above
 // and keeps the default binding, and still gets its chip, precisely because the
 // chip lives inside EdgesHTMLWithLinks rather than in this closure.
-func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, dependedByLookup map[string][]string) {
-	if len(implinkLookup) == 0 && len(dependedByLookup) == 0 {
+func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, dependedByLookup map[string][]string, targetStatusLookup map[string]components.TargetStatus) {
+	if len(implinkLookup) == 0 && len(dependedByLookup) == 0 && len(targetStatusLookup) == 0 {
 		return
 	}
 	edges := func(c model.Claim) template.HTML {
-		return components.EdgesHTMLWithLinks(c, implinkLookup[c.ID], dependedByLookup[c.ID])
+		return components.EdgesHTMLWithLinks(c, implinkLookup[c.ID], dependedByLookup[c.ID], targetStatusLookup)
 	}
 	for _, tmpl := range partials {
 		tmpl.Funcs(template.FuncMap{"edges": edges})

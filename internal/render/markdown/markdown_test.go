@@ -59,12 +59,33 @@ func loadClaim(t *testing.T, dir, rel string) claimYAML {
 // closing tag count, for a fixed set of tags this package ever emits.
 func assertTagBalance(t *testing.T, out string) {
 	t.Helper()
-	for _, tag := range []string{"p", "pre", "code", "ul", "ol", "li"} {
-		openCount := strings.Count(out, "<"+tag+">")
+	for _, tag := range []string{"p", "pre", "code", "ul", "ol", "li", "blockquote", "h3", "h4", "h5", "h6"} {
+		openCount := countOpenTags(out, tag)
 		closeCount := strings.Count(out, "</"+tag+">")
 		if openCount != closeCount {
 			t.Errorf("tag balance: <%s> open=%d close=%d in output:\n%s", tag, openCount, closeCount, out)
 		}
+	}
+}
+
+// countOpenTags counts opening tags for one element name, WITH OR WITHOUT
+// attributes: <ol> and <ol start="3"> both count once, and <li> and
+// <li class="task"> both count once. The plain strings.Count this replaced
+// missed every attributed tag phase B introduced, so an <ol start> looked like
+// an unbalanced </ol>. The name must be followed by ">" or a space, so "<p"
+// does not match "<pre>".
+func countOpenTags(out, name string) int {
+	n, i := 0, 0
+	for {
+		k := strings.Index(out[i:], "<"+name)
+		if k < 0 {
+			return n
+		}
+		j := i + k + 1 + len(name)
+		if j < len(out) && (out[j] == '>' || out[j] == ' ') {
+			n++
+		}
+		i = j
 	}
 }
 
@@ -80,10 +101,10 @@ func assertTagBalance(t *testing.T, out string) {
 //
 // The list tracks every fixture whose SOURCE contains a ``` run — which,
 // since P1 made fence recognition line-anchored, is not the same set as the
-// fixtures that RENDER a fence. container-fence-in-blockquote is the
-// standing example: its runs are all prefixed by "> ", so none of them opens
-// a fence, and the fixture renders zero <pre> blocks until P4 teaches the
-// scanner to strip a blockquote prefix and recurse.
+// fixtures whose ``` runs open a fence AT TOP LEVEL. container-fence-in-
+// blockquote is the standing example: its runs are all prefixed by "> ", so
+// they open a fence only once the blockquote prefix has been stripped, which
+// is why scanFencesForTest recurses into a quote the same way Render does.
 var fencedClaims = []string{
 	"fenced-basic.yaml",
 	"fenced-with-info-string.yaml",
@@ -531,10 +552,32 @@ func TestRender_EmptyBody(t *testing.T) {
 // TestRender_AllFencedClaims: it mirrors Render's recognition rule without
 // reimplementing the rendering.
 func scanFencesForTest(body string) []string {
-	lines := strings.Split(body, "\n")
+	return scanFenceLines(strings.Split(body, "\n"), true)
+}
+
+// scanFenceLines is scanFencesForTest's recursion: it mirrors renderBlocks'
+// container handling — a blockquote's lines have their prefix stripped and are
+// rescanned with quote recognition off — so the expectation source stays the
+// same rule Render uses rather than drifting into a second implementation.
+func scanFenceLines(lines []string, allowQuote bool) []string {
 	closers := closerRuns(lines)
 	var out []string
 	for i := 0; i < len(lines); i++ {
+		if allowQuote && len(lines[i]) > 0 && lines[i][0] == '>' {
+			end := i
+			var inner []string
+			for end < len(lines) {
+				rest, ok := blockquotePrefix(lines[end])
+				if !ok {
+					break
+				}
+				inner = append(inner, rest)
+				end++
+			}
+			out = append(out, scanFenceLines(inner, false)...)
+			i = end - 1
+			continue
+		}
 		indent, runLen, ok := fenceOpener(lines[i])
 		if !ok {
 			continue

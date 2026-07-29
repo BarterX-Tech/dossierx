@@ -1,0 +1,11 @@
+id: mdmod.contract.helper
+facet: contract
+module: mdmod
+status: draft
+layout: card
+body: |
+  Helper claim, targeted by the malformed claim's rests_on edge so that the
+  fixture trips markdown-sanity alone and not the orphan lint as well.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

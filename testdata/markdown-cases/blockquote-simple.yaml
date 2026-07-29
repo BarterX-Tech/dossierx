@@ -8,4 +8,4 @@ body: |
   > It can span multiple lines.
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests blockquote (not yet supported)
+  reason: markdown renderer test fixture - tests blockquote

@@ -1,0 +1,12 @@
+id: widget.markdown-cases.task-list-item-not-a-checkbox
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - [notacheckbox] text
+  - [xx] text
+  - \[x] escaped
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - only [ ], [x] and [X] open a task item

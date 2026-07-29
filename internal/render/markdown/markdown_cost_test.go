@@ -143,6 +143,77 @@ func costShapes() []costShape {
 			why:  "blank/continuation alternation: the exact shape the loose-list rule made reachable",
 			gen:  func(n int) string { return "- x\n" + repeatTo("\n  a\n", n) },
 		},
+		// --- phase B constructs ---------------------------------------
+		//
+		// Every construct added at P4-P8 gets a row here BEFORE it is
+		// believed to be linear, because each one added either a new
+		// per-line search, a new recursion, or a new per-block join, and
+		// each of those is exactly the shape of the four defects above.
+		{
+			name: "blockquote-one-long-quote",
+			why:  "the blockquote recursion re-scans its interior: one closerRuns table per quote",
+			gen:  func(n int) string { return repeatTo("> x\n", n) },
+		},
+		{
+			name: "blockquote-many-short-quotes",
+			why:  "one recursion, one line slice and one closerRuns table PER quote",
+			gen:  func(n int) string { return repeatTo("> x\n\ny\n\n", n) },
+		},
+		{
+			name: "blockquote-nested-literal",
+			why:  "a second > is literal text, so it must not re-enter the quote scanner",
+			gen:  func(n int) string { return repeatTo("> > x\n", n) },
+		},
+		{
+			name: "list-nesting-deepening",
+			why:  "the depth stack: one push per level, and writeList recurses to that depth",
+			gen:  deepeningNestedList,
+		},
+		{
+			name: "list-dedent-churn",
+			why:  "the pop loops: a dedent closes levels, and pops must be amortized by pushes",
+			gen:  func(n int) string { return repeatTo("- a\n  - b\n    - c\n- d\n", n) },
+		},
+		{
+			name: "hard-breaks-backslash",
+			why:  "joinSegments builds one block string plus one break offset per line",
+			gen:  func(n int) string { return repeatTo("a\\\n", n) },
+		},
+		{
+			name: "hard-breaks-two-spaces",
+			why:  "the same accumulation reached through the trailing-space spelling",
+			gen:  func(n int) string { return repeatTo("a  \n", n) },
+		},
+		{
+			name: "hard-breaks-in-list-item",
+			why:  "breaks threaded through item continuation, where the O(K^2) accumulator lived",
+			gen:  func(n int) string { return "- x\n" + repeatTo("  a\\\n", n) },
+		},
+		{
+			name: "hard-breaks-with-unclosed-backticks",
+			why:  "every code-span opener bounds its search with a lookup over ALL break offsets",
+			gen:  func(n int) string { return repeatTo("`x\\\n", n) },
+		},
+		{
+			name: "headings",
+			why:  "one heading recognition and one inline pass per line",
+			gen:  func(n int) string { return repeatTo("### h\n", n) },
+		},
+		{
+			name: "thematic-breaks",
+			why:  "a rule flushes both open blocks on every line",
+			gen:  func(n int) string { return repeatTo("---\n", n) },
+		},
+		{
+			name: "task-items",
+			why:  "the checkbox scan runs on every unordered item's text",
+			gen:  func(n int) string { return repeatTo("- [x] a\n", n) },
+		},
+		{
+			name: "loose-list-items",
+			why:  "looseness makes every item re-enter the <p> path at flush time",
+			gen:  func(n int) string { return repeatTo("- a\n\n", n) },
+		},
 		{
 			name: "prose-control",
 			why:  "the ordinary shape: it must not have paid for any of the repairs",
@@ -183,6 +254,22 @@ func deepeningIndentedList(n int) string {
 	for depth := 1; sb.Len() < n; depth++ {
 		sb.WriteString(strings.Repeat(" ", depth))
 		sb.WriteString("- y\n")
+	}
+	return sb.String()
+}
+
+// deepeningNestedList builds a list that genuinely OPENS a level on every
+// line — each marker is indented two columns past the previous item's content
+// column — to about n bytes. deepeningIndentedList's one-column steps do not
+// reach a content column and so stay flat; this one exercises the depth stack
+// and writeList's recursion at their real depth. Line count grows as sqrt(n),
+// so per-line work linear in the line's own indent is still linear in BYTES.
+func deepeningNestedList(n int) string {
+	var sb strings.Builder
+	sb.Grow(n + 64)
+	for depth := 0; sb.Len() < n; depth++ {
+		sb.WriteString(strings.Repeat(" ", 2*depth))
+		sb.WriteString("- a\n")
 	}
 	return sb.String()
 }
@@ -626,7 +713,11 @@ func TestItemProse_SegmentJoinMatchesConcatenation(t *testing.T) {
 	}
 	// The same, with a blank line before each continuation — the loose-list
 	// path, which is what made this accumulator reachable at all. A blank line
-	// is a soft break like any other: it must not change the joined text.
+	// is a soft break like any other: it must not change the JOINED TEXT. It
+	// does change the wrapper, because a blank line inside a list now makes
+	// the list loose and every item's prose run is <p>-wrapped (CommonMark);
+	// the assertion is deliberately still written as "the same joined text,
+	// inside <p>" so a join regression cannot hide behind the new wrapper.
 	for _, k := range []int{1, 2, 5} {
 		segs := []string{"first"}
 		var body strings.Builder
@@ -636,7 +727,7 @@ func TestItemProse_SegmentJoinMatchesConcatenation(t *testing.T) {
 			segs = append(segs, s)
 			body.WriteString("\n  " + s + "\n")
 		}
-		want := "<ul><li>" + strings.Join(segs, " ") + "</li></ul>"
+		want := "<ul><li><p>" + strings.Join(segs, " ") + "</p></li></ul>"
 		if got := string(Render(body.String())); got != want {
 			t.Errorf("K=%d blank-separated continuation lines:\n got: %q\nwant: %q", k, got, want)
 		}

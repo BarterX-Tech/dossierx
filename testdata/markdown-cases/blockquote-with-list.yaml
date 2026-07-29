@@ -1,0 +1,13 @@
+id: widget.markdown-cases.blockquote-with-list
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > Steps:
+  >
+  > 1. First
+  > 2. Second
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - lists inside a blockquote come free from the recursion

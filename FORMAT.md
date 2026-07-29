@@ -79,15 +79,94 @@ of markdown/rows/steps and carries its own human review gate — see the
 ### `body` and the markdown ceiling
 
 `body` is markdown, but the engine's renderer is a small owned subset rather
-than a general parser. It supports paragraphs, fenced code blocks, inline
-`` `code` `` spans, `[text](url)` links whose scheme is allowlisted, and
-unordered/ordered lists nested one level deep. Everything else — bold, italic,
-headings, blockquotes, markdown tables, deeper nesting — stays literal text.
+than a general parser, and the subset now has **two different ceilings**
+depending on which entry point a surface goes through.
 
-This is a documented ceiling, not a silent gap: the same subset renders `body`,
-every `rows` cell, every `steps` entry, and every comment body, so what a claim
-author sees in one place is what they get in all of them. A future release
-widens it.
+**The BLOCK ceiling** — `markdown.Render` — applies to `body`, `steps`
+entries, and **comment bodies** (both the root of a thread and every reply):
+
+- Paragraphs — a run of non-blank lines separated by a blank line.
+- Fenced code blocks, recognized by the line scanner itself (not a
+  whole-body pre-pass), so an open list item or an open blockquote survives
+  a fence inside it. An indented fence renders inside the deepest open list
+  item, including across a blank line; a fence inside a blockquote keeps the
+  blockquote's content boundary. Fence content is raw source bytes,
+  HTML-escaped once, never run through the inline pass — no escapes, no
+  code spans, no links resolve inside it. An unclosed fence falls through to
+  ordinary paragraph/item-continuation handling with nothing dropped.
+- Backslash escapes — a closed 15-character escapable set, resolved inside
+  the single left-to-right inline scan (never as a separate pre-pass), so an
+  escaped character can never open, close, or delimit a construct. `<` and
+  `&` are deliberately **outside** the escapable set (see "Why `\<` still
+  shows a backslash" below).
+- Inline `` `code` `` spans — double-backtick spans included; a backtick run
+  is matched against a closing run of equal length, so a literal backtick
+  can appear inside inline code.
+- Inline links — `[text](url)` becomes `<a href="url">text</a>`. The url is
+  held to a scheme allowlist (`http`, `https`, `mailto`, scheme-less
+  relative paths, `#`-fragments); any other scheme, and any scheme-less
+  network path (`//host`, and the backslash-authority spellings
+  `/\host`, `\\host`, `\/host`), is neutralized to escaped literal text
+  with no anchor.
+- Unordered (`-`/`*`) and ordered (`1.`, `2.`, ...) lists, nested to
+  unbounded depth via an indent-keyed depth stack, with GFM task items
+  (`- [ ]` / `- [x]` / `- [X]`) rendering a disabled checkbox, CommonMark
+  looseness (a blank line inside a list makes the whole list loose and every
+  item's prose is `<p>`-wrapped), and `<ol start="n">` whenever an ordered
+  list's first item is not 1. A blank line no longer unconditionally ends a
+  list — it is armed and resolved against the next non-blank line's indent
+  column, snapped to the nearest open level.
+- Thematic breaks — a line of three or more dashes and nothing else is
+  always an `<hr>`. There is no setext heading in this subset, so `text`
+  followed by `---` is a paragraph and then a rule, never an `<h2>`.
+- ATX headings at levels 3 to 6 only. `#` and `##` are reserved for the
+  viewer's own chrome and render as literal text with the hashes visible
+  (this renders; the viewer nav still ignores it — see below), as does a
+  run of seven or more hashes.
+- Blockquotes — one level deep. The `> ` prefix is stripped and the
+  interior recurses into the same block scanner with blockquote
+  recognition turned off, so paragraphs, lists, task items, headings,
+  thematic breaks and fenced code inside a quote all come free, while a
+  second leading `>` inside that interior stays literal text — `>> x`
+  renders one quote whose content is the literal text `> x`.
+- Hard line breaks — a trailing backslash, or two trailing spaces, becomes
+  a `<br>`. Both spellings are captured before the line is trimmed and
+  carried through the paragraph join, so the inline pass still runs once
+  per paragraph.
+
+**The INLINE ceiling** — `markdown.RenderInline` — applies to every `rows`
+table cell. It is strictly narrower than the block ceiling: backslash
+escapes and inline `` `code` `` spans and `[text](url)` links render exactly
+as above, but no block construct is recognized at all (no fences, no lists,
+no headings, no blockquotes, no thematic breaks) and there is no hard line
+break inside a cell.
+
+This is a documented ceiling, not a silent gap. Recorded here as decisions,
+not gaps, so a reader does not have to infer them from what the parser
+happens not to do:
+
+- **Reference-style links, footnotes, and raw inline HTML are non-goals.**
+  They are not partially supported and not planned as a near-term addition;
+  `[text](url)` inline links are the only link form.
+- **Body headings render, but the viewer's navigation ignores them.** An
+  `###`-`######` heading inside `body` produces a real heading element in
+  the rendered claim, but it does not appear in the viewer's own sidebar/nav
+  structure — that structure is driven by `module`/`facet`/`section`, not by
+  anything inside a claim's markdown.
+- **`\<` leaves the backslash visible.** `<` (and `&`) sit outside the
+  15-character escapable set on purpose, and every author byte is already
+  passed through `html.EscapeString` regardless of whether it followed a
+  backslash — so `\<` renders as a literal backslash followed by `&lt;`,
+  not as a bare `<`. This is not a bug in the escape set; escaping `<`
+  would require either interpreting the escaped byte specially (defeating
+  "every author byte passes through the same escape") or a second output
+  path, and neither exists.
+
+The same subset renders `body`, every `rows` cell (through the narrower
+inline ceiling), every `steps` entry, and every comment body, so what a
+claim author sees in one place is close to what they get in the others —
+except a `rows` cell, which is inline-only. A future release widens either
+ceiling.
 
 ### `rows` cells
 

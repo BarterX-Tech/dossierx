@@ -1,0 +1,13 @@
+id: widget.markdown-cases.hard-break-in-list-item
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - First\
+    Second
+  - Another  
+    Item
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - both hard-break spellings thread through list-item continuation

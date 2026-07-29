@@ -1,0 +1,17 @@
+id: mdmod.contract.malformed
+facet: contract
+module: mdmod
+status: draft
+layout: card
+body: |
+  ## Reserved heading level, which renders with its hashes still showing.
+
+  This paragraph looks like markup and is not. A link to
+  [the console](javascript:alert(1)) is refused outright and renders as inert
+  literal text, the ` character opens a code span that never closes, and this
+  final line ends in a hard-break marker with nothing to break to\
+rests_on:
+  - mdmod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

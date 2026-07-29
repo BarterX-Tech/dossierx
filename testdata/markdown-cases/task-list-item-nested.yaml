@@ -1,0 +1,12 @@
+id: widget.markdown-cases.task-list-item-nested
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - Parent task list:
+    - [ ] child one
+    - [x] child two
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - task items inside a nested list

@@ -9,4 +9,4 @@ body: |
   - [x] Another done task
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests task list items (not yet supported)
+  reason: markdown renderer test fixture - tests task list items

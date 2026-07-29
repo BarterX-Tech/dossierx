@@ -9,4 +9,4 @@ body: |
   Content under the heading.
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests level 4 heading (not yet supported)
+  reason: markdown renderer test fixture - tests level 4 heading

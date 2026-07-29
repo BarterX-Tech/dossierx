@@ -1,0 +1,14 @@
+id: widget.markdown-cases.list-dedent-snaps-to-open-level
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - L1
+    - L2
+      - L3
+    - back to L2
+  - back to L1
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a dedent closes levels until the indent matches an open one

@@ -1,0 +1,12 @@
+id: widget.markdown-cases.list-unresolvable-indent-folds
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - L1
+      - L2
+    stray continuation
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - an indent matching no open level folds into the deepest reachable item

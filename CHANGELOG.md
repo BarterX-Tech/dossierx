@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 0.3.1
+
+**Locked claim bodies may render differently after this upgrade, with no edit and no ledger
+event.** The lock ledger signs a claim's `body` bytes, not the HTML those bytes produce — so
+widening the renderer changes what an already-locked, byte-identical body looks like in the
+viewer without touching the field the ledger hashes, without flipping `review_pending`, and
+without leaving any entry in `.dossierx-lock-store.json` naming the change. `dossierx check`
+will report exactly what it reported before the upgrade: nothing. If a body relied on a
+construct that used to fall through to literal text — a line that happened to start with a
+dash, a stray backslash, an indented block that used to escape its enclosing list — it may now
+render as a live construct instead. There is no automatic re-review step for this; the tool to
+revisit a claim's rendered output deliberately, on the human's own review, is `dossierx claim
+unlock` (or, for genuine drift, `dossierx claim reaudit`) — see FORMAT.md's markdown-ceiling
+section for what changed.
+
+### Changed — renderer expansion
+
+The block-level markdown renderer (`markdown.Render`, used by `body`, `steps`, and comment
+bodies) grew several constructs beyond the previous release's ceiling: fenced code blocks are
+now recognized by the line scanner itself rather than a whole-body pre-pass, so a fence nested
+inside an open list item or an open blockquote no longer splits the container around it;
+one-level blockquotes recurse into the same block scanner (paragraphs, lists, task items,
+headings and fenced code all render inside a quote); ATX headings at levels 3–6; thematic
+breaks; unordered/ordered lists nest to unbounded depth via an indent-keyed stack, with GFM
+task-item checkboxes, CommonMark list looseness, and `<ol start="n">` for a list that does not
+begin at 1; and hard line breaks (a trailing backslash or two trailing spaces) become `<br>`.
+The inline-only ceiling used by `rows` table cells (`markdown.RenderInline`) is unchanged and
+narrower than the block ceiling — see FORMAT.md for exactly which constructs each entry point
+recognizes.
+
+### Fixed — a denial-of-service path in `parseLink`, already shipped in the current version
+
+This fix predates this release's scope and is already live in the shipped binary; it is
+recorded here because it is part of the same file this release otherwise touches, and because
+it bears directly on the renderer-expansion note above. `parseLink`'s bracket-matching had
+several quadratic-ish rescans — repeatedly walking forward to a `]` or `)` from each `[` in the
+remaining text instead of indexing them once — that produced no wrong byte of output but cost
+seconds to minutes of CPU on an adversarial input. Measured directly: a 1 MiB comment body
+consisting of bracket characters (`[`, `]`) took 5.8 seconds of CPU to render before the fix.
+This matters more on the comment surface than the number alone suggests, because
+`handleListComments` (`internal/serve/handlers.go`) re-renders **every** stored comment on
+**every** `GET /api/comments` call — so one stored hostile body is not a one-time cost, it is
+amplified across every later read of the comment panel for as long as that comment exists. The
+fix bounds the four quadratic paths with an index built once per scan and is guarded by a
+16-shape growth sweep plus a 1 MiB absolute-budget test in
+`internal/render/markdown/markdown_cost_test.go`.
+
 ## [0.3.0] - 2026-07-28
 
 The agent-first restructure. DossierX has two users with opposite needs: an **agent** that

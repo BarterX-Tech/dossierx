@@ -1,0 +1,14 @@
+id: widget.markdown-cases.blockquote-heading-and-rule
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > ### Inside heading
+  >
+  > ---
+  >
+  > Text.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - headings and thematic breaks are legal in a blockquote interior
