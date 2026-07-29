@@ -77,11 +77,26 @@ func assertTagBalance(t *testing.T, out string) {
 // string, multiple fences in one body, and HTML-injection content inside a
 // fence (script tags, ampersands, quotes) all surviving as verbatim,
 // escaped content.
+//
+// The list tracks every fixture whose SOURCE contains a ``` run — which,
+// since P1 made fence recognition line-anchored, is not the same set as the
+// fixtures that RENDER a fence. container-fence-in-blockquote is the
+// standing example: its runs are all prefixed by "> ", so none of them opens
+// a fence, and the fixture renders zero <pre> blocks until P4 teaches the
+// scanner to strip a blockquote prefix and recurse.
 var fencedClaims = []string{
 	"fenced-basic.yaml",
 	"fenced-with-info-string.yaml",
 	"fenced-multi-block.yaml",
 	"fenced-html-injection.yaml",
+	"container-fence-in-blockquote.yaml",
+	"container-fence-in-ordered-list.yaml",
+	"container-fence-in-unordered-list.yaml",
+	"container-fence-indented-in-ordered-list.yaml",
+	"container-fence-indented-in-unordered-list.yaml",
+	"loose-list-blank-line-fence-ordered.yaml",
+	"loose-list-blank-line-fence-unordered.yaml",
+	"loose-list-blank-line-fence-nested.yaml",
 }
 
 func TestRender_AllFencedClaims(t *testing.T) {
@@ -98,32 +113,34 @@ func TestRender_AllFencedClaims(t *testing.T) {
 				t.Fatalf("%s: empty body", rel)
 			}
 
-			// Expected fence count/content computed via the same
-			// ported bodyFence regex this package uses — this is
-			// intentionally the same regex, not a reimplementation,
-			// since the test is verifying Render's use of it, not
-			// second-guessing the regex itself.
-			matches := bodyFence.FindAllStringSubmatchIndex(c.Body, -1)
-			if len(matches) == 0 {
-				t.Fatalf("%s: expected at least one fence, found none", rel)
-			}
+			// Expected fence count/content computed by scanning the
+			// source with the package's own opener/closer predicates —
+			// intentionally the same rule Render uses, not a
+			// reimplementation, since the test verifies Render's USE of
+			// the rule, not the rule itself.
+			blocks := scanFencesForTest(c.Body)
 
 			out := string(Render(c.Body))
 			assertTagBalance(t, out)
 
 			gotPre := strings.Count(out, "<pre><code>")
 			gotClose := strings.Count(out, "</code></pre>")
-			if gotPre != len(matches) || gotClose != len(matches) {
-				t.Errorf("%s: fence count mismatch: source=%d rendered open=%d close=%d", rel, len(matches), gotPre, gotClose)
+			if gotPre != len(blocks) || gotClose != len(blocks) {
+				t.Errorf("%s: fence count mismatch: source=%d rendered open=%d close=%d", rel, len(blocks), gotPre, gotClose)
 			}
 
-			for i, loc := range matches {
-				codeStart, codeEnd := loc[2], loc[3]
-				want := c.Body[codeStart:codeEnd]
+			for i, want := range blocks {
 				wantEscaped := escapeForTest(want)
 				if !strings.Contains(out, wantEscaped) {
 					t.Errorf("%s: fence #%d escaped content not found verbatim in output.\nwant substring:\n%s\ngot output:\n%s", rel, i, wantEscaped, out)
 				}
+			}
+
+			// Whatever the fixture's ``` runs did NOT turn into a fence
+			// must still be present as escaped literal text — the
+			// fall-through rule, never a dropped line.
+			if len(blocks) == 0 && strings.Contains(c.Body, "```") && strings.Contains(out, "<pre>") {
+				t.Errorf("%s: no fence expected but a <pre> was emitted:\n%s", rel, out)
 			}
 		})
 	}
@@ -375,6 +392,10 @@ func TestRender_OrderedListWithLetteredSubItems(t *testing.T) {
 	}
 }
 
+// TestRender_FenceInsideList_Synthetic pins the COLUMN-ZERO half of P1's
+// fence/container rule: an unindented fence is a top-level block, so it still
+// closes an open list exactly as it did before P1. The indented case — the
+// one amendment A1 repairs — is pinned in markdown_parser_test.go.
 func TestRender_FenceInsideList_Synthetic(t *testing.T) {
 	body := "- item one\n```\ncode here\n```\n- item two"
 	out := string(Render(body))
@@ -392,8 +413,9 @@ func TestRender_FenceInsideList_Synthetic(t *testing.T) {
 	if !strings.Contains(out, "<li>item two</li>") {
 		t.Errorf("expected item two as its own list item:\n%s", out)
 	}
-	// The fence must split the list into two separate <ul> blocks, not
-	// merge item one and item two into one list around it.
+	// A column-zero fence is a top-level block, so it splits the list into
+	// two separate <ul> blocks. (Indent it under the item and it becomes
+	// item content instead — see TestRender_FenceInsideUnorderedListItem.)
 	if strings.Count(out, "<ul>") != 2 {
 		t.Errorf("expected two separate <ul> lists split by the fence, got %d in:\n%s", strings.Count(out, "<ul>"), out)
 	}
@@ -501,6 +523,30 @@ func TestRender_EmptyBody(t *testing.T) {
 			t.Errorf("Render(%q) = %q, want empty/blank output", body, out)
 		}
 	}
+}
+
+// scanFencesForTest walks body a line at a time with the package's own
+// fenceOpener/scanFence predicates and returns each closed fence's raw
+// content, in document order. This is the expectation source for
+// TestRender_AllFencedClaims: it mirrors Render's recognition rule without
+// reimplementing the rendering.
+func scanFencesForTest(body string) []string {
+	lines := strings.Split(body, "\n")
+	closers := closerRuns(lines)
+	var out []string
+	for i := 0; i < len(lines); i++ {
+		indent, runLen, ok := fenceOpener(lines[i])
+		if !ok {
+			continue
+		}
+		content, closeIdx, closed := scanFence(lines, closers, i, indent, runLen)
+		if !closed {
+			continue
+		}
+		out = append(out, content)
+		i = closeIdx
+	}
+	return out
 }
 
 // escapeForTest reproduces html.EscapeString via the same stdlib call the

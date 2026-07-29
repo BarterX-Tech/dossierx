@@ -1,0 +1,13 @@
+id: widget.markdown-cases.list-nested-unordered
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - Top level
+    - Nested item one
+    - Nested item two
+  - Another top level
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

@@ -1,0 +1,10 @@
+id: widget.markdown-cases.hostile-ampersand
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  This has & ampersands & in text.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests ampersand escaping

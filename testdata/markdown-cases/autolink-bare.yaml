@@ -1,0 +1,10 @@
+id: widget.markdown-cases.autolink-bare
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Visit https://example.com for more information.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests bare URL autolink (not yet supported)

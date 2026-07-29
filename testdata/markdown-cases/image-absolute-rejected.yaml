@@ -1,0 +1,10 @@
+id: widget.markdown-cases.image-absolute-rejected
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![Alt text](/absolute/path/image.png)
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests absolute image rejection (not yet supported)

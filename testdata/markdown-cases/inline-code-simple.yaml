@@ -1,0 +1,10 @@
+id: widget.markdown-cases.inline-code-simple
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  The function `getValue()` returns a string.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

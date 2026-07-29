@@ -1,0 +1,15 @@
+id: widget.markdown-cases.container-fence-indented-in-ordered-list
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  1. Install it:
+     ```
+     npm install dossierx
+     ```
+     Then check the version.
+  2. Then run it.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - amendment A1's named failure, a fence indented under an ordered-list item; before P1 this split the list in two and restarted the numbering at 1

@@ -1,0 +1,18 @@
+id: widget.markdown-cases.container-fence-in-ordered-list
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  1. First item
+  2. Second item with code:
+
+  ```
+  code block
+  inside list
+  ```
+
+  3. Third item
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests fence inside ordered list (currently splits list)

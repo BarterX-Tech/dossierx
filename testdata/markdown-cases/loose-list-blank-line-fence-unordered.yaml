@@ -1,0 +1,16 @@
+id: widget.markdown-cases.loose-list-blank-line-fence-unordered
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - Install it:
+
+    ```sh
+    go install ./...
+    ```
+
+  - Then run it.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the loose-list rule for an unordered list; a blank line before an indented fence must not split the list

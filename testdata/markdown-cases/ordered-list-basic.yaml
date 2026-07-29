@@ -1,0 +1,12 @@
+id: widget.markdown-cases.ordered-list-basic
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  1. First step
+  2. Second step
+  3. Third step
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

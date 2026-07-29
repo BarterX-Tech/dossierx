@@ -1,0 +1,15 @@
+id: widget.markdown-cases.container-fence-indented-in-unordered-list
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - Top level item:
+    - Nested item with code:
+      ```
+      code inside the nested item
+      ```
+  - Another top level item.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a fence indented under a NESTED unordered item; pins that the block attaches to the deepest open item, not the top-level one

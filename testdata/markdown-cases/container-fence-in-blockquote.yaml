@@ -1,0 +1,15 @@
+id: widget.markdown-cases.container-fence-in-blockquote
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > This is a blockquote with code:
+  >
+  > ```
+  > code block
+  > inside blockquote
+  > ```
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests fence inside blockquote (currently escapes prefixes)

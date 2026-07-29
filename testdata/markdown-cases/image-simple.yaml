@@ -1,0 +1,10 @@
+id: widget.markdown-cases.image-simple
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![Alt text](./diagram.png)
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests image (not yet supported)

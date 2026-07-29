@@ -1,0 +1,12 @@
+id: widget.markdown-cases.blockquote-with-paragraph
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > This is a blockquote with a paragraph.
+  >
+  > Second paragraph in the blockquote.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests blockquote (not yet supported)

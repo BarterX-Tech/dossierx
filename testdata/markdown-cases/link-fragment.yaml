@@ -1,0 +1,10 @@
+id: widget.markdown-cases.link-fragment
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Jump to [section](#widget.contract.x) above.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

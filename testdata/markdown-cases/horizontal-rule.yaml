@@ -1,0 +1,14 @@
+id: widget.markdown-cases.horizontal-rule
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Section one content.
+
+  ---
+
+  Section two content.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests horizontal rule (not yet supported)

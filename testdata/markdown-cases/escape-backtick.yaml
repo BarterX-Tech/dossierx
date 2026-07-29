@@ -1,0 +1,10 @@
+id: widget.markdown-cases.escape-backtick
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  You can write a literal backtick like \` here.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests backslash escape (not yet supported)

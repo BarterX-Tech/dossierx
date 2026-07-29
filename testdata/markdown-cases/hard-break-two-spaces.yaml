@@ -1,0 +1,11 @@
+id: widget.markdown-cases.hard-break-two-spaces
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  First line  
+  Second line after break.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests hard break with two trailing spaces (not yet supported)
