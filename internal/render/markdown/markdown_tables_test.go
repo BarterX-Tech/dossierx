@@ -6,8 +6,9 @@ import (
 )
 
 // markdown_tables_test.go is phase C's unit suite: the GFM pipe table grammar,
-// its placement in the container matrix, its two degradation paths, and the one
-// deliberate exception to the escaping rules (see the "\|" tests below).
+// its placement in the container matrix, its ONE degradation path — a candidate
+// with no valid delimiter row is prose, and that is the only one there is — and
+// the one deliberate exception to the escaping rules (see the "\|" tests below).
 //
 // The golden corpus under testdata/markdown-cases carries the same behaviors as
 // whole-document fixtures; these are the focused cases, including the ones whose
@@ -135,10 +136,17 @@ func TestRender_TableCellsAreTrimmed(t *testing.T) {
 	}
 }
 
-func TestRender_TableShortRowIsPadded(t *testing.T) {
+func TestRender_TableShortRowRendersShort(t *testing.T) {
+	// A row emits exactly the cells it has. No empty cells are invented to
+	// square it off against the header, because inventing them is the one thing
+	// in this construct that emitted more output than it was given input — see
+	// markdown_tables.go's cost note. The row is still a row of the same table.
 	out := string(Render("| a | b | c |\n| --- | --- | --- |\n| 1 |"))
-	if !strings.Contains(out, "<tr><td>1</td><td></td><td></td></tr>") {
-		t.Errorf("short row not padded to the header's arity:\n%s", out)
+	if !strings.Contains(out, "<tr><td>1</td></tr>") {
+		t.Errorf("short row did not render with exactly its own cells:\n%s", out)
+	}
+	if !strings.Contains(out, "<table") {
+		t.Errorf("a ragged row must not cost the table its tablehood:\n%s", out)
 	}
 }
 
@@ -329,70 +337,183 @@ func TestRender_TableCellsEscapeAuthorBytes(t *testing.T) {
 	}
 }
 
-// --- the sparse-padding refusal -------------------------------------------
+// --- output is bounded by input -------------------------------------------
 
-func TestRender_SparsePaddingIsRefused(t *testing.T) {
-	// Padding is the one part of this construct whose OUTPUT is not bounded by
-	// its input: a header of N columns and M one-byte rows emits N*M cells from
-	// N+M bytes. The bound is that a table may not emit more cells than its own
-	// source has bytes; a table that would is not a table, and the whole
-	// candidate block renders as ordinary paragraphs with its source bytes
-	// unchanged.
-	body := "|a|b|c|d|e|\n|-|-|-|-|-|\n" + strings.Repeat("|\n", 6)
-	out := string(Render(body))
-	if strings.Contains(out, "<table") {
-		t.Errorf("a sparse table was emitted:\n%s", out)
-	}
-	if !strings.HasPrefix(out, "<p>|a|b|c|d|e|") {
-		t.Errorf("the refused block did not fall through as prose:\n%s", out)
-	}
-}
-
-func TestRender_SparsePaddingRefusalConsumesTheWholeBlock(t *testing.T) {
-	// The refusal must CONSUME the block it refused. Falling through line by
-	// line would let the delimiter row become the next candidate header, and a
-	// document of alternating wide and narrow rows would then re-walk the same
-	// extent once per line — quadratic.
-	body := "|a|b|c|d|e|\n|-|-|-|-|-|\n" + strings.Repeat("|\n", 6) + "\ntail"
-	out := string(Render(body))
-	if n := strings.Count(out, "<p>"); n != 2 {
-		t.Errorf("refused block did not render as exactly one paragraph plus the tail (got %d):\n%s", n, out)
-	}
-}
-
-func TestRender_TableOutputIsBoundedByItsInput(t *testing.T) {
-	// The bound, measured rather than argued. Every other construct in this
-	// package emits output linear in its input; padding is the one that does
-	// not, so this asserts the property directly on the two shapes that reach
-	// the maximum ratio — including the one whose UNBOUNDED cell count would be
-	// bytes^2/12 (~800 GB from a 1 MiB comment body).
-	//
-	// The ceiling is generous on purpose: it is a DoS bound, not a golden. The
-	// point is that the ratio is a CONSTANT, which no quadratic can satisfy.
-	const maxRatio = 12
-	for _, sh := range []costShape{
-		{name: "table-max-amplification", gen: maxAmplificationTable},
-		{name: "table-ragged-rows-padded", gen: func(n int) string { return tableOf(4, "| x |\n", n) }},
-		{name: "table-ragged-rows-refused", gen: func(n int) string { return tableOf(24, "|\n", n) }},
+// TestRender_NoWellFormedTableIsEverRefused IS THE POINT OF THIS CHANGE, and it
+// is the test the two bounds it replaces could not have passed.
+//
+// Both of those bounds picked a ratio at which a WELL-FORMED table stopped
+// being a table and re-rendered as a paragraph. Nothing in the spec authorises
+// that: A9 makes a ragged body row a rendering decision INSIDE a table, never a
+// reason to stop being one, and A24's degradation matrix gives a table exactly
+// one path to prose — an alignment row whose arity does not match the header's,
+// or none at all. So every such rule contradicted the spec by construction and
+// merely relocated a cliff that real authors fall off. Measured against the byte
+// ceiling, immediately before this change:
+//
+//	10 columns, 5 short rows, plain            rendered as a table
+//	10 columns, 5 short rows, CENTRE-ALIGNED   rendered as a PARAGRAPH
+//	 4 columns, 3 short rows, CENTRE-ALIGNED   rendered as a PARAGRAPH
+//
+// A four-column centre-aligned table with three ragged rows silently vanished.
+// So the property is asserted as a UNIVERSAL over the whole two-dimensional
+// space rather than at a handful of sampled shapes: every column count 1..40
+// against every row count 1..40, plain and centre-aligned, with the raggedest
+// body rows there are. Sampling is what let the previous rounds each claim a
+// universal that did not hold; a sweep cannot make that mistake, because the
+// cliff is somewhere in the interior and the interior is what is swept.
+func TestRender_NoWellFormedTableIsEverRefused(t *testing.T) {
+	for _, delim := range []struct {
+		name string
+		cell string
+	}{
+		{"plain", "-"},
+		// Centre alignment is swept because it is the WORST case, not because
+		// it is exotic: `<td class="md-col-center"></td>` is the widest cell
+		// markup this package can write, so a ratio bound bit here first. Both
+		// of the vanishing shapes above were centred.
+		{"centred", ":-:"},
 	} {
-		for _, size := range []int{16 << 10, 128 << 10} {
-			body := sh.gen(size)
-			out := string(Render(body))
-			if ratio := float64(len(out)) / float64(len(body)); ratio > maxRatio {
-				t.Errorf("%s at %d bytes: output %d bytes, ratio %.1fx exceeds %dx",
-					sh.name, len(body), len(out), ratio, maxRatio)
+		for cols := 1; cols <= 40; cols++ {
+			header := "|" + strings.Repeat("h|", cols)
+			drow := "|" + strings.Repeat(delim.cell+"|", cols)
+			for rows := 1; rows <= 40; rows++ {
+				body := header + "\n" + drow + "\n" + strings.Repeat("|x|\n", rows)
+				if out := string(Render(body)); !strings.Contains(out, "<table") {
+					t.Fatalf("%s, %d columns x %d ragged one-cell rows was refused "+
+						"and rendered as prose:\n%.200s", delim.name, cols, rows, out)
+				}
 			}
 		}
 	}
 }
 
-func TestRender_DenseTableIsStillATable(t *testing.T) {
-	// The bound must not refuse an ordinary table. A real one carries far more
-	// than one byte per emitted cell.
-	body := "| Header 1 | Header 2 |\n| -------- | -------- |\n" +
-		strings.Repeat("| value a  | value b  |\n", 40)
-	if out := string(Render(body)); !strings.Contains(out, "<table") {
-		t.Errorf("an ordinary 40-row table was refused:\n%s", out[:min(len(out), 200)])
+// TestRender_TableWithContentInEveryCellIsNeverRefused is the same universal
+// restricted to DENSE tables — every cell present, every cell non-empty — and
+// it is now trivially true, since nothing is refused at all. It is kept because
+// the previous round asserted exactly this and it was the claim that failed:
+// the bound it guarded could not refuse a dense table, but the whole family of
+// ragged ones it could refuse went unswept. Keeping the narrow case next to the
+// universal above records that the narrow case was never the hard one.
+func TestRender_TableWithContentInEveryCellIsNeverRefused(t *testing.T) {
+	for _, cols := range []int{1, 2, 3, 5, 10, 40, 200, 1000} {
+		for _, rows := range []int{0, 1, 5, 20, 100, 500} {
+			header := "|" + strings.Repeat("a|", cols)
+			delim := "|" + strings.Repeat(":-:|", cols)
+			row := "|" + strings.Repeat("1|", cols)
+			body := header + "\n" + delim + "\n" + strings.Repeat(row+"\n", rows)
+			if out := string(Render(body)); !strings.Contains(out, "<table") {
+				t.Errorf("%d columns x %d rows, every cell centred and non-empty, was refused",
+					cols, rows)
+			}
+		}
+	}
+}
+
+func TestRender_OrdinaryTablesAreNeverRefused(t *testing.T) {
+	// The shapes a human actually writes, including the exact ones the two
+	// previous bounds refused.
+	for name, body := range map[string]string{
+		"the shape the cell bound refused": "|a|b|c|d|e|f|g|h|i|j|\n|-|-|-|-|-|-|-|-|-|-|\n" +
+			strings.Repeat("|1|\n", 5),
+		"the shape the byte ceiling refused": "|a|b|c|d|e|f|g|h|i|j|\n" +
+			strings.Repeat("|:-:", 10) + "|\n" + strings.Repeat("|1|\n", 5),
+		"four centred columns, three ragged rows": "|a|b|c|d|\n|:-:|:-:|:-:|:-:|\n" +
+			strings.Repeat("|x|\n", 3),
+		"eight columns, five short rows": "|" + strings.Repeat("h|", 8) + "\n|" +
+			strings.Repeat("-|", 8) + "\n" + strings.Repeat("|x|\n", 5),
+		"an ordinary forty-row table": "| Header 1 | Header 2 |\n| -------- | -------- |\n" +
+			strings.Repeat("| value a  | value b  |\n", 40),
+		"a thirty-column documentation table": "|" + strings.Repeat(" col |", 30) + "\n|" +
+			strings.Repeat(" --- |", 30) + "\n" + strings.Repeat("|"+strings.Repeat(" v |", 30)+"\n", 10),
+		"a sparse table written with spaces": "| a | b | c | d | e | f | g | h | i | j |\n" +
+			strings.Repeat("|:-:", 10) + "|\n" +
+			strings.Repeat("| 1 |   | 2 |   | 3 |   | 4 |   |   |   |\n", 30),
+		"every cell empty but spaced": "| a | b | c |\n| - | - | - |\n" +
+			strings.Repeat("|   |   |   |\n", 30),
+		"every cell empty and unspaced": "|a|b|c|\n|:-:|:-:|:-:|\n" +
+			strings.Repeat("||||\n", 30),
+		"right-aligned numbers": "| item | qty |\n| ---- | ---:|\n" +
+			strings.Repeat("| a | 1 |\n", 50),
+		// The two shapes the cost sweep used to pin as REFUSED. They are here
+		// so the change of verdict is stated in the unit suite too, not only in
+		// a sweep whose wantTable flags moved.
+		"the maximum-amplification shape": "|" + strings.Repeat("|", 4000) + "\n|" +
+			strings.Repeat("-|", 4000) + "\n" + strings.Repeat("|\n", 200),
+		"four hundred centred columns, five one-cell rows": strings.Repeat("|", 401) +
+			strings.Repeat(" ", 395) + "\n|" + strings.Repeat(":-:|", 400) + "\n" +
+			strings.Repeat("|\n", 5),
+	} {
+		if out := string(Render(body)); !strings.Contains(out, "<table") {
+			t.Errorf("%s was refused:\n%.200s", name, out)
+		}
+	}
+}
+
+// widestCellBytes is the widest cell writeTable can emit, spelled through the
+// very alignClass the renderer calls so it cannot drift from the markup. It is
+// the numerator of the construct's intrinsic amplification ratio; the
+// denominator is ONE source byte, the "|" that is the cheapest spelling of a
+// cell there is.
+var widestCellBytes = len("<td") + len(alignClass(alignCenter)) + len(">") + len("</td>")
+
+// TestRender_TableOutputIsBoundedByItsInput measures the property that replaced
+// the ceiling. There is no longer a rule that refuses a table, so the bound is
+// no longer enforced anywhere — it is a CONSEQUENCE of writeTableRow emitting
+// one cell per parsed cell, and this is what checks the consequence actually
+// holds.
+//
+// THE ARGUMENT, in full. splitRow returns one cell per unescaped "|" in the
+// source row, so a row of C emitted cells costs at least C source bytes and
+// emits at most 9 bytes of <tr></tr> plus widestCellBytes per cell. Cell CONTENT
+// only ever moves the ratio down: content costs source bytes of its own, and the
+// widest expansion the inline pass applies to a single byte is html.EscapeString
+// turning `"` into `&#34;`, five bytes from one, against the 31 that same cell's
+// markup already costs. The delimiter row is pure source that emits nothing. So
+// widestCellBytes is a strict supremum, approached only by a table of empty
+// centre-aligned cells as its column count grows, and never reached.
+//
+// EVERY SHAPE IN THE SWEEP IS NOW A TABLE, which is itself the assertion that
+// matters most here. The previous version of this test pinned three of its eight
+// shapes as REFUSED, so for those three it measured the cost of rendering a
+// paragraph while reading as though it measured a table. wantTable is kept as an
+// explicit field rather than dropped, and every value is true, so that
+// reintroducing any refusal path fails this test loudly instead of quietly
+// turning a row back into a paragraph measurement.
+func TestRender_TableOutputIsBoundedByItsInput(t *testing.T) {
+	maxRatio := float64(widestCellBytes)
+	for _, tc := range []struct {
+		name      string
+		wantTable bool
+		gen       func(int) string
+	}{
+		{"table-dense-empty-cells", true, denseEmptyCellTable},
+		{"table-many-tables-at-width", true, tableManyMediumTables},
+		{"table-rows-many", true, func(n int) string { return tableOf(3, "| a | b | c |\n", n) }},
+		{"table-ragged-rows", true, func(n int) string { return tableOf(4, "| x |\n", n) }},
+		{"table-columns-many", true, wideTable},
+		{"table-wide-header-short-rows", true, paddedTableAtCellBound},
+		{"table-max-amplification", true, maxAmplificationTable},
+		{"table-ragged-rows-one-cell", true, func(n int) string { return tableOf(24, "|\n", n) }},
+	} {
+		for _, size := range []int{16 << 10, 128 << 10} {
+			body := tc.gen(size)
+			out := string(Render(body))
+			ratio := float64(len(out)) / float64(len(body))
+			t.Logf("%s at %d bytes: %d out, %.2fx (table=%v)",
+				tc.name, len(body), len(out), ratio, strings.Contains(out, "<table"))
+			if got := strings.Contains(out, "<table"); got != tc.wantTable {
+				t.Errorf("%s at %d bytes: rendered a table = %v, want %v — this shape is "+
+					"measuring something other than what it was added to measure",
+					tc.name, len(body), got, tc.wantTable)
+			}
+			if ratio > maxRatio {
+				t.Errorf("%s at %d bytes: output %d bytes, ratio %.2fx exceeds the "+
+					"widest-cell supremum of %.0fx — a table is emitting cells its "+
+					"source does not contain",
+					tc.name, len(body), len(out), ratio, maxRatio)
+			}
+		}
 	}
 }
 
@@ -457,11 +578,4 @@ func TestDelimiterCellAlignment(t *testing.T) {
 			t.Errorf("delimiterCell(%q) = (%v, %v), want (%v, %v)", tc.in, got, ok, tc.want, tc.ok)
 		}
 	}
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

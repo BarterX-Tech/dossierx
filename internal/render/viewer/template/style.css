@@ -320,6 +320,104 @@ code {
   display: inline;
 }
 
+/* ---- phase C: GFM pipe tables (<table class="md-table">, cells carrying
+   md-col-left/md-col-center/md-col-right) -----------------------------
+
+   Same four Render contexts as the phase B block constructs above, and td
+   is excluded for the same reason plus a stronger one: RenderInline is the
+   only thing that runs inside a cell and a table cannot nest in one, so a
+   td-scoped rule here could never match anything.
+
+   WHY THESE RULES EXIST AT ALL, and why they are not optional chrome. The
+   bare `table` and `td, th` rules immediately below are a layout: table
+   CLAIM's styling — full-bleed, hairline row rules and no vertical
+   division, with a mono uppercase --faint <th>. They are unscoped element
+   selectors, so until this block existed a pipe table written in a claim
+   BODY silently inherited all of it and read as a structured
+   layout: table claim: the one outcome the release explicitly rules out,
+   since a body table is prose furniture with none of the rows-shape
+   linting or model.RowColumns ordering that layout: table gives.
+
+   Those rules are left untouched. What wins here is SPECIFICITY, not
+   source order: `.claim-body .md-table` is (0,2,0) against `table`'s
+   (0,0,1), and `.claim-body .md-table th` is (0,2,1) against `th`'s
+   (0,0,1), so these hold wherever the cascade puts them.
+
+   THE DISTINCTION IS DRAWN IN THREE PLACES, all on the existing token set:
+   a body table sizes to its CONTENT rather than to the card (a comparison
+   table mid-prose, not a record listing); it is a closed GRID, bordered on
+   every side of every cell, where the claim table has bottom rules only;
+   and its header is ordinary sans-serif --ink text, where the claim
+   table's is mono uppercase --faint. The neutral rgba(127,127,127,.10)
+   overlay on the header row is the same one .claim-body pre uses, which is
+   what puts a body table in the same family as a fenced block — an
+   embedded object inside prose — rather than in the claim-chrome family. */
+.claim-body .md-table,
+.claim-list-items .md-table,
+.sbody .md-table,
+.comment-body .md-table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+
+.claim-body .md-table th,
+.claim-body .md-table td,
+.claim-list-items .md-table th,
+.claim-list-items .md-table td,
+.sbody .md-table th,
+.sbody .md-table td,
+.comment-body .md-table th,
+.comment-body .md-table td {
+  border: 1px solid var(--border);
+  padding: 0.3rem 0.55rem;
+  vertical-align: top;
+}
+
+.claim-body .md-table th,
+.claim-list-items .md-table th,
+.sbody .md-table th,
+.comment-body .md-table th {
+  background: rgba(127, 127, 127, .10);
+  font-family: var(--font-sans);
+  font-size: inherit;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--ink);
+}
+
+/* The three alignment classes are the whole of the delimiter row's
+   vocabulary (a column with no alignment carries no class and keeps the
+   inherited left). They are listed separately from the cell rule above so
+   an unaligned column is styled by exactly one rule, and they sit at
+   (0,3,0) so they beat the `td, th { text-align: left }` below. */
+.claim-body .md-table .md-col-left,
+.claim-list-items .md-table .md-col-left,
+.sbody .md-table .md-col-left,
+.comment-body .md-table .md-col-left {
+  text-align: left;
+}
+
+.claim-body .md-table .md-col-center,
+.claim-list-items .md-table .md-col-center,
+.sbody .md-table .md-col-center,
+.comment-body .md-table .md-col-center {
+  text-align: center;
+}
+
+.claim-body .md-table .md-col-right,
+.claim-list-items .md-table .md-col-right,
+.sbody .md-table .md-col-right,
+.comment-body .md-table .md-col-right {
+  text-align: right;
+}
+
 
 table {
   width: 100%;

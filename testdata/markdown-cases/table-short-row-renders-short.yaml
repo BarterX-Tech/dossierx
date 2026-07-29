@@ -1,0 +1,13 @@
+id: widget.markdown-cases.table-short-row-renders-short
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a | b | c |
+  | --- | --- | --- |
+  | 1 | 2 | 3 |
+  | short |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a row with fewer cells than the header renders short - no empty cells are invented, and it stays a table

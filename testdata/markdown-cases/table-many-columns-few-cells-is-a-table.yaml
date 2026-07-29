@@ -1,0 +1,16 @@
+id: widget.markdown-cases.table-many-columns-few-cells-is-a-table
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  |a|b|c|d|e|f|g|h|i|j|
+  |-|-|-|-|-|-|-|-|-|-|
+  |1|
+  |2|
+  |3|
+  |4|
+  |5|
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - ten columns and five short rows is a well-formed table, each row emitting only the cells it has, and adding a row must not make it vanish

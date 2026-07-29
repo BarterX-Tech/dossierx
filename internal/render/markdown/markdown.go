@@ -60,12 +60,15 @@
 //   - GFM pipe tables — a header row, a REQUIRED delimiter row that sets each
 //     column's alignment, and zero or more body rows, becoming a real
 //     <table class="md-table"> whose cells carry a fixed-literal alignment
-//     class. Outer pipes are optional, a short row is padded and a long one
-//     truncated, and "\|" is a literal pipe rather than a cell boundary. Row
+//     class. Outer pipes are optional, a short row renders SHORT and a long one
+//     is truncated, and "\|" is a literal pipe rather than a cell boundary. Row
 //     splitting happens BEFORE inline parsing, so a code span does not protect
-//     a pipe — see markdown_tables.go, which carries the whole grammar, the
-//     placement rule, and the padding bound that keeps a table's output linear
-//     in its input.
+//     a pipe — see markdown_tables.go, which carries the whole grammar and the
+//     placement rule. A WELL-FORMED TABLE IS ALWAYS A TABLE: there is no size,
+//     shape or alignment at which one degrades to prose, and the only thing
+//     that renders as prose is a candidate with no valid delimiter row. A row
+//     emits exactly the cells it has, which is what keeps a table's output
+//     linear in its input without any bound having to be enforced.
 //   - Blockquotes — one level deep. The "> " prefix is stripped and the
 //     interior recurses into the same block scanner with blockquote
 //     recognition OFF, so lists, headings, rules, task items and fenced code
@@ -1070,26 +1073,15 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 		//
 		// A table interrupts an open paragraph and ends any open list, exactly
 		// as the plain-paragraph branch below would have. See markdown_tables.go
-		// for the grammar, and for why a refused table consumes its own extent
-		// instead of falling through line by line.
+		// for the grammar. There is no refusal branch here and there must not
+		// be one: a candidate with a valid delimiter row IS a table, at every
+		// size and every shape, and the only thing that renders as prose is a
+		// candidate tableAt did not accept — which consumes just its own line.
 		if w == 0 {
-			if aligns, end, verdict := tableAt(lines, i); verdict != notATable {
-				if verdict == isATable {
-					flushParagraph()
-					flushList()
-					writeTable(b, lines, i, end, aligns)
-				} else {
-					// Refused for padding amplification. The block becomes
-					// ordinary paragraph prose with its source bytes
-					// unchanged: it joins an open paragraph and ends an open
-					// list, exactly as the branch below would have, and it is
-					// CONSUMED so the delimiter row cannot become the next
-					// candidate header and re-walk the same extent.
-					flushList()
-					for j := i; j <= end; j++ {
-						paraSegs = append(paraSegs, newSegment(lines[j]))
-					}
-				}
+			if aligns, end, ok := tableAt(lines, i); ok {
+				flushParagraph()
+				flushList()
+				writeTable(b, lines, i, end, aligns)
 				i = end
 				continue
 			}

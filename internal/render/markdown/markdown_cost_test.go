@@ -333,13 +333,23 @@ func costShapes() []costShape {
 		},
 		// --- phase C: pipe tables -------------------------------------
 		//
-		// Tables are the first construct whose OUTPUT is not bounded by its
-		// input: a short body row emits one cell per HEADER column, so N
-		// columns and M rows amplify N+M bytes into N*M cells. The padding
-		// bound (see markdown_tables.go) is what makes that linear again, and
-		// table-ragged-rows-refused is the row that measures it. The rest guard
-		// the new per-line searches: the unescaped-pipe scan, the delimiter-row
-		// pre-filter, and one splitRow allocation per candidate row.
+		// Tables USED TO BE the one construct whose output was not bounded by
+		// its input: a short body row emitted one cell per HEADER column, so N
+		// columns and M rows amplified N+2M bytes into N*M cells. Two bounds
+		// were tried against that and both refused well-formed tables, which
+		// the spec does not authorise; what shipped instead removes the padding,
+		// so a row emits exactly the cells it has and the amplification is
+		// closed at the source rather than capped downstream. See
+		// markdown_tables.go's cost note.
+		//
+		// EVERY TABLE ROW IN THIS SWEEP IS NOW AN EMITTED TABLE. Three of them
+		// used to be REFUSED shapes, and a refused shape renders as a paragraph
+		// — so what those three measured was the cost of a paragraph, wearing a
+		// table's name. They are kept, under names that say what they are, and
+		// they now measure the construct at the shapes that used to break it.
+		// The rest guard the per-line searches: the unescaped-pipe scan, the
+		// delimiter-row pre-filter, and one splitRow allocation per candidate
+		// row.
 		{
 			name: "table-rows-many",
 			why:  "a real table: one splitRow and one inline pass per row, and the extent walked once",
@@ -356,26 +366,65 @@ func costShapes() []costShape {
 			gen:  pipeRunLines,
 		},
 		{
-			name: "table-ragged-rows-padded",
-			why:  "padding: every short row emits one cell per header column, and must stay bounded by them",
+			name: "table-ragged-rows",
+			why:  "ragged rows: each emits only the cells it has, and must cost only what it emits",
 			gen:  func(n int) string { return tableOf(4, "| x |\n", n) },
 		},
 		{
-			name: "table-ragged-rows-refused",
-			why:  "THE amplification shape: N columns x M one-byte rows, refused and CONSUMED, never re-walked",
+			// Formerly table-ragged-rows-refused, and formerly a paragraph.
+			name: "table-ragged-rows-one-cell",
+			why:  "24 columns x one-cell rows: the shape padding turned into N*M cells, now N+M",
 			gen:  func(n int) string { return tableOf(24, "|\n", n) },
 		},
 		{
-			// The shape that MAXIMISES padding amplification, and the reason
-			// the padding bound exists at all: spend a sixth of the budget on
-			// columns and the rest on one-byte rows and the cell count is
-			// bytes^2/12 — ~9x10^10 cells, ~800 GB of <td>, from one stored
-			// 1 MiB comment. Every other table row in this sweep sits far below
-			// that ratio, so without this one the bound had never been measured
-			// at the shape it was written for.
+			// THE SHAPE THE WHOLE ARGUMENT IS ABOUT. Spend a sixth of the budget
+			// on columns and the rest on one-byte rows: under padding the cell
+			// count was bytes^2/12 — ~9x10^10 cells, ~800 GB of <td>, from one
+			// stored 1 MiB comment. It is now one cell per body row, and it is a
+			// TABLE, which is what both previous bounds could not deliver at
+			// once. If a row ever pads again, this row goes quadratic first.
 			name: "table-max-amplification",
-			why:  "cells = N*M from N+M bytes: the padding bound must refuse it, and must consume it",
+			why:  "the ex-quadratic shape: N columns x M one-byte rows, now N+M cells and still a table",
 			gen:  maxAmplificationTable,
+		},
+		{
+			// THE REGRESSION SHAPE, pinned rather than derived because it is the
+			// exact input an adversarial verifier found against the CELL bound:
+			// 400 centre-aligned columns, five one-byte body rows, and 395
+			// trailing spaces on the header. Repeated to 1 MiB it measured 30.9x
+			// and 218 MiB allocated, over oneMiBAllocBudget. With padding gone
+			// the five rows emit five cells rather than 2000.
+			name: "table-wide-header-short-rows",
+			why:  "N columns x M one-byte rows x S header trailing spaces: the shape the CELL bound let through at 31x",
+			gen:  paddedTableAtCellBound,
+		},
+		{
+			// THE SHAPE THAT MAXIMISES THE CONSTRUCT'S INTRINSIC RATIO, and the
+			// one the byte ceiling refused outright rather than admit: every
+			// cell present, every cell EMPTY, every column centre-aligned, so
+			// every source "|" buys the widest cell markup there is
+			// (`<td class="md-col-center"></td>`, 31 bytes) and nothing else.
+			// Padding never entered into it — this is what the construct costs
+			// at its own supremum — so it is the row that says whether removing
+			// padding was enough on its own. The byte ceiling's own comment put
+			// 1000x1000 of it at 242 MiB and used that as the reason a ceiling
+			// had to sit below the intrinsic maximum; measured here at the 1 MiB
+			// cap instead of at an input four times over it.
+			name: "table-dense-empty-cells",
+			why:  "31x: the widest cell markup per source byte, with no padding involved at all — the construct's intrinsic supremum",
+			gen:  denseEmptyCellTable,
+		},
+		{
+			// AND the shape that maximises BYTES ALLOCATED, which is a different
+			// shape again — ratio-maximal is not allocation-maximal, because
+			// splitRow's cell slice is paid once per SOURCE row and the
+			// ratio-maximal shape spends its source on one enormous header
+			// instead. Many medium-wide tables cost more than one giant one at
+			// the same ratio. Its parameters are pinned: it is the shape
+			// oneMiBAllocBudget was last sized against.
+			name: "table-many-tables-at-width",
+			why:  "many medium-wide tables: splitRow's per-source-row cell slice, the term the ratio-maximal shape does not pay",
+			gen:  tableManyMediumTables,
 		},
 		{
 			name: "table-escaped-pipes",
@@ -510,12 +559,12 @@ func wideTable(n int) string {
 	return tableOf(cols, "| x |\n", 0)
 }
 
-// maxAmplificationTable builds the table shape whose emitted cell count is
+// maxAmplificationTable builds the table shape whose emitted cell count WAS
 // maximal for its byte budget: a header of n/6 columns, a matching delimiter
 // row, and one-byte body rows for the remaining half of the budget. Column
-// count and row count are each linear in n, so the CELL count is quadratic in
-// it — the whole reason markdown_tables.go bounds a table's cells by its own
-// source bytes.
+// count and row count are each linear in n, so under padding the CELL count was
+// quadratic in it — the whole reason this file's table rows exist. With padding
+// gone each of those body rows emits one cell, and the shape is linear.
 func maxAmplificationTable(n int) string {
 	cols := n / 6
 	if cols < 1 {
@@ -531,6 +580,84 @@ func maxAmplificationTable(n int) string {
 		sb.WriteString("|\n")
 	}
 	return sb.String()
+}
+
+// tableUnit builds ONE table of cols columns whose delimiter cells are all
+// delimCell and whose body is rows copies of row, followed by the blank line
+// that ends it. Repeating the unit therefore repeats the TABLE; without the
+// blank line the next header would just extend the previous table's extent,
+// which is how an earlier attempt at measuring these shapes accidentally
+// measured one enormous refused block instead of many small accepted ones.
+func tableUnit(cols, rows int, delimCell, row string, headerSpaces int) string {
+	var sb strings.Builder
+	sb.WriteString(strings.Repeat("|", cols+1)) // cols empty header cells
+	sb.WriteString(strings.Repeat(" ", headerSpaces))
+	sb.WriteString("\n|")
+	sb.WriteString(strings.Repeat(delimCell+"|", cols))
+	sb.WriteByte('\n')
+	for r := 0; r < rows; r++ {
+		sb.WriteString(row)
+		sb.WriteByte('\n')
+	}
+	sb.WriteByte('\n')
+	return sb.String()
+}
+
+// paddedTableAtCellBound is the shape an adversarial verifier found against the
+// CELL bound: 400 centre-aligned columns, five one-byte body rows, and 395
+// trailing spaces on the header. The spaces were the whole trick — they raised
+// srcBytes, and strings.TrimSpace in splitRow means they add no cells, so each
+// one bought a byte of allowance for nothing. Repeated to 1 MiB this amplified
+// 30.9x and allocated 218 MiB against a 192 MiB budget.
+//
+// The parameters are pinned rather than derived, because this is a REGRESSION
+// shape: it is the exact input that broke the previous bound, and it is worth
+// as much in five years as it is today. What it now measures is the repair —
+// those five rows emit five cells rather than 2000 — and the trailing-space
+// lever no longer buys anything, because there is no longer an allowance to buy.
+func paddedTableAtCellBound(n int) string {
+	return repeatTo(tableUnit(400, 5, ":-:", "|", 395), n)
+}
+
+// denseEmptyCellTable builds the shape that maximises the construct's INTRINSIC
+// ratio, with no raggedness and no padding anywhere in it: every body row
+// carries exactly one cell per column, every cell is EMPTY, and every column is
+// centre-aligned. Each source "|" therefore buys `<td class="md-col-center">`
+// plus its closer — 31 bytes, the widest cell this package can write — and buys
+// nothing else, so the ratio climbs toward 31x as the column count grows and is
+// never reached, since the delimiter row is source that emits nothing.
+//
+// It is deliberately sized in BYTES rather than pinned at 1000x1000, the way the
+// byte ceiling's own comment cited it: 1000x1000 is over 2 MiB of source, twice
+// the untrusted cap, so measuring it there measured a body that cannot reach
+// Render. 320 columns is wide enough to sit within a few percent of the
+// supremum while leaving the rest of the budget for rows.
+func denseEmptyCellTable(n int) string {
+	const cols = 320
+	var sb strings.Builder
+	sb.Grow(n + 8*cols + 64)
+	sb.WriteString(strings.Repeat("|", cols+1)) // cols empty header cells
+	sb.WriteString("\n|")
+	sb.WriteString(strings.Repeat(":-:|", cols))
+	sb.WriteByte('\n')
+	row := strings.Repeat("|", cols+1) + "\n"
+	for sb.Len() < n {
+		sb.WriteString(row)
+	}
+	return sb.String()
+}
+
+// tableManyMediumTables is the shape that maximises BYTES ALLOCATED, which is
+// not the same shape as the one that maximises the emitted ratio: splitRow's
+// cell slice is paid once per SOURCE row, so a body of many medium-wide tables
+// costs more than one enormous table at the same ratio, which spends its source
+// on a single header instead.
+//
+// Its parameters are pinned because it is a regression shape: it is the shape
+// oneMiBAllocBudget was last sized against, and the cells whose one byte expands
+// widest through html.EscapeString (`"` becomes `&#34;`) are what its rows carry.
+func tableManyMediumTables(n int) string {
+	return repeatTo(tableUnit(320, 5, "-", `|"|"|"|`, 0), n)
 }
 
 // pipeRunLines builds two lines of solid pipes, n/2 bytes each. Every byte is
@@ -659,14 +786,35 @@ func TestRender_CostAtOneMiBIsBounded(t *testing.T) {
 // oneMiBAllocBudget is the ceiling on BYTES ALLOCATED by one Render of a 1 MiB
 // body. See TestRender_AllocationAtOneMiBIsBounded for why there is one.
 //
-// THE SHAPE THE BUDGET IS ACTUALLY SIZED AGAINST is
-// emphasis-alternating-delimiters, at 108 MiB: 1.8x headroom, not the "about
-// 2.5x" an earlier version of this comment claimed. That claim was computed off
-// a sweep that did not contain the shape — it named loose-list-items at 77 MiB
-// as the widest and said "the inline shapes top out at 47 MiB" — which is to
-// say the guard added to bound PER-RUN memory had never been evaluated at the
-// input that maximises runs per byte. It is now. The arithmetic is worth having
-// in one place, because it is the whole cost model of the inline pass:
+// THE SHAPE THE BUDGET IS ACTUALLY SIZED AGAINST is now
+// table-dense-empty-cells, at 128 MiB: 1.5x headroom. This comment has named
+// three shapes before it — loose-list-items at 77 MiB, then
+// emphasis-alternating-delimiters at 108 MiB, then a table sitting on the
+// markup ceiling at 156 MiB — each correction made for the same reason, which
+// is the reason worth carrying forward rather than the numbers: A BUDGET IS
+// ONLY EVER SIZED AGAINST THE SHAPES SOMEBODY THOUGHT TO SWEEP.
+//
+// WHAT CHANGED THIS TIME, and it is the one part of the table redesign that had
+// to be paid for rather than deleted. Removing padding closed the amplification
+// vector — a row now emits only the cells it has — but it did not touch the
+// construct's INTRINSIC ratio, which is 31x: the widest cell markup
+// (`<td class="md-col-center"></td>`) against the one source byte that buys it.
+// A table of empty centre-aligned cells reaches that with no raggedness in it
+// at all, and the markup ceiling's answer had been to REFUSE that table, which
+// is precisely the answer the redesign rules out. Measured unrefused for the
+// first time, the shape allocated 266 MiB — over this budget by 39%.
+//
+// It was brought inside by making the renderer cheaper rather than by making
+// the budget bigger or the table illegal. Two reservations, neither of which
+// changes an output byte: splitRow now sizes its cell slice once from the row's
+// own pipe count, and writeTableRow reserves each row before writing it so the
+// output builder grows by DOUBLING rather than by append's ~1.25x step for
+// large slices. Together they took the same shape from 266 MiB to 128 MiB. See
+// tableRowEstimate in markdown_tables.go for why the reservation is computed
+// from the row's cells and never from the header's column count.
+//
+// The inline arithmetic below is still the whole cost model of the inline pass,
+// and emphasis-alternating-delimiters is still the widest INLINE shape:
 //
 //	a delimRun is 72 bytes on a 64-bit build and a matchNode 16;
 //	"*_" repeated is one maximal run per BYTE, the reachable maximum, so a
@@ -676,9 +824,15 @@ func TestRender_CostAtOneMiBIsBounded(t *testing.T) {
 //	output, for 108 MiB allocated and a measured peak live heap of 109 MiB.
 //
 // The next densest shape in the sweep, emphasis-rule-of-three-blocked, reaches
-// 0.4 runs per byte and 47 MiB; the widest BLOCK shape is loose-list-items at
-// 77 MiB, whose 1 MiB of input becomes 3.5 MiB of output through the block
-// renderer's joins.
+// 0.4 runs per byte and 47 MiB; the widest non-table BLOCK shape is
+// loose-list-items at 77 MiB, whose 1 MiB of input becomes 3.5 MiB of output
+// through the block renderer's joins.
+//
+// The table shapes above them are dominated by two costs and neither is the
+// inline pass: the output builder's geometric growth over a result tens of
+// megabytes wide, and splitRow's cell slice, paid once per SOURCE row. Both are
+// now reserved rather than grown, which is what the paragraph above is about;
+// what remains of the first is the doubling itself, ~2x the emitted bytes.
 //
 // The budget still sits well under the pre-repair figures for the inline shapes
 // at this same size — 443 MiB for " *a", 443 MiB for " _a", 354 MiB for "a~~ ",

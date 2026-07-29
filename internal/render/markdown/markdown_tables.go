@@ -19,8 +19,22 @@
 //	    whitespace.
 //	  - A table may interrupt an open paragraph, and it ends at the first blank
 //	    line or the first line with no unescaped "|".
-//	  - A body row with fewer cells than the header is PADDED with empty cells;
-//	    one with more has the extra cells DROPPED. A row is never emitted ragged.
+//	  - A ROW EMITS EXACTLY THE CELLS IT HAS. A body row with fewer cells than
+//	    the header renders SHORT — no empty cells are invented to square it off —
+//	    and one with more has the extra cells DROPPED.
+//
+//	    THIS DIVERGES FROM AMENDMENT A9 AS WRITTEN, and the divergence is
+//	    deliberate and needs recording rather than glossing. A9 says a body row
+//	    whose cell count differs from the header's is "padded with empty <td> or
+//	    truncated — never emitted ragged". The truncation half is implemented
+//	    exactly. The padding half is not, because padding is the one thing in
+//	    this package that emits more output than it was given input, and two
+//	    successive attempts to bound it instead ended up REFUSING well-formed
+//	    tables — which A9 forbids far more clearly than it requires padding, and
+//	    which made real authors' tables vanish into paragraphs. A short row is
+//	    still a row of the same table; nothing degrades. The spec sentence needs
+//	    the amendment, and markdown-sanity's ragged-row finding — which still
+//	    fires, and should — needs its wording updated with it.
 //
 // PLACEMENT is decided by WHERE the scanner sits, exactly as it is for every
 // other block construct in this package. tableAt is consulted from renderBlocks
@@ -82,27 +96,68 @@
 // author content, and it reaches the output only through renderInline, which is
 // the same escaping boundary every other construct in this package uses.
 //
-// COST: PADDING IS THE ONLY UNBOUNDED PART OF THIS CONSTRUCT, and it is bounded
-// here. Every other construct in this package emits output linear in its input;
-// padding does not. A header of N columns costs N bytes ("|" per column) and a
-// body row costs as little as ONE byte ("|"), yet each such row emits N cells —
-// so N columns and M rows amplify N+M input bytes into N*M cells. At the 1 MiB
-// untrusted comment-body cap that is ~10^11 cells from one stored comment,
-// re-paid on every GET /api/comments. The bound is stated as an invariant
-// rather than a tuned constant: A TABLE MAY NOT EMIT MORE CELLS THAN ITS OWN
-// SOURCE HAS BYTES. Real tables carry several bytes per cell and are unaffected
-// (the tightest legal spelling, "|||", is 1.5 bytes per cell); only genuine
-// raggedness at scale trips it. A table that would trip it is not a table: the
-// whole candidate block renders as ordinary paragraphs with its source bytes
-// unchanged, which is the same degradation the spec gives every other malformed
-// table.
+// COST: NOTHING IN THIS CONSTRUCT AMPLIFIES, BECAUSE EVERY EMITTED CELL IS A
+// CELL THAT EXISTS IN THE SOURCE. That is a property of the grammar above, not
+// of a guard bolted on after it, and it is worth stating why the guard is gone.
 //
-// That refusal CONSUMES the block it refused, and must. Falling through line by
-// line would make the delimiter row the next candidate header, and a document
-// of alternating wide and narrow rows would re-walk the same extent once per
-// line — the same quadratic shape as the four cost defects this file's package
-// has already had. tableAt therefore reports the extent it examined even when
-// it refuses, and renderBlocks advances past all of it.
+// PADDING WAS THE AMPLIFICATION, AND IT WAS THE WHOLE OF IT. A header of N
+// columns costs N+1 bytes ("|" per column plus the outer one) and a body row
+// costs as little as two ("|" and its newline), yet a padded row emitted one
+// cell per HEADER column — so N columns and M rows turned N+2M source bytes
+// into N*M cells. At the 1 MiB untrusted comment-body cap that is ~10^11 cells
+// from one stored comment, re-paid on every GET /api/comments. Every other
+// construct in this package emits output linear in its input; padding was the
+// single exception.
+//
+// TWO BOUNDS WERE TRIED AGAINST IT AND BOTH WERE WRONG IN THE SAME WAY. One
+// capped a table's CELLS by its source bytes; the next capped its emitted
+// MARKUP BYTES by its source bytes at a derived ratio. Each picked a point at
+// which a WELL-FORMED TABLE WAS REFUSED and re-rendered as a paragraph, and
+// each therefore contradicted the spec by construction. A9 makes a ragged body
+// row a rendering decision INSIDE a table — padded or truncated — never a reason
+// to stop being one, and A24's degradation matrix gives exactly one path from a
+// table to prose: an alignment row whose arity does not match the header's, or
+// none at all. Nothing anywhere authorises refusing a table for its size. What
+// the two bounds actually did was relocate a cliff:
+//
+//	10 columns, 5 short rows, plain            rendered as a table
+//	10 columns, 5 short rows, CENTRE-ALIGNED   rendered as a PARAGRAPH
+//	 4 columns, 3 short rows, CENTRE-ALIGNED   rendered as a PARAGRAPH
+//
+// A four-column centre-aligned table with three ragged rows silently vanished,
+// and centre alignment made it worse because <td class="md-col-center"> is the
+// widest cell markup this file can write. That is not a shape an attacker
+// reaches for; it is a shape an author writes.
+//
+// SO THE FIX IS AT THE SOURCE OF THE AMPLIFICATION RATHER THAN DOWNSTREAM OF
+// IT: writeTableRow emits one cell per PARSED CELL, capped at the header's
+// column count. A short row renders short and a long row still has its extra
+// cells dropped — truncation is the half of A9 that is bounded by construction,
+// and it is the half that survives. Every emitted cell now corresponds to a cell
+// that exists in the source, so
+//
+//	emitted cells <= source cells <= source bytes
+//
+// and the vector is CLOSED rather than capped. There is no ceiling, no refusal
+// path and no verdict to report: a well-formed table is ALWAYS a table.
+//
+// WHAT THE CONSTANT FACTOR IS, now that there is one. The widest cell is
+// `<td class="md-col-center"></td>` at 31 bytes and the cheapest source spelling
+// of a cell is one byte (its "|"), so a row of C empty centre-aligned cells
+// emits 9+31C bytes of markup from C+2 source bytes — under 31x, approached
+// from below as C grows and never reached, since the delimiter row is pure
+// source that emits nothing and any cell CONTENT costs more source per cell
+// than it can emit. 31x is the construct's intrinsic supremum, it is reached
+// only by a table of empty cells at scale, and it is a CONSTANT: the shape that
+// used to amplify quadratically is now the same 31x as everything else. That
+// figure is measured rather than argued — see TestRender_TableOutputIsBounded-
+// ByItsInput, which asserts it across the sweep, and markdown_cost_test.go's
+// table rows, which measure the allocation it implies at the 1 MiB cap.
+//
+// The scan is linear for a separate reason worth keeping: tableAt reports the
+// EXTENT it examined, and renderBlocks advances past all of it. A candidate
+// that is not a table consumes only its own first line, so a heading or a rule
+// on the next line is still a heading or a rule.
 package markdown
 
 import "strings"
@@ -138,22 +193,6 @@ func alignClass(a cellAlign) string {
 	}
 }
 
-// tableVerdict is what tableAt decided about a candidate at some line.
-type tableVerdict uint8
-
-const (
-	// notATable: no valid delimiter row of matching arity. The candidate LINE
-	// falls through to ordinary handling; nothing else is consumed, so a
-	// heading or a rule on the next line is still a heading or a rule.
-	notATable tableVerdict = iota
-	// tableTooSparse: a real table whose padding would emit more cells than its
-	// source has bytes. The whole EXTENT renders as ordinary paragraph prose
-	// and is consumed (see this file's cost note).
-	tableTooSparse
-	// isATable: emit it.
-	isATable
-)
-
 // hasUnescapedPipe reports whether s contains a "|" that would split a row. It
 // is the predicate behind both "is this a table candidate" and "does the table
 // end here", so those two questions can never disagree.
@@ -186,7 +225,14 @@ func splitRow(line string) []string {
 	if len(s) > 0 && s[0] == '|' {
 		start = 1
 	}
-	var cells []string
+	// One allocation per row instead of the append ladder's five. A row can
+	// hold at most one cell per "|" plus one, and strings.Count is a strict
+	// upper bound on that (it counts escaped pipes too, which do not split), so
+	// this over-reserves by at most the row's escape count and never
+	// under-reserves. The reservation is linear in the row's own bytes, which is
+	// the property that matters: it cannot be the amplification vector padding
+	// was, because a row with no "|" reserves one cell.
+	cells := make([]string, 0, strings.Count(s[start:], "|")+1)
 	seg := start
 	for i := start; i < len(s); i++ {
 		switch s[i] {
@@ -315,53 +361,43 @@ func delimiterAligns(line string) ([]cellAlign, bool) {
 	return aligns, true
 }
 
-// tableAt examines the table candidate beginning at lines[start] and returns
-// the column alignments, the index of the candidate's LAST line, and what to do
-// with it.
+// tableAt examines the table candidate beginning at lines[start]. It returns
+// the column alignments and the index of the table's LAST line, or ok=false if
+// there is no table here.
 //
-// end is meaningful for every verdict: on isATable it is the table's last row,
-// on tableTooSparse it is the last line of the block that must be consumed as
-// prose, and on notATable it is start itself (only that one line falls
-// through). Reporting the extent even on a refusal is what keeps the scan
-// linear — see this file's cost note.
+// THERE IS NO THIRD ANSWER. A candidate either has a valid delimiter row of
+// matching arity, in which case it is a table and is rendered as one, or it does
+// not, in which case only lines[start] is consumed and a heading or a rule on
+// the next line is still a heading or a rule. Nothing here can refuse a
+// well-formed table — see this file's cost note for the two bounds that used to
+// and why neither could be right.
 //
 // Cost: each line is examined at most twice, once as a candidate header and
 // once as a candidate delimiter row, and the extent walk runs only after a
-// delimiter row has validated — after which the extent is consumed whatever the
-// verdict. Nothing here re-walks ground the scanner does not then advance past.
-func tableAt(lines []string, start int) (aligns []cellAlign, end int, v tableVerdict) {
+// delimiter row has validated — after which renderBlocks advances past the whole
+// extent. Nothing here re-walks ground the scanner does not then advance past.
+func tableAt(lines []string, start int) (aligns []cellAlign, end int, ok bool) {
 	if !hasUnescapedPipe(lines[start]) || start+1 >= len(lines) {
-		return nil, start, notATable
+		return nil, start, false
 	}
-	aligns, ok := delimiterAligns(lines[start+1])
+	aligns, ok = delimiterAligns(lines[start+1])
 	if !ok {
-		return nil, start, notATable
+		return nil, start, false
 	}
-	cols := len(splitRow(lines[start]))
-	if cols != len(aligns) {
-		return nil, start, notATable
+	if len(splitRow(lines[start])) != len(aligns) {
+		return nil, start, false
 	}
 
 	// The extent: every following line up to the first blank one, the first
 	// with no unescaped "|", or the end of the container.
 	end = start + 1
-	rows := 0
-	srcBytes := len(lines[start]) + len(lines[start+1])
 	for j := start + 2; j < len(lines); j++ {
 		if strings.TrimSpace(lines[j]) == "" || !hasUnescapedPipe(lines[j]) {
 			break
 		}
-		end, rows = j, rows+1
-		srcBytes += len(lines[j])
+		end = j
 	}
-
-	// Every row emits exactly cols cells, header included; the delimiter row
-	// emits none. A table that would emit more cells than its source has bytes
-	// is padding-amplified rather than tabular.
-	if cols*(1+rows) > srcBytes {
-		return nil, end, tableTooSparse
-	}
-	return aligns, end, isATable
+	return aligns, end, true
 }
 
 // writeTable renders the table occupying lines[start:end+1], whose delimiter
@@ -381,10 +417,15 @@ func writeTable(b *strings.Builder, lines []string, start, end int, aligns []cel
 	b.WriteString("</table>")
 }
 
-// writeTableRow emits exactly one cell per COLUMN, never one per parsed cell:
-// a short row is padded with empty cells and a long one has its extra cells
-// dropped, so no row is ever ragged and a dropped cell never reaches the inline
-// pass at all.
+// writeTableRow emits EXACTLY THE CELLS THE ROW HAS, capped at the header's
+// column count: a short row renders short and a long one has its extra cells
+// dropped, so a dropped cell never reaches the inline pass at all.
+//
+// The loop bound is what makes this construct's output linear in its input, and
+// it is the whole of that argument: cells comes from splitRow, which returns one
+// cell per unescaped "|" in the SOURCE row, so `for i := range cells` cannot emit
+// a cell the author did not write. Padding to len(aligns) is what could, and is
+// what this file no longer does — see the cost note.
 //
 // A cell runs renderInline with no break offsets — a cell is single-line by
 // construction, so there is nothing for a hard break to break to and a trailing
@@ -394,15 +435,49 @@ func writeTableRow(b *strings.Builder, cells []string, aligns []cellAlign, heade
 	if header {
 		open, close = "<th", "</th>"
 	}
+	b.Grow(tableRowEstimate(cells, aligns))
 	b.WriteString("<tr>")
-	for i, a := range aligns {
-		b.WriteString(open)
-		b.WriteString(alignClass(a))
-		b.WriteString(">")
-		if i < len(cells) {
-			b.WriteString(renderInline(cells[i], nil))
+	for i, cell := range cells {
+		if i >= len(aligns) {
+			break // an extra cell has no column: dropped, per amendment A9.
 		}
+		b.WriteString(open)
+		b.WriteString(alignClass(aligns[i]))
+		b.WriteString(">")
+		b.WriteString(renderInline(cell, nil))
 		b.WriteString(close)
 	}
 	b.WriteString("</tr>")
+}
+
+// tableRowEstimate is how many bytes writeTableRow is about to need, reserved in
+// ONE step before the row is written. It changes no output byte; it is here for
+// what it does to ALLOCATION, and that is worth a paragraph because it is the
+// difference between this construct fitting the package's memory budget and not.
+//
+// strings.Builder is backed by append, and append's growth for a large slice is
+// ~1.25x — so a builder walked up to a K-byte result by unreserved writes has
+// allocated about 5K bytes on the way, each step copying the last. A table is
+// the widest output this package produces (see the cost note: up to 31 bytes of
+// markup per source byte), so it is the one construct where that 5x lands on
+// tens of megabytes. Builder.Grow reserves 2*cap+n, i.e. it DOUBLES, which
+// takes the same walk from ~5K to ~2K.
+//
+// It is deliberately an ESTIMATE and deliberately linear in what the row
+// actually contains: one term per emitted cell, each the cell's own fixed markup
+// plus its own source length. renderInline can expand a cell past that (escaping
+// "<" costs four bytes for one) and append absorbs the difference, which is why
+// this may be low but must never be a MULTIPLE of the truth — a reservation
+// computed from the header's column count rather than the row's cell count would
+// re-create, in allocated bytes, exactly the padding amplification this file
+// removed from the output.
+func tableRowEstimate(cells []string, aligns []cellAlign) int {
+	n := len(`<tr></tr>`)
+	for i, cell := range cells {
+		if i >= len(aligns) {
+			break
+		}
+		n += len(`<td></td>`) + len(alignClass(aligns[i])) + len(cell)
+	}
+	return n
 }
