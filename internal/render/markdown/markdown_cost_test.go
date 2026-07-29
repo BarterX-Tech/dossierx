@@ -3,6 +3,7 @@ package markdown
 import (
 	"fmt"
 	"math/rand"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -36,7 +37,12 @@ import (
 // asserting one wall-clock number on one body. A growth assertion survives a
 // change of machine, and adding a newly-suspected shape is one table row.
 // A 1 MiB absolute-budget guard rides alongside it, because the attacker's real
-// budget is an absolute one.
+// budget is an absolute one — and, since phase A, that budget is measured in
+// BYTES ALLOCATED as well as in wall-clock time. A ratio cannot see a constant
+// factor, and neither can a wall-clock budget with an order of magnitude of
+// headroom; a rewrite of the inline pass moved allocation on this same surface
+// by two orders of magnitude while both of the older guards stayed green. See
+// TestRender_AllocationAtOneMiBIsBounded.
 
 // oneMiB is internal/serve's maxBodyBytes: the largest body that can reach
 // Render from the untrusted surface.
@@ -214,6 +220,117 @@ func costShapes() []costShape {
 			why:  "looseness makes every item re-enter the <p> path at flush time",
 			gen:  func(n int) string { return repeatTo("- a\n\n", n) },
 		},
+		// --- phase A constructs ---------------------------------------
+		//
+		// Emphasis is the first construct whose resolution walks BACKWARDS,
+		// and a backward walk that consumes nothing is the exact shape of
+		// every defect above. The delimiter stack's openers_bottom bound and
+		// its removal of a failed closer are what keep these linear, and
+		// these rows are what say so. The autolink rows guard the two new
+		// forward searches ("<" to its ">" and a bare url to its terminator),
+		// both of which are self-bounding by design.
+		{
+			name: "emphasis-unmatched-stars",
+			why:  "every closer walks back over every opener; openers_bottom is what bounds it",
+			gen:  func(n int) string { return repeatTo("a* ", n) },
+		},
+		{
+			name: "emphasis-unmatched-openers",
+			why:  "runs that can only open: the stack grows and nothing ever consumes it",
+			gen:  func(n int) string { return repeatTo(" *a", n) },
+		},
+		{
+			name: "emphasis-underscore-unmatched-openers",
+			why:  "the same never-pairing stack reached through '_', the character the corpus is dense in",
+			gen:  func(n int) string { return repeatTo(" _a", n) },
+		},
+		{
+			name: "emphasis-both-flanking-runs",
+			why:  "intraword runs can open AND close, so neither the closer removal nor a match is free",
+			gen:  func(n int) string { return repeatTo("a*b", n) },
+		},
+		{
+			name: "emphasis-rule-of-three-blocked",
+			why:  "run lengths chosen so the rule of three refuses every pair: pure failed back-walking",
+			gen:  emphasisRuleOfThreeShape,
+		},
+		{
+			name: "emphasis-underscore-intraword",
+			why:  "the corpus shape: an intraword _ is never a delimiter and must not reach the stack at all",
+			gen:  func(n int) string { return repeatTo("governed_by rests_on schema_version ", n) },
+		},
+		{
+			// THE DENSEST SHAPE THERE IS, and the one the allocation budget
+			// actually exists to bound. delimRun memory is exactly linear in
+			// DELIMITER RUNS PER INPUT BYTE, and every other row in this sweep
+			// sits far below the reachable maximum of that ratio: the next
+			// densest, emphasis-rule-of-three-blocked, reaches 0.4 runs per
+			// byte. Alternating two different delimiter characters makes every
+			// single byte its own maximal run — 1.0 runs per byte, which is the
+			// ceiling — and every one of those runs sits between punctuation on
+			// both sides, so every one of them can both open and close and none
+			// of them is filtered out before it is recorded. Without this row
+			// the guard added to bound per-run memory had never been evaluated
+			// at the shape that maximises it.
+			name: "emphasis-alternating-delimiters",
+			why:  "one delimiter run PER BYTE, the maximum density reachable at all: the shape that maximises delimRun memory per input byte",
+			gen:  func(n int) string { return repeatTo("*_", n) },
+		},
+		{
+			name: "emphasis-nested-pairs",
+			why:  "every pair matches and every match removes the delimiters between: amortization check",
+			gen:  func(n int) string { return repeatTo("**a** *b* ~~c~~ ", n) },
+		},
+		{
+			name: "strike-unmatched-runs",
+			why:  "the same stack, reached through the tilde spelling",
+			gen:  func(n int) string { return repeatTo("a~~ ", n) },
+		},
+		{
+			name: "strike-long-tilde-run",
+			why:  "one enormous run: byteRun must measure it once, not once per byte",
+			gen:  func(n int) string { return strings.Repeat("~", n) },
+		},
+		{
+			name: "angle-openers-unterminated",
+			why:  "each < scans for its >; the scan is self-bounding at the next < or whitespace",
+			gen:  func(n int) string { return repeatTo("<a ", n) },
+		},
+		{
+			name: "angle-openers-dense",
+			why:  "a solid run of < with no terminator anywhere",
+			gen:  func(n int) string { return strings.Repeat("<", n) },
+		},
+		{
+			name: "angle-autolinks-rejected",
+			why:  "complete runs whose scheme is refused: schemeOf strips and re-reads every one",
+			gen:  func(n int) string { return repeatTo("<javascript:alert(1)> ", n) },
+		},
+		{
+			name: "bare-url-shaped-runs",
+			why:  "the bare-URL detector fires at every word boundary and consumes to the terminator",
+			gen:  func(n int) string { return repeatTo("https://x.test/a ", n) },
+		},
+		{
+			name: "bare-url-near-misses",
+			why:  "the word-boundary gate must reject a prose 'h' in O(1), not by parsing a url",
+			gen:  func(n int) string { return repeatTo("http here http there https ", n) },
+		},
+		{
+			name: "bare-url-trailing-parens",
+			why:  "paren balance is counted ONCE per run; recounting per stripped byte would be quadratic",
+			gen:  func(n int) string { return "https://x.test/" + strings.Repeat(")", n) },
+		},
+		{
+			name: "bare-url-one-long-run",
+			why:  "a single url the length of the whole body: one scan, one balance count",
+			gen:  func(n int) string { return "https://x.test/" + strings.Repeat("a", n) },
+		},
+		{
+			name: "fence-info-strings",
+			why:  "infoLanguage runs per closed fence and must not be linear in the whole line",
+			gen:  func(n int) string { return repeatTo("```json\nx\n```\n", n) },
+		},
 		{
 			name: "prose-control",
 			why:  "the ordinary shape: it must not have paid for any of the repairs",
@@ -239,6 +356,22 @@ func distinctBacktickRuns(n int) string {
 	for run := 1; sb.Len() < n; run++ {
 		sb.WriteString(strings.Repeat("`", run))
 		sb.WriteByte('x')
+	}
+	return sb.String()
+}
+
+// emphasisRuleOfThreeShape builds a paragraph of "*" runs whose lengths are
+// chosen so that CommonMark's rule of three refuses every candidate pair: each
+// run both opens and closes, and the sum of any two adjacent run lengths is a
+// multiple of three while neither length is. Nothing ever matches, so every
+// closer's back-walk consumes nothing — which is precisely the shape that is
+// quadratic without an openers_bottom bound.
+func emphasisRuleOfThreeShape(n int) string {
+	var sb strings.Builder
+	sb.Grow(n + 64)
+	sb.WriteString("a")
+	for sb.Len() < n {
+		sb.WriteString("*a**a")
 	}
 	return sb.String()
 }
@@ -383,6 +516,93 @@ func TestRender_CostAtOneMiBIsBounded(t *testing.T) {
 				t.Fatalf("shape %q: unescaped markup leaked", sh.name)
 			}
 			assertTagBalance(t, out)
+		})
+	}
+}
+
+// oneMiBAllocBudget is the ceiling on BYTES ALLOCATED by one Render of a 1 MiB
+// body. See TestRender_AllocationAtOneMiBIsBounded for why there is one.
+//
+// THE SHAPE THE BUDGET IS ACTUALLY SIZED AGAINST is
+// emphasis-alternating-delimiters, at 108 MiB: 1.8x headroom, not the "about
+// 2.5x" an earlier version of this comment claimed. That claim was computed off
+// a sweep that did not contain the shape — it named loose-list-items at 77 MiB
+// as the widest and said "the inline shapes top out at 47 MiB" — which is to
+// say the guard added to bound PER-RUN memory had never been evaluated at the
+// input that maximises runs per byte. It is now. The arithmetic is worth having
+// in one place, because it is the whole cost model of the inline pass:
+//
+//	a delimRun is 72 bytes on a 64-bit build and a matchNode 16;
+//	"*_" repeated is one maximal run per BYTE, the reachable maximum, so a
+//	1 MiB body of it records 1,048,576 runs — a 72 MiB slice, sized exactly
+//	once by growRunsExactly and live for the whole render;
+//	on top of that sit the first-pass buffer, the match arena and 3.3 MiB of
+//	output, for 108 MiB allocated and a measured peak live heap of 109 MiB.
+//
+// The next densest shape in the sweep, emphasis-rule-of-three-blocked, reaches
+// 0.4 runs per byte and 47 MiB; the widest BLOCK shape is loose-list-items at
+// 77 MiB, whose 1 MiB of input becomes 3.5 MiB of output through the block
+// renderer's joins.
+//
+// The budget still sits well under the pre-repair figures for the inline shapes
+// at this same size — 443 MiB for " *a", 443 MiB for " _a", 354 MiB for "a~~ ",
+// 634 MiB for "[" — so a reintroduction of the token-list defect fails this by
+// a factor of two to three rather than by a rounding error.
+//
+// TotalAlloc is deterministic for a given input, so the headroom does not have
+// to absorb machine-to-machine variance the way the wall-clock budget does.
+const oneMiBAllocBudget = 192 << 20
+
+// TestRender_AllocationAtOneMiBIsBounded is the third half of the cost guard,
+// and it exists because the other two could not see the defect it now guards.
+//
+// A tokenizing rewrite of the inline pass materialised the whole block as a
+// token list before writing anything, at roughly one 112-byte token per two
+// input bytes. Nothing about that was superlinear — ns/byte stayed flat out to
+// 4 MiB — so the growth sweep, which compares two equally-slowed measurements,
+// measured no change at all; and the wall-clock budget had fifteen times the
+// headroom it needed, so it stayed green while a 1 MiB body went from 2 MiB of
+// allocation to 443 MiB and from 2 MiB of peak live heap to 151 MiB. On the
+// surface this file's header describes — a stored comment body re-rendered for
+// every reader of every GET /api/comments, concurrently — that is R x K times a
+// third of a gigabyte, and no guard here would have said a word.
+//
+// So the third guard is an ABSOLUTE ALLOCATION budget, for the same reason the
+// second one is an absolute time budget: the attacker's budget is one 1 MiB
+// body, not a ratio. TotalAlloc is what is measured because it is deterministic
+// for a given input — it does not depend on when the collector happened to
+// run — and because it bounds peak live heap from above.
+func TestRender_AllocationAtOneMiBIsBounded(t *testing.T) {
+	if testing.Short() {
+		t.Skip("cost guard skipped under -short")
+	}
+	if raceEnabled {
+		// The race detector allocates its own shadow state per access, so
+		// what this would measure is the instrumentation. Same reasoning as
+		// the wall-clock budget above; the growth sweep still runs.
+		t.Skip("absolute allocation budget is not meaningful under -race; the growth sweep still runs")
+	}
+	for _, sh := range costShapes() {
+		sh := sh
+		t.Run(sh.name, func(t *testing.T) {
+			body := sh.gen(oneMiB)
+			var before, after runtime.MemStats
+			runtime.GC()
+			runtime.ReadMemStats(&before)
+			out := Render(body)
+			runtime.ReadMemStats(&after)
+			runtime.KeepAlive(out)
+			used := after.TotalAlloc - before.TotalAlloc
+			t.Logf("%s: %d bytes in, %d bytes out, %.1f MiB allocated",
+				sh.name, len(body), len(out), float64(used)/(1<<20))
+			if used > oneMiBAllocBudget {
+				t.Errorf("shape %q: %d bytes allocated %.1f MiB, over the %.0f MiB budget\n"+
+					"  a constant-factor blow-up is invisible to the growth sweep and to the\n"+
+					"  wall-clock budget; this is the guard that sees it\n"+
+					"  this shape reaches: %s",
+					sh.name, len(body), float64(used)/(1<<20),
+					float64(oneMiBAllocBudget)/(1<<20), sh.why)
+			}
 		})
 	}
 }
@@ -769,6 +989,141 @@ func BenchmarkRenderInlineOrdinaryProse(b *testing.B) {
 	}
 }
 
+// --- emphasis pairing: correctness of the fast path -----------------------
+
+// pairDelimitersByFullWalk is pairDelimiters with the openers_bottom bound
+// REMOVED: every closer walks the whole list behind it, every time. It is the
+// reference TestPairDelimiters_BoundMatchesFullWalk holds the bounded pass to,
+// and it is the same shape of guard scanFenceByWalk is for fence scanning — a
+// cost repair may only make the answer cheaper, never different.
+//
+// It is otherwise a line-for-line copy of pairDelimiters. Keeping it a copy
+// rather than a flag on the real function is deliberate: a flag would let the
+// two share the bug being tested for.
+func pairDelimitersByFullWalk(runs []delimRun) []matchNode {
+	if len(runs) == 0 {
+		return nil
+	}
+	for k := range runs {
+		runs[k].prev = k - 1
+		runs[k].next = k + 1
+		runs[k].openHead = -1
+		runs[k].closeHead = -1
+		runs[k].closeTail = -1
+	}
+	runs[len(runs)-1].next = -1
+	var arena []matchNode
+	unlink := func(k int) {
+		n := &runs[k]
+		if n.prev >= 0 {
+			runs[n.prev].next = n.next
+		}
+		if n.next >= 0 {
+			runs[n.next].prev = n.prev
+		}
+	}
+	for current := 0; current >= 0; {
+		d := &runs[current]
+		if !d.canClose {
+			current = d.next
+			continue
+		}
+		found := -1
+		for o := d.prev; o >= 0; o = runs[o].prev {
+			on := &runs[o]
+			if !on.canOpen || on.ch != d.ch {
+				continue
+			}
+			if d.ch != '~' && emphasisRuleOfThreeBlocks(on, d) {
+				continue
+			}
+			found = o
+			break
+		}
+		if found < 0 {
+			next := d.next
+			if !d.canOpen {
+				unlink(current)
+			}
+			current = next
+			continue
+		}
+		on := &runs[found]
+		use := int8(1)
+		switch {
+		case d.ch == '~':
+			use = 2
+		case d.remaining >= 2 && on.remaining >= 2:
+			use = 2
+		}
+		arena = append(arena, matchNode{next: on.openHead, use: use})
+		on.openHead = len(arena) - 1
+		arena = append(arena, matchNode{next: -1, use: use})
+		mi := len(arena) - 1
+		if d.closeTail >= 0 {
+			arena[d.closeTail].next = mi
+		} else {
+			d.closeHead = mi
+		}
+		d.closeTail = mi
+		on.remaining -= int(use)
+		d.remaining -= int(use)
+		for k := on.next; k >= 0 && k != current; {
+			nk := runs[k].next
+			unlink(k)
+			k = nk
+		}
+		if on.remaining == 0 {
+			unlink(found)
+		}
+		if d.remaining == 0 {
+			next := d.next
+			unlink(current)
+			current = next
+		}
+	}
+	return arena
+}
+
+// TestPairDelimiters_BoundMatchesFullWalk is the correctness half of the
+// emphasis-cost bound. openers_bottom is what stops a body of runs that can all
+// close and can never pair from being quadratic — and it is also the one place
+// in the pairing pass where a wrong bound would silently CHANGE which runs pair.
+// So every delimiter-bearing corpus body is paired twice, once bounded and once
+// by full walk, and the rendered output must be byte-identical.
+func TestPairDelimiters_BoundMatchesFullWalk(t *testing.T) {
+	for _, s := range append(costCorpus(), delimiterCorpus()...) {
+		var fastBuf, slowBuf strings.Builder
+		fastRuns := inlineScan(&fastBuf, s, nil, inlineCtx{})
+		slowRuns := inlineScan(&slowBuf, s, nil, inlineCtx{})
+		got := spliceDelimiters(fastBuf.String(), fastRuns, pairDelimiters(fastRuns), len(s))
+		want := spliceDelimiters(slowBuf.String(), slowRuns, pairDelimitersByFullWalk(slowRuns), len(s))
+		if got != want {
+			t.Fatalf("openers_bottom changed the answer for %q\n bounded: %s\nfull walk: %s", s, got, want)
+		}
+	}
+}
+
+// delimiterCorpus is hand-written emphasis material: the CommonMark shapes
+// where the rule of three, a run used as both opener and closer, and an
+// unmatchable closer all decide the outcome — plus the flanking cases the
+// underscore decision rests on.
+func delimiterCorpus() []string {
+	return []string{
+		"*a*", "**a**", "***a***", "****a****", "*****a*****",
+		"*a**b*", "**a*b**", "*foo**bar**baz*", "*foo**bar*baz**",
+		"**foo*bar**", "*a*b*c*", "a*b*c*d", "***", "****", "*", "**",
+		"_a_", "__a__", "___a___", "a_b_c", "_a_b_c_", "foo_bar_baz",
+		"governed_by rests_on schema_version", "_leading", "trailing_",
+		"_leading and trailing_", "snake_case_word", "._a_.", "a_._b",
+		"~~a~~", "~a~", "~~~a~~~", "~~a~~b~~c~~", "~~", "~~~~",
+		"*__a__*", "__*a*__", "~~**a**~~", "**~~a~~**", "*~~a~~*",
+		"**a `b` c**", "` *a* `", "*`a`*", "**[a](b)**", "[*a*](b)",
+		"*a\\*b*", "\\*a*", "*a\\*", "\\**a**",
+		"* a *", "a * b * c", "*a *b* a*", "**a **b** a**",
+	}
+}
+
 // --- shared corpus -------------------------------------------------------
 
 // costCorpus is a differential-testing corpus: hand-written shapes that
@@ -800,9 +1155,18 @@ func costCorpus() []string {
 		"[a](b)[c](d)", "[a][b](c)", "[a](b))", "[a]((b)", "]a(b)",
 		"[a\\](b)", "[`a`](b)", "[a](b c)", "[](())", "[[[]]]",
 		"[a](javascript:x)", "[a](//h/p)", "[a](#f)", "[x](mailto:a@b)",
+		// Phase A's delimiters and openers, in the shapes that decide a
+		// fall-through: an angle run that is not an autolink, one whose scheme
+		// is refused, a scheme with nothing after it, and a bare url whose
+		// trailing punctuation has to be given back.
+		"<", "<>", "<a", "<a b>", "< a>", "<script>", "<x:y>", "<javascript:x>",
+		"<mailto:a@b>", "<<a:b>>", "*<a:b>*", "`<a:b>`",
 	}
 	rng := rand.New(rand.NewSource(0x5EED))
-	alphabet := []byte("``` \n\\ax[](){}-*.1#")
+	// The alphabet is every byte the block and inline scanners special-case.
+	// Phase A added six: the three emphasis delimiters, the angle bracket, and
+	// the two bytes a bare url is detected by.
+	alphabet := []byte("``` \n\\ax[](){}-*.1#_~<>:/hts")
 	for c := 0; c < 400; c++ {
 		n := 1 + rng.Intn(120)
 		buf := make([]byte, n)

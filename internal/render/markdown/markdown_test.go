@@ -59,7 +59,14 @@ func loadClaim(t *testing.T, dir, rel string) claimYAML {
 // closing tag count, for a fixed set of tags this package ever emits.
 func assertTagBalance(t *testing.T, out string) {
 	t.Helper()
-	for _, tag := range []string{"p", "pre", "code", "ul", "ol", "li", "blockquote", "h3", "h4", "h5", "h6"} {
+	for _, tag := range []string{
+		"p", "pre", "code", "ul", "ol", "li", "blockquote", "h3", "h4", "h5", "h6",
+		// Phase A's tags. Emphasis is the first construct whose nesting is
+		// decided by a backward-walking delimiter stack rather than by the
+		// order openers are met, so "did every tag it opened get closed" is a
+		// real question here in a way it never was for a code span.
+		"strong", "em", "del", "a",
+	} {
 		openCount := countOpenTags(out, tag)
 		closeCount := strings.Count(out, "</"+tag+">")
 		if openCount != closeCount {
@@ -118,6 +125,8 @@ var fencedClaims = []string{
 	"loose-list-blank-line-fence-ordered.yaml",
 	"loose-list-blank-line-fence-unordered.yaml",
 	"loose-list-blank-line-fence-nested.yaml",
+	"fenced-info-string-rejected.yaml",
+	"autolink-bare-suppressed.yaml",
 }
 
 func TestRender_AllFencedClaims(t *testing.T) {
@@ -144,7 +153,9 @@ func TestRender_AllFencedClaims(t *testing.T) {
 			out := string(Render(c.Body))
 			assertTagBalance(t, out)
 
-			gotPre := strings.Count(out, "<pre><code>")
+			// "<pre><code" without the closing ">" because a fence with an
+			// info string now opens <pre><code class="language-x">.
+			gotPre := strings.Count(out, "<pre><code")
 			gotClose := strings.Count(out, "</code></pre>")
 			if gotPre != len(blocks) || gotClose != len(blocks) {
 				t.Errorf("%s: fence count mismatch: source=%d rendered open=%d close=%d", rel, len(blocks), gotPre, gotClose)
@@ -285,9 +296,20 @@ func TestRenderInline_Links(t *testing.T) {
 			want: `<a href="/local/path">x</a>`,
 		},
 		{
+			// The LINK falls through — no anchor is built from the bracket —
+			// and the "(" and the bracket both survive as literal text. What
+			// then happens to "http://x" is the bare-URL autolink's business,
+			// not the link grammar's: a literal http:// immediately after a
+			// "(" is exactly its trigger, and nothing consumed those bytes
+			// first. Phase A is where that second construct arrived.
 			name: "unclosed link no paren falls through",
 			in:   "[text](http://x",
-			want: "[text](http://x",
+			want: `[text](<a href="http://x">http://x</a>`,
+		},
+		{
+			name: "unclosed link with a scheme-less url falls fully through",
+			in:   "[text](relative/path",
+			want: "[text](relative/path",
 		},
 		{
 			name: "bracket without paren falls through",
@@ -578,7 +600,7 @@ func scanFenceLines(lines []string, allowQuote bool) []string {
 			i = end - 1
 			continue
 		}
-		indent, runLen, ok := fenceOpener(lines[i])
+		indent, runLen, _, ok := fenceOpener(lines[i])
 		if !ok {
 			continue
 		}

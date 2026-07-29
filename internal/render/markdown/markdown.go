@@ -11,23 +11,40 @@
 //
 //   - Paragraphs — a run of non-blank lines separated by a blank line.
 //   - Fenced code blocks — a ```-delimited block, recognized by the line
-//     scanner in document order (see renderBlocks and fenceOpener), with an
-//     optional dropped info string on the opening line, becoming a real
-//     <pre><code>escaped-content</code></pre>. A fence indented under an open
-//     list item renders INSIDE that item — including across a blank line,
-//     which is how nearly all real documentation writes one.
+//     scanner in document order (see renderBlocks and fenceOpener), becoming a
+//     real <pre><code>escaped-content</code></pre>. The opening line's info
+//     string contributes class="language-x" when its first word is a plain
+//     identifier and NOTHING when it is not (see infoLanguage). A fence
+//     indented under an open list item renders INSIDE that item — including
+//     across a blank line, which is how nearly all real documentation writes
+//     one.
 //   - Backslash escapes — a closed escapable set, resolved inside the inline
 //     scan (see isEscapable and renderInline).
 //   - Inline code spans — a backtick run matched against a closing run of
 //     equal length, so a literal backtick can appear inside inline code.
-//   - Inline links — [text](url) becomes <a href="url">text</a>, new in this
-//     package. The url is held to a scheme allowlist: only http, https,
-//     mailto, and scheme-less relative-path or #fragment hrefs are emitted as
-//     anchors. A javascript:, data:, vbscript: (or any other) scheme — AND a
-//     scheme-less protocol-relative "//host" network-path, which resolves
-//     off-origin — is neutralized to escaped literal text with no anchor. Both
-//     the url (in attribute context) and the link text are HTML-escaped. See
-//     renderInline and allowedScheme for the parsing/allowlist boundary.
+//   - Inline links — [text](url) becomes <a href="url">text</a>. The url is
+//     held to a scheme allowlist: only http, https, mailto, and scheme-less
+//     relative-path or #fragment hrefs are emitted as anchors. A javascript:,
+//     data:, vbscript: (or any other) scheme — AND a scheme-less
+//     protocol-relative "//host" network-path, which resolves off-origin — is
+//     neutralized to escaped literal text with no anchor. The url is
+//     HTML-escaped in attribute context; the link TEXT runs the full inline
+//     pass, so "[**text**](url)" composes. See renderInline and allowedScheme
+//     for the parsing/allowlist boundary.
+//   - Emphasis — **bold** becomes <strong>, *italic* and _italic_ become <em>,
+//     and ~~strike~~ becomes <del>, on strict CommonMark left/right-flanking
+//     delimiter rules (see markdown_inline.go's flanking rule, which is where
+//     the whole "_" argument lives: an intraword underscore can neither open
+//     nor close, so no snake_case corpus token can ever italicise — and where
+//     the THREE classes of "_" run that rule does still let through are stated
+//     in full, including the punctuation-flanked one that can both open and
+//     close). Strikethrough is exactly two tildes; one or three or more is
+//     literal.
+//   - Autolinks — an angle-bracket <scheme:...> and a bare http/https URL both
+//     become <a>, both through allowedScheme unchanged. "<" is a construct
+//     opener for the angle form and for nothing else: anything that is not a
+//     complete autolink with an accepted scheme is escaped, which is what keeps
+//     raw inline HTML a non-goal. No bare-email autolinking.
 //   - Unordered ("-"/"*") and ordered ("1.", "2.", ...) lists, nested to
 //     UNBOUNDED depth via an indent-keyed depth stack (see renderBlocks' list
 //     indentation rule), with GFM task items ("- [ ]" / "- [x]") rendering a
@@ -63,9 +80,9 @@
 //	table cell          : inline only — RenderInline, no block construct at
 //	                      all, and no <br>.
 //
-// Explicitly out of scope: bold/italic/strikethrough, tables-in-markdown,
-// images, multi-level blockquotes, setext headings, indented (non-fenced)
-// code blocks. FORMAT.md's body field ("markdown string") makes no promise
+// Explicitly out of scope: tables-in-markdown, images, multi-level
+// blockquotes, setext headings, indented (non-fenced) code blocks, and raw
+// inline HTML. FORMAT.md's body field ("markdown string") makes no promise
 // beyond "markdown", so trimming to this subset does not contradict the
 // format spec's contract — it is a documented ceiling, not a silent gap.
 //
@@ -147,23 +164,27 @@ func Render(body string) template.HTML {
 //
 // Content: fence content is raw source bytes, HTML-escaped exactly once and
 // never handed to renderInline — no escape resolution, no code spans, no
-// links. The info string is dropped (P9 turns it into a language class).
+// links, no emphasis and no autolinking of a URL that happens to sit inside
+// one. The info string is not content: its first word becomes the code
+// element's language class when it is a plain identifier (see infoLanguage),
+// and the rest of it is dropped exactly as the whole of it used to be.
 
 // fenceOpener reports whether line opens a fenced code block, and if so its
-// leading-whitespace width and the length of its backtick run.
-func fenceOpener(line string) (indent, runLen int, ok bool) {
+// leading-whitespace width, the length of its backtick run, and its trimmed
+// info string (see infoLanguage, which turns that into a language class).
+func fenceOpener(line string) (indent, runLen int, info string, ok bool) {
 	indent = leadingSpaces(line)
 	runLen = backtickRun(line, indent)
 	if runLen < 3 {
-		return 0, 0, false
+		return 0, 0, "", false
 	}
 	// CommonMark: a backtick fence's info string may not contain a
 	// backtick. Without this, "```x``` and more" would open a block fence
 	// on a line that is plainly an inline span.
 	if strings.IndexByte(line[indent+runLen:], '`') != -1 {
-		return 0, 0, false
+		return 0, 0, "", false
 	}
-	return indent, runLen, true
+	return indent, runLen, strings.TrimSpace(line[indent+runLen:]), true
 }
 
 // fenceCloses reports whether line closes a fence opened with a run of
@@ -239,8 +260,19 @@ func scanFence(lines []string, closers []int, start, indent, openLen int) (conte
 // preBlock renders one fenced code block. Every author byte passes
 // html.EscapeString and both tags are fixed literals — the same escaping
 // boundary renderInline maintains.
-func preBlock(content string) string {
-	return "<pre><code>" + html.EscapeString(content) + "</code></pre>"
+//
+// info is the opening line's info string. Its first word becomes
+// class="language-x" when it is a plain identifier, and NOTHING when it is not
+// (see infoLanguage): the class value is author bytes in an attribute, so the
+// rule there is rejection first and escaping second, not escaping alone. A
+// fence with no info string, or with one that is refused, emits exactly the
+// bytes it emitted before this phase.
+func preBlock(content, info string) string {
+	open := "<pre><code>"
+	if lang := infoLanguage(info); lang != "" {
+		open = `<pre><code class="language-` + html.EscapeString(lang) + `">`
+	}
+	return open + html.EscapeString(content) + "</code></pre>"
 }
 
 // backtickRun counts the run of consecutive backticks in s starting at i.
@@ -876,7 +908,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 		// Fences are met in document order, so an open container survives
 		// one. An unclosed fence is not a fence: it falls through to the
 		// ordinary line handling below.
-		if fIndent, runLen, ok := fenceOpener(line); ok {
+		if fIndent, runLen, info, ok := fenceOpener(line); ok {
 			if content, closeIdx, closed := scanFence(lines, closers, i, fIndent, runLen); closed {
 				if byteIndent > 0 && len(stack) > 0 {
 					// Indented under an open item: the block is that
@@ -885,11 +917,11 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 					if looseArm {
 						lv.list.loose = true
 					}
-					lv.item.addBlock(itemBlock{kind: blockHTML, html: preBlock(content)})
+					lv.item.addBlock(itemBlock{kind: blockHTML, html: preBlock(content, info)})
 				} else {
 					flushParagraph()
 					flushList()
-					b.WriteString(preBlock(content))
+					b.WriteString(preBlock(content, info))
 				}
 				i = closeIdx
 				continue
@@ -1121,8 +1153,9 @@ func writeList(b *strings.Builder, l *listNode) {
 }
 
 // RenderInline is the exported entry point for the inline pass — backslash
-// escapes, backtick-run code spans and [text](url) links, with everything
-// else HTML-escaped. It is used by render/components' table-cell helper so a
+// escapes, backtick-run code spans, [text](url) links, emphasis, strikethrough
+// and both autolink forms, with everything else HTML-escaped. It is used by
+// render/components' table-cell helper so a
 // <td> renders the same inline markdown subset a card/list/steps body does,
 // minus the block-level paragraph/list/fence handling Render layers on top (a
 // table cell wants inline content, not a <p>-wrapped block).
@@ -1161,77 +1194,67 @@ func isEscapable(c byte) bool {
 	return false
 }
 
-// renderInline runs the inline pass over one paragraph's or list item's raw
-// text in a single left-to-right scan recognizing three inline constructs —
-// backslash escapes, backtick code spans and [text](url) links — and
-// HTML-escaping everything else. It is never called on fence content.
+// renderInline runs the inline pass over one paragraph's, heading's, list
+// item's or table cell's raw text. It is never called on fence content.
 //
-// THE ESCAPING BOUNDARY. renderInline's output is trusted as template.HTML
-// (see RenderInline), which is safe for exactly two structural reasons, and
-// every construct added here must keep both true:
+// The scan itself lives in markdown_inline.go, whose doc comment carries the
+// full construct set and the precedence rule; this function is the block
+// layer's entry point into it, and the one place the default context (not
+// inside a link's text) is chosen.
+//
+// THE ESCAPING BOUNDARY, which every construct in that file keeps:
 //
 //   - every emitted tag and attribute delimiter is a fixed literal in this
-//     file; and
+//     package; and
 //   - every author byte reaches the output through html.EscapeString.
 //
-// BACKSLASH ESCAPES (amendment A7) are resolved HERE, inside this scan —
-// never as a pre-pass over the segment. On "\" the scanner inspects the next
-// byte: if it is in the escapable set that byte is written straight to the
-// output builder through html.EscapeString and the scan resumes two bytes
-// on; otherwise the backslash itself is written through html.EscapeString
-// and the scan resumes one byte on. A trailing "\" at end of text is a
-// literal backslash.
+// BACKSLASH ESCAPES (amendment A7) are resolved inside the scan — never as a
+// pre-pass over the segment. On "\\" the scanner inspects the next byte: if it
+// is in the escapable set that byte is written straight to the output and the
+// scan resumes two bytes on; otherwise the backslash itself is an ordinary
+// character and the scan resumes one byte on. A trailing "\\" at end of text is
+// a literal backslash.
 //
 // "Escapes never re-enter the parser" is therefore structural, not a
-// convention: the escaped byte is appended to b, and the scanner only ever
-// reads from text at an index already advanced past it. There is no buffer
-// an escape result could be re-scanned from, so an escaped byte can never
-// open, close or delimit any construct — present or future.
+// convention: the escaped byte is written to the output buffer, which is never
+// read back, and the scanner only ever reads from text at an index already
+// advanced past it. There is no buffer an escape result could be re-scanned
+// from, so an escaped byte can never open, close or delimit any construct —
+// including the emphasis and autolink constructs added at phase A.
 //
 // Escapes do NOT process inside a code span: a span's content is sliced
-// verbatim out of text and escaped once, so "`a\b`" keeps its backslash
-// instead of silently losing a character. They likewise do not process
-// inside a fence, which never reaches this function at all. Inside a link's
-// text or url they are also not resolved — parseLink's grammar takes both
-// verbatim to the first "]" / ")" (a documented v0.3.1 ceiling, unchanged by
-// P1).
+// verbatim out of text and escaped once, so "`a\b`" keeps its backslash instead
+// of silently losing a character. They likewise do not process inside a fence,
+// which never reaches this function at all, nor inside a bare URL or an angle
+// autolink, both of which are consumed verbatim. Inside a link's URL they are
+// also not resolved — parseLink's grammar takes it verbatim to the first ")"
+// (a documented v0.3.1 ceiling). A link's TEXT, by contrast, now runs the full
+// inline pass, so an escape inside it resolves exactly as it would anywhere
+// else.
+//
+// TWO THINGS ABOUT LINK TEXT ARE STILL NOT IDENTICAL to top-level text, and
+// both are deliberate. Neither autolink form fires inside it, because an anchor
+// may not contain an anchor. And because the pass runs on a SUBSTRING, the
+// recursive call is told which characters bracket that substring — the link's
+// own "[" and "]" — so that a delimiter run at either end of the text flanks
+// against those brackets, which is what the source actually has there and what
+// CommonMark resolves against. Without that it would flank against a
+// start-of-text that is not there. See inlineCtx.
 //
 // At block level the escape is what stops a marker from being a marker: the
-// block scanner matches "-", "*", "N." and a ``` run against the RAW line,
-// so a leading backslash means the line no longer starts with the marker and
-// the backslash is then consumed here. Same mechanism, no special case.
+// block scanner matches "-", "*", "N." and a ``` run against the RAW line, so a
+// leading backslash means the line no longer starts with the marker and the
+// backslash is then consumed here. Same mechanism, no special case.
 //
-// CODE SPANS match by run length: an opening run of N backticks is closed by
-// the next run of EXACTLY N backticks, so a literal backtick can appear
-// inside inline code — a double-backtick span holding a-backtick-b renders
-// as <code>a`b</code>. If no run of exactly N follows, the opening run alone
-// is emitted as escaped literal text and the scan resumes immediately after
-// it — the remainder of the text is still parsed, rather than being
-// abandoned as literal wholesale, which is what the pre-P1 single-backtick
-// pairing did.
-//
-// LINKS are fall-through-safe as before: a "[" that resolves to a complete
-// [text](url) (see parseLink) is emitted as <a href="url">text</a> only when
-// allowedScheme accepts the url; a rejected scheme
-// (javascript:/data:/vbscript:/anything not http|https|mailto|relative)
-// renders the whole match as escaped literal text with no anchor, and a "["
-// that never completes a link is a literal character with the scan resuming
-// just after it.
-//
-// The three constructs compose by position: whichever opener the scan meets
-// first wins. A link written inside a code span stays literal because the
-// span opened first and consumed it verbatim; an escaped opener is consumed
-// as a plain byte before it can open anything.
-//
-// HARD LINE BREAKS reach this scan as BREAKS: the ascending byte offsets, in
+// HARD LINE BREAKS reach the scan as BREAKS: the ascending byte offsets, in
 // text, of the separator spaces the block layer decided were hard line breaks
-// (see joinSegments). At such an offset the scan writes a fixed-literal <br>
-// and skips the space. Carrying them out of band rather than as an in-band
-// sentinel is what keeps this function's escaping boundary exact — there is no
-// byte in text that this scan treats as anything other than an author byte,
-// so no author input can forge a break — and it is why the inline unit is
-// still the whole block: a construct that spans a soft line break spans a hard
-// one, because both are just a byte in the same string.
+// (see joinSegments). At such an offset the scan emits a fixed-literal <br> and
+// skips the space. Carrying them out of band rather than as an in-band sentinel
+// is what keeps the escaping boundary exact — there is no byte in text that the
+// scan treats as anything other than an author byte, so no author input can
+// forge a break — and it is why the inline unit is still the whole block:
+// emphasis and strikethrough span a hard break because a break is just a byte
+// in the same string.
 //
 // The single exception is a CODE SPAN, which may not span a hard break: the
 // closing-run search is capped at the next break offset, so an opening run
@@ -1239,143 +1262,7 @@ func isEscapable(c byte) bool {
 // The cap is exact rather than approximate because a break offset is always a
 // separator SPACE, so no backtick run can straddle one.
 func renderInline(text string, breaks []int) string {
-	var b strings.Builder
-	// plain is the start of the pending run of ordinary bytes; it is
-	// flushed through html.EscapeString before every construct and once at
-	// the end, so no author byte can reach b by any other route.
-	plain := 0
-	// spans is nil until a code-span search fails; from then on it answers
-	// the remaining searches (see backtickIndex). Purely a cost structure —
-	// it returns what findBacktickRun would have returned.
-	var spans *backtickIndex
-	// links is the same idea for link delimiters: nil until a parseLink
-	// attempt fails, and from then on it answers the remaining attempts (see
-	// linkIndex). Also purely a cost structure — it returns what parseLink
-	// would have returned, byte for byte, accept for accept.
-	var links *linkIndex
-	flushPlain := func(end int) {
-		if end > plain {
-			b.WriteString(html.EscapeString(text[plain:end]))
-		}
-	}
-
-	// bi is the cursor into breaks. It only ever moves forward, exactly as i
-	// does, so the whole break pass is amortized O(1) per byte even when a
-	// construct consumes several breaks at once.
-	bi := 0
-
-	i := 0
-	for i < len(text) {
-		for bi < len(breaks) && breaks[bi] < i {
-			bi++
-		}
-		if bi < len(breaks) && breaks[bi] == i {
-			flushPlain(i)
-			b.WriteString("<br>")
-			i++
-			bi++
-			plain = i
-			continue
-		}
-		c := text[i]
-		if c != '\\' && c != '`' && c != '[' {
-			i++
-			continue
-		}
-		flushPlain(i)
-
-		switch c {
-		case '\\':
-			if i+1 < len(text) && isEscapable(text[i+1]) {
-				b.WriteString(html.EscapeString(text[i+1 : i+2]))
-				i += 2
-			} else {
-				// Not an escape (or a dangling backslash at end of
-				// text): the backslash is a literal character and the
-				// scan resumes at the next byte.
-				b.WriteString(html.EscapeString(text[i : i+1]))
-				i++
-			}
-
-		case '`':
-			runLen := backtickRun(text, i)
-			contentStart := i + runLen
-			// A code span may not span a hard line break: the search stops
-			// at the next break offset. Slicing text is exact here — a break
-			// offset is a separator space, so no run straddles it.
-			limit := nextBreak(breaks, contentStart, len(text))
-			var closeStart int
-			var ok bool
-			if spans != nil {
-				if closeStart, ok = spans.find(contentStart, runLen); ok && closeStart >= limit {
-					ok = false
-				}
-			} else if closeStart, ok = findBacktickRun(text[:limit], contentStart, runLen); !ok {
-				// This search just walked every remaining run without
-				// consuming any of them. Index them once so no later
-				// opener repeats the walk (see backtickIndex).
-				spans = newBacktickIndex(text, contentStart)
-			}
-			if !ok {
-				// Unclosed run: the run itself is literal, and the scan
-				// resumes after it so later constructs still match.
-				b.WriteString(html.EscapeString(text[i:contentStart]))
-				i = contentStart
-				break
-			}
-			b.WriteString("<code>")
-			b.WriteString(html.EscapeString(text[contentStart:closeStart]))
-			b.WriteString("</code>")
-			i = closeStart + runLen
-
-		case '[':
-			var matchLen int
-			var linkText, url string
-			var ok bool
-			if links != nil {
-				matchLen, linkText, url, ok = links.parseLinkAt(text, i)
-			} else if matchLen, linkText, url, ok = parseLink(text[i:]); !ok {
-				// This attempt failed, which means it consumed nothing:
-				// the scan will advance one byte and the next "[" would
-				// repeat both of parseLink's searches over the same
-				// remainder. Index the delimiters once so it doesn't
-				// (see linkIndex).
-				//
-				// Indexing on ANY failure, not only an expensive one, is
-				// deliberate. "Was that scan expensive?" has no cheap
-				// honest answer: a failure can walk the whole remainder
-				// and still return a valid index rather than -1 — N
-				// copies of "[" followed by a single "]x" is quadratic
-				// with every IndexByte succeeding. The price of the
-				// simple rule is one extra linear pass over a body whose
-				// brackets fail cheaply; the price of a clever one is a
-				// threshold an attacker gets to sit just underneath.
-				links = newLinkIndex(text, i)
-			}
-			if !ok {
-				// Not a complete link: "[" is a literal char; resume the
-				// scan just after it so any later construct still matches.
-				b.WriteString(html.EscapeString(text[i : i+1]))
-				i++
-				break
-			}
-			if allowedScheme(url) {
-				b.WriteString(`<a href="`)
-				b.WriteString(html.EscapeString(url))
-				b.WriteString(`">`)
-				b.WriteString(html.EscapeString(linkText))
-				b.WriteString("</a>")
-			} else {
-				// Rejected scheme: emit the whole "[text](url)" match as
-				// inert escaped literal text — never an anchor.
-				b.WriteString(html.EscapeString(text[i : i+matchLen]))
-			}
-			i += matchLen
-		}
-		plain = i
-	}
-	flushPlain(len(text))
-	return b.String()
+	return renderInlineCtx(text, breaks, inlineCtx{})
 }
 
 // findBacktickRun returns the start index of the first run of EXACTLY n

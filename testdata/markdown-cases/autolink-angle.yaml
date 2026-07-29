@@ -7,4 +7,4 @@ body: |
   Visit <https://example.com> for more.
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests angle-bracket autolink (not yet supported)
+  reason: markdown renderer test fixture - tests angle-bracket autolink

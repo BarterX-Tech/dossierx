@@ -1,0 +1,16 @@
+id: widget.markdown-cases.emphasis-underscore-word-boundary
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A lone _leading underscore has no partner on this line.
+
+  A lone trailing_ underscore has none either.
+
+  snake_case_word and target_blank stay literal.
+
+  But _two that legitimately pair_ do emphasise, and \_two that are escaped\_ do not.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the residual word-boundary exposure, in both directions

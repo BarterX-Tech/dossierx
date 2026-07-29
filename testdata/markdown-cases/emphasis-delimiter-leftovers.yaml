@@ -1,0 +1,19 @@
+id: widget.markdown-cases.emphasis-delimiter-leftovers
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A delimiter run is written out in three parts: the tags it closes, the
+  characters no match consumed, and the tags it opens. This fixture pins the
+  middle part, which is the only place the renderer emits an author byte from a
+  precomputed table rather than from html.EscapeString on the spot.
+
+  Partly consumed: ***a* and **b*** and ****c**** and *****d*****.
+
+  Never consumed: a * b, a ** b, three *** alone, a lone ~ and a ~~~ run.
+
+  Mixed with prose: 2 * 3 * 4 = 24, and 5 ** 2 is exponentiation.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the leftover-characters half of the delimiter write-out, which the streaming rewrite is responsible for

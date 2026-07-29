@@ -1,0 +1,14 @@
+id: widget.markdown-cases.autolink-angle-rejected
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A rejected scheme keeps its brackets and becomes inert text: <javascript:alert(1)>
+  and <data:text/html,x> and <vbscript:x>.
+
+  A run that is not an autolink at all stays escaped: <script>alert(1)</script>,
+  <img src=x onerror=alert(1)>, and a bare < in prose.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - "<" opens an autolink and nothing else, ever

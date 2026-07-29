@@ -1,0 +1,14 @@
+id: widget.markdown-cases.fenced-info-string-rejected
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  An info string that is not a plain identifier yields no language class at all:
+
+  ```<script>alert(1)</script>
+  still just code
+  ```
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the language class is rejected, not escaped-and-emitted

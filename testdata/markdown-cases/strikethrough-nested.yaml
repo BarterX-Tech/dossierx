@@ -1,0 +1,12 @@
+id: widget.markdown-cases.strikethrough-nested
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ~~**Struck and bold**~~, ~~*struck and italic*~~, and ~~`struck code`~~.
+
+  A single ~tilde~ is literal, and so is a ~~~triple~~~ run.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - strikethrough is exactly two tildes, and it composes

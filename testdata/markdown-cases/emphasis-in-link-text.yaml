@@ -1,0 +1,17 @@
+id: widget.markdown-cases.emphasis-in-link-text
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A link's text runs the full inline pass on a SUBSTRING, so the flanking rule
+  has to be told which characters bracket it. In the source those are the
+  link's own brackets, which are punctuation: [__._](https://example.com/a)
+  keeps its underscores literal, and so does the mirror case
+  [_.__](https://example.com/b).
+
+  Composition is unaffected: [**text**](https://example.com/c) and
+  [a *b* c](https://example.com/d) and [~~gone~~](https://example.com/e).
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - emphasis inside link text flanks against the link's brackets

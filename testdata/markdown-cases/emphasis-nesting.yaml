@@ -1,0 +1,13 @@
+id: widget.markdown-cases.emphasis-nesting
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Nesting is the acceptance test: **bold `code`** composes, and
+  ` **not bold** ` does not, because a code span wins over everything.
+
+  **`a`** and *__b__* and ~~**c**~~ and [**text**](https://example.com/d).
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the nesting matrix, including code-span precedence

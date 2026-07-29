@@ -109,7 +109,9 @@ func TestRender_FenceAtColumnZeroClosesAnOpenList(t *testing.T) {
 func TestRender_BlankLineBeforeIndentedFenceKeepsOrderedList(t *testing.T) {
 	body := "1. Install it:\n\n   ```sh\n   go install ./...\n   ```\n\n2. Then run it.\n"
 	got := string(Render(body))
-	want := "<ol><li><p>Install it:</p><pre><code>go install ./...\n</code></pre></li><li><p>Then run it.</p></li></ol>"
+	// The "sh" info string became class="language-sh" at phase A; the list
+	// structure this test exists to pin is unchanged.
+	want := `<ol><li><p>Install it:</p><pre><code class="language-sh">go install ./...` + "\n</code></pre></li><li><p>Then run it.</p></li></ol>"
 	if got != want {
 		t.Errorf("blank line before an indented fence:\n got: %s\nwant: %s", got, want)
 	}
@@ -119,7 +121,7 @@ func TestRender_BlankLineBeforeIndentedFenceKeepsOrderedList(t *testing.T) {
 func TestRender_BlankLineBeforeIndentedFenceKeepsUnorderedList(t *testing.T) {
 	body := "- Install it:\n\n  ```sh\n  go install ./...\n  ```\n\n- Then run it.\n"
 	got := string(Render(body))
-	want := "<ul><li><p>Install it:</p><pre><code>go install ./...\n</code></pre></li><li><p>Then run it.</p></li></ul>"
+	want := `<ul><li><p>Install it:</p><pre><code class="language-sh">go install ./...` + "\n</code></pre></li><li><p>Then run it.</p></li></ul>"
 	if got != want {
 		t.Errorf("blank line before an indented fence:\n got: %s\nwant: %s", got, want)
 	}
@@ -350,9 +352,23 @@ func TestRenderInline_NonEscapableFallThrough(t *testing.T) {
 func TestRenderInline_EscapeDefusesConstructOpeners(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"\\`not code`", "`not code`"},
-		{`\[a](http://x)`, `[a](http://x)`},
+		{`\[a](relative/path)`, `[a](relative/path)`},
 		{`\*\*bold\*\*`, `**bold**`},
+		{`\*\*b\*\* \_i\_ \~\~s\~\~`, `**b** _i_ ~~s~~`},
 		{"``a\\`b``", "<code>a\\`b</code>"}, // no escape processing inside a span
+		// "<" is deliberately OUTSIDE the escapable set, so that an escape can
+		// never be a route to an unescaped angle bracket. The consequence is
+		// that a backslash does not defuse an angle autolink: the backslash is
+		// a literal character and the "<" after it still opens one. That is
+		// safe rather than merely tolerable — the autolink still has to pass
+		// allowedScheme, and everything it emits is escaped.
+		{`\<https://x.test>`, `\<a href="https://x.test">https://x.test</a>`},
+		{`\<script>`, `\&lt;script&gt;`},
+		// The escaped "[" still opens nothing — but "http://x" sitting after
+		// a "(" is a BARE URL, a construct in its own right that the escape
+		// was never aimed at. The link construct is defused; the autolink is
+		// not, because nothing consumed those bytes first.
+		{`\[a](http://x)`, `[a](<a href="http://x">http://x</a>)`},
 	}
 	for _, tc := range cases {
 		if got := string(RenderInline(tc.in)); got != tc.want {
@@ -399,9 +415,20 @@ func TestRenderInline_EscapedOutputNeverReEntersTheParser(t *testing.T) {
 	if got := string(RenderInline("\\``x`")); got != "`<code>x</code>" {
 		t.Errorf("escaped backtick participated in span matching: got %q", got)
 	}
-	// An escaped "[" must not open a link with the later "](...)".
-	if got := string(RenderInline(`\[a](http://x)`)); strings.Contains(got, "<a ") {
+	// An escaped "[" must not open a link with the later "](...)". The url is
+	// deliberately scheme-less so that the assertion is about the LINK
+	// construct alone: with an http url the bare-URL autolink would fire on
+	// its own account (it is preceded by "(") and the anchor in the output
+	// would say nothing about whether the bracket had opened anything.
+	if got := string(RenderInline(`\[a](relative/path)`)); strings.Contains(got, "<a ") {
 		t.Errorf("escaped bracket opened a link: got %q", got)
+	}
+	// An escaped delimiter must not pair with a live one.
+	if got := string(RenderInline(`\*a*`)); got != "*a*" {
+		t.Errorf("escaped star participated in emphasis matching: got %q", got)
+	}
+	if got := string(RenderInline(`\~\~a~~`)); got != "~~a~~" {
+		t.Errorf("escaped tilde participated in strike matching: got %q", got)
 	}
 }
 
@@ -431,21 +458,47 @@ func TestRenderInline_BacktickRuns(t *testing.T) {
 	}
 }
 
-// --- L3 regression matrix (guards for P2, which P1 must not pre-empt) ----
+// --- L3 regression matrix ------------------------------------------------
 
-// TestRender_L3DelimiterMatrix pins that P1 changes nothing about the
-// list-marker / emphasis-delimiter boundary: unorderedMarker's required
-// whitespace is what stops **bold** parsing as a list, and no emphasis is
-// implemented yet.
+// TestRender_L3DelimiterMatrix is the mandatory matrix for the moment "*" came
+// to mean two things. Every row is a shape where the list-marker rule and the
+// emphasis rule both have a claim on the same byte, and the answer is decided
+// by exactly one thing in each case:
+//
+//   - unorderedMarker is ^[-*]\s+, so a "*" NOT followed by whitespace is not a
+//     marker and is free to be a delimiter. That is why "**b**" is bold and
+//     "* item" is a list, and it is the invariant
+//     TestUnorderedMarkerRequiresWhitespace pins directly.
+//   - CommonMark flanking decides everything about "_". An intraword "_" can
+//     neither open nor close, which is why the corpus tokens survive; a
+//     word-boundary "_" can, which is why the last row emphasises.
+//
+// Through phase B every row here rendered as literal text, because emphasis did
+// not exist. Phase A is where the right-hand column changes.
 func TestRender_L3DelimiterMatrix(t *testing.T) {
 	cases := []struct{ in, want string }{
-		{"**b**", "<p>**b**</p>"},
+		// "*" means two things, and whitespace after the marker is the whole
+		// difference.
+		{"**b**", "<p><strong>b</strong></p>"},
 		{"* item", "<ul><li>item</li></ul>"},
-		{"*italic* rest", "<p>*italic* rest</p>"},
-		{"- *italic* item", "<ul><li>*italic* item</li></ul>"},
-		{"*not a list*item", "<p>*not a list*item</p>"},
+		{"*italic* rest", "<p><em>italic</em> rest</p>"},
+		{"- *italic* item", "<ul><li><em>italic</em> item</li></ul>"},
+		{"*not a list*item", "<p><em>not a list</em>item</p>"},
+		// "_" is governed entirely by flanking. These four are the corpus
+		// protection the underscore decision rests on.
 		{"governed_by and rests_on", "<p>governed_by and rests_on</p>"},
-		{"_leading, trailing_", "<p>_leading, trailing_</p>"},
+		{"snake_case_word", "<p>snake_case_word</p>"},
+		{"_leading", "<p>_leading</p>"},
+		{"trailing_.", "<p>trailing_.</p>"},
+		// The documented residual exposure: two word-boundary underscores that
+		// legitimately pair DO emphasise. A backslash escape and a code span
+		// are the cover — markdown-sanity is NOT, because it reports UNMATCHED
+		// runs and this one is matched. See markdown_inline.go's flanking
+		// comment, which states all three classes of exposure, and
+		// TestRenderInline_UnderscorePunctuationFlankedEmphasises for the class
+		// that needs no word boundary at all.
+		{"_leading, trailing_", "<p><em>leading, trailing</em></p>"},
+		{"}_{a}_{", "<p>}<em>{a}</em>{</p>"},
 	}
 	for _, tc := range cases {
 		if got := string(Render(tc.in)); got != tc.want {

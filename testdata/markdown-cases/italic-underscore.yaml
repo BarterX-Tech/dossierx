@@ -7,4 +7,4 @@ body: |
   This text has _italic content_ in it.
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests italic with underscore (not yet supported)
+  reason: markdown renderer test fixture - tests italic with underscore, under CommonMark flanking
