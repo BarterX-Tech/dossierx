@@ -1143,21 +1143,6 @@ export const contentSpec: ContentSpec = {
             ],
           },
           {
-            version: "v0.3.1",
-            date: "2026-07-30",
-            title: "A documentation-grade renderer",
-            tag: "Latest release",
-            highlights: [
-              "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
-              "Constructs: backslash escapes, bold, italic in both spellings under CommonMark left/right-flanking rules, strikethrough, double-backtick code spans, autolinks in both forms, blockquotes, horizontal rules, headings at ### and deeper, unbounded list nesting, task items, hard line breaks, loose lists, ordered-list start numbers, fence language classes, GFM pipe tables, and images. Emphasis is held to all 132 emphasis examples of CommonMark 0.31.2.",
-              "Images render in claim bodies and never in comment bodies, fail-closed by construction rather than by a flag: markdown.Render emits none and cannot be told to, so the comment paths stay image-free by changing nothing. A src must resolve under its own claim's assets/ directory, and dossierx serve answers for them from an allowlist computed from the loaded claims rather than from filesystem traversal.",
-              "SECURITY: parseLink's bracket rescan was quadratic — 1 MiB of bracket characters in a comment body cost 5.8 seconds of CPU, amplified because every comment is re-rendered on every GET /api/comments. This predates v0.3.1 and is live in the v0.3.0 binary.",
-              "SECURITY: the mockup <img> gate recognised // as an authority prefix but not the three backslash spellings a browser normalises to it, so a reviewed, locked, allowlisted mockup claim could load a third-party image. The gate now lives in one shared internal/urlsafe instead of four divergent copies.",
-              "Two new lints — markdown-sanity and asset-scope — with a deliberate severity split: error for security findings, warning for craft ones, because lock refuses on any error-severity finding corpus-wide.",
-              "Upgrading: locked claim bodies may render differently with no edit, no content-hash change and no ledger event. dossierx claim unlock is the deliberate way to revisit them.",
-            ],
-          },
-          {
             version: "v0.3.0",
             date: "2026-07-28",
             title: "Agent-first restructure — two surfaces, one gate",
@@ -1173,6 +1158,21 @@ export const contentSpec: ContentSpec = {
 
               "BUG FIX, and the reason the loop works at all: a claim with no comments rendered no 💬 chip, so the first comment on any card could never be opened from the viewer — the exact gesture the review loop starts with. Both gates had to move together, since the server emitted the chip only when threads existed and the client hid any chip reading zero, so an empty chip would have vanished the moment it was clicked. Every non-banner card now carries a chip, zero-state included; a static file:// export still hides them, because with no API to answer, read-only is the honest presentation.",
               "Also: self-edges rejected across every edge type and a second cycle pass over governed_by; edge labels in the viewer read as prose instead of raw ids (issue #11); five embedded skills, contract front-loaded, rewritten onto the new surface. Still cobra + yaml.v3 only.",
+            ],
+          },
+          {
+            version: "v0.3.1",
+            date: "2026-07-30",
+            title: "A documentation-grade renderer",
+            tag: "Latest release",
+            highlights: [
+              "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
+              "Constructs: backslash escapes, bold, italic in both spellings under CommonMark left/right-flanking rules, strikethrough, double-backtick code spans, autolinks in both forms, blockquotes, horizontal rules, headings at ### and deeper, unbounded list nesting, task items, hard line breaks, loose lists, ordered-list start numbers, fence language classes, GFM pipe tables, and images. Emphasis is held to all 132 emphasis examples of CommonMark 0.31.2.",
+              "Images render in claim bodies and never in comment bodies, fail-closed by construction rather than by a flag: markdown.Render emits none and cannot be told to, so the comment paths stay image-free by changing nothing. A src must resolve under its own claim's assets/ directory, and dossierx serve answers for them from an allowlist computed from the loaded claims rather than from filesystem traversal.",
+              "SECURITY: parseLink's bracket rescan was quadratic — 1 MiB of bracket characters in a comment body cost 5.8 seconds of CPU, amplified because every comment is re-rendered on every GET /api/comments. This predates v0.3.1 and is live in the v0.3.0 binary.",
+              "SECURITY: the mockup <img> gate recognised // as an authority prefix but not the three backslash spellings a browser normalises to it, so a reviewed, locked, allowlisted mockup claim could load a third-party image. The gate now lives in one shared internal/urlsafe instead of four divergent copies.",
+              "Two new lints — markdown-sanity and asset-scope — with a deliberate severity split: error for security findings, warning for craft ones, because lock refuses on any error-severity finding corpus-wide.",
+              "Upgrading: locked claim bodies may render differently with no edit, no content-hash change and no ledger event. dossierx claim unlock is the deliberate way to revisit them.",
             ],
           },
         ],
