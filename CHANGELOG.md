@@ -22,35 +22,126 @@ section for what changed.
 
 ### Changed — renderer expansion
 
-The block-level markdown renderer (`markdown.Render`, used by `body`, `steps`, and comment
-bodies) grew several constructs beyond the previous release's ceiling: fenced code blocks are
-now recognized by the line scanner itself rather than a whole-body pre-pass, so a fence nested
-inside an open list item or an open blockquote no longer splits the container around it;
-one-level blockquotes recurse into the same block scanner (paragraphs, lists, task items,
-headings and fenced code all render inside a quote); ATX headings at levels 3–6; thematic
-breaks; unordered/ordered lists nest to unbounded depth via an indent-keyed stack, with GFM
-task-item checkboxes, CommonMark list looseness, and `<ol start="n">` for a list that does not
-begin at 1; and hard line breaks (a trailing backslash or two trailing spaces) become `<br>`.
-The inline-only ceiling used by `rows` table cells (`markdown.RenderInline`) is unchanged and
-narrower than the block ceiling — see FORMAT.md for exactly which constructs each entry point
-recognizes.
+The claim-body markdown renderer grew substantially beyond the previous release's ceiling —
+this is the largest single change in v0.3.1, and it lands on every layout that renders `body`
+or a `steps` entry (card, banner, list, steps, table, mockup), on comment bodies, and on `rows`
+table cells, in each case exactly as far as that surface's ceiling reaches. See FORMAT.md's
+markdown-ceiling section for the authoritative construct-by-surface table; summarized here:
 
-### Fixed — a denial-of-service path in `parseLink`, already shipped in the current version
+- **Block structure.** Fenced code blocks are now recognized by the line scanner itself rather
+  than a whole-body pre-pass, so a fence nested inside an open list item or an open blockquote
+  no longer splits the container around it; a fence's info string now contributes
+  `class="language-x"` to the rendered `<code>` element. One-level blockquotes recurse into the
+  same block scanner, so paragraphs, lists, task items, headings, thematic breaks and fenced
+  code all render inside a quote. ATX headings at levels 3–6 (`#`/`##` stay reserved for the
+  viewer's own chrome and render as literal text). Thematic breaks. Unordered/ordered lists
+  nest to unbounded depth via an indent-keyed stack, with GFM task-item checkboxes, CommonMark
+  list looseness (a property of the list, not the item — a tight nested list stays tight inside
+  a loose parent), and `<ol start="n">` for a list that does not begin at 1. Hard line breaks (a
+  trailing backslash or two trailing spaces) become `<br>`.
+- **Inline constructs.** Backslash escapes over a closed 15-character set (`<` and `&` are
+  deliberately outside it, so `\<` still shows its backslash); double-backtick code spans;
+  `**bold**`, `*italic*`/`_italic_` under strict CommonMark flanking (an intraword underscore
+  can never open or close, so `governed_by`-shaped tokens never italicize), and `~~strike~~`;
+  angle-bracket and bare-URL autolinks. The inline-only ceiling used by `rows` table cells and
+  by a GFM pipe-table cell (`markdown.RenderInline`) gained the same emphasis, strikethrough and
+  autolink constructs as the block ceiling, on top of the escapes/code-spans/links it already
+  had — **every `rows` table cell renders differently after this upgrade** if its text happens
+  to contain `*`, `_`, `~~`, or a bare URL.
+- **GFM pipe tables**, new in this release: a header row, a required delimiter row (which must
+  itself carry a pipe — a bare `---` stays a thematic break), and zero or more body rows. A
+  well-formed table is always rendered as a table, at any size or shape: a body row with fewer
+  cells than the header renders **short** rather than padded, and a longer row has its extra
+  cells dropped. Row splitting happens before inline parsing, so a pipe inside a cell's code
+  span still splits the cell unless escaped (`` `a\|b` `` is the working spelling for a literal
+  pipe inside inline code).
+- **Images**, new in this release, and the one construct that is not available everywhere the
+  rest of this list is: `![alt](src)` renders as a real `<img>` in claim-authored `body` and
+  `steps` text and in a table cell embedded in that text, and **never** in a comment body. `src`
+  must resolve under the claim's own `assets/` directory (a fixed, non-configurable name) and
+  end in one of six extensions (`.png .jpg .jpeg .gif .webp .svg`); anything else renders the
+  whole `![alt](src)` as escaped literal text rather than as a broken image. Two new lint rules
+  ship with it: `markdown-sanity` (mostly warning-severity craft findings — a malformed table, an
+  unclosed fence — but error-severity on the security-relevant ones, such as an off-origin image
+  or link `src`) and `asset-scope` (error-severity throughout — it can refuse `dossierx claim
+  lock` on an image `src` that resolves outside `assets/` or carries an unlisted extension, on a
+  corpus that had no such check before this upgrade).
 
-This fix predates this release's scope and is already live in the shipped binary; it is
-recorded here because it is part of the same file this release otherwise touches, and because
-it bears directly on the renderer-expansion note above. `parseLink`'s bracket-matching had
-several quadratic-ish rescans — repeatedly walking forward to a `]` or `)` from each `[` in the
-remaining text instead of indexing them once — that produced no wrong byte of output but cost
-seconds to minutes of CPU on an adversarial input. Measured directly: a 1 MiB comment body
-consisting of bracket characters (`[`, `]`) took 5.8 seconds of CPU to render before the fix.
-This matters more on the comment surface than the number alone suggests, because
-`handleListComments` (`internal/serve/handlers.go`) re-renders **every** stored comment on
-**every** `GET /api/comments` call — so one stored hostile body is not a one-time cost, it is
+### Changed — new HTTP surface in `dossierx serve`
+
+`dossierx serve` mounts a second, non-API route: `GET /claim-assets/<claim-id>/<path>`, which
+serves exactly the images the loaded claims reference, answered from an allowlist computed from
+those claims rather than by walking the filesystem — a percent-encoded path, a path outside the
+extension allowlist, a symlink that resolves outside the claims directory, or anything that is
+not a regular file is a bare 404, with no distinction from "does not exist". The viewer's
+`Content-Security-Policy` on `GET /` widens accordingly, from `default-src 'none'; style-src ...`
+to `default-src 'none'; img-src 'self'; style-src ...` — the one relaxation this release makes to
+the CSP, scoped to same-origin images only.
+
+### Fixed — a denial-of-service path in `parseLink`, live in the currently-shipped binary
+
+This bug **predates** v0.3.1 and is live in the v0.3.0 binary you are upgrading from; the fix
+ships in this release. `parseLink`'s bracket-matching had several quadratic-ish rescans —
+repeatedly walking forward to a `]` or `)` from each `[` in the remaining text instead of
+indexing them once — that produced no wrong byte of output but cost seconds to minutes of CPU on
+an adversarial input. This is the smallest of **four** quadratic paths this release bounds,
+each measured against a 1 MiB reviewer-authored body (the practical ceiling on a comment or
+claim `body`) at the same commit:
+
+| path | before | after |
+|---|---|---|
+| list continuation accumulator | 10.6s CPU, a 65 GB allocation | 23ms |
+| fences indented under a list item | 8.55s CPU | 21ms |
+| `parseLink` bracket rescan | 5.8s CPU | 12ms |
+| fence rescan | 299ms @ 8 KiB | 5ms @ 16 KiB |
+
+The `parseLink` case matters more on the comment surface than the CPU number alone suggests,
+because `handleListComments` (`internal/serve/handlers.go`) re-renders **every** stored comment
+on **every** `GET /api/comments` call — so one stored hostile body is not a one-time cost, it is
 amplified across every later read of the comment panel for as long as that comment exists. The
-fix bounds the four quadratic paths with an index built once per scan and is guarded by a
-16-shape growth sweep plus a 1 MiB absolute-budget test in
-`internal/render/markdown/markdown_cost_test.go`.
+65 GB allocation in the list-continuation path is reachable from a 1 MiB comment body with no
+special privilege — any reviewer who can leave a comment could trigger it before this fix. All
+four paths are bounded with an index built once per scan and guarded by a 16-shape growth sweep
+plus a 1 MiB absolute-budget test in `internal/render/markdown/markdown_cost_test.go`.
+
+### Security — an off-origin `<img>` could pass the mockup review gate, live in the currently-shipped binary
+
+This hole **predates** v0.3.1 and is live in the v0.3.0 binary you are upgrading from. A
+`layout: mockup` claim's `raw_html` is the one field DossierX renders unescaped, and it is
+allowed only for an allowlisted module, only with `raw_html_reviewed: true`, and only through a
+tag/attribute allowlist in which `<img>` may carry a **relative** `src`. That relative-only test
+was a regular expression that treated the literal bytes `//` as the only authority prefix.
+Browsers normalise `\` to `/` in the authority position of an `http`/`https` URL, so
+`src="\\evil.example/p.png"`, `src="/\evil.example/p.png"` and `src="\/evil.example/p.png"` all
+resolve off-origin — and all three passed the gate, meaning a **reviewed, locked** mockup claim
+could load a third-party image (and leak the viewer's IP, User-Agent and referrer) from a page a
+human had signed off on. `src="//evil.example/p.png"`, the one spelling the regex knew, was
+correctly refused, which is why the gap was invisible in review.
+
+The fix is not a stronger regex. The same rule was written **four** independent times in this
+repository — the mockup gate, `internal/lint`'s markdown scanner, and two places in
+`internal/render/markdown` — and the other three already knew that a backslash counts as a
+slash; the weakest copy had simply never been brought up to the others. All four now call one
+leaf package, **`internal/urlsafe`**, which imports nothing else in the module (so both the
+renderer and the linter can depend on it) and exports a single by-construction gate:
+`IsOffOrigin` refuses any explicit scheme, all four authority spellings, a root-relative path, a
+query or a fragment, after HTML-entity-decoding and after stripping every ASCII control byte and
+space — so `&#47;&#47;host`, `ht&#9;tp://host` and `\x01//host` are refused on the same terms as
+the bytes they decode to. The four local copies are deleted rather than left delegating.
+
+Four behaviour changes follow, all narrowing what is accepted, all confined to the mockup
+`<img src>` gate. A **root-relative** `src` (`/foo.png`), an **empty** `src`, a `src` carrying a
+**query** (`x.png?v=2`) and one carrying a **fragment** (`x.png#frag`) are now refused where they
+previously passed. The last two are the ones most likely to surprise: a cache-busting query on an
+otherwise relative path is same-origin, and the finding still describes it as a non-relative URL.
+The gate implements the rule as written — a relative path with no scheme, no authority prefix, no
+leading `/`, no `..`, no `#` and no `?` — and is deliberately stricter than the security argument
+alone requires. No fixture or shipped mockup uses either form. Relative forms are unaffected:
+`../diagrams/x.svg`, `./x.png` and `x.png` still pass, including the `../` form the shipped Google
+Cloud Console mockups use.
+Nothing on the claim-body image path or the markdown link-scheme allowlist changed: those were
+already on the strong rule, and their accept/reject decisions are byte-identical across this
+change.
 
 ## [0.3.0] - 2026-07-28
 

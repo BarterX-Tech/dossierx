@@ -54,6 +54,8 @@ import (
 	"html/template"
 	"path"
 	"strings"
+
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 // AssetPrefix is the URL prefix an accepted image src is rewritten onto: what
@@ -193,7 +195,7 @@ func imgHTML(src, alt string) string {
 //
 // It is three rules, and all three must pass:
 //
-//  1. LEGALITY (ImageSrcLegal): a relative reference with no scheme, no
+//  1. LEGALITY (urlsafe.IsRelativePath): a relative reference with no scheme, no
 //     authority prefix, no leading "/", no ".." segment, no "#" and no "?",
 //     tested after entity-decoding and control-byte stripping.
 //  2. CO-LOCATION: the path lies under this claim's own "assets/" directory.
@@ -215,7 +217,7 @@ func imgHTML(src, alt string) string {
 //
 // IT REFUSES; IT NEVER REWRITES. That sentence is the whole reason rule 3 runs
 // on the ENTITY-DECODED BYTES AND NOTHING ELSE. The control-and-space strip that
-// ImageSrcLegal needs (a scheme name with a tab in it is still a scheme to a
+// the legality rule needs (a scheme name with a tab in it is still a scheme to a
 // browser) must not run ahead of the shape rule here, because a strip applied
 // before a shape test cannot fail: it deletes the evidence. "assets/team
 // photo.png" would not be refused, it would BECOME "assets/teamphoto.png" — a
@@ -226,7 +228,7 @@ func imgHTML(src, alt string) string {
 // rather than as something to clean up, and assetSegment's closed set states the
 // same rule a second time on the bytes that survive it.
 func ImageSrc(raw string) (rel string, ok bool) {
-	if !ImageSrcLegal(raw) {
+	if !urlsafe.IsRelativePath(raw) {
 		return "", false
 	}
 	// Entity-decoded, and NOT stripped: "&#32;" is a space the author wrote in
@@ -237,8 +239,11 @@ func ImageSrc(raw string) (rel string, ok bool) {
 		return "", false
 	}
 	// THE NORMALISATION GUARD. Anything the strip would have removed makes the
-	// src unspellable, so the src is refused rather than silently repaired.
-	if stripCtrlAndSpace(s) != s {
+	// src unspellable, so the src is refused rather than silently repaired. It
+	// must be the IDENTICAL strip the legality gate applied a few lines up, or
+	// this guard would pass bytes that gate had already normalised away — which
+	// is why urlsafe exports it rather than keeping it private.
+	if urlsafe.StripCtrlAndSpace(s) != s {
 		return "", false
 	}
 	segs := strings.Split(s, "/")
@@ -289,70 +294,24 @@ func assetSegment(seg string) bool {
 	return true
 }
 
-// ImageSrcLegal is amendment A4's gate, DEFINED BY CONSTRUCTION rather than by
-// negation: a legal image src is a relative path with no scheme, no authority
-// prefix formed from two of "/" or "\", no leading "/", no ".." segment, no "#"
-// and no "?", tested after entity-decoding and stripping every byte <= 0x20 and
-// 0x7f.
+// AMENDMENT A4'S LEGALITY GATE IS urlsafe.IsRelativePath, AND THIS PACKAGE NO
+// LONGER OWNS A COPY OF IT. Two exported wrappers, ImageSrcLegal and
+// ImageSrcOffOrigin, used to sit here; their doc comments said they existed "so
+// there is ONE callable definition of the rule rather than two that can drift"
+// and then recorded that internal/lint carried private mirrors of both anyway,
+// one of which — raw_html_scope.go's mockupAbsoluteURLPattern — classified
+// "/\evil.example/p.png" as relative. That note described a live off-origin hole
+// in the mockup <img> gate and deferred the convergence to a later change. This
+// is that change: the rule now lives in internal/urlsafe, a leaf package that
+// imports nothing from this module, and all four call sites read it from there.
 //
-// It is legality, NOT co-location: "diagram.png" is legal and is still refused
-// by ImageSrc, because it is not under assets/. The split is the one
-// internal/lint's two content rules divide a bad src along — an off-origin src
-// is markdown-sanity's finding alone, since it is not a path and has no
-// directory to be in or out of, while a ".." traversal is also asset-scope's,
-// because that is the canonical co-location mistake and asset-scope's message is
-// the one that explains where images must live.
+// The split urlsafe keeps between IsOffOrigin and IsRelativePath is the one
+// internal/lint's two content rules divide a bad src along, and it is why both
+// are exported: an off-origin src is markdown-sanity's finding alone, since it
+// is not a path and has no directory to be in or out of, while a ".." traversal
+// is also asset-scope's, because that is the canonical co-location mistake and
+// asset-scope's message is the one that explains where images must live.
 //
-// This function and ImageSrcOffOrigin are exported so there is ONE callable
-// definition of the rule rather than two that can drift. internal/lint carries
-// a private mirror of them today (markdown_scan.go's mdImageSrcLegal, and
-// raw_html_scope.go's weaker mockupAbsoluteURLPattern, which recognizes only
-// "//" as an authority prefix and would classify "/\evil.example/p.png" as
-// relative); converging both onto these is a cross-file change this phase
-// records rather than makes.
-func ImageSrcLegal(raw string) bool {
-	if ImageSrcOffOrigin(raw) {
-		return false
-	}
-	s := stripCtrlAndSpace(html.UnescapeString(raw))
-	for _, seg := range strings.FieldsFunc(s, isSlashRune) {
-		if seg == ".." {
-			return false
-		}
-	}
-	return true
-}
-
-// ImageSrcOffOrigin is ImageSrcLegal MINUS its ".." clause: it answers only
-// "could this reference leave the origin, or is it not a path at all" — a
-// scheme, an authority prefix, a root-relative leading slash, a query or a
-// fragment.
-//
-// THE BACKSLASH CLAUSE IS LOAD-BEARING and is the half a regex over "//" gets
-// wrong: browsers normalize "\" to "/" in the authority position of a URL under
-// a special (http/https) scheme, so "/\host", "\\host" and "\/host" are exactly
-// as off-origin as "//host". One test covers all four spellings plus the plain
-// root-relative "/foo", because the first byte of each is one of the two slash
-// bytes.
-//
-// The entity-decode and the control-byte strip are what stop the two cheap
-// evasions: "&#47;&#47;host" is "//host" to a browser, and a tab smuggled into
-// the middle of a scheme name is invisible to one. Both are decided here,
-// before any byte is read as structure.
-func ImageSrcOffOrigin(raw string) bool {
-	s := stripCtrlAndSpace(html.UnescapeString(raw))
-	if s == "" {
-		return true
-	}
-	if strings.ContainsAny(s, "#?") {
-		return true
-	}
-	if _, hasScheme := schemeOf(s); hasScheme {
-		return true
-	}
-	return isSlashByte(s[0])
-}
-
-// isSlashRune is isSlashByte for strings.FieldsFunc. Both separators are ASCII,
-// so no multi-byte rune can be one.
-func isSlashRune(r rune) bool { return r == '/' || r == '\\' }
+// Legality is also not co-location, which is this package's own further rule:
+// "diagram.png" satisfies urlsafe.IsRelativePath and is still refused by
+// ImageSrc, because it is not under assets/.

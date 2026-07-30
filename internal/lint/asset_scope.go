@@ -56,7 +56,7 @@
 //     co-location mistake, and the message below is the only one in the engine
 //     that explains where images must live — so both rules fire on it, on the
 //     package's existing co-firing precedent (cycle/self-edge,
-//     dangling/mirror-unanchored). See mdImageSrcOffOrigin.
+//     dangling/mirror-unanchored). See urlsafe.IsOffOrigin.
 //
 //   - It skips a claim whose SourcePath is empty. SourcePath is populated by
 //     the loader and is not part of the YAML schema, so a claim built in
@@ -73,6 +73,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 func init() {
@@ -133,12 +134,13 @@ func (AssetScope) Check(claims []model.Claim, _ *config.Config) []Finding {
 func assetScopeSurface(c model.Claim, dir, surface, source string) []Finding {
 	var findings []Finding
 	for _, img := range mdImagesIn(source) {
-		if mdImageSrcOffOrigin(img.src) {
+		if urlsafe.IsOffOrigin(img.src) {
 			// Not a path at all — a scheme, an authority prefix, a
 			// root-relative slash, a query or a fragment. It has no directory
 			// to be in or out of, so markdown-sanity's "rejected image src"
-			// is the whole story. See mdImageSrcOffOrigin for why a ".."
-			// traversal is NOT in this bucket and is reported here as well.
+			// is the whole story. See urlsafe.IsOffOrigin, and the url-gates
+			// note in markdown_scan.go, for why a ".." traversal is NOT in
+			// this bucket and is reported here as well.
 			continue
 		}
 		src := assetCleanSrc(img.src)
@@ -189,8 +191,8 @@ func assetScopeSurface(c model.Claim, dir, surface, source string) []Finding {
 // assetCleanSrc normalizes an src for path resolution: entity-decoded (the
 // same decode the legality gate applies, so "assets&#47;x.png" resolves the
 // way a browser would) and trimmed. Control-byte stripping is deliberately NOT
-// applied here — mdImageSrcLegal has already refused anything a control byte
-// could have disguised, and stripping bytes at this point would silently
+// applied here — urlsafe.IsRelativePath has already refused anything a control
+// byte could have disguised, and stripping bytes at this point would silently
 // rewrite a filename that legitimately contains a space.
 func assetCleanSrc(raw string) string {
 	return strings.TrimSpace(html.UnescapeString(raw))

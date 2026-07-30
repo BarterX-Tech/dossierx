@@ -52,12 +52,12 @@ package lint
 
 import (
 	"fmt"
-	"html"
 	"regexp"
 	"strings"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 func init() {
@@ -85,12 +85,22 @@ var mockupOnAttrPattern = regexp.MustCompile(`(?i)^on[a-zA-Z]+$`)
 // only be made up of gcp-*/mockup-*-prefixed tokens.
 var mockupClassTokenPattern = regexp.MustCompile(`^(gcp|mockup)-[a-zA-Z0-9_-]+$`)
 
-// mockupAbsoluteURLPattern matches a URL-shaped attribute value that is
-// not relative: an explicit scheme (http:, https:, javascript:, data:,
-// ...) or a protocol-relative "//" prefix. A same-origin root-relative
-// path ("/foo") or a plain relative path ("foo.png", "./foo") is not
-// matched, and is allowed.
-var mockupAbsoluteURLPattern = regexp.MustCompile(`(?i)^\s*([a-zA-Z][a-zA-Z0-9+.-]*:|//)`)
+// THE URL GATE LIVES IN internal/urlsafe AND NOT HERE. What used to sit at this
+// spot was mockupAbsoluteURLPattern, a regexp reading
+// `(?i)^\s*([a-zA-Z][a-zA-Z0-9+.-]*:|//)`, and it had a live hole: it treated
+// only the literal bytes "//" as an authority prefix, so "\\host", "/\host" and
+// "\/host" all read as relative paths and linted clean — yet a browser
+// normalises "\" to "/" in the authority position of an http/https URL and loads
+// all three off-origin. This gate guards the <img src> of a human-REVIEWED
+// mockup claim, the one field this repo emits unescaped, so a reviewed mockup
+// could carry an off-origin image.
+//
+// The regexp was the weakest of four independent copies of one rule; the other
+// three (markdown_scan.go's mdImageSrcOffOrigin, markdown.go's isNetworkPath,
+// markdown_images.go's ImageSrcOffOrigin) already knew about the backslash. The
+// fix is not a stronger regexp here — that would leave three copies still free
+// to drift apart again — but a single leaf package all four now call. See
+// urlsafe.IsOffOrigin.
 
 // mockupAllowedTags is the fixed tag allowlist for RawHTML content. br is
 // included alongside div/span/b for the Google Cloud Console mockups'
@@ -105,8 +115,8 @@ var mockupAbsoluteURLPattern = regexp.MustCompile(`(?i)^\s*([a-zA-Z][a-zA-Z0-9+.
 // description — see e.g. docs/tabs/llm-internals.html's health-state-
 // machine diagram). Unlike div/span/b/br, img may additionally carry src
 // and alt (see checkMockupMarkup) — src still goes through
-// mockupAbsoluteURLPattern so only a same-repo-relative path is legal,
-// never an absolute/external URL.
+// urlsafe.IsOffOrigin so only a same-origin relative path is legal, never
+// an absolute/external URL in any of its spellings.
 var mockupAllowedTags = map[string]bool{
 	"div":  true,
 	"span": true,
@@ -384,24 +394,6 @@ func scanMockupAttrs(raw string, j int) (attrs []mockupAttr, end int, malformed 
 	}
 }
 
-// stripCtrlAndSpace removes every ASCII control byte and whitespace/space
-// (code point <= 0x20, plus DEL 0x7f) from s. It mirrors the markdown
-// renderer's schemeOf normalization (internal/render/markdown) so the img-src
-// relative-only gate and the markdown anchor scheme gate defend the same class
-// of control-char scheme evasion (e.g. "ht\ttp://host", "\x01//host") the same
-// way. A browser strips these bytes before resolving a URL, so the lint must
-// too before deciding whether a value is relative.
-func stripCtrlAndSpace(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; c > 0x20 && c != 0x7f {
-			b.WriteByte(c)
-		}
-	}
-	return b.String()
-}
-
 func isMockupLetter(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z')
 }
@@ -492,16 +484,16 @@ func checkMockupAttr(tagName string, attr mockupAttr, add func(string)) {
 			add("raw_html <img> has a valueless src attribute")
 			return
 		}
-		// Entity-decode AND strip ASCII control/whitespace bytes before the
-		// relative-only check. mockupAbsoluteURLPattern matches raw bytes and its
-		// scheme class excludes control chars while it only tolerates *leading*
-		// whitespace, so without this an encoded absolute URL (src="&#47;&#47;host")
-		// OR a control byte smuggled inside/ahead of the scheme
-		// (src="ht&#9;tp://host", a literal embedded tab, a leading NUL/SOH) would
-		// slip past it as a "relative" path — yet a browser strips those bytes and
-		// loads the external URL. stripCtrlAndSpace mirrors the markdown renderer's
-		// schemeOf normalization so both boundaries default-deny the same class.
-		if mockupAbsoluteURLPattern.MatchString(stripCtrlAndSpace(html.UnescapeString(attr.value))) {
+		// THE RELATIVE-ONLY CHECK IS urlsafe.IsOffOrigin AND NOTHING ELSE. It
+		// entity-decodes and strips every ASCII control/whitespace byte before
+		// deciding, so an encoded absolute URL (src="&#47;&#47;host") and a
+		// control byte smuggled inside or ahead of a scheme (src="ht&#9;tp://host",
+		// a literal embedded tab, a leading NUL/SOH) are refused rather than read
+		// as relative paths — a browser drops those bytes and loads the external
+		// URL. It also refuses all four authority spellings, "//host", "\\host",
+		// "/\host" and "\/host", which the regexp that used to live here did not:
+		// see this file's note where mockupAbsoluteURLPattern used to be defined.
+		if urlsafe.IsOffOrigin(attr.value) {
 			add(fmt.Sprintf("raw_html <img> src=%q is a non-relative URL, which is disallowed", attr.value))
 		}
 	default:

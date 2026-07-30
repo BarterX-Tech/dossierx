@@ -1,9 +1,29 @@
-// Package markdown is the engine's single shared body renderer: one
-// entry point, Render(body string) template.HTML, used identically by
-// every claim component (card, table, steps, banner, list) instead of the
+// Package markdown is the engine's shared body renderer. It replaces the
 // three ad-hoc, inconsistent string transforms that used to live inline in
 // render/components/components.go (renderBody's regex-only fence matcher,
-// bodyLines' naive newline split, and steps.html's raw unescaped dump).
+// bodyLines' naive newline split, and steps.html's raw unescaped dump) with
+// three exported entry points over the same construct set, differing only in
+// which surface they serve and, for two of them, whether images render:
+//
+//   - Render(body string) template.HTML — the block ceiling with images
+//     OFF. Used by every surface that must never render an image: comment
+//     bodies (root and every reply), on every render path that reaches one.
+//   - RenderClaimBody(body string, assets AssetPrefix) template.HTML — the
+//     same block ceiling with images ON. This is what every claim component
+//     (card, table, steps, banner, list, mockup) actually binds for a
+//     claim's own body and steps entries, via the "claimMarkdown" template
+//     func in render/components; see markdown_images.go for the whole
+//     argument for why the capability is a separate entry point rather than
+//     a parameter on Render.
+//   - RenderInline(text string) template.HTML — the narrower inline-only
+//     ceiling, images always OFF, used by a layout:table claim's own rows
+//     cells.
+//
+// A GFM pipe-table cell embedded inside a body rendered by RenderClaimBody
+// is a fourth case worth naming here because it is easy to get wrong by
+// analogy with RenderInline: it goes through the same inline-only renderer,
+// but it inherits the image capability of the body around it rather than
+// always having it off — see markdown_tables.go's writeTable/writeTableRow.
 //
 // This is deliberately not a general Markdown parser. It implements exactly
 // the subset real claim corpora (and FORMAT.md's generic "body: markdown
@@ -76,8 +96,19 @@
 //   - Hard line breaks — a trailing backslash or two trailing spaces becomes
 //     a <br>. Both spellings are captured before the line is trimmed and
 //     carried as an offset into the joined block text, so the inline pass
-//     still runs ONCE per paragraph and a future emphasis/strikethrough
-//     construct spans a break for free (see joinSegments).
+//     still runs ONCE per paragraph and the emphasis/strikethrough construct
+//     above spans a break for free (see joinSegments).
+//   - Images — "![alt](src)" — are the one construct in this list NOT
+//     available through every entry point: see this file's own doc comment
+//     above and markdown_images.go's file doc for the whole argument. Where
+//     permitted, src is accepted only if, after entity-decoding, it names a
+//     relative path under the rendering claim's own "assets/" directory
+//     drawn from a closed character set and ending in one of six extensions
+//     (.png .jpg .jpeg .gif .webp .svg); anything else — including every
+//     scheme, every authority prefix (both slash spellings), every ".."
+//     segment — renders the whole "![alt](src)" as escaped literal text
+//     rather than as a broken <img>. alt is raw author bytes, HTML-escaped
+//     and never itself run through the inline pass (see imgHTML).
 //
 // THE CONTAINER MATRIX (gate 0, amendment A2) is implemented exactly as
 // stated and no cell is filled by implementation choice:
@@ -92,8 +123,10 @@
 //	table cell          : inline only — renderInline, no block construct at
 //	                      all, and no <br>.
 //
-// Explicitly out of scope: images, multi-level blockquotes, setext headings,
-// indented (non-fenced) code blocks, and raw inline HTML.
+// Explicitly out of scope: multi-level blockquotes, setext headings,
+// indented (non-fenced) code blocks, reference-style links, footnotes, and
+// raw inline HTML. Images are IN scope — see this list's own bullet above —
+// but only through the two entry points that carry the capability.
 // FORMAT.md's body field ("markdown string") makes no promise
 // beyond "markdown", so trimming to this subset does not contradict the
 // format spec's contract — it is a documented ceiling, not a silent gap.
@@ -1504,101 +1537,27 @@ func (x *linkIndex) parseLinkAt(s string, at int) (matchLen int, linkText, url s
 	return matchLen, linkText, url, true
 }
 
-// allowedScheme reports whether url may be emitted as an anchor's href. Only
-// http, https, mailto, and scheme-less relative-path / #fragment urls are
-// permitted; every other scheme — notably javascript, data, and vbscript — is
-// rejected, AS IS a scheme-less protocol-relative "//host" network-path (see
-// isNetworkPath), so a rejected link renders as inert escaped text instead of
-// an active off-origin anchor. This is the allowlist half of renderInline's
-// escaping boundary and is deliberately evasion-resistant (see schemeOf).
-func allowedScheme(url string) bool {
-	scheme, ok := schemeOf(url)
-	if !ok {
-		// No scheme: a relative path or #fragment is allowed — but NOT a
-		// protocol-relative "//host" network-path, which carries no scheme yet
-		// resolves against the page's own scheme to an arbitrary off-origin
-		// host, outside the documented scheme-less (relative-path / #fragment)
-		// scope.
-		return !isNetworkPath(url)
-	}
-	switch scheme {
-	case "http", "https", "mailto":
-		return true
-	default:
-		return false
-	}
-}
-
-// isNetworkPath reports whether url is a protocol-relative (RFC 3986
-// "network-path", "//host...") reference: scheme-less, yet NOT a same-origin
-// relative reference — it points at an arbitrary host under the page's own
-// scheme, so it must never be emitted as a live anchor. Control bytes and
-// spaces are stripped first (the same evasion resistance schemeOf applies before
-// reading a scheme), and a backslash counts as a slash because browsers
-// normalize "\" to "/" in the authority position of a URL under a special
-// (http/https) scheme — so "/\host", "\\host", and "\/host" are just as
-// off-origin as "//host".
-func isNetworkPath(url string) bool {
-	stripped := stripCtrlAndSpace(url)
-	return len(stripped) >= 2 && isSlashByte(stripped[0]) && isSlashByte(stripped[1])
-}
-
-// stripCtrlAndSpace removes every ASCII control byte and space (code point
-// <= 0x20, plus DEL 0x7f) from anywhere in s.
+// THE URL GATES LIVE IN internal/urlsafe AND NOT HERE. allowedScheme,
+// isNetworkPath, schemeOf, stripCtrlAndSpace and isSlashByte used to be defined
+// at this spot. They were correct — and they were also one of FOUR private
+// copies of the same rule in this repository, the weakest of which (the mockup
+// <img src> regexp in internal/lint/raw_html_scope.go) recognised "//host" but
+// not "\\host", "/\host" or "\/host" and so let a reviewed mockup claim carry an
+// off-origin image. Correct copies do not stop the drift; having one definition
+// does.
 //
-// It is ONE function rather than a copy per gate on purpose. A browser drops
-// these bytes before it resolves a URL, so every gate in this package that
-// decides what a URL means has to drop them first or decide about a string the
-// browser will never see — and the gates that do (schemeOf, isNetworkPath,
-// ImageSrcOffOrigin, ImageSrc) must drop exactly the same set, or "ht\ttp://x"
-// is a scheme to one of them and a relative path to another.
-func stripCtrlAndSpace(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; c > 0x20 && c != 0x7f {
-			b.WriteByte(c)
-		}
-	}
-	return b.String()
-}
-
-func isSlashByte(c byte) bool { return c == '/' || c == '\\' }
-
-// schemeOf extracts url's lower-cased URI scheme (the part before the first
-// ':', e.g. "http" or "mailto"), returning ok=false when url has no scheme
-// (a relative path or fragment).
+// The renderer therefore calls urlsafe.IsAllowedHref for an anchor href,
+// urlsafe.SchemeOf where the autolink scanner needs to know a scheme exists, and
+// urlsafe.StripCtrlAndSpace / urlsafe.IsRelativePath in markdown_images.go.
+// urlsafe imports nothing from this module, so both this package and
+// internal/lint can depend on it without a cycle — which is the property that
+// made a shared gate possible at all.
 //
-// Before reading the scheme it removes every ASCII control byte and space
-// (code point <= 0x20, plus DEL 0x7f) from anywhere in url, so an attacker
-// cannot smuggle a javascript: scheme past allowedScheme with leading/
-// trailing whitespace or embedded tabs/newlines/control chars (e.g.
-// "  JavaScript:", "java\tscript:", "java\nscript:" all normalize to
-// "javascript:"). The scheme is then read per RFC 3986's grammar
-// (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":") — anything that reaches a
-// non-scheme byte before a ':' (e.g. "/", "#", "?") has no scheme.
-func schemeOf(url string) (scheme string, ok bool) {
-	stripped := stripCtrlAndSpace(url)
-
-	for i := 0; i < len(stripped); i++ {
-		c := stripped[i]
-		if c == ':' {
-			if i == 0 {
-				return "", false
-			}
-			return strings.ToLower(stripped[:i]), true
-		}
-		if isSchemeAlpha(c) {
-			continue
-		}
-		if i > 0 && (isSchemeDigit(c) || c == '+' || c == '-' || c == '.') {
-			continue
-		}
-		// A non-scheme byte before any ':': url is relative, not schemed.
-		return "", false
-	}
-	return "", false
-}
+// isSchemeAlpha and isSchemeDigit stay here. They are not the scheme GATE; they
+// are the autolink scanner's candidate-word character classes (see
+// markdown_inline.go's autolinkWord, which deliberately also accepts "_" and is
+// wider than the grammar), and the gate is applied to what they find, never
+// derived from it.
 
 func isSchemeAlpha(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
 func isSchemeDigit(c byte) bool { return c >= '0' && c <= '9' }

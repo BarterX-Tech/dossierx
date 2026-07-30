@@ -76,6 +76,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 func init() {
@@ -219,14 +220,14 @@ func mdSanityInlineSurface(claimID, surface, text string, breaks []int, line int
 			at, string(ch))))
 	}
 	for _, url := range in.links {
-		if !mdAllowedScheme(url) {
+		if !urlsafe.IsAllowedHref(url) {
 			findings = append(findings, mdErr(claimID, fmt.Sprintf(
 				"%s: rejected link scheme in href %q — only http, https, mailto and scheme-less relative/#fragment hrefs become anchors; this one renders as inert escaped text with no link",
 				at, url)))
 		}
 	}
 	for _, img := range in.images {
-		if !mdImageSrcLegal(img.src) {
+		if !urlsafe.IsRelativePath(img.src) {
 			findings = append(findings, mdErr(claimID, fmt.Sprintf(
 				"%s: rejected image src %q — an image src must be a relative path with no scheme, no \"//\"-style authority (a backslash counts as a slash), no leading \"/\", no \"..\" segment and no \"#\" or \"?\"; this one renders as escaped literal text with no image",
 				at, img.src)))

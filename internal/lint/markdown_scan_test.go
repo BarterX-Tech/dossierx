@@ -3,6 +3,8 @@ package lint
 import (
 	"reflect"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 // TestMDScanBlocks_Recognizers pins the block-level half of the scanner
@@ -268,6 +270,12 @@ func TestMDRunJoined_HardBreaks(t *testing.T) {
 
 // TestMDImageSrcLegal is amendment A4's gate, stated by construction. The
 // backslash-as-slash rows are the half a weaker check gets wrong.
+//
+// The rule itself now lives in internal/urlsafe and is table-tested there; this
+// test survives verbatim as the LINT's assertion about it, so that a future
+// change routing markdown-sanity's image src through some other check has to
+// delete this file's expectations out loud rather than quietly stop meeting
+// them.
 func TestMDImageSrcLegal(t *testing.T) {
 	legal := []string{
 		"assets/flow.svg",
@@ -294,19 +302,23 @@ func TestMDImageSrcLegal(t *testing.T) {
 		"ht\ttps://evil.example/p.png",
 	}
 	for _, src := range legal {
-		if !mdImageSrcLegal(src) {
+		if !urlsafe.IsRelativePath(src) {
 			t.Errorf("src %q must be legal", src)
 		}
 	}
 	for _, src := range illegal {
-		if mdImageSrcLegal(src) {
+		if urlsafe.IsRelativePath(src) {
 			t.Errorf("src %q must be rejected", src)
 		}
 	}
 }
 
-// TestMDAllowedScheme mirrors markdown.allowedScheme, including the
-// control-byte evasion resistance both boundaries have to share.
+// TestMDAllowedScheme pins the anchor allowlist markdown-sanity reports
+// against. It no longer "mirrors" markdown.allowedScheme — since the gate moved
+// to internal/urlsafe there is one implementation and nothing left to mirror —
+// but the expectations are kept here unchanged, because this is the list a
+// markdown-sanity finding is generated from and it should be readable next to
+// the lint that emits it.
 func TestMDAllowedScheme(t *testing.T) {
 	allowed := []string{
 		"https://example.com",
@@ -326,12 +338,12 @@ func TestMDAllowedScheme(t *testing.T) {
 		`\\evil.example\x`,
 	}
 	for _, u := range allowed {
-		if !mdAllowedScheme(u) {
+		if !urlsafe.IsAllowedHref(u) {
 			t.Errorf("href %q must be allowed", u)
 		}
 	}
 	for _, u := range rejected {
-		if mdAllowedScheme(u) {
+		if urlsafe.IsAllowedHref(u) {
 			t.Errorf("href %q must be rejected", u)
 		}
 	}

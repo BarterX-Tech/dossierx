@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 // This file guards the COST regressions. None of them ever produced a wrong
@@ -1192,7 +1194,7 @@ func BenchmarkRenderInlineUnpairedBacktickRuns(b *testing.B) {
 
 // TestLinkIndex_MatchesParseLink is the correctness half of the link-cost fix,
 // and it carries more weight than the other two differentials: parseLink's url
-// output feeds allowedScheme/schemeOf, the package's security boundary. If the
+// output feeds urlsafe.IsAllowedHref/SchemeOf, the security boundary. If the
 // indexed path ever disagreed about where a link ends, it would disagree about
 // which url is checked — so this asserts equality of ALL FOUR return values,
 // including the verbatim url and link text, at every '[' of every corpus body.
@@ -1223,7 +1225,7 @@ func TestLinkIndex_MatchesParseLink(t *testing.T) {
 // TestLinkIndex_PreservesSchemeDecisions closes the loop from the differential
 // above to the thing that actually matters: the accept/reject decision. Every
 // url the two paths produce must not only be equal but must be judged the same
-// by allowedScheme, so no bounding of the scan can widen or narrow what becomes
+// by urlsafe.IsAllowedHref, so no bounding of the scan can widen or narrow what becomes
 // a live anchor.
 func TestLinkIndex_PreservesSchemeDecisions(t *testing.T) {
 	corpus := append(costCorpus(), schemeCorpus()...)
@@ -1239,9 +1241,9 @@ func TestLinkIndex_PreservesSchemeDecisions(t *testing.T) {
 				if gotOK != wantOK {
 					t.Fatalf("parseLinkAt/parseLink disagree on match at %d of %q", at, s)
 				}
-				if gotOK && allowedScheme(gotURL) != allowedScheme(wantURL) {
+				if gotOK && urlsafe.IsAllowedHref(gotURL) != urlsafe.IsAllowedHref(wantURL) {
 					t.Fatalf("scheme decision diverged at %d of %q: %q -> %v vs %q -> %v",
-						at, s, gotURL, allowedScheme(gotURL), wantURL, allowedScheme(wantURL))
+						at, s, gotURL, urlsafe.IsAllowedHref(gotURL), wantURL, urlsafe.IsAllowedHref(wantURL))
 				}
 			}
 		}

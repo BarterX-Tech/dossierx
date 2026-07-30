@@ -63,6 +63,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 // inlineCtx carries what the inline pass needs to know about the text AROUND
@@ -217,7 +219,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 			// The bare-URL detector, and the only construct whose opener is a
 			// prose letter — which is why it is gated by a word-boundary test
 			// inside bareURL before it is allowed to cost anything, and why
-			// "h" is not in the opener set below. allowedScheme is a second
+			// "h" is not in the opener set below. urlsafe.IsAllowedHref is a second
 			// gate inside bareURL and is never the detector, because it returns
 			// true for almost any prose token.
 			if ctx.inLink {
@@ -328,7 +330,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 				i++
 				continue
 			}
-			if !allowedScheme(url) {
+			if !urlsafe.IsAllowedHref(url) {
 				// A complete link with a refused scheme is inert literal text,
 				// delimiters and all — so it too stays in the pending run.
 				i += matchLen
@@ -337,7 +339,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 			flush(i)
 			// The link's TEXT runs the full inline pass, so
 			// "[**text**](url)" composes; its URL does not, and still reaches
-			// the output only through allowedScheme and html.EscapeString.
+			// the output only through urlsafe.IsAllowedHref and html.EscapeString.
 			//
 			// nil breaks: a link's text is rendered with no hard-break offsets,
 			// so a break inside one stays the separator space it was before this
@@ -358,7 +360,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 		case '<':
 			if !ctx.inLink {
 				if n, url, ok := angleAutolink(text, i); ok {
-					if !allowedScheme(url) {
+					if !urlsafe.IsAllowedHref(url) {
 						// A complete autolink with a rejected scheme: the whole
 						// run, brackets included, stays literal.
 						i += n
@@ -459,7 +461,7 @@ func delimRunUpperBound(text string) int {
 }
 
 // anchorHTML builds one anchor. Both tags and the attribute delimiters are
-// fixed literals; url has already passed allowedScheme and is escaped here in
+// fixed literals; url has already passed urlsafe.IsAllowedHref and is escaped here in
 // attribute context; inner is either already-escaped text or already-rendered
 // inline markup.
 func anchorHTML(url, inner string) string {
@@ -950,8 +952,8 @@ func spliceDelimiters(buf string, runs []delimRun, arena []matchNode, hint int) 
 //
 // ANGLE-BRACKET "<scheme:...>". "<" is a construct opener ONLY for this. The
 // run must reach a ">" with no whitespace and no second "<" in between, and
-// what it encloses must carry a scheme (schemeOf), which is then held to
-// allowedScheme UNCHANGED. Everything else — "<script>", "<img src=x>", "<"
+// what it encloses must carry a scheme (urlsafe.SchemeOf), which is then held to
+// urlsafe.IsAllowedHref UNCHANGED. Everything else — "<script>", "<img src=x>", "<"
 // followed by whitespace, an unterminated run to end of text, a scheme-less
 // "<//host>" or "<#frag>" — is emitted through html.EscapeString with the scan
 // resuming ONE BYTE after the "<". A complete autolink whose scheme is rejected
@@ -960,7 +962,7 @@ func spliceDelimiters(buf string, runs []delimRun, arena []matchNode, hint int) 
 //
 // BARE URL. Fires only on a literal, case-insensitive "http" or "https"
 // followed by the authority mark (see authorityMark), at start-of-text or
-// immediately after whitespace or "(". allowedScheme is applied to the matched
+// immediately after whitespace or "(". urlsafe.IsAllowedHref is applied to the matched
 // run as a SECOND GATE and is never the detector: it returns true for
 // scheme-less strings, so detecting with it would autolink ordinary prose. No
 // other scheme, no "www." prefix, no bare email. The run is consumed greedily
@@ -990,10 +992,10 @@ func angleAutolink(text string, i int) (n int, url string, ok bool) {
 				return 0, "", false
 			}
 			// An autolink must carry a scheme. A scheme-less "<//host>" or
-			// "<#frag>" is not an autolink — allowedScheme would accept the
+			// "<#frag>" is not an autolink — urlsafe.IsAllowedHref would accept the
 			// second of those as an href, but this is a RECOGNITION question,
 			// not an allow question.
-			if _, has := schemeOf(url); !has {
+			if _, has := urlsafe.SchemeOf(url); !has {
 				return 0, "", false
 			}
 			return j + 1 - i, url, true
@@ -1081,7 +1083,7 @@ func bareURL(text string, i int) (n int, ok bool) {
 		return 0, false
 	}
 	// The second gate. It can only ever narrow what becomes an anchor.
-	if !allowedScheme(text[i:j]) {
+	if !urlsafe.IsAllowedHref(text[i:j]) {
 		return 0, false
 	}
 	return j - i, true

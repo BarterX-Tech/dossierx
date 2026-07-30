@@ -46,12 +46,18 @@ it out.
   had passed, and the lock ledger will report it as `integrity_failed` on the next check.
 - `body` (prose) and/or `rows` (a table; every cell must be an authored **string**, so quote
   numbers and booleans). A claim needs at least one. `body` gets the wider **block** ceiling —
-  paragraphs, fenced code, backslash escapes, code spans, links, lists (with task items), thematic
-  breaks, headings (`###`–`######` only — `#`/`##` render as literal text), and one level of
-  blockquote. Every `rows` cell gets the narrower **inline-only** ceiling — code spans and links,
-  no block constructs. In both, `[text](url)` links render with an allowlisted scheme; bare URLs
-  are not autolinked; `javascript:`/`data:` URLs are neutralized. See FORMAT.md's markdown-ceiling
-  section for the full two-ceiling table — do not reach past either one.
+  paragraphs, fenced code (with a language class from the fence's info string), backslash
+  escapes, code spans, `**bold**`/`*italic*`/`_italic_` (CommonMark flanking — intraword
+  underscores never italicize, so `snake_case` tokens are safe), `~~strikethrough~~`, links,
+  autolinks (`<https://...>` and a bare `http`/`https` URL both link on their own — bare URLs
+  *are* autolinked now), GFM pipe tables, images (claim `body`/`steps` only, never in a comment,
+  `src` confined to that claim's own `assets/`), lists (with task items), thematic breaks,
+  headings (`###`–`######` only — `#`/`##` render as literal text), and one level of blockquote.
+  Every `rows` cell gets the narrower **inline-only** ceiling — escapes, code spans, links,
+  emphasis, strikethrough and autolinks, but no block construct and no image. In both,
+  `[text](url)` links render with an allowlisted scheme; `javascript:`/`data:` URLs are
+  neutralized. See FORMAT.md's "`body` and the markdown ceiling" section for the full
+  construct-by-surface account — do not reach past either ceiling.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required

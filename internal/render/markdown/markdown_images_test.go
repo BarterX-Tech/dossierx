@@ -3,6 +3,8 @@ package markdown
 import (
 	"strings"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
 // testAssets is the URL prefix a claim body is rendered with throughout this
@@ -229,8 +231,11 @@ func TestImageSrc_CanonicalizesWhatItAccepts(t *testing.T) {
 // clause, stated as a test because it is the half a simpler check gets wrong:
 // browsers normalize "\" to "/" in the authority position under a special
 // scheme, so "/\host", "\\host" and "\/host" leave the origin exactly as
-// "//host" does. internal/lint's mockupAbsoluteURLPattern is the weaker check
-// this function exists to replace.
+// "//host" does. internal/lint's mockupAbsoluteURLPattern was the weaker check;
+// it is gone, and both boundaries now call urlsafe.IsOffOrigin, which is what
+// this test asserts against. The expectations are unchanged from when this
+// package owned the rule, which is the point: routing it through urlsafe moved
+// no accept/reject decision on the image path.
 func TestImageSrcOffOrigin_KnowsBackslashIsASlash(t *testing.T) {
 	for _, raw := range []string{
 		"//evil.example/x.png",
@@ -245,33 +250,34 @@ func TestImageSrcOffOrigin_KnowsBackslashIsASlash(t *testing.T) {
 		"x.png#f",
 		"",
 	} {
-		if !ImageSrcOffOrigin(raw) {
-			t.Errorf("ImageSrcOffOrigin(%q) = false, want true", raw)
+		if !urlsafe.IsOffOrigin(raw) {
+			t.Errorf("urlsafe.IsOffOrigin(%q) = false, want true", raw)
 		}
 	}
 	for _, raw := range []string{"assets/x.png", "./assets/x.png", "../a/x.png", "x.png"} {
-		if ImageSrcOffOrigin(raw) {
-			t.Errorf("ImageSrcOffOrigin(%q) = true, want false", raw)
+		if urlsafe.IsOffOrigin(raw) {
+			t.Errorf("urlsafe.IsOffOrigin(%q) = true, want false", raw)
 		}
 	}
 }
 
 // TestImageSrcLegal_RefusesTraversalAndNothingElse pins the split between the
-// two exported gates, which is the split internal/lint's two content rules
-// divide a bad src along: off-origin is markdown-sanity's finding, a ".."
-// traversal is asset-scope's as well.
+// two shared gates, which is the split internal/lint's two content rules divide
+// a bad src along: off-origin is markdown-sanity's finding, a ".." traversal is
+// asset-scope's as well. ImageSrc composes the second of them with this
+// package's own co-location, shape and extension rules.
 func TestImageSrcLegal_RefusesTraversalAndNothingElse(t *testing.T) {
-	if ImageSrcLegal("../a/x.png") {
-		t.Error(`ImageSrcLegal("../a/x.png") = true, want false`)
+	if urlsafe.IsRelativePath("../a/x.png") {
+		t.Error(`urlsafe.IsRelativePath("../a/x.png") = true, want false`)
 	}
-	if ImageSrcLegal(`a\..\x.png`) {
+	if urlsafe.IsRelativePath(`a\..\x.png`) {
 		t.Error(`a backslash-separated ".." must be refused too`)
 	}
-	if !ImageSrcLegal("x.png") {
-		t.Error(`ImageSrcLegal("x.png") = false, want true (legality is not co-location)`)
+	if !urlsafe.IsRelativePath("x.png") {
+		t.Error(`urlsafe.IsRelativePath("x.png") = false, want true (legality is not co-location)`)
 	}
-	if !ImageSrcLegal("assets/x.png") {
-		t.Error(`ImageSrcLegal("assets/x.png") = false, want true`)
+	if !urlsafe.IsRelativePath("assets/x.png") {
+		t.Error(`urlsafe.IsRelativePath("assets/x.png") = false, want true`)
 	}
 }
 

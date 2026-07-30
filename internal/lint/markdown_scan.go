@@ -30,7 +30,6 @@
 package lint
 
 import (
-	"html"
 	"sort"
 	"strings"
 )
@@ -958,121 +957,33 @@ func mdImagesIn(source string) []mdImageRef {
 }
 
 // --- url gates -------------------------------------------------------------
-
-// mdAllowedScheme mirrors markdown.allowedScheme: http, https, mailto, and
-// scheme-less relative-path / "#fragment" hrefs are anchors; everything else —
-// javascript:, data:, vbscript:, any other scheme, and a scheme-less
-// protocol-relative network path — renders as inert escaped text.
-func mdAllowedScheme(url string) bool {
-	scheme, ok := mdSchemeOf(url)
-	if !ok {
-		return !mdIsNetworkPath(url)
-	}
-	switch scheme {
-	case "http", "https", "mailto":
-		return true
-	default:
-		return false
-	}
-}
-
-// mdImageSrcLegal is amendment A4's gate, DEFINED BY CONSTRUCTION rather than
-// by negation: a legal image src is a relative path with no scheme, no
-// authority prefix formed from two of "/" or "\", no leading "/", no ".."
-// segment, no "#" and no "?", tested after entity-decoding and stripping every
-// byte <= 0x20 and 0x7f.
 //
-// The backslash-counts-as-a-slash clause is load-bearing and is the half a
-// simpler check gets wrong: browsers normalize "\" to "/" in the authority
-// position under a special scheme, so "/\host", "\\host" and "\/host" are as
-// off-origin as "//host".
-func mdImageSrcLegal(raw string) bool {
-	if mdImageSrcOffOrigin(raw) {
-		return false
-	}
-	s := mdStripCtrlAndSpaceBytes(html.UnescapeString(raw))
-	for _, seg := range strings.FieldsFunc(s, func(r rune) bool { return r == '/' || r == '\\' }) {
-		if seg == ".." {
-			return false
-		}
-	}
-	return true
-}
-
-// mdImageSrcOffOrigin is mdImageSrcLegal MINUS its ".." clause: it answers
-// only "could this src leave the origin, or is it not a path at all" — a
-// scheme, an authority prefix, a root-relative leading slash, a query or a
-// fragment.
+// THERE ARE NONE IN THIS FILE ANY MORE, AND THAT IS THE POINT. This file used
+// to carry mdAllowedScheme, mdImageSrcLegal, mdImageSrcOffOrigin,
+// mdIsNetworkPath, mdSchemeOf and mdStripCtrlAndSpaceBytes — a hand-copied
+// mirror of internal/render/markdown's URL rules, added because that package
+// exports no diagnostics API (see this file's header) and a lint cannot ask it
+// what it refused.
 //
-// The split exists so the two lints can divide one src's failure modes the way
-// an author would want to read them. A "../other-facet/assets/x.png" is
-// refused by the renderer AND is the canonical co-location mistake, and
-// asset-scope's message is the one that explains where images must live, so
-// asset-scope reports it too rather than deferring. Both rules firing on that
-// one src is deliberate co-firing, on the package's existing precedent
-// (cycle/self-edge, dangling/mirror-unanchored). An src that is off-origin,
-// by contrast, is never a path at all and has no directory to be in or out of,
-// so asset-scope stays silent on it and markdown-sanity alone reports it.
-func mdImageSrcOffOrigin(raw string) bool {
-	s := mdStripCtrlAndSpaceBytes(html.UnescapeString(raw))
-	if s == "" {
-		return true
-	}
-	if strings.ContainsAny(s, "#?") {
-		return true
-	}
-	if _, hasScheme := mdSchemeOf(s); hasScheme {
-		return true
-	}
-	// One test covers both a root-relative "/foo" and every two-byte authority
-	// prefix, since the first byte of "//", "/\", "\\" and "\/" is one of the
-	// two slash bytes.
-	return mdIsSlashByte(s[0])
-}
-
-// mdIsNetworkPath mirrors markdown.isNetworkPath.
-func mdIsNetworkPath(url string) bool {
-	stripped := mdStripCtrlAndSpaceBytes(url)
-	return len(stripped) >= 2 && mdIsSlashByte(stripped[0]) && mdIsSlashByte(stripped[1])
-}
-
-// mdSchemeOf mirrors markdown.schemeOf, including its evasion resistance:
-// every ASCII control byte and space is removed from anywhere in url before
-// the scheme is read, so "java\tscript:" and "  JavaScript:" both normalize to
-// "javascript:".
-func mdSchemeOf(url string) (scheme string, ok bool) {
-	stripped := mdStripCtrlAndSpaceBytes(url)
-	for i := 0; i < len(stripped); i++ {
-		c := stripped[i]
-		if c == ':' {
-			if i == 0 {
-				return "", false
-			}
-			return strings.ToLower(stripped[:i]), true
-		}
-		if mdIsSchemeAlpha(c) {
-			continue
-		}
-		if i > 0 && (mdIsDigit(c) || c == '+' || c == '-' || c == '.') {
-			continue
-		}
-		return "", false
-	}
-	return "", false
-}
-
-// mdStripCtrlAndSpaceBytes removes every ASCII control byte and space (<= 0x20,
-// plus DEL) from s.
-func mdStripCtrlAndSpaceBytes(s string) string {
-	var b strings.Builder
-	b.Grow(len(s))
-	for i := 0; i < len(s); i++ {
-		if c := s[i]; c > 0x20 && c != 0x7f {
-			b.WriteByte(c)
-		}
-	}
-	return b.String()
-}
+// The mirror argument holds for the SCANNER, whose job is to see what the
+// renderer sees. It never held for the URL GATES, which are not recognition at
+// all but a security decision that has exactly one correct answer, and which
+// four files in this repo had four private copies of — one of which, the mockup
+// <img> gate in raw_html_scope.go, had drifted into a live off-origin hole.
+// Those six functions are gone; both lints now call internal/urlsafe, the same
+// leaf package the renderer calls, so this half of the mirror cannot drift by
+// construction rather than by vigilance.
+//
+// markdown-sanity uses urlsafe.IsAllowedHref for a link href and
+// urlsafe.IsRelativePath for an image src; asset-scope uses
+// urlsafe.IsOffOrigin. The last split is deliberate and is why urlsafe exports
+// the off-origin question separately from the relative-path one: a
+// "../other-facet/assets/x.png" is refused by the renderer AND is the canonical
+// co-location mistake, so asset-scope reports it too rather than deferring
+// (deliberate co-firing, on the package's existing cycle/self-edge and
+// dangling/mirror-unanchored precedent), whereas an OFF-ORIGIN src is not a
+// path at all and has no directory to be in or out of, so asset-scope stays
+// silent on it and markdown-sanity alone reports it.
 
 // --- byte helpers ----------------------------------------------------------
 
@@ -1123,10 +1034,15 @@ func mdIndentWidth(s string) int {
 	return col
 }
 
-func mdIsSlashByte(c byte) bool   { return c == '/' || c == '\\' }
-func mdIsSchemeAlpha(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
-func mdIsDigit(c byte) bool       { return c >= '0' && c <= '9' }
-func mdIsAlnum(c byte) bool       { return mdIsSchemeAlpha(c) || mdIsDigit(c) }
+// mdIsAlpha/mdIsDigit/mdIsAlnum classify a byte for the INLINE scan's
+// intraword-underscore rule only. They were also the scheme grammar's character
+// classes until the URL gates moved to internal/urlsafe; urlsafe carries its own
+// copies now, deliberately, because a byte class shared across a package
+// boundary would make the scheme grammar look like something a scanner change
+// could edit.
+func mdIsAlpha(c byte) bool { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
+func mdIsDigit(c byte) bool { return c >= '0' && c <= '9' }
+func mdIsAlnum(c byte) bool { return mdIsAlpha(c) || mdIsDigit(c) }
 func mdIsSpaceByte(c byte) bool {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f'
 }
