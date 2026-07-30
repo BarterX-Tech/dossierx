@@ -72,6 +72,12 @@ go run ./cmd/dossierx check --config testdata/fixture-basic/project.config.yaml
 - **DCO sign-off.** Every commit must be signed off: `git commit -s`. This adds a `Signed-off-by:` trailer certifying you have the right to submit the change under the project's license.
 - **One logical change per PR.** Keep PRs scoped to a single change — a feature, a fix, a refactor — even if that means splitting up a larger piece of work. Smaller PRs review faster and bisect cleaner.
 
+## Cutting a release
+
+Maintainers only: [docs/RELEASING.md](docs/RELEASING.md). Tagging is automated;
+the checklist covers the parts that are not — the version numbers copied into
+prose, and verifying the published artifact rather than the source you edited.
+
 ## Package boundaries
 
 `internal/` is organized as a dependency graph with a small number of hard rules, enforced by
