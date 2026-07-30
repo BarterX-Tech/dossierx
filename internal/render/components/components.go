@@ -47,9 +47,22 @@ var fileForLayout = map[model.Layout]string{
 // funcMap is shared by every component template — default and override
 // alike — so an override partial can use the same generic helpers as the
 // built-in ones.
+//
+// "markdown" IS THE NO-IMAGES RENDERER AND MUST STAY THAT WAY. It is the name
+// an arbitrary project override partial reaches for, it is the name
+// comments.html is parsed with, and it is the name a future engine template
+// will reach for by habit. Binding the image-permitting entry point to it would
+// hand the capability to all three by default; binding it to markdown.Render
+// means the worst a forgotten opt-in can cost is a missing diagram in a claim,
+// which the human reading the page sees at once.
+//
+// "claimMarkdown" is the opt-in, and it takes the CLAIM rather than the text
+// alone, because a claim's images are addressed relative to that claim — see
+// claimMarkdown and ClaimAssetURLPrefix.
 var funcMap = template.FuncMap{
 	"rowKeys":       rowKeys,
 	"markdown":      markdown.Render,
+	"claimMarkdown": claimMarkdown,
 	"cell":          cell,
 	"edges":         edgesHTML,
 	"inc":           inc,

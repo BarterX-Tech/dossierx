@@ -1,0 +1,29 @@
+id: widget.markdown-claim-body-cases.image-src-refused
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![absolute](https://evil.example/x.png)
+
+  ![protocol relative](//evil.example/x.png)
+
+  ![backslash authority](\\evil.example\x.png)
+
+  ![control-char scheme](ht	tp://evil.example/x.png)
+
+  ![root relative](/assets/x.png)
+
+  ![parent escape](../other-facet/assets/x.png)
+
+  ![shared pool](shared/assets/x.png)
+
+  ![beside the claim](diagram.png)
+
+  ![wrong extension](assets/notes.txt)
+
+  ![query](assets/x.png?v=1)
+
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - every refusal shape, rendering as escaped literal text and never as a broken <img> or an anchor"

@@ -1,0 +1,11 @@
+id: widget.markdown-claim-body-cases.image-escaped-bang
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  \![Alt](assets/a.png)
+
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - an escaped \"!\" can never open an image — the escapable set reaches this construct for free, leaving an ordinary link behind it"

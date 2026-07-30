@@ -33,7 +33,7 @@
 <section class="claim claim-list card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}
-  <div class="claim-list-items">{{markdown .Body}}</div>
+  <div class="claim-list-items">{{claimMarkdown . .Body}}</div>
   {{else}}
   <p class="claim-empty">No items.</p>
   {{end}}

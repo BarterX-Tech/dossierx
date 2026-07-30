@@ -129,9 +129,15 @@ import (
 // a fenced block under an ordered-list item split the list in two, restarted
 // the numbering at 1 and ejected the code to top level. Recognizing fences
 // inside the scanner is what makes containers survive them.
+// IMAGES ARE NOT PART OF THIS ENTRY POINT AND THAT IS DELIBERATE. Render's
+// meaning is "no images": "![alt](src)" falls through as escaped literal text,
+// so the shared component funcMap, comments.html and internal/serve's
+// commentToDTO — the three comment-bearing call sites — are correct without
+// being edited. markdown_images.go's RenderClaimBody is the opt-in, and its doc
+// comment carries the whole argument for which way round the default sits.
 func Render(body string) template.HTML {
 	var b strings.Builder
-	renderBlocks(&b, strings.Split(body, "\n"), true)
+	renderBlocks(&b, strings.Split(body, "\n"), true, imagePolicy{})
 	return template.HTML(b.String())
 }
 
@@ -847,7 +853,11 @@ type itemBlock struct {
 // with no blank line of its own stays tight inside a loose parent, which is
 // the CommonMark shape and the reason looseness is tracked per list rather
 // than per document.
-func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
+// img is the image capability, carried unchanged into every container this
+// function opens — a blockquote interior, a list item, a table cell — and into
+// the inline pass. The ZERO VALUE RENDERS NO IMAGES, so a block construct added
+// later that forgets to pass it along refuses images rather than granting them.
+func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img imagePolicy) {
 	closers := closerRuns(lines)
 
 	// stack is the open list levels, outermost first. stack[0].list is the
@@ -865,7 +875,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 		}
 		text, breaks := joinSegments(paraSegs)
 		b.WriteString("<p>")
-		b.WriteString(renderInline(text, breaks))
+		b.WriteString(renderInline(text, breaks, img))
 		b.WriteString("</p>")
 		paraSegs = nil
 	}
@@ -874,7 +884,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 		if len(stack) == 0 {
 			return
 		}
-		writeList(b, stack[0].list)
+		writeList(b, stack[0].list, img)
 		stack = stack[:0]
 	}
 	// snapToContent pops levels whose content column a line at width w does
@@ -962,7 +972,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 					end++
 				}
 				b.WriteString("<blockquote>")
-				renderBlocks(b, inner, false)
+				renderBlocks(b, inner, false, img)
 				b.WriteString("</blockquote>")
 				i = end - 1
 				continue
@@ -978,7 +988,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 				flushList()
 				tag := "h" + strconv.Itoa(level)
 				b.WriteString("<" + tag + ">")
-				b.WriteString(renderInline(text, nil))
+				b.WriteString(renderInline(text, nil, img))
 				b.WriteString("</" + tag + ">")
 				continue
 			}
@@ -1031,7 +1041,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 					lst := &listNode{ordered: ordered, start: num}
 					lst.items = append(lst.items, it)
 					if len(stack) == 1 {
-						writeList(b, lv.list)
+						writeList(b, lv.list, img)
 						stack = append(stack[:0], openLevel{list: lst, item: it, markerCol: w, contentCol: cc})
 					} else {
 						parent := &stack[len(stack)-2]
@@ -1081,7 +1091,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool) {
 			if aligns, end, ok := tableAt(lines, i); ok {
 				flushParagraph()
 				flushList()
-				writeTable(b, lines, i, end, aligns)
+				writeTable(b, lines, i, end, aligns, img)
 				i = end
 				continue
 			}
@@ -1146,7 +1156,7 @@ func listMarker(trimmed string) (ordered bool, num int, itemText string, ok bool
 // rule reaches it in a tight list and a loose one alike. Every attribute here
 // is a fixed literal except start's number, which is re-emitted from a parsed
 // int and so can only ever be digits — the escaping boundary is unchanged.
-func writeList(b *strings.Builder, l *listNode) {
+func writeList(b *strings.Builder, l *listNode, img imagePolicy) {
 	tag := "ul"
 	if l.ordered {
 		tag = "ol"
@@ -1174,7 +1184,7 @@ func writeList(b *strings.Builder, l *listNode) {
 				// as addText's old incremental concatenation produced for the
 				// soft case.
 				text, breaks := joinSegments(blk.segs)
-				inline := renderInline(text, breaks)
+				inline := renderInline(text, breaks, img)
 				switch {
 				case !l.loose:
 					b.WriteString(inline)
@@ -1184,7 +1194,7 @@ func writeList(b *strings.Builder, l *listNode) {
 			case blockHTML:
 				b.WriteString(blk.html)
 			case blockList:
-				writeList(b, blk.list)
+				writeList(b, blk.list, img)
 			}
 		}
 		b.WriteString("</li>")
@@ -1223,7 +1233,7 @@ func writeList(b *strings.Builder, l *listNode) {
 // called with no break offsets, and a trailing backslash in a cell is the
 // literal dangling backslash the inline scan already renders.
 func RenderInline(text string) template.HTML {
-	return template.HTML(renderInline(text, nil))
+	return template.HTML(renderInline(text, nil, imagePolicy{}))
 }
 
 // isEscapable reports whether c is in the CLOSED backslash-escapable set
@@ -1309,8 +1319,8 @@ func isEscapable(c byte) bool {
 // whose only closer is on the far side of a break is emitted as literal text.
 // The cap is exact rather than approximate because a break offset is always a
 // separator SPACE, so no backtick run can straddle one.
-func renderInline(text string, breaks []int) string {
-	return renderInlineCtx(text, breaks, inlineCtx{})
+func renderInline(text string, breaks []int, img imagePolicy) string {
+	return renderInlineCtx(text, breaks, inlineCtx{img: img})
 }
 
 // findBacktickRun returns the start index of the first run of EXACTLY n
@@ -1529,15 +1539,28 @@ func allowedScheme(url string) bool {
 // (http/https) scheme — so "/\host", "\\host", and "\/host" are just as
 // off-origin as "//host".
 func isNetworkPath(url string) bool {
+	stripped := stripCtrlAndSpace(url)
+	return len(stripped) >= 2 && isSlashByte(stripped[0]) && isSlashByte(stripped[1])
+}
+
+// stripCtrlAndSpace removes every ASCII control byte and space (code point
+// <= 0x20, plus DEL 0x7f) from anywhere in s.
+//
+// It is ONE function rather than a copy per gate on purpose. A browser drops
+// these bytes before it resolves a URL, so every gate in this package that
+// decides what a URL means has to drop them first or decide about a string the
+// browser will never see — and the gates that do (schemeOf, isNetworkPath,
+// ImageSrcOffOrigin, ImageSrc) must drop exactly the same set, or "ht\ttp://x"
+// is a scheme to one of them and a relative path to another.
+func stripCtrlAndSpace(s string) string {
 	var b strings.Builder
-	b.Grow(len(url))
-	for i := 0; i < len(url); i++ {
-		if c := url[i]; c > 0x20 && c != 0x7f {
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if c := s[i]; c > 0x20 && c != 0x7f {
 			b.WriteByte(c)
 		}
 	}
-	stripped := b.String()
-	return len(stripped) >= 2 && isSlashByte(stripped[0]) && isSlashByte(stripped[1])
+	return b.String()
 }
 
 func isSlashByte(c byte) bool { return c == '/' || c == '\\' }
@@ -1555,14 +1578,7 @@ func isSlashByte(c byte) bool { return c == '/' || c == '\\' }
 // (ALPHA *( ALPHA / DIGIT / "+" / "-" / "." ) ":") — anything that reaches a
 // non-scheme byte before a ':' (e.g. "/", "#", "?") has no scheme.
 func schemeOf(url string) (scheme string, ok bool) {
-	var s strings.Builder
-	s.Grow(len(url))
-	for i := 0; i < len(url); i++ {
-		if c := url[i]; c > 0x20 && c != 0x7f {
-			s.WriteByte(c)
-		}
-	}
-	stripped := s.String()
+	stripped := stripCtrlAndSpace(url)
 
 	for i := 0; i < len(stripped); i++ {
 		c := stripped[i]

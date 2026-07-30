@@ -107,12 +107,45 @@ type fileStamp struct {
 	size    int64
 }
 
-// scanFingerprint walks root exactly as loader.LoadClaims does — recursively,
-// matching *.yaml/*.yml — and records a stamp per file. It excludes precisely
-// what the watcher must never react to: dot-directories (never claim homes) and
-// the atomic writer's transient "<name>.tmp-<rand>" scratch files, which appear
-// and vanish around every SaveClaim and would otherwise flap the fingerprint.
+// scanFingerprint is the WATCHER'S fingerprint, and it is deliberately NARROWER
+// than loader.LoadClaims' enumeration. It walks root recursively matching
+// *.yaml/*.yml, and then excludes precisely what live reload must never react
+// to: dot-directories (never claim homes) and anything whose name contains
+// ".tmp-", which sweeps up the atomic writer's transient
+// "<name>.yaml.tmp-<rand>" scratch files that appear and vanish around every
+// SaveClaim and would otherwise flap the fingerprint on every comment mutation.
+//
+// THAT NARROWNESS IS A LIVE-RELOAD POLICY, NOT A DEFINITION OF "CLAIM", and it
+// must not be reused as one. The loader takes any *.yaml/*.yml anywhere under
+// claims_dir — including under a dot-directory, and including an ordinary claim
+// whose own filename happens to contain ".tmp-" — so a fingerprint built from
+// this scan cannot see a change to either. For the watcher that costs at worst a
+// missed reload of a claim nobody expected to be live. For anything that has to
+// INVALIDATE state derived from the loaded claims, it is wrong: see
+// scanLoadedClaimFingerprint, which claim_assets.go uses instead.
 func scanFingerprint(root string) (map[string]fileStamp, error) {
+	return fingerprintTree(root, true, ignoredClaimFile)
+}
+
+// scanLoadedClaimFingerprint stamps EXACTLY the files loader.LoadClaims reads:
+// every *.yaml/*.yml anywhere under root, with no directory and no filename
+// excluded. It is the freshness signal for anything derived from the loaded
+// claims, because "the set of claims changed" and "this scan changed" have to be
+// the same event — a scan that enumerates fewer files than the loader does
+// cannot notice an edit to, or the deletion of, a claim it does not look at, and
+// whatever was derived from that claim then outlives it indefinitely.
+//
+// It is a stat-walk, so an extra one costs about what the watcher's poll already
+// costs twice a second; the load and re-derive behind it are paid only when the
+// stamps actually differ.
+func scanLoadedClaimFingerprint(root string) (map[string]fileStamp, error) {
+	return fingerprintTree(root, false, notAClaimFile)
+}
+
+// fingerprintTree is the shared walk both fingerprints are spelled in terms of,
+// so the ONLY difference between them is the two exclusion knobs and a reader
+// can see the whole difference in one place.
+func fingerprintTree(root string, skipDotDirs bool, ignore func(name string) bool) (map[string]fileStamp, error) {
 	fp := make(map[string]fileStamp)
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -120,12 +153,12 @@ func scanFingerprint(root string) (map[string]fileStamp, error) {
 		}
 		if d.IsDir() {
 			// Skip dot-directories wholesale, but never the root itself.
-			if path != root && strings.HasPrefix(d.Name(), ".") {
+			if skipDotDirs && path != root && strings.HasPrefix(d.Name(), ".") {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if ignoredClaimFile(d.Name()) {
+		if ignore(d.Name()) {
 			return nil
 		}
 		info, err := d.Info()
@@ -146,17 +179,21 @@ func scanFingerprint(root string) (map[string]fileStamp, error) {
 	return fp, nil
 }
 
-// ignoredClaimFile reports whether name is a file the claims fingerprint must
-// skip: anything that is not a *.yaml/*.yml claim, and the atomic writer's
-// "*.tmp-*" scratch files. A real claim is "<name>.yaml"; its temp sibling is
-// "<name>.yaml.tmp-<rand>", so the ".tmp-" test excludes exactly those transient
-// files without touching real claims.
-func ignoredClaimFile(name string) bool {
-	if strings.Contains(name, ".tmp-") {
-		return true
-	}
+// notAClaimFile reports whether name is a file loader.LoadClaims would not read
+// at all: anything whose extension is not .yaml/.yml. It is the loader's rule
+// and nothing more.
+func notAClaimFile(name string) bool {
 	ext := strings.ToLower(filepath.Ext(name))
 	return ext != ".yaml" && ext != ".yml"
+}
+
+// ignoredClaimFile is notAClaimFile plus the watcher's own ".tmp-" exclusion.
+// A real claim is "<name>.yaml"; its atomic-write sibling is
+// "<name>.yaml.tmp-<rand>", which notAClaimFile already rejects on extension —
+// so the ".tmp-" clause only ever catches names the loader WOULD read, which is
+// why it belongs to the watcher alone. See scanFingerprint.
+func ignoredClaimFile(name string) bool {
+	return strings.Contains(name, ".tmp-") || notAClaimFile(name)
 }
 
 // fingerprintsEqual reports whether two tree fingerprints are identical (the

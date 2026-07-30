@@ -7,4 +7,4 @@ body: |
   ![Alt text](/absolute/path/image.png)
 governed_by:
   type: none
-  reason: markdown renderer test fixture - tests absolute image rejection (not yet supported)
+  reason: "markdown renderer test fixture - an off-origin image src on the default (no-images) entry point; refused twice over and still only ever escaped literal text"

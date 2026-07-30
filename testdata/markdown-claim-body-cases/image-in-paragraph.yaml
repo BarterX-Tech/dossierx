@@ -1,0 +1,15 @@
+id: widget.markdown-claim-body-cases.image-in-paragraph
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  An architecture diagram sits inline with the prose:
+
+  ![Retry state machine](assets/retry.svg)
+
+  and the prose carries on after it.
+
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - the ordinary case: one co-located image in a claim body's prose"

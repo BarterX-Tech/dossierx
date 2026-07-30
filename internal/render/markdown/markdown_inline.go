@@ -92,9 +92,16 @@ import (
 // The recursion is depth-bounded by the link grammar rather than by a counter:
 // parseLink takes its text verbatim up to the FIRST "]", so a link's text can
 // never contain the "](" a nested link would need. Depth is at most two.
+//
+// img — the IMAGE CAPABILITY, carried here rather than passed alongside so that
+// every recursive call into the pass has to carry it too. Its zero value renders
+// no images (see markdown_images.go), which is why an inlineCtx built literally
+// — as RenderInline and every non-claim-body caller build it — refuses images
+// without saying so.
 type inlineCtx struct {
 	inLink              bool
 	leftEdge, rightEdge rune
+	img                 imagePolicy
 }
 
 // edgeNone is the "there is no character on this side" edge: the real start or
@@ -269,6 +276,44 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 			i = closeStart + runLen
 			plain = i
 
+		case '!':
+			// "!" is a construct opener ONLY for a COMPLETE image run. A bare
+			// "!" in prose, a "![" that never completes, and a "!" sitting in
+			// front of an ordinary "[text](url)" that does not follow it
+			// immediately all fall to the i++ below and stay in the pending
+			// plain run, so exclamation marks cost nothing.
+			//
+			// A complete run is consumed WHOLE in both outcomes. With images
+			// permitted and the src accepted it becomes one <img>; with images
+			// refused — the capability is off, or the src did not pass the gate
+			// — the whole "![alt](src)" stays literal, delimiters and all, and
+			// is written out with the prose around it. It deliberately does NOT
+			// fall back to the anchor the "[" branch would have made of it:
+			// image syntax means an image or it means nothing, and a comment
+			// body must not be able to spell a link two ways.
+			if i+1 < len(text) && text[i+1] == '[' {
+				var matchLen int
+				var alt, src string
+				var ok bool
+				if links != nil {
+					matchLen, alt, src, ok = links.parseLinkAt(text, i+1)
+				} else if matchLen, alt, src, ok = parseLink(text[i+1:]); !ok {
+					links = newLinkIndex(text, i+1)
+				}
+				if ok {
+					if url, permitted := ctx.img.accept(src); permitted {
+						flush(i)
+						b.WriteString(imgHTML(url, alt))
+						i += 1 + matchLen
+						plain = i
+						continue
+					}
+					i += 1 + matchLen
+					continue
+				}
+			}
+			i++
+
 		case '[':
 			var matchLen int
 			var linkText, url string
@@ -304,7 +349,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 			// delimiter run at either end of the text flank as CommonMark says
 			// it does; see inlineCtx.
 			inner := renderInlineCtx(linkText, nil, inlineCtx{
-				inLink: true, leftEdge: '[', rightEdge: ']',
+				inLink: true, leftEdge: '[', rightEdge: ']', img: ctx.img,
 			})
 			b.WriteString(anchorHTML(url, inner))
 			i += matchLen

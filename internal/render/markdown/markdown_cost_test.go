@@ -451,6 +451,84 @@ func costShapes() []costShape {
 			why:  "tables reached through the quote recursion, where the interior is re-sliced per quote",
 			gen:  func(n int) string { return "> | a | b |\n> | - | - |\n" + repeatTo("> | 1 | 2 |\n", n) },
 		},
+		// --- phase D: images ------------------------------------------
+		//
+		// Images make "!" a construct opener for the first time, which is the
+		// same shape as every other row above: a byte that used to fall through
+		// in O(1) now runs a search that may consume nothing. The link index is
+		// what bounds it (an image reuses parseLink verbatim), and these rows
+		// are what say so — measured through Render, where the capability is
+		// OFF and every complete run therefore falls through as literal text,
+		// which is the path a reviewer-authored 1 MiB comment body takes.
+		// TestRenderClaimBody_ImageCostAtOneMiBIsBounded runs the same shapes
+		// with the capability ON, where each one also EMITS markup.
+		{
+			name: "image-bangs-bare",
+			why:  "a prose '!' must not cost a link parse: the '[' lookahead has to reject in O(1)",
+			gen:  func(n int) string { return strings.Repeat("!", n) },
+		},
+		{
+			name: "image-openers-never-complete",
+			why:  "'![' whose link parse fails consumes nothing; without the link index every one re-walks",
+			gen:  func(n int) string { return repeatTo("![", n) },
+		},
+		{
+			name: "image-openers-distant-close",
+			why:  "every '![' walks to the same distant ']' only to fail the '(' test and consume nothing",
+			gen:  func(n int) string { return repeatTo("![", n) + "]x" },
+		},
+		{
+			name: "image-openers-open-paren",
+			why:  "the ')' rescan, reached through the image opener rather than the link one",
+			gen:  func(n int) string { return repeatTo("![a](", n) },
+		},
+		{
+			name: "image-src-refused",
+			why:  "a complete run whose src the gate refuses: entity-decode plus ctrl-strip per src, consuming the run",
+			gen:  func(n int) string { return repeatTo("![a](https://evil.example/x.png) ", n) },
+		},
+		{
+			// The refusal class the normalisation guard added. It is the one
+			// shape that reaches BOTH the guard's comparison strip and the
+			// segment walk, so it is where "refuse instead of rewrite" is
+			// charged. It must stay the same order as every other refusal —
+			// the guard runs after the length bound, so it is a pass over at
+			// most maxAssetSrcBytes per src, never over the body.
+			name: "image-src-space-refused",
+			why:  "a src carrying a space: the normalisation guard refuses rather than rewriting, one bounded extra pass per src",
+			gen:  func(n int) string { return repeatTo("![a](assets/a b.png) ", n) },
+		},
+		{
+			name: "image-src-accepted",
+			why:  "a complete run the gate accepts: ImageSrc's segment walk, once per image",
+			gen:  func(n int) string { return repeatTo("![a](assets/x.png) ", n) },
+		},
+		{
+			// The densest EMITTED shape: the shortest source that still buys a
+			// whole <img> tag. Under Render it emits nothing at all (which is
+			// the point of measuring it here too — the refusal path must not be
+			// the expensive one); under RenderClaimBody it is what the markup
+			// ratio is maximised by, and the claim-body guard below is where
+			// that is bounded.
+			name: "image-minimal-runs",
+			why:  "the shortest source that emits a whole <img>: the construct's markup-ratio supremum",
+			gen:  func(n int) string { return repeatTo("![](assets/a.png)", n) },
+		},
+		{
+			name: "image-long-alt",
+			why:  "one image whose alt is the whole body: the alt is escaped once, not once per byte",
+			gen:  func(n int) string { return "![" + strings.Repeat("a", n) + "](assets/x.png)" },
+		},
+		{
+			name: "image-long-src",
+			why:  "one src the length of the body: the gate's strip/decode/segment walk must be one pass",
+			gen:  func(n int) string { return "![a](assets/" + strings.Repeat("a", n) + ".png)" },
+		},
+		{
+			name: "image-in-table-cells",
+			why:  "images reached through the cell inline pass, one gate evaluation per cell",
+			gen:  func(n int) string { return tableOf(2, "| ![a](assets/x.png) | b |\n", n) },
+		},
 		{
 			name: "prose-control",
 			why:  "the ordinary shape: it must not have paid for any of the repairs",
@@ -838,6 +916,24 @@ func TestRender_CostAtOneMiBIsBounded(t *testing.T) {
 // at this same size — 443 MiB for " *a", 443 MiB for " _a", 354 MiB for "a~~ ",
 // 634 MiB for "[" — so a reintroduction of the token-list defect fails this by
 // a factor of two to three rather than by a rounding error.
+//
+// PHASE D CHANGED NOTHING HERE, and that is worth recording rather than
+// leaving to be re-derived. An image is new emitted markup from a very short
+// source — "![](assets/a.png)" is 17 bytes in and 71 out — so it is exactly the
+// shape that has moved this number three times before. Measured at the cap on
+// the shape that maximises it (image-minimal-runs, one whole tag per 17 source
+// bytes): 5.2x emitted and 46 MiB allocated through RenderClaimBody, which is a
+// quarter of this budget and a third of table-dense-empty-cells, the shape the
+// budget is actually sized against. It is far off the ceiling because the tag
+// is a fixed literal plus two short escaped values and the pass allocates
+// nothing per image — no node, no token, no slice.
+//
+// The image shapes are swept through BOTH entry points. In this file they run
+// through Render, where the capability is OFF, which measures the REFUSAL path
+// (parse, gate, fall through to literal text) — the path a hostile 1 MiB
+// comment body actually takes. markdown_images_cost_test.go runs the same
+// shapes through RenderClaimBody against this same constant, which is where the
+// numbers above come from.
 //
 // TotalAlloc is deterministic for a given input, so the headroom does not have
 // to absorb machine-to-machine variance the way the wall-clock budget does.

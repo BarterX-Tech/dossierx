@@ -33,6 +33,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -58,7 +59,21 @@ const (
 	// <style> and one inline IIFE (no external assets, ever); connect-src
 	// 'self' lets that IIFE reach the same-origin /api/* endpoints while
 	// blocking the exfiltration half of any injected script.
-	cspValue = "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+	//
+	// img-src 'self' IS THE PHASE-D ADDITION, and the exact token matters more
+	// than the fact of it. serve is the only human surface, so a claim-body
+	// image that cannot load here is the feature not working — but the two
+	// cheap ways to make one load are "img-src *" and "img-src data:", and both
+	// hand every injected or authored byte on the page an outbound channel: an
+	// <img> whose src names an attacker's host exfiltrates by loading, with no
+	// fetch and no script involved, which is exactly what connect-src 'self'
+	// was chosen to prevent. 'self' re-allows
+	// exactly one thing — an image from this origin, which means the
+	// allowlisted /claim-assets/ route in claim_assets.go and nothing else.
+	// The rest of the policy is unchanged; in particular the comment above
+	// about "no external assets, ever" still holds, because 'self' is not
+	// external.
+	cspValue = "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
 
 	// shutdownGrace bounds how long a graceful shutdown waits for in-flight
 	// handlers (and thus their deferred lock releases) before forcing exit.
@@ -113,6 +128,33 @@ type Server struct {
 	// defaults to os.Stderr (the terminal running serve) and is redirected by
 	// SetWarnWriter in tests. Written once by Serve at startup.
 	warnw io.Writer
+
+	// assets is the computed claim-image allowlist and assetsMu guards it; both
+	// are read from handler goroutines. See claim_assets.go, which owns the
+	// whole structure — nil means "not built yet", never "no images".
+	//
+	// assetsCheckedAt is when a freshness check was last ATTEMPTED, and
+	// assetsConfirmedAt is when one last SUCCEEDED — when the index was rebuilt,
+	// or its fingerprint re-matched the tree. They are two clocks on purpose:
+	// the first bounds how often the check runs (it costs a stat-walk of the
+	// whole tree, and a page fires one asset request per image, so it is
+	// amortised over one watcher tick rather than paid per request); the second
+	// bounds how long an index that CANNOT be re-verified may keep authorising
+	// requests, because an unparseable claim file makes every check fail and
+	// "we tried recently" is then true forever while "it is still correct" is
+	// not. claimAssets and keepAssets carry both arguments. assetScans counts
+	// the walks purely so a test can prove the amortisation still holds (see
+	// AssetTreeScans).
+	//
+	// It is deliberately NOT invalidated from onChange either: that callback
+	// fires on the watcher's NARROWER fingerprint, which cannot see a claim in a
+	// dot-directory or one whose filename contains ".tmp-", so wiring it here
+	// would be right for most claims and silently wrong for those.
+	assetsMu          sync.Mutex
+	assets            *assetIndex
+	assetsCheckedAt   time.Time
+	assetsConfirmedAt time.Time
+	assetScans        atomic.Int64
 }
 
 // New builds a Server for cfg. version is reported verbatim by GET /api/ping
@@ -175,6 +217,14 @@ func (s *Server) URL() string { return fmt.Sprintf("http://127.0.0.1:%d/", s.Por
 // requests run the pipeline fewer than N times); production code has no reason
 // to call it.
 func (s *Server) RenderRuns() int64 { return s.pipe.runCount() }
+
+// AssetTreeScans is the number of times the claim-image allowlist has stat-walked
+// the claims tree to verify its own freshness. It exists for the one test that
+// can catch a return to per-request walking — the walk is O(claims) and a page
+// fires one asset request per image, so N requests against an unchanged tree
+// must produce a bounded number of scans, never N. Production code has no
+// reason to call it.
+func (s *Server) AssetTreeScans() int64 { return s.assetScans.Load() }
 
 // Serve runs the HTTP server until ctx is cancelled (the command wires ctx to
 // SIGINT/SIGTERM), then gracefully drains in-flight requests — letting any
@@ -316,6 +366,10 @@ func (s *Server) assertOutputsOutsideClaimsTree() error {
 func (s *Server) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{$}", s.handleRoot)
+	// The only route that reads a file off disk, and the only non-API route
+	// besides the root document. It answers from a computed allowlist rather
+	// than from the filesystem — see claim_assets.go for the whole argument.
+	mux.HandleFunc(assetRoutePattern, s.handleClaimAsset)
 	mux.HandleFunc("GET /api/ping", s.handlePing)
 	mux.HandleFunc("GET /api/fragment", s.handleFragment)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)

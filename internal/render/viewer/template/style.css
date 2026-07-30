@@ -411,11 +411,51 @@ code {
   text-align: center;
 }
 
-.claim-body .md-table .md-col-right,
-.claim-list-items .md-table .md-col-right,
-.sbody .md-table .md-col-right,
-.comment-body .md-table .md-col-right {
-  text-align: right;
+/* ---- phase D: claim-body images (img.md-img) -------------------------
+
+   THREE CONTEXTS, NOT FOUR, and the missing one is the point. Every block
+   above lists .comment-body alongside the three claim contexts because
+   Render produces those constructs on every surface. An image is the one
+   construct that does not: markdown.Render has no image capability, so a
+   comment body can never contain an .md-img, and a `.comment-body .md-img`
+   rule here would be dead CSS asserting a capability the renderer refuses.
+   Leaving it out is the stylesheet agreeing with the boundary rather than
+   quietly implying a fourth surface.
+
+   WHY THE CLASS IS REQUIRED ON THE SELECTOR. A layout: mockup claim's
+   reviewed raw_html may carry its own img element (see internal/lint's
+   raw-html-scope, which allows img with a relative src for static
+   diagrams), and that markup lives inside .claim-body too. Scoping to
+   .md-img keeps these rules off it, exactly as .md-table keeps the body
+   table rules off a layout: table claim's own table element.
+
+   max-width: 100% is the load-bearing declaration: a diagram is authored
+   at whatever pixel width its tool exported, and a card is narrower than
+   most of them. height: auto preserves the aspect ratio while it scales.
+   display: block plus the vertical margin makes a lone image in a
+   paragraph read as a figure rather than as an oversized text glyph
+   sitting on the prose baseline. The border and radius match the pre and
+   .md-table treatment, which is what puts an image in the same "embedded
+   object inside prose" family as a fenced block instead of leaving it
+   floating unframed. */
+.claim-body .md-img,
+.claim-list-items .md-img,
+.sbody .md-img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.6rem 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(127, 127, 127, .06);
+}
+
+/* An image is the last thing in a list item often enough to be worth the
+   rule: without it the item's own bottom margin doubles the image's. */
+.claim-body li > .md-img:last-child,
+.claim-list-items li > .md-img:last-child,
+.sbody li > .md-img:last-child {
+  margin-bottom: 0;
 }
 
 

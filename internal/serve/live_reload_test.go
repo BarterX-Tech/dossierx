@@ -3,7 +3,6 @@ package serve_test
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,32 +20,17 @@ import (
 // than a real half-second poll.
 func startServerFast(t *testing.T, files map[string]string) (srv *serve.Server, base, root string) {
 	t.Helper()
-	root = t.TempDir()
-	writeFile(t, filepath.Join(root, "project.config.yaml"), baseConfig)
-	for rel, content := range files {
-		writeFile(t, filepath.Join(root, rel), content)
-	}
-	cfg, err := config.LoadConfig(filepath.Join(root, "project.config.yaml"))
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	srv = serve.New(cfg, testVersion)
-	srv.SetWatchIntervals(15*time.Millisecond, 25*time.Millisecond)
-	if err := srv.Listen(0); err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	go func() {
-		srv.Serve(ctx) //nolint:errcheck // test server; Serve returns ErrServerClosed on cancel
-		close(done)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		<-done
-	})
-	return srv, fmt.Sprintf("http://127.0.0.1:%d", srv.Port()), root
+	return startServerWatch(t, baseConfig, files, fastPoll, fastDebounce)
 }
+
+// fastPoll and fastDebounce are that short cadence. They are named because the
+// claim-image allowlist's freshness window is defined as ONE POLL INTERVAL, so
+// the asset staleness tests borrow the same pair and the relationship between
+// the two is visible rather than coincidental.
+const (
+	fastPoll     = 15 * time.Millisecond
+	fastDebounce = 25 * time.Millisecond
+)
 
 // sseClient opens a live /api/events stream and returns a channel that receives
 // the name of every SSE event ("changed", ...) plus a cancel that closes the
