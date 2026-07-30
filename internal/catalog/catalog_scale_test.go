@@ -50,23 +50,14 @@ func TestBuild_LinearScaling(t *testing.T) {
 		t.Fatalf("warmup Build: %v", err)
 	}
 
-	start := time.Now()
-	if _, err := Build(small, cfg); err != nil {
-		t.Fatalf("Build(small): %v", err)
-	}
-	smallElapsed := time.Since(start)
-
-	start = time.Now()
-	if _, err := Build(large, cfg); err != nil {
-		t.Fatalf("Build(large): %v", err)
-	}
-	largeElapsed := time.Since(start)
-
-	// Guard against a near-zero smallElapsed making the ratio meaningless
-	// on a very fast machine.
-	if smallElapsed <= 0 {
-		smallElapsed = time.Nanosecond
-	}
+	// Both sizes are measured per-operation, repeating until the total clears
+	// a floor. A single timed call is not safe on Windows, whose clock
+	// granularity rounds a fast Build to exactly zero — and the previous guard
+	// for that ("if smallElapsed <= 0 { smallElapsed = time.Nanosecond }")
+	// turned an unmeasurable baseline into a ratio in the millions, failing the
+	// test for being too FAST rather than saving it.
+	smallElapsed := perBuildTime(t, small, cfg)
+	largeElapsed := perBuildTime(t, large, cfg)
 
 	ratio := float64(largeElapsed) / float64(smallElapsed)
 	const sizeFactor = 8.0       // 16000 / 2000
@@ -110,5 +101,24 @@ func TestBuild_LargeClaimsDirCorrectness(t *testing.T) {
 	}
 	if total != n {
 		t.Errorf("ByModule holds %d ids total, want %d", total, n)
+	}
+}
+
+// perBuildTime returns the cost of one Build(claims, cfg), repeating the build
+// until the measured total clears buildTimerFloor so the result is a real
+// per-operation duration on every platform.
+func perBuildTime(t *testing.T, claims []model.Claim, cfg *config.Config) time.Duration {
+	t.Helper()
+	const buildTimerFloor = 2 * time.Millisecond
+	for n := 1; ; n *= 2 {
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			if _, err := Build(claims, cfg); err != nil {
+				t.Fatalf("Build: %v", err)
+			}
+		}
+		if total := time.Since(start); total >= buildTimerFloor {
+			return total / time.Duration(n)
+		}
 	}
 }
