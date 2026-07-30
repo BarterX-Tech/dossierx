@@ -409,11 +409,11 @@ func mdScanFence(lines []string, closers []int, start, openLen int) (closeIdx in
 
 // mdQuotePrefix mirrors markdown.blockquotePrefix.
 func mdQuotePrefix(line string) (rest string, ok bool) {
-	if len(line) == 0 || line[0] != '>' {
+	if line == "" || line[0] != '>' {
 		return "", false
 	}
 	rest = line[1:]
-	if len(rest) > 0 && rest[0] == ' ' {
+	if rest != "" && rest[0] == ' ' {
 		rest = rest[1:]
 	}
 	return rest, true
@@ -458,7 +458,7 @@ func mdATXHeading(trimmed string) (level int, text string, ok bool) {
 // It is hand-rolled rather than regexp-based so it can never disagree with the
 // renderer about what "\s+" matched.
 func mdListMarker(trimmed string) (ordered bool, itemText string, ok bool) {
-	if len(trimmed) == 0 {
+	if trimmed == "" {
 		return false, "", false
 	}
 	if c := trimmed[0]; c == '-' || c == '*' {

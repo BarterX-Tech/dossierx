@@ -464,11 +464,11 @@ func trimClosingHashes(s string) string {
 // blockquotePrefix strips a leading ">" plus one optional space from line,
 // reporting ok=false when line does not open/continue a quote.
 func blockquotePrefix(line string) (rest string, ok bool) {
-	if len(line) == 0 || line[0] != '>' {
+	if line == "" || line[0] != '>' {
 		return "", false
 	}
 	rest = line[1:]
-	if len(rest) > 0 && rest[0] == ' ' {
+	if rest != "" && rest[0] == ' ' {
 		rest = rest[1:]
 	}
 	return rest, true
@@ -574,12 +574,11 @@ func trailingRun(s string, c byte) int {
 // A break on the final segment produces no offset: there is nothing to break
 // to, so it emits nothing. Its backslash is left in the text, where the inline
 // scan renders it as the literal dangling backslash it is.
-func joinSegments(segs []segment) (string, []int) {
+func joinSegments(segs []segment) (joined string, breaks []int) {
 	if len(segs) == 1 {
 		return segs[0].text, nil
 	}
 	var sb strings.Builder
-	var breaks []int
 	for i, s := range segs {
 		text := s.text
 		last := i == len(segs)-1
@@ -991,7 +990,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 		// Column-zero-only constructs: the container matrix's list-item row
 		// is enforced by this guard and nothing else.
 		if w == 0 {
-			if allowQuote && len(line) > 0 && line[0] == '>' {
+			if allowQuote && line != "" && line[0] == '>' {
 				flushParagraph()
 				flushList()
 				end := i

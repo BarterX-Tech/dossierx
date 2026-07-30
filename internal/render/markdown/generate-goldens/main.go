@@ -5,7 +5,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"html/template"
 	"os"
 	"path/filepath"
 	"strings"
@@ -80,8 +79,8 @@ func processFixture(casesDir, filename string) error {
 	rendered := markdown.Render(claim.Body)
 
 	// Write golden file
-	content := fmt.Sprintf("<!-- Generated golden file for %s -->\n%s\n", filename, template.HTML(rendered))
-	if err := os.WriteFile(goldenPath, []byte(content), 0644); err != nil {
+	content := fmt.Sprintf("<!-- Generated golden file for %s -->\n%s\n", filename, rendered)
+	if err := os.WriteFile(goldenPath, []byte(content), 0o644); err != nil {
 		return err
 	}
 

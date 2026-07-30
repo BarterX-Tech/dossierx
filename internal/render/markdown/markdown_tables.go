@@ -222,7 +222,7 @@ func hasUnescapedPipe(s string) bool {
 func splitRow(line string) []string {
 	s := strings.TrimSpace(line)
 	start := 0
-	if len(s) > 0 && s[0] == '|' {
+	if s != "" && s[0] == '|' {
 		start = 1
 	}
 	// One allocation per row instead of the append ladder's five. A row can
@@ -431,9 +431,9 @@ func writeTable(b *strings.Builder, lines []string, start, end int, aligns []cel
 // construction, so there is nothing for a hard break to break to and a trailing
 // backslash stays the literal dangling backslash the inline scan renders.
 func writeTableRow(b *strings.Builder, cells []string, aligns []cellAlign, header bool, img imagePolicy) {
-	open, close := "<td", "</td>"
+	openTag, closeTag := "<td", "</td>"
 	if header {
-		open, close = "<th", "</th>"
+		openTag, closeTag = "<th", "</th>"
 	}
 	b.Grow(tableRowEstimate(cells, aligns))
 	b.WriteString("<tr>")
@@ -441,11 +441,11 @@ func writeTableRow(b *strings.Builder, cells []string, aligns []cellAlign, heade
 		if i >= len(aligns) {
 			break // an extra cell has no column: dropped, per amendment A9.
 		}
-		b.WriteString(open)
+		b.WriteString(openTag)
 		b.WriteString(alignClass(aligns[i]))
 		b.WriteString(">")
 		b.WriteString(renderInline(cell, nil, img))
-		b.WriteString(close)
+		b.WriteString(closeTag)
 	}
 	b.WriteString("</tr>")
 }

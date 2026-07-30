@@ -155,6 +155,10 @@ var lintCostSweepSizes = []int{64 << 10, 128 << 10, 256 << 10, 512 << 10}
 // sweep uses, for the same shapes.
 const lintCostGrowthLimit = 25.0
 
+// See costGrowthAttempts in the renderer's cost guard for why a shape gets
+// more than one sweep before it fails.
+const lintCostGrowthAttempts = 3
+
 // lintCostMeasurementCeiling stops the sweep before it spends minutes
 // confirming what the first two sizes already showed.
 const lintCostMeasurementCeiling = 2 * time.Second * lintCostTimeScale
@@ -169,25 +173,32 @@ func TestMarkdownSanity_CostScalesLinearlyAcrossShapes(t *testing.T) {
 	for _, sh := range lintCostShapes() {
 		sh := sh
 		t.Run(sh.name, func(t *testing.T) {
-			times := make([]time.Duration, 0, len(lintCostSweepSizes))
-			for _, n := range lintCostSweepSizes {
-				d, ok := lintBestCheckTime(sh.claimFor(n))
-				times = append(times, d)
-				if !ok {
-					t.Fatalf("shape %q: one lint of %d bytes took %v, past the %v measurement "+
-						"ceiling — this shape is superlinear and the sweep stops here\n"+
-						"  measurements: %s\n  this shape reaches: %s",
-						sh.name, n, d, lintCostMeasurementCeiling, lintFormatSweep(lintCostSweepSizes, times), sh.why)
+			var times []time.Duration
+			var ratio float64
+			for attempt := 1; attempt <= lintCostGrowthAttempts; attempt++ {
+				times = make([]time.Duration, 0, len(lintCostSweepSizes))
+				for _, n := range lintCostSweepSizes {
+					d, ok := lintBestCheckTime(sh.claimFor(n))
+					times = append(times, d)
+					if !ok {
+						t.Fatalf("shape %q: one lint of %d bytes took %v, past the %v measurement "+
+							"ceiling — this shape is superlinear and the sweep stops here\n"+
+							"  measurements: %s\n  this shape reaches: %s",
+							sh.name, n, d, lintCostMeasurementCeiling, lintFormatSweep(lintCostSweepSizes, times), sh.why)
+					}
+				}
+				ratio = float64(times[len(times)-1]) / float64(times[0])
+				t.Logf("%s: %s  (span 8x, ratio %.1fx, attempt %d/%d)",
+					sh.name, lintFormatSweep(lintCostSweepSizes, times), ratio, attempt, lintCostGrowthAttempts)
+				if ratio <= lintCostGrowthLimit {
+					return
 				}
 			}
-			ratio := float64(times[len(times)-1]) / float64(times[0])
-			t.Logf("%s: %s  (span 8x, ratio %.1fx)", sh.name, lintFormatSweep(lintCostSweepSizes, times), ratio)
-			if ratio > lintCostGrowthLimit {
-				t.Errorf("shape %q: 8x the bytes cost %.1fx the time "+
-					"(linear is ~8x, quadratic ~64x, limit %.0fx)\n"+
-					"  measurements: %s\n  this shape reaches: %s",
-					sh.name, ratio, lintCostGrowthLimit, lintFormatSweep(lintCostSweepSizes, times), sh.why)
-			}
+			t.Errorf("shape %q: 8x the bytes cost %.1fx the time on all %d attempts "+
+				"(linear is ~8x, quadratic ~64x, limit %.0fx)\n"+
+				"  measurements: %s\n  this shape reaches: %s",
+				sh.name, ratio, lintCostGrowthAttempts, lintCostGrowthLimit,
+				lintFormatSweep(lintCostSweepSizes, times), sh.why)
 		})
 	}
 }
@@ -252,7 +263,7 @@ func TestAssetScope_CostAtOneMiBIsBounded(t *testing.T) {
 
 // lintRepeatTo repeats unit until the result is at least n bytes.
 func lintRepeatTo(unit string, n int) string {
-	if len(unit) == 0 {
+	if unit == "" {
 		return ""
 	}
 	return strings.Repeat(unit, n/len(unit)+1)
@@ -292,17 +303,49 @@ func lintSawtoothIndents(n int) string {
 // lintBestCheckTime runs the lint a few times and keeps the fastest, so one
 // scheduling hiccup does not become a false quadratic. ok is false when even
 // the fastest run passed the measurement ceiling.
+
+// costTimerFloor is the smallest TOTAL elapsed time a measurement may report
+// and still carry a signal. Windows' clock granularity rounds a sub-millisecond
+// interval to exactly zero, which made times[0] zero, the growth ratio +Inf,
+// and failed a shape for being too FAST — a real windows-latest CI failure, not
+// a performance regression.
+//
+// Special-casing the zero would only move the cliff. Instead every measurement
+// repeats the operation until the total clears this floor and divides by the
+// iteration count, which is what a benchmark harness does and yields a real
+// per-operation duration on every platform.
+const costTimerFloor = 2 * time.Millisecond
+
+// measurePerOp returns the per-operation cost of f. It gives up early, with
+// ok=false, once one operation is past ceiling, so a shape that has gone
+// superlinear fails the guard instead of spinning here.
+func measurePerOp(f func(), ceiling time.Duration) (time.Duration, bool) {
+	for n := 1; ; n *= 2 {
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			f()
+		}
+		total := time.Since(start)
+		per := total / time.Duration(n)
+		if per > ceiling {
+			return per, false
+		}
+		if total >= costTimerFloor {
+			return per, true
+		}
+	}
+}
+
 func lintBestCheckTime(claim model.Claim) (time.Duration, bool) {
 	claims := []model.Claim{claim}
 	best := time.Duration(1<<63 - 1)
 	for i := 0; i < 3; i++ {
-		start := time.Now()
-		MarkdownSanity{}.Check(claims, nil)
-		if d := time.Since(start); d < best {
-			best = d
+		d, ok := measurePerOp(func() { MarkdownSanity{}.Check(claims, nil) }, lintCostMeasurementCeiling)
+		if !ok {
+			return d, false
 		}
-		if best > lintCostMeasurementCeiling {
-			return best, false
+		if d < best {
+			best = d
 		}
 	}
 	return best, true
