@@ -381,7 +381,7 @@ export function Hero() {
           <div className="hero__col">
             <motion.div className="hero__kicker" variants={rise}>
               <span>Open-source documentation engine</span>
-              <span className="hero__kicker-meta">v0.3.0 · Go 1.26</span>
+              <span className="hero__kicker-meta">v0.3.1 · Go 1.26</span>
             </motion.div>
 
             <h1 className="hero__title">

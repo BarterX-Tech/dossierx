@@ -939,7 +939,7 @@ export const contentSpec: ContentSpec = {
                 detail:
                   "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere — which is exactly why a bootstrapping agent calls it first. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
                 example:
-                  "$ dossierx version --format text\ndossierx v0.3.0\n  commit: 4a91c07\n  date:   2026-07-27",
+                  "$ dossierx version --format text\ndossierx v0.3.1\n  commit: d3b1e30\n  date:   2026-07-30",
               },
             ],
           },
@@ -1052,7 +1052,7 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.3.0**, the agent-first restructure: twenty commands, a JSON envelope on every one of them, a lock ledger enforced through git, and a viewer where every card can be commented on — see the full history below for what's shipped since the engine's public extraction.",
+        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.3.1**, the documentation-grade renderer: emphasis, headings, GFM tables and images in a claim body, images fail-closed by construction and scoped to the claim's own `assets/` directory, and two security fixes that matter to anyone still on v0.3.0 — see the full history below for what's shipped since the engine's public extraction.",
       data: {
         releases: [
           {
