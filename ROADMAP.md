@@ -49,3 +49,44 @@ author who needs a literal double-underscore token to stay literal, is a backsla
 delimiter (`\_\_init\_\_`) or a code span (`` `__init__` ``). Neither workaround is written down
 anywhere a claim author will see it. This is a formal deferral, not a scheduled item: no release
 currently commits to it.
+
+## Deferred: `markdown.Diagnose` was never built, so the lint mirrors the parser
+
+`internal/render/markdown` exports exactly `Render` and `RenderInline`, both returning finished
+`template.HTML`. There is no diagnostics entry point — nothing in that package can tell a caller
+"this fence never closed" or "this `src` was refused" — and the renderer's whole contract is that
+malformed input degrades silently to literal text, which is the silence the `markdown-sanity` and
+`asset-scope` lints exist to break. So those two lints share a second, independent scanner:
+`internal/lint/markdown_scan.go`, 1,048 lines at release (1,132 before `internal/urlsafe`
+absorbed the URL rules), every recognizer of which names the renderer rule it mirrors.
+
+The consequence is stated in that file's own doc comment (lines 16–20) and is not hidden: **the
+mirror can drift.** Any change to a recognition rule in `markdown.go` — the escapable set, the
+fence opener's shape, the list indentation rule, the scheme allowlist — has to be made twice, and
+nothing in the build fails if only one copy moves. The comment names the fix ("the right
+long-term fix is a diagnostics entry point on the markdown package") and points at a release
+change list rather than at anything a reader of this repository would find, which is why it is
+written down here. One half of the mirror is already immune: the URL rules now call the shared
+`internal/urlsafe` leaf that the renderer calls, so that half cannot drift by construction. The
+rest can. This is a formal deferral, not a scheduled item: no release currently commits to it.
+
+## Deferred: a short table row renders short, which contradicts spec amendment A9
+
+The v0.3.1 plan's section 10 is authoritative, and amendment A9 says a body row whose cell count
+differs from the header's "is padded with empty `<td>` or truncated — never emitted ragged".
+Half of that shipped: a longer row does have its extra cells dropped. A **short** row does not
+get padded — it emits exactly the cells it has, leaving a ragged right edge where GFM would
+square the table off.
+
+This was a deliberate reversal taken mid-release, not an oversight. Padding was the amplification
+vector the phase-C bound existed to stop: a header of N columns and M one-cell rows emitted N×M
+cells from roughly N+2M source bytes. Two attempts to tune a refusal threshold both failed the
+same way — A9 also says a ragged table *remains a table*, so any refusal rule contradicts the
+spec by construction and merely relocates a cliff real authors fall off (measured on the previous
+tree, a four-column centre-aligned table with three ragged rows silently rendered as a
+paragraph). Emitting only cells that exist in the source closes the vector at its origin instead
+of capping it, and let the refusal path and the three-valued table verdict be deleted outright.
+The trade accepted is the ragged right edge; column alignment is unaffected, because widths are
+shared table-wide. FORMAT.md documents the shipped behaviour as the rule. Nothing here reopens
+A9's padding clause: this is a formal deferral, not a scheduled item, and no release currently
+commits to restoring it.

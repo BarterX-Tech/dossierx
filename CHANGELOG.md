@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 0.3.1
+## [0.3.1] - 2026-07-30
 
 **Locked claim bodies may render differently after this upgrade, with no edit and no ledger
 event.** The lock ledger signs a claim's `body` bytes, not the HTML those bytes produce — so
@@ -47,7 +47,11 @@ markdown-ceiling section for the authoritative construct-by-surface table; summa
   by a GFM pipe-table cell (`markdown.RenderInline`) gained the same emphasis, strikethrough and
   autolink constructs as the block ceiling, on top of the escapes/code-spans/links it already
   had — **every `rows` table cell renders differently after this upgrade** if its text happens
-  to contain `*`, `_`, `~~`, or a bare URL.
+  to contain `*`, `_`, `~~`, or a bare URL. A third field joins that ceiling: a `governed_by:
+  none` claim's `reason`, which the edges footer used to write through `html.EscapeString`, now
+  renders through `markdown.RenderInline` — so a reason that names a claim id in backticks or
+  carries a link, an asterisk or an underscore-flanked token renders differently after this
+  upgrade too, on the same no-edit, no-ledger-event terms as a body.
 - **GFM pipe tables**, new in this release: a header row, a required delimiter row (which must
   itself carry a pipe — a bare `---` stays a thematic break), and zero or more body rows. A
   well-formed table is always rendered as a table, at any size or shape: a body row with fewer
@@ -66,6 +70,20 @@ markdown-ceiling section for the authoritative construct-by-surface table; summa
   or link `src`) and `asset-scope` (error-severity throughout — it can refuse `dossierx claim
   lock` on an image `src` that resolves outside `assets/` or carries an unlisted extension, on a
   corpus that had no such check before this upgrade).
+
+### Changed — actionable status pills on claim-edge references (closes issue #11)
+
+v0.3.0 shipped readable edge labels but left the last piece of issue #11 unbuilt: a claim-edge
+reference said nothing about the state of the claim it pointed at. A `governed_by`, `mirrors`,
+`rests_on` or "depended on by" target now carries a small status pill — `draft`, or
+`review_pending` for a locked target flagged for re-review — reusing the same three-way
+status-to-class mapping every claim-head pill already uses. The pill is **actionable-only**: a
+healthy locked target gets nothing, so the footer stays quiet and lights up exactly on the case
+it exists to explain, a claim gated on an edge that is not ready yet. It requires the whole
+catalog to resolve a target's status, so it rides the catalog-aware edges binding
+(`internal/render`'s `attachEdgesOverride`); the parse-time `edges`/`claimEdgeList` funcMap
+bindings have no catalog and render every target with no pill, exactly as before — which is why
+`build_order.html`'s `rests_on` list, which lists only locked claims anyway, is unchanged.
 
 ### Changed — new HTTP surface in `dossierx serve`
 
@@ -922,7 +940,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.1...HEAD
+[0.3.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.2.0
 [0.1.2]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.1.2
