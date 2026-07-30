@@ -590,7 +590,7 @@ func scanFenceLines(lines []string, allowQuote bool) []string {
 	closers := closerRuns(lines)
 	var out []string
 	for i := 0; i < len(lines); i++ {
-		if allowQuote && len(lines[i]) > 0 && lines[i][0] == '>' {
+		if allowQuote && lines[i] != "" && lines[i][0] == '>' {
 			end := i
 			var inner []string
 			for end < len(lines) {

@@ -767,6 +767,17 @@ var costSweepSizes = []int{64 << 10, 128 << 10, 256 << 10, 512 << 10}
 // well under every quadratic ratio this file has measured.
 const costGrowthLimit = 25.0
 
+// costGrowthAttempts is how many independent sweeps a shape gets before the
+// growth guard fails it. A shape that has genuinely gone superlinear exceeds
+// the limit on EVERY sweep — the cost is in its algorithm, not in the machine.
+// A GC pause or a noisy shared CI runner exceeds it once and then does not:
+// blockquote-many-short-quotes, an allocation-heavy shape, measured 26.4x and
+// 28.6x against a 25x limit on two macos-latest runs whose per-size numbers
+// disagreed by more than 2x with each other, while the same shape measures
+// ~8x locally. Retrying preserves the limit instead of raising it, so the gap
+// between linear (~8x) and quadratic (~64x) stays as tight as it was.
+const costGrowthAttempts = 3
+
 // TestRender_CostScalesLinearlyAcrossShapes is the growth half of the guard.
 // Every shape in the sweep is rendered at four increasing sizes and must not
 // cost anything like the square of its input.
@@ -782,34 +793,39 @@ func TestRender_CostScalesLinearlyAcrossShapes(t *testing.T) {
 	for _, sh := range costShapes() {
 		sh := sh
 		t.Run(sh.name, func(t *testing.T) {
-			times := make([]time.Duration, 0, len(costSweepSizes))
-			sizes := make([]int, 0, len(costSweepSizes))
-			for _, n := range costSweepSizes {
-				d, ok := bestRenderTime(sh.gen(n))
-				times = append(times, d)
-				sizes = append(sizes, n)
-				if !ok {
-					t.Errorf("shape %q: one render of %d bytes took %v, past the %v "+
-						"measurement ceiling — this shape is superlinear and the sweep "+
-						"stops here rather than measuring the larger sizes\n"+
-						"  measurements: %s\n"+
-						"  this shape reaches: %s",
-						sh.name, n, d, costMeasurementCeiling, formatSweep(sizes, times), sh.why)
+			span := costSweepSizes[len(costSweepSizes)-1] / costSweepSizes[0]
+			var times []time.Duration
+			var ratio float64
+			for attempt := 1; attempt <= costGrowthAttempts; attempt++ {
+				times = make([]time.Duration, 0, len(costSweepSizes))
+				sizes := make([]int, 0, len(costSweepSizes))
+				for _, n := range costSweepSizes {
+					d, ok := bestRenderTime(sh.gen(n))
+					times = append(times, d)
+					sizes = append(sizes, n)
+					if !ok {
+						t.Errorf("shape %q: one render of %d bytes took %v, past the %v "+
+							"measurement ceiling — this shape is superlinear and the sweep "+
+							"stops here rather than measuring the larger sizes\n"+
+							"  measurements: %s\n"+
+							"  this shape reaches: %s",
+							sh.name, n, d, costMeasurementCeiling, formatSweep(sizes, times), sh.why)
+						return
+					}
+				}
+				ratio = float64(times[len(times)-1]) / float64(times[0])
+				t.Logf("%s: %s  (span %dx, ratio %.1fx, attempt %d/%d)",
+					sh.name, formatSweep(costSweepSizes, times), span, ratio, attempt, costGrowthAttempts)
+				if ratio <= costGrowthLimit {
 					return
 				}
 			}
-			ratio := float64(times[len(times)-1]) / float64(times[0])
-			t.Logf("%s: %s  (span %dx, ratio %.1fx)",
-				sh.name, formatSweep(costSweepSizes, times),
-				costSweepSizes[len(costSweepSizes)-1]/costSweepSizes[0], ratio)
-			if ratio > costGrowthLimit {
-				t.Errorf("shape %q: %dx the bytes cost %.1fx the time "+
-					"(linear is ~8x, quadratic ~64x, limit %.0fx)\n"+
-					"  measurements: %s\n"+
-					"  this shape reaches: %s",
-					sh.name, costSweepSizes[len(costSweepSizes)-1]/costSweepSizes[0],
-					ratio, costGrowthLimit, formatSweep(costSweepSizes, times), sh.why)
-			}
+			t.Errorf("shape %q: %dx the bytes cost %.1fx the time on all %d attempts "+
+				"(linear is ~8x, quadratic ~64x, limit %.0fx)\n"+
+				"  measurements: %s\n"+
+				"  this shape reaches: %s",
+				sh.name, span, ratio, costGrowthAttempts, costGrowthLimit,
+				formatSweep(costSweepSizes, times), sh.why)
 		})
 	}
 }
@@ -1034,17 +1050,50 @@ const costMeasurementCeiling = 2 * time.Second * costTimeScale
 //
 // It returns ok=false when even the first render blew the measurement ceiling,
 // so the caller can stop measuring and report immediately.
+
+// costTimerFloor is the smallest TOTAL elapsed time a measurement may report
+// and still carry a signal. Windows' clock granularity rounds a sub-millisecond
+// interval to exactly zero, which made times[0] zero, the growth ratio +Inf,
+// and failed a shape for being too FAST — a real windows-latest CI failure, not
+// a performance regression.
+//
+// Special-casing the zero would only move the cliff. Instead every measurement
+// repeats the operation until the total clears this floor and divides by the
+// iteration count, which is what a benchmark harness does and yields a real
+// per-operation duration on every platform.
+const costTimerFloor = 2 * time.Millisecond
+
+// measurePerOp returns the per-operation cost of f. It gives up early, with
+// ok=false, once one operation is past ceiling, so a shape that has gone
+// superlinear fails the guard instead of spinning here.
+func measurePerOp(f func(), ceiling time.Duration) (time.Duration, bool) {
+	for n := 1; ; n *= 2 {
+		start := time.Now()
+		for i := 0; i < n; i++ {
+			f()
+		}
+		total := time.Since(start)
+		per := total / time.Duration(n)
+		if per > ceiling {
+			return per, false
+		}
+		if total >= costTimerFloor {
+			return per, true
+		}
+	}
+}
+
 func bestRenderTime(body string) (best time.Duration, ok bool) {
-	start := time.Now()
-	_ = Render(body)
-	best = time.Since(start)
-	if best > costMeasurementCeiling {
+	best, ok = measurePerOp(func() { _ = Render(body) }, costMeasurementCeiling)
+	if !ok {
 		return best, false
 	}
 	for r := 1; r < 5; r++ {
-		start = time.Now()
-		_ = Render(body)
-		if d := time.Since(start); d < best {
+		d, ok := measurePerOp(func() { _ = Render(body) }, costMeasurementCeiling)
+		if !ok {
+			return d, false
+		}
+		if d < best {
 			best = d
 		}
 	}

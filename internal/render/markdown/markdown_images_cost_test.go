@@ -49,27 +49,34 @@ func TestRenderClaimBody_ImageCostScalesLinearly(t *testing.T) {
 	for _, sh := range costShapes() {
 		sh := sh
 		t.Run(sh.name, func(t *testing.T) {
-			times := make([]time.Duration, 0, len(costSweepSizes))
-			for _, n := range costSweepSizes {
-				d, ok := bestClaimBodyTime(sh.gen(n))
-				times = append(times, d)
-				if !ok {
-					t.Fatalf("shape %q: one RenderClaimBody of %d bytes took %v, past the %v "+
-						"measurement ceiling — this shape is superlinear with images ON\n"+
-						"  measurements: %s\n  this shape reaches: %s",
-						sh.name, n, d, costMeasurementCeiling,
-						formatSweep(costSweepSizes[:len(times)], times), sh.why)
+			span := costSweepSizes[len(costSweepSizes)-1] / costSweepSizes[0]
+			var times []time.Duration
+			var ratio float64
+			for attempt := 1; attempt <= costGrowthAttempts; attempt++ {
+				times = make([]time.Duration, 0, len(costSweepSizes))
+				for _, n := range costSweepSizes {
+					d, ok := bestClaimBodyTime(sh.gen(n))
+					times = append(times, d)
+					if !ok {
+						t.Fatalf("shape %q: one RenderClaimBody of %d bytes took %v, past the %v "+
+							"measurement ceiling — this shape is superlinear with images ON\n"+
+							"  measurements: %s\n  this shape reaches: %s",
+							sh.name, n, d, costMeasurementCeiling,
+							formatSweep(costSweepSizes[:len(times)], times), sh.why)
+					}
+				}
+				ratio = float64(times[len(times)-1]) / float64(times[0])
+				t.Logf("%s: %s  (ratio %.1fx, attempt %d/%d)",
+					sh.name, formatSweep(costSweepSizes, times), ratio, attempt, costGrowthAttempts)
+				if ratio <= costGrowthLimit {
+					return
 				}
 			}
-			ratio := float64(times[len(times)-1]) / float64(times[0])
-			t.Logf("%s: %s  (ratio %.1fx)", sh.name, formatSweep(costSweepSizes, times), ratio)
-			if ratio > costGrowthLimit {
-				t.Errorf("shape %q: %dx the bytes cost %.1fx the time through RenderClaimBody "+
-					"(linear is ~8x, quadratic ~64x, limit %.0fx)\n"+
-					"  measurements: %s\n  this shape reaches: %s",
-					sh.name, costSweepSizes[len(costSweepSizes)-1]/costSweepSizes[0],
-					ratio, costGrowthLimit, formatSweep(costSweepSizes, times), sh.why)
-			}
+			t.Errorf("shape %q: %dx the bytes cost %.1fx the time through RenderClaimBody "+
+				"on all %d attempts (linear is ~8x, quadratic ~64x, limit %.0fx)\n"+
+				"  measurements: %s\n  this shape reaches: %s",
+				sh.name, span, ratio, costGrowthAttempts, costGrowthLimit,
+				formatSweep(costSweepSizes, times), sh.why)
 		})
 	}
 }
@@ -173,12 +180,15 @@ func TestClaimBodyImages_CostAtOneMiBIsBounded(t *testing.T) {
 // bestClaimBodyTime is bestRenderTime for the claim-body entry point: best-of-N,
 // because the number is a denominator and noise only ever adds.
 func bestClaimBodyTime(body string) (best time.Duration, ok bool) {
+	// measurePerOp rather than a single timed call: Windows' clock granularity
+	// rounds a fast RenderClaimBody to exactly zero, which made times[0] zero
+	// and the growth ratio +Inf. See costTimerFloor in markdown_cost_test.go.
 	for i := 0; i < claimBodyCostRuns; i++ {
-		start := time.Now()
-		out := RenderClaimBody(body, claimBodyCostPrefix)
-		d := time.Since(start)
-		runtime.KeepAlive(out)
-		if i == 0 && d > costMeasurementCeiling {
+		d, measured := measurePerOp(func() {
+			out := RenderClaimBody(body, claimBodyCostPrefix)
+			runtime.KeepAlive(out)
+		}, costMeasurementCeiling)
+		if !measured {
 			return d, false
 		}
 		if best == 0 || d < best {

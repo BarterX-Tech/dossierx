@@ -504,15 +504,15 @@ func (s *Server) handleClaimAsset(w http.ResponseWriter, r *http.Request) {
 	// claim text cannot see, because the claim's own reference is legitimate.
 	// The isInsideDir check after it is redundant by construction and kept
 	// because "redundant by construction" is a property of today's builder.
-	real, err := filepath.EvalSymlinks(file)
-	if err != nil || real != file || !isInsideDir(idx.root, real) {
+	resolved, err := filepath.EvalSymlinks(file)
+	if err != nil || resolved != file || !isInsideDir(idx.root, resolved) {
 		http.NotFound(w, r)
 		return
 	}
 
 	// (5) A REGULAR FILE, opened as one. No directory listing, no device, no
 	// fifo, and no http.FileServer anywhere in the path.
-	f, err := os.Open(real)
+	f, err := os.Open(resolved)
 	if err != nil {
 		http.NotFound(w, r)
 		return
