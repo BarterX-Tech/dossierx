@@ -1,0 +1,11 @@
+id: widget.markdown-cases.hard-break-code-span-does-not-span
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  a `code\
+  more` b
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a code span does not span a hard break

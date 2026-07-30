@@ -304,19 +304,75 @@ func TestRawHTMLScope_Mockup_DefaultDeny(t *testing.T) {
 	}
 }
 
+// TestRawHTMLScope_Mockup_BackslashAuthorityBypass is the regression for the
+// hole this gate carried until internal/urlsafe existed.
+//
+// The check used to be a regexp, `(?i)^\s*([a-zA-Z][a-zA-Z0-9+.-]*:|//)`, which
+// recognised the literal bytes "//" as an authority prefix and nothing else. A
+// browser normalises "\" to "/" in the authority position of a URL under a
+// special (http/https) scheme, so "\\host", "/\host" and "\/host" resolve
+// off-origin exactly as "//host" does — and all three linted clean, which means
+// they could be locked and then rendered live into the client-shared viewer,
+// because this gate reviews the one field DossierX emits unescaped.
+//
+// Measured against the old regexp: "//evil.example/p.png" was blocked and the
+// other three were NOT. Every row below must now be blocked, and the legitimate
+// relative forms must still pass.
+func TestRawHTMLScope_Mockup_BackslashAuthorityBypass(t *testing.T) {
+	blocked := []string{
+		"//evil.example/p.png",
+		`\\evil.example/p.png`,
+		`/\evil.example/p.png`,
+		`\/evil.example/p.png`,
+		`\\evil.example\p.png`,
+		"///evil.example/p.png",
+		// The entity spellings of the same three authorities.
+		"&#47;&#47;evil.example/p.png",
+		"&#92;&#92;evil.example/p.png",
+		"&#47;&#92;evil.example/p.png",
+		// A root-relative src is not same-repo either: amendment A4's rule is
+		// "no leading /", and the first byte of every authority spelling above
+		// is one of the two slash bytes, so one test covers both.
+		"/evil.example/p.png",
+	}
+	allowed := []string{
+		"../diagrams/health-state-machine.svg",
+		"./x.png",
+		"x.svg",
+		"assets/sub/x.png",
+	}
+
+	run := func(src string) []Finding {
+		c := validMockupClaim()
+		c.RawHTML = `<img class="mockup-diagram" src="` + src + `" alt="ok">`
+		return RawHTMLScope{}.Check([]model.Claim{c}, mockupTestConfig())
+	}
+	for _, src := range blocked {
+		t.Run("blocked:"+src, func(t *testing.T) {
+			got := run(src)
+			if len(got) == 0 {
+				t.Fatalf("src %q must be refused as non-relative, got no findings", src)
+			}
+		})
+	}
+	for _, src := range allowed {
+		t.Run("allowed:"+src, func(t *testing.T) {
+			if got := run(src); len(got) != 0 {
+				t.Fatalf("src %q must still pass, got: %+v", src, got)
+			}
+		})
+	}
+}
+
 // TestRawHTMLScope_Mockup_ControlCharSchemeEvasion is the DX-AUD-07/08
-// regression for control-char scheme smuggling in an <img src>. The
-// relative-only check html.UnescapeString(value)s the src and then matches
-// mockupAbsoluteURLPattern, whose scheme class ([a-zA-Z][a-zA-Z0-9+.-]*:)
-// only tolerates LEADING whitespace and excludes control bytes — so a
-// control char (tab, newline, or a non-\s control like NUL/SOH) embedded
-// inside or ahead of the scheme breaks the scheme run, the pattern misses,
-// and the value is treated as a relative path that lints clean, locks, and
-// renders live — yet a browser strips the control byte and loads the
-// external URL. The gate must strip every ASCII control byte and whitespace
-// (mirroring the markdown renderer's schemeOf) before testing, so each
-// wantFind case below is FLAGGED while a legitimate relative src still
-// passes.
+// regression for control-char scheme smuggling in an <img src>. A control char
+// (tab, newline, or a non-\s control like NUL/SOH) embedded inside or ahead of
+// the scheme breaks the scheme run, so a check reading the raw bytes treats the
+// value as a relative path that lints clean, locks, and renders live — yet a
+// browser strips the control byte and loads the external URL. The gate must
+// entity-decode and strip every ASCII control byte and whitespace before
+// testing, which is what urlsafe.IsOffOrigin does, so each wantFind case below
+// is FLAGGED while a legitimate relative src still passes.
 func TestRawHTMLScope_Mockup_ControlCharSchemeEvasion(t *testing.T) {
 	cases := []struct {
 		name     string

@@ -1,0 +1,13 @@
+id: widget.markdown-cases.table-interrupts-paragraph
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Prose introducing the table.
+  | a | b |
+  | --- | --- |
+  | 1 | 2 |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a table interrupts an open paragraph with no blank line before it

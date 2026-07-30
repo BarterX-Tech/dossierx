@@ -1,0 +1,15 @@
+id: widget.markdown-cases.emphasis-star-not-a-list
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  *italic* rest of the line.
+
+  *not a list*item, run together.
+
+  - *italic* inside a list item
+  - **bold** inside a list item
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the L3 matrix rows where a star could mean either thing

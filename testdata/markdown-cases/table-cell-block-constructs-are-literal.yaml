@@ -1,0 +1,16 @@
+id: widget.markdown-cases.table-cell-block-constructs-are-literal
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | input | stays literal |
+  | --- | --- |
+  | - a | not a list |
+  | ### h | not a heading |
+  | 1. n | not an ordered item |
+  | > q | not a blockquote |
+  | --- | not a thematic break |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a cell is inline-only - every block construct stays literal text

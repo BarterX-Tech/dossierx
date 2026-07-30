@@ -1,0 +1,12 @@
+id: widget.markdown-cases.autolink-bare-wins-over-delimiters
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A consumed url is one token, so every delimiter inside it is literal:
+  https://example.com/v1/_status_ and https://example.com/a*b*c and
+  https://example.com/a~~b~~c.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - the url wins over every emphasis, strike and underscore delimiter it contains

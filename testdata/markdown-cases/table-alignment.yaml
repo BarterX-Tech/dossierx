@@ -1,0 +1,13 @@
+id: widget.markdown-cases.table-alignment
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | Left | Center | Right |
+  |:-----|:------:|------:|
+  | L1   |   C1   |    R1 |
+  | L2   |   C2   |    R2 |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests pipe table column alignment classes

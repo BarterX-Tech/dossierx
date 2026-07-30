@@ -1,0 +1,6 @@
+schema_version: 1
+facets:
+  - contract
+modules:
+  - assetmod
+claims_dir: claims

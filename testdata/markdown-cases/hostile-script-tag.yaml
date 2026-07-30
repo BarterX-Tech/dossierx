@@ -1,0 +1,10 @@
+id: widget.markdown-cases.hostile-script-tag
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Never write <script>alert('xss')</script> in markdown.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests script tag escaping

@@ -1,0 +1,12 @@
+id: widget.markdown-cases.heading-h4
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  #### Subsection Heading
+
+  Content under the heading.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests level 4 heading

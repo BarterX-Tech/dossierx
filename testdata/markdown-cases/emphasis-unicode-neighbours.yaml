@@ -1,0 +1,23 @@
+id: widget.markdown-cases.emphasis-unicode-neighbours
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  The flanking rule classifies the CHARACTER next to a delimiter run, not the
+  byte. An em dash is punctuation, so *—*bravo. stays literal, and so does
+  ~~—~~bravo.
+
+  A pound sign is punctuation under CommonMark's definition too, so *£*bravo.
+  stays literal: that is spec example 354.
+
+  A letter is a word character in every script, so *аб* really is emphasis.
+
+  The line below has a NO-BREAK SPACE (U+00A0) on each side of the "a". A
+  no-break space is Unicode whitespace, so the run before it cannot open
+  emphasis, and it is not ASCII whitespace, so the line is not a list either:
+
+  * a *
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a non-ASCII neighbour is classified as a character, not as a byte

@@ -1,0 +1,16 @@
+id: assetmod.contract.diagram
+facet: contract
+module: assetmod
+status: draft
+layout: card
+body: |
+  The image below is a legal relative src, so the renderer emits it and
+  markdown-sanity is satisfied. It simply does not live under this claim's
+  own assets/ directory, which is the whole of what asset-scope refuses.
+
+  ![the widget flow](images/flow.svg)
+rests_on:
+  - assetmod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

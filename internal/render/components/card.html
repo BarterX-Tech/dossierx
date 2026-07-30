@@ -15,6 +15,12 @@
      "markdown" template func) rather than shown raw, so any
      ```fenced``` span in a claim's prose renders as a real
      <pre><code>...</code></pre> element instead of literal backticks.
+     Body goes through "claimMarkdown", not the shared "markdown" func: it is
+     the image-permitting entry point, and it takes the whole claim because a
+     claim's images are addressed relative to that claim (components.go's
+     funcMap and images.go's ClaimAssetURLPrefix). "markdown" is deliberately
+     still the no-images renderer, so a project override written against it
+     loses a diagram rather than gaining a capability.
 
      The heading shows the id's readable label via the shared "claimLabel"
      func (components.go's ClaimLabel — bare label here, since a card's own
@@ -26,6 +32,6 @@
      linted module.facet.slug shape renders verbatim — see ClaimLabel. */}}
 <section class="claim claim-card card{{if .Emphasis}} claim-card--warn{{end}}{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
-  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
   {{edges .}}
 </section>

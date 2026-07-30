@@ -1,0 +1,14 @@
+id: widget.markdown-cases.table-centred-ragged-rows-is-a-table
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a | b | c | d |
+  |:-:|:-:|:-:|:-:|
+  | x |
+  | y |
+  | z |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - four centre-aligned columns with three ragged rows - the exact shape the markup ceiling silently turned into a paragraph

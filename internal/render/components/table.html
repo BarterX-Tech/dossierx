@@ -35,7 +35,7 @@
      unshaped id does. */}}
 <section class="claim claim-table card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
-  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
+  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
   {{if .Rows}}
   {{$keys := rowKeys .Rows}}
   <table>

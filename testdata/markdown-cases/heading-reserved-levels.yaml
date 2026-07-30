@@ -1,0 +1,12 @@
+id: widget.markdown-cases.heading-reserved-levels
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  # One
+
+  ## Two
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - # and ## are reserved for viewer chrome and stay literal

@@ -1,0 +1,20 @@
+id: widget.markdown-cases.autolink-bare-suppressed
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Inside a code span it is literal: `https://example.com/a`.
+
+  Inside a link's text it is literal too: [https://example.com/b](https://example.com/b).
+
+  Mid-token it never fires: ahttps://example.com/c and x=https://example.com/d.
+
+  Other schemes never fire: ftp://example.com, www.example.com, a@example.com.
+
+  ```
+  https://example.com/in-a-fence
+  ```
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - every place bare-URL recognition must stay off

@@ -1,0 +1,12 @@
+id: widget.markdown-cases.hr-interrupts-paragraph
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Not a setext heading
+  ---
+  After the rule.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - --- is always a thematic break, never a setext heading

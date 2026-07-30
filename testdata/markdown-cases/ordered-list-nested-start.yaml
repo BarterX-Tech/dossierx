@@ -1,0 +1,13 @@
+id: widget.markdown-cases.ordered-list-nested-start
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  1. First
+     3. Nested starts at three
+     4. Next
+  2. Second
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - <ol start> on a nested ordered list

@@ -1,0 +1,13 @@
+id: widget.markdown-cases.table-pipe-simple
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | Header 1 | Header 2 |
+  |----------|----------|
+  | Cell 1   | Cell 2   |
+  | Cell 3   | Cell 4   |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests the basic GFM pipe table shape

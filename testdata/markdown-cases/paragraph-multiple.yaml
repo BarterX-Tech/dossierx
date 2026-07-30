@@ -1,0 +1,13 @@
+id: widget.markdown-cases.paragraph-multiple
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  First paragraph with text.
+
+  Second paragraph with more text.
+  This line continues the second paragraph.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

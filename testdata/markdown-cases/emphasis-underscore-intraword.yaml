@@ -1,0 +1,13 @@
+id: widget.markdown-cases.emphasis-underscore-intraword
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  A claim names governed_by, rests_on, claims_dir, schema_version and
+  build_role; a mockup names raw_html; a lock ledger names migrated_from,
+  validated_at and depended_by. Not one of those underscores italicises,
+  because an intraword underscore can neither open nor close emphasis.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - CommonMark flanking protects every corpus token with an intraword underscore

@@ -354,7 +354,7 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 	// comments for why this is a no-op for a project that has never
 	// called "dossierx implink set" and has no claim any other claim rests
 	// on.
-	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), buildDependedByLookup(cat))
+	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), buildDependedByLookup(cat), buildTargetStatusLookup(cat))
 
 	// Rebind mockup.html's "mockupHTML" func with the project's
 	// mockup_modules allowlist so its defense-in-depth gate (DX-AUD-08) can

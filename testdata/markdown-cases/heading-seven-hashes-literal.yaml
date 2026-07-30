@@ -1,0 +1,10 @@
+id: widget.markdown-cases.heading-seven-hashes-literal
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ####### Seven
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - seven or more hashes is not a heading

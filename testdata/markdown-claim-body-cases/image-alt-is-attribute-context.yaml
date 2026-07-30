@@ -1,0 +1,15 @@
+id: widget.markdown-claim-body-cases.image-alt-is-attribute-context
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![a" onerror="alert(1)](assets/a.png)
+
+  ![<script>x</script> & co](assets/b.png)
+
+  ![**not bold** `not code`](assets/c.png)
+
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - alt is author bytes in ATTRIBUTE context: escaped, never parsed as markdown, never able to close the attribute"

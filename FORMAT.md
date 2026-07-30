@@ -79,15 +79,208 @@ of markdown/rows/steps and carries its own human review gate — see the
 ### `body` and the markdown ceiling
 
 `body` is markdown, but the engine's renderer is a small owned subset rather
-than a general parser. It supports paragraphs, fenced code blocks, inline
-`` `code` `` spans, `[text](url)` links whose scheme is allowlisted, and
-unordered/ordered lists nested one level deep. Everything else — bold, italic,
-headings, blockquotes, markdown tables, deeper nesting — stays literal text.
+than a general parser. The subset has **two ceilings** depending on which
+entry point a surface goes through, plus **one further split within the
+wider ceiling**: whether images are permitted at all.
 
-This is a documented ceiling, not a silent gap: the same subset renders `body`,
-every `rows` cell, every `steps` entry, and every comment body, so what a claim
-author sees in one place is what they get in all of them. A future release
-widens it.
+**The BLOCK ceiling** covers every claim-authored prose surface — `body` on
+every layout that renders it (card, banner, list, steps, table, mockup) and
+every `steps` entry — and, separately, **comment bodies** (both the root of
+a thread and every reply). Both routes recognize the identical set of
+constructs below; the only thing that differs between them is images (see
+"Images", after this list):
+
+- Paragraphs — a run of non-blank lines separated by a blank line.
+- Fenced code blocks, recognized by the line scanner itself (not a
+  whole-body pre-pass), so an open list item or an open blockquote survives
+  a fence inside it. An indented fence renders inside the deepest open list
+  item, including across a blank line; a fence inside a blockquote keeps the
+  blockquote's content boundary. Fence content is raw source bytes,
+  HTML-escaped once, never run through the inline pass — no escapes, no
+  code spans, no links resolve inside it. An unclosed fence falls through to
+  ordinary paragraph/item-continuation handling with nothing dropped. The
+  opening line's info string contributes `class="language-x"` on the
+  `<code>` element when its first word is a plain identifier (e.g. a fence
+  opened with `` ```go ``) and nothing when it is not.
+- Backslash escapes — a closed 15-character escapable set, resolved inside
+  the single left-to-right inline scan (never as a separate pre-pass), so an
+  escaped character can never open, close, or delimit a construct. `<` and
+  `&` are deliberately **outside** the escapable set (see "Why `\<` still
+  shows a backslash" below).
+- Inline `` `code` `` spans — double-backtick spans included; a backtick run
+  is matched against a closing run of equal length, so a literal backtick
+  can appear inside inline code.
+- Inline links — `[text](url)` becomes `<a href="url">text</a>`. The url is
+  held to a scheme allowlist (`http`, `https`, `mailto`, scheme-less
+  relative paths, `#`-fragments); any other scheme, and any scheme-less
+  network path (`//host`, and the backslash-authority spellings
+  `/\host`, `\\host`, `\/host`), is neutralized to escaped literal text
+  with no anchor.
+- Emphasis and strikethrough — `**bold**` becomes `<strong>`, `*italic*` and
+  `_italic_` both become `<em>`, and `~~strike~~` becomes `<del>`, under
+  strict CommonMark left/right-flanking delimiter rules. In particular, an
+  **intraword** underscore can neither open nor close emphasis, so ordinary
+  identifier-shaped prose (`governed_by`, `rests_on`, `build_role`) never
+  italicizes by accident — a run of underscores that is genuinely flanked on
+  both sides (e.g. `__init__` as a whole word) does still pair and italicize.
+  Strikethrough is exactly two tildes; one tilde or three-or-more is literal.
+- Autolinks — an angle-bracket form (`<https://example.com>`) and a bare
+  `http`/`https` URL sitting in prose both become `<a>`, through the same
+  scheme allowlist as `[text](url)`. `<` opens a construct only for a
+  complete autolink; anything that is not one is escaped, which is what
+  keeps raw inline HTML a non-goal (see below). There is no bare-email
+  autolinking.
+- Unordered (`-`/`*`) and ordered (`1.`, `2.`, ...) lists, nested to
+  unbounded depth via an indent-keyed depth stack, with GFM task items
+  (`- [ ]` / `- [x]` / `- [X]`) rendering a disabled checkbox, and
+  `<ol start="n">` whenever an ordered list's first item is not 1, at any
+  nesting depth. A blank line no longer unconditionally ends a list — it is
+  armed and resolved against the next non-blank line's indent column,
+  snapped to the nearest open level.
+  - **Looseness is a property of the LIST, not the item.** A blank line
+    between two items in a list makes that list "loose" — every item's
+    prose is `<p>`-wrapped — but a list nested one level inside a loose
+    item does not inherit looseness from its parent: it stays tight on its
+    own terms (bare `<li>` text, no `<p>` wrapper) as long as there is no
+    blank line between *its own* items, even though the outer list around
+    it is loose.
+- Thematic breaks — a line of three or more dashes and nothing else is
+  always an `<hr>`. There is no setext heading in this subset, so `text`
+  followed by `---` is a paragraph and then a rule, never an `<h2>`.
+- ATX headings at levels 3 to 6 only. `#` and `##` render as literal text
+  with the hashes visible (this renders; the viewer's own nav still ignores
+  it — see below), as does a run of seven or more hashes; only `###`
+  through `######` produce a real heading element.
+- Blockquotes — one level deep. The `> ` prefix is stripped and the
+  interior recurses into the same block scanner with blockquote
+  recognition turned off, so paragraphs, lists, task items, headings,
+  thematic breaks, fenced code and pipe tables inside a quote all come
+  free, while a second leading `>` inside that interior stays literal
+  text — `>> x` renders one quote whose content is the literal text `> x`.
+- Hard line breaks — a trailing backslash, or two trailing spaces, becomes
+  a `<br>`. Both spellings are captured before the line is trimmed and
+  carried through the paragraph join, so the inline pass still runs once
+  per paragraph.
+- GFM pipe tables — a header row, a **required** delimiter row that sets
+  each column's alignment, and zero or more body rows, become a real
+  `<table class="md-table">`. Three rules an author will otherwise hit by
+  accident:
+  1. **The delimiter row must carry a pipe of its own.** `---` alone is
+     always a thematic break in this subset (there is no setext heading),
+     so a delimiter row with no pipe never turns a preceding pipe-bearing
+     line into a table — it stays a paragraph followed by an `<hr>`. Every
+     line of a table, delimiter row included, is required to carry at
+     least one unescaped `|`.
+  2. **Row splitting happens before inline parsing, so a pipe inside a
+     code span still splits the cell.** `` | `a|b` | c | `` is three
+     cells, not two — a code span does not protect a pipe. The working
+     spelling for a literal pipe inside a cell's inline code is an escaped
+     pipe *inside* the backticks: `` `a\|b` `` renders one cell holding one
+     code span, `<code>a|b</code>`. This is the single documented exception
+     to "escapes never process inside a code span" above; it applies only
+     to `\|`, only at the row-splitting step, before any cell reaches the
+     inline pass.
+  3. **A short row renders short.** A body row with fewer cells than the
+     header emits exactly the cells it has — no empty `<td>`s are invented
+     to square it off — and a longer row has its extra cells dropped. A
+     well-formed table (a valid header plus a valid delimiter row of the
+     same arity) is always rendered as a table; there is no size or shape
+     at which it degrades to prose. The only thing that renders as prose is
+     a pipe-bearing line with no valid delimiter row after it.
+  - Tables are legal at the top level and inside a blockquote; a
+    pipe-bearing line indented under a list item is item prose, not a
+    table, matching every other block construct's list-item rule above. A
+    table cell is inline-only and single-line by construction — see the
+    INLINE ceiling below — so no block construct, including another table,
+    can appear inside one.
+
+**Images.** `![alt](src)` is the one construct that is not available on
+every BLOCK-ceiling surface: it renders as a real `<img>` on the
+claim-authored surfaces above (`body`, every `steps` entry, on every
+layout) — **never** in a comment body, root or reply. On a surface where
+images are not permitted, a complete `![alt](src)` run renders as its own
+escaped literal source text, unconditionally; it never falls back to the
+anchor a bare `[alt](src)` would have made of it. Where images are
+permitted:
+
+- `src` must be a relative path with no scheme, no authority prefix
+  (including the backslash-authority spellings a browser normalizes the
+  same as `//`: `/\host`, `\\host`, `\/host`), no leading `/`, no `..`
+  segment, no `#`, and no `?`, and it must resolve under **this claim's
+  own** `assets/` directory — not a sibling claim's, not a shared pool.
+  `assets/` is a fixed, non-configurable literal; there is no project
+  setting that changes it.
+- Every path segment must be drawn from `[A-Za-z0-9._-]` (no space, no
+  leading `.`), and the final segment's extension, case-insensitively, must
+  be one of exactly six: `.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`.
+- A `src` that fails any rule above renders the *whole* `![alt](src)` as
+  escaped literal text — no partial rendering, no broken-image `<img>`, and
+  no silent repair of a near-miss (a space in the path is a refusal, not
+  something stripped).
+- `alt` is raw author text, HTML-escaped and emitted verbatim into the
+  `alt` attribute. It is **not** run through backslash-escape resolution or
+  any other inline construct — a backslash in alt text stays a visible
+  backslash, and `**`/`_`/`` ` `` inside alt text render as literal
+  characters, never as emphasis or code.
+- An image nested inside a link (`[![alt](src)](url)`) is not a supported
+  construct: the inner `![` is not recognized as an image opener once it
+  is already inside a link's `[...]`, and the byte sequence renders as a
+  garbled link rather than as a linked image. Do not nest the two.
+- A GFM pipe-table cell embedded in a `body` (or `steps` entry) inherits
+  the same image capability as the surrounding text — so an image can
+  appear inside a table cell written directly in `body`. A `rows` cell
+  (the structured `layout: table` cell below) never can, on any surface —
+  see the INLINE ceiling.
+- `dossierx serve` answers `GET /claim-assets/<claim-id>/<path>` from an
+  allowlist computed from the images the loaded claims actually reference;
+  it never walks the filesystem. Its `Content-Security-Policy` on `GET /`
+  includes `img-src 'self'`, so a browser will not fetch an image from
+  anywhere else even if a `src` somehow reached the page unvalidated.
+
+**The INLINE ceiling** covers two surfaces that both end at the same
+renderer, and they diverge on exactly one thing:
+
+- A `rows` **table cell** (a `layout: table` claim's own structured cell)
+  always goes through the exported `markdown.RenderInline`, which never
+  permits images, on any surface. It renders backslash escapes, inline
+  `` `code` `` spans, `[text](url)` links, emphasis, strikethrough and both
+  autolink forms exactly as the block ceiling does — but no block construct
+  is recognized at all (no fences, no lists, no headings, no blockquotes,
+  no tables), and there is no hard line break inside a cell.
+- A **GFM pipe-table cell embedded inside `body`** (or a `steps` entry) is
+  inline-only in exactly the same way and recognizes the same inline
+  constructs, but — as noted above — it inherits whatever image capability
+  the surrounding body has, so it can hold an image when the enclosing
+  surface can and cannot when it (like a comment body) cannot.
+
+This is a documented ceiling, not a silent gap. Recorded here as decisions,
+not gaps, so a reader does not have to infer them from what the parser
+happens not to do:
+
+- **Reference-style links, footnotes, and raw inline HTML are non-goals.**
+  They are not partially supported and not planned as a near-term addition;
+  `[text](url)` inline links and the two autolink forms above are the only
+  link forms.
+- **Body headings render, but the viewer's navigation ignores them.** An
+  `###`-`######` heading inside `body` produces a real heading element in
+  the rendered claim, but it does not appear in the viewer's own sidebar/nav
+  structure — that structure is driven by `module`/`facet`/`section`, not by
+  anything inside a claim's markdown.
+- **`\<` leaves the backslash visible.** `<` (and `&`) sit outside the
+  15-character escapable set on purpose, and every author byte is already
+  passed through `html.EscapeString` regardless of whether it followed a
+  backslash — so `\<` renders as a literal backslash followed by `&lt;`,
+  not as a bare `<`. This is not a bug in the escape set; escaping `<`
+  would require either interpreting the escaped byte specially (defeating
+  "every author byte passes through the same escape") or a second output
+  path, and neither exists.
+
+The same construct set — with the images asymmetry noted above — renders
+`body` on every layout, every `steps` entry, and every comment body, so what
+a claim author sees in one place is close to what they get in the others.
+`rows` cells, and pipe-table cells generally, are the narrower exception:
+inline-only, with images gated per-surface rather than always off. A future
+release may widen either ceiling.
 
 ### `rows` cells
 
@@ -95,10 +288,12 @@ Every value in a `rows` cell must be an authored **string**. A non-string
 cell — a number, bool, list, or map — is a `rows-shape` lint error:
 `table.html` renders each cell as-is, so an unquoted `1.0` would silently
 become `"1"` and a list/map would render as Go-native junk. Quote such values
-in the YAML. Cells flow through the same inline renderer as `body` prose, so a
-cell's `code` spans and `[text](url)` links render as HTML (URL schemes are
-allowlisted — http, https, mailto, `#`-fragment, and relative only; others are
-neutralized to literal text); all other markdown in a cell stays literal.
+in the YAML. Cells flow through `markdown.RenderInline`, the same INLINE
+ceiling described above: backslash escapes, `` `code` `` spans,
+`[text](url)` links (URL schemes allowlisted — http, https, mailto,
+`#`-fragment, and relative only; others are neutralized to literal text),
+emphasis, strikethrough and both autolink forms all render; no block
+construct and no image ever renders in a `rows` cell.
 
 ### `order` and viewer sequencing
 

@@ -1,0 +1,12 @@
+id: widget.markdown-cases.heading-interrupts-paragraph
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Prose line.
+  ### Heading
+  More prose.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a heading interrupts an open paragraph

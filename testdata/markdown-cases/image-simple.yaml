@@ -1,0 +1,10 @@
+id: widget.markdown-cases.image-simple
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![Alt text](./diagram.png)
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - image syntax on the DEFAULT (no-images) entry point, which every comment surface uses: a complete ![alt](src) run is escaped literal text, not the anchor the bare \"!\" used to leave behind"

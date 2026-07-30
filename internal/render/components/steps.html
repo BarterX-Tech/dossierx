@@ -6,7 +6,10 @@
      "markdown" template func) — the same renderer card/table/banner/list
      use — instead of a raw {{$s}} auto-escape-only dump, so a step
      containing a fenced example or inline code renders identically to
-     everywhere else Body-shaped text appears. class="card" (the reference
+     everywhere else Body-shaped text appears. Both Body and each step go
+     through "claimMarkdown" rather than the shared "markdown" func, because
+     Steps is the second image-permitting surface (gate 0 amendment A3: "claim
+     Body/Steps — yes") and each step is a separate template call. class="card" (the reference
      stylesheet's .card) is added alongside the existing claim/claim-steps
      classes so a steps claim shares the same box model (12px radius / 13-15px
      padding / 11px margin) as card/table/list claims instead of falling
@@ -23,10 +26,10 @@
      unshaped id does. */}}
 <section class="claim claim-steps card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
-  {{if .Body}}<div class="claim-body">{{markdown .Body}}</div>{{end}}
+  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
   {{if .Steps}}
   {{range $i, $s := .Steps}}
-  <div class="step"><div class="snum">{{inc $i}}</div><div class="sbody">{{markdown $s}}</div></div>
+  <div class="step"><div class="snum">{{inc $i}}</div><div class="sbody">{{claimMarkdown $ $s}}</div></div>
   {{end}}
   {{else}}
   <p class="claim-empty">No steps.</p>

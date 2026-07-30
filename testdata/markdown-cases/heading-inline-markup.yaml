@@ -1,0 +1,10 @@
+id: widget.markdown-cases.heading-inline-markup
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ### Use `dossierx check` and [docs](#widget.contract.x)
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - heading text runs the full inline pass

@@ -1,0 +1,19 @@
+id: widget.markdown-claim-body-cases.image-fenced-is-source
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Write a diagram reference like this:
+
+  ```markdown
+  ![Alt](assets/diagram.png)
+  ```
+
+  and it renders like this:
+
+  ![Alt](assets/diagram.png)
+
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - fence content is raw escaped source: documentation ABOUT the syntax is never a reference"

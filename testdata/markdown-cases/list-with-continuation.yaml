@@ -1,0 +1,12 @@
+id: widget.markdown-cases.list-with-continuation
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - First item that
+    wraps to the next line
+  - Second item here
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

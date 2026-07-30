@@ -1,0 +1,11 @@
+id: widget.markdown-cases.table-code-span-pipe-splits
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | `a|b` | c |
+  | --- | --- | --- |
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a code span does NOT protect a pipe - row splitting happens before inline parsing

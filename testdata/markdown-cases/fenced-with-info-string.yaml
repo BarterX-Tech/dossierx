@@ -4,7 +4,7 @@ module: widget
 status: draft
 layout: card
 body: |
-  A fence whose opening line carries a dropped info string:
+  A fence whose opening line carries an info string:
 
   ```yaml
   key: value

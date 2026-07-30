@@ -1,0 +1,15 @@
+id: widget.markdown-cases.emphasis-bold-at-column-zero
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  **Bold at the head of a line** is not a list item.
+
+  * This one is a list item.
+  * So is this.
+
+  *Italic at the head of a line* is not a list item either.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - unorderedMarker's required whitespace is what separates a bullet from a bold run

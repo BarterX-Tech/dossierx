@@ -1,0 +1,14 @@
+id: widget.markdown-cases.hr-long-dash-run
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Above.
+
+  -----
+
+  Below.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - three or more dashes is a thematic break

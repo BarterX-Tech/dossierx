@@ -1,0 +1,21 @@
+id: widget.markdown-claim-body-cases.image-in-containers
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![top level](assets/a.png)
+
+  - ![in a list item](assets/b.png)
+
+  > ![in a blockquote](assets/c.gif)
+
+  ### ![in a heading](assets/d.webp)
+
+  | diagram | note |
+  | --- | --- |
+  | ![in a table cell](assets/e.jpeg) | inherits the caller's permission |
+
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - the container matrix for images: every claim-body container inherits the capability, including a pipe-table cell (amendment A3)"

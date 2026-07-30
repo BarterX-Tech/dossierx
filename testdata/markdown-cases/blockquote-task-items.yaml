@@ -1,0 +1,11 @@
+id: widget.markdown-cases.blockquote-task-items
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  > - [x] done
+  > - [ ] todo
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - task items are legal in a blockquote interior

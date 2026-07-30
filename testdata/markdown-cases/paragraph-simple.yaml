@@ -1,0 +1,10 @@
+id: widget.markdown-cases.paragraph-simple
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  This is a simple paragraph with some text.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

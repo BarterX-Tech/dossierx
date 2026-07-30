@@ -296,6 +296,44 @@ func TestEdgesHTML_GovernedNoneWithReason(t *testing.T) {
 	}
 }
 
+// TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown covers the
+// change routing Governed.Reason through markdown.RenderInline instead of a
+// bare html.EscapeString: Reason is hand-written prose that routinely names
+// a claim id or a path, so it should be able to carry a code span or a
+// link (the INLINE ceiling — no block constructs), the same subset every
+// other prose field already gets via the "markdown"/"cell" funcs.
+func TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
+	c := model.Claim{
+		Facet: "contract",
+		Governed: model.Governed{
+			Type:   string(model.GovernedNone),
+			Reason: "see `widget.contract.retry-policy` for the real gate",
+		},
+	}
+	got := string(edgesHTML(c))
+	if !strings.Contains(got, "<code>widget.contract.retry-policy</code>") {
+		t.Fatalf("expected the code span in Reason to render as <code>, got: %s", got)
+	}
+	if strings.Contains(got, "`widget.contract.retry-policy`") {
+		t.Fatalf("Reason's backticks should not survive as literal text, got: %s", got)
+	}
+}
+
+// TestEdgesHTML_GovernedNoneReasonHostileHTMLStillEscaped guards the
+// INLINE ceiling: RenderInline still HTML-escapes anything that isn't one
+// of its recognized inline constructs, so a Reason is never a vector for
+// raw markup even after the switch away from a bare html.EscapeString.
+func TestEdgesHTML_GovernedNoneReasonHostileHTMLStillEscaped(t *testing.T) {
+	c := model.Claim{
+		Facet:    "contract",
+		Governed: model.Governed{Type: string(model.GovernedNone), Reason: `<script>alert(1)</script>`},
+	}
+	got := string(edgesHTML(c))
+	if strings.Contains(got, "<script>") {
+		t.Fatalf("hostile HTML in Reason leaked unescaped: %s", got)
+	}
+}
+
 func TestEdgesHTML_GovernedByDoctrineClaim(t *testing.T) {
 	c := model.Claim{
 		Facet:    "contract",
@@ -373,15 +411,15 @@ func TestEdgesHTML_ReviewPendingOnlyShownWhenLocked(t *testing.T) {
 
 func TestEdgesHTMLWithLinks_NilFiles_MatchesPlainEdgesHTML(t *testing.T) {
 	c := model.Claim{Facet: "contract", Status: model.StatusLocked}
-	if got, want := string(EdgesHTMLWithLinks(c, nil, nil)), string(edgesHTML(c)); got != want {
-		t.Fatalf("EdgesHTMLWithLinks(c, nil, nil) = %q, want it to match edgesHTML(c) = %q", got, want)
+	if got, want := string(EdgesHTMLWithLinks(c, nil, nil, nil)), string(edgesHTML(c)); got != want {
+		t.Fatalf("EdgesHTMLWithLinks(c, nil, nil, nil) = %q, want it to match edgesHTML(c) = %q", got, want)
 	}
 }
 
 func TestEdgesHTMLWithLinks_RendersFileAndSymbol(t *testing.T) {
 	c := model.Claim{Facet: "contract", Status: model.StatusLocked}
 	files := []implink.ViewFile{{File: "internal/widget/run.go", Symbol: "Run"}}
-	got := string(EdgesHTMLWithLinks(c, files, nil))
+	got := string(EdgesHTMLWithLinks(c, files, nil, nil))
 	if !strings.Contains(got, "implemented in") {
 		t.Fatalf("expected an 'implemented in' line, got: %s", got)
 	}
@@ -396,7 +434,7 @@ func TestEdgesHTMLWithLinks_RendersFileAndSymbol(t *testing.T) {
 func TestEdgesHTMLWithLinks_NoSymbol_OmitsHash(t *testing.T) {
 	c := model.Claim{Facet: "contract"}
 	files := []implink.ViewFile{{File: "internal/widget/run.go"}}
-	got := string(EdgesHTMLWithLinks(c, files, nil))
+	got := string(EdgesHTMLWithLinks(c, files, nil, nil))
 	if !strings.Contains(got, "<code>internal/widget/run.go</code>") {
 		t.Fatalf("expected a bare file path with no trailing '#' when Symbol is empty, got: %s", got)
 	}
@@ -405,7 +443,7 @@ func TestEdgesHTMLWithLinks_NoSymbol_OmitsHash(t *testing.T) {
 func TestEdgesHTMLWithLinks_DriftedFile_GetsWarnPill(t *testing.T) {
 	c := model.Claim{Facet: "contract"}
 	files := []implink.ViewFile{{File: "internal/widget/run.go", Drifted: true}}
-	got := string(EdgesHTMLWithLinks(c, files, nil))
+	got := string(EdgesHTMLWithLinks(c, files, nil, nil))
 	if !strings.Contains(got, `<span class="pill pw">drifted</span>`) {
 		t.Fatalf("expected the shared warn pill (.pill.pw) on a drifted file, got: %s", got)
 	}
@@ -417,7 +455,7 @@ func TestEdgesHTMLWithLinks_MultipleFiles_OneLinePerFile(t *testing.T) {
 		{File: "a.go", Symbol: "A"},
 		{File: "b.go", Symbol: "B"},
 	}
-	got := string(EdgesHTMLWithLinks(c, files, nil))
+	got := string(EdgesHTMLWithLinks(c, files, nil, nil))
 	if strings.Count(got, "claim-implemented-in") != 2 {
 		t.Fatalf("expected one implemented-in line per linked file, got: %s", got)
 	}
@@ -425,7 +463,7 @@ func TestEdgesHTMLWithLinks_MultipleFiles_OneLinePerFile(t *testing.T) {
 
 func TestEdgesHTMLWithLinks_DependedBy_RendersLinkedList(t *testing.T) {
 	c := model.Claim{Facet: "contract"}
-	got := string(EdgesHTMLWithLinks(c, nil, []string{"widget.internals.a", "widget.internals.b"}))
+	got := string(EdgesHTMLWithLinks(c, nil, []string{"widget.internals.a", "widget.internals.b"}, nil))
 	if !strings.Contains(got, "depended on by") {
 		t.Fatalf("expected a 'depended on by' line, got: %s", got)
 	}
@@ -439,9 +477,93 @@ func TestEdgesHTMLWithLinks_DependedBy_RendersLinkedList(t *testing.T) {
 
 func TestEdgesHTMLWithLinks_NilDependedBy_OmitsLine(t *testing.T) {
 	c := model.Claim{Facet: "contract"}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 	if strings.Contains(got, "depended on by") {
 		t.Fatalf("expected no 'depended on by' line when dependedBy is empty, got: %s", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// C6 target status pills (issue #11's last unshipped piece): a claim-edge
+// target gets a small pill after its label ONLY when it is actionable —
+// draft, or locked with review_pending — never for a healthy locked target.
+// This rides the targetStatuses param EdgesHTMLWithLinks/writeClaimRef added
+// and, in production, only ever arrives non-nil through internal/render's
+// attachEdgesOverride; the default parse-time funcMap binding always passes
+// nil and gets no pill at all, on any target (covered separately below).
+// ---------------------------------------------------------------------
+
+func TestEdgesHTMLWithLinks_TargetPill_DraftTarget(t *testing.T) {
+	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
+	statuses := map[string]TargetStatus{
+		"widget.contract.a": {Status: model.StatusDraft},
+	}
+	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
+	if !strings.Contains(got, `<span class="pill pv">draft</span>`) {
+		t.Fatalf("expected a draft pill (.pill.pv) on a draft target, got: %s", got)
+	}
+}
+
+func TestEdgesHTMLWithLinks_TargetPill_LockedReviewPendingTarget(t *testing.T) {
+	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
+	statuses := map[string]TargetStatus{
+		"widget.contract.a": {Status: model.StatusLocked, ReviewPending: true},
+	}
+	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
+	if !strings.Contains(got, `<span class="pill pw">review_pending</span>`) {
+		t.Fatalf("expected a warn pill (.pill.pw) reading review_pending on a locked+review_pending target, got: %s", got)
+	}
+}
+
+func TestEdgesHTMLWithLinks_TargetPill_HealthyLockedTargetGetsNoPill(t *testing.T) {
+	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
+	statuses := map[string]TargetStatus{
+		"widget.contract.a": {Status: model.StatusLocked},
+	}
+	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
+	if strings.Contains(got, `class="pill`) {
+		t.Fatalf("a healthy locked target must get no pill at all, got: %s", got)
+	}
+}
+
+func TestEdgesHTMLWithLinks_TargetPill_UnknownTargetGetsNoPill(t *testing.T) {
+	// A target id not present in the lookup at all (e.g. an unlinted or
+	// otherwise unresolvable id) must not panic on the nil-map read and
+	// must render no pill, same as an empty/nil statuses map.
+	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
+	statuses := map[string]TargetStatus{"widget.contract.b": {Status: model.StatusDraft}}
+	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
+	if strings.Contains(got, `class="pill`) {
+		t.Fatalf("a target absent from the lookup must get no pill, got: %s", got)
+	}
+}
+
+func TestEdgesHTMLWithLinks_TargetPill_NilStatuses_DegradesToNoPill(t *testing.T) {
+	// The default funcMap binding (edgesHTML) always calls
+	// EdgesHTMLWithLinks with a nil targetStatuses map — this is the
+	// degrade-under-the-default-binding contract the task requires.
+	c := model.Claim{Facet: "contract", Module: "widget", RestsOn: []string{"widget.contract.a"}}
+	got := string(edgesHTML(c))
+	if strings.Contains(got, `class="pill`) {
+		t.Fatalf("edgesHTML (the default binding) must never render a target pill, got: %s", got)
+	}
+}
+
+func TestEdgesHTMLWithLinks_TargetPill_OnGovernedByEdge(t *testing.T) {
+	// governed_by is a claim-edge target too (it renders through the same
+	// writeClaimRef), so an actionable governing claim should also get the
+	// pill.
+	c := model.Claim{
+		Facet:    "contract",
+		Module:   "widget",
+		Governed: model.Governed{Type: "widget.doctrine.hub"},
+	}
+	statuses := map[string]TargetStatus{
+		"widget.doctrine.hub": {Status: model.StatusDraft},
+	}
+	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
+	if !strings.Contains(got, `<span class="pill pv">draft</span>`) {
+		t.Fatalf("expected a draft pill on an actionable governed_by target, got: %s", got)
 	}
 }
 

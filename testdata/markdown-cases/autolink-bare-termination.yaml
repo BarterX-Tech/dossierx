@@ -1,0 +1,16 @@
+id: widget.markdown-cases.autolink-bare-termination
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Trailing sentence punctuation is not part of the href: see https://example.com/a.
+  Nor is a comma, https://example.com/b, nor a semicolon https://example.com/c; nor
+  a question mark https://example.com/d?
+
+  A closing paren that belongs to the sentence is given back
+  (see https://example.com/e), but one the url opened is kept:
+  https://example.com/wiki/Topic_(disambiguation).
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - bare-URL termination, trailing punctuation and the parenthetical rule

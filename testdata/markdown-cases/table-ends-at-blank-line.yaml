@@ -1,0 +1,14 @@
+id: widget.markdown-cases.table-ends-at-blank-line
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  | a | b |
+  | --- | --- |
+  | 1 | 2 |
+
+  Prose after | a pipe.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a table ends at the first blank line

@@ -1,0 +1,10 @@
+id: widget.markdown-cases.image-absolute-rejected
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  ![Alt text](/absolute/path/image.png)
+governed_by:
+  type: none
+  reason: "markdown renderer test fixture - an off-origin image src on the default (no-images) entry point; refused twice over and still only ever escaped literal text"

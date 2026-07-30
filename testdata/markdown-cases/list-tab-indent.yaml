@@ -1,0 +1,12 @@
+id: widget.markdown-cases.list-tab-indent
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  - L1
+  	- L2 under a tab
+  - Back to L1
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a tab counts as four indent columns

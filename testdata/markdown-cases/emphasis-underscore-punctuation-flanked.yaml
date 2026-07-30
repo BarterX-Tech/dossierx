@@ -1,0 +1,22 @@
+id: widget.markdown-cases.emphasis-underscore-punctuation-flanked
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  An underscore with ASCII punctuation on BOTH sides is left- and
+  right-flanking and satisfies both of CommonMark's escape clauses, so it can
+  open AND close. That is a third class of exposure, neither leading nor
+  trailing: {{ .ProjectName }}_{{ .Os }}_{{ .Arch }} emphasises, and so do
+  p/_/q/_/r and -_- -_- and |_|_|.
+
+  A single token can also carry a leading run and a trailing run at once, so it
+  needs no partner elsewhere: __init__ and __all__ are emphasised where
+  governed_by and schema_version are not.
+
+  The cover is the ordinary one. A code span defuses the whole run:
+  `{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}`. So does a backslash escape:
+  \_\_init\_\_.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - class 3 of the underscore exposure, punctuation on both sides, which an earlier statement of the ceiling left out

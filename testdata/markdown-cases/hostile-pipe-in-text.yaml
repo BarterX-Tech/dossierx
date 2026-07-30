@@ -1,0 +1,10 @@
+id: widget.markdown-cases.hostile-pipe-in-text
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Text with pipes | like this | in it.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests pipe character handling

@@ -1,0 +1,10 @@
+id: widget.markdown-cases.hostile-angle-brackets
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  This has <angle> and <brackets> in text.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests angle bracket escaping

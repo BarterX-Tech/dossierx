@@ -1,0 +1,14 @@
+id: widget.markdown-cases.loose-list-blank-line-between-items
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  1. First item.
+
+  2. Second item.
+
+  3. Third item.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - blank lines between plain items are an ordinary loose list; one list with continuous numbering, not one list per item

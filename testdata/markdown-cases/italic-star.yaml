@@ -1,0 +1,10 @@
+id: widget.markdown-cases.italic-star
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  This text has *italic content* in it.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests italic with star, under CommonMark flanking

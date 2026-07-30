@@ -1,15 +1,26 @@
-// Package lint defines the Lint interface every one of the 25 lints
+// Package lint defines the Lint interface every one of the 27 lints
 // (dangling, ambiguous, id-shape, rest-on-locked, cycle, governed-cycle,
 // self-edge, governed-required,
 // mirror-mismatch, mirror-unanchored, mirror-reciprocal, rows-shape,
 // supersede, raw-html-scope, roll-up, validated-on-missing, body-edge-hint,
 // code-orphan, orphan, layout-shape-mismatch, build-role-required-for-locked,
 // orientation-note-order, orientation-note-shape, status-shape,
-// comments-unresolved) implements,
+// comments-unresolved, markdown-sanity, asset-scope) implements,
 // one per file
 // in this package. This file only defines the contract and the registry;
 // individual lint implementations are a later phase and Registry starts
 // empty on purpose.
+//
+// THIS COUNT AND THIS LIST ARE LOAD-BEARING, not decoration. Three things are
+// keyed to the number of registered rules and fail loudly when it moves without
+// them: tests/lint_fixtures_test.go requires exactly one fixture directory per
+// registered rule under testdata/fixture-coverage/lint/,
+// tests/lint_coverage_meta_test.go names any registered rule that never fires
+// across the coverage corpus, and this sentence is the only prose statement of
+// the roster a reader meets first. markdown-sanity and asset-scope were the
+// v0.3.1 additions and were absent here — the enumeration said 25 while the
+// registry held 27 — which is exactly the kind of drift a doc comment nobody
+// tests is prone to. If you register a rule, add it here in the same commit.
 package lint
 
 import (

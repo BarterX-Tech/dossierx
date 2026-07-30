@@ -1,0 +1,10 @@
+id: widget.markdown-cases.hard-break-dangling-at-block-end
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Only line\
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - a break marker on the last line of a block emits nothing

@@ -1,0 +1,10 @@
+id: widget.markdown-cases.autolink-angle
+facet: contract
+module: widget
+status: draft
+layout: card
+body: |
+  Visit <https://example.com> for more.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture - tests angle-bracket autolink

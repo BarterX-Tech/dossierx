@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/serve"
@@ -55,6 +56,17 @@ func standardFiles() map[string]string {
 // Origin checks run against the actual bound port.
 func startServer(t *testing.T, cfgBody string, files map[string]string) (srv *serve.Server, base, root string) {
 	t.Helper()
+	return startServerWatch(t, cfgBody, files, 0, 0)
+}
+
+// startServerWatch is startServer with the watcher's cadence exposed. Zero
+// intervals keep the production defaults (~500ms/200ms); a short pair drives
+// live reload — and, with it, the claim-image allowlist's freshness window,
+// which is defined as one watcher tick — on a tight deterministic cycle. Tests
+// that assert something BECOMES true after a claim file changes go through this
+// rather than sleeping out a real half-second poll.
+func startServerWatch(t *testing.T, cfgBody string, files map[string]string, poll, debounce time.Duration) (srv *serve.Server, base, root string) {
+	t.Helper()
 	root = t.TempDir()
 	writeFile(t, filepath.Join(root, "project.config.yaml"), cfgBody)
 	for rel, content := range files {
@@ -65,6 +77,9 @@ func startServer(t *testing.T, cfgBody string, files map[string]string) (srv *se
 		t.Fatalf("load config: %v", err)
 	}
 	srv = serve.New(cfg, testVersion)
+	if poll > 0 {
+		srv.SetWatchIntervals(poll, debounce)
+	}
 	if err := srv.Listen(0); err != nil {
 		t.Fatalf("listen: %v", err)
 	}
@@ -519,13 +534,43 @@ func TestRoot_RendersBrokenProjectsNotBlank(t *testing.T) {
 }
 
 // The CSP value is the exact one required for the inline-style/inline-script
-// viewer that can still reach same-origin /api/*.
+// viewer that can still reach same-origin /api/* and load its own claim images.
+//
+// img-src 'self' WAS ADDED DELIBERATELY at phase D and this assertion was
+// updated with it, not around it. serve is the only human surface, so a
+// claim-body image had to be able to load here; 'self' is the narrowest token
+// that lets one — it re-allows the same-origin /claim-assets/ route
+// (claim_assets.go) and nothing else. The two tokens that would also have
+// worked, "*" and "data:", each hand every byte on the page an outbound
+// channel, which is the exact thing connect-src 'self' is here to deny. See
+// TestRoot_CSPDoesNotWidenImgSrc, which is the guard on that.
 func TestRoot_CSPValue(t *testing.T) {
 	_, base, _ := startServer(t, baseConfig, standardFiles())
 	resp, _ := do(t, http.MethodGet, base+"/", "")
-	want := "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+	want := "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
 	if got := resp.Header.Get("Content-Security-Policy"); got != want {
 		t.Fatalf("CSP header = %q, want %q", got, want)
+	}
+}
+
+// TestRoot_CSPDoesNotWidenImgSrc is the guard on the fastest wrong fix. If a
+// claim image ever fails to load under serve, the two-character repair is to
+// widen img-src, and it would pass every other test in this file. The route in
+// claim_assets.go is the repair that is allowed; these tokens are not.
+func TestRoot_CSPDoesNotWidenImgSrc(t *testing.T) {
+	_, base, _ := startServer(t, baseConfig, standardFiles())
+	resp, _ := do(t, http.MethodGet, base+"/", "")
+	csp := resp.Header.Get("Content-Security-Policy")
+	for _, forbidden := range []string{
+		"img-src *", "img-src data:", "img-src https:", "img-src http:",
+		"img-src 'unsafe-inline'", "default-src *",
+	} {
+		if strings.Contains(csp, forbidden) {
+			t.Errorf("CSP contains %q; images load from the same-origin /claim-assets/ route, never from a widened img-src: %q", forbidden, csp)
+		}
+	}
+	if !strings.Contains(csp, "img-src 'self'") {
+		t.Errorf("CSP has no img-src 'self'; claim-body images cannot load: %q", csp)
 	}
 }
 
@@ -551,7 +596,7 @@ func TestRoot_RenderErrorHasCSP(t *testing.T) {
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("GET / with a broken shell override: got %d, want 500 (body=%s)", resp.StatusCode, data)
 	}
-	want := "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+	want := "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
 	if got := resp.Header.Get("Content-Security-Policy"); got != want {
 		t.Fatalf("500 render-error page CSP = %q, want %q (the error branch must set the same CSP as the 200 path)", got, want)
 	}

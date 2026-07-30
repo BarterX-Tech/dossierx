@@ -45,7 +45,7 @@ func resolvedThread(id, body string) model.Comment {
 // panel (there are no threads to bake).
 func TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault(t *testing.T) {
 	c := model.Claim{ID: "widget.contract.quiet", Facet: "contract", Status: model.StatusLocked}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
 	if !strings.Contains(got, `<li class="claim-comments" hidden>`) {
 		t.Fatalf("the zero-state chip's <li> must ship hidden (revealed only by the viewer's live-API probe), got: %s", got)
@@ -86,7 +86,7 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 			resolvedThread("c-cccccc", "already handled"),
 		},
 	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
 	// Chip: accent (open), carries the claim id via data-* (never id=), and
 	// shows the OPEN count (2), not the total (3).
@@ -131,7 +131,7 @@ func TestEdgesHTMLWithLinks_ResolvedOnly_ChipMutedAndDetailsCollapsed(t *testing
 			resolvedThread("c-d3d3d3", "third resolved"),
 		},
 	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
 	// A claim whose threads are all resolved still shows a chip, but muted,
 	// with the total count (3) — never the accent/open variant.
@@ -172,7 +172,7 @@ func TestEdgesHTMLWithLinks_CommentMarkupHasNoIDAttributes(t *testing.T) {
 			resolvedThread("c-bbbbbb", "resolved one"),
 		},
 	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 	if n := strings.Count(got, ` id="`); n != 0 {
 		t.Fatalf("comment markup must emit zero id= attributes, found %d in: %s", n, got)
 	}
@@ -190,7 +190,7 @@ func TestEdgesHTMLWithLinks_BodyMarkdownRenderedAndEscaped(t *testing.T) {
 			openThread("c-aaaaaa", "look: <img src=x onerror=alert(1)> and <script>alert(2)</script>"),
 		},
 	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 	if !strings.Contains(got, "&lt;img") {
 		t.Fatalf("expected the <img> body escaped to &lt;img, got: %s", got)
 	}
@@ -215,7 +215,7 @@ func TestEdgesHTMLWithLinks_NoComposerMarkup(t *testing.T) {
 			resolvedThread("c-bbbbbb", "resolved one"),
 		},
 	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 	for _, forbidden := range []string{"<textarea", "<form", "comment-composer", `type="submit"`} {
 		if strings.Contains(got, forbidden) {
 			t.Fatalf("static comment render must contain no composer markup, found %q in: %s", forbidden, got)
@@ -236,7 +236,7 @@ func TestEdgesHTMLWithLinks_AccessibleControls(t *testing.T) {
 			resolvedThread("c-bbbbbb", "resolved one"),
 		},
 	}
-	got := string(EdgesHTMLWithLinks(c, nil, nil))
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
 	// The chip is a real button with a non-empty aria-label.
 	if !strings.Contains(got, `<button type="button"`) {
