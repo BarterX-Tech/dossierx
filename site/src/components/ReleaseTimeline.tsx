@@ -6,6 +6,12 @@ export interface Release {
   title: string;
   tag: string;
   highlights: string[];
+  /**
+   * The tagged commit, on the newest entry only. Not rendered here — it feeds
+   * the `dossierx version` example in content.ts, which used to carry its own
+   * hand-typed copy of the version, commit and date and went stale on release.
+   */
+  commit?: string;
 }
 
 interface ReleaseTimelineProps {

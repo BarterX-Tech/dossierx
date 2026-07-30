@@ -17,6 +17,8 @@
 // never `dossierx stale`. The ten verbs v0.3.0 deleted appear on this page in
 // exactly one place — the migration table in the CLI section — and nowhere else.
 
+import type { Release } from "./components/ReleaseTimeline";
+
 export interface NavItem {
   id: string;
   label: string;
@@ -58,6 +60,154 @@ export interface ContentSpec {
   sections: Section[];
 }
 
+/**
+ * The release ledger, oldest-first. ReleaseTimeline treats the LAST entry as
+ * the current release, so a new release is appended, never prepended.
+ *
+ * Hoisted above `contentSpec` so the version can be derived from it rather
+ * than hand-copied: the hero kicker, the hero badge list, the release-history
+ * intro and the `dossierx version` example all read `latestRelease` below.
+ * Every one of them had gone stale against this array at least once.
+ */
+const releases: Release[] = [
+        {
+          version: "v0.0.1",
+          date: "2026-07-21",
+          title: "Initial public release",
+          tag: "First commit 3561a2d — 'feat: initial release — claims-to-HTML documentation engine'",
+          highlights: [
+            "Extracts the proven internal engine into its own repository and removes project-specific names, facets, and modules; project.config.yaml becomes the only project-specific input.",
+            "Ships the full CLI: lint, catalog, render, check, deps, coverage, stale, lock/unlock, reaudit, build-order, flag, implink.",
+            "21 lint rules, each with an isolated test fixture plus a coverage meta-gate.",
+            "Three vendorable Claude Code skills embedded in the binary: dossierx-claims, dossierx-build-order, dossierx-code-links.",
+            "The lock / review_pending / reaudit lifecycle as the core value — confirm-before-write on every locked change.",
+          ],
+        },
+        {
+          version: "v0.0.2",
+          date: "2026-07-22",
+          title: "Cross-platform hardening (one real bug)",
+          tag: "First real CI run — Linux/Windows/macOS matrix with -race, gofmt, golangci-lint",
+          highlights: [
+            "HEADLINE BUG FIX: many concurrent `dossierx lock` runs against the same claims_dir could fail on Windows with a transient 'being used by another process' error (mandatory file locking colliding a concurrent atomic rename with a concurrent read). Both read and write paths in internal/loader now retry with short backoff, Windows-only.",
+            "User-facing upshot: DossierX now runs reliably on Windows.",
+            "Corrected minor gofmt drift in two files.",
+            "CLI-integration test harness appends .exe so os/exec can launch the test binary on Windows.",
+            "Two POSIX-permission tests skipped on Windows (don't fit its ACL model); an inconclusive concurrency negative-control assertion skipped on windows-latest.",
+            "Tightened golangci-lint config/version pinning to match the module's go 1.26 floor.",
+          ],
+        },
+        {
+          version: "v0.0.3",
+          date: "2026-07-22",
+          title: "Viewer freshness cue",
+          tag: "Previous release",
+          highlights: [
+            "The rendered viewer's sidebar now shows a 'Generated <timestamp>' footer, surfacing the same render-time timestamp already embedded in the leading generated-by HTML comment.",
+            "A reviewer can tell at a glance how fresh or stale a documentation page is without viewing page source.",
+            "Small, purely additive usability improvement.",
+          ],
+        },
+        {
+          version: "v0.1.0",
+          date: "2026-07-23",
+          title: "docs → dossierx naming rebrand",
+          tag: "Previous release",
+          highlights: [
+            "Every generic 'docs' placeholder — CLI-invocation examples, the docs-claim: source tag (including the real Go regex), docs-v1 naming in skill docs, the default viewer title, and the on-disk store filenames — is renamed to the tool's actual name, dossierx.",
+            "BREAKING: .docs-lock-store.json and .docs-flag-store.json are renamed to .dossierx-lock-store.json and .dossierx-flag-store.json, with no migration. An existing project's lock/flag store will not be found after upgrading past this release.",
+            "Minor version bump (v0.0.3 → v0.1.0), not a patch, to signal the breaking on-disk change under pre-1.0 semver.",
+          ],
+        },
+        {
+          version: "v0.1.1",
+          date: "2026-07-24",
+          title: "Steps number/text alignment fix",
+          tag: "Previous release",
+          highlights: [
+            "Fixes a rendering bug in the default viewer's layout: steps claims: because each step's text is routed through the shared markdown renderer, it was wrapped in a <p> whose default browser top margin pushed the first line down relative to the step's fixed-size number circle, leaving the number visibly misaligned above the text.",
+            "The viewer stylesheet now resets the step body's <p> margins — a 0.5rem inter-block rhythm with the first block's top and last block's bottom margin zeroed — so the number circle sits flush with the first line of step text.",
+            "Purely a default-viewer CSS fix: no schema_version, on-disk store, API, or config change, so it lands as a patch bump (v0.1.0 → v0.1.1) under pre-1.0 semver.",
+          ],
+        },
+        {
+          version: "v0.1.2",
+          date: "2026-07-25",
+          title: "Consolidated audit-fix release",
+          tag: "Previous release",
+          highlights: [
+            "A deep audit against a real 202-claim consumer project found 25 confirmed defects, fixed together as one patch rather than a stream of point releases.",
+            "Markdown [text](url) links now render as anchors in claim bodies AND structured table cells (scheme-allowlisted; javascript:/data: neutralized); backtick code spans render in cells too.",
+            "Lifecycle data integrity: dependency-hash baselines are keyed per-dependent (with an automatic, re-arming lock-store migration), unlock clears pending flags, and flag is refused on structured layouts.",
+            "Security: the raw_html mockup gate is now default-deny across every attribute quote form (control-char and entity evasions closed) and enforced by render and catalog, not just lock.",
+            "Build-order staleness is now structural — status re-derives the order a fresh propose would compute and flags any divergence (reordered, re-roled, promoted, renamed, added, or deleted claims); the Build Order viewer section is visible; new dossierx version command; lint --json emits valid arrays.",
+            "Patch bump despite new capabilities: internal/ is not importable, no breaking CLI changes, and the lock-store migrates automatically.",
+          ],
+        },
+        {
+          version: "v0.2.0",
+          date: "2026-07-26",
+          title: "Comments on claims — review, discuss, resolve before locking",
+          tag: "Previous release",
+          highlights: [
+            "Threaded, Google-Docs-style review comments attach to any claim: a new dossierx comment group with an --as human|agent actor, engine-minted thread and reply ids, and a pinned, greppable list format.",
+            "An open comment thread is a third review_pending trigger alongside dependency drift and a flag: a claim cannot lock while it has an unresolved thread, and resolving the last open thread clears review_pending unless drift or a flag also stands. reaudit refuses a comment-only review_pending — there is no content diff to confirm.",
+            "New dossierx serve: a localhost-only HTTP viewer with an interactive thread panel and composer, a same-origin admission layer (Host/Origin checks, no CORS), and live reload over server-sent events as claim files change on disk. It renders from memory and never writes viewer/index.html or .catalog.json on a page load.",
+            "Adds NO new runtime dependency — the file watcher is a standard-library modification-time poll, so the runtime stays cobra + yaml.v3 only.",
+            "A fourth embedded skill teaches agents when to comment vs. flag and the advisory-rights rule. The comments: field is omitempty and excluded from a claim's content hash, so commenting never rewrites an uncommented claim or flips its dependents.",
+          ],
+        },
+        {
+          version: "v0.3.0",
+          date: "2026-07-28",
+          title: "Agent-first restructure — two surfaces, one gate",
+          tag: "Previous release",
+          highlights: [
+            "The premise, made explicit: the AGENT operates DossierX and the HUMAN reviews it. Each role gets its own surface — twenty CLI commands for the agent, the viewer's comment-and-Resolve for the human — and the docs, skills and site are rewritten around that split.",
+            "MACHINE CONTRACT: every command emits exactly one JSON envelope ({ok, command, data, warnings, error, stopped_at}), JSON by default, with a shared snake_case error.code vocabulary that the viewer's JSON API and the CLI now literally share. --dry-run on every mutating verb; --reason required on claim lock, claim unlock, claim reaudit --confirm and build-order lock. Exit codes stayed additive: 1 generic, 2 not-found/wrong-state.",
+            "SURFACE: 26 commands became 20 under eight nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), migrate --adopt, serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
+            "INTEGRITY: a lock ledger, separate from the content hash and built as a deny-list over every persisted field — so a swapped raw_html payload on a locked, allowlisted mockup can no longer pass as unchanged. Hand-flipping status, editing a locked body, re-locking onto a record an unlock already released, deleting a locked claim's file outright, deleting a thread from YAML, or hand-editing a locked build order is now reported as lock-ledger-missing, lock-content-drift, lock-ledger-orphan, lock-ledger-released, lock-ledger-abandoned, comment-ledger-drift, build-order-content-drift or build-order-ledger-missing. The gate rides git: a pre-commit hook running check --staged over the index, with CI as the authority, because merges and rebases never fire pre-commit.",
+            "BREAKING, and it breaks on your first check: every project that locked a claim before v0.3.0 must run `dossierx migrate --adopt` once, then commit the rewritten .dossierx-lock-store.json. Pre-ledger projects used to be grandfathered in automatically on the first writing check; that is gone. Adoption is the one operation that manufactures approval out of nothing, so a gate that performs it on sight rewards deleting the ledger with a clean report over content nobody read — and no evidence inside a project distinguishes an honest v0.2.x store from a downgraded one, since locked_at shipped in v0.2.0. Adoption therefore fails closed everywhere, and only a human running the migration clears it.",
+            "THE MODEL, stated plainly because the boundary matters: DossierX DETECTS and the forge ENFORCES. Every rule produces a named, recoverable finding — a stable rule string, the claim it is about, and the command that restores it — and branch protection with a required CI check is what makes anyone obey it. check --staged judges the GIT INDEX, what the commit will actually contain, writing nothing, which is what makes a pre-commit hook meaningful; it judges ONE TREE and reads no git history, so its verdict is identical in every clone however shallow.",
+            "The boundary, stated as a principle rather than a list of cases: AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE IT. The gate judges one tree, and within it a change to a locked claim's APPROVED CONTENT leaves a surviving artifact DISAGREEING with the one that moved, and is caught (review_pending is engine bookkeeping, outside the hash, so deleting it by hand clears a review flag silently) — an agent editing a locked claim, a careless hand-edit, a bad merge, a status flip, a deleted approval record, an erased comment thread all leave the untouched files disagreeing with the touched one, and that disagreement is a named finding. What has nothing to disagree with it is not: a record's reason, at and actor are testimony rather than signature, so rewriting those alone changes what the ledger says a human approved and is reported by nothing. What it cannot catch is a claim and its ledger record written TOGETHER, in one commit, by someone entitled to write both: nothing survives to disagree. The sharpest form involves no deletion at all — unlock a locked claim, rewrite its body, re-lock it (minting a fresh record whose hash correctly covers the new content), then hand-edit that record's reason, at and actor back to the original approval's values; check and check --staged both report ok:true over a ledger crediting a human who approved nothing. That is one illustration, not an inventory. No in-repo mechanism closes it, because any evidence the tool consults lives in the repository and the repository is writable by the person being gated — a build during this release cycle compared the staged tree against its parent commit and was withdrawn before shipping, since the parent commit is outside the COMMIT but not outside the COMMITTER (a rebase, --orphan or a second config file switches such a comparison off unremarkably) and it cost false refusals of ordinary git revert. It is caught where a control the committer cannot rewrite lives: branch protection, a required CI status check, and review of a diff in which such a change is loud. The direction that would actually move the boundary is signing the ledger with a key held outside the repository, of which git commit signing is the cheapest form.",
+
+            "BUG FIX, and the reason the loop works at all: a claim with no comments rendered no 💬 chip, so the first comment on any card could never be opened from the viewer — the exact gesture the review loop starts with. Both gates had to move together, since the server emitted the chip only when threads existed and the client hid any chip reading zero, so an empty chip would have vanished the moment it was clicked. Every non-banner card now carries a chip, zero-state included; a static file:// export still hides them, because with no API to answer, read-only is the honest presentation.",
+            "Also: self-edges rejected across every edge type and a second cycle pass over governed_by; edge labels in the viewer read as prose instead of raw ids (issue #11); five embedded skills, contract front-loaded, rewritten onto the new surface. Still cobra + yaml.v3 only.",
+          ],
+        },
+        {
+          version: "v0.3.1",
+          date: "2026-07-30",
+          title: "A documentation-grade renderer",
+          tag: "Latest release",
+          commit: "d3b1e30",
+          highlights: [
+            "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
+            "Constructs: backslash escapes, bold, italic in both spellings under CommonMark left/right-flanking rules, strikethrough, double-backtick code spans, autolinks in both forms, blockquotes, horizontal rules, headings at ### and deeper, unbounded list nesting, task items, hard line breaks, loose lists, ordered-list start numbers, fence language classes, GFM pipe tables, and images. Emphasis is held to all 132 emphasis examples of CommonMark 0.31.2.",
+            "Images render in claim bodies and never in comment bodies, fail-closed by construction rather than by a flag: markdown.Render emits none and cannot be told to, so the comment paths stay image-free by changing nothing. A src must resolve under its own claim's assets/ directory, and dossierx serve answers for them from an allowlist computed from the loaded claims rather than from filesystem traversal.",
+            "SECURITY: parseLink's bracket rescan was quadratic — 1 MiB of bracket characters in a comment body cost 5.8 seconds of CPU, amplified because every comment is re-rendered on every GET /api/comments. This predates v0.3.1 and is live in the v0.3.0 binary.",
+            "SECURITY: the mockup <img> gate recognised // as an authority prefix but not the three backslash spellings a browser normalises to it, so a reviewed, locked, allowlisted mockup claim could load a third-party image. The gate now lives in one shared internal/urlsafe instead of four divergent copies.",
+            "Two new lints — markdown-sanity and asset-scope — with a deliberate severity split: error for security findings, warning for craft ones, because lock refuses on any error-severity finding corpus-wide.",
+            "Upgrading: locked claim bodies may render differently with no edit, no content-hash change and no ledger event. dossierx claim unlock is the deliberate way to revisit them.",
+          ],
+        },
+];
+
+/** The current release — the last entry, matching ReleaseTimeline's own rule. */
+export const latestRelease: Release = releases[releases.length - 1];
+
+/** e.g. "v0.3.1". The single source for every version string on the site. */
+export const latestVersion: string = latestRelease.version;
+
+/**
+ * Lowercases only the first character, so a release title reads as a clause
+ * mid-sentence. Deliberately not `toLowerCase()`, which would flatten the
+ * proper nouns and acronyms release titles carry (GFM, CommonMark, JSON).
+ */
+function lowerFirst(s: string): string {
+  return s.charAt(0).toLowerCase() + s.slice(1);
+}
+
 export const contentSpec: ContentSpec = {
   siteTitle: "DossierX",
   tagline:
@@ -89,7 +239,7 @@ export const contentSpec: ContentSpec = {
           "Go 1.26",
           "cobra + yaml.v3 only",
           "20 commands, JSON by default",
-          "v0.3.1",
+          latestVersion,
           "github.com/BarterX-Tech/dossierx",
         ],
         // These are the five STAGES of one command, not five commands. In
@@ -939,7 +1089,7 @@ export const contentSpec: ContentSpec = {
                 detail:
                   "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere — which is exactly why a bootstrapping agent calls it first. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
                 example:
-                  "$ dossierx version --format text\ndossierx v0.3.1\n  commit: d3b1e30\n  date:   2026-07-30",
+                  `$ dossierx version --format text\ndossierx ${latestRelease.version}\n  commit: ${latestRelease.commit ?? "d3b1e30"}\n  date:   ${latestRelease.date}`,
               },
             ],
           },
@@ -1052,130 +1202,11 @@ export const contentSpec: ContentSpec = {
       title: "Release history.",
       kind: "timeline",
       contentMd:
-        "Every change ships as a tagged release with its own changelog entry. The current release is **v0.3.1**, the documentation-grade renderer: emphasis, headings, GFM tables and images in a claim body, images fail-closed by construction and scoped to the claim's own `assets/` directory, and two security fixes that matter to anyone still on v0.3.0 — see the full history below for what's shipped since the engine's public extraction.",
+        // Derived, deliberately: an elaboration written by hand here would be a
+        // second copy of the newest entry's highlights, which sit directly below.
+        `Every change ships as a tagged release with its own changelog entry. The current release is **${latestRelease.version}** — ${lowerFirst(latestRelease.title)}, tagged ${latestRelease.date}. What it changed is listed first below, followed by the full history since the engine's public extraction.`,
       data: {
-        releases: [
-          {
-            version: "v0.0.1",
-            date: "2026-07-21",
-            title: "Initial public release",
-            tag: "First commit 3561a2d — 'feat: initial release — claims-to-HTML documentation engine'",
-            highlights: [
-              "Extracts the proven internal engine into its own repository and removes project-specific names, facets, and modules; project.config.yaml becomes the only project-specific input.",
-              "Ships the full CLI: lint, catalog, render, check, deps, coverage, stale, lock/unlock, reaudit, build-order, flag, implink.",
-              "21 lint rules, each with an isolated test fixture plus a coverage meta-gate.",
-              "Three vendorable Claude Code skills embedded in the binary: dossierx-claims, dossierx-build-order, dossierx-code-links.",
-              "The lock / review_pending / reaudit lifecycle as the core value — confirm-before-write on every locked change.",
-            ],
-          },
-          {
-            version: "v0.0.2",
-            date: "2026-07-22",
-            title: "Cross-platform hardening (one real bug)",
-            tag: "First real CI run — Linux/Windows/macOS matrix with -race, gofmt, golangci-lint",
-            highlights: [
-              "HEADLINE BUG FIX: many concurrent `dossierx lock` runs against the same claims_dir could fail on Windows with a transient 'being used by another process' error (mandatory file locking colliding a concurrent atomic rename with a concurrent read). Both read and write paths in internal/loader now retry with short backoff, Windows-only.",
-              "User-facing upshot: DossierX now runs reliably on Windows.",
-              "Corrected minor gofmt drift in two files.",
-              "CLI-integration test harness appends .exe so os/exec can launch the test binary on Windows.",
-              "Two POSIX-permission tests skipped on Windows (don't fit its ACL model); an inconclusive concurrency negative-control assertion skipped on windows-latest.",
-              "Tightened golangci-lint config/version pinning to match the module's go 1.26 floor.",
-            ],
-          },
-          {
-            version: "v0.0.3",
-            date: "2026-07-22",
-            title: "Viewer freshness cue",
-            tag: "Previous release",
-            highlights: [
-              "The rendered viewer's sidebar now shows a 'Generated <timestamp>' footer, surfacing the same render-time timestamp already embedded in the leading generated-by HTML comment.",
-              "A reviewer can tell at a glance how fresh or stale a documentation page is without viewing page source.",
-              "Small, purely additive usability improvement.",
-            ],
-          },
-          {
-            version: "v0.1.0",
-            date: "2026-07-23",
-            title: "docs → dossierx naming rebrand",
-            tag: "Previous release",
-            highlights: [
-              "Every generic 'docs' placeholder — CLI-invocation examples, the docs-claim: source tag (including the real Go regex), docs-v1 naming in skill docs, the default viewer title, and the on-disk store filenames — is renamed to the tool's actual name, dossierx.",
-              "BREAKING: .docs-lock-store.json and .docs-flag-store.json are renamed to .dossierx-lock-store.json and .dossierx-flag-store.json, with no migration. An existing project's lock/flag store will not be found after upgrading past this release.",
-              "Minor version bump (v0.0.3 → v0.1.0), not a patch, to signal the breaking on-disk change under pre-1.0 semver.",
-            ],
-          },
-          {
-            version: "v0.1.1",
-            date: "2026-07-24",
-            title: "Steps number/text alignment fix",
-            tag: "Previous release",
-            highlights: [
-              "Fixes a rendering bug in the default viewer's layout: steps claims: because each step's text is routed through the shared markdown renderer, it was wrapped in a <p> whose default browser top margin pushed the first line down relative to the step's fixed-size number circle, leaving the number visibly misaligned above the text.",
-              "The viewer stylesheet now resets the step body's <p> margins — a 0.5rem inter-block rhythm with the first block's top and last block's bottom margin zeroed — so the number circle sits flush with the first line of step text.",
-              "Purely a default-viewer CSS fix: no schema_version, on-disk store, API, or config change, so it lands as a patch bump (v0.1.0 → v0.1.1) under pre-1.0 semver.",
-            ],
-          },
-          {
-            version: "v0.1.2",
-            date: "2026-07-25",
-            title: "Consolidated audit-fix release",
-            tag: "Previous release",
-            highlights: [
-              "A deep audit against a real 202-claim consumer project found 25 confirmed defects, fixed together as one patch rather than a stream of point releases.",
-              "Markdown [text](url) links now render as anchors in claim bodies AND structured table cells (scheme-allowlisted; javascript:/data: neutralized); backtick code spans render in cells too.",
-              "Lifecycle data integrity: dependency-hash baselines are keyed per-dependent (with an automatic, re-arming lock-store migration), unlock clears pending flags, and flag is refused on structured layouts.",
-              "Security: the raw_html mockup gate is now default-deny across every attribute quote form (control-char and entity evasions closed) and enforced by render and catalog, not just lock.",
-              "Build-order staleness is now structural — status re-derives the order a fresh propose would compute and flags any divergence (reordered, re-roled, promoted, renamed, added, or deleted claims); the Build Order viewer section is visible; new dossierx version command; lint --json emits valid arrays.",
-              "Patch bump despite new capabilities: internal/ is not importable, no breaking CLI changes, and the lock-store migrates automatically.",
-            ],
-          },
-          {
-            version: "v0.2.0",
-            date: "2026-07-26",
-            title: "Comments on claims — review, discuss, resolve before locking",
-            tag: "Previous release",
-            highlights: [
-              "Threaded, Google-Docs-style review comments attach to any claim: a new dossierx comment group with an --as human|agent actor, engine-minted thread and reply ids, and a pinned, greppable list format.",
-              "An open comment thread is a third review_pending trigger alongside dependency drift and a flag: a claim cannot lock while it has an unresolved thread, and resolving the last open thread clears review_pending unless drift or a flag also stands. reaudit refuses a comment-only review_pending — there is no content diff to confirm.",
-              "New dossierx serve: a localhost-only HTTP viewer with an interactive thread panel and composer, a same-origin admission layer (Host/Origin checks, no CORS), and live reload over server-sent events as claim files change on disk. It renders from memory and never writes viewer/index.html or .catalog.json on a page load.",
-              "Adds NO new runtime dependency — the file watcher is a standard-library modification-time poll, so the runtime stays cobra + yaml.v3 only.",
-              "A fourth embedded skill teaches agents when to comment vs. flag and the advisory-rights rule. The comments: field is omitempty and excluded from a claim's content hash, so commenting never rewrites an uncommented claim or flips its dependents.",
-            ],
-          },
-          {
-            version: "v0.3.0",
-            date: "2026-07-28",
-            title: "Agent-first restructure — two surfaces, one gate",
-            tag: "Previous release",
-            highlights: [
-              "The premise, made explicit: the AGENT operates DossierX and the HUMAN reviews it. Each role gets its own surface — twenty CLI commands for the agent, the viewer's comment-and-Resolve for the human — and the docs, skills and site are rewritten around that split.",
-              "MACHINE CONTRACT: every command emits exactly one JSON envelope ({ok, command, data, warnings, error, stopped_at}), JSON by default, with a shared snake_case error.code vocabulary that the viewer's JSON API and the CLI now literally share. --dry-run on every mutating verb; --reason required on claim lock, claim unlock, claim reaudit --confirm and build-order lock. Exit codes stayed additive: 1 generic, 2 not-found/wrong-state.",
-              "SURFACE: 26 commands became 20 under eight nouns — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), migrate --adopt, serve, skills export, version. lint, catalog, render, deps, stale, coverage and the implink group are gone (stages and filters, not verbs); comment edit/delete/resolve/reopen are gone from the CLI and live only in the viewer, where the rights holder is. New: claim show (3–4 calls → 1), claim list with filters, claim new, and comment inbox (O(N) calls → 1).",
-              "INTEGRITY: a lock ledger, separate from the content hash and built as a deny-list over every persisted field — so a swapped raw_html payload on a locked, allowlisted mockup can no longer pass as unchanged. Hand-flipping status, editing a locked body, re-locking onto a record an unlock already released, deleting a locked claim's file outright, deleting a thread from YAML, or hand-editing a locked build order is now reported as lock-ledger-missing, lock-content-drift, lock-ledger-orphan, lock-ledger-released, lock-ledger-abandoned, comment-ledger-drift, build-order-content-drift or build-order-ledger-missing. The gate rides git: a pre-commit hook running check --staged over the index, with CI as the authority, because merges and rebases never fire pre-commit.",
-              "BREAKING, and it breaks on your first check: every project that locked a claim before v0.3.0 must run `dossierx migrate --adopt` once, then commit the rewritten .dossierx-lock-store.json. Pre-ledger projects used to be grandfathered in automatically on the first writing check; that is gone. Adoption is the one operation that manufactures approval out of nothing, so a gate that performs it on sight rewards deleting the ledger with a clean report over content nobody read — and no evidence inside a project distinguishes an honest v0.2.x store from a downgraded one, since locked_at shipped in v0.2.0. Adoption therefore fails closed everywhere, and only a human running the migration clears it.",
-              "THE MODEL, stated plainly because the boundary matters: DossierX DETECTS and the forge ENFORCES. Every rule produces a named, recoverable finding — a stable rule string, the claim it is about, and the command that restores it — and branch protection with a required CI check is what makes anyone obey it. check --staged judges the GIT INDEX, what the commit will actually contain, writing nothing, which is what makes a pre-commit hook meaningful; it judges ONE TREE and reads no git history, so its verdict is identical in every clone however shallow.",
-              "The boundary, stated as a principle rather than a list of cases: AN IN-REPO LEDGER CANNOT ATTEST ANYTHING AGAINST THE PERSON WHO CAN WRITE IT. The gate judges one tree, and within it a change to a locked claim's APPROVED CONTENT leaves a surviving artifact DISAGREEING with the one that moved, and is caught (review_pending is engine bookkeeping, outside the hash, so deleting it by hand clears a review flag silently) — an agent editing a locked claim, a careless hand-edit, a bad merge, a status flip, a deleted approval record, an erased comment thread all leave the untouched files disagreeing with the touched one, and that disagreement is a named finding. What has nothing to disagree with it is not: a record's reason, at and actor are testimony rather than signature, so rewriting those alone changes what the ledger says a human approved and is reported by nothing. What it cannot catch is a claim and its ledger record written TOGETHER, in one commit, by someone entitled to write both: nothing survives to disagree. The sharpest form involves no deletion at all — unlock a locked claim, rewrite its body, re-lock it (minting a fresh record whose hash correctly covers the new content), then hand-edit that record's reason, at and actor back to the original approval's values; check and check --staged both report ok:true over a ledger crediting a human who approved nothing. That is one illustration, not an inventory. No in-repo mechanism closes it, because any evidence the tool consults lives in the repository and the repository is writable by the person being gated — a build during this release cycle compared the staged tree against its parent commit and was withdrawn before shipping, since the parent commit is outside the COMMIT but not outside the COMMITTER (a rebase, --orphan or a second config file switches such a comparison off unremarkably) and it cost false refusals of ordinary git revert. It is caught where a control the committer cannot rewrite lives: branch protection, a required CI status check, and review of a diff in which such a change is loud. The direction that would actually move the boundary is signing the ledger with a key held outside the repository, of which git commit signing is the cheapest form.",
-
-              "BUG FIX, and the reason the loop works at all: a claim with no comments rendered no 💬 chip, so the first comment on any card could never be opened from the viewer — the exact gesture the review loop starts with. Both gates had to move together, since the server emitted the chip only when threads existed and the client hid any chip reading zero, so an empty chip would have vanished the moment it was clicked. Every non-banner card now carries a chip, zero-state included; a static file:// export still hides them, because with no API to answer, read-only is the honest presentation.",
-              "Also: self-edges rejected across every edge type and a second cycle pass over governed_by; edge labels in the viewer read as prose instead of raw ids (issue #11); five embedded skills, contract front-loaded, rewritten onto the new surface. Still cobra + yaml.v3 only.",
-            ],
-          },
-          {
-            version: "v0.3.1",
-            date: "2026-07-30",
-            title: "A documentation-grade renderer",
-            tag: "Latest release",
-            highlights: [
-              "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
-              "Constructs: backslash escapes, bold, italic in both spellings under CommonMark left/right-flanking rules, strikethrough, double-backtick code spans, autolinks in both forms, blockquotes, horizontal rules, headings at ### and deeper, unbounded list nesting, task items, hard line breaks, loose lists, ordered-list start numbers, fence language classes, GFM pipe tables, and images. Emphasis is held to all 132 emphasis examples of CommonMark 0.31.2.",
-              "Images render in claim bodies and never in comment bodies, fail-closed by construction rather than by a flag: markdown.Render emits none and cannot be told to, so the comment paths stay image-free by changing nothing. A src must resolve under its own claim's assets/ directory, and dossierx serve answers for them from an allowlist computed from the loaded claims rather than from filesystem traversal.",
-              "SECURITY: parseLink's bracket rescan was quadratic — 1 MiB of bracket characters in a comment body cost 5.8 seconds of CPU, amplified because every comment is re-rendered on every GET /api/comments. This predates v0.3.1 and is live in the v0.3.0 binary.",
-              "SECURITY: the mockup <img> gate recognised // as an authority prefix but not the three backslash spellings a browser normalises to it, so a reviewed, locked, allowlisted mockup claim could load a third-party image. The gate now lives in one shared internal/urlsafe instead of four divergent copies.",
-              "Two new lints — markdown-sanity and asset-scope — with a deliberate severity split: error for security findings, warning for craft ones, because lock refuses on any error-severity finding corpus-wide.",
-              "Upgrading: locked claim bodies may render differently with no edit, no content-hash change and no ledger event. dossierx claim unlock is the deliberate way to revisit them.",
-            ],
-          },
-        ],
+        releases,
       },
     },
     {
