@@ -269,7 +269,7 @@ func TestUIDeleteWholeThreadConfirmed(t *testing.T) {
 	// against a live serve it STAYS VISIBLE (v0.2.1): the claim can still be
 	// commented on, and hiding the chip here would strand the panel the user is
 	// currently looking at behind a control that no longer exists.
-	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip');return !!c && c.classList.contains('comment-chip--empty') && !c.closest('.claim-comments').hidden;})()`)
+	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip');return !!c && c.classList.contains('comment-chip--empty') && !c.closest('.claim-comments-slot').hidden;})()`)
 	if evalString(t, ctx, `document.querySelector('.comment-chip .comment-chip-count').textContent`) != "0" {
 		t.Fatal("the zero-state chip must read 0 after the last thread is deleted")
 	}
