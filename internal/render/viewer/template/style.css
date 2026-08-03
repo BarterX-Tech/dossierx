@@ -2060,6 +2060,18 @@ body.shell-body {
    server-written `open` signals, and of the expand-all toolbar — whichever of
    those is or is not in effect on screen, print shows all four states
    identically.
+   SCOPE — stated plainly so the next reader knows this is a decision, not an
+   oversight: only the facet currently ON SCREEN prints. A collapsed footer
+   belonging to a claim in a facet group the reader is not looking at stays
+   unrendered, because its ancestor section.claim-group carries the `hidden`
+   attribute (computed display: none) and no rule here un-hides it. The rules
+   below reveal a disclosure inside a subtree that is being laid out; they
+   cannot resurrect a subtree that display: none removed from the box tree in
+   the first place. That is deliberate: printing a tabbed viewer has always
+   shown one facet, what v0.4.1 changes is that the shown facet's footers now
+   print with it, and un-hiding every facet for print is a larger design
+   change — page order, per-facet headings, the duplicated overview copies —
+   than a patch release should make.
    Only the disclosure is touched. Nothing here restyles the card, the type
    scale or the color tokens; a full print stylesheet is out of scope for
    v0.4.1. */
