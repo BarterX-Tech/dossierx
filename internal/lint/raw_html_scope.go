@@ -12,28 +12,25 @@
 // of scope everywhere, independent of layout.
 //
 // The second half governs the one field that IS meant to be rendered
-// unescaped: model.Claim.RawHTML, for layout: mockup claims (see
-// model.LayoutMockup's doc comment and render/components' mockup
-// component). Because that content is genuinely live markup, this lint
-// enforces the round-3 "hardening issue 9" gate in full, in this order:
+// unescaped: model.Claim.RawHTML. It is legal on any layout, not only
+// layout: mockup (see model.LayoutMockup's doc comment and render/components'
+// mockup component for the layout that originated it). Because that content
+// is genuinely live markup, this lint enforces the round-3 "hardening issue
+// 9" gate in full, in this order:
 //
-//  1. Layout gate — RawHTML may only be non-empty on a layout: mockup
-//     claim; it must never be smuggled into a card/table/list/steps/banner
-//     body (those bodies go through Body/Steps/Rows instead, and stay
-//     covered by the denylist above regardless of layout).
-//  2. Module allowlist — only a module present in cfg.MockupModules (a
+//  1. Module allowlist — only a module present in cfg.MockupModules (a
 //     checked-in field of project.config.yaml — see internal/config) may
-//     author a layout: mockup claim at all. An unset/empty allowlist means
-//     no module may.
-//  3. Tag/attribute allowlist — RawHTML's markup may use only div, span,
+//     author a raw_html claim at all, on any layout. An unset/empty
+//     allowlist means no module may.
+//  2. Tag/attribute allowlist — RawHTML's markup may use only div, span,
 //     b, and br elements (br carrying no attributes at all, same as the
 //     others' "class only" ceiling), carrying at most a class attribute;
 //     every other tag or attribute (including style, id, href, src,
 //     data-*, any inline event handler) is a hard failure.
-//  4. CSS-class allowlist — every class token used must be prefixed
+//  3. CSS-class allowlist — every class token used must be prefixed
 //     gcp- or mockup-, matching the classes ported into the engine's
 //     shared stylesheet; anything else is a hard failure.
-//  5. Lock-lifecycle gate — a claim carrying RawHTML must have
+//  4. Lock-lifecycle gate — a claim carrying RawHTML must have
 //     RawHTMLReviewed == true. This is enforced here, as a lint finding,
 //     rather than as a separate check inside internal/lock: internal/lock.
 //     Lock already refuses to lock a claim against which the full lint
@@ -223,21 +220,16 @@ func checkMockupGate(c model.Claim, cfg *config.Config) []Finding {
 		})
 	}
 
-	// 1. Layout gate.
-	if c.Layout != model.LayoutMockup {
-		mockupFinding(fmt.Sprintf("raw_html is only legal on layout: mockup, got layout: %q", c.Layout))
-	}
-
-	// 2. Module allowlist.
+	// 1. Module allowlist.
 	allowlisted := cfg != nil && contains(cfg.MockupModules, c.Module)
 	if !allowlisted {
 		mockupFinding(fmt.Sprintf("module %q is not in the project's mockup_modules allowlist and may not author layout: mockup / raw_html claims", c.Module))
 	}
 
-	// 3 & 4. Tag/attribute allowlist and CSS-class allowlist.
+	// 2 & 3. Tag/attribute allowlist and CSS-class allowlist.
 	findings = append(findings, checkMockupMarkup(c.ID, c.RawHTML)...)
 
-	// 5. Lock-lifecycle gate. Enforced here, not in internal/lock: Lock
+	// 4. Lock-lifecycle gate. Enforced here, not in internal/lock: Lock
 	// refuses to lock against any error-severity lint finding, so this
 	// finding alone is sufficient to block locking (see this file's
 	// package doc comment, point 5).

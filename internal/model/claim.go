@@ -277,11 +277,11 @@ type Claim struct {
 	// structure into rendered output instead).
 	Section string `yaml:"section,omitempty"`
 
-	// RawHTML is a project-authored blob of raw HTML for layout: mockup
-	// claims (see LayoutMockup) — e.g. an embedded viewer mockup that
-	// cannot be expressed as markdown prose/rows/steps. Unlike Body, Steps,
-	// and Row values, which flow through html/template as plain,
-	// auto-escaped strings (see render/components.renderBody and the
+	// RawHTML is a project-authored blob of raw HTML, legal on any layout
+	// (not only layout: mockup, see LayoutMockup) — e.g. an embedded viewer
+	// mockup that cannot be expressed as markdown prose/rows/steps. Unlike
+	// Body, Steps, and Row values, which flow through html/template as
+	// plain, auto-escaped strings (see render/components.renderBody and the
 	// raw-html-scope lint), RawHTML is meant to be rendered unescaped, so
 	// it carries its own explicit review gate: RawHTMLReviewed.
 	RawHTML string `yaml:"raw_html,omitempty"`

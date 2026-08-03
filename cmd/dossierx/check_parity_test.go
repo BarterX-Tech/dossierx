@@ -214,11 +214,10 @@ func TestCheckParity_RawHTMLFailsAtLint(t *testing.T) {
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
 	wantStdout := "[warning] orphan: widget.contract.mock: claim has no mirrors/rests_on edges in either direction\n" +
-		"[error] raw-html-scope: widget.contract.mock: raw_html is only legal on layout: mockup, got layout: \"card\"\n" +
 		"[error] raw-html-scope: widget.contract.mock: module \"widget\" is not in the project's mockup_modules allowlist and may not author layout: mockup / raw_html claims\n" +
 		"[error] raw-html-scope: widget.contract.mock: raw_html is set but raw_html_reviewed is not true; a human must review this markup and set raw_html_reviewed: true before this claim can lock\n" +
-		"lint: 4 finding(s), 3 error(s)\n"
-	wantStderr := "Error: check: lint: 3 error-level finding(s)\n"
+		"lint: 3 finding(s), 2 error(s)\n"
+	wantStderr := "Error: check: lint: 2 error-level finding(s)\n"
 	assertCheckParity(t, cfgPath, wantStdout, wantStderr, true)
 }
 

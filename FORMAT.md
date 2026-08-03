@@ -25,7 +25,7 @@ build_role: orientation | schema | behavior | api | verification | out-of-scope 
 body: markdown string          # optional, illustrative prose
 rows: [ { ... } ]              # optional, table rows; each cell must be a string
 steps: [ string ]              # optional, ordered steps
-raw_html: string               # optional, layout: mockup only (review-gated)
+raw_html: string               # optional, legal on any layout (review-gated)
 raw_html_reviewed: bool        # optional, human-set gate for raw_html
 section: string                # optional, in-content section heading (see below)
 mirrors: [ id, ... ]
@@ -73,8 +73,11 @@ When `layout` is omitted, it is inferred from the claim's shape:
 
 `list`, `tree`, `banner`, and `mockup` are never inferred; a claim must set
 them explicitly. `mockup` renders a project-authored `raw_html` blob instead
-of markdown/rows/steps and carries its own human review gate — see the
-`raw-html-scope` lint for the full constraints.
+of markdown/rows/steps, but `raw_html` itself is not exclusive to `layout:
+mockup` — it is legal on any layout, alongside that layout's own body/rows/
+steps content, subject to the module allowlist, the markup allowlist, and
+its own human review gate — see the `raw-html-scope` lint for the full
+constraints.
 
 ### `body` and the markdown ceiling
 
