@@ -28,6 +28,15 @@
      stringifies non-string cell values (numbers/bools) and maps a nil/absent
      cell to "", so a ragged row never breaks template execution.
 
+     The <table> sits inside a scroll wrapper div, and the WRAPPER is what
+     carries overflow-x: auto — the table itself keeps style.css's
+     width: 100%. A table wider than its card then scrolls inside its own box
+     instead of widening the page. The wrapper opens and closes inside the
+     {{if .Rows}} branch, so the "No rows." branch below emits no wrapper and
+     no <table>, exactly as before. style.css's block for that class carries
+     the cell rules scoped to it, and says why a body pipe table (.md-table)
+     is deliberately left outside that scope.
+
      The heading shows the id's readable label via the shared "claimLabel"
      func (components.go's ClaimLabel), with the machine id kept reachable on
      the same element through data-claim-id and the hover title — see
@@ -38,17 +47,19 @@
   {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
   {{if .Rows}}
   {{$keys := rowKeys .Rows}}
-  <table>
-    <thead>
-      <tr>{{range $keys}}<th>{{.}}</th>{{end}}</tr>
-    </thead>
-    <tbody>
-      {{range .Rows}}
-      {{$row := .}}
-      <tr>{{range $keys}}{{$cls := colClass .}}<td{{if $cls}} class="{{$cls}}"{{end}}>{{cell (index $row .)}}</td>{{end}}</tr>
-      {{end}}
-    </tbody>
-  </table>
+  <div class="claim-table-scroll">
+    <table>
+      <thead>
+        <tr>{{range $keys}}<th>{{.}}</th>{{end}}</tr>
+      </thead>
+      <tbody>
+        {{range .Rows}}
+        {{$row := .}}
+        <tr>{{range $keys}}{{$cls := colClass .}}<td{{if $cls}} class="{{$cls}}"{{end}}>{{cell (index $row .)}}</td>{{end}}</tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
   {{else}}
   <p class="claim-empty">No rows.</p>
   {{end}}

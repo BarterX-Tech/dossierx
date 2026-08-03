@@ -38,9 +38,11 @@ var (
 	// the CLI and the serve handlers cross, by an ACTUAL round-trip probe
 	// (loader.CommentBodyRoundTrips) that matches the loader's save-time guard
 	// (loader.ErrClaimNotRoundTrippable) by construction — the guard remains the
-	// systemic backstop under it. The message is actionable: start the body with a
-	// non-whitespace character.
-	ErrUnsafeBody = errors.New("comments: comment body cannot be safely stored as YAML: start it with a non-whitespace character — remove any leading blank line and de-indent the first line — then retry")
+	// systemic backstop under it. The message is actionable, and it names only what
+	// is still refused: a leading blank line, or a first content line led by a TAB.
+	// A SPACE-indented first content line stores fine since v0.4.0 (T6), so telling
+	// the caller to de-indent would send them to fix something that is not broken.
+	ErrUnsafeBody = errors.New("comments: comment body cannot be safely stored as YAML: start it with a character that is not a blank line or a tab — then retry")
 	// ErrInvalidActor: --as was neither "human" nor "agent".
 	ErrInvalidActor = errors.New(`comments: actor must be "human" or "agent"`)
 	// ErrRightsDenied: advisory rights — an agent may not resolve/reopen/edit/
@@ -536,11 +538,11 @@ func (d *Deps) mutate(claimID string, fn func(c *model.Claim) error) (model.Clai
 	// project-scoped gate is already reporting as downgraded. See
 	// lock.LedgerEstablished for the reproduction; lock.PrepareStore's comment
 	// sweep has always asked the wider question, and now all three ask it the same
-	// way. An honest un-migrated v0.2.x project is pre-ledger and NOT downgraded,
-	// so it still answers "no" and nothing here changes for it.
+	// way. An honest pre-ledger v0.2.x project is NOT downgraded, so it still
+	// answers "no" and nothing here changes for it.
 	ledgerCovered := ls.LedgerEstablished(digests.FileExists())
 
-	// The un-migrated project, kept out of the digest store's way entirely — see
+	// The pre-ledger project, kept out of the digest store's way entirely — see
 	// recordCommentDigest. This is a separate question from ledgerCovered: a
 	// pre-ledger store answers "no" to both, but the two "no"s mean opposite
 	// things about whether this op may CREATE the digest store.
@@ -671,8 +673,8 @@ func (d *Deps) openCommentDigest() (*digest.Store, func(), error) {
 //
 // The predicate is the THREADS, because they are what survives the tamper. The
 // single code path that writes a thread (this function's caller) records the
-// claim's digest in the same act, and AdoptProject records an entry for every
-// claim as a project crosses into ledger coverage. So in a covered project
+// claim's digest in the same act, and a project that crosses into ledger
+// coverage does so holding nothing locked. So in a covered project
 // "carries threads, has no entry" is not reachable by any honest sequence: either
 // the entry was removed, or the threads were never written by the engine.
 //
@@ -682,8 +684,8 @@ func (d *Deps) openCommentDigest() (*digest.Store, func(), error) {
 //   - an UNCOVERED project (no ledger yet). A v0.2.x project's threads predate
 //     the digest store entirely, and the store adopts them wholesale on first
 //     write; accusing them would refuse every comment op on every project that
-//     has not run `migrate --adopt`, and the gate for that is the project-scoped
-//     lock-ledger-adoption-required, said once.
+//     has not yet crossed onto the ledger, and the gate for that is the
+//     project-scoped lock-ledger-pre-ledger, said once.
 //   - a claim with NO threads. The first comment on a claim is the ordinary case
 //     and must work: an entry is what a comment op creates, not something it
 //     requires.
@@ -766,7 +768,7 @@ func claimFileFor(c model.Claim) string {
 // moments earlier. The message says plainly that the comment WAS saved, because
 // the wrong response to it is a retry — that is what appends the thread twice.
 func (d *Deps) recordCommentDigest(store *digest.Store, claims []model.Claim, c model.Claim, ledgerCovered, preLedger bool) error {
-	// THE UN-MIGRATED PROJECT IS LEFT ALONE, digest store included, and this is
+	// THE PRE-LEDGER PROJECT IS LEFT ALONE, digest store included, and this is
 	// the one case where the honest answer is to record nothing at all.
 	//
 	// The comment digest store is a SIBLING FILE that only exists once a project
@@ -776,28 +778,27 @@ func (d *Deps) recordCommentDigest(store *digest.Store, claims []model.Claim, c 
 	// therefore manufactures that contradiction against a project that has done
 	// nothing wrong, and this function was doing it on every comment op:
 	//
-	//	an honest, un-migrated v0.2.x project (lock store at version 1)
+	//	an honest, still-pre-ledger v0.2.x project (lock store at version 1)
 	//	dossierx comment add <draft-claim> …    succeeds, and CREATES
 	//	                                        .dossierx-comment-digest.json
 	//	dossierx check                          lock-ledger-downgraded, from now on
-	//	dossierx migrate --adopt                REFUSED (ErrAdoptionRefused):
-	//	                                        "restore the lock store from
-	//	                                        version control"
+	//	the crossing                            REFUSED: "restore the lock store
+	//	                                        from version control"
 	//
-	// One ordinary comment left the project permanently un-migratable, accused of
-	// tampering, and pointed at a recovery for a file nobody had touched. That is
-	// the outage the whole fail-closed design exists to avoid handing an honest
+	// One ordinary comment left the project permanently unable to cross, accused
+	// of tampering, and pointed at a recovery for a file nobody had touched. That
+	// is the outage the whole fail-closed design exists to avoid handing an honest
 	// project on upgrade day.
 	//
 	// lock.SweepCommentDigests already draws exactly this line — its `crossing`
 	// excludes a pre-ledger store with the same reasoning, and says so — and its
 	// closing sentence names who does the work instead: a pre-ledger project's
-	// whole comment store is written by AdoptProject, in the same act that writes
-	// its ledger records. So the cost of recording nothing here is bounded and
-	// temporary: this claim's threads stay UNKNOWN to the digest rules (never
-	// blessed, never accused, which is where every other claim in an un-migrated
-	// project already sits) until the human runs the migration once, and the
-	// migration records every claim's block.
+	// digest store is created by lock.CrossPreLedger, in the same act that stamps
+	// the schema. So the cost of recording nothing here is bounded and temporary:
+	// this claim's threads stay UNKNOWN to the digest rules (never blessed, never
+	// accused, which is where every other claim in a pre-ledger project already
+	// sits) until the project crosses, at which point every ordinary comment op
+	// records its block again.
 	//
 	// It is keyed on the store being ABSENT as well as pre-ledger: a pre-ledger
 	// project that somehow already HAS a digest store is a project the gate is
@@ -815,7 +816,7 @@ func (d *Deps) recordCommentDigest(store *digest.Store, claims []model.Claim, c 
 	// internal/check reports as comment-digest-absent, and adopting there would
 	// re-record a hand-edited comment block as the truth and clear the very
 	// finding that named it. Same rule the lock ledger has always applied to
-	// itself (AdoptProject: absence never adopts), for the same reason: an
+	// itself (an absent ledger is never crossed), for the same reason: an
 	// adoption an attacker can trigger is not an adoption.
 	//
 	// The cost is honest and bounded: in a covered project whose store is gone,
@@ -886,8 +887,9 @@ func validateActor(a model.CommentRole) error {
 // heuristic, so it rejects EXACTLY the bodies the loader's save-time guard
 // (loader.ErrClaimNotRoundTrippable) would refuse — matching it by construction.
 // That closes the two gaps the old heuristic had: it now rejects a first CONTENT
-// line indented by a tab or spaces (which the heuristic missed, so the op ran and
-// the guard leaked a raw round-trip error), and it now ACCEPTS bodies that
+// line led by a TAB (which the heuristic missed, so the op ran and the guard
+// leaked a raw round-trip error — note the SPACE-indented half of that class
+// became storable in v0.4.0 and is accepted), and it now ACCEPTS bodies that
 // round-trip cleanly despite a whitespace-only or CR/NBSP/NEL-led first line
 // (which the heuristic false-rejected).
 func validateBody(body string) error {

@@ -37,10 +37,10 @@ const (
 	// RuleLockLedgerDowngraded is project-scoped: the lock store says it
 	// predates the lock ledger, and the project around it says otherwise.
 	//
-	// It is the read-only half of the guard AdoptProject enforces on the write
+	// It is the read-only half of the guard CrossPreLedger enforces on the write
 	// path (see Store.LedgerDowngraded for the evidence and the attack). The two
 	// have to exist together: without the write-path half, one edited number
-	// re-arms grandfathering and re-blesses tampered content as approved;
+	// re-opens the crossing and re-blesses tampered content as approved;
 	// without THIS half, a read-only command — `check --validate`, `check
 	// --staged`, the pre-commit hook, CI — would see the downgraded store, take
 	// it for an honest v0.2.x project, grandfather it in memory and report
@@ -52,15 +52,15 @@ const (
 	// restore.
 	RuleLockLedgerDowngraded = "lock-ledger-downgraded"
 
-	// RuleLockLedgerAdoptionRequired is project-scoped: this project's lock store
+	// RuleLockLedgerPreLedger is project-scoped: this project's lock store
 	// predates the lock ledger, so nothing in it carries an approval record — and
-	// this build does not grandfather it in on its own.
+	// this build does not grandfather anything in on its own.
 	//
-	// It is the visible half of DECISION "adoption fails closed". The state it
+	// It is the visible half of DECISION "the ledger fails closed". The state it
 	// reports is the one that used to be SILENT: PrepareStore adopted it on the
-	// write path and Store.PreLedgerExempt grandfathered it in memory on the read
-	// path, so a project presenting the pre-ledger shape passed every gate. And
-	// presenting that shape is two hand edits — lower "version", delete the
+	// write path and the pre-ledger predicate grandfathered it in memory on the
+	// read path, so a project presenting the pre-ledger shape passed every gate.
+	// And presenting that shape is two hand edits — lower "version", delete the
 	// "ledger" key — which is why LedgerDowngraded had to be invented, and why it
 	// is not enough on its own: delete the comment digest store in the same commit
 	// and no evidence in this directory can tell the result from an honest v0.2.x
@@ -68,16 +68,36 @@ const (
 	// looks identical either way — verified against git show v0.2.0).
 	//
 	// So the answer is not a better predicate but a refusal: this project fails
-	// the gate until a human runs the one-time migration, which is the only path
-	// in the build that writes a grandfathered record. See AdoptProject.
+	// the gate until it holds nothing that predates the ledger, at which point the
+	// next lock crosses it (CrossPreLedger). Nothing writes a grandfathered
+	// record any more.
+	//
+	// IT IS EMITTED ONLY WHEN SOMETHING IS ACTUALLY LOCKED, which is a v0.4.0
+	// behaviour change from the unconditional emission this comment used to
+	// argue for. That argument was: "It fires whether or not any claim is locked:
+	// the migration is what puts this store on the ledger schema at all, and a
+	// project that skips it while it happens to have nothing locked would simply
+	// meet the same refusal later, from a state where a lock had already been
+	// refused. One command, run once, and every command after it behaves
+	// normally." It died with the migration: there is no command to skip and no
+	// later refusal to meet, because a pre-ledger project holding nothing locked
+	// crosses silently and correctly on its next lock. Reporting it there would
+	// be a finding on correct state, which is how gates get switched off.
+	//
+	// The condition is therefore the one the WRITE PATH refuses on —
+	// countLocked(claims) + lockedBuildOrders > 0 — and it is emitted from two
+	// disjoint places, because lock.Audit has no build-order input and
+	// structurally cannot have one (internal/buildorder imports internal/lock).
+	// This file owns the claims term; internal/check's ledgerGate owns the
+	// build-orders-only term. See internal/check/ledger.go.
 	//
 	// It replaces the per-claim lock-ledger-missing findings for these claims
-	// rather than sitting on top of them — one cause, said once, with the command
+	// rather than sitting on top of them — one cause, said once, with the recovery
 	// that clears it. Repeating "this claim is locked but has no record" N times,
 	// each with a recovery that says to set the claim back to draft and re-lock
 	// it, is exactly the destructive advice the old exemption existed to avoid
 	// giving an honest project.
-	RuleLockLedgerAdoptionRequired = "lock-ledger-adoption-required"
+	RuleLockLedgerPreLedger = "lock-ledger-pre-ledger"
 
 	// RuleLockLedgerMissing: a locked claim with no ledger record. Something
 	// wrote status: locked without going through the approval path — most
@@ -137,7 +157,8 @@ const (
 	//
 	//   - OTHER CLAIMS' BASELINES that name this claim as a dependency
 	//     (hashes[dependent][id]). Unsound in both directions. Baselines are
-	//     recorded for dependencyIDs = mirrors ++ rests_on, and a LOCKED claim may
+	//     recorded for BaselineDependencyIDs = mirrors ++ rests_on ++ a
+	//     claim-valued governed_by.type, and a LOCKED claim may
 	//     legitimately mirror a DRAFT one — mirror-mismatch compares Layout, Body,
 	//     Rows and Steps and documents status as EXPECTED to differ — so the rule
 	//     would fire on correct state, which is the outage this gate exists to
@@ -380,9 +401,9 @@ type Finding struct {
 //
 // digests is also EVIDENCE ABOUT THE LOCK STORE, which is the second, less
 // obvious reason it is passed here. Its presence is what tells an honest
-// pre-ledger project (grandfathered in memory, silently — see
-// Store.PreLedgerExempt) apart from a lock store that was edited back to a
-// pre-ledger version to re-arm that same grandfathering (refused, loudly — see
+// pre-ledger project (exempt from the per-claim rules — see
+// Store.PreLedgerUnadopted) apart from a lock store that was edited back to a
+// pre-ledger version to re-arm the old grandfathering (refused, loudly — see
 // Store.LedgerDowngraded). Both are decided once, up front, from the state the
 // caller loaded.
 func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding {
@@ -400,17 +421,17 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 	// the ledger map itself — still applies.
 	digestsPresent := digests != nil && digests.FileExists()
 
-	// adoptionRequired: this project locked things before this build gave locks a
-	// record, and it has not run the one-time migration yet. Its locked claims
+	// preLedgerUnadopted: this project locked things before this build gave locks
+	// a record, and it has not crossed onto the ledger yet. Its locked claims
 	// are NOT accused one by one (that recovery text is destructive advice for a
 	// project that has done nothing wrong) and they are NOT grandfathered in
 	// memory either, which is what used to happen and what made the whole state
-	// silent. They are reported once, project-scoped, with the command that
-	// clears it. See Store.AdoptionRequired and RuleLockLedgerAdoptionRequired.
-	adoptionRequired := store.AdoptionRequired(digestsPresent)
+	// silent. They are reported once, project-scoped, with the recovery that
+	// clears it. See Store.PreLedgerUnadopted and RuleLockLedgerPreLedger.
+	preLedgerUnadopted := store.PreLedgerUnadopted(digestsPresent)
 
 	// covered: the ledger is in force here — the store is on disk at the ledger
-	// schema, which in this build happens only because AdoptProject or a real
+	// schema, which in this build happens only because CrossPreLedger or a real
 	// approval put it there. It arms the two rules whose evidence is only
 	// meaningful once every locked claim is supposed to have a record:
 	// lock-ledger-deleted and comment-digest-unrecorded. A downgraded store is
@@ -423,11 +444,11 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		record, hasRecord := ledgerRecordFor(store, c.ID)
 
 		switch {
-		// The un-migrated project is spent HERE and only here: on a claim whose
+		// The pre-ledger project is spent HERE and only here: on a claim whose
 		// record was never written because the build that locked it had nowhere
 		// to write one. Every other rule below needs a record to exist, and a
 		// genuinely pre-ledger store has none — so nothing else has to know.
-		case !hasRecord && adoptionRequired:
+		case !hasRecord && preLedgerUnadopted:
 
 		// Evaluated BEFORE lock-ledger-missing, and for both lock states,
 		// because it is the more precise diagnosis wherever it applies: the
@@ -571,25 +592,23 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		})
 	}
 
-	// The un-migrated project, reported once for the whole project. It fires
-	// whether or not any claim is locked: the migration is what puts this store
-	// on the ledger schema at all, and a project that skips it while it happens
-	// to have nothing locked would simply meet the same refusal later, from a
-	// state where a lock had already been refused. One command, run once, and
-	// every command after it behaves normally.
+	// The pre-ledger project, reported once for the whole project, and ONLY when
+	// this project still holds a locked CLAIM.
+	//
+	// The claims-only condition is not an oversight: this function has no
+	// build-order input and structurally cannot have one, so the other half of
+	// the union — a pre-ledger project holding a locked BUILD ORDER and zero
+	// locked claims — is emitted by internal/check's ledgerGate, which holds both
+	// inputs. The two conditions are mutually exclusive, so the finding appears
+	// exactly once in every state. See RuleLockLedgerPreLedger for why the
+	// emission is conditional at all.
 	//
 	// It is DELIBERATELY NOT accompanied by the per-claim findings for the same
 	// claims (see the switch above): the cause is the project's, the recovery is
 	// the project's, and lock-ledger-missing's own advice — set it back to draft
-	// and re-lock — would destroy the very approvals the migration is about to
-	// record.
-	if adoptionRequired {
-		findings = append(findings, Finding{
-			Rule: RuleLockLedgerAdoptionRequired,
-			Message: fmt.Sprintf(
-				"this project's lock store predates the lock ledger (schema version %d), so %d locked claim(s) here have no approval record and nothing can say whether they still hold the content that was approved. Nothing is grandfathered automatically any more: adoption records whatever the claims say NOW as approved, so it has to be an explicit act a human runs and reviews, not something an ordinary command does on its own. Run `dossierx migrate --adopt` ONCE, review the claims it names, and commit the updated %s and %s. Until then every gate here fails closed.",
-				store.OnDiskVersion(), countLocked(claims), StoreFileName, digest.StoreFileName),
-		})
+	// and re-lock — would destroy the very approvals the crossing preserves.
+	if lockedClaims := countLocked(claims); preLedgerUnadopted && lockedClaims > 0 {
+		findings = append(findings, PreLedgerFinding(store, lockedClaims, 0))
 	}
 
 	// The downgrade is the other project-scoped rule, and it is deliberately
@@ -613,6 +632,28 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 		return findings[i].Rule < findings[j].Rule
 	})
 	return findings
+}
+
+// PreLedgerFinding builds the project-scoped RuleLockLedgerPreLedger finding.
+//
+// It is exported because the finding is emitted from TWO places — this package,
+// for the locked-CLAIMS half, and internal/check's ledgerGate for the locked-
+// BUILD-ORDERS-only half, which is the only package that holds both inputs. One
+// constructor rather than two restatements is what keeps the two emitters from
+// producing different bytes for the same condition.
+//
+// The count is rendered as both terms so a reader can see WHICH half fired.
+func PreLedgerFinding(store *Store, lockedClaims, lockedBuildOrders int) Finding {
+	version := 0
+	if store != nil {
+		version = store.OnDiskVersion()
+	}
+	return Finding{
+		Rule: RuleLockLedgerPreLedger,
+		Message: fmt.Sprintf(
+			"this project's lock store predates the lock ledger (schema version %d), so %d locked claim(s) and %d locked build order(s) here have no approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more.\n\n%s\n\nCommit the updated %s and %s with the re-locks.",
+			version, lockedClaims, lockedBuildOrders, preLedgerCrossingSteps, StoreFileName, digest.StoreFileName),
+	}
 }
 
 // engineLocked reports whether the STORE says this engine locked claim id at
@@ -640,8 +681,9 @@ func engineLocked(s *Store, id string) bool {
 }
 
 // countLocked counts the locked claims in the set under audit — for the
-// adoption-required message, which is more useful when it says how much work the
-// migration is about to record than when it says only that one is needed.
+// pre-ledger finding (see PreLedgerFinding), which is more useful when it says
+// how much of the project still predates the ledger than when it says only that
+// something does.
 func countLocked(claims []model.Claim) int {
 	n := 0
 	for _, c := range claims {

@@ -241,8 +241,8 @@ func preLedgerStore(t *testing.T) *Store {
 	return store
 }
 
-// TestAuditRefusesAnUnmigratedProjectOnceByName is the read-only half of
-// ADOPTION FAILS CLOSED, and it replaces the in-memory grandfathering that used
+// TestAuditRefusesAPreLedgerProjectOnceByName is the read-only half of THE
+// LEDGER FAILS CLOSED, and it replaces the in-memory grandfathering that used
 // to make this state pass silently.
 //
 // Two things have to be true at once, and only one of them used to be. The gate
@@ -254,8 +254,8 @@ func preLedgerStore(t *testing.T) *Store {
 // hand edits) was grandfathered in memory by every read-only command, so `check
 // --validate`, the pre-commit hook and CI all reported a clean project.
 //
-// So: exactly one finding, project-scoped, naming the one-time command.
-func TestAuditRefusesAnUnmigratedProjectOnceByName(t *testing.T) {
+// So: exactly one finding, project-scoped, naming the crossing.
+func TestAuditRefusesAPreLedgerProjectOnceByName(t *testing.T) {
 	store := preLedgerStore(t)
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked long before the ledger existed"}
 	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft}
@@ -263,17 +263,17 @@ func TestAuditRefusesAnUnmigratedProjectOnceByName(t *testing.T) {
 	// No digest store: the file did not exist before this release, so an honest
 	// pre-ledger project has none.
 	findings := Audit([]model.Claim{locked, draft}, store, nil)
-	if len(findings) != 1 || findings[0].Rule != RuleLockLedgerAdoptionRequired {
-		t.Fatalf("an un-migrated project must fail with exactly one project-scoped finding, got %+v", findings)
+	if len(findings) != 1 || findings[0].Rule != RuleLockLedgerPreLedger {
+		t.Fatalf("a pre-ledger project holding a locked claim must fail with exactly one project-scoped finding, got %+v", findings)
 	}
 	if findings[0].ClaimID != "" {
-		t.Errorf("the adoption refusal is about the PROJECT, not a claim; got claim_id %q", findings[0].ClaimID)
+		t.Errorf("the pre-ledger refusal is about the PROJECT, not a claim; got claim_id %q", findings[0].ClaimID)
 	}
-	if !strings.Contains(findings[0].Message, "dossierx migrate --adopt") {
-		t.Errorf("the refusal must name the one command that clears it, got %q", findings[0].Message)
+	if !strings.Contains(findings[0].Message, "dossierx claim unlock") {
+		t.Errorf("the refusal must name the crossing that clears it, got %q", findings[0].Message)
 	}
 	if hasRule(findings, RuleLockLedgerMissing) {
-		t.Errorf("the per-claim accusation must NOT accompany it: its recovery would destroy the approvals the migration is about to record")
+		t.Errorf("the per-claim accusation must NOT accompany it: its recovery would destroy the approvals the crossing preserves")
 	}
 	// The read-only gate stays read-only: it must not write a record, or it
 	// would be silently doing the migration's job — the very thing that made
@@ -285,7 +285,7 @@ func TestAuditRefusesAnUnmigratedProjectOnceByName(t *testing.T) {
 
 // The exemption is spent only on the one thing a pre-ledger build could not have
 // written. Everything else the gate knows how to say, it still says.
-func TestPreLedgerExemptionDoesNotSuppressTheOtherRules(t *testing.T) {
+func TestThePreLedgerSuppressionDoesNotSilenceTheOtherRules(t *testing.T) {
 	store := preLedgerStore(t)
 	digests, err := digest.LoadStore(filepath.Join(t.TempDir(), "digest.json"))
 	if err != nil {
@@ -651,11 +651,11 @@ func TestAnHonestlyUnlockedClaimIsNotReportedAsDeleted(t *testing.T) {
 	}
 }
 
-// And the rule is armed by COVERAGE, not by the stamp alone: an un-migrated
+// And the rule is armed by COVERAGE, not by the stamp alone: a pre-ledger
 // project's locked_at stamps are not evidence of a deleted record, because that
-// project never had records to delete. It gets the adoption refusal instead —
-// one finding, with the command that clears it.
-func TestTheDeletedRecordRuleIsSilentOnAnUnmigratedProject(t *testing.T) {
+// project never had records to delete. It gets the pre-ledger refusal instead —
+// one finding, with the crossing that clears it.
+func TestTheDeletedRecordRuleIsSilentOnAPreLedgerProject(t *testing.T) {
 	store := preLedgerStore(t) // its locked_at names widget.contract.main
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "locked by v0.2.x"}
 
@@ -663,7 +663,26 @@ func TestTheDeletedRecordRuleIsSilentOnAnUnmigratedProject(t *testing.T) {
 	if hasRule(findings, RuleLockLedgerDeleted) {
 		t.Fatalf("a pre-ledger project's locked_at is not a deleted record: it never had one; got %+v", findings)
 	}
-	if !hasRule(findings, RuleLockLedgerAdoptionRequired) {
-		t.Fatalf("expected %s, got %+v", RuleLockLedgerAdoptionRequired, findings)
+	if !hasRule(findings, RuleLockLedgerPreLedger) {
+		t.Fatalf("expected %s, got %+v", RuleLockLedgerPreLedger, findings)
+	}
+}
+
+// TestPreLedgerFindingIsSilentWhenNothingIsLocked pins v0.4.0's decided
+// behaviour change: the project-scoped pre-ledger finding is CONDITIONAL now,
+// not unconditional.
+//
+// At v0.3.x it fired on the bare predicate, on the reasoning that the migration
+// was what put the store on the ledger schema at all, so a project that skipped
+// it would meet the same refusal later. There is no migration to skip any more:
+// a pre-ledger project holding nothing locked crosses silently and correctly on
+// its next lock (CrossPreLedger), so reporting it here would be a finding on
+// correct state — and `check` would contradict a write path that succeeds.
+func TestPreLedgerFindingIsSilentWhenNothingIsLocked(t *testing.T) {
+	store := preLedgerStore(t)
+	draft := model.Claim{ID: "widget.contract.draft", Facet: "contract", Module: "widget", Status: model.StatusDraft}
+
+	if findings := Audit([]model.Claim{draft}, store, nil); len(findings) != 0 {
+		t.Fatalf("a pre-ledger project with nothing locked crosses on its next lock and must be reported clean, got %+v", findings)
 	}
 }

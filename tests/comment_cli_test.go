@@ -568,9 +568,9 @@ func TestComment_AddRefusedOnBannerClaim(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// A store-bricking body whose FIRST line is real CONTENT that begins with a tab
-// or space indent ("\tcode\nmore", "    code\n    more") — the class the old
-// leading-whitespace heuristic MISSED — must be refused at the CLI with the
+// A store-bricking body whose FIRST line is real CONTENT that begins with a TAB
+// ("\tcode\nmore") — the class the old leading-whitespace heuristic MISSED —
+// must be refused at the CLI with the
 // FRIENDLY, actionable ErrUnsafeBody guidance (exit non-zero), NEVER the cryptic
 // internal "did not round-trip byte-exact" text, and must never brick the store.
 // A body the old heuristic FALSE-REJECTED but that round-trips fine (" \ncontent")
@@ -583,7 +583,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 		body string
 	}{
 		{"tab-led-content-line", "\tcode line\nmore"},
-		{"space-indented-content-line", "    func main() {}\n    return nil"},
+		{"tab-led-multiline", "\tone\n\ttwo"},
 	}
 	for _, tc := range unsafe {
 		t.Run(tc.name, func(t *testing.T) {
@@ -597,8 +597,11 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 				t.Fatalf("expected a non-zero exit for an unsafe body, got 0 (stdout: %s)", out)
 			}
 			msg := stderr + out
-			// FRIENDLY + actionable: the guidance names how to fix it.
-			if !strings.Contains(msg, "de-indent") || !strings.Contains(msg, "stored as YAML") {
+			// FRIENDLY + actionable: the guidance names how to fix it. It stopped
+			// saying "de-indent" in v0.4.0, because a space-indented first line
+			// now stores fine and only a tab-led one does not — sending the caller
+			// to de-indent would point them at something that is not broken.
+			if !strings.Contains(msg, "not a blank line or a tab") || !strings.Contains(msg, "stored as YAML") {
 				t.Fatalf("expected the friendly unsafe-body guidance, got stdout: %s stderr: %s", out, stderr)
 			}
 			// NEVER the cryptic internal round-trip text.

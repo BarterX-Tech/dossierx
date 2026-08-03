@@ -28,10 +28,16 @@ checklist for that half.
 - [ ] **The version pins are moved.** Sweep for them rather than recalling
       where they are:
 
-      grep -rn "dossierx@v\|/v0\.[0-9]" --include="*.md" --include="*.yml" . \
-        | grep -v "CHANGELOG\|docs/RELEASING.md"
+      git grep -nE "dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v" \
+        -- . ':!CHANGELOG.md' ':!docs/RELEASING.md'
 
-      As of v0.3.1 that is `README.md` (the `go install` line and the
+      This used to be a `grep -rn --include="*.md" --include="*.yml"`, which does
+      not search `*.yaml` — and this repo has 232 of those against 10 `.yml`. It
+      missed nothing, but a sweep with a blind spot degrades into memory, which
+      is the exact thing this item exists to avoid. `git grep` needs no filter
+      list to keep current.
+
+      As of v0.4.0 that is `README.md` (the `go install` line and the
       `install-git-hook.sh` raw URL), `skills/dossierx/SKILL.md` (the same raw
       URL), and `scripts/ci/dossierx-check.yml` (the `go install` line — this
       one is a template users copy into their own repository, so a stale pin
@@ -95,7 +101,7 @@ claims and only the last one matters.
 
       Grep is not sufficient here and gets steadily less sufficient: since the
       version strings became derived, they are minified into variables and a
-      grep for `v0.3.1` in the bundle returns nothing whether the page is
+      grep for the release tag in the bundle returns nothing whether the page is
       correct or broken. A zero from a 404 or a bad selector looks identical to
       a zero from a clean fix.
 

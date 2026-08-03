@@ -604,23 +604,28 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 		flagStore = nil
 	}
 
-	// The pre-ledger upgrade step, FIRST because it is the only hint here about
-	// the project rather than about a claim.
+	// The pre-ledger crossing, FIRST because it is the only hint here about the
+	// project rather than about a claim.
 	//
-	// A project that locked claims before this build gave locks a record needs a
-	// one-time migration, and this hint is the human-readable half of the
-	// lock-ledger-adoption-required finding the ledger gate reports beside it. The
-	// finding is what fails the gate; the hint is what says which command clears
-	// it, in the next_steps list an agent reads for its next move.
+	// It is the human-readable half of the lock-ledger-pre-ledger finding the
+	// ledger gate reports beside it. The finding is what fails the gate; the hint
+	// is what says how to clear it, in the next_steps list an agent reads for its
+	// next move.
 	//
-	// It names `dossierx migrate --adopt` and nothing else. It used to say "run
-	// dossierx check (the writing form) once", from the release where adoption
-	// happened as a side effect of any command that opened the lock store for
-	// writing — that is gone (see lock.AdoptProject), and advice to run a command
-	// that no longer adopts would leave an agent looping on a gate it cannot clear
-	// while believing it is following the tool's own instructions.
-	if store != nil && store.AdoptionRequired(digestStorePresent(cfg)) {
-		hints = append(hints, "this project's locks predate the lock ledger and nothing is grandfathered automatically -> run dossierx migrate --adopt --dry-run to see what would be adopted, then dossierx migrate --adopt ONCE, and commit the lock store and comment digest store it writes")
+	// IT IS GATED ON THE SAME UNION THE FINDING IS — at least one locked claim or
+	// one locked build order — and not on the bare predicate. A pre-ledger project
+	// holding nothing locked crosses silently and correctly on its next lock, so a
+	// hint firing there would tell a human to fix a state this same run reports as
+	// clean.
+	lockedBuildOrders := 0
+	for _, b := range buildOrders {
+		if b.Locked {
+			lockedBuildOrders++
+		}
+	}
+	if store != nil && store.PreLedgerUnadopted(digestStorePresent(cfg)) &&
+		countLockedClaims(claims)+lockedBuildOrders > 0 {
+		hints = append(hints, "this project's locks predate the lock ledger -> re-propose any locked build order FIRST, then unlock every locked claim, then re-lock only what you still stand behind; the FIRST lock in a project holding nothing crosses the store onto the ledger schema — unlocking alone does not. There is no automatic adoption and no migration command")
 	}
 
 	var draftIDs []string
@@ -813,7 +818,7 @@ func storePath(cfg *config.Config) string {
 }
 
 // digestStorePresent reports whether the comment digest store is on disk for
-// cfg. It is the evidence lock.Store.PreLedgerExempt weighs against a store that
+// cfg. It is the evidence lock.Store.PreLedgerUnadopted weighs against a store that
 // claims to predate the ledger (see lock.Store.LedgerDowngraded), read here from
 // the WORKING TREE because that is where the rest of nextSteps' advisory inputs
 // come from — this is a hint about what to run next, never a verdict, and the

@@ -23,7 +23,7 @@
 //
 // Store is a small JSON-file-backed table of dependency content hashes,
 // keyed per-dependent (Hashes[dependentID][depID]), used to detect when a
-// claim a locked claim depends on (via Mirrors or RestsOn) has changed
+// claim a locked claim depends on (see BaselineDependencyIDs) has changed
 // underneath it. This is load-bearing: dossierx check's staleness detection
 // and dossierx lock's baseline-recording both go through it, so its file
 // format is considered part of the engine's on-disk contract, not an
@@ -40,6 +40,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -73,11 +74,11 @@ var nowFunc = time.Now
 //
 // Version 2 introduced the LOCK LEDGER (Store.Ledger — see ledger.go): a record
 // per locked artifact of the content that was approved, when, by whom, and on
-// whose words. A store at version < 2 predates the ledger, so its already-locked
-// claims are grandfathered in once, by the explicit migration — see AdoptProject
-// for why that trigger is "the file exists at an older version" and never "the
-// ledger is empty", and for why it is a command a human runs rather than
-// something an ordinary write path does on its own.
+// whose words. A store at version < 2 predates the ledger, and nothing here is
+// grandfathered: such a store crosses to version 2 only through
+// CrossPreLedger, which refuses while the project still holds a locked artifact
+// — see it for why the trigger is "the file exists at an older version" and
+// never "the ledger is empty".
 const (
 	storeSchemaVersion      = 2
 	nestedHashSchemaVersion = 1
@@ -138,9 +139,10 @@ type Store struct {
 	diskVersion int
 
 	// fileExists records whether the store file was actually there. It is
-	// load-bearing for grandfathering, which must distinguish "an older store
-	// that never had a ledger" (adopt, once, loudly) from "no store at all
-	// while locked claims exist" (never adopt — see AdoptProject).
+	// load-bearing for the pre-ledger predicates, which must distinguish "an
+	// older store that never had a ledger" (crossable, once the project holds
+	// nothing locked) from "no store at all while locked claims exist" (never
+	// crossable — see Store.PreLedger).
 	fileExists bool
 
 	// ledgerKeyOnDisk records whether the decoded file carried a "ledger" KEY,
@@ -292,8 +294,8 @@ func LoadStore(path string) (*Store, error) {
 	//
 	// So Version is the version this store has EARNED: whatever the file said,
 	// until a migration that actually ran raises it. MigrateLegacyStore sets it
-	// on its success path and AdoptProject sets it on its own, so an honest
-	// upgrade still stamps forward exactly once — and a store whose adoption was
+	// on its success path and CrossPreLedger sets it on its own, so an honest
+	// upgrade still stamps forward exactly once — and a store whose crossing was
 	// REFUSED keeps its downgraded version on disk, where the gate keeps
 	// reporting it until a human restores the file.
 	s.fileExists = true
@@ -333,8 +335,9 @@ func LoadStore(path string) (*Store, error) {
 // MigrateLegacyStore closes that gap. When the store carries no baselines at
 // all — Hashes empty, the state a legacy drop leaves behind (and equally a
 // brand-new store) — it records, for every currently-LOCKED claim, the CURRENT
-// content hash of each dependency it rests on, using the exact dependencyIDs
-// set DetectStale compares so baselines and staleness checks always agree. It
+// content hash of each dependency it rests on, using the exact
+// BaselineDependencyIDs set DetectStale compares so baselines and staleness
+// checks always agree. It
 // also stamps the store to the current schema version.
 //
 // Baselining against CURRENT content (rather than fabricating a historical
@@ -354,8 +357,8 @@ func LoadStore(path string) (*Store, error) {
 // needless Save.
 //
 // The caller must hold this store's file lock (AcquireFileLock) around the
-// migrate-and-Save sequence, the same as any other load-mutate-save on the
-// shared store file.
+// MigrateLegacyStore-and-Save sequence, the same as any other load-mutate-save
+// on the shared store file.
 func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
 	rebaselined := map[string]bool{}
 
@@ -408,7 +411,7 @@ func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
 		if c.Status != model.StatusLocked {
 			continue
 		}
-		for _, dep := range dependencyIDs(c) {
+		for _, dep := range BaselineDependencyIDs(c) {
 			depClaim, ok := findByID(claims, dep)
 			if !ok {
 				continue
@@ -430,18 +433,17 @@ func MigrateLegacyStore(s *Store, claims []model.Claim) (changed bool) {
 		// record in it. Every locked claim in that project would then read as
 		// covered-but-unrecorded — lock-ledger-deleted, "restore the store from
 		// version control" — for a project whose only fault was being two versions
-		// behind, and the one-time adoption that should have run
-		// (RuleLockLedgerAdoptionRequired -> AdoptProject) would never be offered,
+		// behind, and the crossing that should have run
+		// (RuleLockLedgerPreLedger -> CrossPreLedger) would never be offered,
 		// because the store would no longer claim to predate the ledger. While
-		// adoption was implicit this could not happen: the ledger adoption ran in the same
-		// PrepareStore and stamped the records in the same breath. With adoption
-		// explicit, the two migrations cross their lines separately, and each one
-		// may only claim the schema it actually performed.
+		// grandfathering was implicit this could not happen: it ran in the same
+		// PrepareStore and stamped the records in the same breath. The two
+		// migrations now cross their lines separately, and each one may only claim
+		// the schema it actually performed.
 		s.Version = nestedHashSchemaVersion
 		s.rebaselined = sortedKeys(rebaselined)
-		// A migration that rewrites integrity baselines announces itself, on the
-		// same terms and for the same reason AdoptProject does: it is a one-time
-		// event that re-arms what "unchanged since approval" MEANS for every
+		// A migration that rewrites integrity baselines announces itself: it is a
+		// one-time event that re-arms what "unchanged since approval" MEANS for every
 		// claim named, and a run that does it silently is a run whose ok:true a
 		// human cannot interpret. The ids are also kept on the store
 		// (Store.Rebaselined) so a caller can put them in its envelope rather
@@ -480,10 +482,10 @@ func (s *Store) CommentDigestsAdopted() []string {
 	return s.commentDigestsAdopted
 }
 
-// announceRebaseline writes the legacy-baseline re-arm notice, on the same
-// writer (and for the same reason) as announceAdoption: the migration is
-// reached from five commands, and a notice each caller has to remember to print
-// is one that a caller will eventually forget.
+// announceRebaseline writes the legacy-baseline re-arm notice. It goes to the
+// package writer rather than one threaded through every caller because the
+// migration is reached from five commands, and a notice each caller has to
+// remember to print is one that a caller will eventually forget.
 func announceRebaseline(ids []string) {
 	if ledgerAnnounceWriter == nil || len(ids) == 0 {
 		return
@@ -528,11 +530,11 @@ func (s *Store) Save() error {
 	}
 	// A store being written for the FIRST time is a project crossing into
 	// ledger-covered, and it must acquire its comment digest store at the same
-	// instant. PrepareStore's adoptCommentDigests already does this for the
-	// project that MIGRATES across (a pre-ledger store being stamped); this is
-	// the other door into the same room, and it was open. A fresh project that
-	// reaches ledger-covered through its first "claim lock" never goes through a
-	// migration, so it ended up ledger-covered with no digest store — which is
+	// instant. CrossPreLedger already does this for the project that CROSSES
+	// (a pre-ledger store being stamped); this is the other door into the same
+	// room, and it was open. A fresh project that reaches ledger-covered through
+	// its first "claim lock" never crosses at all, so it ended up ledger-covered
+	// with no digest store — which is
 	// indistinguishable on disk from a project whose digest store was DELETED,
 	// and that ambiguity is the whole reason check's comment-digest-absent rule
 	// still has to require a surviving thread before it will fire.
@@ -553,7 +555,7 @@ func (s *Store) Save() error {
 // Empty, never adopted: at first creation no claim has been through the comment
 // engine, so there is nothing legitimate to record. A hand-written comments:
 // block present at this moment stays UNKNOWN to the digest rules — never
-// blessed, never accused — which is the same conservative default AdoptProject
+// blessed, never accused — which is the same conservative default Store.PreLedger
 // takes for an absent lock ledger, and the opposite of what adopting would do.
 //
 // Best-effort by design: a project that cannot write this file is not one whose
@@ -561,22 +563,46 @@ func (s *Store) Save() error {
 // like one that predates this behaviour, which is the state everything here
 // already tolerates.
 func ensureCommentDigestStore(lockStorePath string) {
+	createCommentDigestStore(lockStorePath) //nolint:errcheck // best-effort: see this function's doc comment
+}
+
+// createCommentDigestStore is ensureCommentDigestStore with its errors RETURNED
+// rather than swallowed, so there is one creator of this file rather than two.
+//
+// CrossPreLedger needs the failing form and cannot take the best-effort one:
+// crossing a project onto the ledger without the digest store beside it leaves
+// it stamped as covered with no comment evidence at all, which internal/check
+// reports as comment-digest-absent with a version-control recovery aimed at a
+// file that never existed. A skipped write here is the QUIET failure, so it is
+// returned; ensureCommentDigestStore's callers are the ones for whom a project
+// that cannot write the file is not a project whose lock should fail.
+//
+// It takes the digest store's own file lock as a LEAF — nothing else is held
+// while acquiring it — which is what lets it run from a path holding only the
+// lock-store sentinel. See CrossPreLedger's LOCKING paragraph.
+func createCommentDigestStore(lockStorePath string) error {
 	if lockStorePath == "" {
-		return
+		return nil
 	}
 	path := digest.StorePathBeside(lockStorePath)
 
 	release, err := AcquireFileLock(path)
 	if err != nil {
-		return
+		return fmt.Errorf("lock: create comment digest store: %w", err)
 	}
 	defer release()
 
 	store, err := digest.LoadStore(path)
-	if err != nil || store.FileExists() {
-		return
+	if err != nil {
+		return fmt.Errorf("lock: create comment digest store: %w", err)
 	}
-	store.Save() //nolint:errcheck // best-effort: see this function's doc comment
+	if store.FileExists() {
+		return nil
+	}
+	if err := store.Save(); err != nil {
+		return fmt.Errorf("lock: create comment digest store: %w", err)
+	}
+	return nil
 }
 
 // atomicWriteFile writes data to path without ever leaving a reader able to
@@ -638,12 +664,14 @@ func ContentHash(c model.Claim) string {
 // reworded. See Lock for why re-locking has to be a refusal rather than a no-op.
 var ErrAlreadyLocked = errors.New("lock: claim is already locked")
 
-// ErrAdoptionRequired is Lock's refusal of a project that has not run the
-// one-time lock-ledger adoption yet (see Store.AdoptionRequired and AdoptProject).
+// ErrPreLedgerUnadopted is the refusal every approval-recording path makes on a
+// project whose lock store predates the lock ledger while the project still
+// holds locked artifacts (see Store.PreLedgerUnadopted and CrossPreLedger).
 // It is a sentinel for the same reason ErrAlreadyLocked is: the CLI classifies it
-// into a machine-readable error code, and the recovery — one command, run once —
-// has to be reachable from the envelope rather than only from the prose.
-var ErrAdoptionRequired = errors.New("lock: this project has not been adopted into the lock ledger yet")
+// into a machine-readable error code, and the recovery — an ordered sequence of
+// ordinary commands — has to be reachable from the envelope rather than only
+// from the prose.
+var ErrPreLedgerUnadopted = errors.New("lock: this project's lock store predates the lock ledger and still holds locked artifacts")
 
 // ErrLedgerRecordDeleted is Lock's refusal of a claim whose ledger record was
 // DELETED — the write-path twin of the audit's RuleLockLedgerDeleted, and the
@@ -781,11 +809,11 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 			ErrAlreadyLocked, claim.ID, rec.At, rec.Reason, claim.ID)
 	}
 
-	// THE UN-MIGRATED PROJECT. A store that predates the lock ledger must not
-	// acquire its first ledger record from an ordinary lock, and this refusal is
-	// what keeps that true. It is the write-path twin of the gate's
-	// RuleLockLedgerAdoptionRequired: same predicate, same one command to clear
-	// it.
+	// THE PRE-LEDGER PROJECT. A store that predates the lock ledger must not
+	// acquire its first ledger record from an ordinary lock while anything
+	// locked still predates it, and this refusal is what keeps that true. It is
+	// the write-path twin of the gate's RuleLockLedgerPreLedger: same predicate,
+	// same recovery.
 	//
 	// It is not tidiness. A record written into a pre-ledger store leaves a store
 	// carrying ledger records at a pre-ledger version — which is exactly the
@@ -798,13 +826,20 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	// that keeps the store's version field honest, which is why this is a refusal
 	// rather than a repair.
 	//
-	// unlock -> fix -> lock is NOT blocked by this in any project that has run the
-	// migration, and running it is one command that touches no claim file. Unlock
-	// itself stays gateless, as it always has been, so a project can always get a
-	// claim out of locked even before it migrates.
-	if store.adoptionRequiredOnDisk() {
-		return claim, fmt.Errorf("%w: this project's lock store predates the lock ledger, so locking %q here would write the first approval record into a store that says it has none — a state nothing downstream can tell apart from a tampered one. Nothing is grandfathered automatically: run `dossierx migrate --adopt` ONCE (it records every already-locked claim as grandfathered, and says so on each record), commit the two files it updates, then lock this claim",
-			ErrAdoptionRequired, claim.ID)
+	// unlock -> fix -> lock is NOT blocked by this in any project already on the
+	// ledger. Unlock itself stays gateless, as it always has been, so a project
+	// can always get a claim out of locked, which is what makes the crossing
+	// below reachable from any state.
+	//
+	// IT IS A BACKSTOP FOR OTHER CALLERS, not the CLI's own gate. cmd/dossierx
+	// calls CrossPreLedger before every approval-recording write, so by the time
+	// an ordinary `claim lock` reaches here the predicate is false — either the
+	// project crossed, or CrossPreLedger already returned this same sentinel with
+	// this same text. Keeping it is belt and braces, deliberately: see the
+	// paragraphs above for why a first record in a pre-ledger store is not a
+	// tidiness question.
+	if store.preLedgerUnadoptedOnDisk() {
+		return claim, preLedgerRefusal(countLocked(claims), 0)
 	}
 
 	// THE DELETED RECORD. The two gates above refuse a claim whose record
@@ -838,9 +873,9 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	// this is what stops the tool from doing the thing its own finding warns
 	// against.
 	//
-	// It sits AFTER the adoption refusal so an un-migrated project gets that
+	// It sits AFTER the pre-ledger refusal so a pre-ledger project gets that
 	// message instead: there, every locked claim legitimately has locked_at and
-	// no record, and the honest recovery is the migration rather than a restore.
+	// no record, and the honest recovery is the crossing rather than a restore.
 	// A RELEASED record is a record, so it never reaches here — which is what
 	// keeps unlock -> fix -> lock open, the one path every other refusal in this
 	// package points at.
@@ -920,7 +955,7 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	claim.Status = model.StatusLocked
 	claim.ReviewPending = false
 
-	for _, dep := range dependencyIDs(claim) {
+	for _, dep := range BaselineDependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
 			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
 		}
@@ -969,7 +1004,7 @@ func DetectStale(claims []model.Claim, store *Store) []model.Claim {
 		if c.Status != model.StatusLocked {
 			continue
 		}
-		for _, dep := range dependencyIDs(c) {
+		for _, dep := range BaselineDependencyIDs(c) {
 			depClaim, ok := findByID(claims, dep)
 			if !ok {
 				continue
@@ -998,7 +1033,7 @@ func DetectStale(claims []model.Claim, store *Store) []model.Claim {
 // effect of resolving a comment thread (which must leave the drift baseline
 // exactly as it was so genuine dependency drift stays detected).
 func RefreshBaseline(claim model.Claim, claims []model.Claim, store *Store) {
-	for _, dep := range dependencyIDs(claim) {
+	for _, dep := range BaselineDependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
 			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
 		}
@@ -1029,6 +1064,47 @@ func dependencyIDs(c model.Claim) []string {
 	ids = append(ids, c.Mirrors...)
 	ids = append(ids, c.RestsOn...)
 	return ids
+}
+
+// BaselineDependencyIDs is the dependency set whose CONTENT a locked claim is
+// baselined against: mirrors, rests_on, and a claim-valued governed_by.type.
+//
+// It is deliberately NOT dependencyIDs. dependencyIDs is what hub gating walks
+// (checkHubGating), and hub gating is a lock REFUSAL: widening it would make an
+// unlocked doctrine-facet claim named only by governed_by block a lock, which
+// internal/lint/governed_cycle.go and FORMAT.md both document as deliberately
+// absent. Governance drift flags for review; it does not gate.
+//
+// The guard on Governed.Type is `t != "" && t != "none"` — the same shape
+// internal/lint/dangling.go uses for the same field; keep the two consistent.
+//
+// Exported because internal/comments and cmd/dossierx used to keep hand-copied
+// duplicates of this list; they call this now, so the three cannot diverge.
+func BaselineDependencyIDs(c model.Claim) []string {
+	ids := make([]string, 0, len(c.Mirrors)+len(c.RestsOn)+1)
+	ids = append(ids, c.Mirrors...)
+	ids = append(ids, c.RestsOn...)
+	if t := strings.TrimSpace(c.Governed.Type); t != "" && t != string(model.GovernedNone) {
+		ids = append(ids, t)
+	}
+	return dedupeStable(ids)
+}
+
+// dedupeStable drops repeated ids while preserving first-seen order. It is
+// required, not incidental: a claim may both rests_on X and be governed_by X,
+// and a store that recorded X twice (or in a map-iteration order) would make
+// the baseline table depend on which edge was walked first.
+func dedupeStable(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	return out
 }
 
 // withLockedCandidate returns a copy of claims with the entry matching
@@ -1067,6 +1143,7 @@ func checkHubGating(claim model.Claim, claims []model.Claim, cfg *config.Config)
 	if cfg == nil || !cfg.HubGatingEnabled() {
 		return nil
 	}
+	// dependencyIDs, NOT BaselineDependencyIDs: this is a refusal, and governed_by is a drift edge, not a gating one.
 	for _, dep := range dependencyIDs(claim) {
 		depClaim, ok := findByID(claims, dep)
 		if !ok {

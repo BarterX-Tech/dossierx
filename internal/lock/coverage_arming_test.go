@@ -120,7 +120,7 @@ func TestLedgerEstablishedIsSilentOnAnHonestPreLedgerProject(t *testing.T) {
 	if store.LedgerEstablished(false) {
 		t.Fatalf("a genuine v0.2.x project has never been through a ledger-aware build; treating it as one would refuse every comment op in it")
 	}
-	if !store.AdoptionRequired(false) {
-		t.Fatalf("fixture precondition: the honest pre-ledger project must still be offered the one-time migration")
+	if !store.PreLedgerUnadopted(false) {
+		t.Fatalf("fixture precondition: the honest pre-ledger project must still be offered the crossing")
 	}
 }

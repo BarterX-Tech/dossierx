@@ -6,7 +6,7 @@
 // v0.3.0 RE-PREMISED THIS FILE. Every earlier draft read as if a person ran the
 // pipeline: "run dossierx lint, then lock the claim, then render the viewer."
 // That was always a half-truth and is now simply wrong. An AGENT operates
-// DossierX — all twenty commands, JSON by default — and a HUMAN reviews what
+// DossierX — all nineteen commands, JSON by default — and a HUMAN reviews what
 // it did, in a browser, with two gestures: comment and Resolve. Copy that blurs
 // the two teaches the wrong mental model before a single command appears, so
 // the roles are named in the hero, given their own section ("Who runs what")
@@ -14,8 +14,11 @@
 //
 // Consequently: no command name on this page is a bare verb any more. It is
 // `dossierx claim lock`, never `dossierx lock`; `claim list --review-pending`,
-// never `dossierx stale`. The ten verbs v0.3.0 deleted appear on this page in
-// exactly one place — the migration table in the CLI section — and nowhere else.
+// never `dossierx stale`. The ten verbs v0.3.0 deleted, and the `migrate`
+// command v0.4.0 removed, appear in the live copy in exactly one place — the
+// migration table in the CLI section — and nowhere else. The `releases` array is
+// release HISTORY and is exempt: the v0.3.0 entry names `migrate --adopt`
+// because v0.3.0 shipped it.
 
 import type { Release } from "./components/ReleaseTimeline";
 
@@ -179,7 +182,7 @@ const releases: Release[] = [
           version: "v0.3.1",
           date: "2026-07-30",
           title: "A documentation-grade renderer",
-          tag: "Latest release",
+          tag: "Previous release",
           commit: "d3b1e30",
           highlights: [
             "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
@@ -191,12 +194,33 @@ const releases: Release[] = [
             "Upgrading: locked claim bodies may render differently with no edit, no content-hash change and no ledger event. dossierx claim unlock is the deliberate way to revisit them.",
           ],
         },
+        {
+          version: "v0.4.0",
+          date: "2026-08-03",
+          title: "Migration removed, and governed_by becomes a drift edge",
+          tag: "Latest release",
+          // SET THIS AT TAG TIME to the short sha of the release commit. Until
+          // it is set, the `dossierx version` example below falls back to
+          // "(devel)" — which is what the binary itself prints for an unstamped
+          // build, and is never a stale version string pretending to be current.
+          highlights: [
+            "BREAKING: `dossierx migrate` is gone, and with it every automatic adoption path. A project whose lock store predates the lock ledger crosses by holding nothing locked: re-propose any locked build order, unlock every locked claim, then re-lock only what you still stand behind. That first lock in a project with nothing locked is what stamps the store onto the ledger schema — and it records a real approval, which is the whole difference from the adoption path this release deletes. `migrate` survives only as a hidden stub that names the new path, because README, the skills and the CI template spent a release telling agents to type it, and flag parsing runs before any unknown-command handler.",
+            "BREAKING, on the wire: error.code `adoption_required` is renamed `pre_ledger_unadopted`; `already_migrated` is removed outright; the finding `lock-ledger-adoption-required` is renamed `lock-ledger-pre-ledger`. Nothing is grandfathered any more, but `claim show` keeps `ledger.grandfathered` — always false for new records.",
+            "The pre-ledger finding is now CONDITIONAL: it is silent unless the project actually holds a locked claim or a locked build order. A pre-ledger project with nothing locked crosses silently and correctly on its next lock, and a finding on correct state is how gates get switched off.",
+            "SURFACE: eight nouns and twenty leaves become SEVEN nouns and NINETEEN leaves — check, claim (show/list/new/lock/unlock/flag/reaudit/link), comment (inbox/list/add/reply), build-order (propose/status/lock), serve, skills export, version.",
+            "SILENT: `governed_by` joins mirrors and rests_on as a DRIFT edge — a claim-valued governor whose content changes under a locked claim now flags that claim review_pending. It is NOT a gating edge; hub gating is unchanged. There is no backfill, so a claim locked before this release carries no governance baseline until its next lock or reaudit, and the first governor edit after upgrading does not flag it.",
+            "SILENT: claim writes now merge only the top-level keys that changed onto the existing document, so adding one comment lands as a one-key diff instead of a whole-file rewrite and every untouched key keeps its authored quoting, key order and YAML comments. Block-scalar INDENT WIDTH is deliberately not preserved — the merged tree is re-emitted at two-space indent, which is what makes the bytes safe to hand to the round-trip guard — so the first write to a claim after upgrading may reindent its block scalars.",
+            "Two comment-body shapes that used to be refused as unsafe now store cleanly: a space-indented first content line, and a two-space-indented multiline body. A TAB-led first content line is still unstorable at any indent width, so the refusal class survives — it is now tab-led only.",
+            "A `layout: table` claim wider than its column now sits in a container that scrolls on its own axis, and long cell content wraps instead of forcing the track wide, so the page body never scrolls sideways. Column proportions shift by roughly 12% for ordinary content. Markdown tables inside a claim BODY still scroll rather than wrap — deliberately deferred.",
+            "The markdown-sanity lint no longer fires on a closing delimiter run followed by punctuation: \"Only ~~strike~~, comma after.\" was a finding and is not one. The scanner now applies CommonMark's punctuation clause per rune rather than per byte, which is what multi-byte punctuation requires, and the whole testdata/markdown-cases corpus is a regression gate rather than a set of hand-picked strings.",
+          ],
+        },
 ];
 
 /** The current release — the last entry, matching ReleaseTimeline's own rule. */
 export const latestRelease: Release = releases[releases.length - 1];
 
-/** e.g. "v0.3.1". The single source for every version string on the site. */
+/** The single source for every version string on the site. */
 export const latestVersion: string = latestRelease.version;
 
 /**
@@ -211,7 +235,7 @@ function lowerFirst(s: string): string {
 export const contentSpec: ContentSpec = {
   siteTitle: "DossierX",
   tagline:
-    "DossierX turns a directory of atomic YAML claims into documentation that cannot silently rot — and gives its two readers two different surfaces. Your coding agent operates a twenty-command JSON CLI. You read the rendered viewer in a browser, comment on any card, and click Resolve. Nothing already locked changes without your approval on the record.",
+    "DossierX turns a directory of atomic YAML claims into documentation that cannot silently rot — and gives its two readers two different surfaces. Your coding agent operates a nineteen-command JSON CLI. You read the rendered viewer in a browser, comment on any card, and click Resolve. Nothing already locked changes without your approval on the record.",
   nav: [
     { id: "hero", label: "Overview" },
     { id: "roles", label: "Who runs what" },
@@ -234,11 +258,11 @@ export const contentSpec: ContentSpec = {
         "**DossierX** is a config-driven Go CLI that turns a directory of atomic YAML **claims** — one reviewable fact each — into a linted, dependency-checked, human-reviewable HTML viewer, governed by a lock / review_pending / reaudit lifecycle.\n\nIt has two users and gives them two surfaces. Your **agent** is the operator: it authors draft claims, runs `dossierx check`, links code to the claims it implements, and reads the comment inbox. **You** are the reviewer: you run `dossierx serve`, read the viewer, comment on any card, and resolve the threads you opened. That Resolve click is the approval — and it is load-bearing, because a claim with an open thread cannot lock.\n\nThe gate is narrower than it sounds. Draft claims are the agent's workshop, unfrictioned by design. The invariant is only this: nothing already **locked** changes without your approval on the record.\n\n**DossierX detects; the forge enforces.** The lock ledger rides in git and turns a silent edit into a *named* finding — the rule, the claim, and the command that restores it. Branch protection with a required CI check is what makes anyone obey that finding; the pre-commit hook is fast feedback in front of it. That division is why a red check here means something specific enough to act on.\n\nCLI-first, no public API. The only project-specific input the engine reads is your `project.config.yaml` — point the same binary at any project's config and it becomes that project's documentation engine.",
       data: {
         pitchLine:
-          "An agent-operated, human-approved documentation engine: atomic YAML claims, a twenty-command JSON CLI for the agent, a browser viewer for the reviewer, and a lock ledger in git so nothing locked moves silently.",
+          "An agent-operated, human-approved documentation engine: atomic YAML claims, a nineteen-command JSON CLI for the agent, a browser viewer for the reviewer, and a lock ledger in git so nothing locked moves silently.",
         badges: [
           "Go 1.26",
           "cobra + yaml.v3 only",
-          "20 commands, JSON by default",
+          "19 commands, JSON by default",
           latestVersion,
           "github.com/BarterX-Tech/dossierx",
         ],
@@ -254,7 +278,7 @@ export const contentSpec: ContentSpec = {
           {
             id: "agent",
             who: "Your agent",
-            surface: "the CLI · 20 commands · JSON by default",
+            surface: "the CLI · 19 commands · JSON by default",
           },
           {
             id: "human",
@@ -276,7 +300,7 @@ export const contentSpec: ContentSpec = {
       title: "Two surfaces, and a boundary between them.",
       kind: "two-surface",
       contentMd:
-        "The most common misconception about a tool like this is that a person sits down and drives it. Nobody does. Your coding agent operates DossierX — it writes the claims, runs the checks, links the code, and reads the comment inbox. You review what it did.\n\nSo each role gets its own surface and is denied the other's. The agent's surface is the CLI: twenty commands, one JSON envelope per run, stable error codes to branch on. Your surface is the rendered viewer that `dossierx serve` opens on localhost, where the only two things you do are **comment** and **Resolve**.\n\nNothing stops you typing the twenty commands — you are the approver, and sniffing for a TTY to refuse you would be theatre. But you should never need to, and the strengths below are labelled honestly: some of this boundary is enforced in code, some is enforced by git, and one line of it is convention backed by a required `--reason`.",
+        "The most common misconception about a tool like this is that a person sits down and drives it. Nobody does. Your coding agent operates DossierX — it writes the claims, runs the checks, links the code, and reads the comment inbox. You review what it did.\n\nSo each role gets its own surface and is denied the other's. The agent's surface is the CLI: nineteen commands, one JSON envelope per run, stable error codes to branch on. Your surface is the rendered viewer that `dossierx serve` opens on localhost, where the only two things you do are **comment** and **Resolve**.\n\nNothing stops you typing the nineteen commands — you are the approver, and sniffing for a TTY to refuse you would be theatre. But you should never need to, and the strengths below are labelled honestly: some of this boundary is enforced in code, some is enforced by git, and one line of it is convention backed by a required `--reason`.",
       data: {
         surfaces: [
           {
@@ -300,13 +324,13 @@ export const contentSpec: ContentSpec = {
               "Comment on a static file:// export — read-only by design",
             ],
             footnote:
-              "Not stopped from typing the twenty commands anyway. You are the approver; nothing pretends otherwise.",
+              "Not stopped from typing the nineteen commands anyway. You are the approver; nothing pretends otherwise.",
           },
           {
             id: "agent",
             role: "Operator",
             who: "Agent",
-            surface: "the CLI, all 20 commands · JSON by default",
+            surface: "the CLI, all 19 commands · JSON by default",
             command: "dossierx check",
             commandNote: "the whole pipeline, as often as it likes",
             can: [
@@ -370,12 +394,12 @@ export const contentSpec: ContentSpec = {
       title: "A surface an agent can trust, and facts a human can.",
       kind: "narrative",
       contentMd:
-        "An agent cannot operate a tool whose answers are English sentences. It needs one response shape, one vocabulary of error codes, and a promise that neither will move under it — so v0.3.0 made the machine contract the product's spine: `--format json` by default, one envelope per invocation, a stable `error.code` to branch on, and `--dry-run` on everything that writes. The surface got *smaller* — twenty-six commands to twenty — while getting more capable, because every verb that survived is a verb an agent actually needs.\n\nUnderneath it, the original thesis is unchanged. Markdown folders, ADRs and wikis fail the same way: prose can become wrong without producing a machine-readable signal. DossierX replaces page-level trust with atomic facts that can be linted, reviewed, locked, and flagged when their dependencies or implementing code move.\n\nIt began as internal tooling inside a private, multi-module production app that had been burned by silent documentation drift. The public tool keeps the proven claim schema, the check pipeline, the lifecycle, build ordering and code linking, and takes all project-specific structure from `project.config.yaml`. The embedded skills teach an agent the whole loop: author claims, derive a build order, ground finished code in the claim it implements, and review with threaded comments — never touching a locked claim without asking you first.",
+        "An agent cannot operate a tool whose answers are English sentences. It needs one response shape, one vocabulary of error codes, and a promise that neither will move under it — so v0.3.0 made the machine contract the product's spine: `--format json` by default, one envelope per invocation, a stable `error.code` to branch on, and `--dry-run` on everything that writes. The surface got *smaller* — twenty-six commands to nineteen, across two releases — while getting more capable, because every verb that survived is a verb an agent actually needs.\n\nUnderneath it, the original thesis is unchanged. Markdown folders, ADRs and wikis fail the same way: prose can become wrong without producing a machine-readable signal. DossierX replaces page-level trust with atomic facts that can be linted, reviewed, locked, and flagged when their dependencies or implementing code move.\n\nIt began as internal tooling inside a private, multi-module production app that had been burned by silent documentation drift. The public tool keeps the proven claim schema, the check pipeline, the lifecycle, build ordering and code linking, and takes all project-specific structure from `project.config.yaml`. The embedded skills teach an agent the whole loop: author claims, derive a build order, ground finished code in the claim it implements, and review with threaded comments — never touching a locked claim without asking you first.",
       data: {
         principles: [
           {
             title: "One surface per role",
-            body: "The agent gets twenty commands and a JSON envelope; the human gets a browser and two gestures. Neither gets the other's, which is what makes the roles legible instead of a convention someone has to remember.",
+            body: "The agent gets nineteen commands and a JSON envelope; the human gets a browser and two gestures. Neither gets the other's, which is what makes the roles legible instead of a convention someone has to remember.",
           },
           {
             title: "A narrow gate, kept",
@@ -462,7 +486,7 @@ export const contentSpec: ContentSpec = {
         engineManagedFields: [
           {
             name: "review_pending",
-            desc: "set on a locked claim by any of three triggers — a rests_on/mirrors target's content hash drifts, an agent runs claim flag, or a comment thread is open — and cleared by claim reaudit --confirm, by an unlock, or by resolving the last open thread once no other trigger stands",
+            desc: "set on a locked claim by any of three triggers — a rests_on/mirrors/governed_by target's content hash drifts, an agent runs claim flag, or a comment thread is open — and cleared by claim reaudit --confirm, by an unlock, or by resolving the last open thread once no other trigger stands",
           },
           {
             name: "comments",
@@ -491,7 +515,7 @@ export const contentSpec: ContentSpec = {
           {
             name: "governed_by",
             semantics:
-              "Names the doctrine claim backing this claim's authority — or type: none with a required reason. With doctrine_facet set, a claim can't lock until its named doctrine claim is itself locked (hub-gating). Self-edges are rejected and the governance graph is cycle-checked in its own pass.",
+              "Names the doctrine claim backing this claim's authority — or type: none with a required reason. With doctrine_facet set, a claim can't lock until its named doctrine claim is itself locked (hub-gating). Since v0.4.0 it is also a DRIFT edge alongside mirrors and rests_on: a claim-valued governor whose content changes under a locked claim flags that claim review_pending. It is not a gating edge — hub gating is unchanged. Self-edges are rejected and the governance graph is cycle-checked in its own pass.",
           },
         ],
       },
@@ -501,7 +525,7 @@ export const contentSpec: ContentSpec = {
       title: "Who mandates the transition, and who executes it.",
       kind: "lifecycle-diagram",
       contentMd:
-        "A locked claim is a **trust assertion**: you reviewed it, lint passed, and other claims may safely depend on it. The lifecycle has not changed in v0.3.0 — what changed is that every edge now names two parties. You **mandate** a transition; the agent **executes** it, and records your words in `--reason`.\n\nOnly two edges have no human on the mandating side, and both are the engine noticing something rather than deciding anything: `DetectStale` flags a locked claim whose dependency drifted, and opening a comment thread flags one under discussion. Everything else — lock, unlock, reaudit, and the flag an agent raises when code and claim disagree — needs a yes it can quote.\n\nThe agent's move before any of them is `--dry-run`: the transition it would make, the preconditions it would have to satisfy, what else the change touches, and what is still missing. You read that, then say yes.",
+        "A locked claim is a **trust assertion**: you reviewed it, lint passed, and other claims may safely depend on it. The lifecycle has not changed since v0.3.0 — what changed there is that every edge now names two parties. You **mandate** a transition; the agent **executes** it, and records your words in `--reason`.\n\nOnly two edges have no human on the mandating side, and both are the engine noticing something rather than deciding anything: `DetectStale` flags a locked claim whose dependency drifted, and opening a comment thread flags one under discussion. Everything else — lock, unlock, reaudit, and the flag an agent raises when code and claim disagree — needs a yes it can quote.\n\nThe agent's move before any of them is `--dry-run`: the transition it would make, the preconditions it would have to satisfy, what else the change touches, and what is still missing. You read that, then say yes.",
       data: {
         states: [
           {
@@ -535,7 +559,7 @@ export const contentSpec: ContentSpec = {
             trigger: "DetectStale (automatic)",
             mandate: "Nobody — the engine noticed",
             execute: "Engine, inside check",
-            note: "A mirrors/rests_on dependency's content hash changed. Persisted back to the claim file by dossierx check.",
+            note: "A mirrors/rests_on/governed_by dependency's content hash changed. Persisted back to the claim file by dossierx check. A claim locked before v0.4.0 carries no governance baseline until its next lock or reaudit, so its first governor edit after upgrading does not flag it.",
           },
           {
             from: "locked",
@@ -802,7 +826,7 @@ export const contentSpec: ContentSpec = {
       title: "The machine contract — what your agent uses.",
       kind: "cli-explorer",
       contentMd:
-        "This is not a tutorial, because nobody is going to type these. It is the contract your agent codes against: twenty commands, one JSON envelope per invocation, a stable `error.code` to branch on, `--dry-run` on everything that writes, and `--reason` on everything that changes a locked thing.\n\nOne binary serves any project through `project.config.yaml`, discovered by walking up from the working directory the way git finds `.git`. `check` is the CI entry point — it detects drift, lints, catalogs, renders the viewer, verifies the lock ledger and reconciles code links, and reports which of those stages it stopped at. `--validate` runs it read-only; `--staged` judges the git index instead of the working tree, which is what the pre-commit hook runs.",
+        "This is not a tutorial, because nobody is going to type these. It is the contract your agent codes against: nineteen commands, one JSON envelope per invocation, a stable `error.code` to branch on, `--dry-run` on everything that writes, and `--reason` on everything that changes a locked thing.\n\nOne binary serves any project through `project.config.yaml`, discovered by walking up from the working directory the way git finds `.git`. `check` is the CI entry point — it detects drift, lints, catalogs, renders the viewer, verifies the lock ledger and reconciles code links, and reports which of those stages it stopped at. `--validate` runs it read-only; `--staged` judges the git index instead of the working tree, which is what the pre-commit hook runs.",
       data: {
         // The three contract facts an agent needs before any individual
         // command matters: the shape of every answer, the vocabulary of every
@@ -833,6 +857,11 @@ export const contentSpec: ContentSpec = {
             code: "integrity_failed",
             recovery:
               "A locked claim moved with no matching ledger record. Restore the file, or take the honest path: unlock → fix → lock.",
+          },
+          {
+            code: "pre_ledger_unadopted",
+            recovery:
+              "This project's lock store predates the lock ledger and it still holds locked artifacts, so no approval can be recorded here. There is no migration command: re-propose any locked build order, unlock every locked claim, then lock only what the human still stands behind — the first lock in a project holding nothing locked crosses the store onto the ledger.",
           },
           {
             code: "lint_failed",
@@ -1050,18 +1079,8 @@ export const contentSpec: ContentSpec = {
             ],
           },
           {
-            group: "the four singles",
+            group: "the three singles",
             commands: [
-              {
-                name: "migrate --adopt",
-                usage: 'dossierx migrate --adopt [--dry-run]',
-                summary:
-                  "The one-time, human-run upgrade every pre-v0.3.0 project must perform before check passes again.",
-                detail:
-                  "v0.3.0's one breaking change. A project that locked claims before the lock ledger existed used to be grandfathered in automatically on its first writing check; that is gone, because adoption is the single operation that manufactures approval out of nothing, and a gate that performs it on sight rewards deleting the ledger with a clean report over content nobody reviewed. No evidence inside the directory can tell an honest v0.2.x store from a downgraded one — locked_at shipped in v0.2.0 — so there is no cleverer predicate to reach for. Adoption now fails closed in every run, and only this command clears it. It hashes each currently-locked claim and locked build order exactly as they sit on disk and records them as the baseline, marked adopted rather than approved, permanently. --adopt is required so a bare migrate refuses instead of guessing. There is deliberately NO --reason: every other record-writing verb takes the human's words because a human approved something, and nobody approved this — each record carries a fixed reason saying exactly that, plus grandfathered: true, permanently. Running it twice is refused with already_migrated, because a migration you can re-run is a laundering command. --dry-run lists everything it would adopt and writes nothing. It is an upgrade step, never a recovery tool: on a project that already has a ledger it refuses, and reaching for it to silence a gate would record tampered bytes as approved.",
-                example:
-                  '$ dossierx migrate --adopt --format text\nmigrate --adopt: 36 artifact(s) adopted into the lock ledger as GRANDFATHERED (mode: pre_ledger_store)\n  wrote .dossierx-lock-store.json\n  their recorded content is what was on disk just now, NOT content anyone approved',
-              },
               {
                 name: "serve",
                 usage: "dossierx serve [--port <n>]",
@@ -1089,7 +1108,7 @@ export const contentSpec: ContentSpec = {
                 detail:
                   "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere — which is exactly why a bootstrapping agent calls it first. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
                 example:
-                  `$ dossierx version --format text\ndossierx ${latestRelease.version}\n  commit: ${latestRelease.commit ?? "d3b1e30"}\n  date:   ${latestRelease.date}`,
+                  `$ dossierx version --format text\ndossierx ${latestRelease.version}\n  commit: ${latestRelease.commit ?? "(devel)"}\n  date:   ${latestRelease.date}`,
               },
             ],
           },
@@ -1098,7 +1117,7 @@ export const contentSpec: ContentSpec = {
         // learned v0.2.0 will reach for them, and a migration table is cheaper
         // than an error message.
         migration: {
-          title: "26 → 20: what was cut, and where it went",
+          title: "26 → 19: what was cut, and where it went",
           rows: [
             {
               cut: "lint · catalog · render",
@@ -1129,6 +1148,11 @@ export const contentSpec: ContentSpec = {
               cut: "comment resolve · comment reopen",
               now: "the viewer only",
               why: "Advisory rights already refused a CLI agent acting on a human's thread, and every viewer thread is human-authored — so on the CLI these verbs could only ever have acted on the agent's own. Vestigial. They stay on the surface the rights holder actually uses; the localhost API behind it is not authenticated, so this is a smaller surface rather than a closed one.",
+            },
+            {
+              cut: "migrate --adopt",
+              now: "no replacement — unlock everything, then re-lock",
+              why: "Removed outright in v0.4.0. Adoption is the one operation that manufactures approval out of nothing, and no evidence inside a repository distinguishes an honest pre-ledger store from a downgraded one. A pre-ledger project crosses by holding nothing locked: re-propose any locked build order, unlock every locked claim, then lock only what you still stand behind — and that first lock records a real approval instead of a grandfathered one.",
             },
             {
               cut: "— added —",
@@ -1243,7 +1267,7 @@ export const contentSpec: ContentSpec = {
             wiki: "scrape HTML, hope",
             adr: "prose, no contract",
             markdown: "prose, no contract",
-            dossierx: "20 commands, one JSON envelope, stable error codes",
+            dossierx: "19 commands, one JSON envelope, stable error codes",
           },
           {
             property: "Who can change a reviewed statement",
@@ -1320,3 +1344,18 @@ export const contentSpec: ContentSpec = {
     },
   ],
 };
+
+/**
+ * Leaf commands in the CLI explorer, counted from the explorer's own data.
+ *
+ * The hero used to hard-code this. It said 20 from v0.3.0 until v0.4.0's
+ * surface change made it false, and nothing caught it — it disagreed with the
+ * hero badge, the hero role card and the release entry on the same page. This
+ * is the same failure the version strings had before they were derived, so it
+ * gets the same treatment.
+ */
+export const commandCount: number = (() => {
+  const cli = contentSpec.sections.find((s) => s.kind === "cli-explorer");
+  const groups = (cli?.data as { groups?: { commands?: unknown[] }[] } | undefined)?.groups ?? [];
+  return groups.reduce((n, g) => n + (g.commands?.length ?? 0), 0);
+})();

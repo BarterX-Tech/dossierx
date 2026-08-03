@@ -109,7 +109,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the eight nouns the way the noun
+	// The message is inlined instead, naming the seven nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -122,11 +122,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <build-order, check, claim, comment, migrate, serve, skills, version>")
+				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <build-order, check, claim, comment, migrate, serve, skills, version>")
+			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -164,13 +164,13 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole v0.3.0 surface: eight nouns, twenty leaves, and not one more.
+	// The whole surface: seven nouns, nineteen leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock                                   3
-	//	migrate · serve · skills export · version                         4
+	//	serve · skills export · version                                   3
 	//
 	// The count is a design constraint, not a coincidence. Every verb here is
 	// something an AGENT does, because the agent is this CLI's operator; the
@@ -179,20 +179,23 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyLeavesUnderSevenNouns in main_test.go pins it, so
+	// TestSurfaceIsNineteenLeavesUnderSevenNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
-	// "migrate" is the twentieth, and it is the one leaf this release ADDED. It
-	// had to be added rather than folded into an existing verb: ledger adoption
-	// stopped happening automatically (a missing or stale ledger now fails
-	// closed — see migrate.go), and the deliberate, auditable act that replaces
-	// it cannot live on "check", which a pre-commit hook runs on every commit.
+	// The migration verb was the twentieth leaf, added by v0.3.0 and REMOVED by
+	// v0.4.0. It was the one door into ledger adoption, and v0.4.0 removes
+	// adoption itself: a
+	// pre-ledger project now crosses onto the ledger by holding nothing that
+	// predates it, at which point its next lock stamps the store (see
+	// lock.CrossPreLedger). With nothing left to adopt there is nothing for the
+	// verb to do, and a command that records content nobody approved is exactly
+	// what this release exists to remove. It survives as a hidden retired stub —
+	// see retired.go, which is the convention for every verb this CLI drops.
 	root.AddCommand(
 		newCheckCmd(),
 		newClaimCmd(),
 		newCommentCmd(),
 		newBuildOrderCmd(),
-		newMigrateCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
 
@@ -225,7 +228,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the six
 	// nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyLeavesUnderSevenNouns
+	// wrong argv is told it succeeded. TestSurfaceIsNineteenLeavesUnderSevenNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -487,7 +490,7 @@ func claimsSentinelPath(cfg *config.Config) string {
 // loadStoreForRead loads the lock content-hash store for a read-mostly command
 // (currently "check"), first re-arming per-dependent baselines if the store
 // predates them (a legacy migration — see lock.MigrateLegacyStore) and
-// persisting that one-time re-arm. The load/migrate/Save runs under the same
+// persisting that one-time re-arm. The load/MigrateLegacyStore/Save runs under the same
 // cross-process file lock "dossierx claim lock"/"dossierx claim reaudit" take, so the
 // migration Save can never race their load-mutate-save on the shared store
 // file. The returned store is safe to read (e.g. lock.DetectStale) after the
@@ -536,21 +539,19 @@ func loadStoreForRead(cfg *config.Config, claims []model.Claim) (*lock.Store, ad
 // comment-digest coverage sweep.
 //
 // WHAT IT NO LONGER DOES, and this is the change worth reading. It used to add a
-// migration of its own: grandfathering already-locked BUILD ORDERS, gated on
-// store.PreLedgerExempt. That was the last automatic adoption left in the binary
-// once lock-ledger adoption moved behind "dossierx migrate --adopt", and leaving
-// it here would have made the fail-closed decision half true — an ordinary
-// `dossierx check` in an un-migrated project would still have signed a locked
-// build-order artifact as-found, which is the same "an adoption a command
-// performs on its own is an adoption an attacker can perform on their own" that
-// took the claim half out. It moved, whole, into migrate.go's planMigration,
-// which is where it is now the deliberate act it always should have been. It
-// still cannot live in internal/lock (internal/buildorder imports internal/lock,
-// so lock cannot read an artifact back), which is why migrate.go carries it
-// rather than lock.AdoptProject.
+// migration of its own: grandfathering already-locked BUILD ORDERS, gated on the
+// pre-ledger predicate. That was the last automatic adoption left in the binary
+// once lock-ledger adoption became explicit, and leaving it here would have made
+// the fail-closed decision half true — an ordinary `dossierx check` in a
+// pre-ledger project would still have signed a locked build-order artifact
+// as-found, which is the same "an adoption a command performs on its own is an
+// adoption an attacker can perform on their own" that took the claim half out.
+// It went behind the explicit adoption command, and then out of the build
+// entirely when v0.4.0 removed that command: nothing grandfathers a build order
+// now, and a pre-ledger project's locked orders are covered by the same
+// project-scoped exemption its locked claims are until it crosses.
 //
-// It returns the grandfathered ids alongside changed — always empty now for the
-// ledger half, since nothing here adopts any more — because the COMMENT-DIGEST
+// It returns the adopted ids alongside changed, because the COMMENT-DIGEST
 // sweep still adopts and its ids still have to reach an envelope. Discarding them
 // is what once left an adoption announced on STDERR and nowhere else: `dossierx
 // check` printed ok:true, zero findings, exit 0 on the very run that adopted
@@ -588,10 +589,9 @@ func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (
 	// one arrived outside the comment path — hand-added or hand-edited. That is
 	// the run a human should look at, and it is the run this used to report as
 	// ok:true with nothing else said.
-	// Grandfathered is deliberately EMPTY here. lock.PrepareStore does not adopt
-	// any more — only `dossierx migrate --adopt` writes a grandfathered record —
-	// so the only adoption an ordinary command can still report is the comment
-	// digest sweep's.
+	// The comment digest sweep is the ONLY adoption left in the binary. Nothing
+	// writes a grandfathered ledger record any more — v0.4.0 removed the path
+	// that did — so there is no second kind of id to carry here.
 	a := adoptions{}
 	if digestStoreExisted {
 		a.CommentDigests = store.CommentDigestsAdopted()
@@ -599,62 +599,126 @@ func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (
 	return changed, a
 }
 
+// preLedgerCrossingHint is the recovery every pre-ledger refusal in this package
+// names, and it is the SAME WORDS as the row skills/dossierx/SKILL.md carries in
+// its "if you remember an older command" table and as the retired migration
+// stub's own hint (see retired.go). One string rather than three restatements is
+// what keeps the binary and the skill from drifting into disagreeing about where
+// a caller should go next.
+const preLedgerCrossingHint = `re-propose any locked build order (dossierx build-order propose --module <m>), unlock every locked claim (dossierx claim unlock <id> --reason "..."), then lock only what you still stand behind — the first lock in a project with nothing locked crosses the store onto the ledger`
+
+// crossPreLedger is the write-path half of the pre-ledger gate, shared by the
+// three commands that record an approval: claim lock, claim reaudit --confirm,
+// and build-order lock.
+//
+// It replaces the refusal helper the removed migration command carried. The
+// difference is that this one is not only a refusal: on a project that holds
+// NOTHING locked it performs the crossing itself, which is the whole of v0.4.0's
+// answer to "how does a pre-ledger project ever get onto the ledger" now that
+// there is no adoption path to run.
+//
+// THE CALLER MUST ALREADY HOLD THE LOCK-STORE SENTINEL AND MUST NOT ACQUIRE
+// ANYTHING ELSE FOR THIS. lock.CrossPreLedger takes the comment digest store's
+// own sentinel as a leaf and needs no claims sentinel; requiring one here would
+// invert the project-wide claims -> lock-store order against `build-order lock`,
+// which holds only the lock-store sentinel by design. See lock.CrossPreLedger's
+// LOCKING paragraph.
+//
+// verb is the command path, so the message reads as that command's own refusal
+// rather than as a stray internal error.
+func crossPreLedger(cfg *config.Config, store *lock.Store, claims []model.Claim, verb string) error {
+	err := lock.CrossPreLedger(store, claims, lockedBuildOrders(cfg, claims))
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, lock.ErrPreLedgerUnadopted):
+		return cliout.Errorf(cliout.CodePreLedgerUnadopted, "%s: %w", verb, err).
+			WithHint(preLedgerCrossingHint)
+	default:
+		// The crossing writes two files and undoes the half that landed if the
+		// second fails, so the project is exactly as it was and the command can
+		// simply be re-run once the write failure is fixed.
+		return cliout.Errorf(cliout.CodeWriteFailed, "%s: %w", verb, err).
+			WithHint("nothing was written — the crossing undoes a partial write — so fix the write failure and run the command again")
+	}
+}
+
+// preLedgerPrecondition adds the pre-ledger gate to a PREVIEW, for the three
+// verbs whose write path records an approval.
+//
+// It exists for the rule this codebase restates every round: a --dry-run must
+// agree with its write path. It therefore evaluates EXACTLY what crossPreLedger
+// refuses on — the store's own pre-ledger claim AND at least one locked artifact
+// — and not the bare predicate. Spelling it as "unsatisfied whenever the store
+// is pre-ledger" would make the preview report blocked on the one project where
+// the run succeeds by crossing, which is the disagreement this helper exists to
+// prevent.
+//
+// A store that will not LOAD is left alone rather than reported as pre-ledger:
+// unreadability is a different finding with a different recovery (restore from
+// version control), the gate already names it, and a preview must not
+// manufacture a second, wrong diagnosis out of it.
+func preLedgerPrecondition(dr *cliout.DryRun, cfg *config.Config, claims []model.Claim) {
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil {
+		return
+	}
+	blocked := store.PreLedgerUnadopted(digestStorePresent(cfg)) &&
+		countLockedClaims(claims)+lockedBuildOrders(cfg, claims) > 0
+	dr.Require("pre_ledger", !blocked, boolDetail(!blocked,
+		"this project's lock store is on the ledger schema, or holds nothing that predates it, so an approval can be recorded",
+		"this project's lock store predates the lock ledger and it still holds locked artifacts, so an approval cannot be recorded here: "+preLedgerCrossingHint))
+}
+
+// countLockedClaims counts the claims currently at status: locked — the claims
+// half of the count lock.CrossPreLedger refuses on.
+func countLockedClaims(claims []model.Claim) int {
+	n := 0
+	for _, c := range claims {
+		if c.Status == model.StatusLocked {
+			n++
+		}
+	}
+	return n
+}
+
 // adoptions is everything a single run ADOPTED — took coverage of on the
 // strength of what was on disk, rather than on the strength of anybody's
 // approval.
 //
-// It is one value rather than two loose slices because both halves have to
-// reach the same envelope, and the second half kept not reaching it. The
-// grandfathered ids were already threaded through prepareStore ->
-// loadStoreForRead -> reconcileReviewPending to every command's Warnings; the
-// comment-digest ids were computed on the same run, by the same call, and
-// dropped on the floor — so `dossierx check` printed ok:true, zero findings,
-// exit 0 on a run that had just adopted a hand-edited comment block as truth.
-// Threading a *lock.Store to each of those call sites instead was not an
-// option: `check` does not have one in scope, only the ids reconcile handed
-// back. Making the channel a struct means the compiler asks every site the
-// question, which is the property a silently-dropped field needs.
+// It carried TWO kinds until v0.4.0, and the ledger half is gone with the
+// adoption path that produced it: nothing in this build writes a grandfathered
+// record, so the comment digest sweep is the only adoption a run can still
+// perform.
 //
-// The two are kept SEPARATE inside it rather than concatenated because they are
-// different claims about the project and have different recoveries: a
-// grandfathered lock is re-lockable (unlock, review, lock), while an adopted
-// comment digest is not — no CLI verb clears one, and the recovery is version
-// control. A reader who cannot tell which kind an id is cannot act on it.
+// It stays a STRUCT rather than collapsing to a bare []string because the value
+// is threaded through prepareStore -> loadStoreForRead -> reconcileReviewPending
+// to every command's Warnings, and the ids kept not reaching the envelope when
+// they were a loose return: `dossierx check` printed ok:true, zero findings,
+// exit 0 on a run that had just adopted a hand-edited comment block as truth.
+// Making the channel a struct means the compiler asks every site the question,
+// which is the property a silently-dropped field needs.
 type adoptions struct {
-	// Grandfathered is the locked artifacts — claim ids, and
-	// build-order:<module> keys — the one-time ledger adoption took as-found.
-	Grandfathered []string
 	// CommentDigests is the claim ids whose comment blocks the digest sweep
 	// took coverage of. See lock.Store.CommentDigestsAdopted.
 	CommentDigests []string
 }
 
-// adoptionWarnings renders everything a run ADOPTED as envelope warnings — for
-// each kind, one sentence naming what the adoption did and did not establish,
-// then one line per id.
+// adoptionWarnings renders everything a run ADOPTED as envelope warnings — one
+// sentence naming what the adoption did and did not establish, then one line per
+// id.
 //
 // They are WARNINGS rather than data alone because the envelope's ok field
 // cannot carry them: adoption happens on a run that otherwise succeeds, and
 // "ok:true with zero findings" is exactly the answer that must not be the whole
-// answer on the run that blessed content nobody approved. That reasoning is
-// identical for both halves, which is why they render through one function; what
-// differs is the recovery each sentence names.
+// answer on the run that blessed content nobody approved.
 func adoptionWarnings(a adoptions) []string {
 	var warnings []string
-	if len(a.Grandfathered) > 0 {
-		warnings = append(warnings, fmt.Sprintf(
-			"lock ledger created: %d already-locked artifact(s) were adopted as GRANDFATHERED. Their recorded content is what was on disk just now, NOT content anyone approved — any edit made before this upgrade is adopted with it. Review them, and re-lock any you are not sure of (dossierx claim unlock <id> --reason \"...\" then dossierx claim lock <id> --reason \"...\").",
-			len(a.Grandfathered)))
-		for _, id := range a.Grandfathered {
-			warnings = append(warnings, "grandfathered: "+id)
-		}
-	}
 	if len(a.CommentDigests) > 0 {
-		// The recovery differs from the grandfathered one and has to, because
-		// the re-lock this offers there does not exist here: no verb in the
-		// binary clears a recorded comment digest, so version control is the
-		// only way back to a block anyone actually wrote. See
-		// lock.Store.CommentDigestsAdopted and internal/comments' drift refusal.
+		// The recovery here is version control and nothing else: no verb in the
+		// binary clears a recorded comment digest, so it is the only way back to
+		// a block anyone actually wrote. See lock.Store.CommentDigestsAdopted and
+		// internal/comments' drift refusal.
 		warnings = append(warnings, fmt.Sprintf(
 			"comment digest store: %d claim(s) had their comment block ADOPTED. The recorded digest is the block that was on disk just now, NOT a block anyone reviewed or approved — if one of them was hand-edited, this run recorded the edit as truth. Check the comment threads on the claims below against version control, and restore the claim file if it disagrees.",
 			len(a.CommentDigests)))
@@ -962,21 +1026,16 @@ type checkData struct {
 	LedgerFindings     []lock.Finding `json:"ledger_findings,omitempty"`
 	LedgerFindingCount int            `json:"ledger_finding_count"`
 
-	// LedgerAdopted names the artifacts GRANDFATHERED by this run's one-time
-	// lock-ledger adoption (claim ids, and "build-order:<module>" keys). It is
-	// present only on the single run that performs the adoption, which is the
-	// point: that run reports ok:true with zero findings, and without this the
-	// only trace of it in the machine surface would be nothing at all. See
-	// prepareStore and adoptionWarnings.
-	LedgerAdopted []string `json:"ledger_adopted,omitempty"`
-
 	// CommentDigestsAdopted names the claims whose COMMENT BLOCK this run took
-	// digest coverage of. It is a separate field from LedgerAdopted, not more
-	// entries in it, because the two are different claims about the project with
-	// different recoveries — a grandfathered lock can be re-locked, an adopted
-	// comment digest cannot be cleared by any verb in this binary. Present only
-	// on the run that adopts, for the same reason LedgerAdopted is. See
-	// lock.Store.CommentDigestsAdopted.
+	// digest coverage of. It is present only on the run that adopts, which is the
+	// point: that run reports ok:true with zero findings, and without this the
+	// only trace of it in the machine surface would be nothing at all.
+	//
+	// It used to sit beside a `ledger_adopted` field naming the artifacts a
+	// run's one-time lock-ledger adoption grandfathered. v0.4.0 removed the
+	// adoption path, so that field could only ever be empty and was dropped
+	// rather than left as a permanently-absent key a consumer might wait for.
+	// See lock.Store.CommentDigestsAdopted.
 	CommentDigestsAdopted []string `json:"comment_digests_adopted,omitempty"`
 
 	CatalogPath      string          `json:"catalog_path,omitempty"`
@@ -1116,17 +1175,18 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 	// that tamper on its own (lock-ledger-absent when the ledger goes,
 	// lock-ledger-abandoned when claims_dir moves and strands its claims).
 	switch {
-	case rules[lock.RuleLockLedgerAdoptionRequired]:
-		// The fail-closed adoption refusal. This is the one integrity finding
-		// whose recovery is a command rather than a restore, and it is the whole
-		// reason "dossierx migrate" exists.
-		return "this project has never been migrated onto the lock ledger, and nothing is grandfathered automatically any more. Run: dossierx migrate --adopt --dry-run (it names every artifact it would grandfather), review that list with the human, then dossierx migrate --adopt — and commit the lock store and the comment digest store it writes. Do NOT re-lock the claims instead: that records whatever they say now as approved"
+	case rules[lock.RuleLockLedgerPreLedger]:
+		// The fail-closed pre-ledger refusal. This is the one integrity finding
+		// whose recovery is a sequence of ordinary commands rather than a
+		// restore — because nothing here was tampered with, the project simply
+		// predates the ledger and has to be emptied of what predates it.
+		return "this project's lock store predates the lock ledger, and nothing is grandfathered — so " + preLedgerCrossingHint + ". Then commit the lock store and the comment digest store the crossing writes"
 	case rules[check.RuleLedgerUnreadable]:
-		return "the lock ledger could not be read, so nothing here can say what was approved. Restore it from version control and run: dossierx check --validate. Do NOT re-lock and do NOT run dossierx migrate --adopt (it refuses an unreadable store on purpose): both would record whatever the claims say now as approved"
+		return "the lock ledger could not be read, so nothing here can say what was approved. Restore it from version control and run: dossierx check --validate. Do NOT re-lock: that would record whatever the claims say now as approved"
 	case rules[lock.RuleLockLedgerDowngraded]:
-		return "the lock store's own version was lowered, which is what re-arms grandfathering — so the store on disk disagrees with the project around it. Restore the lock store from version control, then run: dossierx check --validate. Re-locking, and dossierx migrate --adopt, both record whatever the claims say now as approved, which is what the edit was for"
+		return "the lock store's own version was lowered, which is what used to re-arm grandfathering — so the store on disk disagrees with the project around it. Restore the lock store from version control, then run: dossierx check --validate. Re-locking records whatever the claims say now as approved, which is what the edit was for"
 	case rules[lock.RuleLockLedgerAbsent]:
-		return "the lock ledger file is gone while locked claims remain, so there is nothing left that says what was approved. Restore it from version control, then run: dossierx check --validate — an absent ledger is never adopted, so dossierx migrate --adopt will refuse it, deliberately"
+		return "the lock ledger file is gone while locked claims remain, so there is nothing left that says what was approved. Restore it from version control, then run: dossierx check --validate — an absent ledger is never crossed onto the ledger schema either, deliberately"
 	case rules[lock.RuleLockLedgerDeleted]:
 		return "a claim this engine locked has had its approval record removed from the ledger while other evidence of the lock (locked_at, its dependency baselines) survives. Restore the lock store from version control and run: dossierx check --validate. Re-locking would record the current content as approved, which is what deleting the record was for"
 	case rules[lock.RuleLockLedgerAbandoned]:
@@ -1235,16 +1295,11 @@ func newCheckCmd() *cobra.Command {
 			res, runErr := check.Run(claims, cfg)
 			stoppedAt := checkStoppedAt(res, runErr)
 			data := newCheckData(res)
-			// The one-time ledger adoption, in the MACHINE surface. It reached
-			// stderr already (lock.announceAdoption), and stderr alone is not a
-			// contract — see adoptionWarnings. Carried as both data (the ids,
-			// for a consumer that wants to act on them) and warnings (the
-			// sentence, so an agent that reads only ok/warnings still learns the
-			// run blessed content nobody approved).
-			//
-			// Both halves ride, in their own fields: an adopted comment digest
-			// is not a grandfathered lock and does not have its recovery.
-			data.LedgerAdopted = adopted.Grandfathered
+			// The comment-digest adoption, in the MACHINE surface. Carried as
+			// both data (the ids, for a consumer that wants to act on them) and
+			// warnings (the sentence, so an agent that reads only ok/warnings
+			// still learns the run blessed content nobody approved). See
+			// adoptionWarnings.
 			data.CommentDigestsAdopted = adopted.CommentDigests
 			out := cmdResult{
 				Data:      data,
@@ -1995,12 +2050,13 @@ func newLockCmd() *cobra.Command {
 					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "lock: claim %q not found: %w", id, errClaimNotFound)
 				}
 				dr := lockDryRun(claim, claims, cfg, reason)
-				// The un-migrated project, evaluated here rather than inside
+				// The pre-ledger project, evaluated here rather than inside
 				// lockDryRun because it is a property of the PROJECT rather than
-				// of the claim: lock.Lock refuses it (ErrAdoptionRequired) and a
-				// preview that did not would send an agent to its human for a
-				// yes it cannot then act on. See migratedPrecondition.
-				migratedPrecondition(dr, cfg)
+				// of the claim: the write path refuses it
+				// (ErrPreLedgerUnadopted) and a preview that did not would send
+				// an agent to its human for a yes it cannot then act on. See
+				// preLedgerPrecondition.
+				preLedgerPrecondition(dr, cfg, claims)
 				return dryRunResult(cmd, "lock", dr), nil
 			}
 
@@ -2062,10 +2118,9 @@ func newLockCmd() *cobra.Command {
 			// from current content before recording this claim's own, so an
 			// upgrade caught mid-lock still restores drift detection for every
 			// already-locked claim (not just this one) — see
-			// lock.MigrateLegacyStore. It no longer grandfathers anything: since
-			// v0.3.0 adoption happens ONLY in lock.AdoptProject, behind the
-			// explicit "dossierx migrate --adopt", so an ordinary store-opening
-			// command can never write a grandfathered record. Persisted here
+			// lock.MigrateLegacyStore. It grandfathers nothing: no path in this
+			// build writes a grandfathered record, so an ordinary store-opening
+			// command can never bless content nobody approved. Persisted here
 			// rather than relying on the Save below so the baseline re-arm
 			// survives even a subsequently refused lock.
 			changed, adopted := prepareStore(cfg, store, claims)
@@ -2073,6 +2128,17 @@ func newLockCmd() *cobra.Command {
 				if err := store.Save(); err != nil {
 					return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 				}
+			}
+
+			// THE PRE-LEDGER CROSSING, the first of the three write paths that
+			// record an approval. It refuses while anything locked still predates
+			// the ledger, and otherwise stamps this project onto the ledger schema
+			// (creating the comment digest store in the same act) so the approval
+			// below has somewhere honest to land. See lock.CrossPreLedger — the
+			// lock-store sentinel above is the only one it needs, and it must not
+			// be given another.
+			if err := crossPreLedger(cfg, store, claims, "lock"); err != nil {
+				return cmdResult{Warnings: adoptionWarnings(adopted)}, err
 			}
 
 			// THE ROLL-UP GATE, ahead of lock.Lock because lock.Lock cannot see
@@ -2085,18 +2151,21 @@ func newLockCmd() *cobra.Command {
 			//
 			updated, err := lock.Lock(claim, claims, cfg, store, lock.Approval{Actor: lock.DefaultActor(), Reason: reason})
 			if err != nil {
-				// THE UN-MIGRATED PROJECT, classified before everything else.
+				// THE PRE-LEDGER PROJECT, classified before everything else.
 				// It is not a gate failure — the claim may be perfectly
 				// lockable — so evaluateLockGates below would find nothing to
 				// report and fall through to `internal`, which tells an agent
-				// to file a bug about a state one documented command fixes.
+				// to file a bug about a state a documented sequence fixes.
 				// This is the one integrity refusal an agent can clear itself
 				// once the human has said yes, which is why it gets its own
-				// code and a hint naming the command. See cliout.CodeAdoptionRequired.
-				if errors.Is(err, lock.ErrAdoptionRequired) {
+				// code. It is unreachable from here in practice (crossPreLedger
+				// above answers first, with the same sentinel and the same
+				// text); it stays as the backstop lock.Lock's own comment argues
+				// for. See cliout.CodePreLedgerUnadopted.
+				if errors.Is(err, lock.ErrPreLedgerUnadopted) {
 					return cmdResult{Warnings: adoptionWarnings(adopted)},
-						cliout.Wrap(err, cliout.CodeAdoptionRequired).
-							WithHint("run: dossierx migrate --adopt --dry-run (it names every already-locked artifact it would grandfather), show that list to the human, then dossierx migrate --adopt ONCE — and commit the two files it writes before locking anything")
+						cliout.Wrap(err, cliout.CodePreLedgerUnadopted).
+							WithHint(preLedgerCrossingHint)
 				}
 				// Same reason, for the deleted-record refusal: it trips none
 				// of the three lock gates either, so without this it reports
@@ -2770,15 +2839,16 @@ func newReauditCmd() *cobra.Command {
 					WithHint(fmt.Sprintf("run: dossierx check --validate (it names the finding), then either restore %s from git or dossierx claim unlock %s --reason \"...\"", claim.SourcePath, id))
 			}
 
-			// THE UN-MIGRATED PROJECT. RecordApproval below is the second of the
+			// THE PRE-LEDGER CROSSING. RecordApproval below is the second of the
 			// three paths in this binary that write an approval record, and — like
 			// "build-order lock" and unlike "claim lock" — it does not go through
 			// lock.Lock, so it does not inherit that function's refusal. Writing
 			// here would put the first record into a store that says it has no
-			// ledger, and Store.Save stamps the current schema version as it
-			// writes: every other locked claim in the project would read as
-			// lock-ledger-deleted afterwards. See requireMigratedProject.
-			if err := requireMigratedProject(cfg, store, "reaudit"); err != nil {
+			// ledger, which lock.Store.LedgerDowngraded reads — correctly, by its
+			// own rules — as tampering from then on. A reaudit always has at least
+			// one locked claim (its own), so in a pre-ledger project this always
+			// refuses. See lock.CrossPreLedger.
+			if err := crossPreLedger(cfg, store, claims, "reaudit"); err != nil {
 				return cmdResult{}, err
 			}
 
@@ -2957,20 +3027,25 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	dr.Propose("trigger", reauditTrigger(drift, flagged)).
 		Propose("reason", reason)
 
-	// The un-migrated project: --confirm records an approval (RecordApproval),
-	// and requireMigratedProject refuses it there, so the preview says so here.
-	migratedPrecondition(dr, cfg)
+	// The pre-ledger project: --confirm records an approval (RecordApproval),
+	// and lock.CrossPreLedger refuses it there, so the preview says so here.
+	preLedgerPrecondition(dr, cfg, claims)
 	return dryRunResult(cmd, "reaudit", dr), nil
 }
 
 // pickChangedDependency picks a dependency to report as "the" changed
-// dependency for a reaudit proposal: the first mirrors/rests_on target
-// whose current content hash no longer matches the stored baseline, or —
-// if none can be identified that way (e.g. an empty store) — simply the
-// first declared dependency, since ProposeDiff's stub only uses this for
-// its note text.
+// dependency for a reaudit proposal: the first baselined dependency whose
+// current content hash no longer matches the stored baseline, or — if none can
+// be identified that way (e.g. an empty store) — simply the first declared
+// dependency, since ProposeDiff's stub only uses this for its note text.
+//
+// It walks lock.BaselineDependencyIDs rather than a hand-copied
+// mirrors ++ rests_on: the drift trigger that flips the claim to
+// review_pending includes a claim-valued governed_by.type, so a copy without it
+// answers "dependency "" changed but no proposal was generated" for exactly the
+// claims a governor edit flagged.
 func pickChangedDependency(claim model.Claim, claims []model.Claim, store *lock.Store) model.Claim {
-	deps := append(append([]string(nil), claim.Mirrors...), claim.RestsOn...)
+	deps := lock.BaselineDependencyIDs(claim)
 	for _, dep := range deps {
 		depClaim, ok := loader.FindByID(claims, dep)
 		if !ok {

@@ -150,36 +150,26 @@ const (
 	// stale — there is nothing to do, which is a refusal rather than a silent
 	// success so the caller learns its model of the world was wrong.
 	CodeAlreadyLocked Code = "already_locked"
-	// CodeAlreadyMigrated is "dossierx migrate --adopt" refused because there is
-	// nothing for a migration to adopt. data.mode says which of the two cases it
-	// is, and they have different recoveries. already_covered — this project has
-	// already been through a ledger-aware build; adoption is a ONE-TIME upgrade,
-	// and a second run would record whatever is on disk now as approved, which
-	// makes the migration itself a laundering command (delete one record,
-	// re-migrate, and the edit it covered is "approved" again). nothing_to_adopt
-	// — there is no lock store and nothing locked, so there is no pre-ledger
-	// state at all; the ledger is created by the first real "claim lock". Either
-	// way the reflex to avoid is retrying: neither case becomes adoptable by
-	// running the command again.
-	//
-	// It is a REFUSAL rather than a silent success for the reason
-	// CodeAlreadyLocked gives about the identical shape — a command asked to
-	// change something that finds nothing to change was called on a wrong belief,
-	// and ok:true would leave that belief in place.
-	CodeAlreadyMigrated Code = "already_migrated"
-	// CodeAdoptionRequired is an approval-recording command — claim lock, claim
-	// reaudit --confirm, build-order lock — refused because this project has
-	// never been migrated onto the lock ledger. It is the write-path twin of the
-	// gate's lock-ledger-adoption-required finding.
+	// CodePreLedgerUnadopted is an approval-recording command — claim lock, claim
+	// reaudit --confirm, build-order lock — refused because this project's lock
+	// store predates the lock ledger and the project still holds locked artifacts
+	// that predate it. It is the write-path twin of the gate's
+	// lock-ledger-pre-ledger finding.
 	//
 	// It is its own code for CodeUntrackedConfig's reason: a deterministic
-	// refusal with exactly ONE recovery, that recovery is a single command, and
-	// the reflex an unclassified code invites (retry) loops forever. It is also
-	// the one integrity-family condition an agent can clear by itself once the
-	// human has said yes, which is precisely what a code is for: the skills'
-	// recovery table can carry "adoption_required -> show the human `dossierx
-	// migrate --adopt --dry-run`, then run `dossierx migrate --adopt` once".
-	CodeAdoptionRequired Code = "adoption_required"
+	// refusal with exactly ONE recovery, that recovery is a fixed sequence of
+	// ordinary commands, and the reflex an unclassified code invites (retry)
+	// loops forever. It is also the one integrity-family condition an agent can
+	// clear by itself once the human has said yes, which is precisely what a code
+	// is for: the skills' recovery table can carry "pre_ledger_unadopted -> show
+	// the human the ordered crossing (re-propose locked build orders, unlock
+	// every locked claim, then re-lock only what they still stand behind)".
+	//
+	// Nothing is grandfathered on the way through. The first lock in a project
+	// holding nothing locked is what stamps the store onto the ledger schema, and
+	// it records a real approval, which is the whole difference from the adoption
+	// path v0.4.0 removed.
+	CodePreLedgerUnadopted Code = "pre_ledger_unadopted"
 	// CodeReviewPending is "this claim IS review_pending, and that is what
 	// blocks you" — reaudit refusing a claim whose only pending trigger is an
 	// open comment thread, for instance. Contrast CodeNotReviewPending.

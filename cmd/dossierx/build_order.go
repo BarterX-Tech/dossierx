@@ -19,6 +19,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
+	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
 // newBuildOrderCmd is the "dossierx build-order" command group: propose, status,
@@ -541,10 +542,10 @@ func newBuildOrderLockCmd() *cobra.Command {
 				dr.Effect("rewrites " + path + " with locked: true and a content-hash baseline").
 					Effect("the order becomes the implementation sequence: it goes stale, rather than silently changing, when its claims move")
 				dr.Propose("locked", true).Propose("reason", reason)
-				// The un-migrated project: this command records an approval
-				// (recordBuildOrderApproval), and requireMigratedProject refuses
-				// it there, so the preview evaluates the same gate.
-				migratedPrecondition(dr, cfg)
+				// The pre-ledger project: this command records an approval
+				// (recordBuildOrderApproval), and lock.CrossPreLedger refuses it
+				// there, so the preview evaluates the same gate.
+				preLedgerPrecondition(dr, cfg, claims)
 				return dryRunResult(cmd, "build-order lock", dr), nil
 			}
 
@@ -563,8 +564,27 @@ func newBuildOrderLockCmd() *cobra.Command {
 			// message names both refused on the same unbacked boolean. Naming
 			// the state and pointing at propose is what turns a wedged module
 			// into a recoverable one. See buildOrderApprovalStands.
+			//
+			// THE PRE-LEDGER EXEMPTION, the same one internal/check's
+			// buildOrderGate applies before it will emit
+			// build-order-ledger-missing. A build order locked by a build that
+			// had no ledger to record it in has no record and never could have,
+			// so "nothing backs this flag" is not a statement about the artifact
+			// here — it is a statement about the PROJECT, which
+			// lock-ledger-pre-ledger names once and crossPreLedger refuses with
+			// the whole ordered recovery a few lines below. Without the
+			// exemption this fires first and sends the human to `build-order
+			// propose` under a message accusing them of writing a flag outside
+			// the approval path, and the refusal an agent branches on is
+			// integrity_failed rather than pre_ledger_unadopted.
+			//
+			// It is deliberately NOT folded into buildOrderApprovalStands, whose
+			// other caller (approvedOrderWouldBeDiscarded) needs the opposite
+			// answer here: re-proposing a pre-ledger locked order is step 1 of
+			// the crossing, and must stay allowed.
 			if existing, statusErr := buildorder.Status(path, claims, cfg); statusErr == nil &&
-				existing.Locked && !existing.Stale && !buildOrderApprovalStands(cfg, module) {
+				existing.Locked && !existing.Stale && !buildOrderApprovalStands(cfg, module) &&
+				!projectIsPreLedger(cfg) {
 				return cmdResult{}, cliout.Errorf(cliout.CodeIntegrityFailed,
 					"build-order lock: module %q's build order (%s) already says \"locked\": true, but no standing lock-ledger approval matches it — the flag was written outside the approval path, or its record was lost between the artifact write and the ledger write. There is nothing here for this command to lock: an unbacked flag is not an approved order", module, path).
 					WithHint(fmt.Sprintf("discard the unbacked artifact and approve a fresh one: dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"<the human's words>\"", module, module))
@@ -598,20 +618,24 @@ func newBuildOrderLockCmd() *cobra.Command {
 			}
 			defer release()
 
-			// THE UN-MIGRATED PROJECT, refused here — under the sentinel, and
+			// THE PRE-LEDGER CROSSING, evaluated here — under the sentinel, and
 			// before buildorder.Lock writes the artifact, so nothing is on disk
-			// when it fires.
+			// when it refuses.
 			//
-			// It is the twin of the refusal lock.Lock makes for a claim, and it
+			// It is the twin of the gate lock.Lock applies to a claim, and it
 			// has to exist separately because this command reaches the ledger
 			// through lock.RecordBuildOrderApproval rather than through
 			// lock.Lock. Without it, a build-order lock in a pre-ledger project
 			// writes the first record into a store that says the ledger does not
-			// exist — and Store.Save stamps the current version as it writes, so
-			// every OTHER locked claim in the project would read as
-			// lock-ledger-deleted from that moment on. See requireMigratedProject.
+			// exist, which lock.Store.LedgerDowngraded reads — correctly, by its
+			// own rules — as tampering from then on.
+			//
+			// The sentinel taken at :595 is the ONLY one this call needs, and
+			// that is load-bearing: lock.CrossPreLedger takes the comment digest
+			// store's lock as a leaf and never the claims sentinel, so the
+			// acquisition order stated above is unchanged. Do not add one here.
 			if store, storeErr := lock.LoadStore(storePath(cfg)); storeErr == nil {
-				if err := requireMigratedProject(cfg, store, "build-order lock"); err != nil {
+				if err := crossPreLedger(cfg, store, claims, "build-order lock"); err != nil {
 					return cmdResult{}, err
 				}
 			}
@@ -832,4 +856,61 @@ func buildOrderLockCode(err error) cliout.Code {
 	default:
 		return cliout.CodeBuildOrderRefused
 	}
+}
+
+// lockedBuildOrders counts this project's LOCKED build-order artifacts — the
+// build-order half of the count lock.CrossPreLedger refuses on.
+//
+// It exists because a locked build order is a locked artifact in its own right,
+// and "a locked build order implies at least one locked claim" is FALSE outside
+// propose time: buildorder.Propose refuses a module that is not fully locked, but
+// nothing re-checks it afterwards — `claim unlock` never touches the artifact and
+// internal/buildorder never clears Locked on unlock. So a project can hold a
+// locked order and zero locked claims, and without this term both write paths
+// would cross it silently onto the ledger with an unapproved order still in place.
+//
+// It cannot live in internal/lock: internal/buildorder imports internal/lock, so
+// lock can never read an artifact back. That is the same constraint internal/
+// check records for the build-order gate rules.
+//
+// It iterates the distinct modules of the LOADED CLAIMS rather than cfg.Modules
+// so it asks about exactly the modules this run has evidence for, and a module
+// with no artifact (buildorder.ErrNotProposed, or any other load failure) counts
+// as zero — an artifact nothing can read is not evidence that something is
+// locked, and the ledger gate reports it under its own rule.
+func lockedBuildOrders(cfg *config.Config, claims []model.Claim) int {
+	if cfg == nil {
+		return 0
+	}
+	seen := map[string]bool{}
+	locked := 0
+	for _, c := range claims {
+		if c.Module == "" || seen[c.Module] {
+			continue
+		}
+		seen[c.Module] = true
+		artifact, err := buildorder.LoadArtifact(buildorder.ArtifactPath(cfg, c.Module))
+		if err != nil || artifact == nil || !artifact.Locked {
+			continue
+		}
+		locked++
+	}
+	return locked
+}
+
+// projectIsPreLedger reports whether this project's lock store predates the lock
+// ledger with nothing contradicting that — lock.Store.PreLedgerUnadopted, read
+// off the store on disk.
+//
+// It exists so a refusal that assumes a ledger exists can stand aside for the
+// one project where it never did. An unreadable store answers false: that is a
+// different condition with a different recovery (restore from version control),
+// already named by its own finding, and a guard must not manufacture a second
+// diagnosis out of it.
+func projectIsPreLedger(cfg *config.Config) bool {
+	store, err := lock.LoadStore(storePath(cfg))
+	if err != nil {
+		return false
+	}
+	return store.PreLedgerUnadopted(digestStorePresent(cfg))
 }

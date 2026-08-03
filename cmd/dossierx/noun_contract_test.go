@@ -17,6 +17,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
+	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -295,22 +296,30 @@ func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 	}
 }
 
-// Build orders could be locked before this release gave them a ledger record.
-// Without adoption, every such project would fail `check` on upgrade with a
-// build-order-ledger-missing it had no way to have avoided — a gate firing on
-// correct state, which is how gates get switched off. Adoption is scoped to a
-// store file that EXISTS and predates the ledger, the same predicate the
-// per-claim grandfathering uses, so deleting the ledger still cannot re-bless
-// anything.
+// TestAPreLedgerProjectCrossesByEmptyingItself is v0.4.0's whole answer to
+// "how does a project that predates the lock ledger ever get onto it", end to
+// end, through the CLI.
 //
-// What performs it is now "dossierx migrate --adopt" rather than the next
-// ordinary command: adoption fails closed, and the build-order half moved with
-// the claim half (see migrate.go's planMigration, and prepareStore, which used to
-// carry it). The property under test is unchanged — an honest upgrade ends with a
-// grandfathered record and a passing gate — only the act that produces it.
-func TestMigrationGrandfathersAPreLedgerProjectsLockedBuildOrder(t *testing.T) {
-	cfgPath := buildOrderFixture(t)
+// It replaces a test that ran the removed migration and asserted a GRANDFATHERED
+// record at the end. That is the assertion this release exists to delete:
+// grandfathering records content nobody approved as the baseline every later
+// change is judged against, and no amount of ceremony around the command makes
+// the record it writes evidence of anything.
+//
+// What replaces it costs more and claims less. The project is emptied of
+// everything that predates the ledger, in the order the refusal gives (propose
+// FIRST — propose requires the module still fully locked, so unlocking a claim
+// first would leave the order stuck), and the first re-lock crosses the store.
+// Nothing is grandfathered, because by then there is nothing to grandfather.
+//
+// The last two assertions are the ones that catch a crossing point that stamps
+// only the schema version: the comment digest store must be created by the same
+// act, and the finding set is asserted EMPTY rather than merely free of two
+// named rules.
+func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
+	cfgPath := buildOrderFixture(t) // one claim, status: locked, module widget
 	root := filepath.Dir(cfgPath)
+	const id = "widget.contract.a"
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("propose: %v", err)
@@ -327,25 +336,65 @@ func TestMigrationGrandfathersAPreLedgerProjectsLockedBuildOrder(t *testing.T) {
 	storeFile := filepath.Join(root, ".dossierx-lock-store.json")
 	rewindStoreToPreLedger(t, storeFile)
 
-	// The upgrade run: the one-time migration, then the gate it clears.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "migrate", "--adopt"); err != nil {
-		t.Fatalf("migrate --adopt on an honest pre-ledger project must succeed: %v", err)
+	// 1. The refusal, on both write paths, and that it IS the refusal.
+	lockEnv, _, lockErr := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
+	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
+		t.Fatalf("claim lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
-		t.Fatalf("check after the migration must not fail: %v", err)
+	boEnv, _, boErr := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
+	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodePreLedgerUnadopted {
+		t.Fatalf("build-order lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, boEnv.Error)
 	}
 
-	// And the adoption is on the record, marked as an adoption rather than an
-	// approval, so nobody mistakes it for one.
+	// 2. The recovery, in the order the refusal text gives.
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("re-propose (FIRST: propose needs the module still fully locked): %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "crossing onto the ledger"); err != nil {
+		t.Fatalf("unlock is gateless and always has been: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved after the crossing"); err != nil {
+		t.Fatalf("the crossing lock: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+		t.Fatalf("re-propose after the crossing: %v", err)
+	}
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "re-approved after the crossing"); err != nil {
+		t.Fatalf("build-order lock after the crossing: %v", err)
+	}
+
+	// 3. The assertions.
 	after, err := os.ReadFile(storeFile)
 	if err != nil {
 		t.Fatalf("re-read store: %v", err)
 	}
-	if !strings.Contains(string(after), `"build-order:widget"`) {
-		t.Fatalf("the locked build order was not grandfathered:\n%s", after)
+	if !strings.Contains(string(after), `"version": 2`) {
+		t.Fatalf("the crossing must stamp the ledger schema:\n%s", after)
 	}
-	if !strings.Contains(string(after), `"grandfathered": true`) {
-		t.Fatalf("an adopted build-order record must be marked grandfathered:\n%s", after)
+	for _, key := range []string{id, lock.BuildOrderLedgerKey("widget")} {
+		rec, ok := readLedger(t, storeFile)[key]
+		if !ok {
+			t.Fatalf("expected a record for %q:\n%s", key, after)
+		}
+		if rec.Grandfathered {
+			t.Fatalf("%q must hold a real APPROVAL, never a grandfathered adoption: %+v", key, rec)
+		}
+	}
+	if _, statErr := os.Stat(filepath.Join(root, ".dossierx-comment-digest.json")); statErr != nil {
+		t.Fatalf("the crossing must create the comment digest store in the same act: %v", statErr)
+	}
+
+	// The finding set is asserted EMPTY, not merely free of two named rules: a
+	// crossing point that stamped only the schema version would leave
+	// comment-digest-absent behind, pointing at a file that never existed.
+	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	if err != nil || !env.OK {
+		t.Fatalf("check --validate after the crossing: %v (%+v)", err, env)
+	}
+	var data checkData
+	envData(t, env, &data)
+	if len(data.LedgerFindings) != 0 {
+		t.Fatalf("the crossed project must be clean, got %+v", data.LedgerFindings)
 	}
 }
 
@@ -371,26 +420,37 @@ func TestMigrationGrandfathersAPreLedgerProjectsLockedBuildOrder(t *testing.T) {
 // reported `unknown command "lint" for "dossierx"` with an empty command field
 // and no hint whatsoever.
 func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
+	// wantRemovedIn is per-case rather than a shared literal because the stubs no
+	// longer all come from one release: v0.4.0 removed the migration verb, and a
+	// stub that claimed the wrong release would send a reader to the wrong
+	// CHANGELOG entry for the reasoning.
 	cases := []struct {
-		name     string
-		argv     []string
-		wantHint string
+		name          string
+		argv          []string
+		wantHint      string
+		wantRemovedIn string
 	}{
 		// The four comment verbs, each with the flags it used to take.
-		{"comment resolve --as", []string{"comment", "resolve", "widget.contract.a", "c-abc123", "--as", "agent"}, "dossierx comment reply"},
-		{"comment reopen --as", []string{"comment", "reopen", "widget.contract.a", "c-abc123", "--as", "human"}, "dossierx comment reply"},
-		{"comment edit --body", []string{"comment", "edit", "widget.contract.a", "c-abc123", "--as", "agent", "--body", "revised"}, "dossierx comment reply"},
-		{"comment delete --as", []string{"comment", "delete", "widget.contract.a", "c-abc123", "--as", "agent"}, "dossierx comment reply"},
+		{"comment resolve --as", []string{"comment", "resolve", "widget.contract.a", "c-abc123", "--as", "agent"}, "dossierx comment reply", "removed in v0.3.0"},
+		{"comment reopen --as", []string{"comment", "reopen", "widget.contract.a", "c-abc123", "--as", "human"}, "dossierx comment reply", "removed in v0.3.0"},
+		{"comment edit --body", []string{"comment", "edit", "widget.contract.a", "c-abc123", "--as", "agent", "--body", "revised"}, "dossierx comment reply", "removed in v0.3.0"},
+		{"comment delete --as", []string{"comment", "delete", "widget.contract.a", "c-abc123", "--as", "agent"}, "dossierx comment reply", "removed in v0.3.0"},
 
 		// The retired top-level verbs, with the flags they used to take.
-		{"lint --json", []string{"lint", "--json"}, "dossierx check"},
-		{"catalog --out", []string{"catalog", "--out", ".catalog.json"}, "dossierx check"},
-		{"render --out", []string{"render", "--out", "viewer/index.html"}, "dossierx check"},
-		{"deps <id>", []string{"deps", "widget.contract.a"}, "dossierx claim show"},
-		{"stale --json", []string{"stale", "--json"}, "dossierx claim list --review-pending"},
-		{"coverage --module", []string{"coverage", "--module", "widget"}, "dossierx claim list --migrated"},
-		{"implink set", []string{"implink", "set", "widget.contract.a", "--file", "main.go"}, "dossierx claim link"},
-		{"implink status", []string{"implink", "status", "--module", "widget"}, "dossierx claim show"},
+		{"lint --json", []string{"lint", "--json"}, "dossierx check", "removed in v0.3.0"},
+		{"catalog --out", []string{"catalog", "--out", ".catalog.json"}, "dossierx check", "removed in v0.3.0"},
+		{"render --out", []string{"render", "--out", "viewer/index.html"}, "dossierx check", "removed in v0.3.0"},
+		{"deps <id>", []string{"deps", "widget.contract.a"}, "dossierx claim show", "removed in v0.3.0"},
+		{"stale --json", []string{"stale", "--json"}, "dossierx claim list --review-pending", "removed in v0.3.0"},
+		{"coverage --module", []string{"coverage", "--module", "widget"}, "dossierx claim list --migrated", "removed in v0.3.0"},
+		{"implink set", []string{"implink", "set", "widget.contract.a", "--file", "main.go"}, "dossierx claim link", "removed in v0.3.0"},
+		{"implink status", []string{"implink", "status", "--module", "widget"}, "dossierx claim show", "removed in v0.3.0"},
+
+		// v0.4.0's removal. It is the invocation README, SKILL.md, the CI
+		// template and CHANGELOG all spent a release telling agents to type, and
+		// flag parsing runs first — so without the stub, `--adopt` surfaces as
+		// `unknown flag` and the removal is never named at all.
+		{"migrate --adopt", []string{"migrate", "--adopt"}, "dossierx claim unlock", "removed in v0.4.0"},
 	}
 
 	for _, tc := range cases {
@@ -407,8 +467,8 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 			if strings.Contains(env.Error.Message, "unknown flag") {
 				t.Fatalf("the failure must be about the removed verb, not its flags: %+v", env.Error)
 			}
-			if !strings.Contains(env.Error.Message, "removed in v0.3.0") {
-				t.Fatalf("the message must say the verb was removed: %+v", env.Error)
+			if !strings.Contains(env.Error.Message, tc.wantRemovedIn) {
+				t.Fatalf("the message must say which release removed the verb (%q): %+v", tc.wantRemovedIn, env.Error)
 			}
 			if !strings.Contains(env.Error.Hint, tc.wantHint) {
 				t.Fatalf("the hint must name the replacement %q, got %+v", tc.wantHint, env.Error)
@@ -450,7 +510,7 @@ func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
 // TestRetiredVerbsAreNotSurface: the stubs answer, and they stay invisible.
 //
 // They must not appear in --help, in requireSubcommand's "run one of:" list, or
-// in the twenty-leaf count TestSurfaceIsTwentyLeavesUnderSevenNouns pins.
+// in the nineteen-leaf count TestSurfaceIsNineteenLeavesUnderSevenNouns pins.
 // A removal explanation that advertises itself is a re-addition.
 func TestRetiredVerbsAreNotSurface(t *testing.T) {
 	env, _, err := execCLIJSON(t, "comment")

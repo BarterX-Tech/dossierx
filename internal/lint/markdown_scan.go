@@ -32,6 +32,8 @@ package lint
 import (
 	"sort"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 // --- the inline text unit -------------------------------------------------
@@ -670,18 +672,20 @@ type mdInline struct {
 // breaks are the hard-break offsets from mdRun.joined; a code span may not
 // span one, exactly as in the renderer.
 //
-// Two constructs the renderer does not implement in this file's sibling
-// package are still recognized here, on purpose:
+// Two constructs are called out here, for opposite reasons:
 //
-//   - IMAGES. "![" is treated as an image opener. Until P7 lands the renderer
-//     reads the same bytes as a literal "!" plus a link, so an author who
-//     writes an image today gets neither an image nor a warning. Recognizing
-//     it here is what makes the rejected-src and asset-scope gates real on the
-//     day images render rather than one release later.
-//   - EMPHASIS/STRIKE DELIMITERS. Bold, italic and strikethrough are an
-//     explicit non-goal of the renderer's subset, so "*bold*" renders with its
-//     asterisks visible. The finding exists to say that out loud rather than
-//     let an author ship markup that silently is not markup.
+//   - IMAGES. "![" is treated as an image opener, which the renderer in this
+//     file's sibling package does not implement yet. Until P7 lands it reads
+//     the same bytes as a literal "!" plus a link, so an author who writes an
+//     image today gets neither an image nor a warning. Recognizing it here is
+//     what makes the rejected-src and asset-scope gates real on the day images
+//     render rather than one release later.
+//   - EMPHASIS/STRIKE DELIMITERS. Bold, italic and strikethrough ARE part of
+//     the renderer's subset (markdown_inline.go implements all three), and
+//     mdDelimRunAt below mirrors its flanking rules. The finding is therefore
+//     not "this can never be emphasis" but "this particular run has no partner
+//     on this block", which is the one case where the author wrote markup and
+//     the renderer, correctly, emits a literal character.
 func mdScanInline(text string, breaks []int) mdInline {
 	var in mdInline
 	// runs collects the delimiter runs that can UNAMBIGUOUSLY open or close;
@@ -778,33 +782,147 @@ type mdDelimRun struct {
 //   - a "~" run must be at least two characters, so "~/some/path" is a path
 //     and not an unclosed strikethrough.
 //
-// What remains is exactly the unambiguous case: a run with whitespace (or a
-// text edge) on one side and content on the other, which can only be an opener
-// or only be a closer.
+// What remains is the unambiguous case: whitespace (or a text edge) on one
+// side, OR punctuation on exactly one side, can only open or only close. Word
+// characters on both sides, and punctuation on both sides, stay ambiguous and
+// are skipped.
+//
+// THE PUNCTUATION HALF OF THAT IS NOT DECORATION. An earlier version of this
+// function classified flanking on whitespace ALONE, which made "strike~~," —
+// content on one side, a comma on the other — "ambiguous", dropped the closer
+// and reported the opener as unmatched. Every sentence that ends an emphasised
+// or struck phrase with a comma or a full stop got a finding for markup the
+// renderer pairs correctly. Flanking is now CommonMark's, computed per rune by
+// mdClassifyNeighbour; see that function.
+//
+// One exclusion survives on top of the spec rule, and its scope is exactly one
+// thing: a run the punctuation clause RESCUED — one the whitespace-only rule
+// would have called ambiguous — whose punctuation neighbour is a bracket is
+// skipped, because "(*Store)", "a[*p]", "a*(b+c)" and "Topic_(disambiguation)"
+// are what a claim corpus is made of. It is gated on `rescued` and may never
+// take back a run the pre-change rule already admitted: "A *(b c" is a
+// genuinely unmatched opener before a bracket and must keep reporting.
 func mdDelimRunAt(text string, start, runLen int, c byte) (mdDelimRun, bool) {
 	if c == '~' && runLen < 2 {
 		return mdDelimRun{}, false
 	}
-	var prev, next byte = ' ', ' '
-	if start > 0 {
-		prev = text[start-1]
-	}
 	end := start + runLen
-	if end < len(text) {
-		next = text[end]
-	}
-	if c == '_' && mdIsAlnum(prev) && mdIsAlnum(next) {
+	prevR, prevSize := utf8.DecodeLastRuneInString(text[:start])
+	nextR, nextSize := utf8.DecodeRuneInString(text[end:])
+
+	// The intraword rule stays byte-exact: it exists for an "_" between two
+	// ASCII alphanumerics ("governed_by"), so the size guards keep it from
+	// widening to anything a multi-byte neighbour might be.
+	if c == '_' && prevSize == 1 && mdIsAlnum(byte(prevR)) &&
+		nextSize == 1 && mdIsAlnum(byte(nextR)) {
 		return mdDelimRun{}, false
 	}
-	prevSpace := mdIsSpaceByte(prev)
-	nextSpace := mdIsSpaceByte(next)
-	leftFlanking := !nextSpace
-	rightFlanking := !prevSpace
+
+	prevWS, prevPunct := mdClassifyNeighbour(prevR, prevSize)
+	nextWS, nextPunct := mdClassifyNeighbour(nextR, nextSize)
+
+	// The verdict the whitespace-only rule would have given, from the same
+	// per-rune classification. A run it called ambiguous and the rule below
+	// does not was rescued by the punctuation clause, and only those runs are
+	// in the bracket exclusion's scope.
+	oldLeft := !nextWS
+	oldRight := !prevWS
+	rescued := oldLeft == oldRight
+
+	leftFlanking := !nextWS && (!nextPunct || prevWS || prevPunct)
+	rightFlanking := !prevWS && (!prevPunct || nextWS || nextPunct)
 	if leftFlanking == rightFlanking {
-		// Neither (" * ") or both ("2*3"): not an unambiguous delimiter.
+		// Neither (" * ") or both ("2*3", "count(*)"): not an unambiguous
+		// delimiter.
+		return mdDelimRun{}, false
+	}
+	if rescued && ((prevPunct && mdIsCarveOutRune(prevR)) ||
+		(nextPunct && mdIsCarveOutRune(nextR))) {
 		return mdDelimRun{}, false
 	}
 	return mdDelimRun{char: c, opens: leftFlanking}, true
+}
+
+// mdClassifyNeighbour is the per-rune mirror of markdown.classifyNeighbour
+// (internal/render/markdown/markdown_inline.go:642-666). Read that function's
+// doc at :571-598 before changing anything here: it records why the byte rule
+// this replaces was not merely imprecise but not a well-defined thing to be —
+// misclassifying a non-ASCII neighbour as a word character hands a run MORE
+// opening capability and LESS closing capability through the same two flags, so
+// "conservative" is not an available direction.
+//
+// size is what the utf8 decoder returned. size == 0 means THERE WAS NO
+// CHARACTER AT ALL on that side — a text edge — and that is decided by SIZE and
+// never by the rune's value, so a NUL byte in the text is an ordinary word
+// character rather than an absent one. size == 1 with r == utf8.RuneError is
+// invalid UTF-8 and is a word character (a real U+FFFD decodes with size 3, so
+// the two cannot be confused).
+//
+// WHITESPACE is space, tab, LF, FF, CR, or any rune in Unicode category Zs.
+// PUNCTUATION is CommonMark's ASCII punctuation set or any rune in a Unicode P
+// OR S category. The S half is not optional: spec example 354 turns on "£"
+// (category Sc) stopping a "*" from closing, and "*bold*×2" on U+00D7 (Sm).
+//
+// The renderer's twin carries a third parameter, an edge rune, because a link's
+// inner text has characters OUTSIDE the slice it is scanning. This scanner
+// walks whole blocks, so a text edge here is a genuine edge and size == 0 is
+// whitespace.
+func mdClassifyNeighbour(r rune, size int) (isWS, isPunct bool) {
+	switch {
+	case size == 0:
+		return true, false
+	case size == 1 && r == utf8.RuneError:
+		return false, false
+	}
+	if r < utf8.RuneSelf {
+		// mdIsSpaceByte is already exactly CommonMark's ASCII whitespace set.
+		// The renderer had to spell a second set (isFlankSpaceASCII) because
+		// its isInlineSpaceByte counts the VERTICAL TAB, which is category Cc
+		// and so a word character to the flanking rule; this scanner's space
+		// set never counted it, so one set answers both questions here.
+		return mdIsSpaceByte(byte(r)), mdIsASCIIPunct(byte(r))
+	}
+	return unicode.Is(unicode.Zs, r), unicode.IsPunct(r) || unicode.IsSymbol(r)
+}
+
+// mdIsASCIIPunct mirrors markdown.isASCIIPunct: CommonMark's ASCII punctuation
+// set, which is every printable ASCII character that is neither alphanumeric
+// nor a space.
+func mdIsASCIIPunct(c byte) bool {
+	switch {
+	case c >= '!' && c <= '/': // ! " # $ % & ' ( ) * + , - . /
+		return true
+	case c >= ':' && c <= '@': // : ; < = > ? @
+		return true
+	case c >= '[' && c <= '`': // [ \ ] ^ _ `
+		return true
+	case c >= '{' && c <= '~': // { | } ~
+		return true
+	}
+	return false
+}
+
+// mdIsCarveOutRune reports the punctuation neighbours mdDelimRunAt's
+// rescued-only exclusion skips on.
+//
+// CommonMark's flanking rules make the "*" in "(*Store)" a legitimate opener,
+// and it is — the RENDERER is right to leave it literal only because nothing
+// closes it. This lint is not a conformance checker, it is a noise-budgeted
+// warning, and every one of "(*Store)", "a[*p]", "a*(b+c)" and
+// "Topic_(disambiguation)" appears in ordinary claim prose.
+//
+// The path separator earns its place the same way. Without it, the per-rune
+// punctuation clause fires on every underscore-prefixed path segment —
+// "internal/_generated", "docs/_partials", "testdata/_fixtures" — which is a
+// shape this project's own claim bodies use far more often than "(*Store)".
+// Those were silent before v0.4.0 and would have become warnings, trading the
+// false positive #20 removed for a more common one.
+func mdIsCarveOutRune(r rune) bool {
+	switch r {
+	case '(', ')', '[', ']', '{', '}', '<', '>', '/':
+		return true
+	}
+	return false
 }
 
 // mdUnbalancedDelims pairs the runs left to right and returns, in a stable

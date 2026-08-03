@@ -211,8 +211,11 @@ type claimCommentCounts struct {
 type claimLedgerView struct {
 	// Recorded: a ledger record for this claim exists.
 	Recorded bool `json:"recorded"`
-	// Grandfathered: the record was ADOPTED on upgrade, never approved. Its
-	// hash is what was on disk on adoption day — see lock.AdoptProject.
+	// Grandfathered: a LEGACY record, adopted on upgrade rather than approved.
+	// Its hash is what was on disk on adoption day. Nothing in this build writes
+	// one, so it is false for every record minted here and true only for records
+	// surviving from a project that ran the removed adoption path; the key stays
+	// (no omitempty) because a consumer must be able to tell the two apart.
 	Grandfathered bool `json:"grandfathered"`
 	// Released: an unlock released the record. A released record describes a
 	// claim that is allowed to be draft and allowed to change.

@@ -2,8 +2,22 @@ package lint
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
+	// TEST-ONLY, and the depguard suppression is the point rather than an
+	// escape from it. The rule it names — "internal/render is top-of-stack;
+	// nothing under internal/{lint,...} may import it" — is about the
+	// PRODUCTION dependency graph, and this import does not touch it:
+	// `go list -deps ./internal/lint | grep -c render/markdown` is 0 with this
+	// file in the tree. depguard matches by file path, so it sees a _test.go
+	// file the same as a source one. What the import buys is the one thing
+	// that keeps markdown_scan.go's deliberate MIRROR from silently drifting
+	// from the renderer it mirrors: TestMDScanInline_RendererParity below
+	// checks the two against each other over the whole tracked corpus. If a
+	// production import of internal/render ever appears in this package, this
+	// line is not the precedent for it.
+	"github.com/BarterX-Tech/dossierx/internal/render/markdown" //nolint:depguard // test-only; the parity property below is what pins this package's renderer mirror, and the production dep graph is unchanged
 	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
@@ -346,6 +360,237 @@ func TestMDAllowedScheme(t *testing.T) {
 		if urlsafe.IsAllowedHref(u) {
 			t.Errorf("href %q must be rejected", u)
 		}
+	}
+}
+
+// TestMDScanInline_DelimiterFlanking pins mdDelimRunAt's CommonMark flanking
+// rule, the rule that replaced a whitespace-only one which called every
+// "…bold**," shape ambiguous and then reported its partner as unmatched.
+//
+// The four groups are the four things the rule has to get right at once: the
+// reported false positives go silent, the NON-ASCII half goes silent (a
+// byte-level punctuation test cannot do this — see mdClassifyNeighbour), the
+// shapes an ordinary claim corpus is full of stay silent, and a genuinely
+// unmatched delimiter still reports.
+func TestMDScanInline_DelimiterFlanking(t *testing.T) {
+	cases := []struct {
+		group      string
+		text       string
+		unbalanced string
+	}{
+		// 1. The three fixtures from the issue report. The second and third
+		// are what showed the report's own diagnosis ("needs **, * and ~~
+		// together") was wrong: the comma is the trigger, and the asterisk
+		// case has no "~" in it at all.
+		{group: "reported", text: "Only ~~strike~~, comma after."},
+		{group: "reported", text: "Only ~~strike~~ no comma."},
+		{group: "reported", text: "Has **bold**, and more."},
+
+		// 2. The non-ASCII differential set. Every row reported its delimiter
+		// before the change; the last three are the S-category half, and they
+		// are the rows an implementation mirroring unicode.IsPunct alone still
+		// gets wrong (CommonMark spec example 354).
+		{group: "non-ascii", text: "*bold*—text"},       // Pd, EM DASH
+		{group: "non-ascii", text: "**bold**’s edge"},   // Pf, RIGHT SINGLE QUOTATION MARK
+		{group: "non-ascii", text: "**bold**…and more"}, // Po, HORIZONTAL ELLIPSIS
+		{group: "non-ascii", text: "~~strike~~—dash"},   // Pd
+		{group: "non-ascii", text: "x *bold* y"},        // Zs, NO-BREAK SPACE
+		{group: "non-ascii", text: "*bold*£5 total."},   // Sc, POUND SIGN
+		{group: "non-ascii", text: "*bold*×2 items."},   // Sm, MULTIPLICATION SIGN
+		{group: "non-ascii", text: "*bold*€5 total."},   // Sc, EURO SIGN
+
+		// 3. The non-regression set: everything the ambiguity exclusion and
+		// the bracket exclusion exist for. The last six are the ones the
+		// punctuation clause would otherwise have widened onto, and the URL
+		// shape is in the tracked corpus
+		// (testdata/markdown-cases/autolink-bare-termination.yaml).
+		{group: "quiet", text: "2*3"},
+		{group: "quiet", text: "SELECT count(*) FROM t"},
+		{group: "quiet", text: "governed_by"},
+		{group: "quiet", text: "rests_on"},
+		{group: "quiet", text: "see ~/some/path"},
+		{group: "quiet", text: "A pointer receiver (*Store) is used."},
+		{group: "quiet", text: "The (_internal) package is private."},
+		// Path separators, the second half of the carve-out. Every one of these
+		// was silent before the v0.4.0 flanking rewrite; without "/" in
+		// mdIsCarveOutRune the per-rune punctuation clause turns them all into
+		// unmatched-"_" warnings, which is a more common shape in this project's
+		// prose than any bracket case above.
+		{group: "quiet", text: "The generated files live in internal/_generated today."},
+		{group: "quiet", text: "Run the scan over testdata/_fixtures before locking."},
+		{group: "quiet", text: "Ship it: docs/_partials/header.html is included verbatim."},
+		{group: "quiet", text: "See https://example.com/docs/_index for the reference."},
+		{group: "quiet", text: "Set x = a/_b in the formula."},
+		{group: "quiet", text: "C-style: a[*p] deref."},
+		{group: "quiet", text: "a*(b+c) is the formula."},
+		{group: "quiet", text: "A file named report_(final).pdf here."},
+		{group: "quiet", text: "See https://en.wikipedia.org/wiki/Foo_(bar) for details."},
+		{group: "quiet", text: "<https://example.com/x_(y)>"},
+		{group: "quiet", text: "A *(b)* c"},
+
+		// 4. A genuinely unmatched run still reports, for each of the three
+		// characters independently. The delimiter has to be FLANKED: "an
+		// unmatched * in prose" has whitespace on both sides, is
+		// neither-flanking, and has always been silent.
+		{group: "unmatched", text: "an unmatched *asterisk in prose", unbalanced: "*"},
+		{group: "unmatched", text: "an unmatched _under in prose", unbalanced: "_"},
+		{group: "unmatched", text: "an unmatched ~~strike in prose", unbalanced: "~"},
+		// The run the bracket exclusion must NOT silence: it was already
+		// unambiguous under the whitespace-only rule, so it was never rescued.
+		{group: "unmatched", text: "A *(b c", unbalanced: "*"},
+		// The opener here is rescued and then bracket-excluded; the closer is
+		// untouched, leaving one unmatched closer.
+		{group: "unmatched", text: "(**bold** text", unbalanced: "*"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.group+"/"+tc.text, func(t *testing.T) {
+			if got := string(mdScanInline(tc.text, nil).unbalanced); got != tc.unbalanced {
+				t.Errorf("unbalanced delimiters for %q: got %q, want %q", tc.text, got, tc.unbalanced)
+			}
+		})
+	}
+}
+
+// TestMDScanInline_RendererParity asserts the ONE-DIRECTIONAL contract that
+// keeps this mirror from going stale: if the scanner says a delimiter char is
+// unmatched, the renderer must not have paired it into the tag that char
+// produces.
+//
+// The reverse is deliberately NOT asserted. The ambiguity exclusion and the
+// carve-out exclusion are an under-report by design — "(*Store)",
+// "Topic_(disambiguation)" and "internal/_generated" are legitimate CommonMark
+// openers that this lint
+// declines to warn about because a claim corpus is full of them — so a run the
+// renderer leaves literal and the scanner stays quiet about is the intended
+// outcome, not a parity failure.
+//
+// THREE PRE-EXISTING VIOLATIONS ARE PINNED IN mdParityKnownOverReports RATHER
+// THAN ASSERTED AWAY. All three predate this scanner's flanking rewrite and
+// none is introduced by it — measured against the release base, the rewrite
+// removes eleven violations and adds none. They are here, named, because a test
+// that silently skipped them would be claiming a property the scanner does not
+// have. See that variable for what each one is.
+//
+// The import of internal/render/markdown is TEST-ONLY. internal/lint does not
+// depend on that package in production and must not start (see this file's
+// sibling markdown_scan.go for why the recognizers are a mirror rather than a
+// call).
+func TestMDScanInline_RendererParity(t *testing.T) {
+	tagFor := map[byte][]string{
+		'*': {"<strong>", "<em>"},
+		'_': {"<strong>", "<em>"},
+		'~': {"<del>"},
+	}
+
+	check := func(t *testing.T, name, text string) {
+		t.Helper()
+		unbalanced := mdScanInline(text, nil).unbalanced
+		if len(unbalanced) == 0 {
+			return
+		}
+		out := string(markdown.RenderInline(text))
+		for _, ch := range unbalanced {
+			for _, tag := range tagFor[ch] {
+				if !strings.Contains(out, tag) {
+					continue
+				}
+				if mdParityKnownOverReports[text] {
+					continue
+				}
+				t.Errorf("%s: scanner reports %q unmatched but the renderer emitted %s\n  in: %q\n out: %s",
+					name, string(ch), tag, text, out)
+			}
+		}
+	}
+
+	// Every fixture the flanking test asserts on, plus the delimiter fixtures
+	// from TestMDScanInline_Constructs.
+	for _, text := range mdParityFixtures() {
+		t.Run("fixture/"+text, func(t *testing.T) { check(t, "fixture", text) })
+	}
+
+	// Plus the whole tracked corpus, so a renderer change that repairs or
+	// breaks a pairing this scanner mirrors cannot land silently.
+	for _, c := range mdCorpusClaims(t) {
+		if c.Body == "" {
+			continue
+		}
+		t.Run("corpus/"+c.ID, func(t *testing.T) {
+			for _, run := range mdScanBlocks(splitLines(c.Body), 1, true).runs {
+				text, _ := run.joined()
+				check(t, c.ID, text)
+			}
+		})
+	}
+}
+
+// mdParityKnownOverReports are the three inputs on which the scanner reports a
+// delimiter the renderer did pair. Every one of them is the SAME mechanism, and
+// it is not the one this release's change is about: an exclusion written to
+// suppress a spurious OPENER lands on a legitimate CLOSER instead, and the
+// closer's partner is then reported unmatched.
+//
+//   - "(**bold** text" — the bracket exclusion drops the opener it rescued, so
+//     the (untouched) closer is left with nothing open. This is the exact
+//     behaviour the release plan pins for this input, at the base and after:
+//     the alternative, an unconditional bracket exclusion, silences "A *(b c",
+//     which is a genuinely unmatched opener.
+//   - "*not a list*item, run together." — the closing "*" has word characters
+//     on both sides, so the AMBIGUITY exclusion drops it; CommonMark lets a
+//     both-flanking "*" close, and the renderer does.
+//   - "~~**Struck and bold**~~, …" — the closing "~~" has punctuation on both
+//     sides, which is likewise ambiguous here and likewise closes there.
+//
+// Fixing that class means letting an ambiguous run CLOSE something already
+// open, which is a change to mdUnbalancedDelims's pairing rather than to
+// mdDelimRunAt's classification. It is out of scope here and deliberately not
+// attempted. Shrinking this map is a welcome change; growing it is a
+// regression, and the test will not tell you the difference — read the diff.
+var mdParityKnownOverReports = map[string]bool{
+	"(**bold** text":                  true,
+	"*not a list*item, run together.": true,
+	"~~**Struck and bold**~~, ~~*struck and italic*~~, and ~~`struck code`~~.": true,
+}
+
+// mdParityFixtures is the hand-written half of the parity property's input:
+// every delimiter fixture the two inline tests above assert on.
+func mdParityFixtures() []string {
+	return []string{
+		"Only ~~strike~~, comma after.",
+		"Only ~~strike~~ no comma.",
+		"Has **bold**, and more.",
+		"*bold*—text",
+		"**bold**’s edge",
+		"**bold**…and more",
+		"~~strike~~—dash",
+		"x *bold* y",
+		"*bold*£5 total.",
+		"*bold*×2 items.",
+		"*bold*€5 total.",
+		"2*3",
+		"SELECT count(*) FROM t",
+		"governed_by",
+		"rests_on",
+		"see ~/some/path",
+		"A pointer receiver (*Store) is used.",
+		"The (_internal) package is private.",
+		"C-style: a[*p] deref.",
+		"a*(b+c) is the formula.",
+		"A file named report_(final).pdf here.",
+		"See https://en.wikipedia.org/wiki/Foo_(bar) for details.",
+		"<https://example.com/x_(y)>",
+		"A *(b)* c",
+		"an unmatched *asterisk in prose",
+		"an unmatched _under in prose",
+		"an unmatched ~~strike in prose",
+		"A *(b c",
+		"(**bold** text",
+		"*bold text that never closes",
+		"text that closes* nothing",
+		"some *emphasized* text",
+		"some _emphasized_ text",
+		"~~struck but never restored",
 	}
 }
 

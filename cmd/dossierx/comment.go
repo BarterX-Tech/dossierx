@@ -108,7 +108,7 @@ const viewHint = `; run "dossierx check" or "dossierx serve" to view`
 //
 //   - comments.ErrUnsafeBody is the SUPPLIED body (add/reply) failing the
 //     round-trip-accurate input pre-check; its "start with a non-whitespace
-//     character / de-indent the first line" guidance is correct, so it passes
+//     character / no tab-led first line" guidance is correct, so it passes
 //     through unchanged.
 //   - loader.ErrClaimNotRoundTrippable is the WHOLE claim's STORED bytes failing
 //     to re-serialize at save time — usually a pre-existing prose or comment body

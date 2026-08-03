@@ -33,20 +33,21 @@ func depsAgainst(t *testing.T, p *project, storePath string) *Deps {
 // been through a ledger-aware build — which is exactly why lock.LedgerDowngraded
 // reads its presence as proof that a store claiming "version 1" is lying. The
 // comment write path created it unconditionally, so ONE ordinary `comment add`
-// on an honest, un-migrated v0.2.x project manufactured that contradiction
+// on an honest, still-pre-ledger v0.2.x project manufactured that contradiction
 // against itself:
 //
 //	dossierx comment add …    succeeds, and creates .dossierx-comment-digest.json
 //	dossierx check            lock-ledger-downgraded, from now on
-//	dossierx migrate --adopt  REFUSED: "restore the lock store from version control"
+//	the crossing              REFUSED: "restore the lock store from version control"
 //
-// The project is accused of tampering, its one-time upgrade path is closed, and
-// the recovery named is for a file nobody touched. That is the outage the whole
-// fail-closed design exists to avoid handing an honest project on upgrade day.
+// The project is accused of tampering, its only route onto the ledger is closed,
+// and the recovery named is for a file nobody touched. That is the outage the
+// whole fail-closed design exists to avoid handing an honest project on upgrade
+// day.
 //
 // Without the guard in recordCommentDigest this fails at the first assertion
-// (the digest store is created) and again at the last (AdoptProject refuses).
-func TestACommentOpLeavesAnUnMigratedProjectMigratable(t *testing.T) {
+// (the digest store is created) and again at the last (the crossing refuses).
+func TestACommentOpLeavesAPreLedgerProjectAbleToCross(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML, "b.yaml": preLedgerLockedBYAML})
 	storePath := filepath.Join(p.root, ".dossierx-lock-store.json")
 	if err := os.WriteFile(storePath, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.b":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
@@ -54,7 +55,7 @@ func TestACommentOpLeavesAnUnMigratedProjectMigratable(t *testing.T) {
 	}
 
 	if _, _, err := depsAgainst(t, p, storePath).Add(claimA, model.CommentRoleHuman, "is this still true?"); err != nil {
-		t.Fatalf("a comment op on an un-migrated project must still work: %v", err)
+		t.Fatalf("a comment op on a pre-ledger project must still work: %v", err)
 	}
 
 	digestPath := digest.StorePathBeside(storePath)
@@ -69,30 +70,38 @@ func TestACommentOpLeavesAnUnMigratedProjectMigratable(t *testing.T) {
 		t.Fatalf("expected the thread to have been written; got %d thread(s), err %v", len(threads), err)
 	}
 
-	// And the one-time migration still works, which is the whole point.
+	// And the project can still cross, which is the whole point.
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("lock.LoadStore: %v", err)
 	}
-	if !store.AdoptionRequired(false) {
-		t.Fatalf("the project must still be offered the one-time migration")
+	if !store.PreLedgerUnadopted(false) {
+		t.Fatalf("the project must still be offered the crossing")
 	}
 	claims, err := loader.LoadClaims(p.claimsDir)
 	if err != nil {
 		t.Fatalf("LoadClaims: %v", err)
 	}
-	adoption, err := lock.AdoptProject(store, claims)
-	if err != nil {
-		t.Fatalf("`migrate --adopt` must still work after a comment op: %v", err)
+	// It still holds the pre-ledger locked claim, so the crossing refuses until
+	// that claim is unlocked — which is the refusal, not the outage: the store is
+	// untouched and every step of the recovery is still available.
+	if err := lock.CrossPreLedger(store, claims, 0); !errors.Is(err, lock.ErrPreLedgerUnadopted) {
+		t.Fatalf("expected the pre-ledger refusal after a comment op, got %v", err)
 	}
-	// The migration is what records the comment blocks, in one act — including
-	// the thread this test just wrote.
+	// Emptied of what predates the ledger, it crosses — and the crossing creates
+	// the digest store this comment op deliberately did not.
+	for i := range claims {
+		claims[i].Status = model.StatusDraft
+	}
+	if err := lock.CrossPreLedger(store, claims, 0); err != nil {
+		t.Fatalf("the crossing must still work after a comment op: %v", err)
+	}
 	digests, err := digest.LoadStore(digestPath)
 	if err != nil {
 		t.Fatalf("digest.LoadStore: %v", err)
 	}
-	if _, known := digests.Digest(claimA); !known {
-		t.Fatalf("the migration must record every claim's comment block; adopted %v", adoption.CommentDigests)
+	if !digests.FileExists() {
+		t.Fatalf("the crossing must create %s in the same act that stamps the schema", digestPath)
 	}
 }
 
