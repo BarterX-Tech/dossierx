@@ -1558,7 +1558,8 @@ th {
 }
 
 /* Static diagram/flowchart images (<img class="mockup-diagram" src="...">
-   inside a layout: mockup claim's raw_html — see
+   inside any claim's raw_html — since v0.4.1 the attachment is legal on
+   every layout, not only layout: mockup — see
    internal/lint/raw_html_scope.go's img allowlist entry). Styling ported
    from docs/tabs/llm-internals.html's inline img style for its health-
    state-machine diagram: a plain white card so an SVG/PNG diagram (often

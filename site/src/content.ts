@@ -477,7 +477,7 @@ export const contentSpec: ContentSpec = {
           },
           {
             name: "raw_html + raw_html_reviewed",
-            desc: "review gate for unescaped HTML in raw_html claims (any layout, including layout: mockup) — and the reason the lock ledger hashes every persisted field, not just the ten a content hash covers",
+            desc: "review gate for unescaped HTML in raw_html claims (any layout, including layout: mockup) — and the reason the lock ledger hashes every persisted field, not just the eleven a content hash covers",
           },
         ],
         engineManagedFields: [

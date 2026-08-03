@@ -200,9 +200,15 @@ const (
 
 	// RuleLockContentDrift: a locked claim whose current content no longer
 	// hashes to what its ledger record says was approved. This is the rule
-	// that covers the nine fields ContentHash cannot see — including raw_html
-	// on an allowlisted, reviewed mockup, the only path in this codebase that
-	// renders author bytes unescaped.
+	// that covers the eight fields ContentHash cannot see — headed by
+	// raw_html_reviewed, the flag that promotes an allowlisted claim's
+	// raw_html to trusted, unescaped output.
+	//
+	// raw_html itself moved off that list in v0.4.1, when ContentHash took it
+	// on so an edited attachment marks dependents stale (see lock.ContentHash).
+	// That does not weaken this rule: being stale is not being tampered with,
+	// and LockedClaimHash signs every persisted field regardless of what any
+	// staleness baseline happens to cover.
 	RuleLockContentDrift = "lock-content-drift"
 
 	// RuleLockLedgerOrphan: a DRAFT claim holding an unreleased ledger record
