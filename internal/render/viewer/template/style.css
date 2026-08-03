@@ -619,8 +619,8 @@ th {
    sidebar, from a claim-ref cross-link, or from a pasted URL — must not show
    the reader a collapsed footer, because the edge they followed the link for
    is inside it.
-   This is CSS ONLY, and this rule is its entire implementation anywhere in
-   the codebase. A URL fragment is never sent to the server and is unknowable
+   This is CSS ONLY, and the two rules below are its entire implementation
+   anywhere in the codebase. A URL fragment is never sent to the server and is unknowable
    at render time, so no Go code may write a third `open` attribute for it
    (the two the server does write are the drifted-file and the
    locked+review_pending signals); and doing it in JS would not survive the
@@ -628,10 +628,28 @@ th {
    .claim is the root <section> of every partial. render.stripOverviewIDs
    removes id= from every non-canonical overview copy of a claim, so at most
    ONE element on the page can ever match :target — the rule cannot fan out.
-   Known and accepted: revealing the children does not set the `open`
-   property, so the UA disclosure marker still reads closed. That is not a
-   defect to "fix" with JS. */
+
+   TWO rules, and the order between them matters. A closed <details> hides its
+   contents through the UA's ::details-content pseudo-element, and a descendant
+   cannot opt back out of an ancestor that `content-visibility: hidden` has
+   already skipped — so the child-selector form below is expected to be a no-op
+   on any engine that implements the pseudo-element, and is kept only as a
+   fallback for older engines that predate it and hide the contents some other
+   way. Those engines drop the ::details-content rule as unparseable and still
+   get the pre-v0.4.1 behaviour.
+   ::details-content is recent (Chrome/Edge 131+, Safari 18.4+, Firefox 139+),
+   which is exactly why the fallback stays. The two rules declare the same
+   value, so neither can contradict the other; the pseudo-element rule is
+   nonetheless written LAST because the two selectors carry equal specificity
+   (0,3,1) and source order is all that separates them.
+   Neither form sets the `open` content attribute — CSS cannot write one — so
+   the UA disclosure marker still reads closed while the contents show. That is
+   a cosmetic mismatch, not a defect to "fix" with JS. */
 .claim:target .claim-links > *:not(summary) {
+  content-visibility: visible;
+}
+
+.claim:target .claim-links::details-content {
   content-visibility: visible;
 }
 
@@ -2025,17 +2043,32 @@ body.shell-body {
    honoured the collapsed <details> would silently drop every claim's
    governed_by/rests_on/implemented-in footer — the exact facts a reviewer
    prints the page to read.
-   Forcing the children visible is deliberate rather than setting `open`,
+   Revealing the contents through CSS is deliberate rather than setting `open`,
    which CSS cannot do: `open` is a content attribute, not a property a rule
-   can write. This is the same mechanism as the .claim:target rule above, and
-   it is independent of it, of the two server-written `open` signals, and of
-   the expand-all toolbar — whichever of those is or is not in effect on
-   screen, print shows all four states identically.
+   can write.
+   Same mechanism, and the same two-rule pairing, as the .claim:target rule
+   above: a closed <details> hides its contents through the UA's
+   ::details-content pseudo-element, so that is what is targeted, and the
+   child-selector form is expected to be a no-op wherever the pseudo-element is
+   implemented. It is kept only as a fallback for engines that predate
+   ::details-content (Chrome/Edge 131+, Safari 18.4+, Firefox 139+) and hide
+   the contents some other way; such an engine drops the pseudo-element rule
+   and still prints as it did before v0.4.1. Both rules declare the same value
+   and carry equal specificity (0,1,2), so the pseudo-element rule is written
+   LAST — source order is the only thing ranking them.
+   This block is independent of the .claim:target rule, of the two
+   server-written `open` signals, and of the expand-all toolbar — whichever of
+   those is or is not in effect on screen, print shows all four states
+   identically.
    Only the disclosure is touched. Nothing here restyles the card, the type
    scale or the color tokens; a full print stylesheet is out of scope for
    v0.4.1. */
 @media print {
   details.claim-links > *:not(summary) {
+    content-visibility: visible;
+  }
+
+  details.claim-links::details-content {
     content-visibility: visible;
   }
 

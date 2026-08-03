@@ -406,13 +406,24 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	links := 0
 
 	if c.Governed.Type != "" {
-		// A governed_by row counts as one link whether it names a claim or
-		// reads "none": the gate here is exactly the gate that emits the row,
-		// and a reader expanding the footer does find a governed_by line
-		// either way. review_pending below counts the same way, carrying no
-		// claim id at all — "links" is per-row-except-the-nested-id-lists.
-		links++
 		if c.Governed.Type == string(model.GovernedNone) {
+			// "governed_by: none" DOES NOT COUNT AS A LINK. It is a stated
+			// absence — the claim declaring that no doctrine backs it — not an
+			// edge the reader can follow, and counting it made every claim in
+			// every real project report at least "1 links" (governed_by is
+			// mandatory: see internal/lint's governed-required). That in turn
+			// made the zero-footer case below unreachable in practice, so the
+			// design's promise that a claim with no edges and no files emits no
+			// <details> at all never actually held. A NAMED governed_by target
+			// still counts as one, in the else branch.
+			//
+			// The consequence is deliberate: on a claim whose ONLY footer
+			// content would be this row, the whole <details> is suppressed and
+			// the row (with its Reason) is not rendered. A disclosure control
+			// that opens onto "this claim has no doctrine and nothing else
+			// either" is exactly the empty triangle the suppression rule exists
+			// to prevent. The moment anything else is disclosed — one edge, one
+			// linked file — the row rides along inside as before.
 			rows.WriteString(`<li class="claim-governed governed-none">governed_by: none`)
 			if c.Governed.Reason != "" {
 				rows.WriteString(` — `)
@@ -431,6 +442,12 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 			// than its own hand-built <a>: a doctrine hub is nearly always in a
 			// different facet from the claim it governs, so this is precisely
 			// the edge whose prefix tier ("Doctrine › Hub") carries information.
+			// A named target IS a link — one claim id the reader can follow —
+			// so it counts, unlike the "none" branch above. review_pending
+			// below counts the same way while carrying no claim id at all:
+			// "links" is per-row-except-the-nested-id-lists, minus the one row
+			// that states an absence.
+			links++
 			rows.WriteString(`<li class="claim-governed">governed_by: `)
 			writeClaimRef(&rows, c.Governed.Type, c.Module, c.Facet, targetStatuses)
 			rows.WriteString(`</li>`)
@@ -494,11 +511,17 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 
 	var b strings.Builder
 
-	// Zero rows and zero files: emit no <details> at all — not an empty
+	// Zero links and zero files: emit no <details> at all — not an empty
 	// disclosure reading "0 links - 0 files", which would be a control that
 	// opens onto nothing on every claim with no edges yet. The counts DO print
 	// as 0 whenever the other one is non-zero; it is only the both-zero case
 	// that suppresses the whole footer.
+	//
+	// Since "governed_by: none" no longer counts (see above), the both-zero
+	// case now covers the claim that states an absence and nothing else, which
+	// is the ordinary shape of an ungoverned claim with no edges yet — this
+	// branch is what makes that claim emit a clean section with no dangling
+	// disclosure triangle under it.
 	if links > 0 || len(files) > 0 {
 		// Two auto-open signals, OR'd — either alone opens the footer. Both
 		// read data already in scope (files' Drifted flag, the claim's own
@@ -523,9 +546,18 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 
 		// Fixed ASCII words, a " - " separator (HYPHEN-MINUS, not the em dash
 		// this file uses in prose) and plain %d counts — no claim-authored data
-		// reaches this string, so it needs no escaping, and it is deliberately
-		// un-pluralised ("1 links") to keep the line one fixed mono column.
-		summary := fmt.Sprintf("%d links - %d files", links, len(files))
+		// reaches this string, so it needs no escaping.
+		//
+		// Each count segment is pluralised: "1 link", "2 links", "1 file",
+		// "0 files". The line used to be deliberately un-pluralised to keep a
+		// fixed mono column, but "1 links" on a claim with exactly one edge is
+		// the single most-read string in the viewer reading as a typo, and the
+		// column argument never survived contact with the drifted segment
+		// appearing and disappearing anyway. "drifted" is an adjective, not a
+		// noun, so it is invariant ("1 drifted", "2 drifted") — nothing to
+		// pluralise there. Separator, term order and the >0 gate on drifted are
+		// exactly as the contract froze them; only the nouns changed.
+		summary := countSegment(links, "link") + " - " + countSegment(len(files), "file")
 		if drifted > 0 {
 			summary += fmt.Sprintf(" - %d drifted", drifted)
 		}
@@ -558,6 +590,21 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	}
 
 	return template.HTML(b.String())
+}
+
+// countSegment renders one segment of the <summary> digest — the count and its
+// noun, pluralised with a plain trailing "s" unless the count is exactly 1
+// ("1 link", "0 links", "2 files"). Only "link" and "file" go through here;
+// "drifted" is an adjective and stays invariant at every count.
+//
+// English irregulars are deliberately not handled: the two nouns are fixed
+// literals in this file's only caller, and a general pluraliser would be
+// machinery for a set of size two.
+func countSegment(n int, singular string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %ss", n, singular)
 }
 
 // CommentChipHTML renders the 💬 comment chip for one claim, as a

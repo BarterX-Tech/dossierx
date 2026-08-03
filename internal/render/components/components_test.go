@@ -300,11 +300,19 @@ func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
 
 // TestEdgesHTMLWithLinks_SummaryCountsAndFormat walks the frozen count table.
 // links counts what the reader FINDS ON EXPANDING — one per id inside the
-// nested mirrors/rests_on/depended-on-by lists, one each for governed_by (named
-// target or "none"), migrated_from and review_pending — never <li> rows, and
+// nested mirrors/rests_on/depended-on-by lists, one each for a NAMED
+// governed_by target, migrated_from and review_pending — never <li> rows, and
 // never the linked files, which are their own term. drifted is a SUBSET of
-// files, never added to it. No pluralisation, ever: "1 links" is correct and
-// required, so the line stays one fixed mono column and the emitter one Sprintf.
+// files, never added to it.
+//
+// "governed_by: none" counts ZERO. It is a stated absence, not a link, and
+// counting it put a "1 links" digest under every edgeless claim in every real
+// project (governed_by is mandatory), which also made the no-<details> case
+// unreachable. Both halves of that are pinned below.
+//
+// Each count segment is singular at exactly 1 — "1 link", "1 file" — and
+// plural everywhere else, including 0. "drifted" is an adjective and never
+// takes an "s". Separator, term order and the >0 gate on drifted are unchanged.
 func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -332,7 +340,7 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 				RestsOn:  []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
 			},
 			files:       []implink.ViewFile{{File: "a.go"}},
-			wantSummary: "4 links - 1 files",
+			wantSummary: "4 links - 1 file",
 		},
 		{
 			name: "governed_restson3_two_files_one_drifted",
@@ -345,9 +353,37 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			wantSummary: "4 links - 2 files - 1 drifted",
 		},
 		{
+			// One link, no files: both segments at their singular/plural
+			// extremes in the same line — "1 link" and "0 files".
 			name:        "only_migrated_from",
 			claim:       model.Claim{Facet: "contract", MigratedFrom: "docs/tabs/widget.html"},
-			wantSummary: "1 links - 0 files",
+			wantSummary: "1 link - 0 files",
+		},
+		{
+			// A NAMED governed_by target is one link — the half of the
+			// governed_by rule that did NOT change.
+			name: "governed_named_only",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: "doctrine.hub.retries"},
+			},
+			wantSummary: "1 link - 0 files",
+		},
+		{
+			// One file, no links: the mirror image of only_migrated_from, so
+			// "1 file" is pinned as well as "1 link".
+			name:        "only_one_clean_file",
+			claim:       model.Claim{Facet: "contract"},
+			files:       []implink.ViewFile{{File: "a.go"}},
+			wantSummary: "0 links - 1 file",
+		},
+		{
+			// "drifted" is invariant: 1 drifted, not "1 drifteds", and the
+			// file segment beside it is singular at 1.
+			name:        "one_drifted_file",
+			claim:       model.Claim{Facet: "contract"},
+			files:       []implink.ViewFile{{File: "a.go", Drifted: true}},
+			wantSummary: "0 links - 1 file - 1 drifted",
 		},
 		{
 			name:        "only_two_clean_files",
@@ -362,18 +398,47 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			wantSummary: "0 links - 2 files - 2 drifted",
 		},
 		{
-			// governed_by: none counts +1, the same as a named target: the
-			// gate is Governed.Type != "", which is exactly the condition
-			// that emits the row, and a reader expanding the footer does
-			// find a governed_by line there.
+			// governed_by: none counts ZERO — a stated absence, not a link —
+			// so a claim carrying nothing else falls through to the
+			// no-<details> case, exactly as if the field were unset.
 			name:        "governed_none_only",
 			claim:       model.Claim{Facet: "contract", Governed: model.Governed{Type: string(model.GovernedNone)}},
-			wantSummary: "1 links - 0 files",
+			wantSummary: "",
+		},
+		{
+			// Same claim plus a reason: the reason is not a link either, and
+			// does not resurrect the footer.
+			name: "governed_none_with_reason_only",
+			claim: model.Claim{
+				Facet:    "contract",
+				Governed: model.Governed{Type: string(model.GovernedNone), Reason: "no doctrine covers this yet"},
+			},
+			wantSummary: "",
+		},
+		{
+			// One linked file is enough to disclose something, so the footer
+			// comes back — and the governed_by: none row rides along inside
+			// it while still counting zero.
+			name:        "governed_none_plus_one_file",
+			claim:       model.Claim{Facet: "contract", Governed: model.Governed{Type: string(model.GovernedNone)}},
+			files:       []implink.ViewFile{{File: "a.go"}},
+			wantSummary: "0 links - 1 file",
+		},
+		{
+			// One real edge beside the "none" row: the edge counts, the row
+			// does not, so this is 1 and not 2.
+			name: "governed_none_plus_one_rests_on",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: string(model.GovernedNone)},
+				RestsOn:  []string{"widget.contract.a"},
+			},
+			wantSummary: "1 link - 0 files",
 		},
 		{
 			name:        "review_pending_only",
 			claim:       model.Claim{Facet: "contract", Status: model.StatusLocked, ReviewPending: true},
-			wantSummary: "1 links - 0 files",
+			wantSummary: "1 link - 0 files",
 		},
 		{
 			name:        "nothing_at_all",
@@ -412,6 +477,15 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 			// always print, even as 0.
 			if !strings.Contains(tc.wantSummary, "drifted") && strings.Contains(got, "drifted</summary>") {
 				t.Errorf("the drifted segment must be omitted entirely when zero, got: %s", got)
+			}
+			// A global net under every case, not just the ones whose expected
+			// summary happens to contain a 1: these are the exact strings the
+			// old un-pluralised emitter produced, and "drifteds" is what a
+			// naive pluraliser applied to all three segments would produce.
+			for _, forbidden := range []string{"1 links", "1 files", "drifteds"} {
+				if strings.Contains(got, forbidden) {
+					t.Errorf("summary must be pluralised per count; found %q in: %s", forbidden, got)
+				}
 			}
 		})
 	}
@@ -551,10 +625,18 @@ func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
 	}
 }
 
+// The governed_by: none ROW itself — its class, its reason, and the inline
+// markdown ceiling on that reason — is asserted on a claim that also carries a
+// second edge, because "none" alone no longer counts as a link and therefore no
+// longer emits a footer to look in (see
+// TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter). MigratedFrom is the
+// cheapest edge that opens the disclosure: one flat <li>, no nested id list, no
+// claim-ref markup to confuse a Contains check on the reason.
 func TestEdgesHTML_GovernedNoneWithReason(t *testing.T) {
 	c := model.Claim{
-		Facet:    "contract",
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture <claim>"},
+		Facet:        "contract",
+		MigratedFrom: "docs/tabs/widget.html",
+		Governed:     model.Governed{Type: string(model.GovernedNone), Reason: "fixture <claim>"},
 	}
 	got := string(edgesHTML(c))
 	if !strings.Contains(got, `governed-none`) {
@@ -573,7 +655,8 @@ func TestEdgesHTML_GovernedNoneWithReason(t *testing.T) {
 // other prose field already gets via the "markdown"/"cell" funcs.
 func TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
 	c := model.Claim{
-		Facet: "contract",
+		Facet:        "contract",
+		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
 		Governed: model.Governed{
 			Type:   string(model.GovernedNone),
 			Reason: "see `widget.contract.retry-policy` for the real gate",
@@ -594,12 +677,58 @@ func TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
 // raw markup even after the switch away from a bare html.EscapeString.
 func TestEdgesHTML_GovernedNoneReasonHostileHTMLStillEscaped(t *testing.T) {
 	c := model.Claim{
-		Facet:    "contract",
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: `<script>alert(1)</script>`},
+		Facet:        "contract",
+		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
+		Governed:     model.Governed{Type: string(model.GovernedNone), Reason: `<script>alert(1)</script>`},
 	}
 	got := string(edgesHTML(c))
+	if !strings.Contains(got, "governed-none") {
+		t.Fatalf("this test only proves anything if the none row rendered at all, got: %s", got)
+	}
 	if strings.Contains(got, "<script>") {
 		t.Fatalf("hostile HTML in Reason leaked unescaped: %s", got)
+	}
+}
+
+// TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter is the newly-reachable
+// zero-footer case. "governed_by: none" is a stated absence, not a link, so a
+// claim whose only footer content would be that row has no edges and no files
+// and emits NOTHING — no <details>, no <summary>, no <ul>, and no governed_by
+// row either.
+//
+// This case was unreachable before: governed_by is mandatory (internal/lint's
+// governed-required), so counting the "none" row as a link put a
+// "1 links - 0 files" disclosure — one that opens onto a single line saying
+// nothing governs this claim — under every edgeless claim in every real project.
+// The suppression rule existed but nothing could ever satisfy it.
+func TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter(t *testing.T) {
+	c := model.Claim{
+		ID: "widget.contract.ungoverned", Module: "widget", Facet: "contract",
+		Governed: model.Governed{
+			Type:   string(model.GovernedNone),
+			Reason: "no doctrine hub covers retries yet",
+		},
+	}
+
+	if got := string(EdgesHTMLWithLinks(c, nil, nil, nil)); got != "" {
+		t.Fatalf("a claim whose only footer content is governed_by: none must emit nothing at all, got: %s", got)
+	}
+
+	// The suppression is of the WHOLE footer, reason included — not a footer
+	// with an empty <ul>, and not a bare <details> with the row hidden.
+	if got := string(edgesHTML(c)); strings.Contains(got, "no doctrine hub covers retries yet") || strings.Contains(got, "governed-none") {
+		t.Fatalf("the suppressed footer leaked its governed_by: none row, got: %s", got)
+	}
+
+	// One linked file is enough to make the footer worth opening again, and
+	// the row comes back inside it — suppression is about there being nothing
+	// to disclose, never about hiding the "none" row itself.
+	withFile := string(EdgesHTMLWithLinks(c, []implink.ViewFile{{File: "a.go"}}, nil, nil))
+	if !strings.Contains(withFile, `<summary class="claim-links-summary">0 links - 1 file</summary>`) {
+		t.Fatalf("expected a 0-links, 1-file summary once something is disclosable, got: %s", withFile)
+	}
+	if !strings.Contains(withFile, `<li class="claim-governed governed-none">governed_by: none — no doctrine hub covers retries yet</li>`) {
+		t.Fatalf("the governed_by: none row must ride along inside a footer that is emitted, got: %s", withFile)
 	}
 }
 
