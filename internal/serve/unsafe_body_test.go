@@ -45,7 +45,8 @@ func TestUnsafeBody_HTTPRejectedWithoutBricking(t *testing.T) {
 
 // TestUnsafeBody_ContentFirstLine_HTTPCleanNoLeak covers the class the old
 // leading-whitespace heuristic MISSED: a body whose FIRST line is real CONTENT
-// that begins with a tab or space indent ("\tcode\nmore", "    code\n    more").
+// that begins with a TAB ("\tcode\nmore"). The space-indented half of this class
+// became storable in v0.4.0 (T6) once the loader emitted at SetIndent(2).
 // Under the old code these slipped past validation, the op ran, and the loader
 // guard produced a 500 that LEAKED the raw internal yaml/round-trip error in the
 // JSON body. They must now be a clean 400 unsafe_body across add/reply/edit, with
@@ -53,14 +54,14 @@ func TestUnsafeBody_HTTPRejectedWithoutBricking(t *testing.T) {
 // claim file bricked.
 func TestUnsafeBody_ContentFirstLine_HTTPCleanNoLeak(t *testing.T) {
 	// JSON string escapes: \t and \n are literal here (backtick raw strings); the
-	// server's JSON decoder turns them into an actual tab/newline body. The first
-	// case is tab-led, the second space-indented — both first-CONTENT-line unsafe.
+	// server's JSON decoder turns them into an actual tab/newline body. Both cases
+	// are tab-led first CONTENT lines, differing in the continuation.
 	bodies := []struct {
 		name string
 		json string
 	}{
 		{"tab-led", `{"body":"\tcode line\nmore"}`},
-		{"space-indented", `{"body":"    func main() {}\n    return nil"}`},
+		{"tab-led-multiline", `{"body":"\tone\n\ttwo"}`},
 	}
 	surfaces := []struct {
 		name   string

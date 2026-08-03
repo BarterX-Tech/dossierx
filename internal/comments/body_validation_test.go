@@ -92,11 +92,13 @@ func TestAdd_RejectsUnsafeLeadingWhitespaceBody_NoWrite(t *testing.T) {
 // rather than driven by a leading-whitespace heuristic. It covers the two
 // classes the old heuristic got wrong:
 //
-//   - a first CONTENT line that itself begins with a tab or space indent
-//     ("\tcode\nmore", "    code\n    return") is store-bricking, but the old
-//     heuristic (first line trims to non-empty) MISSED it: it passed validateBody
-//     and was only refused later by the loader guard, leaking a raw round-trip
-//     error to the user. These must now be rejected up front as ErrUnsafeBody.
+//   - a first CONTENT line that itself begins with a TAB ("\tcode\nmore") is
+//     store-bricking, but the old heuristic (first line trims to non-empty)
+//     MISSED it: it passed validateBody and was only refused later by the loader
+//     guard, leaking a raw round-trip error to the user. These must now be
+//     rejected up front as ErrUnsafeBody. The SPACE-indented half of this class
+//     was store-bricking too until v0.4.0 (T6), when the loader began emitting at
+//     SetIndent(2) and they became storable; they are accept cases below.
 //   - a body whose first line is whitespace-only or CR/NBSP/NEL/VT/FF-led yet
 //     round-trips cleanly (" \ncontent", "\r\ncontent", NBSP/NEL + newline) was
 //     FALSE-REJECTED by the old heuristic; these must now be accepted.
@@ -112,8 +114,7 @@ func TestValidateBody_RoundTripAccurate(t *testing.T) {
 	}{
 		// content-first-line class — MUST be rejected (old heuristic missed these)
 		{"tab-led-content-line", "\tcode\nmore", ErrUnsafeBody},
-		{"space-indented-content-line", "    func main(){}\n    return", ErrUnsafeBody},
-		{"two-space-indented-multiline", "  a\n  b", ErrUnsafeBody},
+		{"tab-led-multiline", "\tone\n\ttwo", ErrUnsafeBody},
 		// still rejected (bare newline / blank / tab-only first line)
 		{"bare-leading-newline", "\ncontent", ErrUnsafeBody},
 		{"leading-blank-lines", "\n\nblank then content", ErrUnsafeBody},
@@ -125,6 +126,11 @@ func TestValidateBody_RoundTripAccurate(t *testing.T) {
 		{"nel-then-newline", nel + "\ncontent", nil},
 		{"vt-then-newline", vt + "\ncontent", nil},
 		{"ff-then-newline", ff + "\ncontent", nil},
+		// space-indented first content lines round-trip since v0.4.0 (T6): the
+		// loader emits at SetIndent(2), which is enough for a block scalar to
+		// carry them back byte-exact. They were rejected before that change.
+		{"space-indented-content-line", "    func main(){}\n    return", nil},
+		{"two-space-indented-multiline", "  a\n  b", nil},
 		{"interior-tab", "a\tb", nil},
 		{"normal-multiline", "a\nb\nc", nil},
 		{"windows-endings", "windows\r\nline\r\nendings", nil},
@@ -146,13 +152,17 @@ func TestValidateBody_RoundTripAccurate(t *testing.T) {
 }
 
 // contentFirstLineUnsafeBodies are store-bricking bodies whose FIRST line is real
-// CONTENT that begins with indentation — the class the old leading-whitespace
-// heuristic MISSED, so they slipped past validateBody and surfaced only as a
-// leaked raw round-trip error from the loader guard. They must now be rejected
-// up front, at the shared CLI+serve input boundary, with the clean ErrUnsafeBody.
+// CONTENT that begins with a TAB — the class the old leading-whitespace heuristic
+// MISSED, so they slipped past validateBody and surfaced only as a leaked raw
+// round-trip error from the loader guard. They must now be rejected up front, at
+// the shared CLI+serve input boundary, with the clean ErrUnsafeBody.
+//
+// The space-indented half of this class left it in v0.4.0 (T6): the loader now
+// emits at SetIndent(2), which stores those bodies back byte-exact, so they are
+// accepted. A tab-led line is still unstorable at any indent width.
 var contentFirstLineUnsafeBodies = []string{
-	"\tcode line\nmore",                  // tab-led first content line
-	"    func main() {}\n    return nil", // space-indented first content line
+	"\tcode line\nmore", // tab-led first content line, unindented continuation
+	"\tone\n\ttwo",      // tab-led throughout
 }
 
 // TestAddReplyEdit_RejectContentFirstLineUnsafeBody_NoWrite_NoLeak proves the

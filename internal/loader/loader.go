@@ -6,6 +6,7 @@
 package loader
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -133,12 +135,28 @@ func readFileWithRetry(path string) ([]byte, error) {
 // sibling temp file and renaming it into place means any concurrent reader
 // only ever observes the old complete file or the new complete file, never
 // a partial one — os.Rename is atomic within a single filesystem/directory.
+//
+// SaveClaim serves TWO modes, and the difference is not incidental: it is
+// also the file-CREATE path (dossierx claim new, which refuses to run if the
+// file already exists), so it cannot assume a document to mutate. An absent
+// SourcePath means CREATE and emits a fresh document from the struct; an
+// existing one means MUTATE and goes through renderClaim, which rewrites only
+// the top-level keys whose value actually changed. Both modes end in the same
+// verifyRoundTrip + atomicWriteFile.
 func SaveClaim(c model.Claim) error {
 	if strings.TrimSpace(c.SourcePath) == "" {
 		return fmt.Errorf("loader: claim %q has no source path to save to", c.ID)
 	}
 
-	data, err := yaml.Marshal(c)
+	existing, err := readFileWithRetry(c.SourcePath)
+	if err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("loader: read %s before save: %w", c.SourcePath, err)
+		}
+		existing = nil // CREATE: dossierx claim new writes a file that is not there yet.
+	}
+
+	data, err := renderClaim(c, existing)
 	if err != nil {
 		return fmt.Errorf("loader: marshal claim %q: %w", c.ID, err)
 	}
@@ -149,6 +167,190 @@ func SaveClaim(c model.Claim) error {
 		return fmt.Errorf("loader: write %s: %w", c.SourcePath, err)
 	}
 	return nil
+}
+
+// claimYAMLIndent is the block indent every claim file this package emits
+// uses. It is 2 to match the authored corpus (see
+// testdata/fixture-basic/claims/widget-overview.yaml's "body: |" block), not
+// yaml.v3's default of 4: renderClaim re-emits the WHOLE document even when it
+// only replaces one key, so an emitter that disagreed with the corpus would
+// re-indent every block scalar on the first write and give back exactly the
+// whole-file diff this indirection exists to remove.
+const claimYAMLIndent = 2
+
+// encodeYAML is the single YAML emitter for this package: every byte this
+// package writes, and every byte its round-trip probes measure, comes out of
+// here at claimYAMLIndent. It takes any so both a model.Claim (CREATE,
+// CommentBodyRoundTrips) and a mutated *yaml.Node document (MUTATE) share one
+// encoder configuration — the set of comment bodies the save-time guard
+// refuses is INDENT-SENSITIVE (two of bodyRoundTripCases()' twenty flip
+// between indent 4 and indent 2), so a second emitter with its own settings
+// would silently break the by-construction match CommentBodyRoundTrips'
+// doc comment below promises.
+func encodeYAML(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(claimYAMLIndent)
+	if err := enc.Encode(v); err != nil {
+		_ = enc.Close() // the Encode error is the interesting one
+		return nil, err
+	}
+	if err := enc.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// encodeClaim marshals a whole claim as a fresh document, in model.Claim field
+// order. It is the CREATE path's emitter and the probe CommentBodyRoundTrips
+// measures; MUTATE uses it too, as the source of the replacement value for
+// each key it rewrites.
+func encodeClaim(c model.Claim) ([]byte, error) {
+	return encodeYAML(c)
+}
+
+// renderClaim produces the bytes to write for c. existing is the file's
+// current on-disk content, or nil when there is no file yet (CREATE).
+//
+// With an existing document it re-emits that document with only the changed
+// top-level keys replaced, so an unchanged key keeps its AUTHORED style —
+// quoting, block-scalar form (literal vs folded), key order and YAML comments —
+// instead of being re-serialised from the struct. That is the whole point:
+// adding one comment used to land as a 117-line diff in which exactly one key
+// was new.
+//
+// One thing is NOT preserved, by design: block-scalar INDENT WIDTH. The merged
+// tree is re-emitted through encodeYAML at claimYAMLIndent, so an authored
+// `body: |` whose content sits at 4 spaces comes back at 2 even on a no-op
+// save. Normalising it is what makes the merged bytes safe to hand to
+// verifyRoundTrip in place of the fresh whole-document emission.
+//
+// Any reason the merge cannot be done faithfully (the file is not a single
+// YAML mapping document, or the fresh emission does not itself re-parse)
+// falls back to the fresh whole-document bytes, which is the pre-existing
+// behaviour — and, for a non-round-tripping claim, is exactly the input
+// verifyRoundTrip must see in order to refuse the write.
+func renderClaim(c model.Claim, existing []byte) ([]byte, error) {
+	fresh, err := encodeClaim(c)
+	if err != nil {
+		return nil, err
+	}
+	if len(existing) == 0 {
+		return fresh, nil
+	}
+	if merged, ok := mergeTopLevelKeys(existing, fresh); ok {
+		return merged, nil
+	}
+	return fresh, nil
+}
+
+// mergeTopLevelKeys applies fresh's top-level keys onto existing's node tree
+// and re-emits it, reporting false if either side is not a single YAML mapping
+// document (in which case the caller re-emits fresh wholesale). The key
+// contract, in full:
+//
+//   - a key in both, whose two values decode to the same Go value, keeps the
+//     EXISTING node untouched — that is what preserves authored style (except
+//     block-scalar indent width; see renderClaim);
+//   - a key in both whose decoded values differ takes the fresh node;
+//   - a key only in fresh is APPENDED at the end, and because fresh is emitted
+//     in model.Claim field order, several appends land in field order too;
+//   - a key only in existing is REMOVED. "Absent from fresh" is exactly "zero
+//     and omitempty", which is how the engine expresses a clear: reaudit sets
+//     raw_html_reviewed back to false, and resolving the last thread empties
+//     comments. Both are pinned by loader_test.go, and keeping such a key would
+//     also make any file the struct cannot re-emit permanently unwritable,
+//     because verifyRoundTrip's strict decode would reject the leftover.
+//
+// The result is therefore VALUE-identical to the fresh whole-document emission
+// and differs from it only in style — which is the property that makes it safe
+// to hand to verifyRoundTrip in place of those bytes.
+func mergeTopLevelKeys(existing, fresh []byte) ([]byte, bool) {
+	haveDoc, ok := singleMappingDocument(existing)
+	if !ok {
+		return nil, false
+	}
+	wantDoc, ok := singleMappingDocument(fresh)
+	if !ok {
+		return nil, false
+	}
+	have, want := haveDoc.Content[0], wantDoc.Content[0]
+
+	kept := have.Content[:0]
+	for i := 0; i+1 < len(have.Content); i += 2 {
+		if indexOfKey(want, have.Content[i].Value) >= 0 {
+			kept = append(kept, have.Content[i], have.Content[i+1])
+		}
+	}
+	have.Content = kept
+
+	for i := 0; i+1 < len(want.Content); i += 2 {
+		key, value := want.Content[i], want.Content[i+1]
+		at := indexOfKey(have, key.Value)
+		if at < 0 {
+			have.Content = append(have.Content, key, value)
+			continue
+		}
+		same, err := sameDecodedValue(have.Content[at+1], value)
+		if err != nil {
+			return nil, false
+		}
+		if !same {
+			have.Content[at+1] = value
+		}
+	}
+
+	out, err := encodeYAML(haveDoc)
+	if err != nil {
+		return nil, false
+	}
+	return out, true
+}
+
+// singleMappingDocument decodes data as exactly one YAML mapping document,
+// mirroring LoadClaims' one-claim-per-file discipline (a second document is a
+// hard error there, so it is a "cannot merge this" here rather than something
+// to silently drop).
+func singleMappingDocument(data []byte) (*yaml.Node, bool) {
+	var doc yaml.Node
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&doc); err != nil {
+		return nil, false
+	}
+	var extra yaml.Node
+	if err := dec.Decode(&extra); !errors.Is(err, io.EOF) {
+		return nil, false
+	}
+	if doc.Kind != yaml.DocumentNode || len(doc.Content) != 1 || doc.Content[0].Kind != yaml.MappingNode {
+		return nil, false
+	}
+	return &doc, true
+}
+
+// indexOfKey returns the index of key's KEY node in a mapping node's flat
+// key/value Content slice, or -1.
+func indexOfKey(mapping *yaml.Node, key string) int {
+	for i := 0; i+1 < len(mapping.Content); i += 2 {
+		if mapping.Content[i].Value == key {
+			return i
+		}
+	}
+	return -1
+}
+
+// sameDecodedValue reports whether two nodes carry the same value, compared
+// after decoding rather than by node identity or raw bytes: a scalar that
+// changed only its quoting style, or a mapping that changed only its
+// indentation, is NOT a change worth rewriting the file for.
+func sameDecodedValue(a, b *yaml.Node) (bool, error) {
+	var av, bv any
+	if err := a.Decode(&av); err != nil {
+		return false, err
+	}
+	if err := b.Decode(&bv); err != nil {
+		return false, err
+	}
+	return reflect.DeepEqual(av, bv), nil
 }
 
 // verifyRoundTrip is the systemic store-bricking guard: it decodes c's freshly
@@ -203,7 +405,7 @@ func CommentBodyRoundTrips(body string) bool {
 		ID:       "probe",
 		Comments: []model.Comment{{ID: "c", Body: body}},
 	}
-	data, err := yaml.Marshal(probe)
+	data, err := encodeClaim(probe)
 	if err != nil {
 		return false
 	}
@@ -322,7 +524,7 @@ func SaveClaimIfUnchanged(c model.Claim, want ClaimFileToken) error {
 		return fmt.Errorf("loader: %s: %w", c.SourcePath, ErrClaimFileChanged)
 	}
 
-	data, err := yaml.Marshal(c)
+	data, err := renderClaim(c, current)
 	if err != nil {
 		return fmt.Errorf("loader: marshal claim %q: %w", c.ID, err)
 	}

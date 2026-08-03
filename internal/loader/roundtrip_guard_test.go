@@ -112,9 +112,11 @@ func TestSaveClaimIfUnchanged_RefusesStoreBrickingBody(t *testing.T) {
 // store-bricking class yaml.v3 v3.0.1 produces (reproduced against v3.0.1): a
 // bare leading newline, a leading blank/whitespace-only line, a tab-only first
 // line, AND — the class the old leading-whitespace heuristic MISSED — a first
-// CONTENT line that itself begins with a tab or space indent. The accept set
-// includes bodies the old heuristic FALSE-REJECTED (" \n…", "\r\n…", a
-// NBSP/NEL/VT/FF-led first line) even though they round-trip cleanly.
+// CONTENT line that itself begins with a TAB. The accept set includes bodies the
+// old heuristic FALSE-REJECTED (" \n…", "\r\n…", a NBSP/NEL/VT/FF-led first
+// line) even though they round-trip cleanly, and — since v0.4.0 (T6) — a first
+// CONTENT line indented with SPACES, which emitting at claimYAMLIndent stores
+// back byte-exact.
 func bodyRoundTripCases() []struct {
 	name string
 	body string
@@ -135,9 +137,11 @@ func bodyRoundTripCases() []struct {
 		{"tab-only-first-line", "\t\nreal content", false},
 		{"leading-blank-lines", "\n\nleading blank lines\ncontent", false},
 		{"tab-led-first-content-line", "\tcode\nmore", false},
-		{"space-indented-first-content-line", "    func main(){}\n    return", false},
-		{"two-space-indented-multiline", "  a\n  b", false},
 		// --- ACCEPT (round-trips; must NOT be rejected) ---
+		// Space-indented first content lines moved here in v0.4.0 (T6): emitting at
+		// claimYAMLIndent (2) stores them back byte-exact. A TAB-led one still does not.
+		{"space-indented-first-content-line", "    func main(){}\n    return", true},
+		{"two-space-indented-multiline", "  a\n  b", true},
 		{"space-then-newline", " \ncontent", true},
 		{"crlf-lead", "\r\ncontent", true},
 		{"nbsp-then-newline", nbsp + "\ncontent", true},
