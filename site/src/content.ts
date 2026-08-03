@@ -199,10 +199,7 @@ const releases: Release[] = [
           date: "2026-08-03",
           title: "Migration removed, and governed_by becomes a drift edge",
           tag: "Latest release",
-          // SET THIS AT TAG TIME to the short sha of the release commit. Until
-          // it is set, the `dossierx version` example below falls back to
-          // "(devel)" — which is what the binary itself prints for an unstamped
-          // build, and is never a stale version string pretending to be current.
+          commit: "4a8fec4",
           highlights: [
             "BREAKING: `dossierx migrate` is gone, and with it every automatic adoption path. A project whose lock store predates the lock ledger crosses by holding nothing locked: re-propose any locked build order, unlock every locked claim, then re-lock only what you still stand behind. That first lock in a project with nothing locked is what stamps the store onto the ledger schema — and it records a real approval, which is the whole difference from the adoption path this release deletes. `migrate` survives only as a hidden stub that names the new path, because README, the skills and the CI template spent a release telling agents to type it, and flag parsing runs before any unknown-command handler.",
             "BREAKING, on the wire: error.code `adoption_required` is renamed `pre_ledger_unadopted`; `already_migrated` is removed outright; the finding `lock-ledger-adoption-required` is renamed `lock-ledger-pre-ledger`. Nothing is grandfathered any more, but `claim show` keeps `ledger.grandfathered` — always false for new records.",
