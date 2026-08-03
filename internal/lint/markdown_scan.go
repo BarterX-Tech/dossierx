@@ -836,8 +836,8 @@ func mdDelimRunAt(text string, start, runLen int, c byte) (mdDelimRun, bool) {
 		// delimiter.
 		return mdDelimRun{}, false
 	}
-	if rescued && ((prevPunct && mdIsBracketRune(prevR)) ||
-		(nextPunct && mdIsBracketRune(nextR))) {
+	if rescued && ((prevPunct && mdIsCarveOutRune(prevR)) ||
+		(nextPunct && mdIsCarveOutRune(nextR))) {
 		return mdDelimRun{}, false
 	}
 	return mdDelimRun{char: c, opens: leftFlanking}, true
@@ -902,17 +902,24 @@ func mdIsASCIIPunct(c byte) bool {
 	return false
 }
 
-// mdIsBracketRune reports the bracket family mdDelimRunAt's rescued-only
-// exclusion skips on.
+// mdIsCarveOutRune reports the punctuation neighbours mdDelimRunAt's
+// rescued-only exclusion skips on.
 //
 // CommonMark's flanking rules make the "*" in "(*Store)" a legitimate opener,
 // and it is — the RENDERER is right to leave it literal only because nothing
 // closes it. This lint is not a conformance checker, it is a noise-budgeted
 // warning, and every one of "(*Store)", "a[*p]", "a*(b+c)" and
 // "Topic_(disambiguation)" appears in ordinary claim prose.
-func mdIsBracketRune(r rune) bool {
+//
+// The path separator earns its place the same way. Without it, the per-rune
+// punctuation clause fires on every underscore-prefixed path segment —
+// "internal/_generated", "docs/_partials", "testdata/_fixtures" — which is a
+// shape this project's own claim bodies use far more often than "(*Store)".
+// Those were silent before v0.4.0 and would have become warnings, trading the
+// false positive #20 removed for a more common one.
+func mdIsCarveOutRune(r rune) bool {
 	switch r {
-	case '(', ')', '[', ']', '{', '}', '<', '>':
+	case '(', ')', '[', ']', '{', '}', '<', '>', '/':
 		return true
 	}
 	return false

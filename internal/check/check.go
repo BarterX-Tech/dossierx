@@ -625,7 +625,7 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 	}
 	if store != nil && store.PreLedgerUnadopted(digestStorePresent(cfg)) &&
 		countLockedClaims(claims)+lockedBuildOrders > 0 {
-		hints = append(hints, "this project's locks predate the lock ledger -> unlock every locked claim and build order, which stamps the store to the ledger schema, then re-lock the ones you still stand behind; there is no automatic adoption and no migration command")
+		hints = append(hints, "this project's locks predate the lock ledger -> unlock every locked claim and build order, then re-lock the ones you still stand behind; the FIRST lock in a project holding nothing crosses the store onto the ledger schema — unlocking alone does not. There is no automatic adoption and no migration command")
 	}
 
 	var draftIDs []string

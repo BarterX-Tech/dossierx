@@ -38,9 +38,11 @@ var (
 	// the CLI and the serve handlers cross, by an ACTUAL round-trip probe
 	// (loader.CommentBodyRoundTrips) that matches the loader's save-time guard
 	// (loader.ErrClaimNotRoundTrippable) by construction — the guard remains the
-	// systemic backstop under it. The message is actionable: start the body with a
-	// non-whitespace character.
-	ErrUnsafeBody = errors.New("comments: comment body cannot be safely stored as YAML: start it with a non-whitespace character — remove any leading blank line and de-indent the first line — then retry")
+	// systemic backstop under it. The message is actionable, and it names only what
+	// is still refused: a leading blank line, or a first content line led by a TAB.
+	// A SPACE-indented first content line stores fine since v0.4.0 (T6), so telling
+	// the caller to de-indent would send them to fix something that is not broken.
+	ErrUnsafeBody = errors.New("comments: comment body cannot be safely stored as YAML: start it with a character that is not a blank line or a tab — then retry")
 	// ErrInvalidActor: --as was neither "human" nor "agent".
 	ErrInvalidActor = errors.New(`comments: actor must be "human" or "agent"`)
 	// ErrRightsDenied: advisory rights — an agent may not resolve/reopen/edit/
@@ -885,8 +887,9 @@ func validateActor(a model.CommentRole) error {
 // heuristic, so it rejects EXACTLY the bodies the loader's save-time guard
 // (loader.ErrClaimNotRoundTrippable) would refuse — matching it by construction.
 // That closes the two gaps the old heuristic had: it now rejects a first CONTENT
-// line indented by a tab or spaces (which the heuristic missed, so the op ran and
-// the guard leaked a raw round-trip error), and it now ACCEPTS bodies that
+// line led by a TAB (which the heuristic missed, so the op ran and the guard
+// leaked a raw round-trip error — note the SPACE-indented half of that class
+// became storable in v0.4.0 and is accepted), and it now ACCEPTS bodies that
 // round-trip cleanly despite a whitespace-only or CR/NBSP/NEL-led first line
 // (which the heuristic false-rejected).
 func validateBody(body string) error {

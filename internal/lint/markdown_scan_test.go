@@ -411,6 +411,16 @@ func TestMDScanInline_DelimiterFlanking(t *testing.T) {
 		{group: "quiet", text: "see ~/some/path"},
 		{group: "quiet", text: "A pointer receiver (*Store) is used."},
 		{group: "quiet", text: "The (_internal) package is private."},
+		// Path separators, the second half of the carve-out. Every one of these
+		// was silent before the v0.4.0 flanking rewrite; without "/" in
+		// mdIsCarveOutRune the per-rune punctuation clause turns them all into
+		// unmatched-"_" warnings, which is a more common shape in this project's
+		// prose than any bracket case above.
+		{group: "quiet", text: "The generated files live in internal/_generated today."},
+		{group: "quiet", text: "Run the scan over testdata/_fixtures before locking."},
+		{group: "quiet", text: "Ship it: docs/_partials/header.html is included verbatim."},
+		{group: "quiet", text: "See https://example.com/docs/_index for the reference."},
+		{group: "quiet", text: "Set x = a/_b in the formula."},
 		{group: "quiet", text: "C-style: a[*p] deref."},
 		{group: "quiet", text: "a*(b+c) is the formula."},
 		{group: "quiet", text: "A file named report_(final).pdf here."},
@@ -448,8 +458,9 @@ func TestMDScanInline_DelimiterFlanking(t *testing.T) {
 // produces.
 //
 // The reverse is deliberately NOT asserted. The ambiguity exclusion and the
-// bracket exclusion are an under-report by design — "(*Store)" and
-// "Topic_(disambiguation)" are legitimate CommonMark openers that this lint
+// carve-out exclusion are an under-report by design — "(*Store)",
+// "Topic_(disambiguation)" and "internal/_generated" are legitimate CommonMark
+// openers that this lint
 // declines to warn about because a claim corpus is full of them — so a run the
 // renderer leaves literal and the scanner stays quiet about is the intended
 // outcome, not a parity failure.

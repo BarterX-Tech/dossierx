@@ -597,8 +597,11 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 				t.Fatalf("expected a non-zero exit for an unsafe body, got 0 (stdout: %s)", out)
 			}
 			msg := stderr + out
-			// FRIENDLY + actionable: the guidance names how to fix it.
-			if !strings.Contains(msg, "de-indent") || !strings.Contains(msg, "stored as YAML") {
+			// FRIENDLY + actionable: the guidance names how to fix it. It stopped
+			// saying "de-indent" in v0.4.0, because a space-indented first line
+			// now stores fine and only a tab-led one does not — sending the caller
+			// to de-indent would point them at something that is not broken.
+			if !strings.Contains(msg, "not a blank line or a tab") || !strings.Contains(msg, "stored as YAML") {
 				t.Fatalf("expected the friendly unsafe-body guidance, got stdout: %s stderr: %s", out, stderr)
 			}
 			// NEVER the cryptic internal round-trip text.
