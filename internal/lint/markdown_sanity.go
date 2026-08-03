@@ -216,7 +216,7 @@ func mdSanityInlineSurface(claimID, surface, text string, breaks []int, line int
 	}
 	for _, ch := range in.unbalanced {
 		findings = append(findings, mdWarn(claimID, fmt.Sprintf(
-			"%s: unmatched %q run — the delimiter has no partner on this block, and emphasis/strikethrough are outside this renderer's subset in any case, so it renders as a literal character",
+			"%s: unmatched %q run — the delimiter has no partner on this block, so it renders as a literal character rather than as emphasis",
 			at, string(ch))))
 	}
 	for _, url := range in.links {
