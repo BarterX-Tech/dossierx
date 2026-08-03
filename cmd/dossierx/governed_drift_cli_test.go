@@ -399,7 +399,10 @@ func TestReauditNamesTheGovernorAndRefreshesItsBaseline(t *testing.T) {
 	if !satisfied {
 		t.Fatalf("has_a_content_trigger must be satisfied for a governance drift: %+v", dr.Preconditions)
 	}
-	note, _ := dr.Proposed["note"].(string)
+	note, ok := dr.Proposed["note"].(string)
+	if !ok {
+		t.Fatalf("the proposal's note must be a string, got %T: %+v", dr.Proposed["note"], dr.Proposed)
+	}
 	if !strings.Contains(note, govHub) {
 		t.Fatalf("the proposal must name the GOVERNOR as the changed dependency, got %q", note)
 	}
