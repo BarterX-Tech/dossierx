@@ -11,8 +11,17 @@
      card.html's head comment for why both, and ClaimLabel for what an
      unshaped id does. This is the ONLY part of the claim-edge label work
      that reaches banner.html: it is the one partial that never calls the
-     shared "edges" func, so it has no edges footer to label. */}}
+     shared "edges" func, so it has no edges footer to label.
+
+     banner is also the one chip-free partial. It renders the shared
+     .RawHTML attachment block every other layout now renders (raw_html is
+     legal on any layout — see mockup.html's head comment for the two
+     escaping layers that still gate it), but it gets NO {{commentChip .}}
+     slot and NO {{edges .}} footer, so its ".k" line stays the flat
+     label-plus-pill shape rather than the flex head the six chip-bearing
+     partials use. */}}
 <section class="claim claim-banner card" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
   {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
 </section>

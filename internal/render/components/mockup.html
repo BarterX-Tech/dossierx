@@ -1,29 +1,40 @@
-{{/* mockup.html — default render for layout: mockup claims. This is the
+{{/* mockup.html — default render for layout: mockup claims. .RawHTML is the
      one deliberate, lint-gated exception to every other component's
-     "auto-escape everything" rule: .RawHTML may be emitted unescaped, via
-     the "mockupHTML" template func (see components.go), rather than the
+     "auto-escape everything" rule: it may be emitted unescaped, via the
+     "mockupHTML" template func (see components.go), rather than the
      "markdown" func every other body-shaped field goes through, inside
      .claim-mockup-body — a wrapper the .gcp- / .mockup- prefixed shared CSS
      (see viewer/template/style.css) and any future project's own mockup
-     content can target. This is safe only because of TWO layers:
+     content can target. As of v0.4.1 that attachment block is rendered by
+     EVERY layout partial, not only this one, through this same func and this
+     same wrapper class; mockup.html is merely the layout that also swaps in a
+     "No mockup content." empty state. The exception is the FIELD, not the
+     layout. It is safe only because of TWO layers, and neither one has ever
+     been a layout check:
 
      (1) internal/lint/raw_html_scope.go's "raw-html-scope" lint hard-fails a
-     claim before it can ever lock unless: layout is exactly mockup (so
-     RawHTML can never be smuggled into a card/table/list/steps/banner
-     body), Module is in the project's mockup_modules allowlist, RawHTML's
-     markup uses only the div/span/b/br/img tag allowlist — class on any of
-     them (only gcp- / mockup- prefixed tokens), plus relative-only src and
-     free-text alt on img (e.g. a static diagram/flowchart image) — and
-     RawHTMLReviewed is true.
+     claim before it can ever lock unless: Module is in the project's
+     mockup_modules allowlist, RawHTML's markup uses only the div/span/b/br/img
+     tag allowlist — class on any of them (only gcp- / mockup- prefixed
+     tokens), plus relative-only src and free-text alt on img (e.g. a static
+     diagram/flowchart image) — and RawHTMLReviewed is true. There is no
+     longer a leg requiring layout to be exactly mockup: raw_html is legal on
+     any layout, and the guarantee that used to read "RawHTML can never reach a
+     card/table/list/steps/banner body" is gone on purpose. Those bodies still
+     never carry it — the attachment renders in its own .claim-mockup-body
+     wrapper, through the same gated func, on every layout.
 
      (2) Defense-in-depth (DX-AUD-08): the "mockupHTML" func itself emits
      .RawHTML unescaped ONLY when the claim is locked AND raw_html_reviewed
      AND its module is in cfg.MockupModules; in every other case it emits the
      HTML-escaped text instead, so even a draft/unreviewed/non-allowlisted
      mockup that somehow reaches render (e.g. rendered before locking) can
-     never inject live markup. Do not copy this auto-escaping bypass into any
-     other component — every other claim field stays covered by
-     html/template's normal escaping.
+     never inject live markup. That render gate is layout-blind and stays
+     that way: the other partials reach unescaped markup only by CALLING
+     "mockupHTML", never by re-implementing it. Do not open a second
+     auto-escaping bypass anywhere — .RawHTML through this one func is the
+     whole of it, and every other claim field stays covered by html/template's
+     normal escaping.
 
      Body renders first, through the same "markdown" func card.html uses
      (auto-escaped prose, fences-to-<pre><code> and all) — a mockup claim's
@@ -47,7 +58,7 @@
      context here; it is emphatically NOT a second raw-HTML path alongside
      mockupHTML. */}}
 <section class="claim claim-mockup card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
   {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
   {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{else if not .Body}}<p class="claim-empty">No mockup content.</p>{{end}}
   {{edges .}}

@@ -9,7 +9,12 @@
      docs' "<div class="k">TITLE <span class="pill ps">...</span></div>"
      shape, not a separate header block — per the shared claim-head
      convention every component partial follows (see components.go's
-     pillClass). A claim with Emphasis set (the docs "hard boundary" card
+     pillClass). Label and pill sit together inside a <span class="label">,
+     with the comment chip's <span class="claim-comments-slot"> emitted by
+     "commentChip" as .k's second and last child: .k is a flex row, .label
+     takes the slack, the slot is pushed to the trailing edge. banner.html is
+     the one partial that keeps the older flat .k line, because it renders no
+     chip. A claim with Emphasis set (the docs "hard boundary" card
      precedent) gets the claim-card--warn modifier class. Body is routed
      through the shared internal/render/markdown package (exposed as the
      "markdown" template func) rather than shown raw, so any
@@ -31,7 +36,8 @@
      who can only see "Retry Policy" cannot type it. An id that isn't the
      linted module.facet.slug shape renders verbatim — see ClaimLabel. */}}
 <section class="claim claim-card card{{if .Emphasis}} claim-card--warn{{end}}{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
   {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
   {{edges .}}
 </section>
