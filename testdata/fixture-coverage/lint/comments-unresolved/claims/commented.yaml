@@ -18,6 +18,6 @@ comments:
   - id: c-fix001
     status: open
     author: human
-    created: 2026-07-25T00:00:00Z
+    created: "2026-07-25T00:00:00Z"
     body: please clarify what this claim covers
     edited: false
