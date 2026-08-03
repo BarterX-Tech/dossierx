@@ -697,6 +697,116 @@ func TestContentHash_ExcludesComments(t *testing.T) {
 	}
 }
 
+// contentHashNoRawHTML is the ContentHash of the claim built by
+// TestContentHash_RawHTMLIsHashedOnlyWhenPresent, captured from the code as it
+// stood BEFORE raw_html joined the allowlist. It is written out as a literal
+// rather than recomputed so it cannot drift along with the implementation: it
+// is the only thing standing between a future edit to ContentHash's field list
+// and every consuming project's recorded baselines mismatching at once.
+const contentHashNoRawHTML = "5f8766204a1f739054b452d5871bc51e917260a23e961481e48a66c5e3e4e4d2"
+
+// TestContentHash_RawHTMLIsHashedOnlyWhenPresent pins both halves of the
+// conditional in ContentHash's raw_html stanza, because each half guards a
+// different failure:
+//
+//   - A claim WITHOUT raw_html must hash exactly as it did before raw_html was
+//     added to the list. If raw_html were appended unconditionally, every claim
+//     in every project would re-hash on upgrade and the first run would flip the
+//     whole graph to review_pending — migration-shaped churn from a patch
+//     release. The frozen constant is what detects that.
+//
+//   - A claim WITH raw_html must re-hash when that raw_html is edited. Since
+//     v0.4.1 raw_html is an attachment legal on any layout, so it can sit on a
+//     rule-bearing claim other claims rest_on; if the hash did not move, editing
+//     the attachment would change what a reader sees while leaving every
+//     dependent unflagged.
+func TestContentHash_RawHTMLIsHashedOnlyWhenPresent(t *testing.T) {
+	base := model.Claim{
+		ID:     "widget.contract.a",
+		Facet:  "contract",
+		Module: "widget",
+		Body:   "the claim body",
+	}
+	if got := ContentHash(base); got != contentHashNoRawHTML {
+		t.Fatalf("ContentHash of a claim with no raw_html moved:\n got %s\nwant %s\n"+
+			"raw_html must only be hashed when non-empty; hashing it unconditionally\n"+
+			"re-hashes every claim in every existing project", got, contentHashNoRawHTML)
+	}
+
+	// An empty raw_html is the same claim as no raw_html: the zero value of an
+	// omitempty field is what every pre-v0.4.1 claim on disk loads as, so it
+	// must take the untouched path and not merely happen to.
+	explicitlyEmpty := base
+	explicitlyEmpty.RawHTML = ""
+	if got := ContentHash(explicitlyEmpty); got != contentHashNoRawHTML {
+		t.Fatalf("ContentHash of a claim with an empty raw_html = %s, want the unchanged %s", got, contentHashNoRawHTML)
+	}
+
+	// Gaining raw_html moves the hash...
+	withRaw := base
+	withRaw.RawHTML = "<div class=\"mock\">before</div>"
+	first := ContentHash(withRaw)
+	if first == contentHashNoRawHTML {
+		t.Fatalf("ContentHash did not move when the claim gained raw_html: still %s\n"+
+			"a dependent would never be flagged for an attachment it can see", first)
+	}
+
+	// ...and so does editing it, which is the case v0.4.1 actually introduces:
+	// raw_html on a rule-bearing claim that other claims rest_on.
+	edited := withRaw
+	edited.RawHTML = "<div class=\"mock\">after</div>"
+	if second := ContentHash(edited); second == first {
+		t.Fatalf("ContentHash did not move when raw_html was edited: still %s", second)
+	}
+
+	// raw_html is content, not bookkeeping: it must not disturb the exclusions
+	// TestContentHash_ExcludesComments pins. Same raw_html, different comment
+	// state, same hash.
+	noisy := withRaw
+	noisy.ReviewPending = true
+	noisy.Comments = []model.Comment{{ID: "c-8f3a2b", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Created: "2026-07-24T10:12:00Z", Body: "q"}}
+	if got := ContentHash(noisy); got != first {
+		t.Fatalf("ContentHash of a raw_html-bearing claim changed with comments/review_pending:\n got %s\nwant %s", got, first)
+	}
+}
+
+// TestDetectStale_RawHTMLEditOnDependencyFlipsTheDependent is the reason FIX 1
+// exists, stated end to end rather than at the hash: a locked claim that rests
+// on another claim must be flipped to review_pending when that dependency's
+// raw_html attachment is edited. Before v0.4.1 raw_html could only sit on a
+// layout: mockup illustration with no inbound edges, so this path was
+// unreachable; now the attachment is legal on a rule-bearing claim, and this is
+// the case that would otherwise be silent.
+func TestDetectStale_RawHTMLEditOnDependencyFlipsTheDependent(t *testing.T) {
+	dep := model.Claim{
+		ID:      "widget.contract.dep",
+		Facet:   "contract",
+		Module:  "widget",
+		Status:  model.StatusLocked,
+		Body:    "dep body",
+		RawHTML: "<div>before</div>",
+	}
+	dependent := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, RestsOn: []string{dep.ID}}
+	claims := []model.Claim{dependent, dep}
+
+	store := &Store{Version: storeSchemaVersion, Hashes: map[string]map[string]string{}, LockedAt: map[string]string{}, path: t.TempDir() + "/store.json"}
+	store.recordBaseline(dependent.ID, dep.ID, ContentHash(dep))
+
+	// Only the attachment changes — body, rows, steps and edges all stand.
+	claims[1].RawHTML = "<div>after</div>"
+
+	out := DetectStale(claims, store)
+	var flipped bool
+	for _, c := range out {
+		if c.ID == dependent.ID {
+			flipped = c.ReviewPending
+		}
+	}
+	if !flipped {
+		t.Fatalf("dependent was NOT flipped to review_pending after its dependency's raw_html was edited")
+	}
+}
+
 // TestDetectStale_CommentOnDependencyDoesNotFlip proves a locked dependent
 // claim is NOT flipped to review_pending merely because a claim it rests on
 // gained a comment thread: since ContentHash excludes Comments, the dependency

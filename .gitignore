@@ -8,6 +8,16 @@
 *.out
 coverage.html
 
+# Engine artifacts left behind by running the CLI against a fixture.
+# "dossierx check" writes .dossierx-comment-digest.json next to a project's
+# config, so every fixture render and every sample-viewer regeneration drops
+# one. In THIS repo they are always regenerable droppings — nothing here is a
+# dossierx project whose review history we keep (no .dossierx-* store is
+# tracked). A real consuming project still commits its own digest; its .gitignore
+# is its own. Unanchored so it catches the repo root, testdata fixtures, and any
+# project checked out inside this tree.
+.dossierx-comment-digest.json
+
 # Editor / OS cruft
 .vscode/
 .idea/

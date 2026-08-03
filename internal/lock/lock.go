@@ -638,7 +638,11 @@ func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
 func ContentHash(c model.Claim) string {
 	// A minimal, explicit field list rather than hashing the whole struct:
 	// this keeps ReviewPending/Status changes from ever being mistaken for
-	// content changes, which would create a feedback loop.
+	// content changes, which would create a feedback loop. The list is also a
+	// compatibility surface — every existing project's recorded baselines were
+	// computed from it — so a field is only ever added the way raw_html is
+	// added below: gated so that a claim that does not carry it keeps hashing
+	// byte-identically to before.
 	h := sha256.New()
 	fmt.Fprintf(h, "id=%s\nfacet=%s\nmodule=%s\nlayout=%s\nbody=%s\n", c.ID, c.Facet, c.Module, c.Layout, c.Body)
 	for _, r := range c.Rows {
@@ -654,6 +658,33 @@ func ContentHash(c model.Claim) string {
 		fmt.Fprintf(h, "rests_on=%s\n", r)
 	}
 	fmt.Fprintf(h, "governed=%s/%s\n", c.Governed.Type, c.Governed.Reason)
+
+	// raw_html is in the allowlist, but ONLY WHEN NON-EMPTY. The conditional
+	// is the whole point of this stanza and must not be "simplified" into an
+	// unconditional Fprintf.
+	//
+	// Why it belongs at all: raw_html used to be legal only on layout: mockup
+	// illustrations, which by and large had no inbound rests_on edges, so a
+	// dependent could not be misled by an edit it could not see. v0.4.1 made
+	// raw_html an ATTACHMENT legal on ANY layout — including a rule-bearing
+	// claim other claims rest_on. Without this, editing that attachment would
+	// change what the claim shows a reader while leaving every dependent
+	// unflagged, which is exactly the staleness this hash exists to catch.
+	//
+	// Why it must stay conditional: this hash is the baseline recorded in
+	// Store.Hashes for every locked claim's dependencies, so any change to the
+	// bytes fed in re-hashes that claim and flips its dependents to
+	// review_pending. Appending an unconditional "raw_html=\n" line would
+	// therefore move the hash of EVERY claim in EVERY consuming project, and
+	// the first run after upgrading would mark the entire graph stale —
+	// migration-shaped churn out of a patch release. Gated on non-empty, a
+	// claim without raw_html feeds byte-identical input to the one it fed
+	// before and nothing churns; only the raw_html-bearing claims re-hash, and
+	// only once. TestContentHash_RawHTMLIsHashedOnlyWhenPresent pins both
+	// halves of that against a hash constant captured before the change.
+	if c.RawHTML != "" {
+		fmt.Fprintf(h, "raw_html=%s\n", c.RawHTML)
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 
