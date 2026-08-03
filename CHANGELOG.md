@@ -7,18 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.0] - 2026-08-03
 
-**A claim locked before this upgrade has no governance baseline, and the first edit to its
-governor after upgrading does not flag it.** `governed_by` becomes a drift edge in this release
-(see *Changed — `governed_by` is a drift dependency* below), and a baseline is the governor's
-content hash recorded at lock time — so a claim locked by v0.3.x simply has no such entry in
-`.dossierx-lock-store.json`. There is deliberately **no backfill**, no adoption event and no
-announcement: with the migration path removed in this same release there is no adoption
-vocabulary left to reuse, and manufacturing a baseline out of content nobody approved is
-precisely what v0.4.0 removes. A locked claim gains its governance baseline the next time it is
-locked or re-audited, and only from then on does a governor edit flag it `review_pending`. Until
-then `dossierx check` reports exactly what it reported before the upgrade on that claim:
-nothing. The deliberate tools are the ordinary ones — `dossierx claim reaudit --confirm`
-refreshes the baseline, and `dossierx claim unlock` followed by `dossierx claim lock` mints one.
+**Three things change for already-locked claims that `dossierx check` cannot tell you about.**
+None involves an edit, a content-hash change or a ledger event, so the gate reports exactly what
+it reported before the upgrade. They are listed here together because that is the only place a
+consumer can see the whole set; each has its own section below.
+
+**1. A locked `layout: table` claim renders differently, with no edit and no ledger event.** The
+lock ledger signs a claim's `rows` bytes, not the HTML those bytes produce — so the table fix in
+this release changes what an already-locked, byte-identical claim looks like in the viewer.
+Ordinary table content redistributes by roughly 12% on a two-column 520px table, and a long
+identifier that used to force its column wide now wraps. Nothing flips `review_pending`, and
+nothing appears in `.dossierx-lock-store.json`. This is the same shape as v0.3.1's renderer
+expansion, and the same tool applies: re-run the render to pick it up, and use `dossierx claim
+unlock` when you want to revisit the claim's rendered output on a human's own review.
+
+**2. The first write to a locked claim after upgrading may reindent its block scalars.** Claim
+writes now merge only the changed top-level keys onto the existing document, but the merged tree
+is re-emitted at two-space indent — which is what makes the bytes safe to hand to the round-trip
+guard. A `body: |` authored at four spaces comes back at two. This changes bytes, not values: no
+content hash moves, no ledger record is affected, and no locked claim is flagged by it. The
+place a reviewer will see it is the `git diff`, once.
+
+**3. A claim locked before this upgrade has no governance baseline, and the first edit to its
+governor after upgrading does not flag it.** `governed_by` becomes a drift edge in this release,
+and a baseline is the governor's content hash recorded at lock time — so a claim locked by v0.3.x
+simply has no such entry in `.dossierx-lock-store.json`. There is deliberately **no backfill**, no
+adoption event and no announcement: with the migration path removed in this same release there is
+no adoption vocabulary left to reuse, and manufacturing a baseline out of content nobody approved
+is precisely what v0.4.0 removes. A locked claim gains its baseline the next time it is locked or
+re-audited, and only from then on does a governor edit flag it `review_pending`. The deliberate
+tools are the ordinary ones — `dossierx claim reaudit --confirm` refreshes the baseline, and
+`dossierx claim unlock` followed by `dossierx claim lock` mints one.
 
 ### BREAKING — migration is removed; a pre-ledger project crosses by holding nothing locked (closes issue #18)
 

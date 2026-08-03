@@ -28,8 +28,14 @@ checklist for that half.
 - [ ] **The version pins are moved.** Sweep for them rather than recalling
       where they are:
 
-      grep -rn "dossierx@v\|/v0\.[0-9]" --include="*.md" --include="*.yml" . \
-        | grep -v "CHANGELOG\|docs/RELEASING.md"
+      git grep -nE "dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v" \
+        -- . ':!CHANGELOG.md' ':!docs/RELEASING.md'
+
+      This used to be a `grep -rn --include="*.md" --include="*.yml"`, which does
+      not search `*.yaml` — and this repo has 232 of those against 10 `.yml`. It
+      missed nothing, but a sweep with a blind spot degrades into memory, which
+      is the exact thing this item exists to avoid. `git grep` needs no filter
+      list to keep current.
 
       As of v0.4.0 that is `README.md` (the `go install` line and the
       `install-git-hook.sh` raw URL), `skills/dossierx/SKILL.md` (the same raw

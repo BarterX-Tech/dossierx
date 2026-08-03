@@ -220,7 +220,7 @@ const releases: Release[] = [
 /** The current release — the last entry, matching ReleaseTimeline's own rule. */
 export const latestRelease: Release = releases[releases.length - 1];
 
-/** e.g. "v0.3.1". The single source for every version string on the site. */
+/** The single source for every version string on the site. */
 export const latestVersion: string = latestRelease.version;
 
 /**
