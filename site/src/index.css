@@ -2570,7 +2570,7 @@ svg [tabindex]:focus-visible rect {
 /* ---- The machine contract: what applies to every command ----
  *
  * Ordered the way the agent's own skill is ordered — the contract first, the
- * codes it branches on second, the twenty commands third. These three cards
+ * codes it branches on second, the nineteen commands third. These three cards
  * stay on paper rather than joining the dark terminal below them: they are prose
  * ABOUT the surface, and the one code sample inside them is a response, not
  * something anyone types. */

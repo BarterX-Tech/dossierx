@@ -57,7 +57,7 @@
 # needed more than one commit. "dossierx check" evaluates ONE tree — which is
 # precisely what a checkout is — and runs every rule that survives: the whole
 # lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
-# -orphan / -abandoned / -absent / -adoption-required / -downgraded,
+# -orphan / -abandoned / -absent / -pre-ledger / -downgraded,
 # comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
 # the build-order rules.
 #
@@ -124,24 +124,32 @@
 # dossierx says so out loud when the ledger FILE is missing: locked claims with
 # no ledger file is a hard error (lock-ledger-absent), not a silent pass. That
 # guarantee is about absence only. A ledger file that is PRESENT but was written
-# by a pre-v0.3.0 build is a different case, and it is FAIL-CLOSED: nothing is
-# grandfathered on the quiet any more. The gate refuses the run with
-# lock-ledger-adoption-required until the project has been through the one-time
-# migration, because a build that adopted whatever the claims said on that run
-# would be blessing content nobody approved — on a CI runner, with no human
-# anywhere near it.
+# by a pre-v0.3.0 build is a different case, and it is reported as
+# lock-ledger-pre-ledger. Nothing is grandfathered on the quiet.
 #
-# So if you are upgrading a project that locked claims before v0.3.0, this job
-# will fail until you do this ONCE, locally, at a keyboard:
+# That finding is CONDITIONAL as of v0.4.0: it is emitted only when the project
+# actually holds a locked claim or a locked build order. A pre-ledger project
+# that holds nothing locked is not a finding, because its next lock crosses the
+# store onto the ledger schema by itself — and records a real approval doing it.
 #
-#   dossierx migrate --adopt --dry-run   # names every artifact it would adopt
-#   # read that list WITH the human whose approval it stands in for
-#   dossierx migrate --adopt
+# There is no migration command any more. v0.4.0 removed `dossierx migrate`
+# outright, because adoption is the one operation that manufactures approval out
+# of nothing, and no evidence inside a repository distinguishes an honest
+# pre-ledger store from a downgraded one. So if you are upgrading a project that
+# locked claims before v0.3.0, this job will fail until you do this ONCE,
+# locally, at a keyboard, IN THIS ORDER:
+#
+#   dossierx build-order propose --module <m>    # every LOCKED build order, re-proposed
+#   dossierx claim unlock <id> --reason "..."    # every locked claim
+#   dossierx claim lock   <id> --reason "..."    # re-lock only what you still stand
+#                                                # behind; the first lock in a project
+#                                                # holding nothing locked is what
+#                                                # crosses the store onto the ledger
 #
 # then COMMIT the .dossierx-lock-store.json and .dossierx-comment-digest.json it
-# writes. Until that commit lands, every run here checks out the old-format
-# store and refuses; after it lands, the ledger CI reads is the one a human
-# signed off.
+# writes. Until that commit lands, every run here checks out the old-format store
+# and refuses; after it lands, every record in the ledger CI reads is an approval
+# a human actually gave.
 
 name: dossierx
 
@@ -182,7 +190,7 @@ jobs:
       # you adopt on purpose, in a commit someone reviewed — not something that
       # arrives on a Tuesday and starts failing everyone's builds.
       - name: Install dossierx
-        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.3.1
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.4.0
 
       # The full pipeline: lint, catalog, render, and the lock-ledger gate.
       # --format text because the audience here is a human reading a failed

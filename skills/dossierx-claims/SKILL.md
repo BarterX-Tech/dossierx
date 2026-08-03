@@ -66,7 +66,9 @@ it out.
   human's reading order in the viewer.
 - Edges: `mirrors` (value equality; both sides must declare it), `rests_on` (semantic dependency;
   the target must exist and must not be an unmigrated module), `governed_by: {type, reason}` —
-  `reason` is required when `type: none`.
+  `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
+  changing under a locked claim flags `review_pending`) but never a gating one, so it cannot block
+  a lock.
 - `kind: orientation-note` (implied by the reserved `overview` facet) marks a claim that tells a
   reader how to read the *rest* of the module. It renders as a banner and sorts ahead of fact
   claims, so "read top to bottom" already means "read the orientation notes first".
@@ -149,12 +151,14 @@ three independent triggers stands:
 
 | trigger | set by | cleared by |
 |---|---|---|
-| a dependency's content changed underneath it | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
+| a baselined dependency's content changed underneath it — `mirrors`, `rests_on`, or a claim-valued `governed_by.type` | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
 | shipped code no longer matches the claim | `dossierx claim flag` (see **[[dossierx-code-links]]**) | the same confirmed reaudit |
 | an open comment thread on the claim | anyone commenting (see **[[dossierx-comments]]**) | the **human** resolving it in the viewer |
 
 It is set automatically and never cleared automatically: it clears only once *every* standing
-trigger is gone. `unlock` also clears it, by leaving the locked state entirely.
+trigger is gone. `unlock` also clears it, by leaving the locked state entirely. A claim locked
+BEFORE v0.4.0 carries no governance baseline until its next lock or reaudit, so the first
+`governed_by` edit after upgrading does not flag it.
 
 **`dossierx claim reaudit` is the drift tool, not the general edit tool.** It refuses any claim
 that is not already locked **and** `review_pending` (`not_review_pending`, exit 2), its
@@ -184,9 +188,10 @@ stands (no `claim delete` verb exists — `unlock` first), or a comment block ch
 engine.
 
 **Branch on `rule` inside `data.ledger_findings`, not on the code** — one is not tampering.
-`lock-ledger-adoption-required` means the project predates the ledger and was never adopted:
-adoption fails closed, and the fix is a human running `dossierx migrate --adopt` once (see
-**[[dossierx]]**). Do not confuse it with `lock-ledger-absent`, which means the ledger file is
+`lock-ledger-pre-ledger` means the project's lock store predates the ledger and it still holds
+something locked: the fix is the ordered crossing — re-propose every locked build order, unlock
+every locked claim, then re-lock what the human stands behind (see **[[dossierx]]**). There is no
+migration command. Do not confuse it with `lock-ledger-absent`, which means the ledger file is
 **gone** while locked claims remain — the two are told apart by the store itself, not by history.
 To move `claims_dir` legitimately, move the claims and the stores in the **same** commit, claim
 files byte-identical; that passes because every locked claim still resolves to its record.

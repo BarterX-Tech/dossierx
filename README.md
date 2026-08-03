@@ -10,7 +10,7 @@ DossierX turns a directory of YAML "claims" — atomic, reviewable facts about a
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 20 commands under 7 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Surface** | the CLI: 19 commands under 7 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
 | **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
@@ -24,7 +24,7 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.3.1`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.4.0`,
    then run `dossierx version` and show me the output.
 2. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Load what it
@@ -33,15 +33,17 @@ Set up DossierX in this repository.
    propose a title, the facets, and the modules, and WAIT for me to confirm
    before writing anything.
 4. ASK ME before installing the git pre-commit hook. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.3.1/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.4.0/scripts/install-git-hook.sh
    to a file, show me what it does, then run `sh install-git-hook.sh --yes`.
    If I say no, add the CI workflow instead and tell me so — CI is the
    authority either way.
-5. ONLY if this project already used DossierX v0.2.x and has locked claims:
-   run `dossierx migrate --adopt` once and tell me what it adopted. v0.3.0
-   no longer grandfathers a pre-ledger project automatically, and `check`
-   fails until this has run. On a project you created at step 3 there is
-   nothing to adopt — skip this and say you skipped it.
+5. ONLY if `dossierx check` reports `lock-ledger-pre-ledger`, or a lock,
+   reaudit or build-order lock refuses with `pre_ledger_unadopted`: this
+   project locked claims before it had a lock ledger. There is NO migration
+   command. Crossing means re-proposing every locked build order, unlocking
+   every locked claim, then re-locking only what I still stand behind. Show
+   me the plan and WAIT for my yes before unlocking anything. On a project
+   you created at step 3 this never fires — say you skipped it.
 6. Run `dossierx check --format text` and show me the output. Do not tell me
    it works; show me it exiting 0.
 7. Tell me to commit `.dossierx-lock-store.json` — and
@@ -92,7 +94,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Twenty leaf commands under eight nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Nineteen leaf commands under seven nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, catalog, render and the lock-ledger gate in one shot
@@ -104,10 +106,6 @@ claim        show · list · new · lock · unlock · flag · reaudit · link
 comment      inbox · list · add · reply
 build-order  propose · status · lock
 
-migrate --adopt          one-time: adopt a pre-v0.3.0 project's locked claims into the
-                         ledger. --adopt is required and there is deliberately no
-                         --reason; --dry-run lists every artifact it would adopt
-                         and writes nothing
 serve                    the human's viewer + comment API
 skills export [dir]      write the embedded agent skills into a project
 version                  version, commit, build date (also --version)
@@ -115,7 +113,7 @@ version                  version, commit, build date (also --version)
 
 Every subcommand takes the global `--config` (a path to `project.config.yaml`; when omitted, DossierX searches upward from the current directory the way `git` finds `.git`) and `--format json|text`.
 
-Upgrading from v0.2.x? Twelve commands were removed, four moved, and **every existing project must run `dossierx migrate --adopt` once** — see [Upgrading from v0.2.x](#upgrading-from-v02x-run-migrate---adopt-once) below and [the CHANGELOG's full migration table](CHANGELOG.md).
+Upgrading from v0.2.x? Twelve commands were removed and four moved in v0.3.0, and v0.4.0 removed `migrate` outright — a project whose lock store predates the ledger now crosses onto it by holding nothing locked; see [Upgrading a pre-ledger project](#upgrading-a-pre-ledger-project) below and [the CHANGELOG's full migration table](CHANGELOG.md).
 
 ### The machine contract
 
@@ -126,7 +124,7 @@ Upgrading from v0.2.x? Twelve commands were removed, four moved, and **every exi
  "error": {"code": "lint_failed", "message": "...", "hint": "run: dossierx check"}}
 ```
 
-`error.code` is a stable snake_case token — `lint_failed`, `claim_not_found`, `rights_denied`, `integrity_failed`, `unresolved_comments`, and so on. Branch on it. `message` and `hint` are prose and will be reworded; `code` is the promise. Successful runs carry their payload in `data`, non-blocking findings in `warnings`, and `check` reports how far it got in `stopped_at`.
+`error.code` is a stable snake_case token — `lint_failed`, `claim_not_found`, `rights_denied`, `integrity_failed`, `unresolved_comments`, `pre_ledger_unadopted`, and so on. Branch on it. `message` and `hint` are prose and will be reworded; `code` is the promise. Successful runs carry their payload in `data`, non-blocking findings in `warnings`, and `check` reports how far it got in `stopped_at`.
 
 Mutating commands take `--dry-run`, which reports what *would* change and writes nothing. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`).
 
@@ -158,7 +156,7 @@ Three files hold the review state, at the project root, next to `project.config.
 | `.dossierx-comment-digest.json` | the review history's fingerprint |
 | `.dossierx-flag-store.json` | the pending `claim flag` triggers: each flagged claim's `{claim_says, now_does, reason, flagged_at}`, parked until a confirmed `claim reaudit` consumes it |
 
-**All three are tracked artifacts. Commit them; never `.gitignore` them** — the lock store the moment anything is locked, the digest once anyone comments, the flag store the moment anything is flagged. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip. Neither one ever auto-adopts its way to a pass — [that is what `migrate --adopt` is for, and it is a decision a human makes once](#upgrading-from-v02x-run-migrate---adopt-once).
+**All three are tracked artifacts. Commit them; never `.gitignore` them** — the lock store the moment anything is locked, the digest once anyone comments, the flag store the moment anything is flagged. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip. Neither one ever grandfathers its way to a pass, and since v0.4.0 there is no adoption path to reach for at all — restore the store from version control. [A store that genuinely predates the ledger is a different state with a different recovery](#upgrading-a-pre-ledger-project).
 
 The flag store is not part of the gate — nothing compares it to anything — but it is not optional either. `claim flag` writes the before/after there and sets `review_pending` on the claim; `claim reaudit` reads it back to produce the diff it asks you to confirm. If the claim travels to another machine and the flag store does not, that claim arrives `review_pending` with nothing to propose, and confirming the empty proposal clears the flag having changed nothing.
 
@@ -170,10 +168,10 @@ The gate names each disagreement:
 
 | Finding | What it caught |
 |---|---|
-| `lock-ledger-adoption-required` | project-scoped, and the **one benign entry in this table**: this project locked claims before v0.3.0 and has never been adopted, so there is no ledger to judge against yet. Said once, naming the migration, rather than as one `lock-ledger-missing` per claim — whose recovery ("set it back to draft and re-lock") would be actively destructive advice here. The recovery is one [`dossierx migrate --adopt`](#upgrading-from-v02x-run-migrate---adopt-once). Told apart from `lock-ledger-absent` by the store file itself, with no history needed: adoption-required means the store is **there** and still on the pre-ledger schema, absent means the file is **gone** |
+| `lock-ledger-pre-ledger` | project-scoped, and still the **one benign entry in this table**: this project's lock store predates the lock ledger, so nothing locked here has an approval record and there is nothing to judge against yet. Said once, with the crossing that clears it, rather than as one `lock-ledger-missing` per claim — whose recovery ("set it back to draft and re-lock") would be actively destructive advice here. **New in v0.4.0, and the part not to miss: it is CONDITIONAL** — silent unless the project actually holds a locked claim or a locked build order, because a pre-ledger project with nothing locked is correct state and crosses onto the ledger on its next lock, and a finding on correct state is how gates get switched off. Its write-path twin is `error.code: pre_ledger_unadopted`, which `claim lock`, `claim reaudit --confirm` and `build-order lock` refuse with in the same state. The recovery is [the crossing](#upgrading-a-pre-ledger-project), not a migration — v0.4.0 removed `dossierx migrate` entirely. Told apart from `lock-ledger-absent` by the store file itself, with no history needed: pre-ledger means the store is **there** and still on the pre-ledger schema, absent means the file is **gone** |
 | `lock-ledger-missing` | a claim is `locked` with no approval record — e.g. `status: draft` flipped to `locked` by hand, walking past the lint, hub-gating and unresolved-comment gates |
 | `lock-ledger-deleted` | `lock-ledger-missing`'s sharper twin: a claim **this engine locked**, whose record is gone. Every other rule keys on a record *existing*, so deleting one took the claim out of the switch entirely — delete its `ledger` entry, flip `status: locked` back to `draft`, and it is an ordinary draft again, freely editable and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. `check --validate` reported `ok: true` with zero findings. The evidence the deletion does not reach sits one key away in the same file: `locked_at`, which every lock stamps and which nothing removes (`unlock` keeps the record and stamps `released_at`), plus the claim's dependency baselines under `hashes`. A record that is *absent* rather than *released* was deleted by hand. **`claim lock` refuses this state outright** (`integrity_failed`) — otherwise the last step of the bypass is the tool's own command: re-locking writes a fresh record over the rewritten content and the finding disappears for good |
-| `lock-ledger-downgraded` | the lock store **says it predates the ledger** while the project proves it does not — its own `version` field set back to `1` and the `ledger` key deleted, one edit inside the audited file. This used to be the highest-value edit in the design, because adoption ran automatically and a store that claimed to predate the ledger was re-adopted on sight: the claims *as they are now* became the approved baseline. Adoption no longer runs automatically at all ([see the upgrade section](#upgrading-from-v02x-run-migrate---adopt-once)), so the edit no longer buys approval — but a store lying about its own version is still a tampered store, and it is still reported. Restore it from version control; do **not** re-lock, and do **not** reach for `migrate --adopt`, which would record the current bytes as the baseline and is exactly what the downgrade was trying to achieve |
+| `lock-ledger-downgraded` | the lock store **says it predates the ledger** while the project proves it does not — its own `version` field set back to `1` and the `ledger` key deleted, one edit inside the audited file. This used to be the highest-value edit in the design, because adoption ran automatically and a store that claimed to predate the ledger was re-adopted on sight: the claims *as they are now* became the approved baseline. Adoption no longer exists at all ([see the upgrade section](#upgrading-a-pre-ledger-project)), so the edit no longer buys approval — but a store lying about its own version is still a tampered store, and it is still reported. Restore it from version control; do **not** re-lock, and do **not** try to force the pre-ledger crossing by unlocking everything — both record the current bytes as the baseline, which is exactly what the downgrade was trying to achieve |
 | `lock-ledger-released` | a claim is `locked` on a record an `unlock` already **released** — lock, unlock, then hand-edit `status:` back. A released record is a withdrawn approval, not a standing one, and the content hash cannot see it because the hash excludes `status` |
 | `lock-content-drift` | a locked claim's content no longer matches what was approved — including fields the dependency-drift hash never covered, such as `raw_html`, `build_role`, `section` and `order` |
 | `lock-ledger-orphan` | a `draft` claim still holding an *unreleased* record — `locked` flipped back to `draft` to dodge review |
@@ -231,32 +229,38 @@ It passes because every locked claim is still reachable and still hashes to its 
 
 The ledger is not authentication. `actor` is provenance, not identity, and anyone who can edit a claim can edit the ledger. What it buys is that tampering requires editing **two** tracked files consistently instead of one — and the second is a file whose entire purpose is to be read in the diff.
 
-## Upgrading from v0.2.x: run `migrate --adopt` once
+## Upgrading a pre-ledger project
 
-**This is a breaking change, and it breaks on the first `dossierx check`.** Every project that locked a claim before v0.3.0 must run one command, once, before `check` will pass again:
+**There is no migration command.** v0.4.0 removed `dossierx migrate --adopt` outright, and nothing is grandfathered by any run, in any mode. A project whose locks predate the lock ledger crosses onto it by emptying itself of everything that predates it.
+
+**The state.** A lock store written before the ledger existed — schema `version: 1`, no `ledger` key — fails `check` with the project-scoped `lock-ledger-pre-ledger` finding, and the three approval-recording commands (`claim lock`, `claim reaudit --confirm`, `build-order lock`) refuse with `error.code: pre_ledger_unadopted`. Both happen **only while the project still holds a locked claim or a locked build order.** Hold nothing locked and both are silent.
+
+**The crossing.** The order is load-bearing, not cosmetic: `build-order propose` requires the module still fully locked, so re-proposing has to happen *before* any claim is unlocked — unlock first and propose then refuses, leaving the locked order with no way to be released.
 
 ```sh
-dossierx migrate --adopt --dry-run   # look first: it names every artifact it would adopt
-dossierx migrate --adopt
+# 1. FIRST, for every module whose build order is locked:
+dossierx build-order propose --module <m>
+
+# 2. then every locked claim — unlock is gateless and always has been:
+dossierx claim unlock <id> --reason "<your words>"
+
+# 3. then re-lock only what you still stand behind:
+dossierx claim lock <id> --reason "<your words>"
+
+# 4. then the build orders again:
+dossierx build-order propose --module <m>
+dossierx build-order lock --module <m> --reason "<your words>"
 ```
 
-Then commit the rewritten `.dossierx-lock-store.json` — and the `.dossierx-comment-digest.json` the same run creates — in the same commit as the claims they now cover. That is the whole upgrade.
+**The first `claim lock` in a project holding nothing locked is what crosses it.** That lock stamps the store onto the ledger schema and creates `.dossierx-comment-digest.json` in the same act — and it records a real approval, with your own words in `--reason`. That is the whole difference from the adoption path this replaces. Commit the rewritten `.dossierx-lock-store.json` and the new `.dossierx-comment-digest.json` together with the re-locks.
 
-`--adopt` is required: a bare `dossierx migrate` refuses with `missing_flag` rather than guessing at a migration you did not name. `--dry-run` lists every claim and build order it would adopt and writes nothing.
+**Why there is no command any more.** v0.3.0 answered this state with `dossierx migrate --adopt`, and even then the reasoning was uncomfortable: *adoption is the one operation that manufactures approval out of nothing*. No predicate inside a project can tell an honest v0.2.x store from a downgraded one — `locked_at` shipped in v0.2.0 (`git show v0.2.0:internal/lock/lock.go`), so there is no field, no timestamp and no sibling file whose presence or absence distinguishes the two. And a migration you can re-run is a laundering command: delete one record, migrate again, and the edit it covered is re-signed as approved. v0.3.0 answered that with an `already_migrated` refusal; v0.4.0 answers it by having no command to re-run. The crossing above is safe from an ordinary write path for exactly that reason — an attacker who empties the project of every locked artifact to trigger it has destroyed the approvals they were trying to launder.
 
-**There is deliberately no `--reason`.** Every other verb that writes a ledger record takes one, because a human approved something and their words belong in the record. Nobody approved this. Each record this command writes carries a fixed reason that says exactly that — *"grandfathered by `dossierx migrate --adopt`: locked before this project had a lock ledger; content adopted as-found on migration day, never approved by anyone"* — plus `grandfathered: true`, permanently. A human-supplied reason would make an adoption read like an approval in the ledger diff, which is the one thing this command must not do.
+**`dossierx migrate` survives as a hidden retired stub** that fails naming this path. It has to exist as a command at all because cobra parses flags before any unknown-command handler runs: without it, `dossierx migrate --adopt` would fail as `unknown flag: --adopt` for every agent that still remembers the old instruction, rather than as an explanation.
 
-**Why it is a command and not automatic.** v0.3.0 originally grandfathered a pre-ledger project in on its first plain `check`: the run saw an old store, adopted whatever the claims said at that moment as approved, and marked each record `grandfathered`. It was convenient and it was unsound, because *adoption is the one operation that manufactures approval out of nothing*. A store that adopts on sight is a store where deleting the ledger — or downgrading it, or arriving with one that never existed — is rewarded with a clean bill of health over content nobody looked at. Earlier review rounds tried to tell an honest v0.2.x project from a downgraded one by evidence inside the project, and could not: `locked_at` shipped in v0.2.0 (`git show v0.2.0:internal/lock/lock.go`), so there is no field, no timestamp and no sibling file whose presence or absence distinguishes the two. When no predicate can be trusted, the answer is not a cleverer predicate. It is to stop guessing.
+**A near neighbour worth telling apart**, and the lock store itself is what distinguishes them — no git history required. **`lock-ledger-pre-ledger`** means the store is **present**, still on the pre-ledger schema, and something is still locked: benign, and the recovery is the crossing. **`lock-ledger-absent`** means the store **file is gone** while locked claims remain: tampering, and the recovery is version control.
 
-So **adoption now fails closed.** A missing or unreadable ledger never grandfathers anything, in any run — plain `check`, `--validate` and `--staged` alike. The only thing that adopts is a human running `migrate --adopt` on purpose, which is exactly the property the ledger is supposed to have: an approval enters the record because someone decided it should.
-
-**What `migrate --adopt` records, and what it does not.** It writes a record for each currently-locked claim and each locked build order, hashing the content **as it is on disk right now**. Those records are marked as adopted rather than approved, permanently, because an adopted hash is content that was *observed*, not reviewed. Read the claims before you run it — this command is you saying "what is in this repository today is the baseline", and nothing in it can check that for you. It changes no claim's `status`, resolves no thread, and clears no `review_pending`.
-
-**What you see if you skip it.** `dossierx check` fails on the lock-ledger gate instead of silently adopting, with the project-scoped finding **`lock-ledger-adoption-required`**. It is deliberately a single finding naming the migration, not one `lock-ledger-missing` per claim: repeating "this claim is locked with no record" for every claim would attach a recovery — set it back to draft and re-lock it — that is actively destructive advice at a project that has done nothing wrong. A pre-commit hook and a CI run fail the same way, which is the point: the run that would previously have blessed a project quietly now refuses it loudly.
-
-It has a near neighbour worth telling apart, and the lock store itself is what makes them distinguishable — no git history required. **`lock-ledger-adoption-required`** fires when the store is **present** and still carries a pre-ledger schema version: this project has never been through a ledger-aware build. That is benign, and the recovery is the migration. **`lock-ledger-absent`** fires when the store **file is gone** while locked claims remain. That is tampering, and the recovery is version control.
-
-**Once adopted, a project can never be adopted again.** A second `migrate --adopt` refuses with `already_migrated`. That is not tidiness: a migration you can re-run is a laundering command — delete one record, migrate again, and the edit it covered is re-signed as approved. **Do not "fix" a ledger complaint by deleting the store, by re-locking, or by reaching for the migration.** All three record the current bytes as approved with no diff shown to anyone.
+**Do not "fix" a ledger complaint by deleting the store or by re-locking.** Both record the current bytes as approved with no diff shown to anyone.
 
 ## Concepts
 
@@ -277,11 +281,11 @@ governed_by:
   reason: no doctrine facet configured yet
 ```
 
-Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`), and a `governed_by` block naming what backs its truth (a doctrine claim, or `none` with a reason). Claims name other claims they `rests_on` or `mirrors`, forming a graph the engine walks and validates. The full schema is in [FORMAT.md](FORMAT.md).
+Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`), and a `governed_by` block naming what backs its truth (a doctrine claim, or `none` with a reason). Claims name other claims they `rests_on` or `mirrors` — and a claim-valued `governed_by.type` is the same kind of edge for drift purposes — forming a graph the engine walks and validates. The full schema is in [FORMAT.md](FORMAT.md).
 
 **`check` is the pipeline.** One command runs lint → catalog → render → the ledger gate and stops at the first failure. `--validate` is the read-only form for the authoring loop: it runs the lint gate and the ledger gate in memory and writes nothing — no claim files, no lock store, no `.catalog.json`, no viewer. It also does not reconcile `review_pending`, rebuild the catalog or the viewer, or scan source for code links; run plain `check` before trusting what the viewer shows.
 
-**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`/`mirrors` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
+**The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`, `mirrors` or is `governed_by` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `governed_by` joined the drift set in v0.4.0 as a **drift** edge only: a claim-valued governor whose content changes flags its dependants `review_pending`, but hub gating still walks `rests_on`/`mirrors` alone, so an unlocked governor named only by `governed_by` still never refuses a lock. There is no backfill — a claim locked before v0.4.0 carries no governance baseline until its next `claim lock` or confirmed `claim reaudit`, so the first governor edit after upgrading does not flag it. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
 
 **`reaudit` is the drift tool, not the general edit tool.** It refuses a claim that is not already `review_pending`, it rewrites only `body`, and it refuses a claim whose only trigger is an open thread (there is no diff to confirm — resolve the thread instead). To change anything else about a locked claim, the path is `unlock → fix → lock`.
 
@@ -307,7 +311,7 @@ Config loading is strict: an unknown top-level or `viewer.theme` field is a hard
 
 ## The skills
 
-DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the eight nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
+DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the seven nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
 
 `dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 2 of the paste block above does this. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. That is why step 2 names `.claude/skills` explicitly: it runs before the config exists, so the guides are in place to be followed while the project is set up. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 

@@ -27,3 +27,6 @@ go.mod.local
 
 # Claude Code local worktrees
 .claude/worktrees/
+
+# Lavish editor session state
+.lavish/

@@ -5,6 +5,206 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-08-03
+
+**A claim locked before this upgrade has no governance baseline, and the first edit to its
+governor after upgrading does not flag it.** `governed_by` becomes a drift edge in this release
+(see *Changed — `governed_by` is a drift dependency* below), and a baseline is the governor's
+content hash recorded at lock time — so a claim locked by v0.3.x simply has no such entry in
+`.dossierx-lock-store.json`. There is deliberately **no backfill**, no adoption event and no
+announcement: with the migration path removed in this same release there is no adoption
+vocabulary left to reuse, and manufacturing a baseline out of content nobody approved is
+precisely what v0.4.0 removes. A locked claim gains its governance baseline the next time it is
+locked or re-audited, and only from then on does a governor edit flag it `review_pending`. Until
+then `dossierx check` reports exactly what it reported before the upgrade on that claim:
+nothing. The deliberate tools are the ordinary ones — `dossierx claim reaudit --confirm`
+refreshes the baseline, and `dossierx claim unlock` followed by `dossierx claim lock` mints one.
+
+### BREAKING — migration is removed; a pre-ledger project crosses by holding nothing locked (closes issue #18)
+
+**`dossierx migrate` — and `dossierx migrate --adopt` — is gone.** Adoption is removed rather
+than carried forward: nothing can attest to content no ledger ever recorded, and a command that
+manufactures approval out of observed bytes is the one operation v0.3.0 already called unsound.
+
+The replacement is not a command but an **ordered sequence**, quoted here in the exact words the
+binary emits so the CHANGELOG, the skills' retired-command row and the retired stub's own hint
+cannot drift apart:
+
+> re-propose any locked build order (`dossierx build-order propose --module <m>`), unlock every
+> locked claim (`dossierx claim unlock <id> --reason "..."`), then lock only what you still stand
+> behind — the first lock in a project with nothing locked crosses the store onto the ledger
+
+The order matters. `build-order propose` requires the module still fully locked, so re-proposing
+has to happen *before* any claim is unlocked; the other order strands the locked order with no
+way to release it. And what the crossing records matters just as much: the first lock in a
+project holding nothing locked stamps the store onto the ledger schema and records a **real
+approval**, with nothing grandfathered. That is the whole difference from the removed adoption
+path. Commit the updated `.dossierx-lock-store.json` and `.dossierx-comment-digest.json`
+alongside the re-locks.
+
+`dossierx migrate` survives as a **hidden retired stub** that fails naming the new path. It has
+to exist as a command at all because flag parsing runs before any unknown-command handler — so
+without it, the invocation a whole release told agents to type would fail as `unknown flag:
+--adopt` rather than as an explanation.
+
+The wire changes, each stated as the rename or removal a consumer's parser will see:
+
+- `error.code` **`adoption_required` → `pre_ledger_unadopted`**. Same three emitters — `claim
+  lock`, `claim reaudit --confirm`, `build-order lock` — but the condition is narrower and now
+  literal: the project's lock store predates the ledger **and** it still holds locked artifacts.
+  On a project holding nothing locked those commands no longer refuse at all; they perform the
+  crossing. The recovery is no longer one command but the ordered sequence above, which is why
+  the code was renamed rather than left in place.
+- `error.code` **`already_migrated` is REMOVED**, together with its `data.mode` discriminator
+  (`already_covered` / `nothing_to_adopt`). There is no command left that can be run twice.
+- Ledger finding rule **`lock-ledger-adoption-required` → `lock-ledger-pre-ledger`**, and it is
+  now **conditional**: silent unless the project holds at least one locked claim or at least one
+  locked build order. A pre-ledger project with nothing locked is not in a bad state — it is one
+  lock away from being on the ledger — and reporting a finding there told a clean project to run
+  a recovery it did not need. The message now names the on-disk schema version, the count of
+  locked claims and the count of locked build orders, and carries the ordered crossing steps.
+- **`dossierx check`'s `data.ledger_adopted` field is REMOVED.** With no adoption path it could
+  only ever be empty, and it was dropped rather than left as a permanently-absent key a consumer
+  might wait for. `data.comment_digests_adopted` is unaffected and still reported.
+- `dossierx claim show`'s `data.ledger.grandfathered` key **stays**, without `omitempty`, and is
+  **always `false`** for any record this build mints. It is true only for records surviving from
+  a project that ran the removed adoption path, and the key is kept precisely so a consumer can
+  still tell the two apart.
+
+The surface shrinks with it: **eight nouns and twenty leaves become seven nouns and nineteen
+leaves** — `check`, `claim`, `comment`, `build-order`, `serve`, `skills`, `version`. The removed
+noun is `migrate`, the same one that took the surface from nineteen-under-six to twenty-under-
+seven when v0.3.0 added it, so this returns the leaf count to nineteen. The hidden retired stub
+is deliberately not counted as surface: it is excluded by mark rather than by hidden-ness, so a
+real leaf can never be smuggled past the count by hiding it.
+
+**Two further machine-contract changes fall out of the same removal.** Neither is in the wire
+list above, and both would be found the hard way by an agent that branches on them:
+
+- **The dry-run precondition `project_migrated` is renamed `pre_ledger`.** It surfaces in every
+  `--dry-run` envelope as `data.preconditions[].name` and, when it blocks, in `data.blocked[]`.
+  The eight migrate-only preconditions (`adopt_flag_given`, `history_confirms_pre_ledger`,
+  `lock_store_exists`, `locked_claims_match_version_control`, `not_already_migrated`,
+  `pre_ledger_claim_not_contradicted`, `something_to_adopt`) go with the command; `pre_ledger` is
+  the one replacement, and it is the only one of the set that ever applied to a surviving command.
+- **An approval-recording command that REFUSES can still cross the store.** The crossing runs
+  before the operation's own preconditions, so a `build-order lock` that then fails — on a
+  hand-edited order, say — leaves the store stamped onto the ledger schema even though it
+  reported `ok: false`. This is safe rather than merely tolerated: the crossing only runs at all
+  when the project holds nothing locked, so it discards no approval, and the post-state passes
+  `dossierx check` cleanly. It is recorded here because a durable write by a command that
+  reported failure is genuinely surprising, and no other bullet would tell you. `--dry-run`
+  writes nothing, and no read-only command crosses.
+
+### Changed — `governed_by` is a drift dependency (closes issue #21)
+
+A claim-valued `governed_by.type` now joins `mirrors` and `rests_on` as a **drift edge**. When
+the governing claim's comparable content changes underneath a locked claim, that locked claim is
+flagged `review_pending`, `claim show` reports `review_trigger: drift`, and `check`'s
+`next_steps` lists it under the drift/reaudit step.
+
+Four boundaries, each of them a decision rather than an accident:
+
+- It is **not a gating edge.** Hub gating is byte-for-byte unchanged — a claim naming an
+  unlocked doctrine-facet claim only through `governed_by.type` still locks.
+- `governed_by.type: none` creates no baseline and never triggers drift.
+- Propagation is **staged**, matching the existing drift edges: flagging a direct dependent does
+  not itself flag claims downstream of it.
+- A claim reaching the same target through two edge types (`rests_on: X` and
+  `governed_by.type: X`) produces exactly **one** baseline entry, deterministically.
+
+For what this means on claims locked before the upgrade, see the note at the top of this entry.
+The internal correction that made it possible is worth naming: the drift set had three
+independent implementations — `internal/lock`, the pending walk in `internal/comments`, and an
+inline copy in `main.go` — which is why a reader who tested drift on v0.3.x may have seen
+different answers depending on which command they asked. All three now call one function.
+
+### Changed — comment bodies with a space-indented first content line are now storable (closes issue #24)
+
+A comment or reply body whose first content line begins with **space** indentation used to be
+refused as unstorable and now stores fine. The two shapes, as the tests spell them:
+`"    func main(){}\n    return"` (space-indented first content line) and `"  a\n  b"` (a
+two-space-indented multiline body).
+
+The cause of the loosening is mechanical rather than a relaxed rule: the loader now emits claim
+YAML at a two-space indent through one shared encoder, and at that indent a block scalar carries
+those bodies back byte-exact — so the round-trip guard, which is the actual gate, stops refusing
+them. This is a **widening**, and it lands at every layer that pinned the old behaviour
+together, because they are matched by construction: `comments.validateBody`, the `comment add
+--dry-run` `body_is_storable` precondition, the CLI's `unsafe_body` refusal, and `dossierx
+serve`'s 400 on `POST /api/comments`.
+
+The limit, stated as sharply as the widening: a **tab-led** first content line is still refused,
+at any indent width. The store-bricking class survives; it is now tab-led only. (`ErrUnsafeBody`'s
+own message still advises "de-indent the first line", which is now broader than the surviving
+rule.)
+
+### Fixed — a claim write touches only the keys that changed (closes issue #24)
+
+Adding one comment used to land as a whole-file rewrite — a 117-line diff in which exactly one
+key was new — because `SaveClaim` re-serialised the claim from the struct. It now merges the
+changed top-level keys onto the existing document's node tree, so an unchanged key keeps its
+authored quoting, block-scalar form, key order and YAML comments.
+
+Two modes, because `SaveClaim` is also the file-**create** path: create emits the fresh document
+wholesale, mutate merges. Both still end at `verifyRoundTrip` and an atomic write — the
+round-trip guard is a gate, not a nicety — and the merge falls back to the fresh whole-document
+bytes whenever it cannot be done faithfully, so no write is ever less safe than before.
+
+One deliberate exception, stated as such: **block-scalar indent width is not preserved.** The
+merged tree is re-emitted at the loader's two-space indent, which is exactly what makes the
+merged bytes safe to hand to the round-trip guard. This changes bytes, not values — a claim's
+content hash is computed over decoded field values, which a block scalar's indent width does not
+change — so no ledger record is affected and no locked claim is flagged by it.
+
+### Fixed — wide `layout: table` claims scroll instead of running under the viewer chrome (closes issues #22, #23)
+
+A `layout: table` claim wider than its column used to overflow with no way to reach the content.
+The table now sits in a `.claim-table-scroll` container that scrolls on its own axis, so the page
+body never scrolls sideways, and cells wrap rather than forcing the track wider, with a 5rem
+per-cell floor so a column of short values does not collapse to unreadable slivers.
+
+Two consequences a reader will notice:
+
+- **Ordinary table content redistributes slightly — about 12% on a two-column 520px table.**
+  This is the knowing price of `overflow-wrap: anywhere` rather than `break-word`: only
+  `anywhere` contributes its soft-wrap opportunities to min-content, which is what stops a single
+  65-character identifier taking ~80% of the table under auto table layout. `break-word` leaves
+  proportions byte-identical and does not fix the bug at all.
+- **Markdown tables inside a claim `body` are deliberately not changed.** Both new rules are
+  scoped to `.claim-table-scroll`, which a `.md-table` is never inside; a body pipe table is
+  already contained by `width: max-content` plus `overflow-x: auto`, so a long identifier makes a
+  body table *scroll* rather than wrap. Body tables therefore keep scrolling rather than wrapping
+  — a deliberate deferral, not an oversight.
+
+This changes rendered viewer output, so re-run the render to pick it up.
+
+### Fixed — `markdown-sanity` no longer fires on punctuation after a closing delimiter run (closes issue #20)
+
+The `markdown-sanity` lint rule reported an unmatched delimiter run whenever a correctly-closed
+emphasis or strikethrough run was followed by punctuation. The measured cases are the clearest
+statement of the bug: `"Only ~~strike~~, comma after."` produced one finding while `"Only
+~~strike~~ no comma."` produced none, and `"Has **bold**, and more."` produced one with no `~`
+anywhere in the string.
+
+The issue report named the wrong cause, and the record is worth correcting: it was not a shared
+cursor requiring `**`, `*` and `~~` together — it was flanking being decided on whitespace
+alone, so any closing run followed by punctuation looked like an unclosed opener. The scanner now
+applies CommonMark's punctuation clause **per rune** rather than per byte, which is what the spec
+specifies and what multi-byte punctuation requires.
+
+Widening right-flanking admits every run with a word character on one side and punctuation on the
+other, so a carve-out holds the noise budget. It covers the bracket family — `(*Store)`, `a[*p]`,
+`Topic_(disambiguation)` — and the **path separator**, without which every underscore-prefixed
+path segment (`internal/_generated`, `docs/_partials`, `testdata/_fixtures`) becomes an unmatched
+`_` warning. Those were silent before this release; admitting them would have traded the false
+positive #20 removed for one this project's own claim bodies hit more often.
+
+The finding's message was also wrong about the cause and no longer claims emphasis is outside the
+renderer's subset — it has not been since v0.3.1 — and now names the delimiter it found and where
+it opened. These are warning-severity craft findings, so the false positive was noise rather than
+a blocked `claim lock`.
+
 ## [0.3.1] - 2026-07-30
 
 **Locked claim bodies may render differently after this upgrade, with no edit and no ledger
@@ -940,7 +1140,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.1...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/BarterX-Tech/dossierx/releases/tag/v0.2.0
