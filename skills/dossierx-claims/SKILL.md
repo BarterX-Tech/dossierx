@@ -65,7 +65,7 @@ it out.
   **[[dossierx-build-order]]**) and has nothing to do with `section`/`order`, which are the
   human's reading order in the viewer.
 - Edges: `mirrors` (value equality; both sides must declare it), `rests_on` (semantic dependency;
-  the target must exist and must not be an unmigrated module), `governed_by: {type, reason}` —
+  the target must exist), `governed_by: {type, reason}` —
   `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
   changing under a locked claim flags `review_pending`) but never a gating one, so it cannot block
   a lock.
