@@ -511,10 +511,10 @@ func downgradeLockStore(t *testing.T, cfg *config.Config, keepDigestStore bool) 
 // failure mode was `lock-ledger-missing` fired once per locked claim with
 // recovery text telling the human to set their claims back to draft and re-lock
 // them — a gate firing on correct state with destructive advice attached, at the
-// exact moment a project upgrades. lock-ledger-adoption-required says the true
-// thing instead ("this project has not been migrated") and names the one command
-// that fixes it, which is why the next-step assertion below is as load-bearing as
-// the finding assertion.
+// exact moment a project upgrades. lock-ledger-pre-ledger says the true thing
+// instead ("this project's locks predate the lock ledger") and names the ordered
+// crossing that clears it, which is why the next-step assertion below is as
+// load-bearing as the finding assertion.
 func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": orderedClaim("widget.contract.a"),
@@ -523,22 +523,67 @@ func TestStatus_PreLedgerProjectIsRefusedOnceByNameNotAccusedPerClaim(t *testing
 	downgradeLockStore(t, cfg, false)
 
 	res := check.Status(claims, cfg)
-	if got := rulesOf(res.LedgerFindings); len(got) != 1 || got[0] != lock.RuleLockLedgerAdoptionRequired {
-		t.Fatalf("an un-migrated project must be refused exactly once, by %s, and never accused per-claim; got %v",
-			lock.RuleLockLedgerAdoptionRequired, got)
+	if got := rulesOf(res.LedgerFindings); len(got) != 1 || got[0] != lock.RuleLockLedgerPreLedger {
+		t.Fatalf("a pre-ledger project must be refused exactly once, by %s, and never accused per-claim; got %v",
+			lock.RuleLockLedgerPreLedger, got)
 	}
 
 	// The finding fails the gate; the next step is what tells the reader how to
-	// clear it. Naming the command is the assertion — an agent that is refused
-	// without being given `migrate --adopt` loops on a gate it cannot pass.
+	// clear it. Naming the crossing is the assertion — an agent that is refused
+	// without being told to unlock loops on a gate it cannot pass.
 	found := false
 	for _, h := range res.NextSteps {
-		if strings.Contains(h, "predate the lock ledger") && strings.Contains(h, "dossierx migrate --adopt") {
+		if strings.Contains(h, "predate the lock ledger") && strings.Contains(h, "unlock every locked claim") {
 			found = true
 		}
 	}
 	if !found {
-		t.Fatalf("the upgrade must be reported as a next step naming dossierx migrate --adopt, got %#v", res.NextSteps)
+		t.Fatalf("the crossing must be reported as a next step naming unlock, got %#v", res.NextSteps)
+	}
+}
+
+// THE STATE THE CLAIMS-ONLY EMITTER CANNOT SEE: a pre-ledger project holding a
+// LOCKED BUILD ORDER and ZERO locked claims.
+//
+// It is reachable, and it was silent. `claim unlock` never touches the
+// build-order artifact and internal/buildorder never clears Locked on unlock, so
+// lock a module, lock its order, then unlock every claim. In that state
+// lock.Audit's claims-only term is zero and buildOrderGate suppresses
+// build-order-ledger-missing under the pre-ledger exemption — while BOTH write
+// paths refuse with pre_ledger_unadopted. A refusal with no finding naming it,
+// and no recovery text reachable from `check`, is exactly what the project-scoped
+// rule exists to prevent.
+//
+// So: exactly ONE lock-ledger-pre-ledger (not one per module, and not two from
+// the two emitters), and still zero build-order-ledger-missing.
+func TestStatus_PreLedgerProjectWithOnlyALockedBuildOrderIsStillReported(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/a.yaml": orderedClaim("widget.contract.a"),
+	})
+	lockBuildOrder(t, cfg, claims, "widget")
+	downgradeLockStore(t, cfg, false)
+
+	// Unlock every claim, leaving the LOCKED artifact in place — the reachable
+	// state described above.
+	for i := range claims {
+		claims[i].Status = model.StatusDraft
+	}
+
+	got := rulesOf(check.Status(claims, cfg).LedgerFindings)
+	preLedger, missing := 0, 0
+	for _, r := range got {
+		switch r {
+		case lock.RuleLockLedgerPreLedger:
+			preLedger++
+		case check.RuleBuildOrderLedgerMissing:
+			missing++
+		}
+	}
+	if preLedger != 1 {
+		t.Fatalf("expected exactly one %s so check and the write path agree, got %d in %v", lock.RuleLockLedgerPreLedger, preLedger, got)
+	}
+	if missing != 0 {
+		t.Fatalf("the pre-ledger exemption still covers the build order itself; got %d %s in %v", missing, check.RuleBuildOrderLedgerMissing, got)
 	}
 }
 

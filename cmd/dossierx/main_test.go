@@ -267,7 +267,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyLeavesUnderSevenNouns pins the headline of the v0.3.0
+// TestSurfaceIsNineteenLeavesUnderSevenNouns pins the headline of the v0.3.0
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
@@ -275,12 +275,17 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // getting more capable. Adding a leaf should be a decision someone makes on
 // purpose and writes down here, not something that accretes.
 //
-// It moved from nineteen-under-six to twenty-under-seven exactly once, for
-// "migrate", and the decision is recorded rather than assumed: ledger adoption
-// became fail-closed (lock.AdoptProject), and the deliberate one-time act that
-// replaces it could not be a flag on an existing verb without putting an
-// irreversible, content-blessing write behind a command CI runs every commit.
-func TestSurfaceIsTwentyLeavesUnderSevenNouns(t *testing.T) {
+// It moved from nineteen-under-six to twenty-under-seven exactly once, for the
+// migration verb v0.3.0 added when ledger adoption became fail-closed — and
+// v0.4.0 takes it straight back out, which is why this reads nineteen again.
+// Removal is the same kind of decision as addition and is recorded the same way:
+// v0.4.0 removes adoption itself, so a project that predates the lock ledger
+// crosses onto it by holding nothing that predates it (lock.CrossPreLedger)
+// rather than by running a command that records content nobody approved. With
+// nothing left to adopt there is nothing for the verb to do. It survives as a
+// hidden retired stub, counted by TestRetiredInvocationsNameTheirReplacement
+// rather than here.
+func TestSurfaceIsNineteenLeavesUnderSevenNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -302,7 +307,6 @@ func TestSurfaceIsTwentyLeavesUnderSevenNouns(t *testing.T) {
 		"build-order status":  true,
 		"build-order lock":    true,
 
-		"migrate":       true,
 		"serve":         true,
 		"skills export": true,
 		"version":       true,
@@ -351,8 +355,8 @@ func TestSurfaceIsTwentyLeavesUnderSevenNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 20 {
-		t.Errorf("the surface is 20 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 19 {
+		t.Errorf("the surface is 19 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 

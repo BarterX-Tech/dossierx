@@ -33,7 +33,6 @@
 package lock
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -101,12 +100,14 @@ type LedgerRecord struct {
 	// part of the record that a machine cannot generate for itself.
 	Reason string `json:"reason"`
 
-	// Grandfathered marks a record ADOPTED on upgrade rather than earned
-	// through the approval path — its Hash is whatever the claim happened to
-	// contain on adoption day, which is NOT evidence that a human ever approved
-	// those exact bytes. It stays on the record permanently so nobody
-	// mistakes an adoption for an approval, and so a project can find and
-	// re-lock its grandfathered claims deliberately.
+	// Grandfathered is a HISTORICAL marker, read-only in this build. Nothing
+	// writes it any more: v0.4.0 removed the adoption path that minted records
+	// from content nobody approved, so every record this build creates is an
+	// approval and carries false. The field survives because it is persisted
+	// state — Store.Save marshals this struct wholesale — and dropping it would
+	// silently rewrite every surviving legacy record into one indistinguishable
+	// from a human approval on the very next ordinary write. Readers still read
+	// it, and a project can still find and re-lock the records it marks.
 	Grandfathered bool `json:"grandfathered,omitempty"`
 
 	// ReleasedAt/By/Reason record a legitimate unlock. A record with
@@ -157,12 +158,13 @@ func DefaultActor() string {
 	return "unknown"
 }
 
-// ledgerAnnounceWriter is where grandfathering announces itself. It is a
-// package-level var rather than a writer threaded through every caller
-// precisely BECAUSE adoption must never be silent: adoption happens deep inside
-// a store-load path reached from five different commands, and an announcement
-// that each caller has to remember to print is an announcement that one of them
-// will eventually forget. Tests redirect it; nothing else should.
+// ledgerAnnounceWriter is where a one-time store migration announces itself. It
+// is a package-level var rather than a writer threaded through every caller
+// precisely BECAUSE such a migration must never be silent: it happens deep
+// inside a store-load path reached from five different commands, and an
+// announcement that each caller has to remember to print is an announcement
+// that one of them will eventually forget. Tests redirect it; nothing else
+// should.
 var ledgerAnnounceWriter io.Writer = os.Stderr
 
 // Record returns the ledger record for key (a claim id, or
@@ -241,12 +243,13 @@ func RecordApproval(store *Store, claim model.Claim, ap Approval) {
 // treats most seriously, because the agent takes the preview to its human, gets
 // a yes, and then cannot deliver it.
 //
-// It deliberately does NOT fold in the adoption check: an un-migrated project
-// has locked_at on every locked claim and no records at all, and Lock refuses
-// that case FIRST with the migrate hint, which is the more actionable answer.
-// The preview asks that question separately (migratedPrecondition).
+// It deliberately does NOT fold in the pre-ledger check: a project whose store
+// predates the ledger has locked_at on every locked claim and no records at
+// all, and Lock refuses that case FIRST with the crossing instructions, which
+// is the more actionable answer. The preview asks that question separately
+// (preLedgerPrecondition).
 func (s *Store) LedgerRecordDeleted(claim model.Claim) bool {
-	if s == nil || s.adoptionRequiredOnDisk() {
+	if s == nil || s.preLedgerUnadoptedOnDisk() {
 		return false
 	}
 	_, ok := ledgerRecordFor(s, claim.ID)
@@ -344,18 +347,17 @@ func RecordBuildOrderApproval(store *Store, module, hash string, ap Approval) {
 }
 
 // PreLedger reports whether this store was loaded from a file written by a
-// build that PREDATES the lock ledger — the one condition under which adopting
-// existing locks is honest rather than a bypass.
+// build that PREDATES the lock ledger — the one condition under which crossing
+// onto the ledger is honest rather than a bypass.
 //
-// It is the same predicate AdoptProject keys on, exported because build-order
-// artifacts have to be grandfathered on exactly the same terms and cannot be
-// reached from this package (internal/buildorder imports internal/lock, so the
-// edge cannot run the other way). Callers must consult it BEFORE PrepareStore,
-// which stamps the current version as its last act.
+// It is the same predicate CrossPreLedger keys on, exported because build-order
+// artifacts sit under exactly the same exemption and cannot be reached from this
+// package (internal/buildorder imports internal/lock, so the edge cannot run
+// the other way).
 //
-// Both halves matter. A store at the current version never adopts again: after
-// the upgrade, a locked artifact without a record is a finding, not an
-// invitation. And an ABSENT store never adopts at all, because absence is
+// Both halves matter. A store at the current version never crosses again: after
+// the crossing, a locked artifact without a record is a finding, not an
+// invitation. And an ABSENT store never crosses at all, because absence is
 // indistinguishable from someone deleting the ledger to re-bless a tampered
 // project — which would make `rm .dossierx-lock-store.json` the universal
 // bypass.
@@ -384,8 +386,8 @@ func (s *Store) PreLedger() bool {
 //
 //   - digestStorePresent: .dossierx-comment-digest.json is a SIBLING file that
 //     this build creates at the exact moment a project becomes ledger-covered —
-//     PrepareStore's adoptCommentDigests for a project that migrates across, and
-//     Store.Save's ensureCommentDigestStore for a fresh project that crosses on
+//     CrossPreLedger for a pre-ledger project that crosses, and Store.Save's
+//     ensureCommentDigestStore for a fresh project that crosses on
 //     its first lock. A genuine v0.2.x project has never had one (the file did
 //     not exist before v0.3.0), so its presence beside a store that says
 //     "version 1" is a contradiction: this project HAS been through a
@@ -418,66 +420,50 @@ func (s *Store) LedgerDowngraded(digestStorePresent bool) bool {
 	return digestStorePresent || s.ledgerKeyOnDisk || len(s.Ledger) > 0
 }
 
-// AdoptionRequired reports whether this project still has to run the ONE-TIME,
-// EXPLICIT adoption (AdoptProject — the CLI's "dossierx migrate --adopt") before
-// anything here can carry a lock-ledger approval: its store predates the ledger,
-// and the project around it does not contradict that.
+// PreLedgerUnadopted reports whether this project's store predates the lock
+// ledger and has not crossed onto it yet, with the project around it not
+// contradicting that claim. Nothing here can carry a lock-ledger approval until
+// it crosses (CrossPreLedger).
 //
-// ADOPTION FAILS CLOSED, and this predicate is where that decision lives. It
-// used to be spelled PreLedgerExempt, and the name was the design: a pre-ledger
-// project was EXEMPT — the read-only gate grandfathered it in memory, the write
+// THE LEDGER FAILS CLOSED, and this predicate is where that decision lives. It
+// used to be spelled as an EXEMPTION, and the name was the design: a pre-ledger
+// project was exempt — the read-only gate grandfathered it in memory, the write
 // path (any `dossierx check`, any claim command) grandfathered it on disk, and
 // both happened without anybody asking for it. That was chosen to keep an honest
 // v0.2.x project from being accused of tampering on upgrade day, and it worked
-// for that. What it also did was make ADOPTION SOMETHING AN ATTACKER COULD
+// for that. What it also did was make GRANDFATHERING SOMETHING AN ATTACKER COULD
 // TRIGGER: the trigger is the store's own version field plus the absence of
 // records, so downgrading the version and deleting the ledger key re-armed the
-// adoption of whatever the claims said at that moment. LedgerDowngraded closed
+// blessing of whatever the claims said at that moment. LedgerDowngraded closed
 // the version-field half by finding evidence the audited file does not own — but
 // no evidence in this directory can tell an honest v0.2.x store from a downgraded
 // one once BOTH the ledger key and the comment digest store are gone in the same
 // commit, because locked_at (the only other pre-ledger artifact) shipped in
 // v0.2.0 and looks identical either way.
 //
-// So the answer is not a cleverer predicate. It is that nothing is EVER adopted
-// implicitly: the state below is a REFUSAL with a name
-// (RuleLockLedgerAdoptionRequired) and a one-time command to clear it, and the
-// only code path that writes a grandfathered record is the one a human runs
-// deliberately. An adoption a command performs on its own is an adoption an
-// attacker can perform on their own.
+// So the answer is not a cleverer predicate. It is that nothing is EVER blessed
+// implicitly: while this project still holds a locked artifact the state below
+// is a REFUSAL with a name (RuleLockLedgerPreLedger), and the only way across is
+// to empty the project of everything that predates the ledger and re-lock what a
+// human still stands behind. A blessing a command performs on its own is a
+// blessing an attacker can perform on their own.
 //
 // It is a conjunction, not a synonym for PreLedger: a store whose pre-ledger
-// claim is CONTRADICTED (see LedgerDowngraded) is not offered the migration at
+// claim is CONTRADICTED (see LedgerDowngraded) is not offered the crossing at
 // all — it is reported as downgraded, and the recovery is version control, never
-// an adoption that would record the tampered content as approved.
-func (s *Store) AdoptionRequired(digestStorePresent bool) bool {
+// a re-lock that would record the tampered content as approved.
+func (s *Store) PreLedgerUnadopted(digestStorePresent bool) bool {
 	return s.PreLedger() && !s.LedgerDowngraded(digestStorePresent)
 }
 
-// PreLedgerExempt is AdoptionRequired under its old name, kept because callers
-// outside this package (internal/check's next-step hint and its build-order
-// gate, cmd/dossierx's build-order grandfathering) were written when this state
-// meant "silently exempt" and still read it to decide whether to accuse a
-// pre-ledger project of a missing record.
-//
-// The predicate is unchanged and those call sites are still RIGHT to suppress
-// their per-artifact findings here — what changed is that the state is no longer
-// silent underneath them: lock.Audit now reports the project-scoped
-// RuleLockLedgerAdoptionRequired for exactly the same condition, so the gate
-// fails and names the migration instead of passing. Keeping the old name working
-// is what lets that flip land without a cross-package rename in the same change.
-func (s *Store) PreLedgerExempt(digestStorePresent bool) bool {
-	return s.AdoptionRequired(digestStorePresent)
-}
-
-// adoptionRequiredOnDisk is AdoptionRequired for the WRITE paths, which have a
-// real directory to look in and so read the digest store's presence from it —
+// preLedgerUnadoptedOnDisk is PreLedgerUnadopted for the WRITE paths, which have
+// a real directory to look in and so read the digest store's presence from it —
 // the same split LedgerDowngraded/digestStorePresentBeside already makes, and
 // for the same reason: the read paths must take that evidence from the store
 // they were handed (which is what makes `check --staged` answer for the INDEX
 // rather than for the working tree).
-func (s *Store) adoptionRequiredOnDisk() bool {
-	return s.AdoptionRequired(digestStorePresentBeside(s.path))
+func (s *Store) preLedgerUnadoptedOnDisk() bool {
+	return s.PreLedgerUnadopted(digestStorePresentBeside(s.path))
 }
 
 // digestStorePresentBeside reports whether the comment digest store is on disk
@@ -505,8 +491,8 @@ func digestStorePresentBeside(lockStorePath string) bool {
 // also be the evidence — so it is keyed on this instead: a project still at an
 // older lock-store version is mid-upgrade and exempt, a project already stamped
 // current is not. See internal/check's comment-digest-absent rule, and
-// PrepareStore, which creates the digest store at the same moment it stamps this
-// version so an upgrading project crosses both lines together.
+// CrossPreLedger, which creates the digest store at the same moment it stamps
+// this version so an upgrading project crosses both lines together.
 func (s *Store) LedgerCovered() bool {
 	return s != nil && s.fileExists && s.diskVersion >= ledgerSchemaVersion
 }
@@ -549,57 +535,12 @@ func (s *Store) LedgerCovered() bool {
 // per-claim findings on top of it would bury the one sentence a reader needs.
 // REPORTING says it once; REFUSING has to hold everywhere.
 //
-// It stays silent on the honest un-migrated project — a genuine v0.2.x store is
+// It stays silent on the honest pre-ledger project — a genuine v0.2.x store is
 // pre-ledger and NOT downgraded (no ledger key, no digest store beside it), so
-// it answers "no" and every gate below it stays off, which is what keeps
-// `migrate --adopt` reachable.
+// it answers "no" and every gate below it stays off, which is what keeps the
+// crossing reachable.
 func (s *Store) LedgerEstablished(digestStorePresent bool) bool {
 	return s.LedgerCovered() || s.LedgerDowngraded(digestStorePresent)
-}
-
-// AdoptBuildOrderApproval grandfathers one module's already-locked build-order
-// artifact into the ledger, and reports whether it wrote anything.
-//
-// It is the build-order twin of AdoptProject's per-claim adoption, for projects
-// that locked a build order before this release gave build orders a record. The
-// Grandfathered flag stays on permanently and says honestly what was
-// established: these are the bytes that were on disk on adoption day, not bytes
-// anybody approved.
-//
-// An existing record is never overwritten — an adoption must not be able to
-// quietly replace a real approval.
-//
-// It REFUSES on a store that still owes the one-time claim adoption
-// (AdoptionRequired), and that refusal is what keeps the two halves of a
-// project's adoption from crossing the ledger line separately. Its one caller is
-// cmd/dossierx's planMigration, behind "dossierx migrate --adopt" — it used to be
-// prepareStore, which runs on every store-opening command, and moving it is the
-// build-order half of the same fail-closed decision: an ordinary `dossierx check`
-// must not sign a locked build-order artifact as-found. Before this guard it was
-// free to write a build-order record into a v0.2.x store,
-// leaving a store that carries ledger records at a pre-ledger version — which
-// LedgerDowngraded reads, correctly by its own rules, as a DOWNGRADE, and reports
-// against a project that did nothing but run `dossierx check`. The build-order
-// half belongs to the same one-time migration as the claim half: AdoptProject
-// stamps the schema in memory before it returns, so a migration command that
-// adopts build orders after calling it finds this guard already satisfied.
-func AdoptBuildOrderApproval(store *Store, module, hash string) bool {
-	if store == nil || store.adoptionRequiredOnDisk() {
-		return false
-	}
-	key := BuildOrderLedgerKey(module)
-	if _, exists := store.Record(key); exists {
-		return false
-	}
-	store.putRecord(key, LedgerRecord{
-		Subject:       SubjectBuildOrder,
-		Hash:          hash,
-		At:            nowFunc().UTC().Format(time.RFC3339Nano),
-		Actor:         DefaultActor(),
-		Reason:        "grandfathered: this build order was locked before this project had a lock ledger; content adopted as-found, never approved",
-		Grandfathered: true,
-	})
-	return true
 }
 
 // ReleaseApproval marks claimID's ledger record released by a legitimate
@@ -658,266 +599,138 @@ func ReleaseBuildOrderApproval(store *Store, module string, ap Approval) bool {
 	return true
 }
 
-// ErrAdoptionNotRequired is AdoptProject's refusal of a project that is already
-// covered by the lock ledger. It is a sentinel so the migration command can tell
-// this case apart from ErrAdoptionRefused and report it with its own recovery.
+// preLedgerCrossingSteps is the recovery every pre-ledger refusal names, and it
+// is the same words everywhere so the write path, the audit gate and the CLI
+// hint cannot send a reader three different ways.
 //
-// The command classifies it as a REFUSAL (already_migrated, exit 1), not as a
-// success — an earlier version of this comment said the opposite, and the
-// command is right. It is the shape cliout.CodeAlreadyLocked already argues for:
-// a command asked to change something that finds nothing to change was called on
-// a wrong belief, and ok:true leaves that belief in place. What must never
-// happen either way is a SECOND adoption: a covered project with records missing
-// is a tamper, and the recovery for it is version control, never re-running the
-// migration over whatever the claims say now.
-var ErrAdoptionNotRequired = errors.New("lock: this project is already covered by the lock ledger; there is nothing to adopt")
+// The ORDER is not cosmetic. "build-order propose" requires the module still
+// FULLY LOCKED, so re-proposing has to happen BEFORE any claim is unlocked; the
+// other order deadlocks — unlock a claim first and propose then refuses, leaving
+// the locked order with no way to be released.
+const preLedgerCrossingSteps = `Cross onto the ledger by emptying the project of everything that predates it, in this order:
+  1. dossierx build-order propose --module <m>
+     for every module whose build order is locked. Do this FIRST: propose requires the module still fully locked, so unlocking a claim first leaves the order stuck.
+  2. dossierx claim unlock <id> --reason "..."
+     for every locked claim. Unlock is gateless and always has been.
+  3. dossierx claim lock <id> --reason "..."
+     re-lock only what you still stand behind. The FIRST of these crosses the store onto the ledger and records a real approval — locking is what says a human approved these exact bytes.
+  4. dossierx build-order propose --module <m>
+     dossierx build-order lock --module <m> --reason "..."`
 
-// ErrAdoptionRefused is AdoptProject's refusal of a project it must not adopt at
-// all: an ABSENT lock store (indistinguishable from a deleted one), or a store
-// whose pre-ledger claim the project around it contradicts (LedgerDowngraded).
-// Both are states where adopting would record content nobody approved, which is
-// precisely what the person who produced the state wants.
-var ErrAdoptionRefused = errors.New("lock: this project's lock store cannot be adopted")
-
-// Adoption is what one run of AdoptProject established, so the command that ran
-// it can put the ids in a machine envelope instead of leaving them only on
-// stderr. Naming what was adopted is not optional: an adoption records "whatever
-// the files said just now" as the approved content, so the run that performs one
-// is exactly the run a human has to review.
-type Adoption struct {
-	// Claims is the claim ids given a grandfathered ledger record, sorted.
-	Claims []string
-	// CommentDigests is the claim ids whose comment blocks were recorded into
-	// the comment digest store, sorted.
-	CommentDigests []string
+// preLedgerRefusal composes the refusal ErrPreLedgerUnadopted carries, naming
+// how much of the project still predates the ledger so a reader can see which
+// half of the count is keeping them out.
+func preLedgerRefusal(lockedClaims, lockedBuildOrders int) error {
+	return fmt.Errorf("%w: this project's lock store predates the lock ledger, so nothing locked here has an approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more. %d locked claim(s) and %d locked build order(s) still predate it.\n\n%s",
+		ErrPreLedgerUnadopted, lockedClaims, lockedBuildOrders, preLedgerCrossingSteps)
 }
 
-// AdoptProject performs the ONE-TIME, EXPLICIT adoption of a project that locked
-// claims before the ledger existed: every currently-locked claim with no record
-// gets one, marked Grandfathered; every claim's comment block is recorded into
-// the comment digest store; the lock store is stamped to the ledger schema and
-// saved. It is the single entry point "dossierx migrate --adopt" calls, and it
-// is the ONLY path in this build that writes a grandfathered claim record.
+// CrossPreLedger is the ONE place in this build that raises a store's schema
+// version. It crosses a pre-ledger project into the ledger schema at the only
+// moment that requires no adoption at all: when the project has NOTHING LEFT
+// that predates the ledger.
 //
-// IT IS EXPLICIT BECAUSE ADOPTION FAILS CLOSED. This code used to run by itself,
-// from inside PrepareStore, on any command that opened the store for writing —
-// so a project that presented the pre-ledger SHAPE was adopted whether or not
-// anybody had asked, and "present the pre-ledger shape" is two hand edits
-// (lower the version, delete the ledger key). LedgerDowngraded caught those two
-// edits by reading evidence outside the store; deleting the comment digest store
-// in the same commit removed that evidence, and nothing left in the directory can
-// tell the result from an honest v0.2.x project — locked_at, the only other
-// pre-ledger artifact, shipped in v0.2.0 and looks identical either way. An
-// implicit adoption is therefore a laundering path by construction, no matter how
-// good its predicate is. See AdoptionRequired.
+// Nothing is grandfathered, because there is nothing to grandfather. That is the
+// whole difference from the removed adoption path (see CHANGELOG v0.4.0), and it
+// is why this is safe to do from an ordinary write path: an attacker who empties
+// the project of every locked artifact to trigger it has destroyed the approvals
+// they were trying to launder.
 //
-// What that costs, stated plainly: this is a BREAKING upgrade. Every existing
-// v0.2.x project fails `dossierx check` (RuleLockLedgerAdoptionRequired) until a
-// human runs the migration once and commits the two files it writes. That is the
-// price of the guarantee that no command in this binary ever blesses locked
-// content on its own.
+// IT CROSSES BOTH LINES IN ONE ACT: the comment digest store is created FIRST
+// and the lock store stamped and saved SECOND, because a store at the ledger
+// schema with no digest store beside it is what internal/check reports as
+// comment-digest-absent (internal/check/ledger.go's RuleCommentDigestAbsent) — a
+// finding whose "restore it from version control" recovery would name a file
+// that never existed. Nothing else will create it for this project:
+// SweepCommentDigests excludes a pre-ledger store from its crossing on purpose
+// (see its `crossing` predicate) and Store.Save's ensureCommentDigestStore is
+// gated on !s.fileExists, which is false here.
 //
-// The preconditions are the ones the implicit version already enforced, now
-// returning errors a command can classify instead of silently doing nothing:
+// A DOWNGRADED store is left alone and returns nil, preserving today's exact
+// behaviour: the write path never refused a downgraded store either (see
+// preLedgerUnadoptedOnDisk's conjunction), because RuleLockLedgerDowngraded owns
+// that diagnosis and its recovery is version control.
 //
-//   - An ABSENT store file never adopts. It is indistinguishable from someone
-//     deleting the ledger to re-bless a tampered project, so "empty ledger means
-//     adopt everything" would make `rm .dossierx-lock-store.json` the universal
-//     bypass — and the migration command must not become that `rm`'s second half.
-//     Those claims surface from the gate as lock-ledger-missing plus the
-//     project-scoped lock-ledger-absent, and the recovery is version control.
+// LOCKING — READ THIS BEFORE ADDING ANY ACQUISITION. The caller must hold the
+// lock store's file lock (AcquireFileLock on s.path). NOTHING ELSE is required,
+// and nothing else may be taken:
 //
-//   - A store already at the ledger version never adopts again, no matter what
-//     its ledger contains. After the migration, a locked claim WITHOUT a record
-//     is a finding, not an invitation.
+//   - The project's claims sentinel is NOT a precondition. The removed adoption
+//     path required it because it wrote CLAIM-DERIVED content into the digest
+//     store. This does not: the digest store it creates is EMPTY, so claims are
+//     read here for exactly one thing — counting locked artifacts — and nothing
+//     claim-derived is written. The count is stable for the duration anyway,
+//     because every command that changes a claim's LOCK STATUS takes the
+//     lock-store sentinel this caller is already holding (claim lock, claim
+//     unlock, claim reaudit --confirm, build-order lock).
+//   - The digest store's own sentinel is taken and released INSIDE this call, as
+//     a leaf, holding nothing else while acquiring it. That is not a new
+//     pattern: Store.Save already does exactly this through
+//     ensureCommentDigestStore, and that path is already reached from
+//     `build-order lock`, which holds the lock-store sentinel and never the
+//     claims sentinel.
 //
-//   - A store whose pre-ledger claim is CONTRADICTED by the project around it
-//     never adopts either (LedgerDowngraded — see it for the evidence and for
-//     what it does not close).
-//
-// ORDERING, and the one failure window it leaves. The comment digest store is
-// written FIRST and the lock store second, because a lock store stamped to the
-// ledger schema with no digest store beside it is the shape check reports as
-// comment-digest-absent — a finding with a version-control recovery that would be
-// wrong here. If the lock store's save then fails, the digest store this call
-// created is removed again, so a failed migration leaves the project exactly as
-// it found it and can simply be re-run.
-//
-// The caller must hold the lock store's file lock (AcquireFileLock) across this
-// call, like any other load-mutate-save on the shared store file, and — because
-// this touches the comment digest store too — it must hold the project's claims
-// sentinel outside that, which is the ordering internal/digest's package comment
-// fixes.
-func AdoptProject(s *Store, claims []model.Claim) (Adoption, error) {
-	if s == nil {
-		return Adoption{}, fmt.Errorf("%w: there is no lock store to adopt", ErrAdoptionRefused)
+// Requiring the claims sentinel here would be a DEADLOCK, not a nicety. The
+// project-wide order is claims -> lock-store -> flag-store. `build-order lock`
+// takes only the lock-store sentinel and says so in its own comment; a claims
+// acquisition inside that held lock inverts the order against `claim lock` and
+// `claim reaudit --confirm`, both of which take claims FIRST.
+func CrossPreLedger(s *Store, claims []model.Claim, lockedBuildOrders int) error {
+	if s == nil || !s.PreLedger() {
+		return nil
 	}
-	if !s.fileExists {
-		return Adoption{}, fmt.Errorf("%w: %s does not exist. An absent lock ledger is never adopted: a missing store is indistinguishable from a deleted one, so adopting here would make deleting the file the way to re-bless every locked claim as-found. If this project has locked claims, restore the lock store from version control; if it has none, there is nothing to migrate — the first \"dossierx claim lock\" creates the store with a real approval record in it",
-			ErrAdoptionRefused, s.path)
+	// The downgraded store: its pre-ledger claim is contradicted by the project
+	// around it, so it is not offered the crossing at all. See
+	// RuleLockLedgerDowngraded, which owns the diagnosis and whose recovery is
+	// version control rather than a re-lock.
+	if !s.preLedgerUnadoptedOnDisk() {
+		return nil
 	}
-	if s.diskVersion >= ledgerSchemaVersion {
-		return Adoption{}, fmt.Errorf("%w: %s is already at lock-ledger schema %d. Adoption is a one-time upgrade step, not a repair: a locked claim with no record in a covered project is a finding (lock-ledger-missing / lock-ledger-deleted), and the recovery for it is restoring the store from version control — re-adopting would record whatever the claims say NOW as approved",
-			ErrAdoptionNotRequired, s.path, s.diskVersion)
+	lockedClaims := countLocked(claims)
+	if lockedClaims+lockedBuildOrders > 0 {
+		return preLedgerRefusal(lockedClaims, lockedBuildOrders)
 	}
+
 	digestStoreExisted := digestStorePresentBeside(s.path)
-	if s.LedgerDowngraded(digestStoreExisted) {
-		// This project has already been through a ledger-aware build, whatever
-		// its version field now says. Adopt nothing, say so on stderr in the
-		// same words the gate uses, and return a refusal the command can report.
-		announceDowngradeRefusal(s.path)
-		return Adoption{}, fmt.Errorf("%w: %s says it predates the lock ledger (schema version %d), but this project has already been through a ledger-aware build — its comment digest store is present, or the store itself still carries the ledger key. Nothing was adopted: a store's own version field must not be able to re-arm adoption, or editing one number would re-bless every locked claim as-found. Restore the lock store from version control; do NOT re-lock, which would record whatever the claims say now as approved",
-			ErrAdoptionRefused, s.path, s.diskVersion)
+	if err := createCommentDigestStore(s.path); err != nil {
+		return err // nothing stamped, nothing else written
 	}
-
-	adoptedDigests, err := adoptCommentDigests(s, claims)
-	if err != nil {
-		return Adoption{}, err
-	}
-
-	adoptedClaims := adoptLedgerRecords(s, claims)
-	if err := s.Save(); err != nil {
-		// Undo the half that landed, so the project is exactly as it was and the
-		// migration can be re-run. Leaving the digest store behind beside an
-		// un-stamped lock store would be read by LedgerDowngraded — correctly by
-		// its own rules — as a downgrade, turning a failed disk write into an
-		// accusation of tampering.
-		if !digestStoreExisted {
-			os.Remove(digest.StorePathBeside(s.path)) //nolint:errcheck // best-effort undo of a write that just failed
-		}
-		return Adoption{}, err
-	}
-
-	if len(adoptedClaims) > 0 {
-		announceAdoption(adoptedClaims)
-	}
-	return Adoption{Claims: adoptedClaims, CommentDigests: adoptedDigests}, nil
-}
-
-// adoptCommentDigests records a digest for every claim that does not already
-// have one and writes the comment digest store, unconditionally — the comment
-// half of AdoptProject.
-//
-// It applies NONE of SweepCommentDigests' filters, and that is deliberate: those
-// filters exist to stop an ORDINARY command from adopting a block whose absence
-// is a finding, and this is not an ordinary command. It runs once, by hand, on a
-// project crossing into ledger coverage, where every locked claim is about to
-// receive a grandfathered record — so filtering standing records out here (as the
-// sweep does) would leave every locked claim in an honest v0.2.x project
-// permanently uncovered, which is the same outage the old pre-ledger exemption
-// existed to avoid.
-//
-// It saves even when nothing was adopted, because the FILE's existence is what
-// marks the project as ledger-covered for the comment rules (see
-// internal/check's comment-digest-absent): a migrated project with no claims
-// still has to come out of this with a digest store beside its ledger.
-//
-// Unlike every other digest write reached from this package it is NOT
-// best-effort. A best-effort sweep that skips a write leaves claims reading as
-// uncovered, which is the loud direction; a migration that skips it leaves a
-// project stamped as covered with no comment evidence at all, which is the quiet
-// one — so the failure is returned and the migration is refused.
-func adoptCommentDigests(s *Store, claims []model.Claim) ([]string, error) {
-	path := digest.StorePathBeside(s.path)
-
-	release, err := AcquireFileLock(path)
-	if err != nil {
-		return nil, fmt.Errorf("lock: adopt comment digests: %w", err)
-	}
-	defer release()
-
-	store, err := digest.LoadStore(path)
-	if err != nil {
-		return nil, fmt.Errorf("lock: adopt comment digests: %w", err)
-	}
-	adopted := digest.Adopt(store, claims)
-	if err := store.Save(); err != nil {
-		return nil, fmt.Errorf("lock: adopt comment digests: %w", err)
-	}
-	return adopted, nil
-}
-
-// adoptLedgerRecords stamps a grandfathered record onto every currently-locked
-// claim that has none and returns the ids (sorted). It is unexported because the
-// preconditions that make adoption honest are AdoptProject's — this half must
-// never be reachable on its own.
-func adoptLedgerRecords(s *Store, claims []model.Claim) (adopted []string) {
-	for _, c := range claims {
-		if c.Status != model.StatusLocked {
-			continue
-		}
-		if _, exists := s.Record(c.ID); exists {
-			continue
-		}
-		s.putRecord(c.ID, LedgerRecord{
-			Subject:       SubjectClaim,
-			Hash:          LockedClaimHash(c),
-			At:            nowFunc().UTC().Format(time.RFC3339Nano),
-			Actor:         DefaultActor(),
-			Reason:        "grandfathered: locked before this project had a lock ledger; content adopted as-found, never approved",
-			Grandfathered: true,
-		})
-		adopted = append(adopted, c.ID)
-	}
-	sort.Strings(adopted)
-
-	// Stamp the in-memory disk version even when nothing was adopted (a
-	// pre-ledger store whose claims are all draft), so the migration is a
-	// complete crossing rather than one that has to be run again — and so a
-	// caller that adopts BUILD ORDERS after this call finds
-	// AdoptBuildOrderApproval's guard already satisfied. AdoptProject's Save is
-	// what persists it.
+	prevDisk, prevVersion := s.diskVersion, s.Version
+	prevLockedAt, prevHashes := s.LockedAt, s.Hashes
 	s.diskVersion = ledgerSchemaVersion
 	s.Version = storeSchemaVersion
-
-	return adopted
-}
-
-// announceAdoption writes the one-time grandfathering notice. It is loud on
-// purpose and says what was and was NOT established: adoption proves only that
-// these were the bytes present on adoption day. Anything tampered with BEFORE
-// the upgrade is adopted along with everything else — that is unavoidable (no
-// record of the original exists to compare against) and is exactly why the
-// notice tells the human to review, and why Grandfathered stays on the record.
-func announceAdoption(adopted []string) {
-	if ledgerAnnounceWriter == nil {
-		return
+	// THE PRE-LEDGER BOOKKEEPING GOES WITH THE STAMP, and this is not tidying.
+	//
+	// locked_at and the per-dependent baselines are what engineLocked reads as
+	// "this engine locked that claim" (audit.go). In a pre-ledger project they
+	// were written by a build that had no ledger, and the pre-ledger predicate is
+	// what stops RuleLockLedgerDeleted and Lock's ErrLedgerRecordDeleted from
+	// reading them as a record somebody DELETED. The stamp removes that
+	// suppression while leaving the evidence behind — so without this, the very
+	// first re-lock of step 3 is refused as a deleted record, and `check` accuses
+	// every previously-locked claim of tampering. The recovery the refusal names
+	// would be unfollowable, which is the exact defect this release exists to fix.
+	//
+	// It costs nothing, and row 4's precondition is why: the project holds ZERO
+	// locked artifacts here, so no drift baseline belongs to anything (DetectStale
+	// reads baselines for LOCKED claims only) and no locked_at describes a
+	// standing approval. Every re-lock in step 3 writes both again, from content a
+	// human has just approved.
+	s.LockedAt = map[string]string{}
+	s.Hashes = map[string]map[string]string{}
+	if err := s.Save(); err != nil {
+		s.diskVersion, s.Version = prevDisk, prevVersion // un-stamp in memory
+		s.LockedAt, s.Hashes = prevLockedAt, prevHashes
+		if !digestStoreExisted {
+			// undo: leave the project exactly as found. A digest store left
+			// beside an un-stamped lock store is read by LedgerDowngraded —
+			// correctly, by its own rules — as a downgrade, which would turn a
+			// failed disk write into an accusation of tampering.
+			os.Remove(digest.StorePathBeside(s.path)) //nolint:errcheck // best-effort undo of a write that just failed
+		}
+		return err
 	}
-	fmt.Fprintf(ledgerAnnounceWriter,
-		"dossierx: lock ledger created — %d already-locked claim(s) adopted as grandfathered.\n"+
-			"  Their recorded content is what was on disk just now, NOT content anyone approved:\n"+
-			"  any edit made before this upgrade is adopted with it. From here on, every change to\n"+
-			"  a locked claim is detected. Review the adopted claims, and re-lock any you are not\n"+
-			"  sure of (dossierx claim unlock <id> --reason ... then dossierx claim lock <id> --reason ...):\n",
-		len(adopted))
-	for _, id := range adopted {
-		fmt.Fprintf(ledgerAnnounceWriter, "    %s\n", id)
-	}
-}
-
-// announceDowngradeRefusal writes the notice for the other half of AdoptProject's
-// decision: a store that asked to be grandfathered and was refused.
-//
-// It is as loud as the adoption notice, and for the sharper reason. Adoption is
-// a one-time upgrade event; a refused adoption means the lock store on disk
-// disagrees with the rest of the project about whether this project has ever had
-// a ledger, and the only two ways to reach that state are a hand-edited store
-// and a partly-restored one. Both need a human. The recovery named is version
-// control, never re-locking — re-locking records whatever the claims say NOW,
-// which is precisely what the edit was for.
-func announceDowngradeRefusal(path string) {
-	if ledgerAnnounceWriter == nil {
-		return
-	}
-	fmt.Fprintf(ledgerAnnounceWriter,
-		"dossierx: %s says it predates the lock ledger, but this project has already been through a\n"+
-			"  ledger-aware build (its comment digest store exists, or the store still carries the\n"+
-			"  ledger key, which did not exist before the ledger). Nothing was grandfathered: a\n"+
-			"  store's own version field must not be able to re-arm adoption, or editing one number\n"+
-			"  would re-bless every locked claim as-found.\n"+
-			"  Restore the lock store from version control — do NOT re-lock, which would record whatever\n"+
-			"  the claims say now as approved.\n",
-		path)
+	return nil
 }
 
 // PrepareStore runs the on-load store migrations a command that opens the store
@@ -927,21 +740,21 @@ func announceDowngradeRefusal(path string) {
 //  1. MigrateLegacyStore re-arms per-dependent DEPENDENCY baselines for a store
 //     that predates them (schema 0).
 //
-// LEDGER ADOPTION IS NO LONGER ONE OF THEM. It used to be step 2 here, which
-// meant every ordinary command grandfathered any project presenting the
-// pre-ledger shape — and presenting that shape is two hand edits. It now lives
-// in AdoptProject, behind an explicit "dossierx migrate --adopt" a human runs
-// once; see AdoptProject and AdoptionRequired for the full argument, and
-// audit.go's RuleLockLedgerAdoptionRequired for what an un-migrated project sees
+// CROSSING ONTO THE LEDGER IS NOT ONE OF THEM. Grandfathering used to be step 2
+// here, which meant every ordinary command blessed any project presenting the
+// pre-ledger shape — and presenting that shape is two hand edits. There is no
+// grandfathering left at all: a pre-ledger project crosses only through
+// CrossPreLedger, which refuses while anything locked still predates the ledger,
+// and audit.go's RuleLockLedgerPreLedger is what a pre-ledger project sees
 // instead of silence.
 //
 // It reports changed=true if the migration modified the store, so the caller
-// knows to Save. It returns NOTHING about adoption, and that is the point: it
-// briefly kept an `adopted []string` return that was always nil, to spare the
+// knows to Save. It returns NOTHING about grandfathering, and that is the point:
+// it briefly kept an `adopted []string` return that was always nil, to spare the
 // call sites a change, and a permanently-nil return on a function whose old job
-// was adoption is a trap — it reads as "nothing was adopted this run" when what
-// it means is "this function no longer adopts". The grandfathered ids come from
-// AdoptProject, which is the only thing that produces any.
+// was grandfathering is a trap — it reads as "nothing was blessed this run" when
+// what it means is "this function does not bless anything". Nothing in this
+// build produces any.
 //
 // It also runs the COMMENT DIGEST COVERAGE SWEEP, on every call rather than only
 // on a migration — see SweepCommentDigests for why coverage that only ever
@@ -961,8 +774,8 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool) {
 	// It no longer has to be read BEFORE anything, because nothing in this
 	// function stamps the schema version any more. That is the same reason the
 	// `stale` flag this used to compute is gone: a pre-ledger store is left
-	// exactly as found — un-stamped, un-adopted, and reported by the gate — until
-	// the migration runs.
+	// exactly as found — un-stamped, uncrossed, and reported by the gate — until
+	// CrossPreLedger takes it over.
 	covered := s.LedgerEstablished(digestStorePresentBeside(s.path))
 
 	s.commentDigestsAdopted, _ = SweepCommentDigests(s, claims, covered)
@@ -1060,7 +873,7 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool) {
 //
 //   - ledgerCovered: in a project that has been through a ledger-aware build, an
 //     ABSENT digest store is a deleted one, not an upgrade — exactly the rule
-//     AdoptProject applies to the lock ledger itself, where "empty means adopt
+//     PreLedger applies to the lock ledger itself, where "empty means bless
 //     everything" would make `rm` the universal bypass. Nothing is adopted, the
 //     file is left absent so check can report comment-digest-absent, and the
 //     recovery is version control (or the reason-carrying `comment reaudit
@@ -1076,10 +889,10 @@ func PrepareStore(s *Store, claims []model.Claim) (changed bool) {
 // The per-id half is skipped on the UPGRADE CROSSING (a fresh project with no
 // stores at all) and only there — nothing in such a project has been approved or
 // reviewed, so there is nothing an adoption could launder. A PRE-LEDGER project
-// is not a crossing and is not adopted here at all: its whole comment store is
-// written by AdoptProject, in the same act that writes its ledger records, so its
-// locked claims are covered by the migration rather than left permanently
-// uncovered by a filter.
+// is not a crossing and is not adopted here at all: its digest store is created
+// by CrossPreLedger, EMPTY, in the same act that stamps the schema — and by then
+// the project holds nothing locked, so there is nothing left for a filter to
+// leave uncovered.
 //
 // THE RELEASE HALF is the only caller of digest.Store.Forget, and it is narrow
 // on purpose: an entry is dropped only when its claim is gone AND its departure
@@ -1112,17 +925,16 @@ func SweepCommentDigests(s *Store, claims []model.Claim, ledgerCovered bool) (ad
 	// been approved. This is the one state in which absence is honest, and the one
 	// in which the whole project is adopted at once.
 	//
-	// A PRE-LEDGER project is deliberately NOT a crossing any more, and the
-	// !s.PreLedger() term is what excludes it. While adoption was implicit the two
-	// crossed together inside PrepareStore — the ledger was stamped to schema 2
-	// and this created the digest store in the same run — so the pair was always
-	// consistent. With adoption made explicit, creating the digest store here
-	// would leave a v0.2.x project carrying a comment digest store beside a
-	// version-1 lock store, which is precisely the contradiction LedgerDowngraded
-	// is built to detect: the very next `dossierx check` would report
-	// lock-ledger-downgraded against a project whose only crime was being
-	// un-migrated. The digest store for such a project is written by AdoptProject,
-	// with the ledger records, in one act.
+	// A PRE-LEDGER project is deliberately NOT a crossing here, and the
+	// !s.PreLedger() term is what excludes it. While grandfathering was implicit
+	// the two crossed together inside PrepareStore — the ledger was stamped to
+	// schema 2 and this created the digest store in the same run — so the pair was
+	// always consistent. Creating the digest store here now would leave a v0.2.x
+	// project carrying a comment digest store beside a version-1 lock store, which
+	// is precisely the contradiction LedgerDowngraded is built to detect: the very
+	// next `dossierx check` would report lock-ledger-downgraded against a project
+	// whose only crime was predating the ledger. The digest store for such a
+	// project is written by CrossPreLedger, with the schema stamp, in one act.
 	crossing := !store.FileExists() && !ledgerCovered && !s.PreLedger()
 
 	// Neither case below matches the third state — a COVERED project with no

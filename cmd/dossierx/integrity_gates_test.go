@@ -288,10 +288,10 @@ func TestCheckOnACorruptLedgerReachesTheLedgerRule(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// adoption fails closed, and the one-time migration is what clears it
+// the ledger fails closed, and the crossing is what clears it
 // ---------------------------------------------------------------------
 
-// TestUpgradeFailsClosedUntilTheMigrationRuns is the end-to-end shape of the
+// TestUpgradeFailsClosedUntilTheProjectCrosses is the end-to-end shape of the
 // fail-closed decision, from the CLI's side.
 //
 // It replaces a test that asserted the opposite — that the first `check` after an
@@ -299,16 +299,15 @@ func TestCheckOnACorruptLedgerReachesTheLedgerRule(t *testing.T) {
 // its envelope. That was the best available answer while adoption was implicit
 // (an adoption reported only on stderr is worse), but the adoption itself was the
 // defect: presenting the pre-ledger shape is two hand edits, so any command that
-// adopts on its own is a command an attacker can aim. Now the ordinary command
-// REFUSES and names the migration, and the migration is the only thing that
-// writes a grandfathered record.
+// blesses on its own is a command an attacker can aim. v0.3.0 moved it behind an
+// explicit command; v0.4.0 removed it, because a command that records content
+// nobody approved is the same defect with a human's finger on it.
 //
 // Four things are pinned here, and each one was a hole at some point in review:
-// the refusal happens at all; it carries a hint naming a command that EXISTS;
-// the migration reports what it adopted in its own envelope rather than on stderr
-// alone; and it is one-time, so re-running it is refused rather than being a
-// second chance to bless whatever the files say now.
-func TestUpgradeFailsClosedUntilTheMigrationRuns(t *testing.T) {
+// the refusal happens at all; it carries a hint naming commands that EXIST; the
+// crossing works and grandfathers NOTHING; and the record it leaves is a real
+// approval, not an adoption.
+func TestUpgradeFailsClosedUntilTheProjectCrosses(t *testing.T) {
 	cfgPath, _, storeFile := ledgerProject(t)
 	const id = "widget.contract.main"
 
@@ -323,13 +322,13 @@ func TestUpgradeFailsClosedUntilTheMigrationRuns(t *testing.T) {
 
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
 	if err == nil || env.OK {
-		t.Fatalf("an un-migrated project must fail closed, got %+v", env)
+		t.Fatalf("a pre-ledger project holding a locked claim must fail closed, got %+v", env)
 	}
 	if env.Error == nil || env.Error.Code != cliout.CodeIntegrityFailed {
 		t.Fatalf("expected %q, got %+v", cliout.CodeIntegrityFailed, env.Error)
 	}
-	if !strings.Contains(env.Error.Hint, "dossierx migrate --adopt") {
-		t.Fatalf("the refusal must name the command that clears it: %+v", env.Error)
+	if !strings.Contains(env.Error.Hint, "dossierx claim unlock") {
+		t.Fatalf("the refusal must name the crossing that clears it: %+v", env.Error)
 	}
 	var data checkData
 	envData(t, env, &data)
@@ -337,51 +336,48 @@ func TestUpgradeFailsClosedUntilTheMigrationRuns(t *testing.T) {
 	for _, f := range data.LedgerFindings {
 		rules = append(rules, f.Rule)
 	}
-	if !containsStr(rules, lock.RuleLockLedgerAdoptionRequired) {
-		t.Fatalf("expected %s among the findings, got %v", lock.RuleLockLedgerAdoptionRequired, rules)
+	if !containsStr(rules, lock.RuleLockLedgerPreLedger) {
+		t.Fatalf("expected %s among the findings, got %v", lock.RuleLockLedgerPreLedger, rules)
 	}
 
-	// The migration. Its envelope carries what it adopted — the whole point of
-	// the field: an adoption announced on stderr alone is an adoption an agent
-	// following the machine contract never sees.
-	migrateEnv, _, err := execCLIJSON(t, "--config", cfgPath, "migrate", "--adopt")
-	if err != nil {
-		t.Fatalf("migrate --adopt: %v", err)
+	// The write path agrees with the gate: locking anything here is refused with
+	// its own code, so an agent can branch on it rather than reading prose.
+	lockEnv, _, lockErr := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved")
+	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
+		t.Fatalf("expected %q from the write path, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
 	}
-	var migrated migrateData
-	envData(t, migrateEnv, &migrated)
-	if !containsStr(migrated.Adopted, id) {
-		t.Fatalf("the adopted ids must be in the payload, got %v", migrated.Adopted)
+
+	// THE CROSSING. Unlock is gateless and always has been, so it works here —
+	// and it is step two of the crossing itself.
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "crossing onto the ledger"); err != nil {
+		t.Fatalf("unlock must never be gated: %v", err)
 	}
-	if !migrated.Grandfathered {
-		t.Fatalf("the payload must say what these records are: %+v", migrated)
+	// The FIRST lock in a project holding nothing locked crosses the store and
+	// records a real approval in the same run.
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved after the crossing"); err != nil {
+		t.Fatalf("the crossing lock must succeed: %v", err)
 	}
-	joined := strings.Join(migrateEnv.Warnings, "\n")
-	if !strings.Contains(joined, "GRANDFATHERED") || !strings.Contains(joined, id) {
-		t.Fatalf("the adoption must be a warning in the envelope, not stderr only, got %v", migrateEnv.Warnings)
-	}
-	// The record itself says so, permanently. This is what stops an adoption
-	// from ever reading as an approval in a later diff.
+
+	// Nothing is grandfathered, because by then there was nothing to
+	// grandfather. That is the whole difference from the removed adoption path.
 	rec, ok := readLedger(t, storeFile)[id]
-	if !ok || !rec.Grandfathered {
-		t.Fatalf("the adopted record must be marked grandfathered: %+v", rec)
+	if !ok {
+		t.Fatalf("the crossing lock must leave a record for %s", id)
+	}
+	if rec.Grandfathered {
+		t.Fatalf("the crossing must record a real APPROVAL, never a grandfathered adoption: %+v", rec)
+	}
+	if raw, readErr := os.ReadFile(storeFile); readErr != nil || !strings.Contains(string(raw), `"version": 2`) {
+		t.Fatalf("the crossing must stamp the ledger schema on disk, got %s (err %v)", raw, readErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(filepath.Dir(storeFile), ".dossierx-comment-digest.json")); statErr != nil {
+		t.Fatalf("the crossing must create the comment digest store in the same act: %v", statErr)
 	}
 
-	// The gate is satisfied afterwards: a migration that leaves check still
-	// refusing is a migration nobody can complete.
+	// The gate is satisfied afterwards: a crossing that leaves check still
+	// refusing is a crossing nobody can complete.
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
-		t.Fatalf("check must pass once the migration has run: %v", err)
-	}
-
-	// And it is ONE-TIME. Re-running it must be a refusal, not a second chance
-	// to record whatever is on disk now as approved — which is exactly what a
-	// re-runnable migration would be for anyone who deleted a record.
-	againEnv, _, againErr := execCLIJSON(t, "--config", cfgPath, "migrate", "--adopt")
-	if againErr == nil || againEnv.OK {
-		t.Fatalf("a second migration must be refused, got %+v", againEnv)
-	}
-	if againEnv.Error == nil || againEnv.Error.Code != cliout.CodeAlreadyMigrated {
-		t.Fatalf("expected %q, got %+v", cliout.CodeAlreadyMigrated, againEnv.Error)
+		t.Fatalf("check must pass once the project has crossed: %v", err)
 	}
 }
 
@@ -858,16 +854,16 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// build-order grandfathering may not be re-armed from inside the ledger
+// the build-order half may not be re-armed from inside the ledger
 // ---------------------------------------------------------------------
 
 // TestBuildOrderAdoptionRefusesADowngradedLedger closes the last door the
 // downgrade attack still had open, and it was a complete bypass of the
 // release's headline invariant in ONE ordinary command.
 //
-// The claim half of grandfathering has been guarded since it shipped: adoption
-// keys on the store's own "version" field, so lock.AdoptProject weighs that claim
-// against evidence the audited file does not own (a sibling comment digest
+// The claim half of grandfathering has been guarded since it shipped: the
+// pre-ledger predicate keys on the store's own "version" field, so it weighs that
+// claim against evidence the audited file does not own (a sibling comment digest
 // store, or ledger records the old schema could not have held) and refuses when
 // the two contradict. The BUILD-ORDER half — which lives in cmd/, because
 // internal/lock cannot import internal/buildorder — was guarded by nothing but
@@ -931,25 +927,25 @@ func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 	}
 }
 
-// TestBuildOrderAdoptionMovedToTheMigrationCommand is the other half, and it is
-// where the last automatic adoption in the binary went.
+// TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths is the
+// state an earlier design of this release STRANDED, and it is reachable by three
+// ordinary commands.
 //
-// A genuine v0.2.x project has a build order locked before this build gave build
-// orders a record, no ledger records at all, and no comment digest store. It has
-// to end up with a grandfathered record — refusing outright would fail every
-// honest upgrade forever with a build-order-ledger-missing the project had no way
-// to have avoided, which is how a gate gets switched off rather than fixed.
+// `claim unlock` never touches the build-order artifact, and internal/buildorder
+// never clears Locked on unlock — so lock a module, lock its order, unlock every
+// claim, and the project holds a LOCKED BUILD ORDER and ZERO locked claims. In a
+// pre-ledger project that state used to report NOTHING (lock.Audit's term is
+// claims-only, and build-order-ledger-missing is suppressed by the pre-ledger
+// exemption) while BOTH write paths refused. A refusal with no finding naming it
+// and no recovery reachable from `check` is precisely the failure the
+// project-scoped rule exists to prevent, re-created one artifact type over.
 //
-// What changed is WHO does it. `check` used to, from inside cmd/dossierx's
-// prepareStore, on the same PreLedgerExempt predicate the claim half used — so
-// when ledger adoption became explicit, this was left as the one path by which an
-// ordinary command still signed locked content as-found. It moved into
-// planMigration. This test pins both halves of that move: the ordinary command
-// adopts NOTHING, and the migration adopts it, grandfathered.
-func TestBuildOrderAdoptionMovedToTheMigrationCommand(t *testing.T) {
+// So the four assertions below are one statement: check and the write path agree.
+func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 	dir := filepath.Dir(cfgPath)
 	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+	const id = "widget.contract.a"
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)
@@ -957,45 +953,53 @@ func TestBuildOrderAdoptionMovedToTheMigrationCommand(t *testing.T) {
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
 		t.Fatalf("build-order lock: %v", err)
 	}
-
+	// Unlock every claim, leaving the locked ARTIFACT in place.
+	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "emptying the project"); err != nil {
+		t.Fatalf("claim unlock: %v", err)
+	}
 	// rewindStoreToPreLedger removes the WHOLE ledger-era footprint — records,
 	// version stamp and the sibling digest store — which is what makes this an
 	// upgrade fixture rather than a reproduction of the attack above.
 	rewindStoreToPreLedger(t, storeFile)
 
-	// The ordinary command: it may fail (this project is un-migrated, so the
-	// gate refuses it — that is the fail-closed decision working), but whatever
-	// it reports, it must not have signed the build order.
+	// No ordinary command signs the build order, then or now.
 	execCLIJSON(t, "--config", cfgPath, "check") //nolint:errcheck // the verdict is not what is on trial; the ledger is
 	// rawLedgerOf, not readLedger: the store is still at the PRE-ledger schema
-	// version at this point (nothing has migrated it), and readLedger asserts the
-	// current one.
+	// version at this point, and readLedger asserts the current one.
 	if rec, ok := rawLedgerOf(t, storeFile)[lock.BuildOrderLedgerKey("widget")]; ok {
-		t.Fatalf("an ordinary command must not adopt a build order any more; got %+v", rec)
+		t.Fatalf("an ordinary command must not sign a build order; got %+v", rec)
 	}
 
-	// The migration: the deliberate act, and the only one that writes a
-	// grandfathered record.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "migrate", "--adopt")
-	if err != nil {
-		t.Fatalf("migrate --adopt on an honest pre-ledger project must succeed: %v", err)
-	}
-	var data migrateData
+	// 1 + 2. check names the state exactly once, and does not accuse the build
+	// order itself.
+	env, _, _ := execCLIJSON(t, "--config", cfgPath, "check") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it emits is the assertion
+	var data checkData
 	envData(t, env, &data)
-	if !containsStr(data.Adopted, lock.BuildOrderLedgerKey("widget")) {
-		t.Fatalf("the migration must name the build order it adopted, got %v", data.Adopted)
+	preLedger, missing := 0, 0
+	for _, f := range data.LedgerFindings {
+		switch f.Rule {
+		case lock.RuleLockLedgerPreLedger:
+			preLedger++
+		case "build-order-ledger-missing":
+			missing++
+		}
 	}
-	rec, ok := readLedger(t, storeFile)[lock.BuildOrderLedgerKey("widget")]
-	if !ok {
-		t.Fatalf("the migration must adopt the locked build order")
+	if preLedger != 1 {
+		t.Fatalf("expected exactly one %s (not one per module, and not two from the two emitters), got %d in %+v",
+			lock.RuleLockLedgerPreLedger, preLedger, data.LedgerFindings)
 	}
-	if !rec.Grandfathered {
-		t.Fatalf("an adopted build order is grandfathered, never approved: %+v", rec)
+	if missing != 0 {
+		t.Fatalf("the pre-ledger exemption still covers the build order itself; got %d build-order-ledger-missing", missing)
 	}
-	// And the project is clean afterwards: a migration that leaves the gate
-	// still refusing is a migration nobody can complete.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
-		t.Fatalf("check must pass once the migration has run: %v", err)
+
+	// 3 + 4. Both write paths refuse, with the code an agent branches on.
+	lockEnv, _, lockErr := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
+	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
+		t.Fatalf("claim lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
+	}
+	boEnv, _, boErr := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
+	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodePreLedgerUnadopted {
+		t.Fatalf("build-order lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, boEnv.Error)
 	}
 }
 

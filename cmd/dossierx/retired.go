@@ -1,7 +1,7 @@
-// retired.go holds the v0.3.0 surface's memory of its own past: the ten
-// top-level verbs and four comment verbs the release removed, registered as
-// HIDDEN stubs that exist for exactly one purpose — to fail with the sentence
-// that names the replacement.
+// retired.go holds the surface's memory of its own past: the top-level verbs
+// and four comment verbs v0.3.0 removed, plus `migrate`, removed by v0.4.0 —
+// registered as HIDDEN stubs that exist for exactly one purpose, to fail with
+// the sentence that names the replacement.
 //
 // The reason they have to exist as commands, rather than as a paragraph in
 // SKILL.md, is that cobra decides two things BEFORE any unknown-command handler
@@ -31,9 +31,9 @@
 //
 // They are HIDDEN (absent from --help, from the completion script, and from
 // requireSubcommand's "run one of:" list) because they are not surface: nothing
-// should discover them, and the seven-noun/twenty-leaf contract is a design
+// should discover them, and the seven-noun/nineteen-leaf contract is a design
 // constraint the release argues for. annotationRetired is what keeps
-// TestSurfaceIsTwentyLeavesUnderSevenNouns honest about that — it excludes these
+// TestSurfaceIsNineteenLeavesUnderSevenNouns honest about that — it excludes these
 // by MARK, not by hidden-ness, so a real leaf can never be smuggled past the
 // count by hiding it.
 package main
@@ -103,14 +103,14 @@ func retiredCommentVerbs() []*cobra.Command {
 	}
 }
 
-// retiredTopLevelCmds are the verbs v0.3.0 folded into the eight nouns. Each hint
-// is the corresponding row of SKILL.md's "if you remember an older command"
-// table, in the same words, so the binary and the skill cannot drift into
-// disagreeing about where a caller should go next.
+// retiredTopLevelCmds are the verbs v0.3.0 folded into the seven nouns, plus the
+// one v0.4.0 removed outright. Each hint is the corresponding row of SKILL.md's
+// "if you remember an older command" table, in the same words, so the binary and
+// the skill cannot drift into disagreeing about where a caller should go next.
 //
 // lock/unlock/flag/reaudit are deliberately NOT here: they moved UNDER a noun
 // that has the same name they had, so `dossierx lock <id>` is already answered
-// by the root with a hint listing the eight nouns, and a stub would only add a
+// by the root with a hint listing the seven nouns, and a stub would only add a
 // second, less specific answer.
 func retiredTopLevelCmds() []*cobra.Command {
 	checkHint := `run: dossierx check (add --validate for a read-only pass that writes nothing)`
@@ -136,5 +136,13 @@ func retiredTopLevelCmds() []*cobra.Command {
 		retiredCmd("implink",
 			`implink: removed in v0.3.0; recording a code link is dossierx claim link, and reading one back is part of what claim show reports`,
 			`run: dossierx claim link <id> --file <path> (to record one), or dossierx claim show <id> (to read them back)`),
+		// migrate is the one stub NOT from v0.3.0, and it is the one that most
+		// needs to exist: README, SKILL.md, the CI template and CHANGELOG all
+		// spent a release telling every agent to type exactly `dossierx migrate
+		// --adopt`, and flag parsing runs before any unknown-command handler, so
+		// without the stub that invocation fails as `unknown flag: --adopt`.
+		retiredCmd("migrate",
+			`migrate: removed in v0.4.0; there is no automatic adoption and no migration command — nothing can attest to content no ledger ever recorded`,
+			preLedgerCrossingHint),
 	}
 }

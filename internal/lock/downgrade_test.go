@@ -304,8 +304,14 @@ func TestAnEmptiedLedgerKeyIsStillEvidenceOfADowngrade(t *testing.T) {
 	}
 
 	tampered := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "quietly rewritten"}
-	if _, err := AdoptProject(store, []model.Claim{tampered}); !errors.Is(err, ErrAdoptionRefused) {
-		t.Fatalf("an emptied ledger must not re-arm grandfathering, even through the explicit migration: err = %v", err)
+	// A downgraded store is left exactly as found: CrossPreLedger returns nil
+	// and writes nothing, because RuleLockLedgerDowngraded owns this diagnosis
+	// and its recovery is version control, never a crossing.
+	if err := CrossPreLedger(store, []model.Claim{tampered}, 0); err != nil {
+		t.Fatalf("CrossPreLedger on a downgraded store must be a silent no-op, got %v", err)
+	}
+	if store.OnDiskVersion() >= ledgerSchemaVersion {
+		t.Fatalf("an emptied ledger must not re-arm the crossing: the store was stamped to %d", store.OnDiskVersion())
 	}
 	if !hasRule(Audit([]model.Claim{tampered}, store, nil), RuleLockLedgerDowngraded) {
 		t.Fatalf("expected %s", RuleLockLedgerDowngraded)
@@ -318,11 +324,11 @@ func TestAnEmptiedLedgerKeyIsStillEvidenceOfADowngrade(t *testing.T) {
 }
 
 // The honest side of the same read: a genuine v0.2.x store has NO ledger key at
-// all, and must still be grandfathered. This is the assertion that keeps the
-// guard above from being a different outage — an upgrading project that could
-// not adopt would fail check with lock-ledger-missing on every locked claim it
-// had done nothing wrong to earn.
-func TestAStoreWithNoLedgerKeyStillGrandfathers(t *testing.T) {
+// all, and must still be offered the crossing. This is the assertion that keeps
+// the guard above from being a different outage — an upgrading project that
+// could never cross would fail check with lock-ledger-missing on every locked
+// claim it had done nothing wrong to earn.
+func TestAStoreWithNoLedgerKeyStillCrosses(t *testing.T) {
 	silenceAnnouncements(t)
 
 	path := filepath.Join(t.TempDir(), "store.json")
@@ -337,8 +343,16 @@ func TestAStoreWithNoLedgerKeyStillGrandfathers(t *testing.T) {
 		t.Fatalf("a genuine pre-ledger store must not read as downgraded")
 	}
 	locked := model.Claim{ID: "widget.contract.main", Facet: "contract", Module: "widget", Status: model.StatusLocked, Body: "body"}
-	adoption, err := AdoptProject(store, []model.Claim{locked})
-	if err != nil || len(adoption.Claims) != 1 {
-		t.Fatalf("a genuine pre-ledger project must still be adoptable by the explicit migration, got (%v, %v)", adoption.Claims, err)
+	// While it still holds a locked claim it is REFUSED — nothing is
+	// grandfathered any more — and the refusal is the crossing instructions.
+	if err := CrossPreLedger(store, []model.Claim{locked}, 0); !errors.Is(err, ErrPreLedgerUnadopted) {
+		t.Fatalf("a pre-ledger project holding a locked claim must be refused, got %v", err)
+	}
+	// Emptied of everything that predates the ledger, the same store crosses.
+	if err := CrossPreLedger(store, nil, 0); err != nil {
+		t.Fatalf("a genuine pre-ledger project holding nothing locked must cross, got %v", err)
+	}
+	if store.OnDiskVersion() != ledgerSchemaVersion {
+		t.Fatalf("the crossing must stamp the ledger schema, got version %d", store.OnDiskVersion())
 	}
 }

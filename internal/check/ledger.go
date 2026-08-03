@@ -77,7 +77,7 @@ const RuleLedgerUnreadable = "lock-ledger-unreadable"
 // build" (lock.Store.LedgerCovered). That qualifier keeps it off the one state
 // that is innocent: a project upgrading INTO this feature has no digest store
 // and has done nothing wrong. Its lock store is still at the pre-ledger version,
-// so it is exempt — and lock.PrepareStore CREATES the digest store at the very
+// so it is exempt — and lock.CrossPreLedger CREATES the digest store at the very
 // moment it stamps that version (as does Store.Save at the moment it creates a
 // lock store for a fresh project), so a project crosses both lines together and
 // never sees this finding.
@@ -381,7 +381,7 @@ func collectBuildOrderStates(cfg *config.Config, load func(module string) (*buil
 // It takes the whole ledgerInputs rather than the store alone because the
 // pre-ledger exemption needs the SAME evidence lock.Audit needs: whether this
 // project has ever been through a ledger-aware build (see
-// lock.Store.PreLedgerExempt). A build order locked by a v0.2.x build has no
+// lock.Store.PreLedgerUnadopted). A build order locked by a v0.2.x build has no
 // record either, and reporting it as build-order-ledger-missing — telling the
 // human to re-propose and re-lock an order they never touched — was the same
 // false accusation the claim half used to make.
@@ -390,7 +390,7 @@ func buildOrderGate(in ledgerInputs) []lock.Finding {
 	if store == nil {
 		return nil
 	}
-	preLedgerExempt := store.PreLedgerExempt(in.digests != nil && in.digests.FileExists())
+	preLedgerExempt := store.PreLedgerUnadopted(in.digests != nil && in.digests.FileExists())
 
 	var findings []lock.Finding
 	for _, o := range in.buildOrders {
@@ -437,8 +437,10 @@ func buildOrderGate(in ledgerInputs) []lock.Finding {
 
 		if !hasRecord || record.Subject != lock.SubjectBuildOrder {
 			if preLedgerExempt {
-				// Locked before this project had a ledger to record it in.
-				// Grandfathered in memory, exactly as a locked claim is.
+				// Locked before this project had a ledger to record it in. The
+				// pre-ledger exemption is project-scoped and covers this exactly
+				// as it covers a locked claim; the project-scoped
+				// lock-ledger-pre-ledger finding is what names the state, once.
 				continue
 			}
 			findings = append(findings, lock.Finding{
@@ -664,7 +666,63 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 	}
 
 	findings = append(findings, lock.Audit(claims, in.store, in.digests)...)
+	findings = append(findings, preLedgerBuildOrdersOnly(claims, in)...)
 	return append(findings, buildOrderGate(in)...)
+}
+
+// preLedgerBuildOrdersOnly emits the HALF of RuleLockLedgerPreLedger that
+// lock.Audit structurally cannot: a pre-ledger project holding a locked BUILD
+// ORDER and ZERO locked claims.
+//
+// lock.Audit takes claims and two stores, and it cannot take build orders —
+// internal/buildorder imports internal/lock, so lock can never read an artifact
+// back (the same constraint this file's build-order rules exist for). This
+// package is the one place that holds both inputs, which is why the union is
+// split here rather than by widening lock.Audit.
+//
+// THE STATE IT CLOSES IS REACHABLE, and it was silent before. `claim unlock`
+// never touches the build-order artifact and internal/buildorder never clears
+// Locked on unlock, so locking a module, locking its order and then unlocking
+// every claim leaves a locked order with no locked claims. In that state
+// lock.Audit's claims-only term is zero and buildOrderGate suppresses
+// build-order-ledger-missing under the pre-ledger exemption — while BOTH write
+// paths refuse with pre_ledger_unadopted. A refusal with no finding naming it
+// and no recovery text reachable from `check` is exactly what
+// RuleLockLedgerPreLedger exists to prevent, one artifact type over.
+//
+// The two terms are mutually exclusive by construction (this one requires zero
+// locked claims, lock.Audit's requires at least one), so the finding appears
+// exactly once in every state — never twice, and never once per module.
+func preLedgerBuildOrdersOnly(claims []model.Claim, in ledgerInputs) []lock.Finding {
+	if in.store == nil || !in.store.PreLedgerUnadopted(in.digests != nil && in.digests.FileExists()) {
+		return nil
+	}
+	if countLockedClaims(claims) > 0 {
+		return nil // lock.Audit's half owns this state
+	}
+	locked := 0
+	for _, o := range in.buildOrders {
+		if o.Present && o.Locked {
+			locked++
+		}
+	}
+	if locked == 0 {
+		return nil
+	}
+	return []lock.Finding{lock.PreLedgerFinding(in.store, 0, locked)}
+}
+
+// countLockedClaims is lock.Audit's own countLocked, which is unexported there.
+// It is three lines and duplicating it is cheaper than exporting a counter whose
+// only other caller would be this one.
+func countLockedClaims(claims []model.Claim) int {
+	n := 0
+	for _, c := range claims {
+		if c.Status == model.StatusLocked {
+			n++
+		}
+	}
+	return n
 }
 
 // commentDigestAbsent evaluates RuleCommentDigestAbsent (see it for the whole
@@ -686,7 +744,7 @@ func ledgerGate(claims []model.Claim, in ledgerInputs) []lock.Finding {
 // A covered project is one whose lock store exists at the ledger schema — and
 // this build creates the digest store at the very instant it creates or stamps
 // that lock store (lock.Store.Save's ensureCommentDigestStore for a fresh
-// project, lock.PrepareStore's adoptCommentDigests for one migrating across), so
+// project, lock.CrossPreLedger for one crossing onto the ledger), so
 // coverage without a digest store is a state the product does not produce. A
 // project that predates the ledger, or has never locked anything, is not covered
 // and is not asked about.

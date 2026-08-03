@@ -49,11 +49,13 @@ import (
 // lockedClaimHashVersion is the version of the HASH ALGORITHM below, mixed into
 // the hash as a domain separator. Bumping it changes every claim's
 // LockedClaimHash, which would make every existing ledger record look like
-// content drift — so a bump is a re-adoption event and must be accompanied by a
-// ledgerSchemaVersion bump, which is precisely what re-triggers grandfathering
-// (see AdoptProject). Stated the other way round: the grandfathering machinery
-// IS the hash-migration machinery, so there is exactly one upgrade path to
-// maintain rather than two.
+// content drift — so a bump changes every existing ledger record's expected hash
+// and must be accompanied by a `ledgerSchemaVersion` bump. There is no automatic
+// re-blessing to lean on any more: a store at the old schema crosses onto the
+// new one only through `CrossPreLedger`, which requires the project to hold
+// nothing locked, so a hash-version bump is a deliberate
+// unlock-everything/re-lock event for every project that upgrades — one upgrade
+// path, and it is the same one.
 const lockedClaimHashVersion = 1
 
 // lockedClaimHashExcluded is THE DENY-LIST: the yaml tags of the only
