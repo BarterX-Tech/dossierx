@@ -1,0 +1,35 @@
+[
+  {
+    "fingerprint": "sample-viewer-fixtures-omitted-from-scope",
+    "title": "Committed sample viewers omitted from scope",
+    "one_line": "testdata/fixture-basic/viewer/index.html and testdata/fixture-portability/viewer/index.html are checked-in rendered samples with stale markup and no raw_html demo, but appear in neither the files-touched table nor the not-touched list.",
+    "severity": "MAJOR",
+    "where": "Plan §2 Files touched, by lane / not-touched list",
+    "round": 1,
+    "status": "confirmed-and-patched",
+    "reason": "Patched: plan §2 now lists both testdata/fixture-*/viewer/index.html under L5; new step 24b regenerates them via dossierx check before the final gate, with the expected-diff shape spelled out and the raw_html demo explicitly ruled out as scope creep; §5's opening sentence narrowed to 'no golden regeneration mechanism reaches any test assertion this release changes' and now names dossierx check as the regenerator for the two committed viewers.",
+    "lenses": ["completeness"]
+  },
+  {
+    "fingerprint": "readme-mockup-modules-row-stale",
+    "title": "README.md mockup_modules row goes stale, unaddressed",
+    "one_line": "README.md:304 describes mockup_modules as gating who may author 'layout: mockup claims', which becomes inaccurate once raw_html is legal on any layout gated by the same allowlist; neither the design's stale-prose list nor the plan's file list names README.md.",
+    "severity": "MAJOR",
+    "where": "Design §1.5 / Plan §2 Files touched",
+    "round": 1,
+    "status": "confirmed-and-patched",
+    "reason": "Patched: README.md added to the L1 block of plan §2 (appears in no other lane); step 4 extended with the exact replacement wording for README.md:304 and its Proves line gains `! grep -n 'permitted to author .layout: mockup. claims' README.md` (verified to hit today, so it flips hit → no-hit); design §1.5 gains README.md:304 as a sixth stale-prose bullet.",
+    "lenses": ["completeness"]
+  },
+  {
+    "fingerprint": "step1-step3-leg2-wording-conflict",
+    "title": "Step 1 and step 3 conflict over leg-2 message wording",
+    "one_line": "Step 1 requires raw_html_scope.go legs 2-5 stay byte-identical, but step 3 says to revisit the module-allowlist message wording (the leg-2 string at raw_html_scope.go:234) without listing that file in step 3's Files, leaving it undefined whether the source string changes.",
+    "severity": "MAJOR",
+    "where": "Plan §3 Steps 1 and 3",
+    "round": 1,
+    "status": "confirmed-and-patched",
+    "reason": "Patched via the fix's first branch: step 3's vague 'revisit the module-allowlist message wording' is replaced by an explicit decision — leg 2's message text is unchanged in v0.4.1, the wording cleanup is deferred. Step 3 now quotes the sentence, states it stays legacy-flavoured but not false, forbids editing internal/lint/raw_html_scope.go in that step, and tells the implementer to copy it through verbatim into wantStdout so line 218 and line 234 stay in lockstep. No file ownership changed.",
+    "lenses": ["completeness"]
+  }
+]
