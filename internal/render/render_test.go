@@ -3,6 +3,7 @@ package render
 import (
 	"html/template"
 	"os"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -148,6 +149,49 @@ func TestRender_TableExplicitEmptyRows(t *testing.T) {
 	}
 	if strings.Contains(out, "<table>") {
 		t.Errorf("expected no blank <table> element for an empty rows array:\n%s", out)
+	}
+	// The scroll wrapper opens and closes INSIDE the {{if .Rows}} branch, so the
+	// no-rows branch must emit an empty wrapper no more than it emits an empty
+	// <table>.
+	// (The class name itself is unavoidably present in the inlined stylesheet,
+	// so this looks for the wrapper ELEMENT.)
+	if strings.Contains(out, `<div class="claim-table-scroll">`) {
+		t.Errorf("expected no scroll wrapper for an empty rows array:\n%s", out)
+	}
+}
+
+// TestRender_TableClaimScrollWrapper pins #22 on the RENDERED html rather than
+// on the template: a table claim with rows gets exactly one scroll wrapper,
+// opening immediately before its <table> and closing immediately after the
+// matching </table>. The overflow lives on that wrapper (style.css), so the
+// table keeps its width: 100% and a too-wide table scrolls in its own box
+// instead of widening the page.
+func TestRender_TableClaimScrollWrapper(t *testing.T) {
+	cat, err := catalog.Build([]model.Claim{claimFor(model.LayoutTable)}, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, nil)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+
+	// Count the wrapper ELEMENT, not the class name: style.css is inlined into
+	// every rendered viewer, so the selector text is in the document too.
+	if n := strings.Count(out, `<div class="claim-table-scroll">`); n != 1 {
+		t.Errorf("expected exactly one scroll wrapper, got %d:\n%s", n, out)
+	}
+	open := regexp.MustCompile(`<div class="claim-table-scroll">\s*<table>`)
+	if !open.MatchString(out) {
+		t.Errorf("expected the wrapper to open immediately before its <table>:\n%s", out)
+	}
+	closeRE := regexp.MustCompile(`</table>\s*</div>`)
+	if !closeRE.MatchString(out) {
+		t.Errorf("expected the wrapper to close immediately after its </table>:\n%s", out)
+	}
+	// The table itself is untouched — no class, no inline sizing.
+	if !strings.Contains(out, "<table>") {
+		t.Errorf("expected a bare <table> inside the wrapper:\n%s", out)
 	}
 }
 

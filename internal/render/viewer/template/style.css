@@ -459,6 +459,45 @@ code {
 }
 
 
+/* The scroll wrapper components/table.html puts around a layout: table claim's
+   table element, and the two cell declarations scoped to it. Both halves are one
+   sizing decision and neither works alone.
+
+   The overflow lives on the WRAPPER, not on the table, so the table keeps the
+   width: 100% below and a table too wide for its card scrolls inside its own
+   box instead of widening the page.
+
+   The cell wrap keyword is `anywhere`, not `break-word`: `anywhere` is the one
+   whose soft-wrap opportunities count toward MIN-CONTENT, and auto table layout
+   (there is no table-layout rule anywhere in this file) distributes columns
+   from min/max-content — so it is the only one of the two that stops a single
+   65-character identifier taking ~80% of the table. The price, paid knowingly,
+   is that ordinary content redistributes a little (~12% on a two-column
+   520px table); `break-word` leaves proportions byte-identical and does not
+   fix the bug at all.
+
+   That same property would otherwise make the wrapper dead markup: once every
+   cell breaks anywhere, a 6-column table's min-content falls below the card,
+   the table resolves to exactly 100% of the wrapper and nothing ever scrolls.
+   The 5rem floor is what keeps the scroller real, and it goes on the CELLS on
+   purpose — under auto layout a per-cell min-width raises each column's
+   min-content contribution, so the table's floor scales with COLUMN COUNT: six
+   columns floor at ~510px and scroll inside a 358px card, while two or three
+   floor at 160-240px and still fit, so an ordinary table is never forced into
+   a scrollbar it does not need. A fixed min-width on the table element cannot
+   do this — it would penalise narrow tables.
+
+   Both declarations are SCOPED. The bare `td, th` rule below is an unscoped
+   element selector that a body pipe table inherits (see the phase C block
+   above), and a .md-table is already contained by width: max-content +
+   overflow-x: auto — so a long identifier makes a BODY table scroll, not blow
+   out the card. Body tables therefore keep scrolling rather than wrapping;
+   that is a deliberate deferral, recorded in the CHANGELOG. A .md-table is
+   never inside this wrapper, so the two selector sets are disjoint by
+   construction and specificity never enters into it. */
+.claim-table-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.claim-table-scroll td, .claim-table-scroll th { overflow-wrap: anywhere; min-width: 5rem; }
+
 table {
   width: 100%;
   border-collapse: collapse;

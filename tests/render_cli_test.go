@@ -67,6 +67,12 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 	if strings.Contains(string(content), "<table>") {
 		t.Fatalf("rendered output should not contain a blank <table> for an empty rows array:\n%s", content)
 	}
+	// The #22 scroll wrapper lives inside the same {{if .Rows}} branch as the
+	// <table>, so the no-rows state must emit neither. The wrapper ELEMENT is
+	// what is looked for: the class name is also in the inlined stylesheet.
+	if strings.Contains(string(content), `<div class="claim-table-scroll">`) {
+		t.Fatalf("rendered output should not contain a scroll wrapper for an empty rows array:\n%s", content)
+	}
 }
 
 // ---------------------------------------------------------------------
