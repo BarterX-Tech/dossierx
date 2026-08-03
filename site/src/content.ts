@@ -1344,3 +1344,18 @@ export const contentSpec: ContentSpec = {
     },
   ],
 };
+
+/**
+ * Leaf commands in the CLI explorer, counted from the explorer's own data.
+ *
+ * The hero used to hard-code this. It said 20 from v0.3.0 until v0.4.0's
+ * surface change made it false, and nothing caught it — it disagreed with the
+ * hero badge, the hero role card and the release entry on the same page. This
+ * is the same failure the version strings had before they were derived, so it
+ * gets the same treatment.
+ */
+export const commandCount: number = (() => {
+  const cli = contentSpec.sections.find((s) => s.kind === "cli-explorer");
+  const groups = (cli?.data as { groups?: { commands?: unknown[] }[] } | undefined)?.groups ?? [];
+  return groups.reduce((n, g) => n + (g.commands?.length ?? 0), 0);
+})();

@@ -5,7 +5,7 @@ import {
   useReducedMotion,
   type Variants,
 } from "framer-motion";
-import { contentSpec, latestVersion } from "../content";
+import { commandCount, contentSpec, latestVersion } from "../content";
 import { getSection } from "./section-utils";
 
 interface HeroData {
@@ -468,7 +468,7 @@ export function Hero() {
           </div>
           <dl className="hero__facts">
             <div>
-              <dt>20</dt>
+              <dt>{commandCount}</dt>
               <dd>commands your agent runs</dd>
             </div>
             <div>
