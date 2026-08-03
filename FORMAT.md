@@ -585,9 +585,10 @@ This is deliberately not the same hash as the dependency-drift `ContentHash`,
 which covers a hand-picked ten fields and must stay byte-identical forever:
 `raw_html`, `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
 `emphasis`, `migrated_from`, and `audit_notes` are invisible to it — and
-`raw_html` on a locked, reviewed, allowlisted mockup is the only path in the
-engine that renders author bytes unescaped. A ledger built on `ContentHash`
-would certify the one edit that most needs a signature.
+`raw_html`, reviewed and legal on any layout (not only `mockup`), is the
+only path in the engine that renders author bytes unescaped. A ledger
+built on `ContentHash` would certify the one edit that most needs a
+signature.
 
 ### The findings
 
