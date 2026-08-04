@@ -35,14 +35,31 @@ const GH = 'BarterX-Tech/dossierx'
 const a = typeof args === 'string' ? JSON.parse(args) : (args || {})
 
 const phase_ = a.phase
-const VERSION = a.version || 'v0.4.0'
+const VERSION = a.version
 const PR = a.pr || null
-const PREV = a.previous || 'v0.3.1'
+const PREV = a.previous || null
 
 if (!phase_) {
   throw new Error('phase is required — pass {phase:"pre-merge"|"pre-tag"|"post-release"}. ' +
     'It is deliberately not defaulted: a release gate that guesses which phase it is in ' +
     'can report a clean run for checks it never made.')
+}
+
+// Same reasoning as phase_, applied to the other two identities. Both used to carry hard-coded
+// fallbacks ('v0.4.0' and 'v0.3.1'), which is the phase bug in a quieter form: the run does not
+// fail, it verifies the wrong release against the wrong baseline and reports clear. The v0.4.1
+// post-release gate caught the previous-version fallback firing — every gate that release ran
+// believing the predecessor was v0.3.1 when it was v0.4.0. Nothing was missed, because the
+// agents derived the real predecessor themselves, but a gate must not depend on that.
+if (!VERSION) {
+  throw new Error('version is required — pass {version:"vX.Y.Z"}. It is deliberately not ' +
+    'defaulted: a release gate that guesses which release it is verifying can report a clean ' +
+    'run for a release it never looked at.')
+}
+if (!PREV) {
+  throw new Error('previous is required — pass {previous:"vX.Y.Z"}, the release this one ' +
+    'follows. The pin sweep and the stale-mention checks both compare against it, so a wrong ' +
+    'baseline silently narrows what they look for.')
 }
 
 const COMMON = `

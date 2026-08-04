@@ -2,16 +2,20 @@
 
 ## Supported Versions
 
-DossierX is currently pre-1.0. Only the latest released `0.0.x` version is supported with
-security fixes; older patch releases do not receive backports.
+DossierX is currently pre-1.0. Only the latest release is supported with security fixes;
+earlier releases do not receive backports, including earlier patches of the current minor.
 
 | Version | Supported |
 |---|---|
-| 0.0.x (latest release) | :white_check_mark: |
-| < latest 0.0.x | :x: |
+| latest release | :white_check_mark: |
+| anything earlier | :x: |
 
-Once DossierX reaches 1.0, this table will be updated to reflect an ongoing support policy
-across minor versions.
+The table is deliberately written without a version number. It said `0.0.x` for three minor
+series after that stopped being true, because a hard-coded series has to be remembered on every
+release and nothing fails when it is not.
+
+Once DossierX reaches 1.0, this will be updated to reflect an ongoing support policy across
+minor versions.
 
 ## Reporting a Vulnerability
 
