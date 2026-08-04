@@ -4,23 +4,45 @@
 // decision in this file:
 //
 //   - ContentHash answers "would a DEPENDENT of this claim need to re-review?"
-//     It hashes a small, hand-picked allowlist of ten fields, and it must stay
-//     byte-identical forever: it is the baseline recorded in Store.Hashes for
-//     every locked claim's dependencies, so widening it would make every
-//     already-recorded baseline mismatch and flip every locked claim in every
-//     existing project to review_pending on the day they upgrade.
+//     It hashes a small, hand-picked allowlist of eleven fields, and any given
+//     claim's answer must stay byte-identical forever: it is the baseline
+//     recorded in Store.Hashes for every locked claim's dependencies, so
+//     widening it would make every already-recorded baseline mismatch and flip
+//     every locked claim in every existing project to review_pending on the day
+//     they upgrade. The allowlist has been extended exactly once — raw_html, in
+//     v0.4.1 — and only under a conditional that feeds it in when it is
+//     NON-EMPTY, so a claim carrying none still hashes to the bytes it always
+//     did. See ContentHash for why that conditional is load-bearing.
 //
 //   - LockedClaimHash answers "is THIS locked claim still the bytes a human
 //     approved?" That question has no allowlist: every field a claim persists
 //     is part of what was approved. model.Claim persists twenty-two yaml-tagged
-//     fields; ContentHash covers ten. The nine ContentHash cannot see —
-//     raw_html, raw_html_reviewed, build_role, kind, section, order, emphasis,
-//     migrated_from, audit_notes — include the only path in this entire
+//     fields; ContentHash covers eleven. The eight it cannot see —
+//     raw_html_reviewed, build_role, kind, section, order, emphasis,
+//     migrated_from, audit_notes — are all signed here, as are the three no
+//     hash covers (status, review_pending, comments; see
+//     lockedClaimHashExcluded for why the engine's own bookkeeping is left out).
+//
+//     raw_html headed that second list until v0.4.1, and it is the field that
+//     made the argument for this hash: it is the only path in this entire
 //     codebase that renders author bytes UNESCAPED (render/components: a locked
 //     claim with raw_html_reviewed true, in an allowlisted module, has its
-//     raw_html returned as trusted HTML). A ledger built on ContentHash would
-//     certify a hand-swapped raw-HTML payload as unchanged — it would sign the
-//     one edit that most needs a signature. So LockedClaimHash exists.
+//     raw_html returned as trusted HTML), so a ledger built on ContentHash
+//     would have certified a hand-swapped raw-HTML payload as unchanged — it
+//     would have signed the one edit that most needs a signature. v0.4.1 moved
+//     it to the FIRST list, for a different reason: raw_html became an
+//     attachment legal on any layout, including a rule-bearing claim other
+//     claims rest_on, so an edited payload has to mark those dependents stale.
+//
+//     That change does not merge the two hashes and does not retire this one.
+//     They answer different questions, and the questions did not move:
+//     ContentHash is the STALENESS baseline — it says a dependent should look
+//     again, and says nothing about whether the current bytes are the approved
+//     ones. Tamper detection is this hash's job, and eight persisted fields are
+//     still invisible to ContentHash — raw_html_reviewed at their head, since
+//     flipping it true on a locked claim is what promotes a payload to trusted
+//     HTML in the first place. So LockedClaimHash exists, and the split between
+//     the two is the same split it always was.
 //
 // LockedClaimHash is therefore built as a DENY-LIST over reflection rather than
 // an allowlist over named fields: it hashes every field of model.Claim that

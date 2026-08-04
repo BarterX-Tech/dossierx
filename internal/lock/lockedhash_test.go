@@ -153,10 +153,15 @@ func TestDenyListMatchesTheRecordedDecisions(t *testing.T) {
 // rather than trusting it: mutate one field at a time and check the hash moves
 // exactly when the decision says it should.
 //
-// The two that matter most and were invisible before this hash existed:
-// raw_html (swapping the payload on a locked, reviewed, allowlisted mockup —
-// the only unescaped render path in the engine) and build_role/section/order/
-// emphasis, none of which ContentHash covers.
+// The ones that matter most, because nothing in the engine signed them before
+// this hash existed: raw_html (swapping the payload on a locked, reviewed,
+// allowlisted mockup — the only unescaped render path in the engine) and
+// build_role/section/order/emphasis. ContentHash covers none of those except
+// raw_html, which it took on in v0.4.1 as a STALENESS baseline once raw_html
+// became legal on any layout — a different job from certifying that a locked
+// claim still holds the bytes a human approved, which is why every one of them
+// is still this hash's to sign. See TestLockedClaimHashSeesWhatContentHashCannot
+// for the split stated as assertions.
 func TestLockedClaimHashSignsEveryFieldItSaysItSigns(t *testing.T) {
 	base := fullyPopulatedClaim()
 	baseHash := LockedClaimHash(base)
@@ -204,12 +209,20 @@ func TestLockedClaimHashIsIndependentOfStatus(t *testing.T) {
 }
 
 // TestLockedClaimHashSeesWhatContentHashCannot is the audit's headline finding,
-// as a test. ContentHash covers ten fields; model.Claim persists twenty-two. A
-// ledger built on ContentHash would certify each of these edits as unchanged —
-// most dangerously the raw_html swap, which renders unescaped.
+// as a test. model.Claim persists twenty-two fields; ContentHash covers a small
+// allowlist. A ledger built on ContentHash would certify each of the edits below
+// as unchanged.
+//
+// raw_html USED to head this list — it is the one field here that renders
+// unescaped, so it was the most dangerous blind spot of the lot. As of v0.4.1 it
+// is no longer a blind spot: raw_html became an attachment legal on any layout,
+// including a rule-bearing claim other claims rest_on, so ContentHash had to
+// start covering it or an edited attachment would leave every dependent
+// unflagged. It is asserted separately below, because the assertion it needs is
+// now the opposite one. The two hashes still answer different questions and
+// LockedClaimHash must still sign it — that half is unchanged.
 func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 	blindSpots := map[string]func(*model.Claim){
-		"raw_html":          func(c *model.Claim) { c.RawHTML = `<img src=x onerror=alert(1)>` },
 		"raw_html_reviewed": func(c *model.Claim) { c.RawHTMLReviewed = false },
 		"build_role":        func(c *model.Claim) { c.BuildRole = model.BuildRoleOutOfScope },
 		"kind":              func(c *model.Claim) { c.Kind = model.KindOrientationNote },
@@ -232,6 +245,27 @@ func TestLockedClaimHashSeesWhatContentHashCannot(t *testing.T) {
 		if LockedClaimHash(mutated) == LockedClaimHash(base) {
 			t.Errorf("LockedClaimHash does not cover %q — the ledger would sign off on that edit as unchanged", field)
 		}
+	}
+
+	// raw_html, the former blind spot: BOTH hashes must move now. The split
+	// between them is not that one is coarse and one is fine — it is that they
+	// answer different questions, and since v0.4.1 a raw_html swap is a "yes"
+	// to both. "Would a dependent need to re-review?" — yes, the attachment can
+	// sit on a claim others rest_on. "Are these the bytes a human approved?" —
+	// no, and this is still the only path that renders author bytes unescaped.
+	// The conditional that keeps raw_html-free claims hashing byte-identically
+	// is pinned by TestContentHash_RawHTMLIsHashedOnlyWhenPresent in lock_test.go
+	// (and, for a claim carrying none, by TestContentHashIsUnchangedByTheLedger
+	// below, whose frozen constant did not move when raw_html joined the list).
+	swapped := fullyPopulatedClaim()
+	swapped.RawHTML = `<img src=x onerror=alert(1)>`
+	if ContentHash(swapped) == ContentHash(base) {
+		t.Errorf("ContentHash does not cover \"raw_html\" — since v0.4.1 raw_html is legal on any layout, " +
+			"so editing the attachment on a claim others rest_on would leave every dependent unflagged")
+	}
+	if LockedClaimHash(swapped) == LockedClaimHash(base) {
+		t.Errorf("LockedClaimHash does not cover \"raw_html\" — the ledger would sign off on a swapped " +
+			"unescaped-HTML payload as unchanged, which is the one edit that most needs a signature")
 	}
 }
 

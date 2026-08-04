@@ -25,7 +25,7 @@ build_role: orientation | schema | behavior | api | verification | out-of-scope 
 body: markdown string          # optional, illustrative prose
 rows: [ { ... } ]              # optional, table rows; each cell must be a string
 steps: [ string ]              # optional, ordered steps
-raw_html: string               # optional, layout: mockup only (review-gated)
+raw_html: string               # optional, legal on any layout (review-gated)
 raw_html_reviewed: bool        # optional, human-set gate for raw_html
 section: string                # optional, in-content section heading (see below)
 mirrors: [ id, ... ]
@@ -72,9 +72,12 @@ When `layout` is omitted, it is inferred from the claim's shape:
 3. Otherwise → `card`.
 
 `list`, `tree`, `banner`, and `mockup` are never inferred; a claim must set
-them explicitly. `mockup` renders a project-authored `raw_html` blob instead
-of markdown/rows/steps and carries its own human review gate — see the
-`raw-html-scope` lint for the full constraints.
+them explicitly. `mockup` renders its `body` the same as every other
+layout — the exception `raw_html` provides is the *field*, not the layout:
+it is not exclusive to `layout: mockup`, but legal on any layout, rendered
+as an attachment alongside that layout's own body/rows/steps content,
+subject to the module allowlist, the markup allowlist, and its own human
+review gate — see the `raw-html-scope` lint for the full constraints.
 
 ### `body` and the markdown ceiling
 
@@ -579,12 +582,22 @@ persists except three engine-managed fields:
 
 Everything else is signed, **including any field added to the schema later**.
 This is deliberately not the same hash as the dependency-drift `ContentHash`,
-which covers a hand-picked ten fields and must stay byte-identical forever:
-`raw_html`, `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
-`emphasis`, `migrated_from`, and `audit_notes` are invisible to it — and
-`raw_html` on a locked, reviewed, allowlisted mockup is the only path in the
-engine that renders author bytes unescaped. A ledger built on `ContentHash`
-would certify the one edit that most needs a signature.
+which covers a hand-picked eleven fields and must stay byte-identical
+forever: `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
+`emphasis`, `migrated_from`, and `audit_notes` are invisible to it —
+`raw_html` was in that blind list through v0.4.0, but as of v0.4.1 a
+non-empty `raw_html` is one of the eleven, because it can now sit on a
+rule-bearing claim other claims `rests_on`, and a dependent needs
+`ContentHash` to notice that edit, not only a reviewer re-locking the claim
+itself. That leaves eight fields `ContentHash` still cannot see, and
+`LockedClaimHash` is the net for all of them regardless of what
+`ContentHash` tracks: it signs everything a claim persists except `status`,
+`review_pending`, and `comments` (above), so a swapped `raw_html` payload —
+or a swapped `raw_html_reviewed`, `build_role`, or any other field —
+still fails the lock ledger's check even on a claim with no dependent to
+notice the drift. A ledger built on `ContentHash` alone would have
+certified exactly the edit that most needed a signature; it is built on
+`LockedClaimHash` instead.
 
 ### The findings
 

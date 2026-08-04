@@ -106,10 +106,33 @@ func TestRawHTMLScope_Mockup(t *testing.T) {
 			wantFind: false,
 		},
 		{
-			name: "failing: raw_html on a non-mockup layout",
+			name: "passing: raw_html on a non-mockup layout, allowlisted module, reviewed",
 			claim: func() model.Claim {
 				c := validMockupClaim()
 				c.Layout = model.LayoutCard
+				return c
+			}(),
+			cfg:      mockupTestConfig(),
+			wantFind: false,
+		},
+		{
+			name: "failing: raw_html on a non-mockup layout, module not allowlisted",
+			claim: func() model.Claim {
+				c := validMockupClaim()
+				c.Layout = model.LayoutCard
+				c.Module = "other"
+				c.ID = "other.internals.console-mockup"
+				return c
+			}(),
+			cfg:      mockupTestConfig(),
+			wantFind: true,
+		},
+		{
+			name: "failing: raw_html on a non-mockup layout, raw_html_reviewed false",
+			claim: func() model.Claim {
+				c := validMockupClaim()
+				c.Layout = model.LayoutCard
+				c.RawHTMLReviewed = false
 				return c
 			}(),
 			cfg:      mockupTestConfig(),

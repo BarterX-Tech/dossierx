@@ -43,7 +43,7 @@
      card.html's head comment for why both, and ClaimLabel for what an
      unshaped id does. */}}
 <section class="claim claim-table card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
-  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
+  <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
   {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
   {{if .Rows}}
   {{$keys := rowKeys .Rows}}
@@ -63,5 +63,6 @@
   {{else}}
   <p class="claim-empty">No rows.</p>
   {{end}}
+  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
   {{edges .}}
 </section>

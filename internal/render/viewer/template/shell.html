@@ -28,6 +28,7 @@
           <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
         {{end}}
       </nav>
+      <button id="expandAllToggle" type="button" aria-pressed="false">Expand all links/files</button>
       {{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
     </aside>
     <main class="content-area">
@@ -436,8 +437,8 @@
           // updateChips(claimID, 0, 0) on exactly the empty claim whose chip was just
           // clicked, and a bare `totalCount === 0` here would hide that chip out from
           // under the click that opened it.
-          var li = chip.closest('.claim-comments');
-          if (li) { li.hidden = (empty && !mounted); }
+          var slot = chip.closest('.claim-comments-slot');
+          if (slot) { slot.hidden = (empty && !mounted); }
         });
       }
       // syncEmptyChips reveals (or re-hides) every zero-thread chip on the page as
@@ -445,11 +446,11 @@
       // actually found. It runs on probe success and at the end of every
       // initViewer — a Phase 5c fragment swap ships freshly server-rendered chips,
       // hidden again, and only this pass knows the API is live. Chips that carry
-      // threads are untouched; their <li> is never hidden.
+      // threads are untouched; their <span> slot is never hidden.
       function syncEmptyChips() {
         document.querySelectorAll('.comment-chip--empty').forEach(function (chip) {
-          var li = chip.closest('.claim-comments');
-          if (li) { li.hidden = !mounted; }
+          var slot = chip.closest('.claim-comments-slot');
+          if (slot) { slot.hidden = !mounted; }
         });
       }
       // recomputeChipsFromPanel refreshes chip state from the threads currently
@@ -1128,6 +1129,26 @@
         stripToggle.addEventListener('click', function () {
           stripUserToggled = true;
           setStripExpanded(!stripExpanded);
+        });
+      }
+
+      // ---- expand-all toolbar (Q2) --------------------------------------
+      // A single global control that sets/clears the `open` PROPERTY on every
+      // details.claim-links currently in the DOM. This is a client-side DOM
+      // mutation only — no localStorage, no URL state — so it never affects
+      // emitted bytes and never survives a reload. It queries fresh at click
+      // time rather than caching a NodeList, since a Phase 5c fragment swap
+      // can replace <main class="content-area"> (and therefore every
+      // details.claim-links in it) between clicks.
+      var expandAllToggle = document.getElementById('expandAllToggle');
+      if (expandAllToggle) {
+        expandAllToggle.addEventListener('click', function () {
+          var footers = document.querySelectorAll('details.claim-links');
+          var anyClosed = false;
+          footers.forEach(function (d) { if (!d.open) { anyClosed = true; } });
+          footers.forEach(function (d) { d.open = anyClosed; });
+          expandAllToggle.setAttribute('aria-pressed', String(anyClosed));
+          expandAllToggle.textContent = anyClosed ? 'Collapse all links/files' : 'Expand all links/files';
         });
       }
 

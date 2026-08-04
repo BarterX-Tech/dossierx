@@ -2258,11 +2258,8 @@ svg [tabindex]:focus-visible rect {
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   color: var(--text);
 }
-.cmt-card__footer {
-  margin-top: 0.85rem;
-}
-
-/* Chip — mirrors the viewer's rounded 💬 count chip. */
+/* Chip — mirrors the viewer's rounded 💬 count chip, which since v0.4.1 sits
+   in the card head rather than a footer. */
 .cmt-chip {
   display: inline-flex;
   align-items: center;

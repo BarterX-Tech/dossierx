@@ -65,7 +65,7 @@ func flagDryRun(claim model.Claim, claimSays, nowDoes, reason string) *cliout.Dr
 	lay := flagStructuredLayout(claim)
 	dr.Require("claim_is_body_only", lay == "", boolDetail(lay == "",
 		fmt.Sprintf("layout %q renders from body, which is the only field a flag-sourced reaudit rewrites", claim.Layout),
-		fmt.Sprintf("layout is %q; a flag-sourced reaudit can only rewrite body", lay)))
+		flagNonBodyDetail(claim, lay)))
 
 	dr.Effect("sets review_pending on " + claim.SourcePath).
 		Effect("records a one-shot pending-flag entry that the next \"dossierx claim reaudit --confirm\" consumes").
@@ -142,14 +142,15 @@ func newFlagCmd() *cobra.Command {
 			}
 			// DX-AUD-11: a flag-sourced reaudit rewrites only claim.Body (see
 			// internal/reaudit.ProposeFlagDiff/Apply). For a claim whose
-			// rendered content lives outside Body — table rows, steps, or a
-			// raw-HTML mockup — that would clear review_pending while leaving
-			// the actual rendered content stale. Such claims must not be
-			// flagged at all; the correct workflow is to unlock, edit the
-			// rows/steps/raw_html directly, and relock.
+			// rendered content lives outside Body — table rows, steps, or
+			// raw_html on ANY layout since v0.4.1 — that would clear
+			// review_pending while leaving the actual rendered content stale.
+			// Such claims must not be flagged at all; the correct workflow is to
+			// unlock, edit the rows/steps/raw_html directly, and relock. See
+			// flagStructuredLayout on why the test is on content, not layout.
 			if lay := flagStructuredLayout(claim); lay != "" {
 				return cmdResult{}, cliout.Errorf(cliout.CodeStructuredLayout,
-					"flag: claim %q has a %s layout whose rendered content (rows/steps/raw HTML) a flag-sourced reaudit cannot update; unlock the claim, edit it directly, then relock instead", id, lay).
+					"flag: claim %q renders content a flag-sourced reaudit cannot update (%s); unlock the claim, edit it directly, then relock instead", id, flagNonBodyDetail(claim, lay)).
 					WithHint(fmt.Sprintf("run: dossierx claim unlock %s --reason \"...\"", id))
 			}
 			token, err := loader.CaptureClaimFileToken(claim.SourcePath)
@@ -209,12 +210,30 @@ func newFlagCmd() *cobra.Command {
 	return cmd
 }
 
-// flagStructuredLayout returns the non-body ("structured") layout a claim
-// renders with — table, steps, or mockup — or "" if the claim is body-only
-// (card/banner/list/tree). It mirrors internal/catalog.inferLayout's
-// shape-based inference so a claim that omits an explicit layout but carries
-// rows/steps (or raw HTML) is still caught, since that is exactly what a
-// flag-sourced, Body-only reaudit would leave stale (DX-AUD-11).
+// flagStructuredLayout returns the layout of a claim that renders content a
+// Body-only, flag-sourced reaudit cannot update — table rows, steps, or
+// raw_html — or "" if the claim really is body-only and therefore safe to flag
+// (DX-AUD-11).
+//
+// THE TEST IS ON CONTENT, NOT ON THE LAYOUT NAME. Until v0.4.1 raw_html could
+// only exist on layout: mockup, so asking "is the layout mockup?" and asking
+// "does this claim carry raw_html?" were the same question and this function
+// asked the first. Issue #25 separated them: raw_html is now legal on every
+// layout (internal/lint's raw-html-scope gates it on the module allowlist and
+// raw_html_reviewed only, components.MockupHTML's trusted condition carries no
+// layout term, and every component template — card/banner/list/tree/table/steps
+// — renders {{if .RawHTML}}). A card/banner/list/tree claim can therefore carry
+// markup the viewer renders, and classifying it body-only by its layout would
+// let a flag clear review_pending while that markup stayed stale: precisely the
+// failure this gate exists to prevent. So a claim carrying raw_html is refused
+// whatever its layout, and the layout returned is its real one.
+//
+// The layout-less inference mirrors internal/catalog.inferLayout exactly (rows
+// -> table, steps -> steps, otherwise card) and deliberately has NO raw_html
+// leg. raw_html says nothing about layout; inferring mockup from it would label
+// a card claim's markup a mockup — disagreeing with the layout the catalog and
+// the renderer use for that same claim — and would put a layout the author
+// never wrote into the refusal message an agent reads.
 func flagStructuredLayout(c model.Claim) model.Layout {
 	layout := c.Layout
 	if layout == "" {
@@ -223,13 +242,28 @@ func flagStructuredLayout(c model.Claim) model.Layout {
 			layout = model.LayoutTable
 		case len(c.Steps) > 0:
 			layout = model.LayoutSteps
-		case c.RawHTML != "":
-			layout = model.LayoutMockup
+		default:
+			layout = model.LayoutCard
 		}
 	}
 	switch layout {
 	case model.LayoutTable, model.LayoutSteps, model.LayoutMockup:
 		return layout
 	}
+	if c.RawHTML != "" {
+		return layout
+	}
 	return ""
+}
+
+// flagNonBodyDetail explains WHICH non-body content flagStructuredLayout
+// refused a claim over — the raw_html a v0.4.1 claim may carry on any layout,
+// or the rows/steps a structured layout renders from. Without this a card claim
+// bearing raw_html would be refused with nothing but `layout is "card"`, which
+// reads as a bug rather than as the reason.
+func flagNonBodyDetail(c model.Claim, lay model.Layout) string {
+	if c.RawHTML != "" {
+		return fmt.Sprintf("layout is %q and the claim carries raw_html, which a flag-sourced reaudit cannot rewrite", lay)
+	}
+	return fmt.Sprintf("layout is %q; a flag-sourced reaudit can only rewrite body", lay)
 }

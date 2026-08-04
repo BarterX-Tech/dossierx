@@ -214,7 +214,7 @@
 
 <div class="card ok" id="D3">
   <h4><span class="tag">D3 · DECIDED</span> Images <code>![alt](src)</code> — shipping in claim bodies</h4>
-  <p style="margin-bottom:0"><strong>Settled 2026-07-29:</strong> claim bodies get image support. The handoff's non-goal is overturned — <code>layout: mockup</code> stays the reviewed path for hand-authored HTML, but a documentation body that needs a diagram no longer has to become a mockup claim to get one.</p>
+  <p style="margin-bottom:0"><strong>Settled 2026-07-29:</strong> claim bodies get image support. The handoff's non-goal is overturned — <code>layout: mockup</code> stays the reviewed path for hand-authored HTML, but a documentation body that needs a diagram no longer has to become a mockup claim to get one. <strong>Superseded by v0.4.1 (2026-08-04):</strong> <code>layout: mockup</code> is no longer the only layout <code>raw_html</code> may sit on — it is now a reviewed attachment legal on any layout. This paragraph is about images, which are unaffected; the mockup-only framing it leans on for contrast is what changed.</p>
   <h3 style="margin-top:20px">How it ships</h3>
   <p>The handoff's objection here was the only <strong>security</strong> argument among the four, so the mechanism matters more than for D1/D2/D4. <code>layout: mockup</code> gates visuals behind three things: <code>raw-html-scope</code>'s relative-only URL check (<code>mockupAbsoluteURLPattern</code>, which also normalizes control-character scheme evasion such as <code>ht\ttp://host</code> before deciding a value is relative), the <code>raw_html_reviewed</code> flag, and a module allowlist. A markdown image routes around all three unless it is explicitly wired to the first.</p>
   <p><strong>So: <code>src</code> goes through the same relative-only check, reusing <code>raw-html-scope</code>'s existing implementation rather than a second copy of it.</strong> That keeps a claim body's image same-repo, which is also what makes the rendered viewer portable — an absolute <code>src</code> would make the artifact depend on a host staying up. <code>alt</code> text runs the inline pass and is escaped in attribute context. A rejected <code>src</code> renders as escaped literal text, never a broken <code>&lt;img&gt;</code>, and <code>markdown-sanity</code> (<a href="#D5">D5</a>) reports it rather than letting it fail silently.</p>
@@ -594,7 +594,7 @@
 <h2><span class="num">08</span>Remaining non-goals</h2>
 <ul class="plain">
   <li><strong>Reference links and footnotes.</strong> Both need a document-wide second pass and a definition namespace; neither earns it in a claim-sized body.</li>
-  <li><strong>Raw inline HTML.</strong> <code>layout: mockup</code> plus <code>raw_html_reviewed</code> plus the module allowlist is the reviewed path for HTML, and it should stay the only one — especially now that comment bodies share the renderer.</li>
+  <li><strong>Raw inline HTML.</strong> <code>layout: mockup</code> plus <code>raw_html_reviewed</code> plus the module allowlist is the reviewed path for HTML, and it should stay the only one — especially now that comment bodies share the renderer. <strong>Superseded by v0.4.1 (2026-08-04):</strong> <code>raw_html</code> is now a reviewed attachment legal on any layout, not one a claim must adopt to carry it. <code>raw_html_reviewed</code>, the module allowlist and the lock-lifecycle leg are unchanged.</li>
   <li><strong>Heading-derived nav.</strong> Body headings render; the viewer's outline continues to ignore them. One nav, one source.</li>
 </ul>
 

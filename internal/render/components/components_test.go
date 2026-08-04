@@ -267,25 +267,376 @@ func TestColClass_KnownAndUnknownAndCaseInsensitive(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestEdgesHTML_MinimalClaimOmitsFacetModuleAndEmptyFields(t *testing.T) {
+	// A claim with zero edges and zero linked files now emits NOTHING AT ALL —
+	// no <details>, no <summary>, and not even the empty <ul class="claim-edges">
+	// this test used to require. An empty disclosure whose summary read
+	// "0 links - 0 files" would be a control that opens onto nothing, on every
+	// claim that has no edges yet.
 	c := model.Claim{Facet: "contract"}
-	got := string(edgesHTML(c))
-	if !strings.Contains(got, `<ul class="claim-edges">`) {
-		t.Fatalf("edgesHTML missing wrapper ul, got: %s", got)
+	if got := string(edgesHTML(c)); got != "" {
+		t.Fatalf("edgesHTML for a claim with no edges and no files must emit nothing at all, got: %s", got)
 	}
-	// facet/module are deliberately never rendered here — the surrounding
-	// page (tab + nav) already conveys them — so a bare Facet-only claim
-	// with nothing else set should render an effectively empty edges div.
-	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-governed", "claim-mirrors", "claim-rests-on", "claim-migrated", "claim-review-pending"} {
+
+	// facet/module are deliberately never rendered — the surrounding page (tab
+	// + nav) already conveys them. Proven against a claim that DOES emit a
+	// footer, since the empty case above can no longer discriminate: every
+	// substring is trivially absent from "".
+	withEdge := model.Claim{Facet: "contract", Module: "widget", MigratedFrom: "docs/tabs/widget.html"}
+	got := string(edgesHTML(withEdge))
+	if !strings.Contains(got, `<ul class="claim-edges">`) {
+		t.Fatalf("a claim with one edge must still render the edges ul, got: %s", got)
+	}
+	for _, absent := range []string{"claim-facet", "facet:", "claim-module", "module:", "claim-governed", "claim-mirrors", "claim-rests-on", "claim-review-pending"} {
 		if strings.Contains(got, absent) {
-			t.Errorf("edgesHTML for a minimal claim should omit %q, got: %s", absent, got)
+			t.Errorf("edgesHTML should omit %q, got: %s", absent, got)
 		}
 	}
 }
 
+// ---------------------------------------------------------------------
+// v0.4.1: the footer is a collapsed <details class="claim-links"> whose
+// <summary> digests it as "N links - N files - N drifted".
+// ---------------------------------------------------------------------
+
+// TestEdgesHTMLWithLinks_SummaryCountsAndFormat walks the frozen count table.
+// links counts what the reader FINDS ON EXPANDING — one per id inside the
+// nested mirrors/rests_on/depended-on-by lists, one each for a NAMED
+// governed_by target, migrated_from and review_pending — never <li> rows, and
+// never the linked files, which are their own term. drifted is a SUBSET of
+// files, never added to it.
+//
+// "governed_by: none" counts ZERO. It is a stated absence, not a link, and
+// counting it put a "1 links" digest under every edgeless claim in every real
+// project (governed_by is mandatory), which also made the no-<details> case
+// unreachable. Both halves of that are pinned below.
+//
+// Each count segment is singular at exactly 1 — "1 link", "1 file" — and
+// plural everywhere else, including 0. "drifted" is an adjective and never
+// takes an "s". Separator, term order and the >0 gate on drifted are unchanged.
+func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
+	cases := []struct {
+		name        string
+		claim       model.Claim
+		files       []implink.ViewFile
+		dependedBy  []string
+		wantSummary string // "" means: no <details> is emitted at all.
+	}{
+		{
+			name: "governed_mirrors_restson_dependedby_no_files",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: "doctrine.hub.retries"},
+				Mirrors:  []string{"widget.contract.a"},
+				RestsOn:  []string{"widget.contract.b", "widget.contract.c"},
+			},
+			dependedBy:  []string{"widget.internals.d", "widget.internals.e"},
+			wantSummary: "6 links - 0 files",
+		},
+		{
+			name: "governed_restson3_one_clean_file",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: "doctrine.hub.retries"},
+				RestsOn:  []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
+			},
+			files:       []implink.ViewFile{{File: "a.go"}},
+			wantSummary: "4 links - 1 file",
+		},
+		{
+			name: "governed_restson3_two_files_one_drifted",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: "doctrine.hub.retries"},
+				RestsOn:  []string{"widget.contract.a", "widget.contract.b", "widget.contract.c"},
+			},
+			files:       []implink.ViewFile{{File: "a.go", Drifted: true}, {File: "b.go"}},
+			wantSummary: "4 links - 2 files - 1 drifted",
+		},
+		{
+			// One link, no files: both segments at their singular/plural
+			// extremes in the same line — "1 link" and "0 files".
+			name:        "only_migrated_from",
+			claim:       model.Claim{Facet: "contract", MigratedFrom: "docs/tabs/widget.html"},
+			wantSummary: "1 link - 0 files",
+		},
+		{
+			// A NAMED governed_by target is one link — the half of the
+			// governed_by rule that did NOT change.
+			name: "governed_named_only",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: "doctrine.hub.retries"},
+			},
+			wantSummary: "1 link - 0 files",
+		},
+		{
+			// One file, no links: the mirror image of only_migrated_from, so
+			// "1 file" is pinned as well as "1 link".
+			name:        "only_one_clean_file",
+			claim:       model.Claim{Facet: "contract"},
+			files:       []implink.ViewFile{{File: "a.go"}},
+			wantSummary: "0 links - 1 file",
+		},
+		{
+			// "drifted" is invariant: 1 drifted, not "1 drifteds", and the
+			// file segment beside it is singular at 1.
+			name:        "one_drifted_file",
+			claim:       model.Claim{Facet: "contract"},
+			files:       []implink.ViewFile{{File: "a.go", Drifted: true}},
+			wantSummary: "0 links - 1 file - 1 drifted",
+		},
+		{
+			name:        "only_two_clean_files",
+			claim:       model.Claim{Facet: "contract"},
+			files:       []implink.ViewFile{{File: "a.go"}, {File: "b.go"}},
+			wantSummary: "0 links - 2 files",
+		},
+		{
+			name:        "only_two_drifted_files",
+			claim:       model.Claim{Facet: "contract"},
+			files:       []implink.ViewFile{{File: "a.go", Drifted: true}, {File: "b.go", Drifted: true}},
+			wantSummary: "0 links - 2 files - 2 drifted",
+		},
+		{
+			// governed_by: none counts ZERO — a stated absence, not a link —
+			// so a claim carrying nothing else falls through to the
+			// no-<details> case, exactly as if the field were unset.
+			name:        "governed_none_only",
+			claim:       model.Claim{Facet: "contract", Governed: model.Governed{Type: string(model.GovernedNone)}},
+			wantSummary: "",
+		},
+		{
+			// Same claim plus a reason: the reason is not a link either, and
+			// does not resurrect the footer.
+			name: "governed_none_with_reason_only",
+			claim: model.Claim{
+				Facet:    "contract",
+				Governed: model.Governed{Type: string(model.GovernedNone), Reason: "no doctrine covers this yet"},
+			},
+			wantSummary: "",
+		},
+		{
+			// One linked file is enough to disclose something, so the footer
+			// comes back — and the governed_by: none row rides along inside
+			// it while still counting zero.
+			name:        "governed_none_plus_one_file",
+			claim:       model.Claim{Facet: "contract", Governed: model.Governed{Type: string(model.GovernedNone)}},
+			files:       []implink.ViewFile{{File: "a.go"}},
+			wantSummary: "0 links - 1 file",
+		},
+		{
+			// One real edge beside the "none" row: the edge counts, the row
+			// does not, so this is 1 and not 2.
+			name: "governed_none_plus_one_rests_on",
+			claim: model.Claim{
+				Module: "widget", Facet: "contract",
+				Governed: model.Governed{Type: string(model.GovernedNone)},
+				RestsOn:  []string{"widget.contract.a"},
+			},
+			wantSummary: "1 link - 0 files",
+		},
+		{
+			name:        "review_pending_only",
+			claim:       model.Claim{Facet: "contract", Status: model.StatusLocked, ReviewPending: true},
+			wantSummary: "1 link - 0 files",
+		},
+		{
+			name:        "nothing_at_all",
+			claim:       model.Claim{Facet: "contract"},
+			wantSummary: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(EdgesHTMLWithLinks(tc.claim, tc.files, tc.dependedBy, nil))
+
+			if tc.wantSummary == "" {
+				if got != "" {
+					t.Fatalf("expected no <details> at all, got: %s", got)
+				}
+				return
+			}
+
+			want := `<summary class="claim-links-summary">` + tc.wantSummary + `</summary>`
+			if !strings.Contains(got, want) {
+				t.Fatalf("expected the summary %q, got: %s", want, got)
+			}
+			// The separator is SPACE HYPHEN-MINUS SPACE — never the en dash or
+			// the em dash this repo's prose uses, which is the likeliest way a
+			// copy-paste gets this wrong.
+			for _, forbidden := range []string{"–", "—"} {
+				if strings.Contains(tc.wantSummary, forbidden) {
+					t.Fatalf("test case itself uses a non-ASCII dash")
+				}
+			}
+			if strings.Contains(got, "–") {
+				t.Errorf("summary must use ASCII '-', not an en dash, got: %s", got)
+			}
+			// drifted is the ONE segment suppressed at zero; links and files
+			// always print, even as 0.
+			if !strings.Contains(tc.wantSummary, "drifted") && strings.Contains(got, "drifted</summary>") {
+				t.Errorf("the drifted segment must be omitted entirely when zero, got: %s", got)
+			}
+			// A global net under every case, not just the ones whose expected
+			// summary happens to contain a 1: these are the exact strings the
+			// old un-pluralised emitter produced, and "drifteds" is what a
+			// naive pluraliser applied to all three segments would produce.
+			for _, forbidden := range []string{"1 links", "1 files", "drifteds"} {
+				if strings.Contains(got, forbidden) {
+					t.Errorf("summary must be pluralised per count; found %q in: %s", forbidden, got)
+				}
+			}
+		})
+	}
+}
+
+// TestEdgesHTMLWithLinks_DetailsWrapperSeams pins the wrapper's exact shape:
+// zero whitespace at every seam, the <ul> and its rows nested inside, and the
+// class-then-bare-boolean attribute order. The viewer JS and CSS both key off
+// these exact bytes.
+func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
+	c := model.Claim{
+		ID: "widget.contract.self", Module: "widget", Facet: "contract",
+		Governed: model.Governed{Type: "doctrine.hub.retries"},
+	}
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
+
+	if !strings.HasPrefix(got, `<details class="claim-links"><summary class="claim-links-summary">`) {
+		t.Fatalf("expected the <details>/<summary> prologue with no whitespace between them, got: %s", got)
+	}
+	if !strings.Contains(got, `</summary><ul class="claim-edges">`) {
+		t.Fatalf("the edges <ul> must open immediately after </summary>, got: %s", got)
+	}
+	if !strings.HasSuffix(got, `</ul></details>`) {
+		t.Fatalf("the <ul> must close immediately before </details>, got: %s", got)
+	}
+	// The rows themselves are byte-identical to before the wrapper existed;
+	// they simply moved inside it.
+	if !strings.Contains(got, `<li class="claim-governed">governed_by: `) {
+		t.Fatalf("the governed_by row must survive the move into the <details>, got: %s", got)
+	}
+}
+
+// TestEdgesHTMLWithLinks_WorkedExampleExactBytes is the design's canonical
+// footer, asserted as one exact string rather than a pile of Contains checks.
+// Every seam in the wrapper is whitespace-free and every <li> inside it is
+// byte-identical to what this footer emitted before the wrapper existed, so a
+// single equality is the cheapest way to catch a stray space, a reordered
+// attribute, or a row that changed while being moved.
+func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
+	c := model.Claim{
+		ID: "widget.contract.retry-policy", Module: "widget", Facet: "contract",
+		Status: model.StatusLocked, ReviewPending: true,
+		Governed: model.Governed{Type: "doctrine.hub.retries"},
+		RestsOn:  []string{"widget.contract.retry-budget", "platform.http.client"},
+	}
+	files := []implink.ViewFile{
+		{File: "internal/http/retry.go", Symbol: "Do", Drifted: true},
+		{File: "internal/http/backoff.go"},
+	}
+	// links = 1 (governed_by) + 2 (rests_on ids) + 1 (review_pending) = 4;
+	// files = 2; drifted = 1. Open, on both signals at once.
+	const want = `<details class="claim-links" open>` +
+		`<summary class="claim-links-summary">4 links - 2 files - 1 drifted</summary>` +
+		`<ul class="claim-edges">` +
+		`<li class="claim-governed">governed_by: <a class="claim-ref" href="#doctrine.hub.retries" data-claim-id="doctrine.hub.retries" title="doctrine.hub.retries"><span class="claim-ref-prefix">Doctrine · Hub › </span><span class="claim-ref-label">Retries</span></a></li>` +
+		`<li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list">` +
+		`<li><a class="claim-ref" href="#widget.contract.retry-budget" data-claim-id="widget.contract.retry-budget" title="widget.contract.retry-budget"><span class="claim-ref-label">Retry Budget</span></a></li>` +
+		`<li><a class="claim-ref" href="#platform.http.client" data-claim-id="platform.http.client" title="platform.http.client"><span class="claim-ref-prefix">Platform · Http › </span><span class="claim-ref-label">Client</span></a></li>` +
+		`</ul></li>` +
+		`<li class="claim-review-pending">review_pending</li>` +
+		`<li class="claim-implemented-in">implemented in: <code>internal/http/retry.go#Do</code> <span class="pill pw">drifted</span></li>` +
+		`<li class="claim-implemented-in">implemented in: <code>internal/http/backoff.go</code></li>` +
+		`</ul></details>`
+
+	if got := string(EdgesHTMLWithLinks(c, files, nil, nil)); got != want {
+		t.Fatalf("worked-example footer mismatch\n want: %s\n got:  %s", want, got)
+	}
+}
+
+// TestEdgesHTMLWithLinks_OpenAttribute covers the two — and only two —
+// server-written auto-open signals: any linked file Drifted, or the claim
+// locked + review_pending. They are OR'd, so either alone opens the footer.
+// The third signal (a deep link to the claim) is a CSS :target rule in
+// style.css and is deliberately undetectable from here: a URL fragment is
+// never sent to the server.
+func TestEdgesHTMLWithLinks_OpenAttribute(t *testing.T) {
+	const openTag = `<details class="claim-links" open>`
+	const closedTag = `<details class="claim-links">`
+
+	cases := []struct {
+		name     string
+		claim    model.Claim
+		files    []implink.ViewFile
+		wantOpen bool
+	}{
+		{
+			name:     "neither_signal",
+			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked, MigratedFrom: "docs/x.html"},
+			files:    []implink.ViewFile{{File: "a.go"}},
+			wantOpen: false,
+		},
+		{
+			name:     "drifted_file_alone",
+			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked},
+			files:    []implink.ViewFile{{File: "a.go"}, {File: "b.go", Drifted: true}},
+			wantOpen: true,
+		},
+		{
+			name:     "locked_review_pending_alone",
+			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked, ReviewPending: true},
+			wantOpen: true,
+		},
+		{
+			name:     "both_signals",
+			claim:    model.Claim{Facet: "contract", Status: model.StatusLocked, ReviewPending: true},
+			files:    []implink.ViewFile{{File: "a.go", Drifted: true}},
+			wantOpen: true,
+		},
+		{
+			// ReviewPending is only meaningful on a locked claim; a draft
+			// carrying it renders no review_pending row and must not open.
+			name:     "draft_review_pending_does_not_open",
+			claim:    model.Claim{Facet: "contract", Status: model.StatusDraft, ReviewPending: true, MigratedFrom: "docs/x.html"},
+			wantOpen: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := string(EdgesHTMLWithLinks(tc.claim, tc.files, nil, nil))
+			wantTag := closedTag
+			if tc.wantOpen {
+				wantTag = openTag
+			}
+			if !strings.HasPrefix(got, wantTag) {
+				t.Fatalf("expected the footer to open with %q, got: %s", wantTag, got)
+			}
+			// The bare boolean form is the contract: never open="", never
+			// open="open", and never an open="false" for the negative case —
+			// a non-qualifying footer carries no open attribute at all.
+			for _, forbidden := range []string{`open=""`, `open="open"`, `open="true"`, `open="false"`} {
+				if strings.Contains(got, forbidden) {
+					t.Errorf("the open attribute must be a bare boolean, found %q in: %s", forbidden, got)
+				}
+			}
+		})
+	}
+}
+
+// The governed_by: none ROW itself — its class, its reason, and the inline
+// markdown ceiling on that reason — is asserted on a claim that also carries a
+// second edge, because "none" alone no longer counts as a link and therefore no
+// longer emits a footer to look in (see
+// TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter). MigratedFrom is the
+// cheapest edge that opens the disclosure: one flat <li>, no nested id list, no
+// claim-ref markup to confuse a Contains check on the reason.
 func TestEdgesHTML_GovernedNoneWithReason(t *testing.T) {
 	c := model.Claim{
-		Facet:    "contract",
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "fixture <claim>"},
+		Facet:        "contract",
+		MigratedFrom: "docs/tabs/widget.html",
+		Governed:     model.Governed{Type: string(model.GovernedNone), Reason: "fixture <claim>"},
 	}
 	got := string(edgesHTML(c))
 	if !strings.Contains(got, `governed-none`) {
@@ -304,7 +655,8 @@ func TestEdgesHTML_GovernedNoneWithReason(t *testing.T) {
 // other prose field already gets via the "markdown"/"cell" funcs.
 func TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
 	c := model.Claim{
-		Facet: "contract",
+		Facet:        "contract",
+		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
 		Governed: model.Governed{
 			Type:   string(model.GovernedNone),
 			Reason: "see `widget.contract.retry-policy` for the real gate",
@@ -325,12 +677,58 @@ func TestEdgesHTML_GovernedNoneReasonRoutesThroughInlineMarkdown(t *testing.T) {
 // raw markup even after the switch away from a bare html.EscapeString.
 func TestEdgesHTML_GovernedNoneReasonHostileHTMLStillEscaped(t *testing.T) {
 	c := model.Claim{
-		Facet:    "contract",
-		Governed: model.Governed{Type: string(model.GovernedNone), Reason: `<script>alert(1)</script>`},
+		Facet:        "contract",
+		MigratedFrom: "docs/tabs/widget.html", // opens the footer; see the note above.
+		Governed:     model.Governed{Type: string(model.GovernedNone), Reason: `<script>alert(1)</script>`},
 	}
 	got := string(edgesHTML(c))
+	if !strings.Contains(got, "governed-none") {
+		t.Fatalf("this test only proves anything if the none row rendered at all, got: %s", got)
+	}
 	if strings.Contains(got, "<script>") {
 		t.Fatalf("hostile HTML in Reason leaked unescaped: %s", got)
+	}
+}
+
+// TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter is the newly-reachable
+// zero-footer case. "governed_by: none" is a stated absence, not a link, so a
+// claim whose only footer content would be that row has no edges and no files
+// and emits NOTHING — no <details>, no <summary>, no <ul>, and no governed_by
+// row either.
+//
+// This case was unreachable before: governed_by is mandatory (internal/lint's
+// governed-required), so counting the "none" row as a link put a
+// "1 links - 0 files" disclosure — one that opens onto a single line saying
+// nothing governs this claim — under every edgeless claim in every real project.
+// The suppression rule existed but nothing could ever satisfy it.
+func TestEdgesHTMLWithLinks_GovernedNoneAloneEmitsNoFooter(t *testing.T) {
+	c := model.Claim{
+		ID: "widget.contract.ungoverned", Module: "widget", Facet: "contract",
+		Governed: model.Governed{
+			Type:   string(model.GovernedNone),
+			Reason: "no doctrine hub covers retries yet",
+		},
+	}
+
+	if got := string(EdgesHTMLWithLinks(c, nil, nil, nil)); got != "" {
+		t.Fatalf("a claim whose only footer content is governed_by: none must emit nothing at all, got: %s", got)
+	}
+
+	// The suppression is of the WHOLE footer, reason included — not a footer
+	// with an empty <ul>, and not a bare <details> with the row hidden.
+	if got := string(edgesHTML(c)); strings.Contains(got, "no doctrine hub covers retries yet") || strings.Contains(got, "governed-none") {
+		t.Fatalf("the suppressed footer leaked its governed_by: none row, got: %s", got)
+	}
+
+	// One linked file is enough to make the footer worth opening again, and
+	// the row comes back inside it — suppression is about there being nothing
+	// to disclose, never about hiding the "none" row itself.
+	withFile := string(EdgesHTMLWithLinks(c, []implink.ViewFile{{File: "a.go"}}, nil, nil))
+	if !strings.Contains(withFile, `<summary class="claim-links-summary">0 links - 1 file</summary>`) {
+		t.Fatalf("expected a 0-links, 1-file summary once something is disclosable, got: %s", withFile)
+	}
+	if !strings.Contains(withFile, `<li class="claim-governed governed-none">governed_by: none — no doctrine hub covers retries yet</li>`) {
+		t.Fatalf("the governed_by: none row must ride along inside a footer that is emitted, got: %s", withFile)
 	}
 }
 
@@ -920,6 +1318,15 @@ func TestClaimEdgeListHTML_UnshapedFromIDKeepsEveryPrefix(t *testing.T) {
 // edges footer for the rest of this work to reach. The heading shows the label;
 // data-claim-id and the title tooltip keep the id typeable for "dossierx claim
 // lock <id>", greppable in the rendered HTML, and reachable from the viewer JS.
+//
+// v0.4.1 flexes that head: the label and its status pill are wrapped in a
+// <span class="label"> and the comment chip's slot follows as a sibling, so CSS
+// can push the chip to the far edge without the pill going with it. SIX of the
+// seven partials take the new shape; BANNER KEEPS THE OLD FLAT LINE, because
+// banner carries no chip (it has no edges footer and no comment surface at all)
+// and therefore has nothing to flex against. A rewrite that applies the wrapped
+// prefix uniformly is wrong, and one that relaxes the assertion until banner
+// passes stops proving the shape at all.
 func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 	partials, err := Load("")
 	if err != nil {
@@ -936,6 +1343,23 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 		Steps:  []string{"one"},
 	}
 
+	// The whole head, byte for byte, for the six chip-bearing layouts: the
+	// opening <div class="k"> tag is unchanged, the label and pill move inside
+	// <span class="label"> with the one space between them preserved, and the
+	// chip slot follows with ZERO whitespace on either side of it. This claim
+	// carries no comments, so the slot is the hidden zero-state variant.
+	const wantHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
+		`<span class="label">Retry Policy <span class="pill ps">locked</span></span>` +
+		`<span class="claim-comments-slot" hidden>` +
+		`<button type="button" class="comment-chip comment-chip--empty" data-claim-id="widget.contract.retry-policy" ` +
+		`aria-controls="commentsPanel" aria-expanded="false" aria-label="add the first comment on this claim">` +
+		`<span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">0</span>` +
+		`</button></span></div>`
+
+	// banner's flat head, unchanged from before v0.4.1.
+	const wantBannerHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
+		`Retry Policy <span class="pill ps">locked</span></div>`
+
 	for _, layout := range []model.Layout{
 		model.LayoutCard, model.LayoutTable, model.LayoutList,
 		model.LayoutSteps, model.LayoutTree, model.LayoutBanner,
@@ -947,19 +1371,31 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 				t.Fatalf("execute %q partial: %v", layout, err)
 			}
 			got := buf.String()
-			want := `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">Retry Policy `
-			if !strings.Contains(got, want) {
-				t.Fatalf("expected the labeled, id-bearing heading %q, got: %s", want, got)
+
+			want := wantHead
+			if layout == model.LayoutBanner {
+				want = wantBannerHead
 			}
+			if !strings.Contains(got, want) {
+				t.Fatalf("expected the labeled, id-bearing heading\n want: %s\n got:  %s", want, got)
+			}
+			if layout == model.LayoutBanner && strings.Contains(got, "claim-comments-slot") {
+				t.Errorf("banner must carry no comment chip slot, got: %s", got)
+			}
+
 			// The heading label is the BARE label — a claim's own module and
 			// facet are the page the reader is standing on.
 			if strings.Contains(got, `>Widget · Contract › Retry Policy`) {
 				t.Errorf("a claim's own heading must not carry a prefix, got: %s", got)
 			}
 			// The root element's id= is untouched: it is what a #hash deep link
-			// and stripOverviewIDs both key off.
+			// and stripOverviewIDs both key off. The head's new spans add no
+			// second ` id="` for stripOverviewIDs to hit by mistake.
 			if !strings.Contains(got, ` id="widget.contract.retry-policy"`) {
 				t.Errorf("the root element must keep its id attribute, got: %s", got)
+			}
+			if n := strings.Count(got, ` id="`); n != 1 {
+				t.Errorf("exactly one ` id=\"` attribute must appear (the root section's), got %d in: %s", n, got)
 			}
 		})
 	}
@@ -970,6 +1406,13 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 // escaped by html/template itself, with no hand-escaping in the partial. This
 // pins that no future edit "helpfully" wraps claimLabel's output in a
 // template.HTML the way the edges footer legitimately has to.
+//
+// The head now also carries the comment chip, and the chip is the OTHER kind:
+// CommentChipHTML returns template.HTML from a FuncMap, which bypasses
+// html/template's automatic escaping entirely, so its data-claim-id is escaped
+// BY HAND with html.EscapeString or not at all. Both kinds now interpolate the
+// same hostile id into the same <div class="k">, which is why this test — the
+// one that looks at the head — is where the chip's hand-escaping is proven.
 func TestPartialHeadings_HostileIDIsAutoEscaped(t *testing.T) {
 	partials, err := Load("")
 	if err != nil {
@@ -991,6 +1434,19 @@ func TestPartialHeadings_HostileIDIsAutoEscaped(t *testing.T) {
 	// Not three segments, so the heading shows the raw id — escaped.
 	if !strings.Contains(got, `alert(1)`) {
 		t.Fatalf("expected the raw id shown (escaped) in the heading, got: %s", got)
+	}
+	// The chip's hand-escaped attribute, in the head, byte for byte. Asserting
+	// the literal (rather than recomputing html.EscapeString here) is the point:
+	// a future edit that drops the hand-escaping would still pass a test that
+	// escapes its own expectation the same way the code does.
+	const wantChip = `<span class="claim-comments-slot" hidden><button type="button" class="comment-chip comment-chip--empty" ` +
+		`data-claim-id="x&#34;&gt;&lt;script&gt;alert(1)&lt;/script&gt;" aria-controls="commentsPanel"`
+	if !strings.Contains(got, wantChip) {
+		t.Fatalf("expected the chip's data-claim-id hand-escaped in the head\n want: %s\n got:  %s", wantChip, got)
+	}
+	// And nothing anywhere closed out of that attribute.
+	if strings.Contains(got, `data-claim-id="x">`) {
+		t.Fatalf("the chip's data-claim-id broke out of its attribute: %s", got)
 	}
 }
 

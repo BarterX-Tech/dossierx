@@ -697,6 +697,17 @@ func renderOverviewHTML(overview []model.Claim, renderedByID map[string]template
 // attribute, and both survive on every copy on purpose — a data-* hook and a
 // tooltip are not document-unique the way id= is, and the reader of an
 // injected copy still needs the machine id to act on it.
+//
+// v0.4.1 moved the comment chip out of the edges footer and into that same .k
+// header, inside <span class="claim-comments-slot"> (components.CommentChipHTML,
+// bound as the "commentChip" template func). Re-verified against the new
+// markup, and the code below is unchanged: the slot span and the chip <button>
+// it wraps carry class / hidden / data-claim-id / aria-* only — no ` id="`
+// sequence anywhere — so the single Replace still lands on the root
+// <section>'s id and nothing else. A third data-claim-id per copy is exactly
+// the intended fan-out, for the reason above: shell.html's chip handlers
+// address claims by data-claim-id precisely so an overview note injected into
+// N facet tabs stays clickable in all N, while only one copy keeps id=.
 func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []template.HTML {
 	if len(canonical) == 0 {
 		return nil

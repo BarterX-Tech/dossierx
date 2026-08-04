@@ -11,8 +11,13 @@
 //	                                       gate as though they had all passed
 //	edit a locked body with no dependents  no dependent means no baseline
 //	                                       compares it, so nothing looks
-//	swap raw_html on a locked mockup       rendered UNESCAPED, and ContentHash
-//	                                       does not cover raw_html at all
+//	swap raw_html on a locked mockup       rendered UNESCAPED, with no baseline
+//	                                       comparing it either — a mockup has no
+//	                                       dependents. (ContentHash has covered
+//	                                       raw_html since v0.4.1, but that only
+//	                                       marks a DEPENDENT stale; being stale
+//	                                       is not being tampered with, and this
+//	                                       row still holds.)
 //	flip build_role/section/order/emphasis ContentHash covers none of them
 //	flip locked -> draft to dodge review   the claim simply looks like a draft
 //

@@ -38,7 +38,7 @@ func TestEmptyClaimChipOpensRailAndPostsFirstComment(t *testing.T) {
 	// The probe revealed the zero-state chip: visible, --empty, reading 0.
 	pollTrue(t, ctx, `(function(){
 		var c = document.querySelector('.comment-chip');
-		return !!c && c.classList.contains('comment-chip--empty') && !c.closest('.claim-comments').hidden;
+		return !!c && c.classList.contains('comment-chip--empty') && !c.closest('.claim-comments-slot').hidden;
 	})()`)
 	if got := evalString(t, ctx, `document.querySelector('.comment-chip .comment-chip-count').textContent`); got != "0" {
 		t.Fatalf("zero-state chip count = %q, want \"0\"", got)
@@ -57,7 +57,7 @@ func TestEmptyClaimChipOpensRailAndPostsFirstComment(t *testing.T) {
 	// ...and the chip that opened it must SURVIVE. buildPanel's
 	// updateChips(claimID, 0, 0) runs on this exact claim; the pre-fix client
 	// would have hidden the chip out from under the click.
-	if evalBool(t, ctx, `document.querySelector('.comment-chip').closest('.claim-comments').hidden`) {
+	if evalBool(t, ctx, `document.querySelector('.comment-chip').closest('.claim-comments-slot').hidden`) {
 		t.Fatal("clicking an empty chip must not hide it (buildPanel's updateChips(id, 0, 0) re-hide bug)")
 	}
 	if !evalBool(t, ctx, `document.querySelector('.comment-chip').getAttribute('aria-expanded') === 'true'`) {
@@ -127,7 +127,7 @@ func TestFileURLHidesEmptyChips(t *testing.T) {
 	// before a (hypothetically) succeeding probe had resolved.
 	pollTrue(t, ctx, `(function(){
 		var quiet = document.querySelector('.comment-chip[data-claim-id="widget.contract.quiet"]');
-		return !!quiet && quiet.closest('.claim-comments').hidden;
+		return !!quiet && quiet.closest('.claim-comments-slot').hidden;
 	})()`)
 	if evalBool(t, ctx, `document.body.classList.contains('comments-live')`) {
 		t.Fatal("a static file:// viewer must never mount the runtime")
@@ -141,7 +141,7 @@ func TestFileURLHidesEmptyChips(t *testing.T) {
 	if evalInt(t, ctx, `Array.from(document.querySelectorAll('.comment-chip')).filter(function(c){return c.offsetParent !== null;}).length`) != 1 {
 		t.Fatal("exactly one chip (the one with threads) may be visible on a static export")
 	}
-	if evalBool(t, ctx, `document.querySelector('.comment-chip[data-claim-id="widget.contract.base"]').closest('.claim-comments').hidden`) {
+	if evalBool(t, ctx, `document.querySelector('.comment-chip[data-claim-id="widget.contract.base"]').closest('.claim-comments-slot').hidden`) {
 		t.Fatal("a chip that HAS threads must stay visible on a static export")
 	}
 }
@@ -159,7 +159,7 @@ func TestEmptyChipsStayRevealedAcrossReload(t *testing.T) {
 
 	pollTrue(t, ctx, `(function(){
 		var c = document.querySelector('.comment-chip[data-claim-id="widget.contract.base"]');
-		return !!c && !c.closest('.claim-comments').hidden;
+		return !!c && !c.closest('.claim-comments-slot').hidden;
 	})()`)
 
 	// An external change -> a fragment swap that replaces every card (and thus
@@ -168,11 +168,11 @@ func TestEmptyChipsStayRevealedAcrossReload(t *testing.T) {
 	p.writeClaim("ctr2.yaml", facetClaim("widget.contract.added", "contract"))
 	pollTrue(t, ctx, `!!document.getElementById('widget.contract.added')`)
 
-	if evalInt(t, ctx, `Array.from(document.querySelectorAll('.comment-chip')).filter(function(c){return c.closest('.claim-comments').hidden;}).length`) != 0 {
+	if evalInt(t, ctx, `Array.from(document.querySelectorAll('.comment-chip')).filter(function(c){return c.closest('.claim-comments-slot').hidden;}).length`) != 0 {
 		t.Fatal("empty chips must stay revealed after an SSE fragment swap")
 	}
 	// The chip on the claim that only just appeared is offered too.
-	if evalBool(t, ctx, `document.querySelector('.comment-chip[data-claim-id="widget.contract.added"]').closest('.claim-comments').hidden`) {
+	if evalBool(t, ctx, `document.querySelector('.comment-chip[data-claim-id="widget.contract.added"]').closest('.claim-comments-slot').hidden`) {
 		t.Fatal("a claim added by a live reload must arrive with a usable chip")
 	}
 }

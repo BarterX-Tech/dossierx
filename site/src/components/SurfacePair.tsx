@@ -156,6 +156,14 @@ function ViewerCard({ url, card }: { url: string; card: PairCard }) {
         <div className="cmt-card cmt-card--commented">
           <div className="cmt-card__head">
             <code className="cmt-card__id">{card.id}</code>
+            <span
+              className="cmt-chip cmt-chip--open"
+              role="img"
+              aria-label="1 open comment thread"
+            >
+              <span aria-hidden="true">💬</span>
+              <span className="cmt-chip__count">1</span>
+            </span>
             <span className="cmt-card__status">{card.status}</span>
           </div>
           <p className="cmt-card__meta">
@@ -173,16 +181,6 @@ function ViewerCard({ url, card }: { url: string; card: PairCard }) {
                 <span>{r.type}</span>
               </div>
             ))}
-          </div>
-          <div className="cmt-card__footer">
-            <span
-              className="cmt-chip cmt-chip--open"
-              role="img"
-              aria-label="1 open comment thread"
-            >
-              <span aria-hidden="true">💬</span>
-              <span className="cmt-chip__count">1</span>
-            </span>
           </div>
         </div>
 

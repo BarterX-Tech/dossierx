@@ -71,6 +71,7 @@ var funcMap = template.FuncMap{
 	"mockupHTML":    mockupHTML,
 	"claimLabel":    ClaimLabel,
 	"claimEdgeList": ClaimEdgeListHTML,
+	"commentChip":   CommentChipHTML,
 }
 
 // commentsPanelTmpl is the parsed comments.html thread-panel partial, parsed
@@ -89,6 +90,9 @@ var funcMap = template.FuncMap{
 // EdgesHTMLWithLinks, which reads this very var, so parsing with funcMap would
 // be a package-initialization cycle. comments.html needs nothing but "markdown"
 // anyway (its other constructs — range/if/eq/len/template — are builtins).
+// "commentChip" is not added here for the same reason: comments.html never
+// calls it, and widening this restricted map back toward the full funcMap is
+// exactly how the initialization cycle above comes back.
 //
 // Unlike the per-layout partials and build_order.html, this panel is not wired
 // to viewer.template_overrides: it reaches the render through EdgesHTMLWithLinks
@@ -370,6 +374,18 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // func override, rather than a second template field, is how this data
 // reaches the existing per-layout partials without editing any of them.
 //
+// The whole footer ships inside a <details class="claim-links"> whose
+// <summary> is a three-count digest — "N links - N files - N drifted", the
+// drifted segment present only when it is non-zero. A claim's edges are
+// reference material a reader consults, not something they read on every pass,
+// and expanded on every card they were the bulk of the page. The digest keeps
+// the fact that there ARE edges (and that one of them has drifted) visible
+// while closed. Two signals write the bare ` open` attribute server-side —
+// any linked file Drifted, or the claim locked + review_pending — so the two
+// states a reader must not miss are never hidden behind a click. The comment
+// chip is NOT in here any more: it moved to the claim head (see
+// CommentChipHTML), because a chip inside a collapsed footer is unclickable.
+//
 // dependedBy is never authored — it is the reverse index of every other
 // claim's rests_on, computed fresh each Render pass from the whole
 // catalog (see internal/render's buildDependedByLookup). Deriving it at
@@ -380,98 +396,270 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // single-source-of-truth rule (see rests_on's own doc comment) exists to
 // rule out.
 func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []string, targetStatuses map[string]TargetStatus) template.HTML {
-	var b strings.Builder
-	b.WriteString(`<ul class="claim-edges">`)
+	// rows accumulates the <li> bodies and links/drifted counts the <summary>
+	// needs, BEFORE anything is written to b — the whole <details>/<summary>/<ul>
+	// prologue is conditional on there being something to disclose, and the
+	// summary line quotes counts only the completed rows can supply. Emitting
+	// the prologue first and unwinding it on a zero-edge claim would mean
+	// carrying a "did I write anything yet" flag through every branch below.
+	var rows strings.Builder
+	links := 0
 
 	if c.Governed.Type != "" {
 		if c.Governed.Type == string(model.GovernedNone) {
-			b.WriteString(`<li class="claim-governed governed-none">governed_by: none`)
+			// "governed_by: none" DOES NOT COUNT AS A LINK. It is a stated
+			// absence — the claim declaring that no doctrine backs it — not an
+			// edge the reader can follow, and counting it made every claim in
+			// every real project report at least "1 links" (governed_by is
+			// mandatory: see internal/lint's governed-required). That in turn
+			// made the zero-footer case below unreachable in practice, so the
+			// design's promise that a claim with no edges and no files emits no
+			// <details> at all never actually held. A NAMED governed_by target
+			// still counts as one, in the else branch.
+			//
+			// The consequence is deliberate: on a claim whose ONLY footer
+			// content would be this row, the whole <details> is suppressed and
+			// the row (with its Reason) is not rendered. A disclosure control
+			// that opens onto "this claim has no doctrine and nothing else
+			// either" is exactly the empty triangle the suppression rule exists
+			// to prevent. The moment anything else is disclosed — one edge, one
+			// linked file — the row rides along inside as before.
+			rows.WriteString(`<li class="claim-governed governed-none">governed_by: none`)
 			if c.Governed.Reason != "" {
-				b.WriteString(` — `)
+				rows.WriteString(` — `)
 				// Reason is hand-written prose, not viewer chrome (unlike
 				// Claim.Section below), and routinely names a claim id or a
 				// path — so it goes through the same INLINE-ceiling renderer
 				// every other prose field uses (markdown.RenderInline: code
 				// spans and links, no block constructs) rather than a bare
 				// html.EscapeString.
-				b.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
+				rows.WriteString(string(markdown.RenderInline(c.Governed.Reason)))
 			}
-			b.WriteString(`</li>`)
+			rows.WriteString(`</li>`)
 		} else {
 			// governed_by names another claim, so it renders through the same
 			// writeClaimRef every other claim-to-claim edge below uses rather
 			// than its own hand-built <a>: a doctrine hub is nearly always in a
 			// different facet from the claim it governs, so this is precisely
 			// the edge whose prefix tier ("Doctrine › Hub") carries information.
-			b.WriteString(`<li class="claim-governed">governed_by: `)
-			writeClaimRef(&b, c.Governed.Type, c.Module, c.Facet, targetStatuses)
-			b.WriteString(`</li>`)
+			// A named target IS a link — one claim id the reader can follow —
+			// so it counts, unlike the "none" branch above. review_pending
+			// below counts the same way while carrying no claim id at all:
+			// "links" is per-row-except-the-nested-id-lists, minus the one row
+			// that states an absence.
+			links++
+			rows.WriteString(`<li class="claim-governed">governed_by: `)
+			writeClaimRef(&rows, c.Governed.Type, c.Module, c.Facet, targetStatuses)
+			rows.WriteString(`</li>`)
 		}
 	}
 
 	if len(c.Mirrors) > 0 {
-		b.WriteString(`<li class="claim-mirrors">mirrors:`)
-		writeIDListItems(&b, c.Module, c.Facet, c.Mirrors, targetStatuses)
-		b.WriteString(`</li>`)
+		links += len(c.Mirrors)
+		rows.WriteString(`<li class="claim-mirrors">mirrors:`)
+		writeIDListItems(&rows, c.Module, c.Facet, c.Mirrors, targetStatuses)
+		rows.WriteString(`</li>`)
 	}
 
 	if len(c.RestsOn) > 0 {
-		b.WriteString(`<li class="claim-rests-on">rests_on:`)
-		writeIDListItems(&b, c.Module, c.Facet, c.RestsOn, targetStatuses)
-		b.WriteString(`</li>`)
+		links += len(c.RestsOn)
+		rows.WriteString(`<li class="claim-rests-on">rests_on:`)
+		writeIDListItems(&rows, c.Module, c.Facet, c.RestsOn, targetStatuses)
+		rows.WriteString(`</li>`)
 	}
 
 	if len(dependedBy) > 0 {
-		b.WriteString(`<li class="claim-depended-by">depended on by:`)
-		writeIDListItems(&b, c.Module, c.Facet, dependedBy, targetStatuses)
-		b.WriteString(`</li>`)
+		links += len(dependedBy)
+		rows.WriteString(`<li class="claim-depended-by">depended on by:`)
+		writeIDListItems(&rows, c.Module, c.Facet, dependedBy, targetStatuses)
+		rows.WriteString(`</li>`)
 	}
 
 	if c.MigratedFrom != "" {
-		b.WriteString(`<li class="claim-migrated">migrated_from: `)
-		b.WriteString(html.EscapeString(c.MigratedFrom))
-		b.WriteString(`</li>`)
+		links++
+		rows.WriteString(`<li class="claim-migrated">migrated_from: `)
+		rows.WriteString(html.EscapeString(c.MigratedFrom))
+		rows.WriteString(`</li>`)
 	}
 
-	if c.Status == model.StatusLocked && c.ReviewPending {
-		b.WriteString(`<li class="claim-review-pending">review_pending</li>`)
+	// One condition, two consumers: review_pending is both a link in the
+	// summary and (below) one of the two server-written auto-open signals.
+	// They must stay keyed on the identical test.
+	reviewPending := c.Status == model.StatusLocked && c.ReviewPending
+	if reviewPending {
+		links++
+		rows.WriteString(`<li class="claim-review-pending">review_pending</li>`)
 	}
 
-	// The 💬 comment chip rides this shared footer, reading c.Comments
-	// directly rather than a per-render lookup — the claim is already in
-	// scope under both the default "edges" binding (edgesHTML) and
-	// render's attachEdgesOverride closure, so the chip renders under both
-	// with no signature change and no second "edges" Funcs binding (which
-	// would silently discard the first). Values are hand-escaped like the
-	// rest of this func because a FuncMap-returned template.HTML bypasses
-	// html/template's auto-escaping. banner.html never calls {{edges .}},
-	// so banner claims are excluded from the whole comment surface for free.
+	drifted := 0
+	for _, f := range files {
+		if f.Drifted {
+			drifted++
+		}
+		rows.WriteString(`<li class="claim-implemented-in">implemented in: <code>`)
+		rows.WriteString(html.EscapeString(f.File))
+		if f.Symbol != "" {
+			rows.WriteString(`#`)
+			rows.WriteString(html.EscapeString(f.Symbol))
+		}
+		rows.WriteString(`</code>`)
+		if f.Drifted {
+			rows.WriteString(` <span class="pill pw">drifted</span>`)
+		}
+		rows.WriteString(`</li>`)
+	}
+
+	var b strings.Builder
+
+	// Zero links and zero files: emit no <details> at all — not an empty
+	// disclosure reading "0 links - 0 files", which would be a control that
+	// opens onto nothing on every claim with no edges yet. The counts DO print
+	// as 0 whenever the other one is non-zero; it is only the both-zero case
+	// that suppresses the whole footer.
 	//
-	// The chip is emitted for EVERY claim reaching this footer, not only ones
-	// that already carry threads. Gating it on len(c.Comments) > 0 made the
-	// FIRST comment on a card unreachable from the viewer — the only surface
-	// the human has — so a claim nobody had questioned yet could never be
-	// questioned. The zero state is its own third variant (comment-chip--empty,
-	// reading "💬 0") rather than a borrowed --resolved, because "no one has
-	// commented" and "everything raised was settled" are different facts and
-	// the --resolved count would lie about the second.
-	//
-	// The zero-state <li> ships with the `hidden` attribute and is revealed by
-	// shell.html only once its /api/ping probe confirms a live serve. A static
-	// file:// export has no reachable comment API and therefore mounts no
-	// composer, so an empty chip there would open a rail with nothing in it and
-	// no way to add anything — a dead control. Hidden-by-default (rather than
-	// shown-then-hidden-on-probe-failure) is deliberate: the capability appears
-	// when it is confirmed available, instead of flashing away ~1s after load
-	// and inviting a click that resolves to nothing.
+	// Since "governed_by: none" no longer counts (see above), the both-zero
+	// case now covers the claim that states an absence and nothing else, which
+	// is the ordinary shape of an ungoverned claim with no edges yet — this
+	// branch is what makes that claim emit a clean section with no dangling
+	// disclosure triangle under it.
+	if links > 0 || len(files) > 0 {
+		// Two auto-open signals, OR'd — either alone opens the footer. Both
+		// read data already in scope (files' Drifted flag, the claim's own
+		// status pair), which is why this needs no new parameter.
+		//
+		// There is a THIRD auto-open signal, the deep-link/fragment case, and
+		// it is deliberately absent here: a URL fragment is never sent to the
+		// server and is unknowable at render time. It is implemented as the
+		// CSS rule `.claim:target .claim-links > *:not(summary)` in
+		// viewer/template/style.css, and nothing in this package may try to
+		// infer it.
+		openAttr := ""
+		for _, f := range files {
+			if f.Drifted {
+				openAttr = " open"
+				break
+			}
+		}
+		if reviewPending {
+			openAttr = " open"
+		}
+
+		// Fixed ASCII words, a " - " separator (HYPHEN-MINUS, not the em dash
+		// this file uses in prose) and plain %d counts — no claim-authored data
+		// reaches this string, so it needs no escaping.
+		//
+		// Each count segment is pluralised: "1 link", "2 links", "1 file",
+		// "0 files". The line used to be deliberately un-pluralised to keep a
+		// fixed mono column, but "1 links" on a claim with exactly one edge is
+		// the single most-read string in the viewer reading as a typo, and the
+		// column argument never survived contact with the drifted segment
+		// appearing and disappearing anyway. "drifted" is an adjective, not a
+		// noun, so it is invariant ("1 drifted", "2 drifted") — nothing to
+		// pluralise there. Separator, term order and the >0 gate on drifted are
+		// exactly as the contract froze them; only the nouns changed.
+		summary := countSegment(links, "link") + " - " + countSegment(len(files), "file")
+		if drifted > 0 {
+			summary += fmt.Sprintf(" - %d drifted", drifted)
+		}
+
+		b.WriteString(`<details class="claim-links"`)
+		b.WriteString(openAttr)
+		b.WriteString(`><summary class="claim-links-summary">`)
+		b.WriteString(summary)
+		b.WriteString(`</summary><ul class="claim-edges">`)
+		b.WriteString(rows.String())
+		b.WriteString(`</ul></details>`)
+	}
+
+	// The baked-in thread panel follows the whole <details> (a <div>, so it
+	// can't be an <li> inside the <ul>) but stays inside the claim's <section>,
+	// since {{edges .}} is the last thing every non-banner partial emits before
+	// </section>. It is a SIBLING of the disclosure, never a child: a claim's
+	// threads must stay readable without expanding its edges, and — crucially —
+	// a claim with comments but no edges at all suppresses the <details> above
+	// while still rendering its panel here. comments.html auto-escapes its
+	// bodies via the shared "markdown" func, so no hand-escaping is needed for
+	// the panel. On the (embedded, tested) template this Execute cannot fail; a
+	// defensive error path drops the panel rather than corrupt the footer with
+	// partial output.
+	if len(c.Comments) > 0 {
+		var pb strings.Builder
+		if err := commentsPanelTmpl.Execute(&pb, newCommentsPanelView(c)); err == nil {
+			b.WriteString(pb.String())
+		}
+	}
+
+	return template.HTML(b.String())
+}
+
+// countSegment renders one segment of the <summary> digest — the count and its
+// noun, pluralised with a plain trailing "s" unless the count is exactly 1
+// ("1 link", "0 links", "2 files"). Only "link" and "file" go through here;
+// "drifted" is an adjective and stays invariant at every count.
+//
+// English irregulars are deliberately not handled: the two nouns are fixed
+// literals in this file's only caller, and a general pluraliser would be
+// machinery for a set of size two.
+func countSegment(n int, singular string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %ss", n, singular)
+}
+
+// CommentChipHTML renders the 💬 comment chip for one claim, as a
+// <span class="claim-comments-slot"> holding the chip <button>. It is bound
+// into funcMap as "commentChip" and called directly from each chip-bearing
+// partial's <div class="k"> heading — {{commentChip .}}, the whole claim — so
+// the chip sits in the claim HEAD rather than in the edges footer, where it
+// used to ride as an <li class="claim-comments"> inside the shared
+// <ul class="claim-edges">. It moved because the footer is now a collapsed
+// <details> (see EdgesHTMLWithLinks): a chip inside it would be invisible, and
+// unclickable, on every claim whose footer starts closed.
+//
+// It reads c.Comments directly rather than a per-render lookup, so it needs no
+// config, no allowlist and therefore no override binding in internal/render —
+// unlike "edges" and "mockupHTML", the exported func IS the binding, under both
+// the parse-time funcMap and every Render pass. banner.html simply does not call
+// it, which is what keeps banner claims out of the whole comment surface (it no
+// longer calls {{edges .}} either).
+//
+// Values are hand-escaped because a FuncMap-returned template.HTML bypasses
+// html/template's automatic escaping — nothing downstream will escape c.ID or
+// the aria-label for us.
+//
+// The chip is emitted for EVERY claim, not only ones that already carry
+// threads. Gating it on len(c.Comments) > 0 made the FIRST comment on a card
+// unreachable from the viewer — the only surface the human has — so a claim
+// nobody had questioned yet could never be questioned. The zero state is its own
+// third variant (comment-chip--empty, reading "💬 0") rather than a borrowed
+// --resolved, because "no one has commented" and "everything raised was settled"
+// are different facts and the --resolved count would lie about the second.
+//
+// The zero-state slot ships with the bare `hidden` attribute and is revealed by
+// shell.html only once its /api/ping probe confirms a live serve. A static
+// file:// export has no reachable comment API and therefore mounts no composer,
+// so an empty chip there would open a rail with nothing in it and no way to add
+// anything — a dead control. Hidden-by-default (rather than
+// shown-then-hidden-on-probe-failure) is deliberate: the capability appears when
+// it is confirmed available, instead of flashing away ~1s after load and
+// inviting a click that resolves to nothing. The attribute lives on the SLOT,
+// not the button, which is the element shell.html's syncEmptyChips and the
+// chromedp suite reach for via closest('.claim-comments-slot').
+//
+// This func emits no ` id="` sequence anywhere, deliberately: render's
+// stripOverviewIDs matches a leading-space ` id="<claim-id>"` literal to strip
+// the duplicate ids an overview claim's N rendered copies would otherwise carry,
+// and it must keep hitting only the root <section>.
+func CommentChipHTML(c model.Claim) template.HTML {
 	open := len(c.OpenThreadIDs())
 	total := len(c.Comments)
-	liOpenTag := `<li class="claim-comments" hidden>`
+	slotOpenTag := `<span class="claim-comments-slot" hidden>`
 	chipClass := "comment-chip comment-chip--empty"
 	count := 0
 	label := "add the first comment on this claim"
 	if total > 0 {
-		liOpenTag = `<li class="claim-comments">`
+		slotOpenTag = `<span class="claim-comments-slot">`
 		chipClass = "comment-chip comment-chip--resolved"
 		count = total
 		label = fmt.Sprintf("view %d comment thread(s), all resolved", total)
@@ -485,7 +673,8 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	// shell.html) that the viewer JS reveals on click; aria-expanded is kept in
 	// sync by that JS. Both are inert in a browser-less context but make the
 	// chip a proper disclosure control for assistive tech.
-	b.WriteString(liOpenTag)
+	var b strings.Builder
+	b.WriteString(slotOpenTag)
 	b.WriteString(`<button type="button" class="`)
 	b.WriteString(chipClass)
 	b.WriteString(`" data-claim-id="`)
@@ -494,38 +683,7 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	b.WriteString(html.EscapeString(label))
 	b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
 	b.WriteString(fmt.Sprintf("%d", count))
-	b.WriteString(`</span></button></li>`)
-
-	for _, f := range files {
-		b.WriteString(`<li class="claim-implemented-in">implemented in: <code>`)
-		b.WriteString(html.EscapeString(f.File))
-		if f.Symbol != "" {
-			b.WriteString(`#`)
-			b.WriteString(html.EscapeString(f.Symbol))
-		}
-		b.WriteString(`</code>`)
-		if f.Drifted {
-			b.WriteString(` <span class="pill pw">drifted</span>`)
-		}
-		b.WriteString(`</li>`)
-	}
-
-	b.WriteString(`</ul>`)
-
-	// The baked-in thread panel follows the edges <ul> (a <div>, so it can't
-	// be an <li> inside it) but stays inside the claim's <section>, since
-	// {{edges .}} is the last thing every non-banner partial emits before
-	// </section>. comments.html auto-escapes its bodies via the shared
-	// "markdown" func, so no hand-escaping is needed for the panel. On the
-	// (embedded, tested) template this Execute cannot fail; a defensive error
-	// path drops the panel rather than corrupt the footer with partial output.
-	if len(c.Comments) > 0 {
-		var pb strings.Builder
-		if err := commentsPanelTmpl.Execute(&pb, newCommentsPanelView(c)); err == nil {
-			b.WriteString(pb.String())
-		}
-	}
-
+	b.WriteString(`</span></button></span>`)
 	return template.HTML(b.String())
 }
 
@@ -582,6 +740,27 @@ func mockupHTML(c model.Claim) template.HTML {
 // live markup into the viewer even if it reached render — the raw-html-scope
 // lint gate should already have stopped it, this is the second layer. Exported
 // so internal/render can bind it with the project's allowlist.
+//
+// THE trusted CONDITION BELOW DELIBERATELY CARRIES NO LAYOUT TERM, and must not
+// grow one. raw_html is legal on ANY layout as of v0.4.1 (issue #25): the
+// raw-html-scope lint used to gate it on layout: mockup as well as on the
+// module allowlist and raw_html_reviewed, and that layout leg was a second,
+// hand-maintained spelling of a rule the other two legs already enforced —
+// duplication that made a card claim's reviewed, allowlisted markup illegal for
+// no reason anyone could state. Re-adding a layout term here "defensively" — a
+// third conjunct testing the claim's Layout field against LayoutMockup — would
+// re-encode exactly that duplication one layer down, and would silently escape
+// the raw_html of every card/table/list/steps/tree/banner claim this release
+// exists to let through. The whole file is grepped for that field name by this
+// release's plan precisely so the term cannot creep back in unnoticed.
+//
+// The real second layer is unchanged and is what this func actually checks: the
+// claim must be LOCKED (so a human signed off on the bytes), RawHTMLReviewed
+// (so a human signed off on them AS MARKUP), and its module must be in the
+// project's mockup_modules allowlist (so raw_html is a capability a project
+// grants a module, not one any claim can take). Those three are layout-blind by
+// design, and a draft, unreviewed or non-allowlisted claim's raw_html is
+// emitted html-escaped on every layout, exactly as before.
 func MockupHTML(c model.Claim, allowlist []string) template.HTML {
 	trusted := c.Status == model.StatusLocked && c.RawHTMLReviewed && stringInSlice(allowlist, c.Module)
 	if trusted {

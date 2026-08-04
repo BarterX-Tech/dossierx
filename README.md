@@ -24,7 +24,7 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.4.0`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.4.1`,
    then run `dossierx version` and show me the output.
 2. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Load what it
@@ -33,7 +33,7 @@ Set up DossierX in this repository.
    propose a title, the facets, and the modules, and WAIT for me to confirm
    before writing anything.
 4. ASK ME before installing the git pre-commit hook. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.4.0/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.4.1/scripts/install-git-hook.sh
    to a file, show me what it does, then run `sh install-git-hook.sh --yes`.
    If I say no, add the CI workflow instead and tell me so — CI is the
    authority either way.
@@ -173,7 +173,7 @@ The gate names each disagreement:
 | `lock-ledger-deleted` | `lock-ledger-missing`'s sharper twin: a claim **this engine locked**, whose record is gone. Every other rule keys on a record *existing*, so deleting one took the claim out of the switch entirely — delete its `ledger` entry, flip `status: locked` back to `draft`, and it is an ordinary draft again, freely editable and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. `check --validate` reported `ok: true` with zero findings. The evidence the deletion does not reach sits one key away in the same file: `locked_at`, which every lock stamps and which nothing removes (`unlock` keeps the record and stamps `released_at`), plus the claim's dependency baselines under `hashes`. A record that is *absent* rather than *released* was deleted by hand. **`claim lock` refuses this state outright** (`integrity_failed`) — otherwise the last step of the bypass is the tool's own command: re-locking writes a fresh record over the rewritten content and the finding disappears for good |
 | `lock-ledger-downgraded` | the lock store **says it predates the ledger** while the project proves it does not — its own `version` field set back to `1` and the `ledger` key deleted, one edit inside the audited file. This used to be the highest-value edit in the design, because adoption ran automatically and a store that claimed to predate the ledger was re-adopted on sight: the claims *as they are now* became the approved baseline. Adoption no longer exists at all ([see the upgrade section](#upgrading-a-pre-ledger-project)), so the edit no longer buys approval — but a store lying about its own version is still a tampered store, and it is still reported. Restore it from version control; do **not** re-lock, and do **not** try to force the pre-ledger crossing by unlocking everything — both record the current bytes as the baseline, which is exactly what the downgrade was trying to achieve |
 | `lock-ledger-released` | a claim is `locked` on a record an `unlock` already **released** — lock, unlock, then hand-edit `status:` back. A released record is a withdrawn approval, not a standing one, and the content hash cannot see it because the hash excludes `status` |
-| `lock-content-drift` | a locked claim's content no longer matches what was approved — including fields the dependency-drift hash never covered, such as `raw_html`, `build_role`, `section` and `order` |
+| `lock-content-drift` | a locked claim's content no longer matches what was approved — including fields the dependency-drift hash does not cover, such as `raw_html_reviewed`, `build_role`, `section` and `order`. (`raw_html` joined the dependency-drift hash in v0.4.1 so an edited attachment marks dependents stale; the ledger signs it either way) |
 | `lock-ledger-orphan` | a `draft` claim still holding an *unreleased* record — `locked` flipped back to `draft` to dodge review |
 | `lock-ledger-abandoned` | a locked claim's **file was deleted** while its approval record still stands. There is no `claim delete` verb, so `rm` was the one change to a locked claim that no rule saw: every other finding starts from the claims that exist. Unlock first, then delete |
 | `comment-ledger-drift` | a review thread edited or deleted outside the engine |
@@ -301,7 +301,7 @@ Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`
 | `eyebrow` | string | no | A one-line subtitle rendered under the title in the sidebar header. No line is rendered when unset. |
 | `doctrine_facet` | string | no | Names one of `facets` as the project's doctrine facet, enabling hub-gating. Must be a facet the project actually declares. |
 | `source_dirs` | []string | no | Directories (relative to the config file) scanned for `dossierx-claim: <id>` source comments — the code side of claim-to-code linking. Unset means "do not scan." |
-| `mockup_modules` | []string | no | The allowlist of modules permitted to author `layout: mockup` claims. Every entry must also appear in `modules`. Unset/empty means no module may. |
+| `mockup_modules` | []string | no | The allowlist of modules permitted to author `raw_html` (on any layout, including `layout: mockup`). Every entry must also appear in `modules`. Unset/empty means no module may. |
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
 | `viewer.theme` | map[string]string | no | CSS custom-property overrides. Keys must be drawn from the fixed allowlist below (without the leading `--`); values are validated defensively before being injected into a generated stylesheet. |
 

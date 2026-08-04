@@ -103,16 +103,27 @@ func buildTargetStatusLookup(cat *catalog.Catalog) map[string]components.TargetS
 // merely equivalent but byte-identical to what Render produced before
 // either feature existed.
 //
-// The 💬 comment chip + baked thread panel deliberately do NOT ride this
-// override: components.EdgesHTMLWithLinks reads c.Comments directly, and the
-// claim is already in scope under both this closure and the default
-// components.edgesHTML binding (which also calls EdgesHTMLWithLinks), so the
-// chip renders under both with no new argument here, no early-return widening,
-// and — critically — no second tmpl.Funcs("edges", …) call, which would
-// silently discard whichever "edges" binding was attached first. A commented
-// project with no implink/depended-by data still hits the early return above
-// and keeps the default binding, and still gets its chip, precisely because the
-// chip lives inside EdgesHTMLWithLinks rather than in this closure.
+// The 💬 comment chip no longer rides this shared footer at all. As of v0.4.1
+// it is emitted by components.CommentChipHTML, bound once as the "commentChip"
+// template func and called straight from each chip-bearing partial's claim
+// head, because the footer is now a collapsed <details> and a chip inside it
+// would be invisible and unclickable on every claim whose footer starts closed.
+// That func takes only the claim — no config, no allowlist, no catalog — so it
+// needs no override of its own here: the exported func IS the binding, under
+// both the parse-time funcMap and every Render pass. Nothing about the chip
+// touches this closure, this file's early return, or this override's arguments.
+//
+// The baked thread panel DOES still come out of components.EdgesHTMLWithLinks,
+// and still deliberately does not ride this override: that func reads
+// c.Comments directly, and the claim is already in scope under both this
+// closure and the default components.edgesHTML binding (which also calls
+// EdgesHTMLWithLinks), so the panel renders under both with no new argument
+// here, no early-return widening, and — critically — no second
+// tmpl.Funcs("edges", …) call, which would silently discard whichever "edges"
+// binding was attached first. A commented project with no implink/depended-by
+// data still hits the early return above and keeps the default binding, and
+// still gets its panel, precisely because the panel lives inside
+// EdgesHTMLWithLinks rather than in this closure.
 func attachEdgesOverride(partials map[model.Layout]*template.Template, implinkLookup map[string][]implink.ViewFile, dependedByLookup map[string][]string, targetStatusLookup map[string]components.TargetStatus) {
 	if len(implinkLookup) == 0 && len(dependedByLookup) == 0 && len(targetStatusLookup) == 0 {
 		return

@@ -146,8 +146,20 @@ func TestRun_LedgerContentDrift(t *testing.T) {
 
 // The headline finding of the audit, asserted through the pipeline: swapping
 // raw_html on a locked, reviewed, allowlisted mockup — the only path in this
-// codebase that renders author bytes unescaped — is caught, even though
-// ContentHash does not hash raw_html at all.
+// codebase that renders author bytes unescaped — is caught as lock-content
+// drift.
+//
+// WHAT CATCHES IT is LockedClaimHash, which signs every persisted field, and
+// that is independent of whatever ContentHash happens to cover: the ledger
+// would report this swap even if no other hash in the engine could see it.
+// This test is not about ContentHash. The comparison below is only a
+// PRECONDITION proving the fixture's swap is a real edit to a hashed field. It
+// used to assert the opposite — ContentHash was blind to raw_html, which was
+// the most convenient way to say "nothing else would catch this" — but v0.4.1
+// put raw_html in ContentHash's allowlist (raw_html became legal on any layout,
+// so a dependent can now rest on a claim that carries one, and an edited
+// payload has to mark it stale). So the precondition is now that the hash DOES
+// move; the assertion that matters, the ledger finding, is unchanged.
 func TestRun_LedgerCatchesSwappedRawHTML(t *testing.T) {
 	cfgBody := "schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: claims\n" +
 		"mockup_modules:\n  - widget\n"
@@ -157,8 +169,8 @@ func TestRun_LedgerCatchesSwappedRawHTML(t *testing.T) {
 			"body: |\n  a locked mockup.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	if got := lock.ContentHash(claims[0]); got != lock.ContentHash(swapRawHTML(claims[0])) {
-		t.Fatalf("precondition failed: ContentHash is supposed to be BLIND to raw_html, but it moved")
+	if got := lock.ContentHash(claims[0]); got == lock.ContentHash(swapRawHTML(claims[0])) {
+		t.Fatalf("precondition failed: since v0.4.1 ContentHash covers raw_html, but it did not move (got %s for both)", got)
 	}
 
 	claims[0] = swapRawHTML(claims[0])
