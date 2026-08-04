@@ -195,7 +195,7 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
 3. Propose `project.config.yaml` (title, facets, modules) and `claims/`, and **ask them to confirm
    the facet list** before writing it.
 4. Ask before installing the git pre-commit hook. If yes, fetch
-   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.4.0/scripts/install-git-hook.sh`,
+   `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.4.1/scripts/install-git-hook.sh`,
    show them what it does, then run `sh install-git-hook.sh --yes`. Neither it nor
    `scripts/ci/dossierx-check.yml` exists in *their* repo — both ship with DossierX, so fetch from
    the same release path. If no, add the CI workflow instead and say so: **CI is the authority.**

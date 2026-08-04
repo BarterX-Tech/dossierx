@@ -198,7 +198,7 @@ const releases: Release[] = [
           version: "v0.4.0",
           date: "2026-08-03",
           title: "Migration removed, and governed_by becomes a drift edge",
-          tag: "Latest release",
+          tag: "Previous release",
           commit: "4a8fec4",
           highlights: [
             "BREAKING: `dossierx migrate` is gone, and with it every automatic adoption path. A project whose lock store predates the lock ledger crosses by holding nothing locked: re-propose any locked build order, unlock every locked claim, then re-lock only what you still stand behind. That first lock in a project with nothing locked is what stamps the store onto the ledger schema — and it records a real approval, which is the whole difference from the adoption path this release deletes. `migrate` survives only as a hidden stub that names the new path, because README, the skills and the CI template spent a release telling agents to type it, and flag parsing runs before any unknown-command handler.",
@@ -210,6 +210,26 @@ const releases: Release[] = [
             "Two comment-body shapes that used to be refused as unsafe now store cleanly: a space-indented first content line, and a two-space-indented multiline body. A TAB-led first content line is still unstorable at any indent width, so the refusal class survives — it is now tab-led only.",
             "A `layout: table` claim wider than its column now sits in a container that scrolls on its own axis, and long cell content wraps instead of forcing the track wide, so the page body never scrolls sideways. Column proportions shift by roughly 12% for ordinary content. Markdown tables inside a claim BODY still scroll rather than wrap — deliberately deferred.",
             "The markdown-sanity lint no longer fires on a closing delimiter run followed by punctuation: \"Only ~~strike~~, comma after.\" was a finding and is not one. The scanner now applies CommonMark's punctuation clause per rune rather than per byte, which is what multi-byte punctuation requires, and the whole testdata/markdown-cases corpus is a regression gate rather than a set of hand-picked strings.",
+          ],
+        },
+        {
+          version: "v0.4.1",
+          date: "2026-08-04",
+          title: "raw_html becomes an attachment, and the edges footer folds away",
+          tag: "Latest release",
+          // PLACEHOLDER, not a sha: v0.4.1's merge commit does not exist while
+          // the release PR is open. The release checklist replaces this at the
+          // pre-tag gate, after the merge. It is deliberately unmistakable
+          // because it renders verbatim in the `dossierx version` example.
+          commit: "PENDING-MERGE-COMMIT-FILL-AT-TAG-GATE",
+          highlights: [
+            "`raw_html` is an ATTACHMENT legal on any layout, not a layout a claim has to adopt (closes issue #25). A claim that is genuinely a table, or a list of steps, can now carry a diagram or a small rendered mockup alongside its own content — all seven layouts render the attachment after the claim's own body/rows/steps and before the edges footer. `layout: mockup` remains a real layout with its own empty state; it simply stops being the toll gate you had to pass through to show anything rendered.",
+            "That widens WHERE unescaped HTML may sit, and nothing else — not who may author it, not what reaches the viewer. Every other leg of the gate still fires on every raw_html-bearing claim whatever its layout: the mockup_modules allowlist, the tag/attribute/class markup allowlist, the raw_html_reviewed human-review flag, and the lock-lifecycle check. `dossierx claim flag`'s body-only rule moved with it — it now keys on whether a claim actually carries raw_html rather than on its layout, which was only ever a sound proxy while the two were the same question.",
+            "The viewer's edges footer is now a disclosure you open, not a block you scroll past. rests_on, mirrors, governed_by, depended-on-by, migrated_from, implemented-in and review_pending fold into a native <details> whose summary is a digest — \"4 links - 2 files - 1 drifted\", with the drifted segment shown only when it is non-zero. It opens by itself, server-side, when a linked file has drifted or the claim is locked and review_pending; a deep link to the claim or a print forces it open in CSS, since neither is knowable at render time. `governed_by: none` no longer counts toward the link total because it states an absence rather than a followable edge, and a claim with no links and no linked files emits no disclosure at all. One toolbar toggle opens or closes every footer on the page.",
+            "The 💬 chip left that footer and moved into each claim's head, which is where the review loop actually starts. A claim with no threads yet reveals its chip on card hover or keyboard focus rather than sitting inside a collapsed footer — never display:none, so it stays in the tab order. `layout: banner` is the one partial that renders neither a chip nor a footer, and neither half of this touches it.",
+            "SILENT: an already-locked, byte-identical claim renders differently. Every layout that carries a chip or a footer emits different HTML from the same locked bytes — no edit, no content-hash move, no review_pending flip, nothing in the lock store and nothing for `dossierx check` to report. Same shape as v0.4.0's table fix and v0.3.1's renderer: re-run the render to pick it up, and `dossierx claim unlock` is the deliberate way to revisit a claim whose rendered output you now want to read again.",
+            "SILENT: a locked claim that ALREADY carries raw_html re-hashes once against its dependents. The content hash — the rests_on/mirrors/governed_by drift baseline — now folds in raw_html when it is non-empty, so editing the attachment this release newly allows on a rule-bearing claim is no longer invisible to the claims resting on it. Gated, not additive: a claim with no raw_html, which is every claim before this release and most after it, feeds the hash byte-identical input and moves nothing. The one case that does move is a pre-existing allowlisted, reviewed mockup claim named by another locked claim's edges — that dependent flips review_pending once, with no edit and no ledger event.",
+            "No migration, and a patch bump: no schema_version, on-disk store, config or CLI change. The raw_html widening is a relaxation of where a gate applies rather than a break in it, and a review_pending flip caused only by the hash widening clears the ordinary way — `dossierx claim reaudit --confirm`, or unlock, fix, lock.",
           ],
         },
 ];

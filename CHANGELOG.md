@@ -7,42 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.4.1] - 2026-08-04
 
-**A locked claim that already carries `raw_html` re-hashes once against its dependents on the
+**Two things change for already-locked claims that `dossierx check` cannot tell you about.**
+Neither is an edit a user made, and neither produces a ledger event, so the gate reports exactly
+what it reported before the upgrade. They are listed here together because that is the only place
+a consumer can see both; each has its own section below.
+
+**1. An already-locked, byte-identical claim renders differently in the viewer.** The shared edges
+footer collapses into a `<details>` disclosure and the comment chip moves out of that footer into
+the claim's head, so every layout that carries a chip or a footer emits different HTML from the
+same locked bytes — no edit, no content-hash move, no `review_pending` flip, nothing in
+`.dossierx-lock-store.json`, and nothing for `dossierx check` to report. This is the same shape as
+v0.4.0's table fix and v0.3.1's renderer expansion, and the same tool applies: re-run the render
+to pick it up, and use `dossierx claim unlock` when you want to revisit the claim's rendered
+output on a human's own review. See the edges-footer section below.
+
+**2. A locked claim that already carries `raw_html` re-hashes once against its dependents on the
 first check after this upgrade, with no edit and no ledger event.** `ContentHash` — the
 `rests_on`/`mirrors`/`governed_by` drift baseline — now folds in `raw_html` when it is non-empty,
 so that editing the attachment this release newly allows on a rule-bearing claim is no longer
-invisible to that claim's dependents (see the `raw_html` section below). The change is gated, not
-additive: a claim with no `raw_html` — every claim before this release, and most after it — feeds
-`ContentHash` byte-identical input to before and re-hashes nothing. The one case that does move is
-a claim that already had `raw_html` set (only possible pre-upgrade on an allowlisted, reviewed
-`layout: mockup` claim) and is named by another locked claim's `rests_on`, `mirrors`, or
-`governed_by`: that dependent's recorded baseline no longer matches the recomputed hash, and it
-flips to `review_pending` once, the same no-edit, no-ledger-event shape as this file's last two
-releases. **No migration is required** — there is no schema change, no new store field, and no
-command to run; a flip caused only by this widening clears the ordinary way, `dossierx claim
-reaudit --confirm` or `unlock` then `lock`.
+invisible to that claim's dependents. The change is gated, not additive: a claim with no
+`raw_html` — every claim before this release, and most after it — feeds `ContentHash`
+byte-identical input to before and re-hashes nothing. The one case that does move is a claim that
+already had `raw_html` set (only possible pre-upgrade on an allowlisted, reviewed `layout: mockup`
+claim) and is named by another locked claim's `rests_on`, `mirrors`, or `governed_by`: that
+dependent's recorded baseline no longer matches the recomputed hash, and it flips to
+`review_pending` once, the same no-edit, no-ledger-event shape as this file's last two releases.
+See the `raw_html` section below.
 
-### Fixed — `raw_html` is an attachment legal on any layout, not a layout a claim must adopt (closes issue #25)
-
-`raw_html` used to be legal only on `layout: mockup`; a claim that was genuinely a table or a list
-of steps could not also carry a diagram or a small rendered mockup alongside its own content.
-`checkMockupGate`'s layout leg (`internal/lint/raw_html_scope.go`) is removed: `raw_html` may now
-sit alongside `body`/`rows`/`steps` on any of the seven layouts. `layout: mockup` stays a valid
-layout in its own right — it is the one that also swaps in a "No mockup content." empty state.
-
-This changes **where** `raw_html` may sit, never **who** may author it or **what** reaches the
-viewer unescaped — every other leg of the gate is untouched and still fires on every
-`raw_html`-bearing claim regardless of layout: the `mockup_modules` allowlist, the
-tag/attribute/class markup allowlist, the `raw_html_reviewed` human review flag, and the
-lock-lifecycle check. `components.MockupHTML`'s render-time escaping gate is byte-identical. All
-seven layout partials (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) now render
-the attachment — reusing the existing `claim-mockup-body` class — after the claim's own
-body/rows/steps content and before the edges footer.
-
-A related gap this same widening opened is closed alongside it: `dossierx claim flag`'s body-only
-classifier used to key "safe to flag" purely on layout (card/banner/list/tree), which was only
-sound while those layouts could not carry `raw_html`. It now keys on whether the claim actually
-carries `raw_html`, regardless of layout.
+**No migration is required** for either — there is no schema change, no new store field, and no
+command to run; a flip caused only by the `ContentHash` widening clears the ordinary way,
+`dossierx claim reaudit --confirm` or `unlock` then `lock`.
 
 ### Changed — the edges footer collapses into a native `<details>`, and the comment chip moves into the claim head
 
@@ -66,6 +60,28 @@ partial that renders neither a chip nor an edges footer, and neither half of thi
 
 This changes rendered viewer output on every layout that carries a chip or a footer, so re-run the
 render to pick it up.
+
+### Fixed — `raw_html` is an attachment legal on any layout, not a layout a claim must adopt (closes issue #25)
+
+`raw_html` used to be legal only on `layout: mockup`; a claim that was genuinely a table or a list
+of steps could not also carry a diagram or a small rendered mockup alongside its own content.
+`checkMockupGate`'s layout leg (`internal/lint/raw_html_scope.go`) is removed: `raw_html` may now
+sit alongside `body`/`rows`/`steps` on any of the seven layouts. `layout: mockup` stays a valid
+layout in its own right — it is the one that also swaps in a "No mockup content." empty state.
+
+This changes **where** `raw_html` may sit, never **who** may author it or **what** reaches the
+viewer unescaped — every other leg of the gate is untouched and still fires on every
+`raw_html`-bearing claim regardless of layout: the `mockup_modules` allowlist, the
+tag/attribute/class markup allowlist, the `raw_html_reviewed` human review flag, and the
+lock-lifecycle check. `components.MockupHTML`'s render-time escaping gate is byte-identical. All
+seven layout partials (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`) now render
+the attachment — reusing the existing `claim-mockup-body` class — after the claim's own
+body/rows/steps content and before the edges footer.
+
+A related gap this same widening opened is closed alongside it: `dossierx claim flag`'s body-only
+classifier used to key "safe to flag" purely on layout (card/banner/list/tree), which was only
+sound while those layouts could not carry `raw_html`. It now keys on whether the claim actually
+carries `raw_html`, regardless of layout.
 
 ## [0.4.0] - 2026-08-03
 
