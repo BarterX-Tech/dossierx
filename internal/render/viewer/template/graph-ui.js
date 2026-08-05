@@ -2811,6 +2811,12 @@
     if (state.expanded.indexOf(groupId) < 0) {
       state.expanded = state.expanded.concat([groupId]);
     }
+    // Expanding a group changes WHICH GRAPH is drawn, exactly as scope and
+    // granularity do, so it asks for a fit for the same reason. Without this
+    // the camera stays framed on the folded view and the newly spread claims
+    // are drawn straight off the canvas edge — measured clipping of 28px at
+    // the top and 17px at the bottom immediately after an expand.
+    requestFit();
     onControlChange(true);
   }
 
@@ -2824,6 +2830,7 @@
       }
     }
     state.expanded = next;
+    requestFit();
     onControlChange(true);
   }
 
@@ -2853,6 +2860,24 @@
     });
 
     bindHashListener();
+    openFromHashOnLoad();
+  }
+
+  // A link someone shares is a link to a VIEW, and the graph state is the only
+  // thing in that hash worth sharing — nobody pastes one to land on the reading
+  // view. The hashchange listener's own comment says it exists for "a URL
+  // someone else pasted into the bar", but a paste that arrives with the
+  // document cannot fire hashchange, so on load the pane has to look for
+  // itself. openPane() already reads the hash fresh, so this only decides
+  // WHETHER to open, never what to restore.
+  function openFromHashOnLoad() {
+    if (isOpen || !root.location) {
+      return;
+    }
+    if (hashGraphState(root.location.hash) === '') {
+      return;
+    }
+    openPane();
   }
 
   // ------------------------------------------------------------------

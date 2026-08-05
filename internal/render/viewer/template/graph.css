@@ -435,7 +435,13 @@ body.dxg-open {
 .dxg-toggle[aria-pressed="true"] {
   border-color: var(--accent);
   background: var(--accent-bg);
-  color: var(--accent);
+  /* The ON state is carried by the border and the tinted background, NOT by
+     the text colour. An accent tuned to read on a dark ground lands at 2.07:1
+     when it is painted on its own 14% tint over a light surface — below AA for
+     12px text — and the accent is a project-themeable token, so the graph
+     cannot know it is safe. --ink against a faint tint of anything is the one
+     pairing that holds at every accent a project might set. */
+  color: var(--ink);
 }
 
 /* ---- notice strip: dangling edges, auto-collapse, refresh failure ------ */
@@ -1021,7 +1027,10 @@ body.dxg-open {
   margin-top: 8px;
   border: 1px solid var(--border);
   background: var(--paper);
-  color: var(--link);
+  /* --link is an accent-derived token and inherits the same problem as the
+     toggles above: 2.64:1 on a light surface at 11px. This is a button-shaped
+     control with a border already announcing it, so the text can be --ink. */
+  color: var(--ink);
   border-radius: 6px;
   cursor: pointer;
   font: 11px var(--font-sans);
