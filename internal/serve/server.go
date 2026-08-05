@@ -374,6 +374,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/fragment", s.handleFragment)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/graph", s.handleGraph)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/claims/{id}/comments", s.handleAddThread)
 	mux.HandleFunc("POST /api/claims/{id}/comments/{tid}/replies", s.handleReply)

@@ -1237,7 +1237,35 @@ th {
    weight on the leading edge, warn text, deeper shadow) because a lock-ledger
    finding is not advice: it says a locked claim changed with nobody approving
    it. Colours are the same inverting :root tokens as everything else, so a
-   project's viewer.theme overrides carry through here too. */
+   project's viewer.theme overrides carry through here too.
+
+   ---- THE Z-INDEX LEDGER ------------------------------------------------
+   Every stacking context in this viewer is hand-assigned, and this is the one
+   place the whole stack is reasoned about. Read it before adding a fourth
+   overlay.
+
+     20  nav overlay (mobile scrim)
+     30  sidebar drawer (mobile)
+     40  nav toggle
+     45  status strip        <- below the comment chrome on purpose, above
+                                everything in the document flow
+     50  comments overlay
+     60  comments rail
+     70  toast
+     80  graph pane backdrop  \  claims graph, added in v0.5.0
+     81  graph pane surface   /
+
+   The graph pane takes the band ABOVE all of them because it is the only
+   full-viewport overlay here: it is not a rail beside the document or a
+   standing statement about it, it is a different view of the whole corpus,
+   and a status strip drawn over it would be a strip floating over a picture
+   it is not describing. Its 80/81 pair lives in graph.css, not in this file —
+   graph.css owns every #dxg / .dxg- selector — but the NUMBERS are recorded
+   here, because a ledger split across two files is not a ledger.
+
+   Its body scroll lock (body.dxg-open) is additive with body.nav-open and
+   body.comments-open: three classes each setting overflow: hidden compose
+   without a release-order hazard, so no coordination is needed between them. */
 
 /* Docked clear of the 210px desktop sidebar (its "Generated …" footer sits in
    exactly this corner); the mobile override below reclaims the full-width left

@@ -9,6 +9,16 @@
        when customizing this template if you want live comments to work. -->
   <meta name="dossierx-viewer-runtime" content="comments-sse">
   <title>{{.Title}}</title>
+  <!-- graph.css is the FIRST style block, deliberately. The two existing
+       style-ordering tests locate blocks with strings.Index/strings.LastIndex
+       and assert the LAST one carries the project theme override; a third
+       block placed last, or between the base sheet and the theme, breaks
+       them. Placed first they keep passing untouched, and the cascade runs the
+       right way besides: style.css cascades over graph.css and the theme block
+       over both. Every selector in graph.css is #dxg / .dxg- prefixed and
+       style.css carries no graph-adjacent selector, so there is no collision
+       to resolve today — only a documented direction if one ever arises. -->
+  <style>{{.GraphCSS}}</style>
   <style>{{.CSS}}</style>
   <style>{{.ThemeCSS}}</style>
 </head>
@@ -24,6 +34,14 @@
         </div>
       </div>
       <nav id="nav">
+        <!-- The graph trigger. It carries data-dxg-open as an ATTRIBUTE and
+             deliberately NOT the class sec-tab: the delegated click handler
+             further down matches e.target.closest('.sec-tab') and would
+             otherwise also switch the reading view's module on every open.
+             It lives inside the swapped subtree and is destroyed and
+             re-created by every fragment swap, which is why graph-ui.js binds
+             one delegated listener on document rather than a listener here. -->
+        <button id="dxgOpen" type="button" data-dxg-open aria-haspopup="dialog">Claims graph</button>
         {{range .ModuleGroups}}
           <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
         {{end}}
@@ -103,6 +121,35 @@
     </button>
     <div id="statusStripBody" class="status-strip-body" hidden></div>
   </section>
+
+  <!-- The claims graph pane's mount point — EMPTY on purpose, and OUTSIDE
+       .layout on purpose.
+
+       Empty: graph-ui.js builds every child on first open and not before. A
+       reader who never opens the pane pays one delegated listener and this
+       one element. Nothing here is markup the server can get stale.
+
+       Outside .layout: an SSE fragment swap re-fetches /api/fragment and
+       replaces exactly two subtrees, <main class="content-area"> and
+       <nav id="nav">, by outerHTML assignment. The pane holds zoom, pan, drag
+       positions, filter selection and an expanded-group set — all client-only
+       state a swap would silently destroy. So it sits out here beside
+       #commentsPanel and #statusStrip, which is the already-proven pattern in
+       this file rather than a new one. Move it inside .layout and everything
+       still renders; the state just quietly evaporates on the next reload. -->
+  <section id="dxgPane" hidden></section>
+
+  <!-- The claims graph payload: facts about this corpus, emitted by
+       internal/graph and read by graph-ui.js at FIRST OPEN, never at parse
+       time. It sits outside .layout with the pane, so an SSE fragment swap
+       neither destroys nor re-delivers it — which is why the pane states the
+       payload's generation time and, behind a live serve, offers a refresh.
+
+       html/template applies NO escaping inside a
+       <script type="application/json"> block. The guard is entirely
+       encoding/json's default HTML escaping, applied by graph.Encode before
+       these bytes exist. Do not add escaping here and do not remove it there. -->
+  <script type="application/json" id="dossierx-graph">{{.GraphPayload}}</script>
 
   <script>
     (function () {
@@ -233,10 +280,16 @@
         // A resolved claim id keeps the full claim id as the hash target (not
         // just its facet) so the URL stays deep-linkable/shareable and a refresh
         // lands back on the same card, not just the tab.
+        //
+        // The graph half of the hash is preserved across every rewrite: this
+        // function runs on every tab click and every deep link, and dropping
+        // the suffix here would erase whatever filter state the graph pane had
+        // just written (see hashGraphSuffix).
         var claimID = opts && opts.claim;
         var hashTarget = claimID || facetID || moduleID;
-        if (!(opts && opts.skipHash) && window.location.hash !== '#' + hashTarget) {
-          history.replaceState(null, '', '#' + hashTarget);
+        var nextHash = '#' + hashTarget + hashGraphSuffix();
+        if (!(opts && opts.skipHash) && window.location.hash !== nextHash) {
+          history.replaceState(null, '', nextHash);
         }
 
         if (claimID) {
@@ -251,8 +304,39 @@
         }
       }
 
+      // ----------------------------------------------------------------
+      // The hash carries TWO independent states, separated by '!':
+      //
+      //     #<reading-view-target>!g=<compact-graph-state>
+      //
+      // Everything before the '!' is this file's and always was. Everything
+      // from the '!' onward belongs to graph-ui.js, which writes it via
+      // history.replaceState only. A hash with no '!' behaves exactly as it
+      // did before the graph pane existed.
+      //
+      // The split matters in both directions. resolve() falls back to the
+      // FIRST MODULE for anything it does not recognize, so a bare graph-state
+      // hash reaching it would silently reset the reader's module — hence
+      // hashId() truncating. And showModuleFacet rewrites the hash on every
+      // nav, so a rewrite that dropped the suffix would erase the graph state
+      // the pane had just written — hence hashGraphSuffix() being appended.
+      // ----------------------------------------------------------------
+
+      // hashGraphSuffix returns the graph half of the current hash, '!' and
+      // all, or '' when there is none. It reads the raw hash and does not
+      // decode: it is re-appended verbatim, so decoding it here would risk
+      // re-encoding it differently on the way back out.
+      function hashGraphSuffix() {
+        var raw = window.location.hash || '';
+        var at = raw.indexOf('!');
+        return at < 0 ? '' : raw.slice(at);
+      }
+
       function hashId() {
-        return decodeURIComponent((window.location.hash || '').replace(/^#/, ''));
+        var raw = (window.location.hash || '').replace(/^#/, '');
+        var at = raw.indexOf('!');
+        if (at >= 0) { raw = raw.slice(0, at); }
+        return decodeURIComponent(raw);
       }
 
       function showFromHash(opts) {
@@ -1457,5 +1541,15 @@
       probeAndMount();
     })();
   </script>
+
+  <!-- The graph pane's two client files, in dependency order: graph-core.js
+       exports window.dossierxGraphCore, graph-ui.js consumes it. Both are
+       engine-owned files read straight off the embedded FS with no project
+       override branch, and both are injected as template.JS — a plain string
+       here becomes a quoted literal with no error anywhere and a pane that
+       never initializes. graph-ui.js registers ONE delegated listener at
+       parse time and does nothing else until a reader opens the pane. -->
+  <script>{{.GraphCoreJS}}</script>
+  <script>{{.GraphUIJS}}</script>
 </body>
 </html>

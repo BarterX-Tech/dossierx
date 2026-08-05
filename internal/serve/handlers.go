@@ -10,10 +10,13 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
+	"github.com/BarterX-Tech/dossierx/internal/graph"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -257,6 +260,82 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, statusToDTO(check.Status(claims, s.cfg)))
+}
+
+// ---------------------------------------------------------------------
+// GET /api/graph — a freshly built claims-graph payload
+// ---------------------------------------------------------------------
+
+// handleGraph returns the claims-graph payload for the CURRENT claims. It is
+// the graph analogue of handleStatus: load claims fresh, build the catalog the
+// same way renderViewer does, compute, write. Nothing else.
+//
+// WHY IT EXISTS. The graph payload is inlined into the viewer document in a
+// <script type="application/json"> block that sits OUTSIDE both subtrees an
+// SSE fragment swap replaces, so a live session never re-receives it. A claim
+// edited mid-session updates the reading view and not the graph. Rather than
+// pretend otherwise, the pane states its payload's generation time and — only
+// against a live serve — offers a refresh button, which this endpoint answers.
+//
+// WHY IT IS SAFE ON A CSRF-EXEMPT GET. It writes nothing. GET and HEAD skip
+// the admission gates that guard the mutating routes, so a read handler that
+// touched disk would let a bare unauthenticated poll rewrite the project and
+// race the render pipeline mid-write. This one never calls os.WriteFile, never
+// reconciles a claim file, and never runs the impl-link scan that mutates link
+// artifacts — exactly the argument handleStatus's doc comment already makes.
+//
+// WHY IT DOES NOT GO THROUGH writeJSON. The payload has exactly ONE encoder,
+// graph.Encode, and therefore exactly one escaping rule to keep correct.
+// encoding/json's DEFAULT HTML escaping is the only thing standing between an
+// author-authored claim label and a </script> breakout in the inline block, and
+// under serve no lint has run to constrain what an author wrote. Routing these
+// bytes through a second marshaller would create a second place for that rule
+// to be got wrong, and the two encodings would drift silently — which is why
+// a test asserts these bytes are byte-identical to the inline block's, modulo
+// generated_at.
+//
+// WHY IT DOES NOT USE graphPayloadJSON's CACHE SEAM. That seam exists to avoid
+// re-deriving a payload nothing asked to change. This endpoint's entire
+// contract is that something did.
+//
+// WHY IT DOES NOT LINT. Neither does any other serve path — serve loads,
+// builds and renders. A corpus with dangling edges genuinely can reach this
+// handler; graph.Build drops those edges and counts them into
+// dropped.unresolved_edges, and the pane shows a notice rather than silently
+// drawing a smaller graph than the data describes.
+func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
+	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
+	if err != nil {
+		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
+		return
+	}
+	// The same normalisation renderViewer applies, so the endpoint and the
+	// inline block always describe the same corpus.
+	cat, err := catalog.Build(disarmUngatedMockups(claims, s.cfg), s.cfg)
+	if err != nil {
+		s.writeInternal(w, fmt.Errorf("build catalog: %w", err))
+		return
+	}
+
+	p := graph.Build(cat, s.cfg)
+	// graph.Build reads no clock — it leaves GeneratedAt empty and every
+	// caller stamps it. Here the value is request time, because freshness is
+	// the whole point; on the render path it is the render's own timestamp, so
+	// the payload agrees with line 1 and the sidebar footer to the instant.
+	p.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+
+	body, err := graph.Encode(p)
+	if err != nil {
+		s.writeInternal(w, fmt.Errorf("encode graph payload: %w", err))
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	// no-store, not no-cache: a cached graph payload is a stale answer to the
+	// one question this endpoint exists to answer.
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	w.Write(body) //nolint:errcheck // headers already sent; a client write error mid-response is unrecoverable
 }
 
 // ---------------------------------------------------------------------
