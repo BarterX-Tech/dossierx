@@ -11,6 +11,12 @@ package viewertests
 // pixel here would hide no logic, and a screenshot baseline would fail on a
 // font.
 //
+// DRAW CALLS ARE NOT PIXELS, and the cycle test below does assert those:
+// which colour a ring was stroked in, which lines were drawn as cycle edges.
+// It uses the recorder in graph_canvas_test.go, which explains why that is a
+// different kind of assertion from a screenshot and why it is stable under a
+// simulation that is still moving.
+//
 // CYCLES ARE PROVEN BY INJECTION, NOT BY A FIXTURE. dossierx check returns
 // above the render stage on the first error-severity lint partition, and
 // cycle, governed-cycle, self-edge and (from v0.5.0) mixed-cycle are all
@@ -162,6 +168,10 @@ func jsQuote(s string) string { return "\"" + s + "\"" }
 // rests_on loop, the MIXED rests_on/governed_by loop that neither engine
 // cycle lint could see before v0.5.0, and a literal self-edge — which is
 // reported under its own rule id and never merged into the cycle list.
+//
+// core.contract.free is in no cycle and no self-edge, and it is what makes the
+// CANVAS half of this test mean something: with every node ringed red, "the
+// cycle members are ringed" would be true of a pane that ringed everything.
 func injectedCyclePayload(t *testing.T) string {
 	t.Helper()
 	node := func(id string) map[string]any {
@@ -177,7 +187,7 @@ func injectedCyclePayload(t *testing.T) string {
 		"nodes": []any{
 			node("core.contract.c1"), node("core.contract.c2"),
 			node("core.contract.m1"), node("core.contract.m2"),
-			node("core.contract.s1"),
+			node("core.contract.s1"), node("core.contract.free"),
 		},
 		"edges": []any{
 			map[string]any{"from": "core.contract.c1", "to": "core.contract.c2", "type": "rests_on"},
@@ -185,6 +195,10 @@ func injectedCyclePayload(t *testing.T) string {
 			map[string]any{"from": "core.contract.m1", "to": "core.contract.m2", "type": "rests_on"},
 			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "governed_by"},
 			map[string]any{"from": "core.contract.s1", "to": "core.contract.s1", "type": "rests_on"},
+			// Into a cycle but not part of one. Its line must NOT be drawn as
+			// a cycle edge: a cycle edge is one whose endpoints share a
+			// component, not one that happens to touch a member.
+			map[string]any{"from": "core.contract.free", "to": "core.contract.c1", "type": "rests_on"},
 		},
 		"groups":  map[string]any{"modules": []any{"core"}, "facets": []any{"contract"}},
 		"dropped": map[string]any{"unresolved_edges": 0},
@@ -205,6 +219,7 @@ func TestGraphPaneRendersInjectedCycles(t *testing.T) {
 	// open, which is the contract this test also proves.
 	evalVoid(t, ctx, `document.getElementById('dossierx-graph').textContent = `+jsString(t, injectedCyclePayload(t))+`;`)
 
+	installRecorder(t, ctx)
 	openGraphPane(t, ctx)
 
 	// One finding per component — two loops are two answers, not one merged
@@ -235,6 +250,104 @@ func TestGraphPaneRendersInjectedCycles(t *testing.T) {
 				t.Fatal("a self-edge must never be merged into the cycle list")
 			}
 		}
+	}
+
+	// -----------------------------------------------------------------
+	// AND NOW WHAT WAS DRAWN.
+	//
+	// Everything above reads values graph-core.js returned. The cycle
+	// RENDERING path — the red ring on a member, the red line on an edge
+	// inside a component — had never been executed by anything, and could not
+	// be: all three cycle lints are error severity, so no corpus that renders
+	// at all can carry a cycle, and the demo fixture legally cannot seed one.
+	// The injected payload is the only way this code has ever run.
+	//
+	// Every assertion below is read from ONE recorded frame, so the cooling
+	// simulation moving nodes between frames cannot make two of them disagree,
+	// and each is anchored to a claim id through the selection ring rather
+	// than to a coordinate.
+	// -----------------------------------------------------------------
+	settleFrames(t, ctx)
+
+	// The negative control first: a node in no cycle wears no cycle ring.
+	// core.contract.free has one outbound edge and so is the rail's
+	// weakly_linked answer.
+	clickJump(t, ctx, "core.contract.free")
+	freeFrame := lastFrame(t, ctx)
+	cycleColor := freeFrame.Pal["cycle"]
+	if cycleColor == "" {
+		t.Fatal("the stylesheet resolved no --dxg-cycle: every colour assertion below would be vacuous")
+	}
+	free := selectedNode(t, freeFrame, "core.contract.free")
+	if free.ring().Color == cycleColor {
+		t.Fatalf("core.contract.free is in no cycle, but its ring was drawn in the cycle colour %s", cycleColor)
+	}
+
+	// The claim itself: a cycle member is visibly ringed, in the cycle colour
+	// and at the heavier cycle weight, and it is the ring — the channel that
+	// survives every overlay — rather than the fill.
+	clickJump(t, ctx, "core.contract.c1")
+	f := lastFrame(t, ctx)
+	if len(f.Nodes) != 6 {
+		t.Fatalf("nodes drawn = %d, want the injected payload's 6", len(f.Nodes))
+	}
+	c1 := selectedNode(t, f, "core.contract.c1")
+	if ring := c1.ring(); ring.Color != cycleColor || ring.Width < 2.4 {
+		t.Fatalf("the ring on cycle member core.contract.c1 = %+v, want the cycle colour %s at width 2.4", ring, cycleColor)
+	}
+
+	// Five of the six wear it: both loops' members, plus the self-edge claim,
+	// which is ringed by the same channel while being reported by its own rule.
+	ringed := 0
+	for _, n := range f.Nodes {
+		if n.ring().Color == cycleColor {
+			ringed++
+		}
+	}
+	if ringed != 5 {
+		t.Fatalf("nodes ringed as in-cycle = %d, want 5 of 6 (four loop members plus the self-edge claim)", ringed)
+	}
+
+	// The edges. Four are inside a component and must be drawn as cycle edges;
+	// the fifth touches a member without sharing its component and must not be.
+	// The self-loop is drawn by nobody: an aggregated self-loop is dropped.
+	var cycleEdges, plainEdges []frameEdge
+	for _, e := range f.Edges {
+		if e.Color == cycleColor {
+			cycleEdges = append(cycleEdges, e)
+		} else {
+			plainEdges = append(plainEdges, e)
+		}
+	}
+	if len(cycleEdges) != 4 {
+		t.Fatalf("edges drawn in the cycle colour = %d, want 4 (both loops, both directions)", len(cycleEdges))
+	}
+	if len(plainEdges) != 1 {
+		t.Fatalf("edges drawn in the ordinary colour = %d, want 1 (free -> c1, which is in no component)", len(plainEdges))
+	}
+	for _, e := range cycleEdges {
+		if e.Alpha < 0.9 {
+			t.Fatalf("a cycle edge was drawn at alpha %v, want the 0.95 that lifts it out of the ordinary 0.55", e.Alpha)
+		}
+	}
+	if plainEdges[0].Alpha > 0.6 {
+		t.Fatalf("the non-cycle edge was drawn at alpha %v, want the ordinary 0.55", plainEdges[0].Alpha)
+	}
+
+	// Tied back to the id: the selected member's own edges are the red ones.
+	// An edge starts exactly at its source node's centre, so this is the same
+	// node the selection ring identified.
+	fromC1 := 0
+	for _, e := range cycleEdges {
+		if nearly(e.FX, c1.X) && nearly(e.FY, c1.Y) {
+			fromC1++
+		}
+	}
+	if fromC1 != 1 {
+		t.Fatalf("cycle edges leaving the selected member = %d, want 1 (c1 -> c2)", fromC1)
+	}
+	if nearly(plainEdges[0].FX, c1.X) && nearly(plainEdges[0].FY, c1.Y) {
+		t.Fatal("the ordinary edge was drawn leaving c1; it runs INTO c1 from a node outside every cycle")
 	}
 }
 
