@@ -1,0 +1,14 @@
+id: mixcyc.contract.pair-a
+facet: contract
+module: mixcyc
+status: draft
+layout: card
+body: |
+  Half of a 2-claim loop that alternates edge kinds. Neither existing cycle
+  rule can see this shape: one walk takes only the first relation and the
+  other takes only the second, so no single walk ever finds a back edge.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - mixcyc.contract.pair-b
