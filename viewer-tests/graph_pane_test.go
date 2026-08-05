@@ -1,0 +1,776 @@
+package viewertests
+
+// The claims graph PANE, in a real browser: graph-ui.js's DOM, its
+// inert-until-opened contract, its freshness story, and the escaping the
+// payload block depends on.
+//
+// What is deliberately NOT asserted here is pixels. A force layout has no
+// stable pixels, and every verdict the pane draws is computed by
+// graph-core.js before anything reaches the canvas — which is where
+// graph_core_test.go proves it, table-driven over one page load. A wrong
+// pixel here would hide no logic, and a screenshot baseline would fail on a
+// font.
+//
+// CYCLES ARE PROVEN BY INJECTION, NOT BY A FIXTURE. dossierx check returns
+// above the render stage on the first error-severity lint partition, and
+// cycle, governed-cycle, self-edge and (from v0.5.0) mixed-cycle are all
+// error severity. So no corpus that renders at all can contain a cycle of
+// any shape. Because the pane parses the payload block at FIRST OPEN rather
+// than at parse time, a test can replace that block's textContent before
+// opening the pane: the rendered document never contained a cycle, the pane
+// did. That is also the airtight proof of the lazy-parse contract itself.
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+
+	"github.com/chromedp/chromedp"
+)
+
+// ---------------------------------------------------------------------
+// Fixtures
+// ---------------------------------------------------------------------
+
+// graphConfig is two facets in one module, so the legend has more than one
+// row to list and the detail panel has a facet worth naming.
+const graphConfig = `schema_version: 1
+facets:
+  - contract
+  - design
+modules:
+  - widget
+claims_dir: claims
+`
+
+// graphClaim writes a claim in module widget, optionally resting on another.
+func graphClaim(id, facet, restsOn string) string {
+	body := "id: " + id + `
+facet: ` + facet + `
+module: widget
+status: draft
+`
+	if restsOn != "" {
+		body += "rests_on:\n  - " + restsOn + "\n"
+	}
+	return body + `body: |
+  a claim in the ` + facet + ` facet.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`
+}
+
+// newGraphProject is the common two-claim corpus: one claim resting on
+// another, one facet each, so neither is isolated and both are weakly linked.
+func newGraphProject(t *testing.T) *project {
+	t.Helper()
+	p := newProjectRaw(t, graphConfig)
+	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
+	p.writeClaim("thing.yaml", graphClaim("widget.design.thing", "design", "widget.contract.base"))
+	return p
+}
+
+// ---------------------------------------------------------------------
+// Browser helpers, all composed from the existing harness
+// ---------------------------------------------------------------------
+
+// desktopViewport pins a viewport above the viewer's single 860px
+// breakpoint. Below it the sidebar becomes a modal drawer whose scrim would
+// intercept a real click on the graph trigger; the pane's own layout also
+// stacks the rail under the canvas there. Pinning it makes both deterministic
+// under any Chromium.
+func desktopViewport(t *testing.T, ctx context.Context) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.EmulateViewport(1280, 900))
+	if evalBool(t, ctx, `window.matchMedia('(max-width: 860px)').matches`) {
+		t.Fatal("EmulateViewport(1280) did not take effect: still matches the <=860px media query")
+	}
+}
+
+// staticGraphTab renders p statically and opens the resulting file:// URL.
+func staticGraphTab(t *testing.T, p *project) context.Context {
+	t.Helper()
+	url := p.renderStatic()
+	ctx := browserContext(t)
+	runCDP(t, ctx, chromedp.Navigate(url))
+	pollTrue(t, ctx, `!!window.dossierxGraphCore`)
+	desktopViewport(t, ctx)
+	return ctx
+}
+
+// openGraphPane clicks the nav trigger for real and waits for the canvas.
+// The click goes through graph-ui.js's ONE delegated listener on document —
+// the trigger button lives inside the subtree an SSE fragment swap replaces,
+// so a listener bound to the button itself would die on the first swap.
+func openGraphPane(t *testing.T, ctx context.Context) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.Click("[data-dxg-open]", chromedp.ByQuery))
+	waitVisible(t, ctx, "#dxgPane .dxg-canvas")
+}
+
+// evalInto evaluates expr and decodes the result into dst.
+func evalInto(t *testing.T, ctx context.Context, expr string, dst any) {
+	t.Helper()
+	if err := chromedp.Run(ctx, chromedp.Evaluate(expr, dst)); err != nil {
+		t.Fatalf("evaluate %s: %v", expr, err)
+	}
+}
+
+func evalStrings(t *testing.T, ctx context.Context, expr string) []string {
+	t.Helper()
+	var out []string
+	evalInto(t, ctx, expr, &out)
+	return out
+}
+
+// evalVoid runs an expression for its side effect only.
+func evalVoid(t *testing.T, ctx context.Context, expr string) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.Evaluate(expr, nil))
+}
+
+// jsString renders s as a JS string literal. JSON string syntax is a subset
+// of JS string syntax, so json.Marshal is the correct quoter here and the one
+// that cannot be got wrong by hand for a payload containing </script>.
+func jsString(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatalf("quote js string: %v", err)
+	}
+	return string(b)
+}
+
+// ruleIDs returns the claim ids the gaps rail lists under a rule id. Keyed off
+// the STABLE rule id (data-dxg-rule), never off display text.
+func ruleIDs(t *testing.T, ctx context.Context, rule string) []string {
+	t.Helper()
+	return evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-rule=`+jsQuote(rule)+`] [data-dxg-jump]'))
+		.map(function (b) { return b.getAttribute('data-dxg-jump'); })`)
+}
+
+func jsQuote(s string) string { return "\"" + s + "\"" }
+
+// ---------------------------------------------------------------------
+// Step 70 — cycle rendering, proven by INJECTING a cycle-carrying payload
+// ---------------------------------------------------------------------
+
+// injectedCyclePayload carries all three structural shapes at once: a plain
+// rests_on loop, the MIXED rests_on/governed_by loop that neither engine
+// cycle lint could see before v0.5.0, and a literal self-edge — which is
+// reported under its own rule id and never merged into the cycle list.
+func injectedCyclePayload(t *testing.T) string {
+	t.Helper()
+	node := func(id string) map[string]any {
+		return map[string]any{
+			"id": id, "title": id, "module": "core", "facet": "contract",
+			"status": "draft", "kind": "fact", "build_role": "", "emphasis": false,
+			"review_pending": false, "open_comments": 0, "in_degree": 1, "out_degree": 1,
+		}
+	}
+	payload := map[string]any{
+		"schema":       1,
+		"generated_at": "2026-08-05T12:00:00Z",
+		"nodes": []any{
+			node("core.contract.c1"), node("core.contract.c2"),
+			node("core.contract.m1"), node("core.contract.m2"),
+			node("core.contract.s1"),
+		},
+		"edges": []any{
+			map[string]any{"from": "core.contract.c1", "to": "core.contract.c2", "type": "rests_on"},
+			map[string]any{"from": "core.contract.c2", "to": "core.contract.c1", "type": "rests_on"},
+			map[string]any{"from": "core.contract.m1", "to": "core.contract.m2", "type": "rests_on"},
+			map[string]any{"from": "core.contract.m2", "to": "core.contract.m1", "type": "governed_by"},
+			map[string]any{"from": "core.contract.s1", "to": "core.contract.s1", "type": "rests_on"},
+		},
+		"groups":  map[string]any{"modules": []any{"core"}, "facets": []any{"contract"}},
+		"dropped": map[string]any{"unresolved_edges": 0},
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("marshal injected payload: %v", err)
+	}
+	return string(b)
+}
+
+func TestGraphPaneRendersInjectedCycles(t *testing.T) {
+	p := newGraphProject(t)
+	ctx := staticGraphTab(t, p)
+
+	// BEFORE any click: swap the payload the document was rendered with for
+	// one carrying cycles. This works only because the pane parses at first
+	// open, which is the contract this test also proves.
+	evalVoid(t, ctx, `document.getElementById('dossierx-graph').textContent = `+jsString(t, injectedCyclePayload(t))+`;`)
+
+	openGraphPane(t, ctx)
+
+	// One finding per component — two loops are two answers, not one merged
+	// id list — ordered by their smallest member.
+	var cycles [][]string
+	evalInto(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-rule="cycle"]')).map(function (block) {
+		return Array.from(block.querySelectorAll('[data-dxg-jump]')).map(function (b) { return b.getAttribute('data-dxg-jump'); });
+	})`, &cycles)
+	want := [][]string{
+		{"core.contract.c1", "core.contract.c2"},
+		{"core.contract.m1", "core.contract.m2"},
+	}
+	if fmt.Sprint(cycles) != fmt.Sprint(want) {
+		t.Fatalf("cycle blocks = %v, want %v", cycles, want)
+	}
+
+	// The self-edge is reported under its OWN rule id. The engine has a
+	// dedicated error-severity self-edge lint distinct from cycle, and a rail
+	// that folded the two together would tell a reader a different story than
+	// dossierx check tells them.
+	if got := ruleIDs(t, ctx, "self_edge"); fmt.Sprint(got) != fmt.Sprint([]string{"core.contract.s1"}) {
+		t.Fatalf("self_edge ids = %v, want [core.contract.s1]", got)
+	}
+	// ...and it is NOT also listed as a cycle.
+	for _, comp := range cycles {
+		for _, id := range comp {
+			if id == "core.contract.s1" {
+				t.Fatal("a self-edge must never be merged into the cycle list")
+			}
+		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// Step 71 — the payload block parses, and the pane says how fresh it is
+// ---------------------------------------------------------------------
+
+func TestGraphPayloadParsesAndHeaderShowsTimestamp(t *testing.T) {
+	p := newProjectRaw(t, graphConfig)
+	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
+	p.writeClaim("two.yaml", graphClaim("widget.contract.two", "contract", "widget.contract.base"))
+	p.writeClaim("thing.yaml", graphClaim("widget.design.thing", "design", "widget.contract.base"))
+	ctx := staticGraphTab(t, p)
+
+	if !evalBool(t, ctx, `!!document.getElementById('dossierx-graph')`) {
+		t.Fatal("the rendered document carries no graph payload block")
+	}
+	// The block parses as JSON and describes exactly this corpus.
+	if n := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).nodes.length`); n != 3 {
+		t.Fatalf("payload nodes = %d, want 3 (one per claim file)", n)
+	}
+	if v := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).schema`); v != 1 {
+		t.Fatalf("payload schema = %d, want 1", v)
+	}
+
+	openGraphPane(t, ctx)
+
+	// The header states the payload's generation time: a relative phrase for
+	// the glance, the absolute value on title so the phrase is never the only
+	// answer available. In a static file:// viewer the answer is simply "when
+	// check ran".
+	stamp := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').getAttribute('title')`)
+	generated := evalString(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).generated_at`)
+	if stamp == "" || stamp != generated {
+		t.Fatalf("header stamp title = %q, want the payload's generated_at %q", stamp, generated)
+	}
+	if phrase := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').textContent`); !strings.HasPrefix(phrase, "payload generated") {
+		t.Fatalf("header stamp text = %q, want a 'payload generated …' phrase", phrase)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Step 72 — a </script> in author-authored data reaches the browser as DATA
+// ---------------------------------------------------------------------
+
+// hostileFacet is the breakout string. html/template applies NO escaping
+// inside <script type="application/json"> for a template.JS value, so the
+// only thing standing between this and an HTML breakout is encoding/json's
+// default HTML escaping — which is why SetEscapeHTML(false) is a forbidden
+// call in this repository.
+const hostileFacet = `</script><img src=x>`
+
+// hostileConfig declares that facet. THIS CORPUS IS SERVED, NOT RENDERED
+// STATICALLY, and that is forced rather than chosen: the id-shape lint
+// requires a claim's id facet segment to equal its facet field and to be a
+// configured facet, at error severity, so `dossierx check` refuses to render
+// this corpus at all. `dossierx serve` never lints — it loads, builds,
+// renders — which is exactly the surface design section 2.6 names as
+// reachable: under serve no lint has run to constrain what an author wrote.
+const hostileConfig = `schema_version: 1
+facets:
+  - contract
+  - "</script><img src=x>"
+modules:
+  - widget
+claims_dir: claims
+`
+
+func TestGraphPayloadSurvivesScriptClose(t *testing.T) {
+	p := newProjectRaw(t, hostileConfig)
+	p.writeClaim("base.yaml", graphClaim("widget.contract.base", "contract", ""))
+	p.writeClaim("hostile.yaml", `id: widget.hostile.thing
+facet: "</script><img src=x>"
+module: widget
+status: draft
+body: |
+  a claim whose facet is a script-closing breakout attempt.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`)
+
+	base, _ := p.serve()
+	ctx := browserContext(t)
+	runCDP(t, ctx,
+		chromedp.Navigate(base+"/"),
+		chromedp.WaitVisible(".content-area", chromedp.ByQuery),
+	)
+
+	// The breakout never reaches the document: json.Marshal escaped it to
+	// </script> before html/template ever saw it.
+	if evalBool(t, ctx, `document.getElementById('dossierx-graph').textContent.indexOf('</script>') >= 0`) {
+		t.Fatal("the payload block contains a literal </script>: the JSON escaping guard is gone")
+	}
+	// It parses, and the string survives VERBATIM as data.
+	if !evalBool(t, ctx, `(function () {
+		var p = JSON.parse(document.getElementById('dossierx-graph').textContent);
+		return p.groups.facets.indexOf(`+jsString(t, hostileFacet)+`) >= 0;
+	})()`) {
+		t.Fatal("the hostile facet did not survive JSON.parse verbatim")
+	}
+	// And nothing became a live element.
+	if n := evalInt(t, ctx, `document.images.length`); n != 0 {
+		t.Fatalf("document.images.length = %d, want 0 — the injected <img> became a live element", n)
+	}
+
+	// The pane opens and draws it as an ordinary facet, named in the legend.
+	desktopViewport(t, ctx)
+	openGraphPane(t, ctx)
+	names := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-legend [data-dxg-facet]'))
+		.map(function (e) { return e.getAttribute('data-dxg-facet'); })`)
+	found := false
+	for _, n := range names {
+		if n == hostileFacet {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("legend facets = %v, want one named %q", names, hostileFacet)
+	}
+	if n := evalInt(t, ctx, `document.images.length`); n != 0 {
+		t.Fatalf("document.images.length = %d after opening the pane, want 0", n)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Step 73 — inert until opened, then the whole structure of what L4 draws
+// ---------------------------------------------------------------------
+
+// parseSpy counts JSON.parse calls whose argument looks like the graph
+// payload. It is installed after load and before the first click, so it
+// pins that nothing parses the payload while the reader is merely sitting on
+// the page. The stronger proof of the lazy-parse contract —that nothing
+// parsed it at script-parse time either— is TestGraphPaneRendersInjectedCycles,
+// which replaces the block's text after load and gets the new graph.
+const parseSpy = `(function () {
+	window.__dxgPayloadParses = 0;
+	var real = JSON.parse;
+	JSON.parse = function (text) {
+		if (typeof text === 'string' && text.indexOf('"schema"') >= 0 && text.indexOf('"generated_at"') >= 0) {
+			window.__dxgPayloadParses++;
+		}
+		return real.apply(JSON, arguments);
+	};
+})();`
+
+func TestGraphPaneInertUntilOpened(t *testing.T) {
+	p := newGraphProject(t)
+	ctx := staticGraphTab(t, p)
+	evalVoid(t, ctx, parseSpy)
+
+	// Inert: a mount point and nothing else. One delegated listener and one
+	// hash read is the whole cost to a reader who never opens the pane.
+	if !evalBool(t, ctx, `document.getElementById('dxgPane').hidden`) {
+		t.Fatal("the pane must start hidden")
+	}
+	if n := evalInt(t, ctx, `document.getElementById('dxgPane').children.length`); n != 0 {
+		t.Fatalf("pane children before first open = %d, want 0 (nothing is built until opened)", n)
+	}
+	if n := evalInt(t, ctx, `document.querySelectorAll('.dxg-canvas').length`); n != 0 {
+		t.Fatalf("canvases before first open = %d, want 0", n)
+	}
+	if n := evalInt(t, ctx, `window.__dxgPayloadParses`); n != 0 {
+		t.Fatalf("payload parses before first open = %d, want 0", n)
+	}
+	// The trigger is not a .sec-tab: the viewer's existing delegated handler
+	// matches .sec-tab and would also switch modules.
+	if evalBool(t, ctx, `document.querySelector('[data-dxg-open]').classList.contains('sec-tab')`) {
+		t.Fatal("the graph trigger must not carry class sec-tab")
+	}
+	// It mounts OUTSIDE div.layout, so an SSE fragment swap cannot destroy it.
+	if evalBool(t, ctx, `!!document.getElementById('dxgPane').closest('.layout')`) {
+		t.Fatal("the pane must mount outside div.layout")
+	}
+
+	openGraphPane(t, ctx)
+
+	if n := evalInt(t, ctx, `window.__dxgPayloadParses`); n < 1 {
+		t.Fatalf("payload parses after first open = %d, want at least 1", n)
+	}
+
+	// The control bar: five groups, in the frozen order.
+	labels := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-controls .dxg-ctl .dxg-ctl-label'))
+		.map(function (e) { return e.textContent; })`)
+	wantLabels := []string{"Scope", "Granularity", "Highlight overlay", "Edge types", "View"}
+	if fmt.Sprint(labels) != fmt.Sprint(wantLabels) {
+		t.Fatalf("control groups = %v, want %v", labels, wantLabels)
+	}
+	// One independently toggleable button per relation, from graph-core.js's
+	// EDGE_TYPES rather than a literal, plus the two View controls.
+	types := evalStrings(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-type]'))
+		.map(function (e) { return e.getAttribute('data-dxg-type'); })`)
+	if fmt.Sprint(types) != fmt.Sprint([]string{"rests_on", "mirrors", "governed_by"}) {
+		t.Fatalf("edge-type toggles = %v, want the three relation types", types)
+	}
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-labels], [data-dxg-relayout]').length`); n != 2 {
+		t.Fatalf("View group controls = %d, want 2 (labels toggle, re-run layout)", n)
+	}
+
+	// The overlay select carries all six overlays plus none, including
+	// governance — the channel that answers "what does this doctrine reach?"
+	overlays := evalStrings(t, ctx, `Array.from(document.querySelectorAll('#dxgOverlay option'))
+		.map(function (o) { return o.value; })`)
+	wantOverlays := []string{"none", "isolated", "cycles", "governance", "review", "comments", "status"}
+	if fmt.Sprint(overlays) != fmt.Sprint(wantOverlays) {
+		t.Fatalf("overlay options = %v, want %v", overlays, wantOverlays)
+	}
+
+	// The legend names every one of the PROJECT's facets, by its own name.
+	// This is facet identity's second channel, and the one that still works
+	// at twenty facets where colour alone has stopped working at about twelve.
+	facets := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-legend [data-dxg-facet] .dxg-legend-name'))
+		.map(function (e) { return e.textContent; })`)
+	if fmt.Sprint(facets) != fmt.Sprint([]string{"contract", "design"}) {
+		t.Fatalf("legend facet names = %v, want the project's own facets", facets)
+	}
+
+	// Selecting a node fills the detail panel — facet identity's THIRD
+	// channel, which names the facet in TEXT so a reader never has to resolve
+	// a colour to answer "which facet is this?".
+	runCDP(t, ctx, chromedp.Click(`[data-dxg-jump="widget.design.thing"]`, chromedp.ByQuery))
+	if got := evalString(t, ctx, `document.querySelector('.dxg-detail-id').textContent`); got != "widget.design.thing" {
+		t.Fatalf("detail panel id = %q, want widget.design.thing", got)
+	}
+	facetRow := evalString(t, ctx, `(function () {
+		var dts = document.querySelectorAll('.dxg-detail-rows dt');
+		for (var i = 0; i < dts.length; i++) {
+			if (dts[i].textContent === 'facet') { return dts[i].nextElementSibling.textContent; }
+		}
+		return '';
+	})()`)
+	if facetRow != "design" {
+		t.Fatalf("detail panel facet row = %q, want design", facetRow)
+	}
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.design.thing"]').length`); n != 1 {
+		t.Fatalf("detail panel open-claim links = %d, want 1", n)
+	}
+
+	// The gaps rail keeps facts and heuristics in separate blocks, and the
+	// heuristics are labelled as guesses. False positives among them are
+	// guaranteed rather than merely possible.
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="hint"]').length`); n != 2 {
+		t.Fatalf("hint blocks inside the hints section = %d, want 2", n)
+	}
+	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-hints] [data-dxg-kind="fact"]').length`); n != 0 {
+		t.Fatalf("fact blocks inside the hints section = %d, want 0 — facts and guesses never mix", n)
+	}
+
+	// Escape closes the pane back to inert-but-MOUNTED: hidden again, and its
+	// DOM (with the reader's camera, positions and filters) still standing.
+	evalVoid(t, ctx, `document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));`)
+	pollTrue(t, ctx, `document.getElementById('dxgPane').hidden === true`)
+	if evalBool(t, ctx, `document.body.classList.contains('dxg-open')`) {
+		t.Fatal("closing the pane must release the body scroll lock")
+	}
+	if n := evalInt(t, ctx, `document.querySelectorAll('#dxgPane .dxg-canvas').length`); n != 1 {
+		t.Fatalf("canvases after close = %d, want 1 — closing must not unmount", n)
+	}
+}
+
+// TestGraphPaneInertUntilOpenedAutoCollapse is the same step's large-corpus
+// half, split into its own func (and its own page load) because it needs a
+// project on the other side of AUTO_COLLAPSE_ABOVE. It shares the prefix so
+// one -run pattern still runs both.
+func TestGraphPaneInertUntilOpenedAutoCollapse(t *testing.T) {
+	const total = 601 // one over graph-ui.js's AUTO_COLLAPSE_ABOVE
+	p := newProjectRaw(t, `schema_version: 1
+facets:
+  - contract
+modules:
+  - m1
+  - m2
+  - m3
+claims_dir: claims
+`)
+	for i := 0; i < total; i++ {
+		module := fmt.Sprintf("m%d", i%3+1)
+		id := fmt.Sprintf("%s.contract.c%03d", module, i)
+		p.writeClaim(fmt.Sprintf("c%03d.yaml", i), "id: "+id+`
+facet: contract
+module: `+module+`
+status: draft
+body: |
+  one of many claims.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+`)
+	}
+
+	ctx := staticGraphTab(t, p)
+	openGraphPane(t, ctx)
+
+	// Above the threshold the pane opens COLLAPSED and says so, naming the
+	// real numbers rather than a plausible-sounding one.
+	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
+		t.Fatalf("granularity above the threshold = %q, want module", got)
+	}
+	notice := evalString(t, ctx, `document.querySelector('.dxg-notices').textContent`)
+	for _, want := range []string{"601", "3 modules", "600-claim threshold"} {
+		if !strings.Contains(notice, want) {
+			t.Fatalf("auto-collapse notice %q does not name %q", notice, want)
+		}
+	}
+
+	// The override WARNS RATHER THAN BLOCKS: a reader who wants every node
+	// gets every node, and is told first what it costs.
+	runCDP(t, ctx, chromedp.Click(`.dxg-notices .dxg-notice-action`, chromedp.ByQuery))
+	pollTrue(t, ctx, `document.getElementById('dxgGranularity').value === 'claims'`)
+	pollTrue(t, ctx, `!!document.querySelector('.dxg-notices .dxg-notice--warn')`)
+	if !strings.Contains(evalString(t, ctx, `document.querySelector('.dxg-notice--warn').textContent`), "601") {
+		t.Fatal("the override warning must name the real claim count")
+	}
+}
+
+// ---------------------------------------------------------------------
+// Step 74 — refresh: absent without a server, and view-preserving with one
+// ---------------------------------------------------------------------
+
+// cameraSpy makes the pane's camera observable without exporting it.
+// draw() is the ONLY caller of ctx.translate/ctx.scale in graph-ui.js (it
+// wraps the whole scene in one save/translate/scale/restore), so recording
+// the last arguments to each is exactly the camera the last frame drew with.
+// Reading it back after a forced redraw is what lets this test assert that a
+// refresh preserved zoom and pan.
+const cameraSpy = `(function () {
+	window.__dxgCam = {};
+	var proto = CanvasRenderingContext2D.prototype;
+	var translate = proto.translate, scale = proto.scale;
+	proto.translate = function (x, y) { window.__dxgCam.x = x; window.__dxgCam.y = y; return translate.apply(this, arguments); };
+	proto.scale = function (sx) { window.__dxgCam.zoom = sx; return scale.apply(this, arguments); };
+})();`
+
+// forceDraw triggers a synchronous repaint through the pane's own resize
+// handler, so the camera spy holds a value without waiting on a layout frame.
+const forceDraw = `window.dispatchEvent(new Event('resize'));`
+
+type cameraState struct {
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+	Zoom float64 `json:"zoom"`
+}
+
+func readCamera(t *testing.T, ctx context.Context) cameraState {
+	t.Helper()
+	evalVoid(t, ctx, forceDraw)
+	var cam cameraState
+	evalInto(t, ctx, `window.__dxgCam`, &cam)
+	return cam
+}
+
+func TestGraphRefresh(t *testing.T) {
+	t.Run("absent in a static file viewer", func(t *testing.T) {
+		p := newGraphProject(t)
+		ctx := staticGraphTab(t, p)
+		openGraphPane(t, ctx)
+
+		// Not disabled — ABSENT. A control a document cannot honour is a
+		// promise, not an affordance; a control that is simply not there says
+		// the truth, which is that this document is a snapshot.
+		if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-refresh]').length`); n != 0 {
+			t.Fatalf("refresh controls on file:// = %d, want 0 (absent, not disabled)", n)
+		}
+		if evalBool(t, ctx, `document.body.classList.contains('comments-live')`) {
+			t.Fatal("a static file:// viewer must never report itself live")
+		}
+		// The close control IS there, so the absence above is about refresh
+		// rather than about the header not being built.
+		if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-close]').length`); n != 1 {
+			t.Fatalf("close controls = %d, want 1", n)
+		}
+	})
+
+	t.Run("present under serve and preserving the view", func(t *testing.T) {
+		p := newGraphProject(t)
+		ctx := serveAndOpenLive(t, p)
+		desktopViewport(t, ctx)
+		evalVoid(t, ctx, cameraSpy)
+		openGraphPane(t, ctx)
+
+		if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-refresh]').length`); n != 1 {
+			t.Fatalf("refresh controls under serve = %d, want 1", n)
+		}
+
+		// A non-default scope, then a pan and a zoom, so all three of the
+		// things a refresh must preserve are away from their defaults.
+		evalVoid(t, ctx, `(function () {
+			var s = document.getElementById('dxgScope');
+			s.value = 'module:widget';
+			s.dispatchEvent(new Event('change'));
+		})();`)
+		evalVoid(t, ctx, `(function () {
+			var cv = document.querySelector('.dxg-canvas');
+			// Synthetic pointer events carry no active pointer, so real capture
+			// would throw; the pan path under test does not depend on it.
+			cv.setPointerCapture = function () {};
+			cv.releasePointerCapture = function () {};
+			var r = cv.getBoundingClientRect();
+			var at = { clientX: r.left + 8, clientY: r.top + 8, pointerId: 1, bubbles: false };
+			cv.dispatchEvent(new PointerEvent('pointerdown', at));
+			cv.dispatchEvent(new PointerEvent('pointermove', { clientX: r.left + 48, clientY: r.top + 38, pointerId: 1 }));
+			cv.dispatchEvent(new PointerEvent('pointercancel', { pointerId: 1 }));
+			cv.dispatchEvent(new WheelEvent('wheel', { deltaY: -240, clientX: r.left + 8, clientY: r.top + 8, cancelable: true }));
+		})();`)
+
+		before := readCamera(t, ctx)
+		if before.Zoom == 1 || before.Zoom == 0 {
+			t.Fatalf("zoom = %v after a wheel event, want something other than the default 1", before.Zoom)
+		}
+		if before.X == 0 && before.Y == 0 {
+			t.Fatalf("pan = (%v,%v) after a drag, want a moved camera", before.X, before.Y)
+		}
+
+		// The header timestamp is the visible proof the button did something.
+		// generated_at is RFC3339 at second resolution, so a refresh inside
+		// the same second legitimately produces the same string — keep asking
+		// until the second turns over rather than sleeping for one.
+		stamp0 := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').getAttribute('title')`)
+		if stamp0 == "" {
+			t.Fatal("the header carries no payload timestamp")
+		}
+		pollTrue(t, ctx, `(function () {
+			var s = document.querySelector('[data-dxg-stamp]');
+			if (s.getAttribute('title') !== `+jsString(t, stamp0)+`) { return true; }
+			var btn = document.querySelector('[data-dxg-refresh]');
+			if (btn && !btn.disabled) { btn.click(); }
+			return false;
+		})()`)
+
+		// ...and everything the reader was looking at survived it.
+		after := readCamera(t, ctx)
+		if after != before {
+			t.Fatalf("camera after refresh = %+v, want %+v unchanged", after, before)
+		}
+		if got := evalString(t, ctx, `document.getElementById('dxgScope').value`); got != "module:widget" {
+			t.Fatalf("scope after refresh = %q, want module:widget", got)
+		}
+		if evalInt(t, ctx, `document.querySelectorAll('#dxgPane .dxg-canvas').length`) != 1 {
+			t.Fatal("the pane must survive its own refresh")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------
+// Step 75 — the hash carries both halves and neither erases the other
+// ---------------------------------------------------------------------
+
+func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
+	p := newProjectRaw(t, twoModuleConfig)
+	p.writeClaim("widget.yaml", twoModuleClaim("widget.contract.overview", "widget"))
+	p.writeClaim("gadget.yaml", twoModuleClaim("gadget.contract.overview", "gadget"))
+	ctx := staticGraphTab(t, p)
+	openGraphPane(t, ctx)
+
+	// On load the first module is the visible one.
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section').length === 2 && !document.querySelectorAll('.module-section')[0].hidden`)
+
+	// Change a graph filter. The pane writes its segment through
+	// history.replaceState ONLY, which does not fire hashchange — so the
+	// reading view's routing, which falls back to the FIRST MODULE for
+	// anything it does not recognise, is never re-entered.
+	evalVoid(t, ctx, `(function () {
+		var s = document.getElementById('dxgOverlay');
+		s.value = 'cycles';
+		s.dispatchEvent(new Event('change'));
+	})();`)
+	hash := evalString(t, ctx, `window.location.hash`)
+	if !strings.Contains(hash, "!g=") || !strings.Contains(hash, "ov=cycles") {
+		t.Fatalf("hash = %q, want a !g= segment carrying the graph state", hash)
+	}
+	if evalBool(t, ctx, `document.querySelectorAll('.module-section')[0].hidden`) {
+		t.Fatal("a graph filter change must not move the reading view")
+	}
+
+	// Now paste a full deep link: a reading-view target AND a graph state.
+	// Both halves must apply.
+	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=sc=all&gr=module&ov=governance&ty=rmg&lb=1&ex=&se=';`)
+	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'governance'`)
+	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
+	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
+		t.Fatalf("granularity from the pasted hash = %q, want module", got)
+	}
+	// The reading view rewrote the hash for its own target and preserved the
+	// graph half byte for byte.
+	if got := evalString(t, ctx, `window.location.hash`); !strings.Contains(got, "!g=") || !strings.Contains(got, "ov=governance") {
+		t.Fatalf("hash after the deep link = %q, want the graph segment preserved", got)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Step 76 — a fragment swap leaves the pane, its state and its stamp alone
+// ---------------------------------------------------------------------
+
+func TestGraphPaneSurvivesFragmentSwap(t *testing.T) {
+	p := newProjectRaw(t, twoFacetConfig)
+	p.writeClaim("ctr.yaml", facetClaim("widget.contract.base", "contract"))
+	p.writeClaim("des.yaml", facetClaim("widget.design.thing", "design"))
+	ctx := serveAndOpenLive(t, p)
+	desktopViewport(t, ctx)
+	openGraphPane(t, ctx)
+
+	// Mark the pane ELEMENT itself. An expando survives only if the node
+	// does; if the swap replaced it, the mark is gone with it.
+	evalVoid(t, ctx, `document.getElementById('dxgPane').__dxgSurvivalMark = 'sentinel';`)
+	evalVoid(t, ctx, `(function () {
+		var s = document.getElementById('dxgOverlay');
+		s.value = 'review';
+		s.dispatchEvent(new Event('change'));
+	})();`)
+	stampBefore := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').getAttribute('title')`)
+
+	// An external claim change drives an SSE "changed", the client re-fetches
+	// /api/fragment and swaps <main class="content-area"> and <nav id="nav">
+	// by outerHTML. The new card landing in the DOM is the deterministic
+	// signal that the swap ran.
+	p.writeClaim("ctr2.yaml", facetClaim("widget.contract.added", "contract"))
+	pollTrue(t, ctx, `!!document.getElementById('widget.contract.added')`)
+
+	if got := evalString(t, ctx, `document.getElementById('dxgPane').__dxgSurvivalMark || ''`); got != "sentinel" {
+		t.Fatal("the pane node did not survive the fragment swap: it must mount outside div.layout")
+	}
+	if evalBool(t, ctx, `document.getElementById('dxgPane').hidden`) {
+		t.Fatal("an open pane must stay open across a fragment swap")
+	}
+	if got := evalString(t, ctx, `document.getElementById('dxgOverlay').value`); got != "review" {
+		t.Fatalf("overlay after the swap = %q, want review — the pane's filter state must survive", got)
+	}
+
+	// And the pane says, honestly, that its payload did NOT come along: the
+	// block sits outside both swapped anchors and is never re-delivered, so
+	// the stamp is unchanged even though the reading view just updated. That
+	// is what the refresh button exists to answer.
+	if got := evalString(t, ctx, `document.querySelector('[data-dxg-stamp]').getAttribute('title')`); got != stampBefore {
+		t.Fatalf("payload stamp = %q after a swap, want %q unchanged — a swap does not re-deliver the payload", got, stampBefore)
+	}
+	if n := evalInt(t, ctx, `JSON.parse(document.getElementById('dossierx-graph').textContent).nodes.length`); n != 2 {
+		t.Fatalf("payload nodes after the swap = %d, want the 2 it was delivered with", n)
+	}
+}
