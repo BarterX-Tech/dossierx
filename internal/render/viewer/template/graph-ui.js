@@ -450,6 +450,25 @@
       e.preventDefault();
       togglePane();
     });
+
+    // A hash that arrives WITH the document fires no hashchange, so a shared
+    // link can only be honoured by looking once, here. It is armed at parse
+    // time and fired when the document has a pane to mount into.
+    //
+    // IT MUST NOT LIVE INSIDE THE MOUNT PATH. mountPane() sets `mounted` only
+    // after it finishes binding, so a check called from there re-enters
+    // openPane() while the flag is still false and recurses until the stack
+    // gives out — openPane -> mountPane -> bind -> check -> openPane. That is
+    // not hypothetical: it is what the first version of this did, and it left
+    // the pane permanently half-built for any reader who arrived on a graph
+    // link and clicked the trigger.
+    if (parseTimeHash !== '') {
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', openFromHashOnLoad);
+      } else {
+        openFromHashOnLoad();
+      }
+    }
   }
 
   // ------------------------------------------------------------------
@@ -2860,7 +2879,6 @@
     });
 
     bindHashListener();
-    openFromHashOnLoad();
   }
 
   // A link someone shares is a link to a VIEW, and the graph state is the only
