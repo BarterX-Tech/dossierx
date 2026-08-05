@@ -1,0 +1,13 @@
+id: viewer.decision.canvas-not-svg
+facet: decision
+module: viewer
+status: draft
+layout: card
+build_role: orientation
+body: |
+  Drawing is done on a canvas rather than one element per claim. A thousand elements is a thousand things for the browser to lay out on every frame.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.schema.payload-shape

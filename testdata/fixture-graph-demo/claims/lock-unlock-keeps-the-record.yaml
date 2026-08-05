@@ -1,0 +1,13 @@
+id: lock.behavior.unlock-keeps-the-record
+facet: behavior
+module: lock
+status: locked
+layout: card
+build_role: behavior
+body: |
+  Releasing an approval stamps the record rather than deleting it, precisely so the evidence outlives the release.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - lock.schema.ledger-record

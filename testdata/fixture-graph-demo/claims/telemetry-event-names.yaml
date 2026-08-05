@@ -1,0 +1,13 @@
+id: telemetry.schema.event-names
+facet: schema
+module: telemetry
+status: draft
+layout: card
+build_role: schema
+body: |
+  Names are drawn from a fixed list checked at build time, so a typo is a compile failure rather than a silently lost count.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - telemetry.schema.counter-shape

@@ -1,0 +1,11 @@
+id: telemetry.decision.counters-are-local
+facet: decision
+module: telemetry
+status: draft
+layout: card
+build_role: orientation
+body: |
+  Nothing is ever sent anywhere. A counter that leaves the machine is a different feature with a different review.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine

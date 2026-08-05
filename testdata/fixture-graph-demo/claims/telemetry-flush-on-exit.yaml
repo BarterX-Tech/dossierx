@@ -1,0 +1,13 @@
+id: telemetry.behavior.flush-on-exit
+facet: behavior
+module: telemetry
+status: draft
+layout: card
+build_role: behavior
+body: |
+  Counts are written once, at exit, to a file beside the configuration. There is no background writer.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - telemetry.schema.counter-shape

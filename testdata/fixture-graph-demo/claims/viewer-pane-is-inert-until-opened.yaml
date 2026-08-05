@@ -1,0 +1,13 @@
+id: viewer.behavior.pane-is-inert-until-opened
+facet: behavior
+module: viewer
+status: locked
+layout: card
+build_role: behavior
+body: |
+  Until a reader opens it, the pane registers one listener and does nothing else. It builds no elements, parses no payload and starts no simulation.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.schema.payload-shape

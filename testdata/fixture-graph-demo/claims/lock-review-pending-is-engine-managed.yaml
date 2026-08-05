@@ -1,0 +1,13 @@
+id: lock.contract.review-pending-is-engine-managed
+facet: contract
+module: lock
+status: draft
+layout: card
+build_role: api
+body: |
+  The review flag is set by the engine when something underneath an approved claim changed, and is cleared only by a confirmed re-review.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - lock.behavior.lock-gates

@@ -1,0 +1,13 @@
+id: engine.behavior.loader-walks-claims-dir
+facet: behavior
+module: engine
+status: locked
+layout: card
+build_role: behavior
+body: |
+  The loader walks the configured claims directory and reads every file it finds. Directory layout carries no meaning: a claim's module and facet come from fields inside the claim.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.claim-shape

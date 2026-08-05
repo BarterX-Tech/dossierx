@@ -1,0 +1,14 @@
+id: cli.contract.check-noun
+facet: contract
+module: cli
+status: locked
+layout: card
+build_role: api
+body: |
+  One command runs review, grouping, rendering and the integrity gate, stopping at the first failure.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.contract.check-is-fail-fast
+  - cli.behavior.exit-codes

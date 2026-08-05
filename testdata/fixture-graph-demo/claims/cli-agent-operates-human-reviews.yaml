@@ -1,0 +1,12 @@
+id: cli.decision.agent-operates-human-reviews
+facet: decision
+module: cli
+status: draft
+layout: card
+build_role: orientation
+body: |
+  An agent runs the commands and a human reads the result and approves it. That separation is the whole point and is never worked around.
+governed_by:
+  type: engine.decision.single-source-of-truth
+rests_on:
+  - cli.contract.serve-noun

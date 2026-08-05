@@ -1,0 +1,14 @@
+id: lock.behavior.lock-gates
+facet: behavior
+module: lock
+status: locked
+layout: card
+build_role: behavior
+emphasis: true
+body: |
+  Approval is refused while review findings stand, while a discussion thread is unresolved, or while a dependency has not itself been approved.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - lock.schema.ledger-record

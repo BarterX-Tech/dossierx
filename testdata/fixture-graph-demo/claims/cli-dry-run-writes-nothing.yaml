@@ -1,0 +1,13 @@
+id: cli.behavior.dry-run-writes-nothing
+facet: behavior
+module: cli
+status: locked
+layout: card
+build_role: behavior
+body: |
+  A dry run reports the transition, the preconditions and the side effects it would have, and writes nothing at all.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - cli.schema.json-envelope

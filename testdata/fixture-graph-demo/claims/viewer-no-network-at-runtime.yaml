@@ -1,0 +1,13 @@
+id: viewer.contract.no-network-at-runtime
+facet: contract
+module: viewer
+status: locked
+layout: card
+build_role: api
+body: |
+  The rendered document makes no outbound request of any kind. It opens from a local file and works with the network removed.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.schema.payload-shape

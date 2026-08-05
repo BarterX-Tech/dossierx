@@ -1,0 +1,13 @@
+id: engine.verification.determinism-suite
+facet: verification
+module: engine
+status: locked
+layout: card
+build_role: verification
+body: |
+  Build the same corpus a hundred times from shuffled input and assert the encoded bytes are identical every time.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.contract.build-is-pure

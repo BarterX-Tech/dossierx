@@ -1,0 +1,13 @@
+id: engine.schema.catalog-shape
+facet: schema
+module: engine
+status: locked
+layout: card
+build_role: schema
+body: |
+  The catalog is the render-ready view over a set of claims: the claims themselves plus a grouping by facet and by module.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.claim-shape

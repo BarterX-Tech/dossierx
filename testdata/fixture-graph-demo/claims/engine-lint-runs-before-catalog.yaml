@@ -1,0 +1,21 @@
+id: engine.behavior.lint-runs-before-catalog
+facet: behavior
+module: engine
+status: locked
+layout: card
+build_role: behavior
+body: |
+  A single error-severity finding stops the pipeline above the catalog and render stages. No corpus that fails review ever produces a rendered artifact.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.edge-kinds
+review_pending: true
+comments:
+  - id: c-2e8875
+    status: open
+    author: human
+    created: "2026-08-05T15:19:28Z"
+    body: Does this still hold once the integrity gate moved below render? The gate runs last now, so the sentence about no artifact being produced needs a second look.
+    edited: false

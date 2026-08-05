@@ -18,6 +18,15 @@ coverage.html
 # project checked out inside this tree.
 .dossierx-comment-digest.json
 
+# ...with one exception. testdata/fixture-graph-demo is the first fixture in this
+# repo that IS a ledger-covered dossierx project: it carries 25 locked claims, so
+# its lock store is ledger-covered, and a ledger-covered project without a
+# committed digest store makes "dossierx check" emit comment-digest-absent and
+# exit 1. A fresh clone or CI checkout would fail on it. The digest is therefore
+# a tracked input of that fixture, exactly as a real consuming project commits
+# its own.
+!testdata/fixture-graph-demo/.dossierx-comment-digest.json
+
 # Editor / OS cruft
 .vscode/
 .idea/

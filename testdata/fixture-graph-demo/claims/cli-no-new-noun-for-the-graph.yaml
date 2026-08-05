@@ -1,0 +1,13 @@
+id: cli.decision.no-new-noun-for-the-graph
+facet: decision
+module: cli
+status: draft
+layout: card
+build_role: orientation
+body: |
+  The graph rides in rendered output. Adding a command for it would have bought a second way to ask a question already answered.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - cli.contract.noun-list-is-fixed

@@ -1,0 +1,12 @@
+id: viewer.contract.render-is-pure
+facet: contract
+module: viewer
+status: locked
+layout: card
+build_role: api
+body: |
+  Rendering is a function of the catalog and the configuration. The same inputs produce the same document, apart from the one stamped generation time.
+governed_by:
+  type: engine.decision.single-source-of-truth
+rests_on:
+  - engine.contract.build-is-pure

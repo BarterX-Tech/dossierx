@@ -1,0 +1,13 @@
+id: viewer.verification.browser-suite
+facet: verification
+module: viewer
+status: draft
+layout: card
+build_role: verification
+body: |
+  One page load, many table cases. A case in that shape costs nothing; a page load per case costs about a second each.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.behavior.pane-is-inert-until-opened

@@ -1,0 +1,57 @@
+# The claims-graph demo corpus.
+#
+# WHAT THIS FIXTURE IS FOR, and how it differs from the other two.
+#
+# fixture-basic proves the engine renders. fixture-portability proves the
+# engine hardcodes no project's facet or module names. This one exists so the
+# viewer's graph pane has a corpus with SHAPE: five modules, five facets, ~58
+# claims, and at least one instance of every gap class the graph payload can
+# express. Each of those classes is asserted present by a Go test over the
+# payload (internal/graph/fixture_test.go), so a claim edited here that
+# accidentally connects the module that is meant to be isolated fails the
+# build rather than silently emptying a panel.
+#
+# THE CORPUS CONTAINS NO CYCLE OF ANY SHAPE, and cannot. "dossierx check"
+# returns above the catalog and render stages on the first error-severity
+# finding, and a rests_on loop, a governed_by loop, a self-edge and a loop
+# that alternates the two are all error severity. So a fixture that must
+# render cannot demonstrate cycle detection; that is proven by unit tests over
+# synthetic edge sets and by a browser test that injects a cycle-carrying
+# payload into the page instead. The gaps rail's cycle block being empty when
+# a reader opens this fixture is the correct and honest reading.
+#
+# doctrine_facet is deliberately NOT set. Setting it turns on hub gating,
+# which refuses to approve a claim whose dependency in that facet is not yet
+# approved — a real feature, but one that would make this corpus's approval
+# order about doctrine rather than about the graph. The "decision" facet is
+# where doctrine-shaped claims live here; it is an ordinary facet.
+#
+# WHAT EACH MODULE SEEDS:
+#
+#   engine     the hub. Every build phase present, so it is NOT the module
+#              the missing-phase heuristic fires on.
+#   viewer     ordinary two-way connectivity, plus the isolated claim and the
+#              weakly-linked claim.
+#   cli        holds approved claims and NO claim in the verification phase:
+#              this is the module the missing-phase heuristic names.
+#   lock       outbound cross-module edges and zero inbound ones.
+#   telemetry  no cross-module edge in either direction, and no approved
+#              claim. Deliberately named after a word the repository's
+#              offline-scan regex matches, so nothing in the engine can get
+#              away with hardcoding it.
+schema_version: 1
+title: Claims Graph Demo
+eyebrow: the corpus the graph pane was designed against
+facets:
+  - contract
+  - schema
+  - behavior
+  - verification
+  - decision
+modules:
+  - engine
+  - viewer
+  - cli
+  - lock
+  - telemetry
+claims_dir: claims
