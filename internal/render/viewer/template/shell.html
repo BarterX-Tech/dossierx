@@ -1243,6 +1243,12 @@
       // do the write controls mount. On file:// the fetch rejects and is
       // swallowed — the read-only panel is the correct, intended outcome.
       function probeAndMount() {
+        // A file:// page has no server to ask, and a relative fetch there does
+        // not merely fail quietly: it logs net::ERR_FILE_NOT_FOUND as a console
+        // error on a document whose whole premise is that it works offline with
+        // no network. Ask the protocol instead of asking the network.
+        var proto = (window.location && window.location.protocol) || '';
+        if (proto !== 'http:' && proto !== 'https:') { return; }
         var controller = null;
         var timer = null;
         try { controller = new AbortController(); } catch (e) { controller = null; }

@@ -92,10 +92,41 @@
   // large exists.
   var AUTO_COLLAPSE_ABOVE = 600;
 
-  // Above this many drawn nodes, labels are suppressed unless the reader has
-  // zoomed in: past it the labels overlap into a grey smear that hides the
-  // shape the pane exists to show.
-  var LABEL_NODE_CEILING = 220;
+  // ---- Labels ------------------------------------------------------------
+  //
+  // Labels are LAID OUT, not merely drawn. The first version drew one under
+  // every node at every zoom level, in world space, with no halo and no
+  // collision test: at the default zoom a third of 58 labels overprinted each
+  // other and ran straight through the node discs, which is the state a
+  // reviewer meets first.
+  //
+  // Three constants and one rule fix that. The rule: a label is drawn only if
+  // its box collides with nothing already drawn and with no node disc, and
+  // the highest-degree nodes get first refusal. Because the boxes are
+  // measured in SCREEN space while the nodes spread apart as the camera zooms
+  // in, zooming REVEALS labels rather than hiding them — which is the
+  // behaviour a reader expects and the opposite of what a world-space
+  // ceiling does.
+  var LABEL_FONT_PX = 11;
+  var LABEL_GAP = 4; // px between a node's rim and the top of its label
+  var LABEL_PAD_X = 3; // slack added around a label box before testing overlap
+  var LABEL_PAD_Y = 1;
+
+  // The halo is a stroke of the page colour laid under the fill, so a label
+  // stays readable over the canvas, over an edge and over a node disc alike.
+  // Three device pixels is the thinnest that survives sub-pixel antialiasing
+  // against a saturated fill.
+  var LABEL_HALO_WIDTH = 3;
+
+  // Only this many labels are ever CONSIDERED. Beyond it the collision pass
+  // is doing quadratic work to reject labels a reader could not read anyway,
+  // and the ones it would reject are the low-degree nodes it considers last.
+  var LABEL_CANDIDATE_CEILING = 400;
+
+  // Above this many devicePixelRatio the backing store costs more memory than
+  // the sharpness is worth; 3 covers every shipping display and stops a
+  // browser reporting 4 or 5 under an OS zoom from allocating 25x the pixels.
+  var DPR_CEILING = 3;
 
   // Above this many drawn nodes the layout drops its O(n^2) repulsion pass
   // and runs on springs plus gravity alone. Auto-collapse means this is
@@ -166,6 +197,8 @@
   var dragging = null; // {id} while a node is being dragged
   var panning = null; // {x, y} while the background is being dragged
   var movedWhileDown = false;
+  var dprQuery = null; // matchMedia handle watching for a resolution change
+  var pendingFit = false; // the drawn graph should be fitted to the canvas
 
   // ------------------------------------------------------------------
   // Small helpers
@@ -373,7 +406,10 @@
     refreshControls();
     buildLegend();
     resizeCanvas();
+    watchDevicePixelRatio();
+    watchColorScheme();
     recompute();
+    requestFit();
     startLayout(true);
     writeHash();
     if (el.surface) {
@@ -456,9 +492,14 @@
   function buildControls() {
     var c = core();
 
+    // Scope and granularity both change WHICH GRAPH is drawn rather than how
+    // it is painted, so both ask for a fit: five module nodes left at the
+    // previous camera occupy about a seventh of the canvas, and a reader who
+    // has to pinch-zoom after every control change stops using the controls.
     var scopeGroup = controlGroup('Scope');
     el.scope = selectControl('dxgScope', function () {
       state.scope = el.scope.value;
+      requestFit();
       onControlChange(true);
     });
     scopeGroup.appendChild(el.scope);
@@ -467,6 +508,7 @@
     el.granularity = selectControl('dxgGranularity', function () {
       state.granularity = el.granularity.value;
       noteManualGranularity();
+      requestFit();
       onControlChange(true);
     });
     for (var g = 0; g < GRANULARITY_OPTIONS.length; g++) {
@@ -514,6 +556,7 @@
     el.relayout.addEventListener('click', function () {
       positions = Object.create(null);
       recompute();
+      requestFit();
       startLayout(true);
     });
     viewGroup.appendChild(el.labels);
@@ -589,6 +632,10 @@
   function onControlChange(reheat) {
     refreshControls();
     recompute();
+    // The legend describes what is ACTUALLY ENCODED right now, and an overlay
+    // changes that wholesale, so it is rebuilt on every control change rather
+    // than only when the payload does. It is a dozen list items.
+    buildLegend();
     writeHash();
     if (reheat) {
       startLayout(false);
@@ -606,23 +653,102 @@
   // member, which is the disambiguator that still works at twenty facets
   // where colour alone has stopped working at about twelve.
 
-  // GOVERNED_SAMPLE is a constant string with no interpolation of any kind —
-  // no payload value reaches it — so assigning it as markup cannot carry
-  // project data into the document. It draws the same three visual channels
-  // the canvas draws: a curve where the other relations are straight, and a
-  // double chevron where rests_on has one.
-  var GOVERNED_SAMPLE =
-    '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
-    '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-    '<path d="M20 2.5 L25 6 L20 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-    '<path d="M24.5 2.5 L29.5 6 L24.5 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
-    '</svg>';
+  // EDGE_SAMPLES are constant strings with no interpolation of any kind — no
+  // payload value reaches any of them — so assigning one as markup cannot
+  // carry project data into the document.
+  //
+  // THERE IS ONE PER RELATION, and that is the fix rather than a flourish.
+  // The strip used to name governed_by alone, which left rests_on and mirrors
+  // as two lines a reader had to tell apart by an arrowhead — and an
+  // arrowhead is precisely the part of an edge that disappears under the node
+  // it points at. So mirrors is now DASHED on the canvas as well as
+  // headless, and each sample here draws exactly what the canvas draws:
+  //
+  //   rests_on     solid, one chevron
+  //   mirrors      dashed, no chevron — reciprocal by design, so a head on
+  //                either end would be a direction it does not have
+  //   governed_by  the reserved hue, curved, two chevrons
+  var EDGE_SAMPLES = {
+    rests_on:
+      '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
+      '<path d="M1 6 L26 6" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+      '<path d="M22 2.5 L27 6 L22 9.5" fill="none" stroke="currentColor" stroke-width="1.6"/>' +
+      '</svg>',
+    mirrors:
+      '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
+      '<path d="M1 6 L31 6" fill="none" stroke="currentColor" stroke-width="1.6" ' +
+      'stroke-dasharray="5 3"/>' +
+      '</svg>',
+    governed_by:
+      '<svg viewBox="0 0 34 12" aria-hidden="true" focusable="false" width="34" height="12">' +
+      '<path d="M1 9 Q 13 1 24 6" fill="none" stroke="currentColor" stroke-width="2"/>' +
+      '<path d="M20 2.5 L25 6 L20 9.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
+      '<path d="M24.5 2.5 L29.5 6 L24.5 9.5" fill="none" stroke="currentColor" stroke-width="2"/>' +
+      '</svg>'
+  };
+
+  // OVERLAY_LEGENDS is what each overlay ACTUALLY paints, as {swatch class,
+  // text} rows. The swatch classes name graph.css's colours; the fills in
+  // overlayFill() name the same tokens through the palette. Neither side
+  // holds a copy of the other's hex.
+  //
+  // This table is the answer to a legend that kept advertising facet swatches
+  // while the status overlay had recoloured every node on screen green or
+  // amber. A legend describing a picture nobody is looking at is worse than
+  // no legend: it is a caption that is confidently wrong.
+  var OVERLAY_LEGENDS = {
+    isolated: [
+      ['warn', 'isolated or weakly linked here'],
+      ['dim', 'everything else']
+    ],
+    cycles: [
+      ['cycle', 'in a dependency cycle'],
+      ['dim', 'everything else']
+    ],
+    governance: [
+      ['governed', 'governs, or is governed'],
+      ['dim', 'everything else']
+    ],
+    review: [
+      ['halo', 'review pending'],
+      ['dim', 'everything else']
+    ],
+    comments: [
+      ['link', 'has an open comment thread'],
+      ['dim', 'everything else']
+    ],
+    status: [
+      ['accent', 'locked'],
+      ['halo', 'draft']
+    ]
+  };
+
+  function legendGroupLabel(text) {
+    return h('li', 'dxg-legend-group', text);
+  }
 
   function buildLegend() {
     clear(el.legend);
     var list = h('ul', 'dxg-legend-list');
+
+    if (state && state.overlay !== 'none' && OVERLAY_LEGENDS[state.overlay]) {
+      appendOverlayRows(list, state.overlay);
+    } else {
+      appendFacetRows(list);
+    }
+    appendEdgeRows(list);
+
+    el.legend.appendChild(list);
+  }
+
+  // The facet rows: every facet the PROJECT declared, by its own name,
+  // against its assigned swatch. Hovering one dims every node on the canvas
+  // that is not a member — the disambiguator that still works at twenty
+  // facets where colour alone has stopped working at about twelve.
+  function appendFacetRows(list) {
     var facets = payload ? payload.groups.facets : [];
     var c = core();
+    list.appendChild(legendGroupLabel('facets'));
 
     for (var i = 0; i < facets.length; i++) {
       var name = str(facets[i]);
@@ -636,25 +762,70 @@
       list.appendChild(item);
     }
 
-    // The catch-all slot only earns a row when some claim actually wears it.
+    // The catch-all slot only earns a row when some claim actually wears it —
+    // or when a collapsed module group is on screen wearing it, which is the
+    // other thing that colour means.
     if (payload && hasUnslottedFacet(facets)) {
       var other = h('li', 'dxg-legend-item');
       other.setAttribute('data-dxg-facet', '');
       other.appendChild(h('span', 'dxg-legend-swatch dxg-swatch-other'));
-      other.appendChild(h('span', 'dxg-legend-name', 'no facet'));
+      other.appendChild(h('span', 'dxg-legend-name', 'no facet · module group'));
       bindLegendHover(other, '');
       list.appendChild(other);
     }
+  }
 
-    var edgeItem = h('li', 'dxg-legend-item dxg-legend-item--edge');
-    edgeItem.setAttribute('data-dxg-edge', 'governed_by');
-    var sample = h('span', 'dxg-legend-edge');
-    sample.innerHTML = GOVERNED_SAMPLE;
-    edgeItem.appendChild(sample);
-    edgeItem.appendChild(h('span', 'dxg-legend-name', 'governed_by'));
-    list.appendChild(edgeItem);
+  // The overlay rows. No hover binding: these are not facets and dimming the
+  // canvas by one of them would answer a question nobody asked.
+  function appendOverlayRows(list, overlay) {
+    var rows = OVERLAY_LEGENDS[overlay];
+    list.appendChild(legendGroupLabel(overlayLabel(overlay)));
+    for (var i = 0; i < rows.length; i++) {
+      var item = h('li', 'dxg-legend-item dxg-legend-item--overlay');
+      item.setAttribute('data-dxg-overlay-key', rows[i][0]);
+      item.appendChild(h('span', 'dxg-legend-swatch dxg-swatch-' + rows[i][0]));
+      item.appendChild(h('span', 'dxg-legend-name', rows[i][1]));
+      list.appendChild(item);
+    }
+  }
 
-    el.legend.appendChild(list);
+  // The three edge rows, always, whatever the overlay is doing to the nodes:
+  // an overlay recolours fills and never changes what a line means.
+  function appendEdgeRows(list) {
+    var c = core();
+    var types = c ? c.EDGE_TYPES : ['rests_on', 'mirrors', 'governed_by'];
+    list.appendChild(legendGroupLabel('edges'));
+    for (var i = 0; i < types.length; i++) {
+      var type = str(types[i]);
+      if (!EDGE_SAMPLES[type]) {
+        continue;
+      }
+      var cls = 'dxg-legend-item dxg-legend-item--edge';
+      if (type === 'governed_by') {
+        cls += ' dxg-legend-item--governed';
+      }
+      var item = h('li', cls);
+      item.setAttribute('data-dxg-edge', type);
+      var sample = h('span', 'dxg-legend-edge');
+      sample.innerHTML = EDGE_SAMPLES[type];
+      item.appendChild(sample);
+      item.appendChild(h('span', 'dxg-legend-name', type));
+      // An edge type the reader has toggled off is not on the canvas, and the
+      // strip says so rather than describing a line that is not there.
+      if (state && state.types.indexOf(type) < 0) {
+        item.appendChild(h('span', 'dxg-legend-name', '(hidden)'));
+      }
+      list.appendChild(item);
+    }
+  }
+
+  function overlayLabel(overlay) {
+    for (var i = 0; i < OVERLAY_OPTIONS.length; i++) {
+      if (OVERLAY_OPTIONS[i][0] === overlay) {
+        return OVERLAY_OPTIONS[i][1];
+      }
+    }
+    return overlay;
   }
 
   function hasUnslottedFacet(facets) {
@@ -880,10 +1051,45 @@
     }
 
     renderCollapseNotice();
+    renderEmptyOverlayNotice();
 
     if (transientNotice) {
       el.notices.appendChild(noticeRow(transientNotice.text, transientNotice.kind));
     }
+  }
+
+  // AN OVERLAY THAT MATCHES NOTHING SAYS SO.
+  //
+  // Every overlay dims what it does not match. When it matches NOTHING, that
+  // rule quietly turns into "fade the entire graph to 14% and highlight
+  // nothing" — 58 ghost dots on white, no message, and a reader with no way
+  // to tell a working filter with an empty result from a broken pane. Through
+  // a shared deep link it is worse still, because that is the first thing the
+  // recipient sees.
+  //
+  // So an empty match is stated in words and the graph is left LEGIBLE: the
+  // dimming is suspended (see scene.overlayEmpty in nodeAlpha, edgeAlpha and
+  // overlayFill), and this row explains why nothing is highlighted. "Nothing
+  // here matches" is a real and often useful answer — no cycles in this
+  // module is the answer a reader wanted — and it deserves to be readable.
+  function renderEmptyOverlayNotice() {
+    if (!scene || !scene.overlayEmpty) {
+      return;
+    }
+    el.notices.appendChild(
+      noticeRow(
+        'the "' +
+          overlayLabel(state.overlay) +
+          '" overlay matches nothing in this view, so nothing is highlighted — ' +
+          'the graph is drawn as it would be with no overlay',
+        'info',
+        'clear the overlay',
+        function () {
+          state.overlay = 'none';
+          onControlChange(false);
+        }
+      )
+    );
   }
 
   // ------------------------------------------------------------------
@@ -1084,9 +1290,22 @@
       }
     }
 
+    // GRANULARITY AND expanded ARE PART OF "THIS VIEW", NOT DECORATION.
+    //
+    // gapRules() runs the connectivity and attention rules over the
+    // REPRESENTATIVE graph — the nodes and edges actually drawn — and it can
+    // only do that if it is told what the canvas collapsed. Omitting these
+    // two is what produced a rail naming 29 claim ids under "exactly one edge
+    // in this view" while the canvas drew five module nodes: ids that were
+    // not nodes, could not be seen, and whose edges were not the edges on
+    // screen. These are the SAME two values handed to representatives()
+    // above, and they must be, so the rail and the canvas read one mapping
+    // rather than two that agree by coincidence.
     var gaps = c.gapRules(scoped, payload.edges, {
       enabledTypes: state.types,
-      groupBy: state.granularity === 'facet' ? 'facet' : 'module'
+      groupBy: state.granularity === 'facet' ? 'facet' : 'module',
+      granularity: state.granularity,
+      expanded: state.expanded
     });
 
     // Component membership, then the claim-level edges INSIDE a component,
@@ -1178,13 +1397,98 @@
       govNodeIds: govNodeIds,
       govEdgeKeys: govEdgeKeys,
       facetsOfNode: facetsOfNode,
-      repByClaim: reps.repByClaim
+      repByClaim: reps.repByClaim,
+      qualifier: qualifiers(nodes),
+      overlayEmpty: false
     };
+    scene.overlayEmpty = overlayMatchesNothing();
 
     ensurePositions(nodes);
     renderNotices();
     renderGaps();
     renderDetail();
+  }
+
+  // qualifiers answers a problem the payload cannot: `title` is derived from
+  // the id's last slug, so two claims in different modules that made the same
+  // promise carry the SAME title — "Facts Not Verdicts" exists twice in the
+  // demo corpus, as do "Claim Shape" and "Catalog Shape". Drawn plain they
+  // are two identical labels with nothing saying which is which, and a reader
+  // comparing them is comparing two things they cannot tell apart.
+  //
+  // So a title that is not unique among the DRAWN nodes earns a qualifier —
+  // its module, or its facet when the module is what they share, or the last
+  // resort of the id itself. A unique title earns nothing, because a
+  // qualifier on every label would cost the width that made labels legible.
+  //
+  // Returns {nodeId: suffixText}; ids absent from it take no suffix.
+  function qualifiers(nodes) {
+    var byTitle = Object.create(null);
+    var i;
+    for (i = 0; i < nodes.length; i++) {
+      if (nodes[i].kind === 'group' || nodes[i].kind === 'ghost') {
+        continue;
+      }
+      var title = str(nodes[i].title);
+      if (title === '') {
+        continue;
+      }
+      if (!byTitle[title]) {
+        byTitle[title] = [];
+      }
+      byTitle[title].push(nodes[i]);
+    }
+    var out = Object.create(null);
+    for (var title2 in byTitle) {
+      if (!Object.prototype.hasOwnProperty.call(byTitle, title2)) {
+        continue;
+      }
+      var group = byTitle[title2];
+      if (group.length < 2) {
+        continue;
+      }
+      // Modules first. If the clash is INSIDE one module the module says
+      // nothing, so fall through to the facet, and then to the id.
+      var modules = Object.create(null);
+      var distinct = 0;
+      for (i = 0; i < group.length; i++) {
+        var mod = str(group[i].module);
+        if (!modules[mod]) {
+          modules[mod] = true;
+          distinct++;
+        }
+      }
+      var useModule = distinct === group.length;
+      for (i = 0; i < group.length; i++) {
+        var node = group[i];
+        var suffix = useModule ? str(node.module) : str(node.facet);
+        if (suffix === '') {
+          suffix = str(node.id);
+        }
+        out[str(node.id)] = suffix;
+      }
+    }
+    return out;
+  }
+
+  // overlayMatchesNothing reports the state that used to render as a graph
+  // faded to invisibility with no explanation. Ghost nodes are excluded from
+  // the count on purpose: a ghost is an out-of-scope stub that no overlay is
+  // ever about, and counting one as a match would turn "nothing here matches"
+  // into "something does" on the strength of a hollow dot.
+  function overlayMatchesNothing() {
+    if (!state || state.overlay === 'none' || !scene) {
+      return false;
+    }
+    for (var i = 0; i < scene.nodes.length; i++) {
+      if (scene.nodes[i].kind === 'ghost') {
+        continue;
+      }
+      if (overlayMatches(scene.nodes[i])) {
+        return false;
+      }
+    }
+    return true;
   }
 
   function addGhost(nodes, byId, id, prefix) {
@@ -1291,18 +1595,67 @@
     return slot < 0 ? pal.other : pal.facets[slot];
   }
 
+  // overlayActive is "an overlay is selected AND it has something to say".
+  // Every dimming path asks this rather than testing state.overlay directly,
+  // so an overlay that matches nothing leaves the graph exactly as it would
+  // be with no overlay at all — see renderEmptyOverlayNotice for why that is
+  // the honest outcome rather than a graph faded to 14% with no explanation.
+  function overlayActive() {
+    return state.overlay !== 'none' && !(scene && scene.overlayEmpty);
+  }
+
   // nodeAlpha folds the two dimming channels — an active overlay and a legend
   // hover — into one number. Dimming rather than hiding is deliberate: a
   // reader must still be able to see the shape they are filtering against.
   function nodeAlpha(node) {
     var a = 1;
-    if (state.overlay !== 'none' && !overlayMatches(node)) {
+    if (overlayActive() && !overlayMatches(node)) {
       a = 0.14;
     }
     if (!isFacetMember(node)) {
       a = Math.min(a, 0.14);
     }
     return a;
+  }
+
+  // nodePath traces the SILHOUETTE of a node, which is a shape channel and
+  // not decoration.
+  //
+  // A folded group and a claim used to be the same disc: #7D8C85 against
+  // #67717E, both muted grey, both round, distinguishable only by reading the
+  // "(n)" on the end of the label — so a reader glancing at a collapsed view
+  // could not tell "five modules" from "five claims that happen to be grey".
+  // A group is now a rounded SQUARE. Shape survives every overlay, every
+  // recolour and every theme, which is exactly the property colour does not
+  // have here.
+  //
+  // The hit test stays circular on purpose: a square's corners are the part
+  // of it a pointer is least likely to be aiming at, and a hit region that
+  // matches the drawn shape exactly would make the corners of a small group
+  // node unclickable in practice.
+  function nodePath(ctx, node, pos, r) {
+    ctx.beginPath();
+    if (node.kind !== 'group') {
+      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+      return;
+    }
+    var half = r * 0.94; // equal-ish visual weight to a disc of radius r
+    var round = Math.max(2, half * 0.28);
+    var x0 = pos.x - half;
+    var y0 = pos.y - half;
+    var side = half * 2;
+    if (ctx.roundRect) {
+      ctx.roundRect(x0, y0, side, side, round);
+      return;
+    }
+    // Manual rounded rectangle: roundRect is recent enough that a browser
+    // without it must still get a square rather than nothing.
+    ctx.moveTo(x0 + round, y0);
+    ctx.arcTo(x0 + side, y0, x0 + side, y0 + side, round);
+    ctx.arcTo(x0 + side, y0 + side, x0, y0 + side, round);
+    ctx.arcTo(x0, y0 + side, x0, y0, round);
+    ctx.arcTo(x0, y0, x0 + side, y0, round);
+    ctx.closePath();
   }
 
   function drawNodes(ctx, pal) {
@@ -1315,42 +1668,65 @@
       }
       var r = radiusOf(node);
       ctx.globalAlpha = nodeAlpha(node);
+      var draft = node.kind !== 'ghost' && statusOf(node) !== 'locked';
+
+      // THE MOAT. A ring in the page colour, drawn just outside the node and
+      // under everything else it wears, so two overlapping discs always have
+      // a background-coloured gap between them. Without it a cluster in dark
+      // mode merges into one blob: the ring colours are near the fills, the
+      // fills are near each other, and nothing separates a node from its
+      // neighbour. It is one stroke and it works in both themes because it is
+      // the background's own colour.
+      nodePath(ctx, node, pos, r + 1);
+      ctx.strokeStyle = pal.paper;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([]);
+      ctx.stroke();
 
       // fill (or hollow, for a ghost)
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+      nodePath(ctx, node, pos, r);
       if (node.kind === 'ghost') {
         ctx.fillStyle = pal.paper;
         ctx.fill();
       } else {
-        ctx.fillStyle = state.overlay === 'none' ? baseFill(node, pal) : overlayFill(node, pal);
+        ctx.fillStyle = overlayActive() ? overlayFill(node, pal) : baseFill(node, pal);
+        // A DRAFT IS PALE, A LOCKED CLAIM IS SOLID. The dashed ring alone was
+        // the whole difference before, and at a 5px radius a 3-2 dash is not
+        // a dash — it reads as an antialiasing artifact, so the two states
+        // had no silhouette a reader could see. Fill opacity is visible at
+        // any size and survives the ring being too small to resolve.
+        //
+        // A collapsed group answers the same way its members do, through
+        // statusOf(): pale unless EVERY claim in it is locked, because "this
+        // module is locked" is a claim about all of it.
+        ctx.globalAlpha = nodeAlpha(node) * (draft ? 0.42 : 1);
         ctx.fill();
+        ctx.globalAlpha = nodeAlpha(node);
       }
 
       // ring: status, or red for a claim inside a cycle
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+      nodePath(ctx, node, pos, r);
       var inCycle = coversAny(node, scene.cycleIds) || coversAny(node, scene.selfIds);
       if (inCycle) {
         ctx.strokeStyle = pal.cycle;
         ctx.lineWidth = 2.4;
         ctx.setLineDash([]);
       } else if (node.kind === 'ghost') {
-        ctx.strokeStyle = pal.faint;
+        ctx.strokeStyle = pal.muted;
         ctx.lineWidth = 1;
         ctx.setLineDash([2, 2]);
-      } else if (str(node.status) === 'locked') {
+      } else if (!draft) {
         ctx.strokeStyle = pal.ink;
-        ctx.lineWidth = 1.4;
-        ctx.setLineDash([]);
-      } else if (node.kind === 'group') {
-        ctx.strokeStyle = pal.muted;
-        ctx.lineWidth = 1.4;
+        ctx.lineWidth = 1.6;
         ctx.setLineDash([]);
       } else {
-        ctx.strokeStyle = pal.muted;
-        ctx.lineWidth = 1.2;
-        ctx.setLineDash([3, 2]);
+        // The dash scales with the node, so a draft ring is four visible
+        // strokes at every radius instead of a fuzz that vanishes at small
+        // sizes and reads as a cog at large ones.
+        ctx.strokeStyle = pal.ink;
+        ctx.lineWidth = 1.4;
+        var seg = Math.max(3, r * 0.9);
+        ctx.setLineDash([seg, seg * 0.75]);
       }
       ctx.stroke();
       ctx.setLineDash([]);
@@ -1358,8 +1734,7 @@
       // halo: at most one, review_pending winning over open threads
       var halo = haloKind(node);
       if (halo !== '') {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r + 4, 0, Math.PI * 2);
+        nodePath(ctx, node, pos, r + 4);
         ctx.strokeStyle = pal.halo;
         ctx.lineWidth = halo === 'review' ? 2 : 1.2;
         if (halo === 'threads') {
@@ -1371,8 +1746,7 @@
 
       // selection
       if (state.selected !== '' && node.id === selectedRepId()) {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r + 7, 0, Math.PI * 2);
+        nodePath(ctx, node, pos, r + 7);
         ctx.strokeStyle = pal.accent;
         ctx.lineWidth = 1.6;
         ctx.stroke();
@@ -1458,14 +1832,34 @@
   // Labels
   // ------------------------------------------------------------------
 
+  // ------------------------------------------------------------------
+  //
+  // WHY LABELS ARE LAID OUT IN SCREEN SPACE, AND WHY THAT IS THE FIX
+  //
+  // The first version drew every label inside the camera transform: the text
+  // scaled with the zoom, nothing measured whether two labels overlapped, and
+  // nothing checked whether a label crossed a node disc. At the default zoom
+  // roughly a third of 58 labels overprinted into glyph soup — the first
+  // thing a reviewer sees — and a "hide labels above N nodes" ceiling made it
+  // WORSE at the moment a reader zoomed out to look for shape.
+  //
+  // Screen space fixes three things at once:
+  //
+  //   1. the text is one size at every zoom, so it is legible at 0.3x and not
+  //      absurd at 4x, and the glyphs land on device-pixel positions;
+  //   2. a collision test in screen space is a test of what the READER can
+  //      actually see, which is the only test that matters;
+  //   3. zooming in spreads the nodes apart while the boxes stay the same
+  //      size, so more labels fit — zoom REVEALS labels instead of hiding
+  //      them, which is what a reader zooming in was asking for.
+  //
+  // Priority is degree, highest first, with the selected node ahead of
+  // everything. When two labels cannot both be drawn, the one on the
+  // better-connected node is the one worth keeping: it is the node a reader
+  // is more likely to be tracing to or from.
+
   function labelsVisible() {
-    if (!state.labels) {
-      return false;
-    }
-    // Past the ceiling the labels overlap into a smear that hides the shape
-    // the pane exists to show — unless the reader has zoomed in, at which
-    // point they are asking to read a neighbourhood rather than see a shape.
-    return scene.nodes.length <= LABEL_NODE_CEILING || camera.zoom > 1.6;
+    return !!state.labels;
   }
 
   function labelOf(node) {
@@ -1475,43 +1869,253 @@
     if (node.kind === 'group') {
       return (str(node.group_name) || 'no ' + str(node.group_type)) + ' (' + num(node.size) + ')';
     }
-    return str(node.title) || str(node.id);
+    var text = str(node.title) || str(node.id);
+    // Two claims in different modules can carry the same derived title. The
+    // qualifier is what stops them rendering as one label twice.
+    var qual = scene && scene.qualifier ? scene.qualifier[str(node.id)] : '';
+    return qual ? text + ' · ' + qual : text;
   }
 
-  function drawLabels(ctx, pal) {
-    ctx.font = '11px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'top';
+  // worldToScreen is screenToWorld's inverse, and the labels are the only
+  // thing that needs it: everything else draws inside the transform.
+  function worldToScreen(wx, wy) {
+    return { x: wx * camera.zoom + camera.x, y: wy * camera.zoom + camera.y };
+  }
+
+  function boxesOverlap(a, b) {
+    return !(a.x1 <= b.x0 || b.x1 <= a.x0 || a.y1 <= b.y0 || b.y1 <= a.y0);
+  }
+
+  // labelOrder ranks the drawn nodes by how much their label is worth: the
+  // selection first, then degree, then id so the result is stable frame to
+  // frame. An unstable order would make labels flicker in and out as the
+  // layout cools, which is worse than showing fewer of them.
+  function labelOrder() {
+    var selected = selectedRepId();
+    var list = [];
     for (var i = 0; i < scene.nodes.length; i++) {
       var node = scene.nodes[i];
-      var pos = positions[node.id];
-      var text = labelOf(node);
-      if (!pos || text === '') {
+      if (node.kind === 'ghost' || !positions[node.id]) {
         continue;
       }
-      ctx.globalAlpha = Math.min(nodeAlpha(node), 0.92);
-      ctx.fillStyle = pal.muted;
-      ctx.fillText(text, pos.x, pos.y + radiusOf(node) + 3);
+      var d = scene.deg[node.id] ? scene.deg[node.id].total : 0;
+      list.push({ node: node, rank: node.id === selected ? Infinity : d });
+    }
+    list.sort(function (a, b) {
+      if (a.rank !== b.rank) {
+        return b.rank - a.rank;
+      }
+      return a.node.id < b.node.id ? -1 : a.node.id > b.node.id ? 1 : 0;
+    });
+    return list.length > LABEL_CANDIDATE_CEILING ? list.slice(0, LABEL_CANDIDATE_CEILING) : list;
+  }
+
+  // drawLabels runs AFTER the camera transform is restored, so every number
+  // in it is a CSS pixel on screen.
+  function drawLabels(ctx, pal) {
+    var width = el.width || 0;
+    var height = el.height || 0;
+    ctx.save();
+    ctx.font = LABEL_FONT_PX + 'px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    ctx.lineJoin = 'round';
+    ctx.miterLimit = 2;
+
+    // Every drawn node's disc, in screen space. A label may not cross any of
+    // them — including its own neighbours' — because text over a saturated
+    // fill is the least readable case there is, halo or no halo.
+    var discs = [];
+    var i;
+    for (i = 0; i < scene.nodes.length; i++) {
+      var p = positions[scene.nodes[i].id];
+      if (!p) {
+        continue;
+      }
+      var sp = worldToScreen(p.x, p.y);
+      var sr = radiusOf(scene.nodes[i]) * camera.zoom;
+      discs.push({ x0: sp.x - sr, y0: sp.y - sr, x1: sp.x + sr, y1: sp.y + sr });
+    }
+
+    var placed = [];
+    var order = labelOrder();
+    for (i = 0; i < order.length; i++) {
+      var node = order[i].node;
+      var text = labelOf(node);
+      if (text === '') {
+        continue;
+      }
+      var pos = positions[node.id];
+      var screen = worldToScreen(pos.x, pos.y);
+      var top = screen.y + radiusOf(node) * camera.zoom + LABEL_GAP;
+      var half = ctx.measureText(text).width / 2;
+      var box = {
+        x0: screen.x - half - LABEL_PAD_X,
+        y0: top - LABEL_PAD_Y,
+        x1: screen.x + half + LABEL_PAD_X,
+        y1: top + LABEL_FONT_PX + LABEL_PAD_Y
+      };
+
+      // Off-canvas labels are neither drawn nor allowed to block a label that
+      // is on canvas — a reader panned away from them is not choosing to lose
+      // the ones in front of them.
+      if (box.x1 < 0 || box.x0 > width || box.y1 < 0 || box.y0 > height) {
+        continue;
+      }
+
+      var blocked = false;
+      var j;
+      for (j = 0; j < placed.length && !blocked; j++) {
+        blocked = boxesOverlap(box, placed[j]);
+      }
+      for (j = 0; j < discs.length && !blocked; j++) {
+        blocked = boxesOverlap(box, discs[j]);
+      }
+      if (blocked) {
+        continue;
+      }
+      placed.push(box);
+
+      // The halo, then the text. Stroking the page colour underneath is what
+      // makes a label readable over a node fill, over an edge and over the
+      // canvas alike — and it is why the fill can be --ink rather than the
+      // grey that used to dissolve into the grey decision nodes behind it.
+      ctx.globalAlpha = Math.min(nodeAlpha(node), 0.95);
+      ctx.lineWidth = LABEL_HALO_WIDTH;
+      ctx.strokeStyle = pal.paper;
+      ctx.strokeText(text, screen.x, top);
+      ctx.fillStyle = pal.ink;
+      ctx.fillText(text, screen.x, top);
     }
     ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   // ------------------------------------------------------------------
-  // The canvas itself
+  // SIZING THE BACKING STORE — the whole pane's sharpness lives here
   // ------------------------------------------------------------------
+  //
+  // A canvas has two sizes and they are not the same thing: the CSS box the
+  // layout gives it, and the backing store its width/height ATTRIBUTES
+  // allocate. Set the second to the first on a 2x display and every pixel is
+  // drawn once and blown up twice, which is exactly what shipped — a soft
+  // graph sitting 20 pixels from crisp DOM text, the comparison that makes it
+  // obvious.
+  //
+  // So: backing store = CSS pixels x devicePixelRatio, and the context is
+  // scaled by the same factor so every coordinate in this file stays in CSS
+  // pixels. Nothing else in the file needs to know the ratio exists.
+  //
+  // TWO WAYS THE RATIO CHANGES WITHOUT A RESIZE EVENT, both handled:
+  //
+  //   1. the window moves between a 2x display and a 1x one. No resize fires
+  //      — the CSS box did not change — and the canvas is left drawing at the
+  //      old ratio, half-resolution or double-cost. watchDevicePixelRatio
+  //      catches it with a matchMedia query on the CURRENT ratio, which stops
+  //      matching the instant the ratio moves.
+  //   2. the reader changes the browser or OS zoom, which moves the ratio and
+  //      usually does fire a resize — but not on every platform, and the same
+  //      watcher covers it either way.
+  //
+  // The re-arm is deliberate: a resolution media query is a test of one
+  // value, so the listener has to be rebuilt against the NEW value each time
+  // it fires or it only ever catches the first change.
+
+  function currentDpr() {
+    var dpr = root.devicePixelRatio;
+    if (typeof dpr !== 'number' || !isFinite(dpr) || dpr <= 0) {
+      return 1;
+    }
+    return Math.min(dpr, DPR_CEILING);
+  }
 
   function resizeCanvas() {
     if (!el.canvas || !el.holder) {
       return;
     }
-    var dpr = root.devicePixelRatio || 1;
+    var dpr = currentDpr();
     var width = el.holder.clientWidth || 1;
     var height = el.holder.clientHeight || 1;
-    el.canvas.width = Math.max(1, Math.round(width * dpr));
-    el.canvas.height = Math.max(1, Math.round(height * dpr));
+    var backingW = Math.max(1, Math.round(width * dpr));
+    var backingH = Math.max(1, Math.round(height * dpr));
+    // Assigning width/height CLEARS the canvas even when the value is
+    // unchanged, so both are written only when they actually move. Without
+    // that guard every resize listener firing on an unchanged box would blank
+    // the graph for a frame.
+    if (el.canvas.width !== backingW || el.canvas.height !== backingH) {
+      el.canvas.width = backingW;
+      el.canvas.height = backingH;
+    }
     el.dpr = dpr;
     el.width = width;
     el.height = height;
+  }
+
+  function watchDevicePixelRatio() {
+    if (typeof root.matchMedia !== 'function') {
+      return;
+    }
+    if (dprQuery && dprQuery.removeEventListener) {
+      dprQuery.removeEventListener('change', onDprChange);
+    }
+    // No regular expression and no template literal: the query is one string
+    // concatenation, for the same reason as everywhere else in this file.
+    dprQuery = root.matchMedia('(resolution: ' + currentDpr() + 'dppx)');
+    if (dprQuery.addEventListener) {
+      dprQuery.addEventListener('change', onDprChange, { once: true });
+    } else if (dprQuery.addListener) {
+      // Safari before 14 has no addEventListener on a MediaQueryList.
+      dprQuery.addListener(onDprChange);
+    }
+  }
+
+  function onDprChange() {
+    if (!isOpen) {
+      return;
+    }
+    resizeCanvas();
+    watchDevicePixelRatio();
+    draw();
+  }
+
+  // ------------------------------------------------------------------
+  // REPAINT WHEN THE COLOUR SCHEME CHANGES
+  // ------------------------------------------------------------------
+  //
+  // Every colour the canvas draws is read from the stylesheet at draw time,
+  // which is what lets one palette live in one file. The half of that
+  // argument nobody wrote down is that A DRAW HAS TO HAPPEN. Nothing did: the
+  // pane repaints on layout, interaction and control changes, and switching
+  // the OS appearance is none of those.
+  //
+  // The result was a pane that looked broken in dark mode and was not:
+  // sampling the integration screenshots, the DOM chrome had correctly
+  // switched to the near-black --paper while the canvas still held its
+  // light-mode pixels — the light facet ramp painted at full alpha, and the
+  // light governance crimson at 55% alpha compositing against the new dark
+  // backdrop as a muted maroon. The node rings were the LIGHT --ink, a near
+  // black, which is why overlapping discs merged: their outlines had become
+  // invisible against the background.
+  //
+  // One listener, one draw. The bug was never the palette.
+  var schemeQuery = null;
+
+  function watchColorScheme() {
+    if (typeof root.matchMedia !== 'function' || schemeQuery) {
+      return;
+    }
+    schemeQuery = root.matchMedia('(prefers-color-scheme: dark)');
+    if (schemeQuery.addEventListener) {
+      schemeQuery.addEventListener('change', onSchemeChange);
+    } else if (schemeQuery.addListener) {
+      schemeQuery.addListener(onSchemeChange);
+    }
+  }
+
+  function onSchemeChange() {
+    if (isOpen) {
+      draw();
+    }
   }
 
   function draw() {
@@ -1519,7 +2123,8 @@
       return;
     }
     var ctx = el.ctx;
-    ctx.setTransform(el.dpr || 1, 0, 0, el.dpr || 1, 0, 0);
+    var dpr = el.dpr || 1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, el.width || 0, el.height || 0);
     if (!scene) {
       return;
@@ -1530,10 +2135,75 @@
     ctx.scale(camera.zoom, camera.zoom);
     drawEdges(ctx, pal);
     drawNodes(ctx, pal);
+    ctx.restore();
+    // Labels are drawn OUTSIDE the camera transform, in screen space, so
+    // their size, their collision test and their pixel grid are all the
+    // reader's rather than the world's.
     if (labelsVisible()) {
       drawLabels(ctx, pal);
     }
-    ctx.restore();
+  }
+
+  // ------------------------------------------------------------------
+  // Fit the drawn graph to the canvas
+  // ------------------------------------------------------------------
+  //
+  // Five module nodes at the previous camera occupied about a seventh of the
+  // canvas with the rest white; thirteen claims in a module scope about a
+  // third. The reader was expected to zoom and pan back to the graph after
+  // every control change, which is work the pane can simply do.
+  //
+  // requestFit ARMS a fit rather than performing one, because the graph has
+  // no shape yet at the moment a control changes — the layout has not run.
+  // The fit is then applied on each frame while the simulation cools, so the
+  // camera tracks a graph that is still spreading out, and any deliberate
+  // camera move by the reader cancels it: their pan or zoom is a statement
+  // about where they want to be looking, and it wins.
+
+  var FIT_PADDING = 40; // CSS px of breathing room around the bounding box
+  var FIT_MAX_ZOOM = 1.6; // never magnify a two-node graph into wallpaper
+
+  function requestFit() {
+    pendingFit = true;
+  }
+
+  function cancelFit() {
+    pendingFit = false;
+  }
+
+  function fitToView() {
+    if (!scene || !el.width || !el.height) {
+      return;
+    }
+    var minX = Infinity;
+    var minY = Infinity;
+    var maxX = -Infinity;
+    var maxY = -Infinity;
+    var seen = 0;
+    for (var i = 0; i < scene.nodes.length; i++) {
+      var p = positions[scene.nodes[i].id];
+      if (!p) {
+        continue;
+      }
+      var r = radiusOf(scene.nodes[i]);
+      minX = Math.min(minX, p.x - r);
+      minY = Math.min(minY, p.y - r);
+      maxX = Math.max(maxX, p.x + r);
+      maxY = Math.max(maxY, p.y + r);
+      seen++;
+    }
+    if (seen === 0) {
+      return;
+    }
+    var spanX = Math.max(1, maxX - minX);
+    var spanY = Math.max(1, maxY - minY);
+    var usableW = Math.max(1, el.width - FIT_PADDING * 2);
+    var usableH = Math.max(1, el.height - FIT_PADDING * 2);
+    var zoom = Math.min(usableW / spanX, usableH / spanY);
+    zoom = Math.max(0.15, Math.min(FIT_MAX_ZOOM, zoom));
+    camera.zoom = zoom;
+    camera.x = el.width / 2 - ((minX + maxX) / 2) * zoom;
+    camera.y = el.height / 2 - ((minY + maxY) / 2) * zoom;
   }
 
   // ------------------------------------------------------------------
@@ -1578,7 +2248,7 @@
     if (scene.redEdgeKeys[edgeKeyOf(edge)]) {
       a = 0.95;
     }
-    if (state.overlay !== 'none' && !overlayMatchesEdge(edge)) {
+    if (overlayActive() && !overlayMatchesEdge(edge)) {
       a = 0.07;
     }
     return a;
@@ -1596,6 +2266,19 @@
       ctx.globalAlpha = edgeAlpha(edge);
       ctx.strokeStyle = edgeStroke(edge, pal);
       ctx.lineWidth = Math.min(3, 0.9 + Math.log(1 + num(edge.weight)) * 0.5);
+      // A governance edge is drawn heavier as well as curved and coloured.
+      // In dark mode the neutral edge grey lightens far enough that hue alone
+      // stopped carrying the difference, and weight is the one channel that
+      // does not depend on how a theme resolved its tokens.
+      if (curved) {
+        ctx.lineWidth += 0.6;
+      }
+      // MIRRORS IS DASHED, and that is the fix for two lines that used to be
+      // tellable apart only by an arrowhead — the part of an edge most often
+      // hidden under the node it points at. mirrors is reciprocal by design
+      // and so carries no head at all; a dash says "no direction here" at a
+      // glance and at any zoom, without pretending the relation has one.
+      ctx.setLineDash(edge.type === 'mirrors' ? [5, 3] : []);
 
       var target = scene.byId[edge.to];
       var stop = target ? radiusOf(target) + 2 : 4;
@@ -1627,6 +2310,7 @@
         chevron(ctx, end.x, end.y, angle, 6);
       }
     }
+    ctx.setLineDash([]);
     ctx.globalAlpha = 1;
   }
 
@@ -1832,13 +2516,31 @@
   // The pairwise pass is O(n^2) and is skipped above PAIRWISE_CEILING drawn
   // nodes. Auto-collapse normally keeps the count far below that; this is the
   // floor under a reader who overrode it.
+  //
+  // THE REST LENGTH IS A FUNCTION OF THE CANVAS, NOT A CONSTANT. A fixed
+  // 62px rest length is right for a few dozen nodes and absurd for five: at
+  // module granularity the whole graph settled into a knot occupying about a
+  // seventh of the canvas with the rest white, and fitting the camera to that
+  // knot only magnifies five discs into wallpaper. So the simulation targets
+  // one node per (canvas area / node count) cell and spaces itself
+  // accordingly — a small graph spreads out, a large one packs in, and the
+  // fit then frames whatever came out at a sane zoom.
 
   var REPULSION = 2600;
   var SPRING = 0.012;
-  var SPRING_LENGTH = 62;
+  var SPRING_LENGTH = 62; // the reference spacing the other constants are tuned against
+  var SPACING_MIN = 44;
+  var SPACING_MAX = 260;
   var GRAVITY = 0.012;
   var DAMPING = 0.82;
   var COOLING = 0.975;
+
+  // layoutSpacing is the rest length for the CURRENT scene and canvas.
+  function layoutSpacing(n) {
+    var area = Math.max(1, (el.width || 600) * (el.height || 400));
+    var cell = Math.sqrt(area / Math.max(1, n));
+    return Math.max(SPACING_MIN, Math.min(SPACING_MAX, cell * 0.62));
+  }
 
   function startLayout(reheat) {
     alpha = reheat ? 1 : Math.max(alpha, 0.45);
@@ -1860,9 +2562,17 @@
       return;
     }
     stepLayout();
+    // Re-fit on every cooling frame while a fit is armed, so the camera
+    // tracks a graph that is still spreading out rather than framing the seed
+    // positions and then watching the nodes drift off the edge.
+    if (pendingFit) {
+      fitToView();
+    }
     draw();
     if (alpha > 0.02 || dragging) {
       frame = root.requestAnimationFrame(tickLayout);
+    } else {
+      cancelFit();
     }
   }
 
@@ -1872,6 +2582,13 @@
     var n = nodes.length;
     var i;
     var centre = screenToWorld((el.width || 600) / 2, (el.height || 400) / 2);
+    var spacing = layoutSpacing(n);
+    var ratio = spacing / SPRING_LENGTH;
+    // Repulsion scales with the square of the spacing so the balance between
+    // the two forces is the one the constants were tuned at, whatever rest
+    // length the canvas and the node count just asked for.
+    var repulsion = REPULSION * ratio * ratio;
+    var farEnough = (spacing * 4.8) * (spacing * 4.8);
 
     if (n <= PAIRWISE_CEILING) {
       for (i = 0; i < n; i++) {
@@ -1889,10 +2606,10 @@
             dy = 0.1;
             d2 = dx * dx + dy * dy;
           }
-          if (d2 > 90000) {
+          if (d2 > farEnough) {
             continue; // far enough that the force rounds to nothing
           }
-          var force = (REPULSION * alpha) / d2;
+          var force = (repulsion * alpha) / d2;
           var dist = Math.sqrt(d2);
           var fx = (dx / dist) * force;
           var fy = (dy / dist) * force;
@@ -1913,7 +2630,7 @@
       var ex = to.x - from.x;
       var ey = to.y - from.y;
       var elen = Math.sqrt(ex * ex + ey * ey) || 1;
-      var pull = (elen - SPRING_LENGTH) * SPRING * alpha;
+      var pull = (elen - spacing) * SPRING * alpha;
       from.vx += (ex / elen) * pull;
       from.vy += (ey / elen) * pull;
       to.vx -= (ex / elen) * pull;
@@ -1980,6 +2697,10 @@
         return;
       }
       movedWhileDown = false;
+      // Touching the canvas is a statement about where the reader wants to be
+      // looking. An armed auto-fit would fight it on the next frame, so the
+      // reader wins and the fit is dropped.
+      cancelFit();
       var world = eventPoint(e);
       var node = hitTest(world);
       if (node) {
@@ -2048,6 +2769,7 @@
           return;
         }
         e.preventDefault();
+        cancelFit();
         var rect = el.canvas.getBoundingClientRect();
         var sx = e.clientX - rect.left;
         var sy = e.clientY - rect.top;
@@ -2166,14 +2888,44 @@
       return;
     }
 
-    el.gaps.appendChild(h('h3', 'dxg-rail-title', 'Gaps in this view'));
+    // THE RAIL SCROLLS AND THE HEURISTICS BLOCK IS BELOW THE FOLD.
+    //
+    // On a real corpus the list runs to roughly twice the rail's height, and
+    // the part a reader cannot see is the part that answers "are the guesses
+    // separated from the facts?" — a question this pane's whole design rests
+    // on. graph.css supplies the gutter and the thumb; this header supplies
+    // the only cue that NAMES what is down there, and a button that goes to
+    // it. It is sticky, so it stays reachable from the middle of the list.
+    var head = h('div', 'dxg-rail-head');
+    head.appendChild(h('h3', 'dxg-rail-title', 'Gaps in this view'));
+
     var i;
+    var hints = h('div', 'dxg-hints');
+    hints.setAttribute('data-dxg-hints', '');
+
+    var hintCount = 0;
+    for (i = 0; i < scene.gaps.hints.length; i++) {
+      hintCount += Array.isArray(scene.gaps.hints[i].node_ids)
+        ? scene.gaps.hints[i].node_ids.length
+        : 0;
+    }
+    var jump = h('button', 'dxg-rail-jump', 'heuristics (' + hintCount + ') ↓');
+    jump.type = 'button';
+    jump.setAttribute('data-dxg-hints-jump', '');
+    jump.addEventListener('click', function () {
+      if (hints.scrollIntoView) {
+        hints.scrollIntoView({ block: 'start' });
+      } else {
+        el.gaps.scrollTop = el.gaps.scrollHeight;
+      }
+    });
+    head.appendChild(jump);
+    el.gaps.appendChild(head);
+
     for (i = 0; i < scene.gaps.facts.length; i++) {
       el.gaps.appendChild(ruleBlock(scene.gaps.facts[i], false));
     }
 
-    var hints = h('div', 'dxg-hints');
-    hints.setAttribute('data-dxg-hints', '');
     hints.appendChild(
       h(
         'p',
@@ -2307,7 +3059,7 @@
       detailRow(rows, 'kind', 'collapsed ' + str(node.group_type) + ' group');
       detailRow(rows, 'members', num(node.size) + ' claims');
       detailRow(rows, 'facets here', facetNamesOf(node).join(', ') || 'none');
-      detailRow(rows, 'degree (view)', degreeText(id));
+      detailRow(rows, 'degree (view)', degreeValue(id));
       detailRow(rows, 'in a cycle', coversAny(node, scene.cycleIds) ? 'yes — a member is' : 'no');
       el.detail.appendChild(rows);
       var expand = h('button', 'dxg-detail-open', 'expand this group');
@@ -2327,7 +3079,17 @@
     }
 
     if (!claim) {
-      detailRow(rows, 'kind', 'not a claim in this payload');
+      // The rail's group rules — sink_group, orphan_group and both hints —
+      // name GROUP ids at every granularity, so a reader can click through to
+      // "module:engine" while the canvas is drawing individual claims and
+      // there is no node to describe. Saying "not a claim in this payload" was
+      // technically true and told them nothing; say what it IS instead.
+      var groupish = id.indexOf('module:') === 0 || id.indexOf('facet:') === 0;
+      detailRow(rows, 'kind', groupish ? 'a ' + id.slice(0, id.indexOf(':')) + ', not a claim' : 'not a claim in this payload');
+      if (groupish) {
+        detailRow(rows, 'drawn here', 'no — this view draws its claims individually');
+        detailRow(rows, 'members', groupMemberCount(id) + ' claims in scope');
+      }
       el.detail.appendChild(rows);
       return;
     }
@@ -2339,7 +3101,7 @@
     detailRow(rows, 'status', str(claim.status) || 'unknown');
     detailRow(rows, 'kind', str(claim.kind) || 'unknown');
     detailRow(rows, 'build role', str(claim.build_role) === '' ? 'none set' : str(claim.build_role));
-    detailRow(rows, 'degree (view)', degreeText(selectedRepId()));
+    detailRow(rows, 'degree (view)', degreeValue(id));
     detailRow(
       rows,
       'degree (project)',
@@ -2366,12 +3128,54 @@
     el.detail.appendChild(open);
   }
 
-  function degreeText(id) {
-    var d = scene && scene.deg[id];
-    if (!d) {
+  // degreeValue renders the scope-relative degree AND NAMES WHOSE IT IS.
+  //
+  // This row used to look the claim's representative up in the drawn graph's
+  // degree map and print the answer under the claim's own name — so a claim
+  // with no edges at all, collapsed into a module with six, read "degree
+  // (view) 6". graph-core.js's degreeFor() exists to make that mistake
+  // unspeakable: it returns a `scale` saying whether the numbers belong to
+  // the node asked about, to the node standing for it, or to nothing drawn,
+  // and this function refuses to render the middle case without saying so.
+  //
+  // The numbers are still shown in that case rather than withheld, because
+  // "the module this claim collapsed into has six edges" is a useful answer.
+  // It is only wrong when it is presented as the claim's own.
+  function degreeValue(id) {
+    var c = core();
+    if (!scene || !c) {
       return 'not drawn in this view';
     }
-    return d.total + ' — ' + d.in + ' in, ' + d.out + ' out';
+    var d = c.degreeFor(id, scene.deg, scene.repByClaim);
+    if (d.scale === 'absent') {
+      return 'not drawn in this view';
+    }
+    var text = d.total + ' — ' + d.in + ' in, ' + d.out + ' out';
+    if (d.scale === 'node') {
+      return text;
+    }
+    var wrap = h('span', '', text);
+    wrap.appendChild(h('span', 'dxg-detail-note', d.id + '’s, not this claim’s — it is not drawn here'));
+    return wrap;
+  }
+
+  // groupMemberCount answers for a group id the canvas is not currently
+  // drawing, by counting the scoped claims that would collapse into it.
+  function groupMemberCount(id) {
+    if (!scene) {
+      return 0;
+    }
+    var cut = id.indexOf(':');
+    var kind = id.slice(0, cut);
+    var name = id.slice(cut + 1);
+    var n = 0;
+    for (var i = 0; i < scene.scoped.length; i++) {
+      var got = kind === 'facet' ? str(scene.scoped[i].facet) : str(scene.scoped[i].module);
+      if (got === name) {
+        n++;
+      }
+    }
+    return n;
   }
 
   function facetNamesOf(node) {

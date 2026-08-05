@@ -51,6 +51,7 @@
   //   aggregateEdges(edges, repByClaim, enabledTypes)
   //                                       -> [{from, to, type, weight}]
   //   degrees(nodeIds, edges)             -> {id: {in, out, total}}
+  //   degreeFor(id, degrees, repByClaim)  -> {id, scale, in, out, total}
   //
   // Structure (design section 3.1):
   //   scc(nodeIds, edges)                 -> [[id, ...]]
@@ -484,6 +485,16 @@
   // from nodeIds (a ghost, or an out-of-scope claim) contributes to the
   // endpoint that IS present and gets no entry of its own. A self-loop counts
   // once on each side, so its total is 2.
+  //
+  // WHICH GRAPH THIS DESCRIBES: exactly the one whose ids and edges you pass.
+  // Pass the DRAWN node ids and the AGGREGATED edges and every entry is a
+  // degree in the view; pass claim ids and claim edges and every entry is a
+  // claim-level degree. The two disagree, and the result carries no marker
+  // saying which one it is — so a caller holding the drawn-graph map must not
+  // look a claim up in it by first swapping in that claim's representative.
+  // That swap is how the detail panel came to report "degree (view) 6" for a
+  // claim with no edges at all: the 6 was its module's. degreeFor() below
+  // exists so that lookup states whose number it just returned.
   function degrees(nodeIds, edges) {
     var ids = asArray(nodeIds);
     var out = {};
@@ -513,6 +524,63 @@
       }
     }
     return out;
+  }
+
+  // degreeFor looks one id up in a degrees() map and returns a record that
+  // NAMES THE NODE THE NUMBERS BELONG TO. That field is the whole point of
+  // the function: at module granularity a claim is not a node, and the only
+  // honest readings are "this claim is not drawn" or "here is its module's
+  // degree, and it is the module's". Handing back the module's numbers under
+  // the claim's name is the third reading, and it is a lie the pane shipped.
+  //
+  //   id            the id a reader selected — a claim id or a drawn node id
+  //   degreesByNode a degrees() result over the DRAWN graph
+  //   repByClaim    a representatives() result's repByClaim, or omitted
+  //
+  // Returns {id, scale, in, out, total}, always, never null:
+  //
+  //   scale "node"            id is itself drawn; the numbers are its own and
+  //                           the returned id equals the id passed in
+  //   scale "representative"  id is not drawn but the node standing for it is;
+  //                           the numbers are THAT node's and the returned id
+  //                           names it, so a caller cannot render them without
+  //                           saying whose they are
+  //   scale "absent"          neither is drawn; id is "" and the counts are 0
+  //
+  // Callers are expected to render `id` whenever scale is "representative".
+  // The counts are still returned rather than withheld because "the module
+  // this claim collapsed into has 6 edges" is a useful answer — it is only
+  // wrong when it is presented as the claim's own.
+  function degreeFor(id, degreesByNode, repByClaim) {
+    var want = asString(id);
+    var deg = degreesByNode && typeof degreesByNode === 'object' ? degreesByNode : {};
+    var rep = repByClaim && typeof repByClaim === 'object' ? repByClaim : {};
+
+    if (want !== '' && Object.prototype.hasOwnProperty.call(deg, want)) {
+      return degreeRecord(want, 'node', deg[want]);
+    }
+    var repId = want !== '' && Object.prototype.hasOwnProperty.call(rep, want) ? asString(rep[want]) : '';
+    if (repId !== '' && repId !== want && Object.prototype.hasOwnProperty.call(deg, repId)) {
+      return degreeRecord(repId, 'representative', deg[repId]);
+    }
+    return { id: '', scale: 'absent', in: 0, out: 0, total: 0 };
+  }
+
+  // degreeRecord coerces one degrees() entry into the exported shape. Counts
+  // are forced finite because the record crosses the JSON-able boundary.
+  function degreeRecord(id, scale, entry) {
+    var d = entry && typeof entry === 'object' ? entry : {};
+    return {
+      id: id,
+      scale: scale,
+      in: finiteNumber(d.in),
+      out: finiteNumber(d.out),
+      total: finiteNumber(d.total)
+    };
+  }
+
+  function finiteNumber(v) {
+    return typeof v === 'number' && isFinite(v) ? v : 0;
   }
 
   // ------------------------------------------------------------------
@@ -796,15 +864,74 @@
   // Gap rules (design section 5)
   // ------------------------------------------------------------------
   //
-  // EVERY rule is computed against the CURRENT SCOPE, here in the browser.
+  // EVERY rule is computed against the CURRENT VIEW, here in the browser.
   // That is the whole reason this file exists rather than a precomputed gap
   // list in the payload: a claim that is isolated within module:viewer may be
   // well-connected project-wide, and a panel that ignored the reader's scope
   // would be confidently wrong the moment they narrowed it.
   //
+  // "THE CURRENT VIEW" INCLUDES GRANULARITY, NOT ONLY SCOPE.
+  //
+  // This is the correction the integration drive forced. Scope was honoured
+  // from the first version; granularity was not. At granularity "module" the
+  // canvas drew five group nodes while the rail still named 29 claim ids
+  // under "exactly one edge in this view" — ids that were not nodes, could
+  // not be seen, and whose edges were not the edges on screen. Four of eight
+  // fact rules were byte-identical across all three granularities, which is
+  // the signature of a rule computed over the raw claim list and captioned
+  // "in this view". A rule reporting on nodes nobody can see is worse than no
+  // rule, so the connectivity and attention rules now run over the
+  // REPRESENTATIVE graph — the nodes and edges actually drawn.
+  //
+  // WHAT EACH RULE MEANS AT COLLAPSED GRANULARITY, stated rather than left to
+  // be inferred, because the rail's wording has to match it:
+  //
+  //   cycle          CLAIM level, always, at every granularity. Design 3.1 is
+  //   self_edge      explicit: collapse a module and every intra-module edge
+  //                  becomes a self-loop, so an SCC pass over the aggregated
+  //                  set would ring every module with any internal edge red.
+  //                  Cycle membership is a property of CLAIMS. These two
+  //                  therefore name claim ids even when the claim is not
+  //                  drawn, and the pane resolves each to the group standing
+  //                  for it (ringing that group red, centring it on a jump).
+  //                  That is a deliberate exception, not the same defect: the
+  //                  finding is about a claim, and it says so.
+  //
+  //   isolated       "isolated in this view" / "exactly one edge in this
+  //   weakly_linked  view", read over the nodes and edges ON SCREEN. At
+  //                  "claims" every node is a claim and nothing changes. At
+  //                  "module"/"facet" a listed id is a GROUP with zero or one
+  //                  drawn edge — the group nothing links to. Edges inside a
+  //                  collapsed group are not drawn and so are not counted;
+  //                  parallel claim edges between the same two groups draw as
+  //                  one line and count once, because the reader counts lines.
+  //
+  //   review_pending an honest group-level ROLL-UP. At "claims" a listed id
+  //   open_threads   is the claim carrying the state. At "module"/"facet" it
+  //                  is a group CONTAINING at least one claim that carries
+  //                  it — the same reading the halo already draws on a
+  //                  collapsed group node, so rail and canvas now agree. The
+  //                  alternative was to declare them not applicable and emit
+  //                  nothing, which would have read as "no claim needs
+  //                  review" — a different and worse lie.
+  //
+  //   sink_group     unchanged: group-level by definition, over cross-group
+  //   orphan_group   claim edges, keyed by options.groupBy.
+  //
+  //   the two hints  unchanged: module-level by definition (a facet has no
+  //                  build), and labelled as guesses.
+  //
+  // Drill-down composes for free, because it composes inside
+  // representatives(): a group the reader expanded contributes its claims as
+  // nodes and the rules judge those claims, while its collapsed siblings are
+  // still judged as groups.
+  //
   // Emission shape, fixed: {rule, node_ids, kind}. Exactly three keys. The
   // `rule` id is stable and is what the rail and the browser tests key off —
-  // display text is never a key.
+  // display text is never a key. There is deliberately no fourth key naming
+  // the scale of the ids: the ids are the ids of DRAWN NODES, which is the
+  // property that makes the rail's existing wording true, and a key saying so
+  // would be a caption on a fact rather than the fact.
   //
   // Every rule id in FACT_RULE_IDS appears at least once, with an empty
   // node_ids when it found nothing, so the rail can render a stable block
@@ -823,8 +950,9 @@
   //
   // Ghost endpoints are counted by NOTHING here. An edge to a claim outside
   // the current scope resolves to a ghost, and design section 3 says a ghost
-  // is not counted in any gap rule — so the connectivity rules run over edges
-  // with BOTH endpoints in scope.
+  // is not counted in any gap rule — so every rule runs over edges with BOTH
+  // endpoints in scope, which is also why aggregation inside this function
+  // can never produce a ghost.
 
   // BUILD_PHASES is the ordered set of real build phases a module is expected
   // to cover. model.BuildRole also defines "out-of-scope", which is
@@ -976,9 +1104,21 @@
   //   nodes    the SCOPE-FILTERED claim-level nodes
   //   edges    claim-level edges; anything touching an out-of-scope claim is
   //            dropped here rather than by the caller
-  //   options  {enabledTypes: [...], groupBy: "module" | "facet"}
+  //   options  {enabledTypes: [...], groupBy: "module" | "facet",
+  //             granularity: "claims" | "module" | "facet", expanded: [...]}
   //            enabledTypes omitted means all three types are on
   //            groupBy omitted means "module"
+  //            granularity omitted means "claims" — nothing collapsed, which
+  //              is the only granularity at which claim ids and drawn node
+  //              ids are the same thing. A CALLER THAT DRAWS A COLLAPSED
+  //              GRAPH AND DOES NOT PASS ITS GRANULARITY HERE GETS A RAIL
+  //              THAT DESCRIBES A DIFFERENT GRAPH THAN THE CANVAS.
+  //            expanded omitted means no per-group drill-down override
+  //
+  // granularity and expanded are the SAME two values handed to
+  // representatives(), and they must be, because this function calls it: the
+  // rail and the canvas are then reading one representative mapping rather
+  // than two that agree by coincidence.
   //
   // Returns {facts: [...], hints: [...]}. The two arrays are separate so the
   // panel cannot render a heuristic alongside a fact by accident — see the
@@ -987,6 +1127,7 @@
     var opts = options && typeof options === 'object' ? options : {};
     var enabled = Array.isArray(opts.enabledTypes) ? opts.enabledTypes : EDGE_TYPES;
     var groupBy = normalizeGroupBy(opts.groupBy);
+    var granularity = normalizeGranularity(opts.granularity);
 
     var list = asArray(nodes);
     var ids = [];
@@ -1019,6 +1160,51 @@
       }
     }
 
+    // The scoped claim nodes, in id order — the input to both the
+    // representative rule and the two heuristics.
+    var scopedNodes = [];
+    for (var s0 = 0; s0 < sortedIds.length; s0++) {
+      scopedNodes.push(byId.get(sortedIds[s0]));
+    }
+
+    // THE DRAWN GRAPH. Everything the rail says "in this view" about is read
+    // off these two, never off the claim list:
+    //
+    //   drawnIds    the ids of the nodes on screen — claim nodes at "claims"
+    //               granularity, group nodes where a group is collapsed, and
+    //               claim nodes again inside a group the reader expanded
+    //   drawnEdges  those nodes' edges, mapped through the representatives,
+    //               with intra-group self-loops dropped and parallel claim
+    //               edges between the same pair collapsed to the one line
+    //               that is actually drawn
+    //
+    // aggregateEdges is passed `connective`, whose endpoints are all in scope
+    // and therefore all in repByClaim, so no ghost can appear here — which is
+    // design section 3's rule that a ghost is counted by no gap rule, held by
+    // construction rather than by a filter.
+    //
+    // Weight is deliberately stripped before counting degree. An aggregated
+    // edge's weight is how many CLAIM edges it stands for; the connectivity
+    // rules ask how many EDGES A READER CAN SEE, and three claim edges
+    // between two collapsed modules are one line on the canvas.
+    var reps = representatives(scopedNodes, granularity, opts.expanded);
+    var drawnIds = [];
+    var drawnNodes = new Map();
+    for (var d0 = 0; d0 < reps.repNodes.length; d0++) {
+      var rn = reps.repNodes[d0] || {};
+      var rid = asString(rn.id);
+      if (rid === '' || drawnNodes.has(rid)) {
+        continue;
+      }
+      drawnIds.push(rid);
+      drawnNodes.set(rid, rn);
+    }
+    var aggregated = aggregateEdges(connective, reps.repByClaim, null);
+    var drawnEdges = [];
+    for (var d1 = 0; d1 < aggregated.length; d1++) {
+      drawnEdges.push({ from: aggregated[d1].from, to: aggregated[d1].to, type: aggregated[d1].type });
+    }
+
     var facts = [];
 
     // cycle — one finding per component of size >= 2, always at least one
@@ -1045,33 +1231,60 @@
     // self_edge — reported under its own name, never merged into cycle.
     facts.push(finding('self_edge', selfEdges(sortedIds, structural), 'fact'));
 
-    // isolated / weakly_linked — scope-relative degree over enabled types.
-    var deg = degrees(sortedIds, connective);
+    // isolated / weakly_linked — degree over the DRAWN graph, so "isolated in
+    // this view" and "exactly one edge in this view" are statements about
+    // nodes and lines a reader can point at. At "claims" granularity every
+    // drawn node is a claim and this is the same set it always was.
+    var deg = degrees(drawnIds, drawnEdges);
     var isolated = [];
     var weak = [];
-    for (var k = 0; k < sortedIds.length; k++) {
-      var total = deg[sortedIds[k]].total;
+    var sortedDrawnIds = sortedUnique(drawnIds);
+    for (var k = 0; k < sortedDrawnIds.length; k++) {
+      var total = deg[sortedDrawnIds[k]].total;
       if (total === 0) {
-        isolated.push(sortedIds[k]);
+        isolated.push(sortedDrawnIds[k]);
       } else if (total === 1) {
-        weak.push(sortedIds[k]);
+        weak.push(sortedDrawnIds[k]);
       }
     }
     facts.push(finding('isolated', isolated, 'fact'));
     facts.push(finding('weakly_linked', weak, 'fact'));
 
     // review_pending / open_threads — engine-managed states that demand a
-    // human. Both are node facts and neither depends on any edge.
+    // human. Both are node facts and neither depends on any edge, but both
+    // still answer for the DRAWN node: a claim when the claim is drawn, and
+    // otherwise the group that stands for it, listed once because at least
+    // one of its members carries the state. That is the same reading the
+    // canvas already draws — graph-ui.js haloes a collapsed group when any
+    // member is review_pending — so the rail and the canvas now agree instead
+    // of the rail naming claims the canvas has no node for.
     var pending = [];
     var threads = [];
-    for (var m = 0; m < sortedIds.length; m++) {
-      var node = byId.get(sortedIds[m]) || {};
-      if (node.review_pending === true) {
-        pending.push(sortedIds[m]);
+    for (var m = 0; m < sortedDrawnIds.length; m++) {
+      var drawn = drawnNodes.get(sortedDrawnIds[m]) || {};
+      // A synthesised group node is the only thing that carries `members`.
+      // Both halves of the test are load-bearing: a payload claim is free to
+      // declare any `kind` string, and one that happened to say "group" must
+      // still answer for itself rather than for an empty member list.
+      var isGroup = drawn.kind === 'group' && Array.isArray(drawn.members);
+      var members = isGroup ? drawn.members : [sortedDrawnIds[m]];
+      var anyPending = false;
+      var anyThreads = false;
+      for (var mm = 0; mm < members.length; mm++) {
+        var node = byId.get(asString(members[mm])) || {};
+        if (node.review_pending === true) {
+          anyPending = true;
+        }
+        var open = typeof node.open_comments === 'number' && isFinite(node.open_comments) ? node.open_comments : 0;
+        if (open > 0) {
+          anyThreads = true;
+        }
       }
-      var open = typeof node.open_comments === 'number' && isFinite(node.open_comments) ? node.open_comments : 0;
-      if (open > 0) {
-        threads.push(sortedIds[m]);
+      if (anyPending) {
+        pending.push(sortedDrawnIds[m]);
+      }
+      if (anyThreads) {
+        threads.push(sortedDrawnIds[m]);
       }
     }
     facts.push(finding('review_pending', pending, 'fact'));
@@ -1117,12 +1330,12 @@
     facts.push(finding('sink_group', sinks.sort(cmpStr), 'fact'));
     facts.push(finding('orphan_group', orphans.sort(cmpStr), 'fact'));
 
-    // Heuristics, in their own array. Both take the scoped nodes only — no
-    // edges — and both always appear.
-    var scopedNodes = [];
-    for (var s = 0; s < sortedIds.length; s++) {
-      scopedNodes.push(byId.get(sortedIds[s]));
-    }
+    // Heuristics, in their own array. Both take the scoped CLAIM nodes only —
+    // no edges, no representatives — and both always appear. They are
+    // deliberately granularity-independent: a build phase is a property of a
+    // module's build whatever the canvas is currently collapsed to, and the
+    // ids they emit are module group ids at every granularity. Their labels
+    // say "module" out loud for exactly that reason.
     var hints = [
       finding('missing_build_phase', missingBuildPhase(scopedNodes), 'hint'),
       finding('density_outlier', densityOutlier(scopedNodes), 'hint')
@@ -1343,6 +1556,7 @@
     representatives: representatives,
     aggregateEdges: aggregateEdges,
     degrees: degrees,
+    degreeFor: degreeFor,
 
     scc: scc,
     selfEdges: selfEdges,

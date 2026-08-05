@@ -54,18 +54,46 @@
    slot `(index in payload.groups.facets) mod 20`, computed by graph-core.js's
    facetSlot(), which knows nothing about colour and returns an integer.
 
-   Slots 1-5 are the requirements prototype's frozen values. Slots 6-20
-   continue the ramp by rotating hue on the golden angle (137.5 degrees, which
-   maximises the spacing between successive entries) and alternating one
-   darker and one lighter step per rotation — so two ADJACENT slots never
-   differ in lightness alone, and never in hue alone either.
+   Slots 1-5 are the requirements prototype's frozen values and are not
+   negotiable. Slots 6-20 are NOT a hue rotation, and the first version of this
+   file learning that the hard way is why the method is written down here.
 
-   AND HERE IS THE HONEST PART: roughly twelve is the practical ceiling on
-   distinguishable categorical colour. A project with twenty facets will have
-   slots a reader genuinely cannot tell apart at a 6px radius. Widening the
-   ramp to twenty does not fix that; it only stops the palette REPEATING
-   inside the range most projects live in. Facet identity is therefore carried
-   by three channels, not one:
+   A hue rotation says nothing about whether the colours it lands on are
+   TELLABLE APART, because perceptual distance is not hue distance: a 0.5
+   degree hue gap between two oranges of similar lightness is invisible, while
+   25 degrees between two blues at the same lightness is nearly as bad. The
+   rotation shipped `#B65A34` at slot 3 beside `#9D4925` at slot 6 — one rust
+   dot twice, half a degree apart — and, in the dark ramp, `#DE8A62` beside
+   `#D68866`, a CIEDE2000 distance of 2.1 where the just-noticeable difference
+   for a small filled shape is around 5.
+
+   So slots 6-20 are instead SOLVED FOR, per theme, as a maximin problem in
+   CIELAB: over a candidate grid of in-gamut LCh colours constrained to the
+   theme's usable lightness and chroma band, greedily take the colour whose
+   minimum CIEDE2000 distance to everything already chosen is largest, then
+   improve each chosen slot in turn until no swap helps. Slots 1-5 and the
+   reserved colours below seed the "already chosen" set, so the ramp is built
+   AROUND the frozen values rather than colliding with them.
+
+   The numbers that came out, and which any future edit has to hold:
+
+     light   min pairwise CIEDE2000 across all 20 slots  10.8
+     dark    min pairwise CIEDE2000 across all 20 slots  11.8
+
+   Both minima are a FROZEN pair — slot 1 against slot 4, which this file may
+   not move. Every pair involving a slot this file did choose is at least 14.2
+   (light) and 14.0 (dark). That is the honest statement of what was achieved:
+   the ramp is now as separated as the frozen values permit, and no worse
+   anywhere else.
+
+   AND HERE IS THE HONEST PART THAT SURVIVES ALL OF THAT: roughly twelve is
+   still the practical ceiling on distinguishable categorical colour. A
+   project with twenty facets will have slots a reader genuinely cannot tell
+   apart at a 6px radius, whatever the metric says, because the metric
+   describes large flat patches and a node is neither. Solving the ramp does
+   not fix that; it only stops the palette REPEATING inside the range most
+   projects live in and stops two adjacent slots being the same dot. Facet
+   identity is therefore carried by three channels, not one:
 
      1. colour, by slot, for gestalt clustering;
      2. the legend strip, which lists every facet by its real project name
@@ -93,11 +121,17 @@
    are straight, a double-chevron arrowhead, and a wedge marker on every node
    that governs another — plus an overlay that dims everything else.
 
-   The hue is reserved rather than merely different. The twenty ramp hues plus
-   the five frozen ones leave exactly one gap wider than 30 degrees, between
-   313 and 5 (the wrap), and --dxg-governed sits at its midpoint, 338. No
-   facet can ever be assigned it at any facet count, in either theme, so a
-   governance edge can never be mistaken for a facet's colour.
+   The hue is reserved rather than merely different, and "reserved" is stated
+   in the same metric the ramp is solved in rather than in degrees of hue: the
+   ramp solver treats --dxg-governed, --dxg-cycle, --dxg-halo and
+   --dxg-facet-other as members of the already-chosen set with a hard floor of
+   CIEDE2000 20, so no slot it picks can land near any of them. Measured over
+   the shipped values, the closest any of the twenty slots comes to a reserved
+   colour is 14.4 in dark and 11.1 in light — and the light 11.1 is frozen
+   slot 5 (#67717E) against --dxg-facet-other (#7D8C85), two greys this file
+   inherited rather than chose. Against --dxg-governed itself, every slot in
+   both themes is at least 20 away. A governance edge cannot be mistaken for a
+   facet's colour at any facet count in either theme.
 
    --dxg-cycle and --dxg-halo are STATE colours, not identity colours. They
    are drawn as a ring and a halo — never as a plain node fill — except under
@@ -120,22 +154,25 @@
   --dxg-facet-4: #A98CD8;
   --dxg-facet-5: #8E9AA8;
 
-  /* Slots 6-20: golden-angle hue rotation, alternating darker/lighter. */
-  --dxg-facet-6: #D68866;
-  --dxg-facet-7: #9DDDC3;
-  --dxg-facet-8: #C966D6;
-  --dxg-facet-9: #D1DD9D;
-  --dxg-facet-10: #66A2D6;
-  --dxg-facet-11: #DD9DDC;
-  --dxg-facet-12: #66D66C;
-  --dxg-facet-13: #B39DDD;
-  --dxg-facet-14: #D6AD66;
-  --dxg-facet-15: #9DDDD8;
-  --dxg-facet-16: #D666BE;
-  --dxg-facet-17: #BCDD9D;
-  --dxg-facet-18: #667CD6;
-  --dxg-facet-19: #DDA39D;
-  --dxg-facet-20: #66D691;
+  /* Slots 6-20: solved for maximum perceptual separation against slots 1-5,
+     against each other and against every reserved colour. See the method note
+     above. Lightness band L* 58-82, chroma 20-62, every slot at least 4.5:1
+     against --paper so a 5px disc is still a disc on near-black. */
+  --dxg-facet-6: #AEBF44;
+  --dxg-facet-7: #009CF4;
+  --dxg-facet-8: #978E05;
+  --dxg-facet-9: #F6B8F3;
+  --dxg-facet-10: #2B9F50;
+  --dxg-facet-11: #F3C0BC;
+  --dxg-facet-12: #07E1F0;
+  --dxg-facet-13: #9F8869;
+  --dxg-facet-14: #92D4FE;
+  --dxg-facet-15: #88E17B;
+  --dxg-facet-16: #C3C9FA;
+  --dxg-facet-17: #15E7B3;
+  --dxg-facet-18: #0AA4C1;
+  --dxg-facet-19: #B6B994;
+  --dxg-facet-20: #A9D6C0;
 
   /* No facet, an unlisted facet, or a collapsed module group. */
   --dxg-facet-other: #6C7F75;
@@ -156,21 +193,25 @@
     --dxg-facet-4: #7050A8;
     --dxg-facet-5: #67717E;
 
-    --dxg-facet-6: #9D4925;
-    --dxg-facet-7: #47C290;
-    --dxg-facet-8: #8F259D;
-    --dxg-facet-9: #ACC247;
-    --dxg-facet-10: #25659D;
-    --dxg-facet-11: #C247C1;
-    --dxg-facet-12: #259D2B;
-    --dxg-facet-13: #7147C2;
-    --dxg-facet-14: #9D7125;
-    --dxg-facet-15: #47C2B9;
-    --dxg-facet-16: #9D2583;
-    --dxg-facet-17: #84C247;
-    --dxg-facet-18: #253D9D;
-    --dxg-facet-19: #C25347;
-    --dxg-facet-20: #259D53;
+    /* Solved the same way as the dark ramp, independently: the light band is
+       L* 36-62 with chroma 22-68, every slot at least 3:1 against --paper.
+       The two ramps are NOT lightness-flipped copies of each other — a
+       flipped dark colour lands outside the light band as often as not. */
+    --dxg-facet-6: #3E7500;
+    --dxg-facet-7: #B466D5;
+    --dxg-facet-8: #8A8A3B;
+    --dxg-facet-9: #7779EF;
+    --dxg-facet-10: #5F5503;
+    --dxg-facet-11: #1089EB;
+    --dxg-facet-12: #159A51;
+    --dxg-facet-13: #AD7696;
+    --dxg-facet-14: #425B3D;
+    --dxg-facet-15: #694B68;
+    --dxg-facet-16: #135E61;
+    --dxg-facet-17: #AC7A72;
+    --dxg-facet-18: #0B7098;
+    --dxg-facet-19: #6F4D37;
+    --dxg-facet-20: #8782A8;
 
     --dxg-facet-other: #7D8C85;
 
@@ -258,13 +299,38 @@ body.dxg-open {
   border-bottom: 1px solid var(--border);
 }
 
+/* ---- TEXT COLOUR AND WCAG AA, stated once for the whole file -----------
+   Every piece of text in this pane is small — 10px to 13px, none of it the
+   18.66px/14px-bold that would make it "large text" — so all of it needs
+   4.5:1 against what sits behind it, and "this line is deliberately quiet"
+   is not an exemption.
+
+   --faint does not clear that bar in either theme. Measured against the two
+   surfaces this pane actually paints on:
+
+     light  --faint #8a948e on --paper 2.88:1   on --card-bg 3.04:1
+     dark   --faint #6f7a74 on --paper 4.20:1   on --card-bg 3.68:1
+     light  --muted #5d6862 on --paper 5.33:1   on --card-bg 5.63:1
+     dark   --muted #9aa6a0 on --paper 7.43:1   on --card-bg 6.50:1
+
+   So every quiet line here is --muted and none of them is --faint, and the
+   hierarchy that --faint used to carry is re-expressed with weight, case and
+   the mono face instead of with contrast. --faint survives in exactly one
+   place, `.dxg-btn:disabled`, where the text belongs to an inactive control
+   and WCAG 1.4.3 does exempt it — and where fixing it would make a disabled
+   button look enabled, which is a worse lie than a faint one.
+
+   A project's own viewer.theme can of course re-point --muted at something
+   unreadable. That is true of the entire viewer, not of this pane, and the
+   answer to it is the same everywhere: the engine ships tokens that pass. */
+
 .dxg-title {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: .05em;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* The generation stamp is the mitigation the pane owes a reader in a live
@@ -334,7 +400,7 @@ body.dxg-open {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: .05em;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .dxg-select {
@@ -444,7 +510,7 @@ body.dxg-open {
   margin: 0;
   pointer-events: none;
   font-size: 11px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .dxg-rail {
@@ -457,12 +523,47 @@ body.dxg-open {
   background: var(--card-bg);
 }
 
+/* THE RAIL SCROLLS, AND IT HAS TO SAY SO.
+   The gaps list runs to roughly twice the rail's height on a real corpus, and
+   the block that lands below the fold is the heuristics block — the one that
+   answers "are the guesses separated from the facts?". On a platform with
+   overlay scrollbars there is no gutter, no thumb and no hint that anything
+   is down there at all, so a reader who never scrolls concludes the pane does
+   not separate them.
+
+   Three affordances, because no single one of them works everywhere:
+     1. a STABLE GUTTER, so the layout does not jump when the thumb appears
+        and there is always a visible channel on the right;
+     2. an ALWAYS-DRAWN THUMB via the WebKit scrollbar pseudo-elements (the
+        viewer's browser), plus the standard scrollbar-width/-color pair for
+        everything else;
+     3. a sticky header carrying a live count and a jump button — the only
+        one of the three that names what is below the fold rather than merely
+        implying that something is. */
 .dxg-gaps {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted) transparent;
   -webkit-overflow-scrolling: touch;
-  padding: 10px 12px;
+  padding: 0 12px 10px;
+}
+
+.dxg-gaps::-webkit-scrollbar {
+  width: 10px;
+}
+
+.dxg-gaps::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border: 3px solid var(--card-bg);
+  border-radius: 6px;
+}
+
+.dxg-gaps::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .dxg-detail {
@@ -533,10 +634,22 @@ body.dxg-open {
    member of the hovered facet. Together they answer the question by pointing
    at the nodes rather than by asking the reader to match a colour.
 
-   The last entry is not a facet at all: it is the governed_by sample, drawn
-   in the reserved hue with the curved routing and the double chevron the
-   canvas uses, so the reader learns all three governance channels from one
-   glance at a strip they were already reading. */
+   THE STRIP DESCRIBES WHAT IS ON SCREEN RIGHT NOW, NOT WHAT IS USUALLY ON
+   SCREEN. An overlay swaps the node fill wholesale — under "draft vs locked"
+   every node is green or amber and not one of them is wearing its facet
+   colour — so a strip that went on listing facet swatches would be captioning
+   a picture nobody is looking at. When an overlay is active the facet rows
+   are replaced by that overlay's own encoding, named in text, and the facet
+   rows come back when the overlay is cleared. graph-ui.js builds the rows;
+   this file only styles them.
+
+   THE EDGE ROWS ARE ALL THREE RELATIONS, NEVER ONLY governed_by. rests_on and
+   mirrors differ on the canvas by an arrowhead, and an arrowhead is exactly
+   the part of an edge that ends up hidden under the node it points at — so a
+   legend naming only the third relation left a reader with two lines that
+   looked identical and no way to find out which was which. Each row draws the
+   same sample the canvas draws: solid with one chevron, dashed with none, and
+   the reserved hue curved with a double chevron. */
 
 .dxg-legend {
   flex-shrink: 0;
@@ -575,6 +688,14 @@ body.dxg-open {
 .dxg-legend-list:hover .dxg-legend-item:hover {
   opacity: 1;
   color: var(--ink);
+}
+
+/* Hovering a facet asks "which nodes are this facet?". The edge rows and the
+   overlay rows are not facets and are not answering it, so they hold at full
+   strength instead of dimming along with the ones that are. */
+.dxg-legend-list:hover .dxg-legend-item--edge,
+.dxg-legend-list:hover .dxg-legend-item--overlay {
+  opacity: 1;
 }
 
 .dxg-legend-name {
@@ -618,17 +739,48 @@ body.dxg-open {
 .dxg-swatch-20 { background: var(--dxg-facet-20); }
 .dxg-swatch-other { background: var(--dxg-facet-other); }
 
-/* The governed_by sample. color: is what the sample's stroke and its two
-   chevrons inherit, so the reserved hue is declared once here and never
-   duplicated in markup. */
+/* Overlay swatches. These are the same tokens the canvas fills a MATCHING
+   node with under each overlay, so the strip and the picture cannot drift:
+   graph-ui.js names a class, this file names the colour, and neither of them
+   holds a second copy of the other's value. */
+.dxg-swatch-cycle { background: var(--dxg-cycle); }
+.dxg-swatch-halo { background: var(--dxg-halo); }
+.dxg-swatch-governed { background: var(--dxg-governed); }
+.dxg-swatch-accent { background: var(--accent); }
+.dxg-swatch-link { background: var(--link); }
+.dxg-swatch-warn { background: var(--warn); }
+
+/* "everything else", the fill a non-matching node keeps while an overlay is
+   active. Drawn at the same opacity the canvas dims it to, so the row looks
+   like the thing it names. */
+.dxg-swatch-dim {
+  background: var(--muted);
+  opacity: .38;
+}
+
+/* A group label inside the strip — "facets", "edges", or the active overlay's
+   name — so the reader can see WHICH question the swatches beside it answer. */
+.dxg-legend-group {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--muted);
+}
+
+/* The edge samples. color: is what each sample's stroke and chevrons inherit
+   through currentColor, so a relation's colour is declared once, here, and
+   never duplicated in the markup graph-ui.js builds. */
 .dxg-legend-edge {
   flex-shrink: 0;
   width: 34px;
   height: 12px;
-  color: var(--dxg-governed);
+  color: var(--muted);
 }
 
-.dxg-legend-item--edge .dxg-legend-name {
+.dxg-legend-item--governed .dxg-legend-edge,
+.dxg-legend-item--governed .dxg-legend-name {
   color: var(--dxg-governed);
 }
 
@@ -644,13 +796,50 @@ body.dxg-open {
    standing "these are guesses" line are what keep a heuristic honest instead
    of annoying, and a shared block would eventually lose all three. */
 
-.dxg-rail-title {
+/* Sticky, so the count and the jump button stay reachable from anywhere in
+   the list rather than only from the top a reader has already scrolled past.
+   The background is opaque for the same reason: rule rows must scroll UNDER
+   it, not through it. */
+.dxg-rail-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0 0 6px;
+  padding: 10px 0 6px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.dxg-rail-title {
+  margin: 0;
   font-family: var(--font-mono);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: .05em;
-  color: var(--faint);
+  color: var(--muted);
+}
+
+/* The cue that the heuristics block exists at all. It is a button rather
+   than a caption because "there is more below" is only half an answer. */
+.dxg-rail-jump {
+  margin-left: auto;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: var(--paper);
+  color: var(--muted);
+  border-radius: 6px;
+  cursor: pointer;
+  font: 10px var(--font-mono);
+  line-height: 1;
+  padding: 4px 6px;
+}
+
+.dxg-rail-jump:hover {
+  color: var(--ink);
+  border-color: var(--accent);
 }
 
 .dxg-rule {
@@ -659,14 +848,32 @@ body.dxg-open {
 
 .dxg-rule-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: 2px 6px;
   font-size: 12px;
   color: var(--ink);
 }
 
 .dxg-rule-name {
   font-family: var(--font-mono);
+}
+
+.dxg-rule-phrase {
+  min-width: 0;
+}
+
+/* A hint row carries one item more than a fact row — the GUESS badge — and in
+   a 320px rail that one extra item is enough to push the phrase into a
+   three-word-wide ragged column beside it. So in the hints block the phrase
+   takes a line of its own: id and badge and count on the first, the whole
+   phrase on the second, wrapping like prose instead of like a squeezed
+   column. Fact rows are left alone because they fit on one line, and giving
+   all ten rules a second line would add ten lines to a rail that already
+   scrolls. */
+.dxg-hints .dxg-rule-phrase {
+  order: 4;
+  flex: 1 0 100%;
 }
 
 .dxg-rule-count {
@@ -680,7 +887,7 @@ body.dxg-open {
    the correct and honest reading for a corpus that passes check, and hiding
    it would leave a reader unable to tell "no cycles" from "not computed". */
 .dxg-rule--empty .dxg-rule-head {
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .dxg-rule-ids {
@@ -712,6 +919,14 @@ body.dxg-open {
   border-color: var(--accent);
 }
 
+/* The "+N more" tail on a rule that listed as many ids as it is going to.
+   It is a count, not a control, so it takes no border and no pointer. */
+.dxg-rule-more {
+  align-self: center;
+  font: 11px var(--font-mono);
+  color: var(--muted);
+}
+
 /* The heuristics block. The left border and the standing caption are the
    whole separation; everything inside is deliberately quieter than a fact. */
 .dxg-hints {
@@ -725,7 +940,7 @@ body.dxg-open {
   margin: 0 0 6px;
   font-size: 11px;
   font-style: italic;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .dxg-hints .dxg-rule-head,
@@ -742,7 +957,7 @@ body.dxg-open {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: .04em;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* A standing pointer at the CLI, because every verdict in this rail is
@@ -750,7 +965,7 @@ body.dxg-open {
 .dxg-scope-note {
   margin: 10px 0 0;
   font-size: 11px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 /* ---- detail panel ------------------------------------------------------ */
@@ -758,7 +973,7 @@ body.dxg-open {
 .dxg-detail-empty {
   margin: 0;
   font-size: 12px;
-  color: var(--faint);
+  color: var(--muted);
 }
 
 .dxg-detail-id {
@@ -779,18 +994,26 @@ body.dxg-open {
 
 .dxg-detail-rows dt {
   font-family: var(--font-mono);
-  color: var(--faint);
+  color: var(--muted);
 }
 
+/* The value is the thing a reader came for, so it is --ink and the label
+   beside it is --muted. Before, both were quiet and the label was quieter
+   still; the label kept its distinctness from the mono face rather than from
+   being the least readable text in the pane. */
 .dxg-detail-rows dd {
   margin: 0;
-  color: var(--muted);
+  color: var(--ink);
   overflow-wrap: anywhere;
 }
 
-.dxg-detail-rows dd em {
-  font-style: normal;
-  color: var(--ink);
+/* A caveat attached to a value — "these numbers belong to the group, not to
+   this claim". It reads as an aside without dropping below AA. */
+.dxg-detail-note {
+  display: block;
+  font-size: 10px;
+  font-style: italic;
+  color: var(--muted);
 }
 
 .dxg-detail-open {
