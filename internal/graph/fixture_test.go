@@ -20,7 +20,7 @@ const demoFixtureDir = "../../testdata/fixture-graph-demo"
 // takes it through — config, loader, catalog, Build — so what this test
 // asserts on is the payload a reader actually gets, not a reconstruction of
 // it.
-func loadDemoPayload(t *testing.T) (Payload, int) {
+func loadDemoPayload(t *testing.T) (payload Payload, claimCount int) {
 	t.Helper()
 	cfg, err := config.LoadConfig(filepath.Join(demoFixtureDir, config.FileName))
 	if err != nil {

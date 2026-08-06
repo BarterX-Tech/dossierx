@@ -37,7 +37,7 @@ checklist for that half.
       is the exact thing this item exists to avoid. `git grep` needs no filter
       list to keep current.
 
-      As of v0.4.1 that is `README.md` (the `go install` line and the
+      As of v0.5.0 that is `README.md` (the `go install` line and the
       `install-git-hook.sh` raw URL), `skills/dossierx/SKILL.md` (the same raw
       URL), and `scripts/ci/dossierx-check.yml` (the `go install` line — this
       one is a template users copy into their own repository, so a stale pin

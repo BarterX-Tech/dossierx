@@ -66,6 +66,13 @@ produces, instead of leaving a stale generated artifact to be noticed at release
 `/* */` comments from the file before matching, so a comment that names an endpoint — `graph-ui.js`
 documents its single `/api/graph` call — no longer reads as a network call.
 
+### Fixed — the offline viewer stops probing for a comment backend
+
+Opened over `file://`, the viewer no longer issues the relative fetch that backs its comment
+probe, so it no longer logs a `net::ERR_FILE_NOT_FOUND` to the console on load. What the reader
+sees is unchanged — the panel was, and remains, read-only offline — and the probe still runs
+normally over `http://` and `https://`.
+
 **Not in this release, and stated so deliberately:** any code-grounding signal. The graph audits
 claims, not code. There is no `has_code_link` field, no "locked, ungrounded" rule and no
 `implink` argument.
@@ -1302,7 +1309,7 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...HEAD
 [0.5.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.1...v0.4.0

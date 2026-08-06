@@ -302,7 +302,7 @@ that the committed fixture has not caught up with.`,
 // and returns the mutated content plus that line's 1-based number. Line 1 is
 // skipped deliberately: it is the only line the normalizer touches, and the
 // control is worth more on a line the normalizer leaves alone.
-func injectOneByte(t *testing.T, content string) (string, int) {
+func injectOneByte(t *testing.T, content string) (mutated string, line int) {
 	t.Helper()
 	lines := strings.Split(content, "\n")
 	for i := 1; i < len(lines); i++ {
@@ -319,9 +319,9 @@ func injectOneByte(t *testing.T, content string) (string, int) {
 // truncateForDiff keeps a failure message readable when the differing line is
 // a minified stylesheet or an inlined payload.
 func truncateForDiff(s string) string {
-	const max = 160
-	if len(s) <= max {
+	const maxLen = 160
+	if len(s) <= maxLen {
 		return s
 	}
-	return s[:max] + "… (" + itoa(len(s)) + " bytes)"
+	return s[:maxLen] + "… (" + itoa(len(s)) + " bytes)"
 }
