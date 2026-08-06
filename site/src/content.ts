@@ -233,8 +233,7 @@ const releases: Release[] = [
           date: "2026-08-06",
           title: "a claims graph in the viewer",
           tag: "Latest release",
-          // commit is set at TAG time, to the merge commit's short sha — it cannot
-          // exist before the merge. See docs/RELEASING.md.
+          commit: "eab3a63",
           highlights: [
             "BREAKING: `dossierx check` now fails on a dependency loop that alternates `rests_on` and `governed_by`. The new `mixed-cycle` lint runs at ERROR severity, taking the registered rule count from 27 to 28. It walks the union of both graphs carrying the edge kind on every hop and reports a cycle whose hops include at least one of each — \"A rests_on B, B governed_by A\". Neither existing rule can see that shape: `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so a mixed loop presents no back edge to either walk and passed the whole registry. A project carrying one passed before this release and exits 1 after it, with no edit on its side, no content-hash move and nothing in the lock store to explain it.",
             "There is deliberately no migration command and no migration document: a corpus containing this shape was always malformed, the engine simply could not see it. The recovery is to break the loop — the finding names every claim on it — and re-run `dossierx check`. Where those claims are locked that is unlock, edit, lock, the same as any other correction. `mirrors` is not part of the union graph and never trips the rule.",
