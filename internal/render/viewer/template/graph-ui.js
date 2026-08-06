@@ -325,8 +325,11 @@
 
   function mountPane(pane) {
     var surface = h('div', 'dxg-surface');
-    surface.setAttribute('role', 'dialog');
-    surface.setAttribute('aria-modal', 'true');
+    // A region, not a dialog. aria-modal would tell a screen reader the rest
+    // of the document is inert and it must be dismissed to continue, which is
+    // what a modal promises and this does not: it is a second view of the
+    // same project, reached and left like any other.
+    surface.setAttribute('role', 'region');
     surface.setAttribute('aria-label', 'Claims graph');
     surface.tabIndex = -1;
 
@@ -407,6 +410,7 @@
     pane.hidden = false;
     isOpen = true;
     document.body.classList.add(BODY_OPEN_CLASS);
+    setTriggerExpanded(true);
 
     // Rebuilt on EVERY open, not only the first: a pane opened inside the
     // live probe's ~1s window would otherwise be missing its refresh button
@@ -426,11 +430,22 @@
     }
   }
 
+  // The trigger lives inside the swapped subtree, so it is destroyed and
+  // rebuilt by every fragment swap. Look it up each time rather than caching a
+  // node that may already be detached, and tolerate its absence.
+  function setTriggerExpanded(open) {
+    var btn = document.querySelector(OPEN_SELECTOR);
+    if (btn) {
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+  }
+
   function closePane() {
     if (!mounted || !isOpen) {
       return;
     }
     isOpen = false;
+    setTriggerExpanded(false);
     el.pane.hidden = true;
     document.body.classList.remove(BODY_OPEN_CLASS);
     stopLayout();

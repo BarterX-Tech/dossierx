@@ -41,7 +41,7 @@
              It lives inside the swapped subtree and is destroyed and
              re-created by every fragment swap, which is why graph-ui.js binds
              one delegated listener on document rather than a listener here. -->
-        <button id="dxgOpen" type="button" data-dxg-open aria-haspopup="dialog">Claims graph</button>
+        <button id="dxgOpen" type="button" data-dxg-open aria-expanded="false">Claims graph</button>
         {{range .ModuleGroups}}
           <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
         {{end}}

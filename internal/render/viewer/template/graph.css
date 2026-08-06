@@ -255,12 +255,21 @@ body.dxg-open {
   overflow: hidden;
 }
 
+/* The graph is a VIEW, not a dialog. It occupies the viewport rather than
+   floating over a dimmed document: no scrim, no inset, no drop shadow, no
+   rounded corners suspended over the reading view. A reader who opened it is
+   looking at the graph, not at the document with something on top of it.
+
+   It stays position: fixed and outside div.layout for the reason it always
+   did — the SSE fragment swap replaces the reading view's nav and main, and a
+   half-explored graph must survive an edit. */
+
 #dxgPane {
   position: fixed;
   z-index: 80;
   inset: 0;
   display: flex;
-  background: rgba(0, 0, 0, .42);
+  background: var(--paper);
   font: 13px var(--font-sans);
   color: var(--ink);
 }
@@ -274,14 +283,10 @@ body.dxg-open {
   z-index: 81;
   flex: 1;
   min-width: 0;
-  margin: 24px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
   background: var(--paper);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: 0 8px 34px rgba(0, 0, 0, .42);
 }
 
 .dxg-surface:focus {
@@ -416,6 +421,50 @@ body.dxg-open {
 .dxg-select:focus {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
+}
+
+/* ---- the nav trigger --------------------------------------------------
+   The button that opens the pane lives inside the sidebar nav, among the
+   module tabs, and must read as one of them.
+
+   NOTE, and it cost a red suite to learn: do NOT write the nav's opening tag
+   literally in this file. Everything here is inlined into a style block in the
+   rendered document, and serve's fragment extractor finds its swap anchors by
+   scanning that document for the tag as a STRING, depth-counting as it goes. A
+   mention inside a CSS comment is indistinguishable from the real thing, so it
+   reports the nav as never closed and GET /api/fragment returns 500. The same
+   hazard applies to the main content-area tag, and to graph-ui.js. It deliberately does NOT carry
+   class .sec-tab: the reading view's delegated handler matches
+   closest('.sec-tab') and would switch the displayed module on every open.
+   So the LOOK is borrowed here and the BEHAVIOUR is not — the two are
+   separable, and a shared class would have coupled them.
+
+   Kept byte-identical to .sec-tab's own declarations (style.css) rather than
+   approximated, so the two cannot drift apart visually without someone
+   noticing this comment. */
+
+#dxgOpen {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 12px 5px 20px;
+  border: none;
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  line-height: 1.4;
+}
+
+/* The open state mirrors .sec-tab.on, because "the graph is what you are
+   looking at" is the same fact as "this module is what you are looking at". */
+body.dxg-open #dxgOpen {
+  color: var(--ink);
+  background: var(--accent-bg);
+  border-left-color: var(--accent);
+  padding-left: 18px;
 }
 
 /* An edge-type / label toggle reads OFF by default and accent-on when
