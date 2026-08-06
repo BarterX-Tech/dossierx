@@ -5,6 +5,71 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - Unreleased
+
+**BREAKING: `dossierx check` now fails on a dependency loop that alternates `rests_on` and
+`governed_by`, and no migration path accompanies it.** The new `mixed-cycle` lint runs at ERROR
+severity, taking the registered rule count from 27 to 28. It walks the union of the `rests_on`
+and `governed_by` graphs with the edge kind carried on every hop, and reports a cycle whose hops
+include at least one of each — "A rests_on B, B governed_by A". Neither existing cycle rule can
+see that shape: `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so
+a mixed loop presents no back edge to either walk and passed the entire registry. A project
+carrying one passed `dossierx check` before this release and exits 1 after it, with no edit on
+its side, no content-hash move and nothing in `.dossierx-lock-store.json` to explain the change.
+
+There is deliberately no migration command and no migration document: a corpus containing this
+shape was always malformed, the engine simply could not see it. The recovery is to break the loop
+— the finding names every claim on it — and re-run `dossierx check`. Where those claims are
+locked, that is `dossierx claim unlock`, the edit, then `dossierx claim lock`, the same as any
+other correction to a locked claim. `mirrors` is not part of the union graph and never trips this
+rule; a pure `rests_on` or pure `governed_by` loop still reports as `cycle` or `governed-cycle`
+and this rule stays silent on it.
+
+### Added — a claims graph pane in the viewer
+
+The rendered viewer now carries a "Claims graph" pane: a canvas view of the corpus's `rests_on`,
+`governed_by` and `mirrors` edges, with selectable overlays (isolated & weakly linked, dependency
+cycles, governance, review pending, open comment threads, draft vs locked), a per-claim detail
+panel that includes an `in a cycle` row, granularity collapse to modules or facets, zoom, pan and
+drag. Above 300 claims the pane opens at module granularity rather than drawing every claim.
+
+It is built by a new `internal/graph` package as a JSON payload inlined into the single
+self-contained `index.html`, alongside three new embedded client files (`graph-core.js`,
+`graph-ui.js`, `graph.css`). No external assets, so it works over `file://`. There is no new CLI
+noun and no new schema field. The pane is a third full-viewport overlay with its own body scroll
+lock (`body.dxg-open`) that is additive with the sidebar drawer's and the comment panel's rather
+than mutually exclusive with them.
+
+### Added — `GET /api/graph` under `dossierx serve`
+
+Backs a refresh button in the pane, rebuilding and re-stamping the payload from the current
+catalog at request time rather than reusing the render's. The button is absent over `file://`,
+where there is nothing to refresh from.
+
+### Added — `testdata/fixture-graph-demo`, a third committed sample viewer
+
+A 58-claim fixture project with a tracked `viewer/index.html`. It is the first fixture in this
+repo that is itself a ledger-covered dossierx project, so its `.dossierx-comment-digest.json` is
+a tracked input (`.gitignore` gained one negation line for exactly that path) alongside its
+`.dossierx-lock-store.json`. Without the digest, a fresh clone or CI checkout would fail the
+fixture on `comment-digest-absent`. `docs/RELEASING.md` now names three sample viewers to
+regenerate, not two.
+
+### Added — `tests/fixture_staleness_test.go`
+
+Fails the build when a committed sample viewer no longer matches what the current renderer
+produces, instead of leaving a stale generated artifact to be noticed at release time.
+
+### Changed — the offline scan strips comments before matching
+
+`tests/portability_test.go`'s check that no shipped `.js` reaches the network now strips `//` and
+`/* */` comments from the file before matching, so a comment that names an endpoint — `graph-ui.js`
+documents its single `/api/graph` call — no longer reads as a network call.
+
+**Not in this release, and stated so deliberately:** any code-grounding signal. The graph audits
+claims, not code. There is no `has_code_link` field, no "locked, ungrounded" rule and no
+`implink` argument.
+
 ## [0.4.1] - 2026-08-04
 
 **Two things change for already-locked claims that `dossierx check` cannot tell you about.**
@@ -1238,6 +1303,7 @@ in `skills/` for projects that consume DossierX to author claims, derive build o
 code back to claims from within an agentic workflow.
 
 [Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...HEAD
+[0.5.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.0...v0.3.1
