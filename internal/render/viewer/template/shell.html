@@ -84,7 +84,10 @@
        and the panel is a read-only snapshot cloned from the baked-in
        .comments-panel markup. The panel keeps its own #commentsOverlay and
        body.comments-open lock, distinct from the sidebar's #navOverlay /
-       body.nav-open, and opening either overlay closes the other. -->
+       body.nav-open, and opening either of THOSE TWO closes the other. The
+       claims graph pane (#dxgPane, body.dxg-open) is a third full-viewport
+       overlay and takes no part in that pairing: its scroll lock is additive
+       and opening it closes neither. See the z-index ledger in style.css. -->
   <button id="commentsOverlay" class="comments-overlay" type="button" aria-label="Close comments" tabindex="-1" hidden></button>
   <aside id="commentsPanel" class="comments-rail" role="complementary" aria-label="Comments" tabindex="-1" hidden>
     <header class="comments-rail-head">
@@ -352,9 +355,17 @@
       var navOverlay = document.getElementById('navOverlay');
 
       // setDrawer owns body.nav-open (sidebar transform + #navOverlay). Opening
-      // the nav closes any open comment panel: the two overlays are mutually
+      // the nav closes any open comment panel: THOSE TWO overlays are mutually
       // exclusive, each with its OWN overflow lock, and must never both hold the
       // body scroll-lock at once.
+      //
+      // The claims graph pane (body.dxg-open, graph-ui.js) is the deliberate
+      // exception and nothing here closes it: its lock is ADDITIVE with both of
+      // these. Three classes each setting overflow: hidden compose without a
+      // release-order hazard — see the z-index ledger in style.css. Do not
+      // "fix" that by closing the pane from here. The pane's trigger (#dxgOpen)
+      // lives inside <nav id="nav">, so on mobile the drawer has to be open to
+      // reach it and nav-open + dxg-open together is a normal state.
       function setDrawer(open) {
         if (open) { closeCommentPanel(); }
         document.body.classList.toggle('nav-open', open);
@@ -1530,9 +1541,17 @@
         railClose.addEventListener('click', function () { closeCommentPanel(); });
       }
 
-      // The SINGLE window keydown Escape listener, modified in place: an open
-      // comment panel closes first (and returns, so the same press does not also
-      // toggle the nav); otherwise Escape closes the nav drawer as before.
+      // This file's one window keydown Escape listener: an open comment panel
+      // closes first (and returns, so the same press does not also toggle the
+      // nav); otherwise Escape closes the nav drawer as before.
+      //
+      // It is NOT the only Escape handler on the page any more. graph-ui.js
+      // registers a document-level keydown that closes the graph pane, and a
+      // document-level event bubbles on to window — so with the pane open one
+      // press runs closePane() and then falls through to setDrawer(false) here.
+      // That is harmless today (closing an already-closed drawer is a no-op),
+      // but anything added to this handler that is not idempotent has to check
+      // the pane's state too.
       window.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') {
           if (commentPanelOpen()) { closeCommentPanel(); return; }

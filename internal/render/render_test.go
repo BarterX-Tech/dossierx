@@ -301,16 +301,20 @@ func TestRender_ThemeCSSInjectedAfterBaseCSS(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	baseIdx := strings.Index(out, "<style>")
-	if baseIdx == -1 {
-		t.Fatalf("output missing base <style> block:\n%s", out)
+	// shell.html emits three <style> blocks: graph.css first, style.css second,
+	// the theme override last. strings.Index therefore finds the graph block,
+	// not the base sheet; what this asserts — and all the cascade needs — is
+	// that the theme block is the LAST one.
+	firstIdx := strings.Index(out, "<style>")
+	if firstIdx == -1 {
+		t.Fatalf("output missing the first <style> block (graph.css):\n%s", out)
 	}
 	themeIdx := strings.LastIndex(out, "<style>")
-	if themeIdx <= baseIdx {
-		t.Fatalf("expected a second <style> block after the base one:\n%s", out)
+	if themeIdx <= firstIdx {
+		t.Fatalf("expected a later <style> block after the first one:\n%s", out)
 	}
 	if !strings.Contains(out[themeIdx:], "--accent:#123456;") {
-		t.Errorf("second <style> block missing theme override:\n%s", out)
+		t.Errorf("last <style> block missing theme override:\n%s", out)
 	}
 }
 
@@ -320,7 +324,7 @@ func TestRender_NoThemeConfiguredEmitsEmptyThemeStyleBlock(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 	if !strings.Contains(out, "<style></style>") {
-		t.Errorf("expected an empty second <style></style> block when no theme is configured:\n%s", out)
+		t.Errorf("expected an empty <style></style> block for the theme when none is configured:\n%s", out)
 	}
 }
 
