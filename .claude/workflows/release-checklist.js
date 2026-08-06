@@ -3,7 +3,7 @@ export const meta = {
   description: 'Runs docs/RELEASING.md as three verification gates around a release. Agents verify; the human/orchestrator performs every irreversible action.',
   whenToUse: 'Invoke three times during a release: {phase:"pre-merge"} before merging the release PR, {phase:"pre-tag"} after merging but before tagging, {phase:"post-release"} after the Release workflow finishes. Pass {version:"v0.4.0", pr:26}.',
   phases: [
-    { title: 'Pre-merge', detail: 'pin sweep, CHANGELOG shape, site invariants, the two suites go test misses' },
+    { title: 'Pre-merge', detail: 'pin sweep, CHANGELOG shape, site invariants, the two suites go test misses, the embedded skills' },
     { title: 'Pre-tag', detail: 'CI green on the MERGE COMMIT, commit sha set in content.ts' },
     { title: 'Post-release', detail: 'verify the artifact the user sees, not the source you edited' },
   ],
@@ -198,6 +198,48 @@ half rather than PASS.
 
 golangci-lint matters specifically because 'go vet' does not catch what it catches — errcheck
 with check-blank already failed CI once in this release after a clean local vet.`,
+  },
+  {
+    key: 'skills-correctness', effort: 'high',
+    prompt: `CHECK: the embedded agent skills still describe THIS release's engine.
+
+Why this gate exists, and why it is not just another docs check: 'dossierx skills export' installs
+skills/*/SKILL.md into OTHER PEOPLE'S repositories, where they become the operating instructions an
+agent follows against a corpus you will never see. A stale rule here does not render a wrong page —
+it teaches an agent the wrong recovery on somebody else's locked claims. Treat a wrong instruction
+as BLOCKING, not minor.
+
+The skills are go:embed-ed (skills/embed.go) and asserted on by cmd/dossierx/skills_embed_test.go,
+so they ship inside the binary: a fix after the tag does not reach anyone who already installed.
+
+Read every skills/*/SKILL.md. For each, run these four sweeps:
+
+1. FALSIFICATION — the untrue sweep, not a mention sweep. Do not ask "does it mention the new
+   feature". Ask, for each factual assertion: "did anything in ${VERSION} make this FALSE?" Check
+   in particular:
+     - every command, flag and noun named — against 'dossierx <noun> --help', not memory
+     - every error.code and lint rule name — against internal/lint and the error-code constants
+     - every count ("nineteen leaves", "seven nouns", rule counts) — against the code that pins it
+     - every "as of vX" / "in vX" claim — is the version still the right one?
+
+2. NEW BREAKING BEHAVIOUR — did ${VERSION} add a rule, refusal or error.code that can fire on a
+   corpus the agent did NOT change? That is the case an agent handles worst, because its instinct
+   is to hunt for what it broke. If such a change exists and no skill names it, that is BLOCKING.
+   Compare 'git diff ${PREV}..HEAD -- internal/lint internal/check' against what the skills say.
+
+3. RECOVERY REACHABILITY — for each new or changed refusal, trace the path an agent actually walks:
+   error.code -> the router's recovery table -> the companion skill it routes to. If the recovery
+   for a new refusal is only derivable by reading Go source or the CHANGELOG, the chain is broken.
+   Say WHERE it breaks.
+
+4. INSTALL INTEGRITY — the version pins inside the skills (there is a raw.githubusercontent pin in
+   skills/dossierx/SKILL.md) must name ${VERSION}; and 'dossierx skills export' must still write
+   what the repo holds. Run it into a temp dir and diff against skills/:
+       cd $(mktemp -d) && go run <repo>/cmd/dossierx skills export . ; diff -r . <repo>/skills
+
+Report a finding per skill file, naming the exact line. An empty finding list is a valid and
+expected result for a release that changed no engine behaviour — say so plainly rather than
+manufacturing a nit. ${VERSION} is not such a release if it added a lint rule.`,
   },
 ]
 

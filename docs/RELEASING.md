@@ -43,6 +43,25 @@ checklist for that half.
       one is a template users copy into their own repository, so a stale pin
       there ships a stale binary into someone else's merge gate). It went stale
       through v0.3.0 and v0.3.1 and was found by a sweep, not by memory.
+- [ ] **The embedded skills still describe this engine.** `skills/*/SKILL.md` is
+      `go:embed`-ed into the binary and installed into *other people's*
+      repositories by `dossierx skills export`, where it becomes the operating
+      instruction an agent follows against a corpus you will never see. A stale
+      rule here does not render a wrong page — it teaches an agent the wrong
+      recovery on somebody else's locked claims, and it ships inside the binary,
+      so a fix after the tag never reaches anyone who already installed.
+
+      Ask the falsification question, not the mention question. Not "do the
+      skills mention the new feature" but, for every assertion in them, "did
+      this release make that FALSE?" — every command and flag against
+      `dossierx <noun> --help`, every `error.code` and lint rule name against
+      the code, every count, every "as of vX" claim.
+
+      Then the case the skills are worst at: **a new refusal that can fire on a
+      corpus the agent did not change.** An agent meeting one hunts for what it
+      broke, finds nothing, and loops. If this release adds such a rule and no
+      skill names it, that is blocking. v0.5.0's `mixed-cycle` is the worked
+      example, and the router carries a section for it.
 - [ ] **The site's release entry is appended.** In `site/src/content.ts` the
       `releases` array is **oldest-first**, and `ReleaseTimeline` treats
       `releases[releases.length - 1]` as current. Append; do not prepend. Set

@@ -8,7 +8,8 @@ description: >-
   DossierX command. It is short on purpose: the seven nouns, the JSON envelope, the
   exit codes, the error.code to recovery table, the dry-run rule, the five rules that
   never bend, how a project whose locks predate the lock ledger crosses onto it (there
-  is no migration command), and which companion skill to load for the work in front of you.
+  is no migration command), why a corpus that passed check before v0.5.0 can fail it after
+  with no edit (`mixed-cycle`), and which companion skill to load for the work in front of you.
   Load a companion skill only when this one sends you there.
 ---
 
@@ -22,7 +23,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 19 commands | the viewer, via `dossierx serve` |
+| Surface | the CLI — all 19 commands | the viewer, via `dossierx serve` — including its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors` and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
@@ -127,6 +128,23 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
    any local caller gets full human rights: the same trust level as write access to the claim YAML.
    Nothing stops you curling the resolve endpoint. It is simply forgery, and it leaves a record
    positively attesting that a human resolved it.
+
+## `mixed-cycle` — what v0.5.0 changed under you
+
+**A corpus that passed `dossierx check` before v0.5.0 can exit 1 after it with no edit on your
+side.** `mixed-cycle` (ERROR) reports a loop alternating the two edge kinds — "A `rests_on` B, B
+`governed_by` A". `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so
+that shape presented no back edge to either and passed the whole registry. `mirrors` never trips it.
+
+You meet it as `lint_failed` carrying `mixed-cycle`, one finding per claim on the loop. Three things
+make it unlike any other finding:
+
+1. **You did not cause it** — no edit, no content-hash move, nothing in the lock store. Do not hunt
+   for what you broke, and do not report it as a regression you introduced.
+2. **No migration command and no migration document**, deliberately: the corpus was always
+   malformed. Break the loop — the finding names every claim on it.
+3. **Those claims are usually LOCKED** (that is how the loop survived), so the recovery is
+   `unlock → fix → lock` and needs the human's recorded approval. Show them the loop first.
 
 ## The pre-ledger crossing and the staged gate — what v0.4.0 changed under you
 

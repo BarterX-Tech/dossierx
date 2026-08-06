@@ -69,6 +69,10 @@ it out.
   `reason` is required when `type: none`; a claim-valued `type` is a **drift** edge (its content
   changing under a locked claim flags `review_pending`) but never a gating one, so it cannot block
   a lock.
+- **Loops are refused in all three shapes**, at ERROR: `rests_on` → `cycle`, `governed_by` →
+  `governed-cycle`, and as of v0.5.0 one *alternating* the two → `mixed-cycle`. "B is governed by A"
+  buys no free back edge when A already rests on B; `mirrors` is exempt. The router's `mixed-cycle`
+  section covers why an untouched corpus can start failing this.
 - `kind: orientation-note` (implied by the reserved `overview` facet) marks a claim that tells a
   reader how to read the *rest* of the module. It renders as a banner and sorts ahead of fact
   claims, so "read top to bottom" already means "read the orientation notes first".

@@ -66,6 +66,29 @@ produces, instead of leaving a stale generated artifact to be noticed at release
 `/* */` comments from the file before matching, so a comment that names an endpoint — `graph-ui.js`
 documents its single `/api/graph` call — no longer reads as a network call.
 
+### Changed — the embedded skills teach `mixed-cycle`, and the release gate checks them
+
+The router skill (`skills/dossierx/SKILL.md`) gains a `mixed-cycle` section, because the router is
+the one file an agent is guaranteed to have read before it meets the finding, and this is a refusal
+that fires on a corpus the agent did not touch. An agent meeting one otherwise hunts for what it
+broke, finds nothing, and loops. The section says three things: you did not cause it, there is no
+migration, and the claims on the loop are usually locked so the recovery is `unlock → fix → lock`
+with the human's approval. `dossierx-claims` gains one bullet listing all three loop shapes beside
+the edge schema, and the router's surface table now names the claims graph as part of what the human
+reads.
+
+The skill line budget moves 230 → 255 to fit it. That is a deliberate resize on the same reasoning
+that moved it 200 → 230 for v0.3.0's adoption section, not a per-release ratchet: the router was
+already at 229 of 230, so the choice was to cover the breaking change or to cut something else
+load-bearing. The four companion skills are unaffected and still sit under 235.
+
+`docs/RELEASING.md` gains a matching pre-merge item. These skills are `go:embed`-ed into the binary
+and installed into *other people's* repositories by `dossierx skills export`, where a stale rule does
+not render a wrong page — it teaches an agent the wrong recovery on somebody else's locked claims,
+and it ships inside the binary, so a fix after the tag never reaches anyone who already installed.
+The gate asks the falsification question ("did this release make that assertion FALSE?") rather than
+the mention question, and singles out new refusals that can fire on an unchanged corpus.
+
 ### Fixed — the offline viewer stops probing for a comment backend
 
 Opened over `file://`, the viewer no longer issues the relative fetch that backs its comment

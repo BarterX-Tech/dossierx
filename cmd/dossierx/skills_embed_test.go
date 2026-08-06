@@ -465,8 +465,20 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // shorter on its own, and ratcheting a budget down to whatever the current file
 // happens to measure turns every honest sentence added later into a test
 // failure. Lower it only on a decision that the router should be shorter.
+//
+// Raised again to 255 in v0.5.0, on the same reasoning that moved it to 230 and
+// on no other. `mixed-cycle` is the second BREAKING change in this project's
+// history that can fire on a corpus the agent did NOT touch: no edit, no
+// content-hash move, nothing in the lock store to explain it. That is the case
+// an agent handles worst — its instinct is to hunt for what it broke, find
+// nothing, and loop — and the router is the one file every agent is guaranteed
+// to have read before it meets the finding. The file was already at 229 of 230,
+// so the real choice was "cover it" or "cut something else load-bearing", not
+// "keep the budget". The four companions are unaffected and still sit under
+// 235 (claims 231, comments 187, code-links 128, build-order 110), which is the
+// check that this is a surface change and not prose creep.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
-	const maxLines = 230
+	const maxLines = 255
 
 	for _, name := range wantSkillNames {
 		raw, err := fs.ReadFile(dxskills.FS, name+"/SKILL.md")
