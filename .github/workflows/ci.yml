@@ -146,6 +146,21 @@ jobs:
           # sidesteps that entirely.
           install-mode: goinstall
 
+      # viewer-tests/ is a separate module, and `golangci-lint run ./...` no
+      # more descends into it than `go test ./...` does. Without this step its
+      # Go code is read by no linter on any machine. Kept as a second step in
+      # the same job rather than a second job: it needs the identical toolchain
+      # and install-mode reasoning above, and duplicating a job to duplicate
+      # that comment is how the two drift apart.
+      # tests/nested_module_coverage_test.go fails the build if this step is
+      # removed, or if a future nested module lands without one.
+      - name: golangci-lint (viewer-tests)
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+          install-mode: goinstall
+          working-directory: viewer-tests
+
   tidy:
     name: tidy
     runs-on: ubuntu-latest

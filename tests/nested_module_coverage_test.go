@@ -143,6 +143,49 @@ func TestEveryNestedModuleIsRunSomewhere(t *testing.T) {
 					"Add one (e.g. `cd %s && go test -count=1 ./...`) and list it in .PHONY,\n"+
 					"so the suite is reachable without reading the CI workflow to find it.", mod, mod)
 			}
+
+			// Lint: same reasoning as the two above, applied to the other
+			// tool. `golangci-lint run ./...` at the repository root does not
+			// descend into a nested module any more than `go test ./...` does,
+			// and golangci-lint-action runs at the root — so a nested module's
+			// Go code was linted by nothing, in CI or locally.
+			//
+			// That is not hypothetical. v0.5.0 shipped a browser test that
+			// asserted on the BROWSER's request log rather than the page's, and
+			// it lived in exactly this unlinted module. Lint would not have
+			// caught that particular bug, but the point stands: the module was
+			// carrying real logic that no linter had ever read.
+			//
+			// Checked PER STEP, not per file. The first version of this asked
+			// whether ci.yml contained "working-directory: <mod>" and
+			// "golangci-lint" anywhere, and it passed immediately against a
+			// workflow that lints nothing but the root: the working-directory
+			// belonged to the browser TEST job and the golangci-lint to a
+			// separate root lint job. Two true facts about different jobs read
+			// as one true fact about one job. Splitting on step boundaries is
+			// what makes this an assertion rather than a coincidence.
+			lintedInCI := false
+			for _, step := range strings.Split(ci, "- name:") {
+				if strings.Contains(step, "golangci-lint") &&
+					strings.Contains(step, "working-directory: "+mod) {
+					lintedInCI = true
+					break
+				}
+			}
+			var lintTarget string
+			for _, line := range strings.Split(mk, "\n") {
+				if strings.Contains(line, "cd "+mod) && strings.Contains(line, "golangci-lint") {
+					lintTarget = line
+					break
+				}
+			}
+			if !lintedInCI && lintTarget == "" {
+				t.Errorf("nothing lints %q — not CI, not the Makefile.\n"+
+					"`golangci-lint run ./...` at the root does not descend into a nested module,\n"+
+					"so this module's Go code is read by no linter on any machine. Add a lint step\n"+
+					"with `working-directory: %s` to .github/workflows/ci.yml, and a Makefile target\n"+
+					"that runs `cd %s && golangci-lint run ./...`.", mod, mod, mod)
+			}
 		})
 	}
 }

@@ -47,10 +47,10 @@ func evalString(t *testing.T, ctx context.Context, expr string) string {
 // runtime is mounted, and returns the browser context PLUS serve's base URL and
 // stop func (the server-down and SSE-witness specs need both, which newLiveTab
 // discards).
-func serveOpenTabWithStop(t *testing.T, p *project) (context.Context, string, func()) {
+func serveOpenTabWithStop(t *testing.T, p *project) (ctx context.Context, base string, stop func()) {
 	t.Helper()
-	base, stop := p.serve()
-	ctx := browserContext(t)
+	base, stop = p.serve()
+	ctx = browserContext(t)
 	runCDP(t, ctx,
 		chromedp.Navigate(base+"/"),
 		chromedp.WaitVisible(".sec-tab", chromedp.ByQuery),
@@ -96,7 +96,7 @@ type sseWitness struct {
 
 func openSSEWitness(t *testing.T, base string) *sseWitness {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodGet, base+"/api/events", nil)
+	req, err := http.NewRequest(http.MethodGet, base+"/api/events", http.NoBody)
 	if err != nil {
 		t.Fatalf("sse witness new request: %v", err)
 	}

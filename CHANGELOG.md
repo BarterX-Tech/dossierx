@@ -107,6 +107,26 @@ and it ships inside the binary, so a fix after the tag never reaches anyone who 
 The gate asks the falsification question ("did this release make that assertion FALSE?") rather than
 the mention question, and singles out new refusals that can fire on an unchanged corpus.
 
+### Fixed — the browser suite is linted, and says which browser it drove
+
+`viewer-tests/` is a separate module, so `golangci-lint run ./...` at the repository root never read
+a line of it — the same blind spot `go test ./...` has, and the reason a `viewer-test` target already
+existed. CI's lint job gains a second step with `working-directory: viewer-tests`, and the Makefile
+gains `viewer-lint`. The first run found ten findings in code no linter had ever read: five
+unchecked errors around the `serve` subprocess teardown, a non-wrapping `%v` that should be `%w`,
+and four gocritic style findings. All ten are fixed rather than silenced.
+
+`tests/nested_module_coverage_test.go` — which already refused to let a nested module exist without
+a CI test job and a Makefile target — now refuses to let one exist without a lint job either, so the
+next nested module cannot repeat this. It checks per STEP rather than per file: the first version
+asked whether `ci.yml` contained `working-directory: viewer-tests` and `golangci-lint` anywhere,
+and passed immediately against a workflow that linted nothing but the root, because those two true
+facts belonged to different jobs.
+
+The suite also now logs which browser it resolved. A green run against the Comet fallback is not the
+same evidence as a green run against Chrome — Comet is a Chromium fork that serves its own
+`chrome://` UI, and its traffic is what the offline test was misreading as the page's own.
+
 ### Fixed — the offline viewer stops probing for a comment backend
 
 Opened over `file://`, the viewer no longer issues the relative fetch that backs its comment

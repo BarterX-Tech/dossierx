@@ -8,7 +8,7 @@
 BINARY := dossierx
 PKG := ./cmd/dossierx
 
-.PHONY: build test viewer-test hook-test
+.PHONY: build test viewer-test viewer-lint hook-test
 
 build:
 	go build -trimpath -o bin/$(BINARY) $(PKG)
@@ -33,5 +33,12 @@ viewer-test:
 # The pre-commit gate is shell driving a real binary against a real git
 # repository, so no Go test can cover it; scripts/hook-smoke-test.sh is its
 # suite, and CI runs it on all three platforms.
+# viewer-tests/ is a separate module, so `golangci-lint run ./...` at the root
+# does not read a line of it — the same blind spot `go test ./...` has, and the
+# reason viewer-test exists above. CI runs this as a second step of the lint
+# job; tests/nested_module_coverage_test.go fails the build if neither exists.
+viewer-lint:
+	cd viewer-tests && golangci-lint run ./...
+
 hook-test:
 	bash scripts/hook-smoke-test.sh

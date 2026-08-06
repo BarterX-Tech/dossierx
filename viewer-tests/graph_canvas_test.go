@@ -590,11 +590,12 @@ func TestGraphEmptyOverlayIsStatedAndDoesNotGhostTheGraph(t *testing.T) {
 
 			var dimmed, lit int
 			for _, n := range f.Nodes {
-				if nearly(n.Alpha, dimmedAlpha) {
+				switch {
+				case nearly(n.Alpha, dimmedAlpha):
 					dimmed++
-				} else if nearly(n.Alpha, 1) {
+				case nearly(n.Alpha, 1):
 					lit++
-				} else {
+				default:
 					t.Fatalf("a node was drawn at alpha %v, which is neither lit (1) nor dimmed (%v)", n.Alpha, dimmedAlpha)
 				}
 			}

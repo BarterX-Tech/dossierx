@@ -53,6 +53,7 @@ func resolveBrowser(t *testing.T) string {
 	t.Helper()
 	if p := os.Getenv("DOSSIERX_TEST_BROWSER"); p != "" {
 		if fileExists(p) {
+			t.Logf("viewer suite driving: %s (DOSSIERX_TEST_BROWSER)", p)
 			return p
 		}
 		t.Fatalf("DOSSIERX_TEST_BROWSER=%q does not exist", p)
@@ -68,6 +69,16 @@ func resolveBrowser(t *testing.T) string {
 	}
 	for _, c := range candidates {
 		if fileExists(c) {
+			// Say which one, every time. A green run against Comet is not the
+			// same evidence as a green run against Chrome: Comet is a Chromium
+			// FORK that serves its own chrome:// UI and posts telemetry, and it
+			// put ~118 spurious entries in the CDP request log that
+			// graph_offline_test.go was reading as the page's own traffic (see
+			// the DocumentURL attribution there). That bug was invisible on CI,
+			// which pins real Chrome, and reproduced only here. So the browser
+			// is part of the result: an unlabelled green invites exactly the
+			// "it passes on my machine" reading that hid it.
+			t.Logf("viewer suite driving: %s", c)
 			return c
 		}
 	}

@@ -45,6 +45,7 @@ package viewertests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -128,10 +129,15 @@ const settleTimeout = 3 * time.Second
 func settleFor(t *testing.T, ctx context.Context, expr string) {
 	t.Helper()
 	var ok bool
-	_ = chromedp.Run(ctx, chromedp.Poll(expr, &ok,
+	// A timeout here is the ordinary outcome — that is the whole reason this
+	// helper exists instead of pollTrue — so it is swallowed deliberately
+	// rather than ignored implicitly.
+	if err := chromedp.Run(ctx, chromedp.Poll(expr, &ok,
 		chromedp.WithPollingInterval(20*time.Millisecond),
 		chromedp.WithPollingTimeout(settleTimeout),
-	))
+	)); err != nil && !errors.Is(err, chromedp.ErrPollingTimeout) {
+		t.Fatalf("settle %q: %v", expr, err)
+	}
 }
 
 // revealedExpr is the settle condition for a claim's footer: the pseudo-element

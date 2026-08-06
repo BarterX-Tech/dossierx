@@ -3,6 +3,7 @@ package viewertests
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -69,7 +70,7 @@ func buildDossierx(dir string) (string, error) {
 	cmd.Dir = root
 	cmd.Env = os.Environ()
 	if out, err := cmd.CombinedOutput(); err != nil {
-		return "", fmt.Errorf("go build ./cmd/dossierx: %v\n%s", err, out)
+		return "", fmt.Errorf("go build ./cmd/dossierx: %w\n%s", err, out)
 	}
 	return bin, nil
 }
@@ -253,7 +254,9 @@ func (p *project) resolveViaAPI(tid, role string) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		var buf bytes.Buffer
-		_, _ = buf.ReadFrom(resp.Body)
+		if _, err := buf.ReadFrom(resp.Body); err != nil {
+			buf.WriteString("<body unreadable: " + err.Error() + ">")
+		}
 		p.t.Fatalf("resolve %s: got status %d, want 200\nbody: %s", tid, resp.StatusCode, buf.String())
 	}
 }
@@ -271,7 +274,7 @@ func (p *project) claimBytes() []byte {
 // serve starts `dossierx serve`, waits for it to print its URL and answer
 // /api/ping, and returns the base URL plus a stop func. The stop func is also
 // registered with t.Cleanup so a failing test never leaks the process.
-func (p *project) serve() (string, func()) {
+func (p *project) serve() (base string, stop func()) {
 	p.t.Helper()
 	cmd := exec.Command(p.bin, "--config", p.config, "serve")
 	stdout, err := cmd.StdoutPipe()
@@ -285,18 +288,33 @@ func (p *project) serve() (string, func()) {
 	}
 
 	stopped := false
-	stop := func() {
+	// Every error below is expected rather than exceptional: by the time stop
+	// runs, the server has often already exited on its own, and signalling or
+	// killing a finished process reports os.ErrProcessDone. Anything ELSE is
+	// worth seeing, so it is logged rather than discarded — this used to be
+	// three blank assignments, which no linter had ever read.
+	stop = func() {
 		if stopped {
 			return
 		}
 		stopped = true
-		_ = cmd.Process.Signal(os.Interrupt)
+		if err := cmd.Process.Signal(os.Interrupt); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			p.t.Logf("interrupting serve: %v", err)
+		}
 		done := make(chan struct{})
-		go func() { _ = cmd.Wait(); close(done) }()
+		go func() {
+			defer close(done)
+			// A non-nil error here is the interrupt or kill above landing.
+			if err := cmd.Wait(); err != nil {
+				return
+			}
+		}()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
-			_ = cmd.Process.Kill()
+			if err := cmd.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				p.t.Logf("killing serve: %v", err)
+			}
 			<-done
 		}
 	}
@@ -319,7 +337,6 @@ func (p *project) serve() (string, func()) {
 		close(urlCh) // EOF without a URL
 	}()
 
-	var base string
 	select {
 	case base = <-urlCh:
 		if base == "" {
