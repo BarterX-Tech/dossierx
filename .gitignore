@@ -11,12 +11,26 @@ coverage.html
 # Engine artifacts left behind by running the CLI against a fixture.
 # "dossierx check" writes .dossierx-comment-digest.json next to a project's
 # config, so every fixture render and every sample-viewer regeneration drops
-# one. In THIS repo they are always regenerable droppings — nothing here is a
-# dossierx project whose review history we keep (no .dossierx-* store is
-# tracked). A real consuming project still commits its own digest; its .gitignore
+# one. In THIS repo they are almost always regenerable droppings; the single
+# fixture that IS a dossierx project whose review history we keep is excepted
+# below. A real consuming project still commits its own digest; its .gitignore
 # is its own. Unanchored so it catches the repo root, testdata fixtures, and any
 # project checked out inside this tree.
 .dossierx-comment-digest.json
+
+# ...with one exception. testdata/fixture-graph-demo is the first fixture in this
+# repo that IS a ledger-covered dossierx project: it carries 25 locked claims, so
+# its lock store is ledger-covered, and a ledger-covered project without a
+# committed digest store makes "dossierx check" emit comment-digest-absent and
+# exit 1. A fresh clone or CI checkout would fail on it. The digest is therefore
+# a tracked input of that fixture, exactly as a real consuming project commits
+# its own.
+!testdata/fixture-graph-demo/.dossierx-comment-digest.json
+
+# That fixture's .dossierx-lock-store.json is tracked too, and needs no negation
+# here because no pattern in this file ever ignored a lock store. Between the
+# two, testdata/fixture-graph-demo is the only path under which a .dossierx-*
+# store is tracked in this repo.
 
 # Editor / OS cruft
 .vscode/

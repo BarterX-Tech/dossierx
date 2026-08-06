@@ -22,13 +22,18 @@ instead of the first one the walk happens to hit, and would give a tighter, more
 diagnostic when a project's `rests_on` or `governed_by` graph has more than one broken loop at
 once. This is a formal deferral, not a scheduled item: no release currently commits to it.
 
-## Deferred: an on-page cycle signal in `dossierx serve`
+## Deferred: a cycle signal on the reading view itself
 
-`dossierx check` and the lint suite already refuse a cycle at lock time, but `dossierx serve` —
-the human's live-reload viewer — has no on-page indicator that the currently-rendered claim set
-contains an unresolved cycle somewhere in the graph. A human working entirely inside `serve`
-between checks has no visual signal short of running `dossierx check` themselves. This is a
-formal deferral, not a scheduled item: no release currently commits to it.
+Most of this shipped in v0.5.0. The viewer carries a permanent "Claims graph" pane with a
+`dependency cycles` overlay that rings cycle-member claims red and an `in a cycle` row in the
+detail panel; the payload is rebuilt on every render — under `dossierx serve` that is every
+reload — and `GET /api/graph` refreshes it live. A human working entirely inside `serve` between
+checks now does have a visual signal short of running `dossierx check` themselves.
+
+What is still deferred is narrower: that signal only exists once the reader opens the pane.
+Nothing on the reading view itself indicates that the currently-rendered claim set contains an
+unresolved cycle somewhere in the graph. This is a formal deferral, not a scheduled item: no
+release currently commits to it.
 
 ## Deferred: markdown-sanity's silence on a MATCHED underscore run
 

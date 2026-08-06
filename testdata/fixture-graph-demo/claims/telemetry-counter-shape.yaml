@@ -1,0 +1,11 @@
+id: telemetry.schema.counter-shape
+facet: schema
+module: telemetry
+status: draft
+layout: card
+build_role: schema
+body: |
+  A counter is a name, a monotonically increasing integer, and nothing else. No timestamps and no identifiers.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine

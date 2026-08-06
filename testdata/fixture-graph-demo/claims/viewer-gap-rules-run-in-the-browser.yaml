@@ -1,0 +1,13 @@
+id: viewer.behavior.gap-rules-run-in-the-browser
+facet: behavior
+module: viewer
+status: draft
+layout: card
+build_role: behavior
+body: |
+  Facts and heuristics are rendered in visually separate blocks, and the heuristics are labelled as guesses. A guess that looks like a finding is worse than no guess.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.behavior.representative-node-rule

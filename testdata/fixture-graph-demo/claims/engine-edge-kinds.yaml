@@ -1,0 +1,13 @@
+id: engine.schema.edge-kinds
+facet: schema
+module: engine
+status: locked
+layout: card
+build_role: schema
+body: |
+  There are three edge kinds and no more. One says a claim depends on another, one says two claims are content-identical, and one says which doctrine backs the claim's truth.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.claim-shape

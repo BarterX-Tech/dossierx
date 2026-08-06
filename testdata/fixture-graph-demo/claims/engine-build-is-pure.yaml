@@ -1,0 +1,14 @@
+id: engine.contract.build-is-pure
+facet: contract
+module: engine
+status: locked
+layout: card
+build_role: api
+emphasis: true
+body: |
+  Building the render payload performs no input or output, reads no clock, and returns no error. Rendering cannot fail because of it.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.catalog-shape

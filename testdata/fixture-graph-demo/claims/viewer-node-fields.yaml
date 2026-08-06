@@ -1,0 +1,13 @@
+id: viewer.schema.node-fields
+facet: schema
+module: viewer
+status: locked
+layout: card
+build_role: schema
+body: |
+  Every node field is emitted whether or not it is set. An absent key and an empty value are different things to the reader, and one of the gap rules keys off the empty value.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.schema.payload-shape

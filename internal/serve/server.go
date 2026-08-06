@@ -55,10 +55,14 @@ const (
 
 	// cspValue is the Content-Security-Policy sent with GET /. default-src
 	// 'none' denies everything not explicitly re-allowed; style-src/script-src
-	// 'unsafe-inline' are required because the viewer ships one inline
-	// <style> and one inline IIFE (no external assets, ever); connect-src
-	// 'self' lets that IIFE reach the same-origin /api/* endpoints while
-	// blocking the exfiltration half of any injected script.
+	// 'unsafe-inline' are required because the viewer ships everything inline
+	// and nothing external, ever: three <style> blocks (graph.css, style.css,
+	// the project theme override), a <script type="application/json"> graph
+	// payload, the viewer IIFE, and graph-core.js / graph-ui.js. connect-src
+	// 'self' lets the same-origin /api/* endpoints be reached while blocking
+	// the exfiltration half of any injected script — load-bearing now for two
+	// independent callers, the IIFE (comments, /api/fragment) and graph-ui.js
+	// (/api/graph).
 	//
 	// img-src 'self' IS THE PHASE-D ADDITION, and the exact token matters more
 	// than the fact of it. serve is the only human surface, so a claim-body
@@ -374,6 +378,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/fragment", s.handleFragment)
 	mux.HandleFunc("GET /api/comments", s.handleListComments)
 	mux.HandleFunc("GET /api/status", s.handleStatus)
+	mux.HandleFunc("GET /api/graph", s.handleGraph)
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 	mux.HandleFunc("POST /api/claims/{id}/comments", s.handleAddThread)
 	mux.HandleFunc("POST /api/claims/{id}/comments/{tid}/replies", s.handleReply)

@@ -1,0 +1,13 @@
+id: viewer.schema.payload-shape
+facet: schema
+module: viewer
+status: locked
+layout: card
+build_role: schema
+body: |
+  The graph payload carries nodes, edges, the two grouping axes and a count of what could not be represented.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.catalog-shape

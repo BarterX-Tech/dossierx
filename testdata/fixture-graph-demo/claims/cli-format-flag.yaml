@@ -1,0 +1,13 @@
+id: cli.behavior.format-flag
+facet: behavior
+module: cli
+status: draft
+layout: card
+build_role: behavior
+body: |
+  Machine output is the default and prose is opt-in, because the primary caller is an agent.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - cli.schema.json-envelope

@@ -1,0 +1,13 @@
+id: engine.overview.start-here
+facet: overview
+module: engine
+status: draft
+layout: banner
+build_role: orientation
+body: |
+  Read this module before any other. It carries the shapes and the guarantees every other module in this project is written against.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.claim-shape

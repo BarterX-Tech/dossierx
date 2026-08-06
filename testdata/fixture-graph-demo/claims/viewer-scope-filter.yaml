@@ -1,0 +1,13 @@
+id: viewer.behavior.scope-filter
+facet: behavior
+module: viewer
+status: draft
+layout: card
+build_role: behavior
+body: |
+  Scope decides which claims are in play at all. An edge reaching outside the current scope is still drawn, ending in a hollow placeholder, so narrowing the view never hides that a claim reaches outward.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - viewer.schema.node-fields

@@ -1,0 +1,13 @@
+id: lock.verification.ledger-audit-suite
+facet: verification
+module: lock
+status: draft
+layout: card
+build_role: verification
+body: |
+  Every laundering path is reproduced as a test: delete the store, empty it, and edit one record, and assert each is reported.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - lock.behavior.lock-gates

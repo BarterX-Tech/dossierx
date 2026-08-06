@@ -5,6 +5,16 @@
 // components.OverrideFile); per-layout partials live in the components/
 // subpackage and are selected via a plain map lookup on each claim's Layout
 // — no per-project branching lives here or in components.
+//
+// The override mechanism covers the shell and CSS ONLY. The claims-graph
+// client files — graph-core.js, graph-ui.js and graph.css — are embedded and
+// read straight from shellFS with no OverrideFile branch. They are engine
+// internals with a tight contract against the graph payload's shape and
+// against each other, so a project that swapped one for its own copy would
+// get a pane that fails in ways no error message could usefully describe.
+// Anything that must vary per project reaches them through the JSON payload,
+// never through a template action: the three files are injected as DATA and
+// are never parsed as templates, so "{{" in their source is inert.
 package render
 
 import (
@@ -23,7 +33,14 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
 
-//go:embed viewer/template/shell.html viewer/template/style.css
+// The three graph paths are named individually rather than embedding the
+// whole directory: //go:embed resolves at COMPILE time, so a directive
+// naming a file that does not exist fails "go build" loudly. Embedding
+// viewer/template/* and reading the graph files at render time would turn
+// exactly the same mistake — a client file deleted, renamed or never
+// written — into a silently empty pane.
+//
+//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css
 var shellFS embed.FS
 
 // shellFileName and styleFileName are the override-lookup names for the
@@ -33,9 +50,17 @@ var shellFS embed.FS
 // literals at each use site — so a future rename of either file only has to
 // change one place instead of staying manually in sync across the
 // OverrideFile lookup, the template.New name, and the embedded path.
+//
+// graphCoreFileName, graphUIFileName and graphCSSFileName follow the same
+// pattern for one reason less: they have no OverrideFile lookup at all (see
+// the package doc comment), so their only two uses are the embed directive
+// and the ReadFile below.
 const (
-	shellFileName = "shell.html"
-	styleFileName = "style.css"
+	shellFileName     = "shell.html"
+	styleFileName     = "style.css"
+	graphCoreFileName = "graph-core.js"
+	graphUIFileName   = "graph-ui.js"
+	graphCSSFileName  = "graph.css"
 )
 
 // shellTemplatePath and styleTemplatePath are the embedded paths backing
@@ -43,8 +68,11 @@ const (
 // reference these constants (viewer/template/ + the corresponding
 // *FileName constant) instead of repeating the path as a separate literal.
 const (
-	shellTemplatePath = "viewer/template/" + shellFileName
-	styleTemplatePath = "viewer/template/" + styleFileName
+	shellTemplatePath     = "viewer/template/" + shellFileName
+	styleTemplatePath     = "viewer/template/" + styleFileName
+	graphCoreTemplatePath = "viewer/template/" + graphCoreFileName
+	graphUITemplatePath   = "viewer/template/" + graphUIFileName
+	graphCSSTemplatePath  = "viewer/template/" + graphCSSFileName
 )
 
 // generatedHeader returns the comment prepended to every rendered document
@@ -90,6 +118,50 @@ type shellData struct {
 	// looking at is (the comment alone is invisible in the rendered page —
 	// only visible in "view source").
 	GeneratedAt string
+
+	// ---- the claims graph pane's four injection sites ----
+	//
+	// THE TYPES ON THESE FOUR FIELDS ARE LOAD-BEARING AND FAIL SILENTLY.
+	//
+	// html/template escapes CONTEXTUALLY. A plain string reaching
+	// <script>{{.GraphCoreJS}}</script> is not emitted as source — it is
+	// JSON-marshalled into a quoted JS string literal, so 1,300 lines of
+	// program become one inert string expression. Inside <style> a plain
+	// string is filtered to the literal ZgotmplZ. Neither produces an error
+	// at build time, at render time, or in any test that asserts on the Go
+	// value, because the Go value is correct in both worlds. The only visible
+	// symptom is a pane that never initializes.
+	//
+	// template.CSS and template.JS are the "already made safe" declarations
+	// that suppress that escaping. They are safe here for a reason that must
+	// stay true: all three client files are ENGINE-OWNED bytes straight off
+	// the embedded FS, never project input and never concatenated with any.
+	// GraphPayload is the one value derived from author input, and it is safe
+	// by a different mechanism — see its own comment below.
+	//
+	// graph_render_test.go asserts every one of these against the RENDERED
+	// DOCUMENT rather than against the Go value, for exactly this reason.
+	GraphCSS template.CSS
+
+	// GraphPayload is graph.Encode's bytes, injected into
+	// <script type="application/json" id="dossierx-graph">. html/template
+	// applies NO escaping at all in that context, so the guard is entirely
+	// encoding/json's DEFAULT HTML escaping, which writes '<' as <
+	// before the bytes ever reach this field. A JSON parser reads that back
+	// as the original character; an HTML parser never sees a tag. Do not
+	// re-marshal, post-process or "clean up" the escaped output here, and
+	// never turn that escaping off anywhere on its path. (The encoder toggle
+	// that would turn it off is deliberately not named here: it is enforced by
+	// a repo-wide grep for the identifier, so writing it out — even to forbid
+	// it — is the one thing that makes the gate fail. internal/graph's package
+	// doc comment makes the same point at length.)
+	GraphPayload template.JS
+
+	// GraphCoreJS and GraphUIJS are the pane's two script files, injected in
+	// that order (core exports the namespace ui consumes) after the shell's
+	// own inline runtime.
+	GraphCoreJS template.JS
+	GraphUIJS   template.JS
 
 	// ModuleGroups is cat.Claims folded into the two-level Module -> []Facet
 	// shape fix 5 describes (one sidebar entry per module, a nested
@@ -367,7 +439,24 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 	}
 
 	generatedAt := time.Now().UTC()
-	data := buildShellData(cat, cfg, tmpl.css, renderedByID, tmpl.buildOrder, generatedAt)
+
+	graphPayload, err := graphPayloadJSON(cat, cfg, generatedAt)
+	if err != nil {
+		return "", err
+	}
+
+	data := buildShellData(shellInputs{
+		cat:            cat,
+		cfg:            cfg,
+		css:            tmpl.css,
+		graphCSS:       tmpl.graphCSS,
+		graphCoreJS:    tmpl.graphCore,
+		graphUIJS:      tmpl.graphUI,
+		graphPayload:   graphPayload,
+		renderedByID:   renderedByID,
+		buildOrderTmpl: tmpl.buildOrder,
+		generatedAt:    generatedAt,
+	})
 
 	var out bytes.Buffer
 	if err := tmpl.shell.Execute(&out, data); err != nil {
@@ -391,6 +480,15 @@ type loadedTemplates struct {
 	// ever executed depends on attachBuildOrders finding at least one
 	// module with a locked build-order artifact, not on anything here.
 	buildOrder *template.Template
+
+	// graphCore, graphUI and graphCSS are the claims-graph client files,
+	// always the embedded engine copies. Unlike css and shell above they have
+	// no override branch at all — see the package doc comment. They are kept
+	// as raw []byte here and typed (template.JS / template.CSS) only at the
+	// shellData boundary, which is the one place the typing is load-bearing.
+	graphCore []byte
+	graphUI   []byte
+	graphCSS  []byte
 }
 
 // loadTemplates resolves all of Render's template and CSS inputs, applying
@@ -437,7 +535,32 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 		}
 	}
 
-	return loadedTemplates{partials: partials, css: css, shell: shell, buildOrder: buildOrderTmpl}, nil
+	// The three graph client files: plain reads off the embedded FS, no
+	// override lookup. A failure here means the embedded FS itself is
+	// inconsistent with the embed directive, which is a build-level bug and
+	// deserves the error rather than an empty pane.
+	graphCore, err := shellFS.ReadFile(graphCoreTemplatePath)
+	if err != nil {
+		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", graphCoreFileName, err)
+	}
+	graphUI, err := shellFS.ReadFile(graphUITemplatePath)
+	if err != nil {
+		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", graphUIFileName, err)
+	}
+	graphCSS, err := shellFS.ReadFile(graphCSSTemplatePath)
+	if err != nil {
+		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", graphCSSFileName, err)
+	}
+
+	return loadedTemplates{
+		partials:   partials,
+		css:        css,
+		shell:      shell,
+		buildOrder: buildOrderTmpl,
+		graphCore:  graphCore,
+		graphUI:    graphUI,
+		graphCSS:   graphCSS,
+	}, nil
 }
 
 // ViewerRuntimeMarker is a stable token the default shell.html emits (a
@@ -501,12 +624,39 @@ func renderClaims(cat *catalog.Catalog, partials map[model.Layout]*template.Temp
 	return renderedByID, nil
 }
 
+// shellInputs is buildShellData's single argument: everything Render has
+// already computed by the time the shell is assembled. It replaced six
+// positional parameters when the graph pane added four more values to thread
+// through — ten positional arguments at one call site is a shape where a
+// transposed pair of []byte/template.JS values compiles and renders and is
+// found only by a reader. Named fields make that particular mistake a
+// compile error instead.
+type shellInputs struct {
+	cat *catalog.Catalog
+	cfg *config.Config
+	// css is style.css's bytes as loadTemplates resolved them (the project's
+	// override when it has one, the embedded default otherwise).
+	css []byte
+	// graphCSS, graphCoreJS and graphUIJS are the three embedded client files
+	// backing the graph pane, always the engine's own copies — they carry no
+	// override branch (design section 7.2). graphPayload is the JSON graph
+	// payload for cat, already stamped and encoded by graphPayloadJSON.
+	graphCSS     []byte
+	graphCoreJS  []byte
+	graphUIJS    []byte
+	graphPayload template.JS
+
+	renderedByID   map[string]template.HTML
+	buildOrderTmpl *template.Template
+	generatedAt    time.Time
+}
+
 // buildShellData assembles the shellData passed to shell.Execute: cfg's
 // title/eyebrow/theme (with the same fallbacks Render has always applied
 // when cfg is nil or leaves a field blank) and the module/facet groups
-// computed from cat via buildGroups/buildModuleGroups, combined with the
+// computed from in.cat via buildGroups/buildModuleGroups, combined with the
 // css/renderedByID inputs loadTemplates and renderClaims already produced.
-// buildOrderTmpl is only ever used by attachBuildOrders, and only for a
+// in.buildOrderTmpl is only ever used by attachBuildOrders, and only for a
 // module that actually has a locked build-order artifact on disk — see
 // that function's doc comment for the graceful-degradation contract this
 // preserves for every project that hasn't adopted the feature.
@@ -515,7 +665,13 @@ func renderClaims(cat *catalog.Catalog, partials map[model.Layout]*template.Temp
 // I/O (reading each module's build-order artifact file, if any) — the same
 // already-established precedent as loadTemplates' own override-directory
 // reads, just keyed by module instead of by override filename.
-func buildShellData(cat *catalog.Catalog, cfg *config.Config, css []byte, renderedByID map[string]template.HTML, buildOrderTmpl *template.Template, generatedAt time.Time) shellData {
+//
+// The four graph fields are typed on the way OUT, not on the way in: see
+// shellData.GraphCSS and the block of comments there for why plain strings
+// at those injection sites fail silently.
+func buildShellData(in shellInputs) shellData {
+	cat, cfg := in.cat, in.cfg
+
 	var theme map[string]string
 	if cfg != nil {
 		theme = cfg.Viewer.Theme
@@ -524,9 +680,9 @@ func buildShellData(cat *catalog.Catalog, cfg *config.Config, css []byte, render
 	// groups is buildModuleGroups' input only — the flat, facet-level
 	// grouping is not exposed on shellData (shell.html renders exclusively
 	// via ModuleGroups below).
-	groups := buildGroups(cat, cfg, renderedByID)
+	groups := buildGroups(cat, cfg, in.renderedByID)
 	moduleGroups := buildModuleGroups(groups)
-	moduleGroups = attachBuildOrders(moduleGroups, cfg, buildOrderTmpl)
+	moduleGroups = attachBuildOrders(moduleGroups, cfg, in.buildOrderTmpl)
 
 	title := "dossierx viewer"
 	eyebrow := ""
@@ -540,9 +696,13 @@ func buildShellData(cat *catalog.Catalog, cfg *config.Config, css []byte, render
 	return shellData{
 		Title:        title,
 		Eyebrow:      eyebrow,
-		CSS:          template.CSS(css),
+		CSS:          template.CSS(in.css),
 		ThemeCSS:     themeOverrideCSS(theme),
-		GeneratedAt:  generatedAt.Format("2006-01-02 15:04 UTC"),
+		GeneratedAt:  in.generatedAt.Format("2006-01-02 15:04 UTC"),
+		GraphCSS:     template.CSS(in.graphCSS),
+		GraphPayload: in.graphPayload,
+		GraphCoreJS:  template.JS(in.graphCoreJS),
+		GraphUIJS:    template.JS(in.graphUIJS),
 		ModuleGroups: moduleGroups,
 	}
 }

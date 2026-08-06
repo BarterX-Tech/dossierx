@@ -18,7 +18,9 @@
 //     -> TestTrimpathBuildDoesNotEmbedBuildMachinePaths
 //  5. the engine works fully offline: no CDN fonts, no remote schema
 //     fetch, no telemetry call -> TestNoNetworkReferencesAnywhereInEngine,
-//     TestCheckSucceedsWithNetworkDisabled
+//     TestCheckSucceedsWithNetworkDisabled. Commentary in .js is exempt from
+//     that scan and executable code is not, both directions pinned by
+//     TestStripJSComments.
 //  6. the engine directory, copied into a repo where a colliding path
 //     segment is already in use, makes zero assumptions about its parent
 //     directory's name -> TestEngineCopiedIntoCollidingParentDirNameWorks
@@ -423,17 +425,130 @@ var networkRefPattern = regexp.MustCompile(`(?i)https?://|cdn\.|fonts\.googleapi
 // the local server's own address in serve source and its admission checks.
 var loopbackURL = regexp.MustCompile(`(?i)https?://(127\.0\.0\.1|localhost)\b`)
 
+// stripJSComments blanks every "//" line comment and "/* … */" block comment
+// in JavaScript source, replacing each commented byte with a space and leaving
+// every newline in place. Its output therefore has the same length, the same
+// line count and the same line numbering as its input, which is what lets the
+// scan below report an offender's real line number after stripping.
+//
+// Why this exists: the property TestNoNetworkReferencesAnywhereInEngine
+// protects is that the shipped engine makes no network request, and that must
+// not weaken. But a citation in a comment makes no request. Failing the build
+// over a doc comment naming the paper an algorithm came from pushes an author
+// toward writing worse comments — precisely the wrong incentive for the
+// viewer's client files, whose non-obvious algorithms deserve citation.
+//
+// It is STRING-LITERAL AWARE for ', " and `, honouring backslash escapes, so
+// a "//" inside a string does not start a comment and
+// `const u = "https://evil.example/x";` still fails. Executable code is not
+// exempt from anything; only commentary is.
+//
+// Two limits, stated rather than hidden:
+//
+//   - A regular-expression literal is treated as division, so an adjacent
+//     "//" inside one would read as a comment start and blank the rest of that
+//     line. JS regex literals escape their interior slashes (`/\/\//`), so an
+//     adjacent pair does not occur in practice; distinguishing a regex literal
+//     from division needs a real tokenizer, which is not worth carrying here.
+//   - A backtick template literal containing a nested backtick inside a
+//     ${…} interpolation would end the literal early.
+//
+// Both failure modes blank MORE than they should, never less on executable
+// code that reads as code — they can hide an offender on one line, they cannot
+// invent an exemption for a URL sitting in a plain string or a call.
+func stripJSComments(content string) string {
+	const (
+		inCode = iota
+		inLineComment
+		inBlockComment
+		inString
+	)
+
+	out := []byte(content)
+	state := inCode
+	var quote byte
+
+	for i := 0; i < len(out); i++ {
+		c := out[i]
+		switch state {
+		case inCode:
+			switch {
+			case c == '/' && i+1 < len(out) && out[i+1] == '/':
+				out[i], out[i+1] = ' ', ' '
+				i++
+				state = inLineComment
+			case c == '/' && i+1 < len(out) && out[i+1] == '*':
+				out[i], out[i+1] = ' ', ' '
+				i++
+				state = inBlockComment
+			case c == '"' || c == '\'' || c == '`':
+				quote = c
+				state = inString
+			}
+		case inString:
+			switch {
+			case c == '\\':
+				i++ // the escaped byte is never a delimiter
+			case c == quote:
+				state = inCode
+			case c == '\n' && quote != '`':
+				// An unterminated ' or " literal ends at the newline in real
+				// JS. Recovering here stops one stray quote from exempting
+				// the whole rest of the file.
+				state = inCode
+			}
+		case inLineComment:
+			if c == '\n' {
+				state = inCode
+				continue // the newline itself is kept: line numbers must not move
+			}
+			out[i] = ' '
+		case inBlockComment:
+			if c == '\n' {
+				continue // kept, same reason
+			}
+			if c == '*' && i+1 < len(out) && out[i+1] == '/' {
+				out[i], out[i+1] = ' ', ' '
+				i++
+				state = inCode
+				continue
+			}
+			out[i] = ' '
+		}
+	}
+	return string(out)
+}
+
 // scanForNetworkRefs returns one "label:line: text" entry for every line in
 // content that matches networkRefPattern after loopback URLs are removed.
 // label is a human-readable source identifier (a file path in the real scan; a
 // synthetic name in the test).
+//
+// When label names a .js file, comments are blanked first (see
+// stripJSComments). The exemption is scoped to .js deliberately: .go, .html
+// and .css are matched exactly as before. The reported text is the ORIGINAL
+// line, not the stripped one, so a human reading a failure sees the source as
+// written.
 func scanForNetworkRefs(label, content string) []string {
+	probeSource := content
+	if strings.EqualFold(filepath.Ext(label), ".js") {
+		probeSource = stripJSComments(content)
+	}
+
+	source := strings.Split(content, "\n")
+	probed := strings.Split(probeSource, "\n")
+
 	var offenders []string
-	for i, line := range strings.Split(content, "\n") {
+	for i, line := range probed {
 		probe := loopbackURL.ReplaceAllString(line, "")
-		if networkRefPattern.MatchString(probe) {
-			offenders = append(offenders, label+":"+itoa(i+1)+": "+strings.TrimSpace(line))
+		if !networkRefPattern.MatchString(probe) {
+			continue
 		}
+		raw := line
+		if i < len(source) {
+			raw = source[i]
+		}
+		offenders = append(offenders, label+":"+itoa(i+1)+": "+strings.TrimSpace(raw))
 	}
 	return offenders
 }
@@ -490,6 +605,189 @@ func TestNoNetworkReferencesAnywhereInEngine(t *testing.T) {
 		hits := scanForNetworkRefs("synthetic.js", content)
 		if len(hits) == 0 {
 			t.Fatalf("positive control: scanner failed to detect a real external URL in %q", content)
+		}
+	})
+}
+
+// TestStripJSComments pins both directions of the comment exemption at once:
+// commentary in .js is exempt, and executable code is not — including a URL in
+// a plain string, and including a string whose CONTENTS look like a comment.
+//
+// It asserts through scanForNetworkRefs rather than on stripJSComments' output
+// text, because the scan is the thing with a contract; the stripping is an
+// implementation detail of it. The one structural property asserted directly
+// is line-count preservation, which is what makes reported line numbers true.
+func TestStripJSComments(t *testing.T) {
+	cases := []struct {
+		name         string
+		label        string
+		content      string
+		wantCount    int
+		wantAtLine   int    // 1-based; 0 means "not asserted"
+		wantInReport string // substring the offender text must carry
+	}{
+		{
+			name:      "exempt: a URL in a line comment",
+			label:     "synthetic.js",
+			content:   "// Tarjan 1972, see https://doi.example/10.1137\nconst a = 1;\n",
+			wantCount: 0,
+		},
+		{
+			name:      "exempt: a URL in a block comment",
+			label:     "synthetic.js",
+			content:   "/*\n * Algorithm from https://doi.example/10.1137\n */\nconst a = 1;\n",
+			wantCount: 0,
+		},
+		{
+			name:      "exempt: a block comment closed and reopened on one line",
+			label:     "synthetic.js",
+			content:   "const a = 1; /* https://a.example */ const b = 2; /* https://b.example */\n",
+			wantCount: 0,
+		},
+		{
+			// The existing positive control, byte for byte. If the stripping
+			// ever swallowed this, the offline guarantee would be gone and
+			// every other test here would still be green.
+			name:         "offender: fetch in executable code",
+			label:        "synthetic.js",
+			content:      "const ok = 1;\nfetch(\"https://evil.example/x\");\n",
+			wantCount:    1,
+			wantAtLine:   2,
+			wantInReport: "fetch(",
+		},
+		{
+			name:         "offender: a URL in a plain string literal",
+			label:        "synthetic.js",
+			content:      "const u = \"https://evil.example/x\";\n",
+			wantCount:    1,
+			wantAtLine:   1,
+			wantInReport: "const u =",
+		},
+		{
+			// The string-literal-awareness case: the "//" here is DATA. A
+			// naive stripper would treat it as a comment start and exempt the
+			// URL that follows it.
+			name:         "offender: a string whose contents look like a comment",
+			label:        "synthetic.js",
+			content:      "var s = \"// not a comment https://evil.example/x\";\n",
+			wantCount:    1,
+			wantAtLine:   1,
+			wantInReport: "not a comment",
+		},
+		{
+			name:         "offender: a URL in a template literal",
+			label:        "synthetic.js",
+			content:      "const u = `https://evil.example/x`;\n",
+			wantCount:    1,
+			wantAtLine:   1,
+			wantInReport: "const u =",
+		},
+		{
+			name:         "offender: a URL in a single-quoted string with an escaped quote",
+			label:        "synthetic.js",
+			content:      "const u = 'it\\'s https://evil.example/x';\n",
+			wantCount:    1,
+			wantAtLine:   1,
+			wantInReport: "const u =",
+		},
+		{
+			name:      "exempt: a trailing comment after clean code",
+			label:     "synthetic.js",
+			content:   "foo(); // https://doc.example/x\n",
+			wantCount: 0,
+		},
+		{
+			// Half a line exempt, half a line still scanned.
+			name:         "offender: the code half of a line carrying a trailing comment",
+			label:        "synthetic.js",
+			content:      "fetch(\"https://evil.example/a\"); // and see https://doc.example/b\n",
+			wantCount:    1,
+			wantAtLine:   1,
+			wantInReport: "evil.example/a",
+		},
+		{
+			// Line numbering is the property the space-preserving strip buys.
+			// The URL is on line 5 and must be reported as line 5, after four
+			// lines of comment above it.
+			name:       "offender: line number survives the stripping",
+			label:      "synthetic.js",
+			content:    "/* a\n b\n c */\n// d\nfetch(\"https://evil.example/x\");\n",
+			wantCount:  1,
+			wantAtLine: 5,
+		},
+		{
+			// Scope: the exemption is .js only. A Go comment carrying a URL
+			// still fails, exactly as before this change.
+			name:       "offender: a comment in .go is NOT exempt",
+			label:      "synthetic.go",
+			content:    "// see https://evil.example/x\nvar a = 1\n",
+			wantCount:  1,
+			wantAtLine: 1,
+		},
+		{
+			name:       "offender: a comment in .css is NOT exempt",
+			label:      "synthetic.css",
+			content:    "/* https://fonts.googleapis.com/x */\nbody { color: red }\n",
+			wantCount:  1,
+			wantAtLine: 1,
+		},
+		{
+			name:       "offender: a comment in .html is NOT exempt",
+			label:      "synthetic.html",
+			content:    "<!-- https://cdn.example/x -->\n<p>hi</p>\n",
+			wantCount:  1,
+			wantAtLine: 1,
+		},
+		{
+			// The loopback exemption must survive the new pre-pass.
+			name:      "exempt: the local serve address is still not egress",
+			label:     "synthetic.js",
+			content:   "const base = \"http://127.0.0.1:7777/api/graph\";\n",
+			wantCount: 0,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			offenders := scanForNetworkRefs(tc.label, tc.content)
+			if len(offenders) != tc.wantCount {
+				t.Fatalf("got %d offenders, want %d: %v", len(offenders), tc.wantCount, offenders)
+			}
+			if tc.wantCount == 0 {
+				return
+			}
+			if tc.wantAtLine > 0 {
+				want := tc.label + ":" + itoa(tc.wantAtLine) + ":"
+				if !strings.HasPrefix(offenders[0], want) {
+					t.Errorf("offender %q does not start with %q; a stripped line must keep its number", offenders[0], want)
+				}
+			}
+			if tc.wantInReport != "" && !strings.Contains(offenders[0], tc.wantInReport) {
+				t.Errorf("offender %q does not carry %q; the report must show the line as written", offenders[0], tc.wantInReport)
+			}
+		})
+	}
+
+	// Structural: stripping must never change the number of lines, which is
+	// the invariant every line number above rests on.
+	t.Run("line_count_is_preserved", func(t *testing.T) {
+		samples := []string{
+			"",
+			"\n",
+			"const a = 1;\n// x\n/* y\n z */\nconst b = 2;\n",
+			"var s = \"unterminated;\nfetch(\"https://evil.example/x\");\n",
+			"/* never closed\nconst a = 1;\n",
+			"const t = `multi\nline`;\n",
+		}
+		for _, s := range samples {
+			got := stripJSComments(s)
+			if a, b := strings.Count(s, "\n"), strings.Count(got, "\n"); a != b {
+				t.Errorf("stripJSComments(%q) changed the newline count: %d -> %d", s, a, b)
+			}
+			if len(got) != len(s) {
+				t.Errorf("stripJSComments(%q) changed the byte length: %d -> %d", s, len(s), len(got))
+			}
 		}
 	})
 }

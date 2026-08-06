@@ -1,0 +1,1106 @@
+{
+  "claims": [
+    {
+      "id": "cli.behavior.dry-run-writes-nothing",
+      "facet": "behavior",
+      "module": "cli",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.behavior.exit-codes",
+      "facet": "behavior",
+      "module": "cli",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.behavior.format-flag",
+      "facet": "behavior",
+      "module": "cli",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.contract.check-noun",
+      "facet": "contract",
+      "module": "cli",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.contract.check-is-fail-fast",
+          "cli.behavior.exit-codes"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.contract.noun-list-is-fixed",
+      "facet": "contract",
+      "module": "cli",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "cli.contract.serve-noun",
+      "facet": "contract",
+      "module": "cli",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.decision.agent-operates-human-reviews",
+      "facet": "decision",
+      "module": "cli",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.contract.serve-noun"
+        ],
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "cli.decision.no-new-noun-for-the-graph",
+      "facet": "decision",
+      "module": "cli",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.contract.noun-list-is-fixed"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.overview.six-nouns",
+      "facet": "overview",
+      "module": "cli",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "orientation-note",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.schema.error-codes",
+      "facet": "schema",
+      "module": "cli",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "cli.schema.json-envelope"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "cli.schema.json-envelope",
+      "facet": "schema",
+      "module": "cli",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.behavior.catalog-groups-by-facet",
+      "facet": "behavior",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.catalog-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.behavior.degree-counting",
+      "facet": "behavior",
+      "module": "engine",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.edge-kinds"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.behavior.lint-runs-before-catalog",
+      "facet": "behavior",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.edge-kinds"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.behavior.loader-walks-claims-dir",
+      "facet": "behavior",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.contract.build-is-pure",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.catalog-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.contract.check-is-fail-fast",
+      "facet": "contract",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.behavior.lint-runs-before-catalog"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.decision.facts-not-verdicts",
+      "facet": "decision",
+      "module": "engine",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "mirrors": [
+          "viewer.decision.facts-not-verdicts"
+        ],
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "engine.decision.no-code-nodes",
+      "facet": "decision",
+      "module": "engine",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "engine.decision.single-source-of-truth",
+      "facet": "decision",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.overview.start-here",
+      "facet": "overview",
+      "module": "engine",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "orientation-note",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.schema.catalog-shape",
+      "facet": "schema",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.schema.claim-shape",
+      "facet": "schema",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "engine.schema.edge-kinds",
+      "facet": "schema",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.verification.determinism-suite",
+      "facet": "verification",
+      "module": "engine",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.contract.build-is-pure"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "engine.verification.nil-safety-suite",
+      "facet": "verification",
+      "module": "engine",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.contract.build-is-pure"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.behavior.comment-digest",
+      "facet": "behavior",
+      "module": "lock",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.schema.ledger-record"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.behavior.lock-gates",
+      "facet": "behavior",
+      "module": "lock",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.schema.ledger-record"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.behavior.unlock-keeps-the-record",
+      "facet": "behavior",
+      "module": "lock",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.schema.ledger-record"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.contract.lock-is-human-approved",
+      "facet": "contract",
+      "module": "lock",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.behavior.lock-gates"
+        ],
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "lock.contract.review-pending-is-engine-managed",
+      "facet": "contract",
+      "module": "lock",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.behavior.lock-gates"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.decision.no-migration-command",
+      "facet": "decision",
+      "module": "lock",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.schema.ledger-record"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.overview.ledger-first",
+      "facet": "overview",
+      "module": "lock",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "orientation-note",
+      "edges": {
+        "rests_on": [
+          "lock.schema.lock-store"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.schema.ledger-record",
+      "facet": "schema",
+      "module": "lock",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.schema.lock-store"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.schema.lock-store",
+      "facet": "schema",
+      "module": "lock",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.claim-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "lock.verification.ledger-audit-suite",
+      "facet": "verification",
+      "module": "lock",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "lock.behavior.lock-gates"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.behavior.counter-increment",
+      "facet": "behavior",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.schema.counter-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.behavior.flush-on-exit",
+      "facet": "behavior",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.schema.counter-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.contract.disabled-by-default",
+      "facet": "contract",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.contract.no-egress"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.contract.no-egress",
+      "facet": "contract",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.behavior.flush-on-exit"
+        ],
+        "governed_by": {
+          "type": "telemetry.decision.counters-are-local"
+        }
+      }
+    },
+    {
+      "id": "telemetry.decision.counters-are-local",
+      "facet": "decision",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.overview.what-this-module-is",
+      "facet": "overview",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "orientation-note",
+      "edges": {
+        "rests_on": [
+          "telemetry.schema.counter-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.schema.counter-shape",
+      "facet": "schema",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.schema.event-names",
+      "facet": "schema",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.schema.counter-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "telemetry.verification.offline-suite",
+      "facet": "verification",
+      "module": "telemetry",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "telemetry.contract.no-egress"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.behavior.gap-rules-run-in-the-browser",
+      "facet": "behavior",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.behavior.representative-node-rule"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.behavior.pane-is-inert-until-opened",
+      "facet": "behavior",
+      "module": "viewer",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.payload-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.behavior.representative-node-rule",
+      "facet": "behavior",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.behavior.scope-filter"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.behavior.scope-filter",
+      "facet": "behavior",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.node-fields"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.contract.no-network-at-runtime",
+      "facet": "contract",
+      "module": "viewer",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.payload-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.contract.render-is-pure",
+      "facet": "contract",
+      "module": "viewer",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.contract.build-is-pure"
+        ],
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "viewer.decision.canvas-not-svg",
+      "facet": "decision",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.payload-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.decision.colour-is-not-the-only-channel",
+      "facet": "decision",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.decision.facts-not-verdicts",
+      "facet": "decision",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "mirrors": [
+          "engine.decision.facts-not-verdicts"
+        ],
+        "governed_by": {
+          "type": "engine.decision.single-source-of-truth"
+        }
+      }
+    },
+    {
+      "id": "viewer.overview.read-me-first",
+      "facet": "overview",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "orientation-note",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.payload-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.schema.node-fields",
+      "facet": "schema",
+      "module": "viewer",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.schema.payload-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.schema.payload-shape",
+      "facet": "schema",
+      "module": "viewer",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "engine.schema.catalog-shape"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "viewer.verification.browser-suite",
+      "facet": "verification",
+      "module": "viewer",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "viewer.behavior.pane-is-inert-until-opened"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "a demo corpus claim, not backed by any real doctrine"
+        }
+      }
+    }
+  ],
+  "by_facet": {
+    "behavior": [
+      "cli.behavior.dry-run-writes-nothing",
+      "cli.behavior.exit-codes",
+      "cli.behavior.format-flag",
+      "engine.behavior.catalog-groups-by-facet",
+      "engine.behavior.degree-counting",
+      "engine.behavior.lint-runs-before-catalog",
+      "engine.behavior.loader-walks-claims-dir",
+      "lock.behavior.comment-digest",
+      "lock.behavior.lock-gates",
+      "lock.behavior.unlock-keeps-the-record",
+      "telemetry.behavior.counter-increment",
+      "telemetry.behavior.flush-on-exit",
+      "viewer.behavior.gap-rules-run-in-the-browser",
+      "viewer.behavior.pane-is-inert-until-opened",
+      "viewer.behavior.representative-node-rule",
+      "viewer.behavior.scope-filter"
+    ],
+    "contract": [
+      "cli.contract.check-noun",
+      "cli.contract.noun-list-is-fixed",
+      "cli.contract.serve-noun",
+      "engine.contract.build-is-pure",
+      "engine.contract.check-is-fail-fast",
+      "lock.contract.lock-is-human-approved",
+      "lock.contract.review-pending-is-engine-managed",
+      "telemetry.contract.disabled-by-default",
+      "telemetry.contract.no-egress",
+      "viewer.contract.no-network-at-runtime",
+      "viewer.contract.render-is-pure"
+    ],
+    "decision": [
+      "cli.decision.agent-operates-human-reviews",
+      "cli.decision.no-new-noun-for-the-graph",
+      "engine.decision.facts-not-verdicts",
+      "engine.decision.no-code-nodes",
+      "engine.decision.single-source-of-truth",
+      "lock.decision.no-migration-command",
+      "telemetry.decision.counters-are-local",
+      "viewer.decision.canvas-not-svg",
+      "viewer.decision.colour-is-not-the-only-channel",
+      "viewer.decision.facts-not-verdicts"
+    ],
+    "overview": [
+      "cli.overview.six-nouns",
+      "engine.overview.start-here",
+      "lock.overview.ledger-first",
+      "telemetry.overview.what-this-module-is",
+      "viewer.overview.read-me-first"
+    ],
+    "schema": [
+      "cli.schema.error-codes",
+      "cli.schema.json-envelope",
+      "engine.schema.catalog-shape",
+      "engine.schema.claim-shape",
+      "engine.schema.edge-kinds",
+      "lock.schema.ledger-record",
+      "lock.schema.lock-store",
+      "telemetry.schema.counter-shape",
+      "telemetry.schema.event-names",
+      "viewer.schema.node-fields",
+      "viewer.schema.payload-shape"
+    ],
+    "verification": [
+      "engine.verification.determinism-suite",
+      "engine.verification.nil-safety-suite",
+      "lock.verification.ledger-audit-suite",
+      "telemetry.verification.offline-suite",
+      "viewer.verification.browser-suite"
+    ]
+  },
+  "by_module": {
+    "cli": [
+      "cli.behavior.dry-run-writes-nothing",
+      "cli.behavior.exit-codes",
+      "cli.behavior.format-flag",
+      "cli.contract.check-noun",
+      "cli.contract.noun-list-is-fixed",
+      "cli.contract.serve-noun",
+      "cli.decision.agent-operates-human-reviews",
+      "cli.decision.no-new-noun-for-the-graph",
+      "cli.overview.six-nouns",
+      "cli.schema.error-codes",
+      "cli.schema.json-envelope"
+    ],
+    "engine": [
+      "engine.behavior.catalog-groups-by-facet",
+      "engine.behavior.degree-counting",
+      "engine.behavior.lint-runs-before-catalog",
+      "engine.behavior.loader-walks-claims-dir",
+      "engine.contract.build-is-pure",
+      "engine.contract.check-is-fail-fast",
+      "engine.decision.facts-not-verdicts",
+      "engine.decision.no-code-nodes",
+      "engine.decision.single-source-of-truth",
+      "engine.overview.start-here",
+      "engine.schema.catalog-shape",
+      "engine.schema.claim-shape",
+      "engine.schema.edge-kinds",
+      "engine.verification.determinism-suite",
+      "engine.verification.nil-safety-suite"
+    ],
+    "lock": [
+      "lock.behavior.comment-digest",
+      "lock.behavior.lock-gates",
+      "lock.behavior.unlock-keeps-the-record",
+      "lock.contract.lock-is-human-approved",
+      "lock.contract.review-pending-is-engine-managed",
+      "lock.decision.no-migration-command",
+      "lock.overview.ledger-first",
+      "lock.schema.ledger-record",
+      "lock.schema.lock-store",
+      "lock.verification.ledger-audit-suite"
+    ],
+    "telemetry": [
+      "telemetry.behavior.counter-increment",
+      "telemetry.behavior.flush-on-exit",
+      "telemetry.contract.disabled-by-default",
+      "telemetry.contract.no-egress",
+      "telemetry.decision.counters-are-local",
+      "telemetry.overview.what-this-module-is",
+      "telemetry.schema.counter-shape",
+      "telemetry.schema.event-names",
+      "telemetry.verification.offline-suite"
+    ],
+    "viewer": [
+      "viewer.behavior.gap-rules-run-in-the-browser",
+      "viewer.behavior.pane-is-inert-until-opened",
+      "viewer.behavior.representative-node-rule",
+      "viewer.behavior.scope-filter",
+      "viewer.contract.no-network-at-runtime",
+      "viewer.contract.render-is-pure",
+      "viewer.decision.canvas-not-svg",
+      "viewer.decision.colour-is-not-the-only-channel",
+      "viewer.decision.facts-not-verdicts",
+      "viewer.overview.read-me-first",
+      "viewer.schema.node-fields",
+      "viewer.schema.payload-shape",
+      "viewer.verification.browser-suite"
+    ]
+  }
+}

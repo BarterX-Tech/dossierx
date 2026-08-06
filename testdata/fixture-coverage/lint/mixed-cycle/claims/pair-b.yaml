@@ -1,0 +1,11 @@
+id: mixcyc.contract.pair-b
+facet: contract
+module: mixcyc
+status: draft
+layout: card
+body: |
+  The other half of the alternating 2-claim loop. It closes the union graph
+  back on the first claim through the authority relation, which is the hop
+  the dependency walk never follows.
+governed_by:
+  type: mixcyc.contract.pair-a

@@ -1,0 +1,13 @@
+id: engine.behavior.catalog-groups-by-facet
+facet: behavior
+module: engine
+status: locked
+layout: card
+build_role: behavior
+body: |
+  Grouping is built by an explicit sort rather than by ranging over a map, so two builds over the same input are byte-identical.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - engine.schema.catalog-shape

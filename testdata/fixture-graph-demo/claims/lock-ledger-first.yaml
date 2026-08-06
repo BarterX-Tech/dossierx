@@ -1,0 +1,13 @@
+id: lock.overview.ledger-first
+facet: overview
+module: lock
+status: draft
+layout: banner
+build_role: orientation
+body: |
+  Approval is evidence, not a flag. Everything in this module exists to make an approval survive the edit that would erase it.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - lock.schema.lock-store

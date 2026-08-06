@@ -1,0 +1,12 @@
+id: engine.decision.facts-not-verdicts
+facet: decision
+module: engine
+status: draft
+layout: card
+build_role: orientation
+body: |
+  The engine states facts and the reader's browser computes verdicts. A gap list precomputed while rendering would be wrong the moment a reader narrows the view to one module, because every connectivity question is relative to what is currently on screen.
+governed_by:
+  type: engine.decision.single-source-of-truth
+mirrors:
+  - viewer.decision.facts-not-verdicts

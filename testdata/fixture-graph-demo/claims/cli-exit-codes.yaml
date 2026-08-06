@@ -1,0 +1,13 @@
+id: cli.behavior.exit-codes
+facet: behavior
+module: cli
+status: locked
+layout: card
+build_role: behavior
+body: |
+  The exit status distinguishes a clean run, a review failure and an operational failure, so a hook can branch without parsing prose.
+governed_by:
+  type: none
+  reason: a demo corpus claim, not backed by any real doctrine
+rests_on:
+  - cli.schema.json-envelope

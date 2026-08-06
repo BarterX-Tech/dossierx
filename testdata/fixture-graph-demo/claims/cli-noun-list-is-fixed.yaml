@@ -1,0 +1,12 @@
+id: cli.contract.noun-list-is-fixed
+facet: contract
+module: cli
+status: locked
+layout: card
+build_role: api
+body: |
+  A new capability rides inside an existing command's output rather than becoming a new command. A command surface that grows with every feature stops being learnable.
+governed_by:
+  type: engine.decision.single-source-of-truth
+rests_on:
+  - cli.schema.json-envelope

@@ -75,6 +75,43 @@ linters-settings:
           - pkg: github.com/BarterX-Tech/dossierx/internal/render
             desc: "internal/render is top-of-stack; nothing under internal/{lint,catalog,lock,loader,implink} may import it"
 
+      # internal/graph builds the claims-graph payload the viewer's graph
+      # pane reads, and the whole point of that package is stated as an
+      # import direction: THE GRAPH AUDITS CLAIMS, NOT CODE.
+      #
+      # Each of the three denials below closes a specific, tempting mistake
+      # rather than being defensive in general:
+      #
+      #   - implink answers "is this claim grounded in real code?". That is
+      #     "dossierx check"'s impl-link verdict, with its own vocabulary and
+      #     its own exit code, and a second surface for it would be a second
+      #     place to keep correct. An import here would mean somebody was
+      #     re-adding the has_code_link field this design removed outright.
+      #   - lint computes verdicts. graph emits facts and lets the browser
+      #     compute verdicts against the reader's current scope; a gap list
+      #     precomputed in Go is wrong the moment a reader scopes to one
+      #     module. It is also the wrong direction: check runs lint BEFORE
+      #     catalog, so lint's answers do not exist to be borrowed here.
+      #   - render is top-of-stack and imports graph. The reverse edge is an
+      #     import cycle waiting to be written by whoever wants
+      #     components.ClaimLabel (see internal/graph/build.go's claimLabel,
+      #     which is duplicated for exactly this reason and says so).
+      #
+      # The prefix match is load-bearing on the last one: it also denies
+      # internal/render/components, which transitively imports both lint and
+      # implink and would smuggle them in through the side door.
+      graph-audits-claims-not-code:
+        list-mode: lax
+        files:
+          - "**/internal/graph/**"
+        deny:
+          - pkg: github.com/BarterX-Tech/dossierx/internal/implink
+            desc: "internal/graph audits claims, not code — whether a claim is grounded in real code is dossierx check's impl-link verdict and stays there"
+          - pkg: github.com/BarterX-Tech/dossierx/internal/lint
+            desc: "internal/graph emits facts; verdicts are computed in the browser against the reader's current scope"
+          - pkg: github.com/BarterX-Tech/dossierx/internal/render
+            desc: "internal/render is top-of-stack and imports internal/graph; the reverse edge is a cycle"
+
   errcheck:
     check-type-assertions: true
     check-blank: true
