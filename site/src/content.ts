@@ -216,7 +216,7 @@ const releases: Release[] = [
           version: "v0.4.1",
           date: "2026-08-04",
           title: "raw_html becomes an attachment, and the edges footer folds away",
-          tag: "Latest release",
+          tag: "Previous release",
           commit: "5327923",
           highlights: [
             "`raw_html` is an ATTACHMENT legal on any layout, not a layout a claim has to adopt (closes issue #25). A claim that is genuinely a table, or a list of steps, can now carry a diagram or a small rendered mockup alongside its own content — all seven layouts render the attachment after the claim's own body/rows/steps and before the edges footer. `layout: mockup` remains a real layout with its own empty state; it simply stops being the toll gate you had to pass through to show anything rendered.",
@@ -226,6 +226,23 @@ const releases: Release[] = [
             "SILENT: an already-locked, byte-identical claim renders differently. Every layout that carries a chip or a footer emits different HTML from the same locked bytes — no edit, no content-hash move, no review_pending flip, nothing in the lock store and nothing for `dossierx check` to report. Same shape as v0.4.0's table fix and v0.3.1's renderer: re-run the render to pick it up, and `dossierx claim unlock` is the deliberate way to revisit a claim whose rendered output you now want to read again.",
             "SILENT: a locked claim that ALREADY carries raw_html re-hashes once against its dependents. The content hash — the rests_on/mirrors/governed_by drift baseline — now folds in raw_html when it is non-empty, so editing the attachment this release newly allows on a rule-bearing claim is no longer invisible to the claims resting on it. Gated, not additive: a claim with no raw_html, which is every claim before this release and most after it, feeds the hash byte-identical input and moves nothing. The one case that does move is a pre-existing allowlisted, reviewed mockup claim named by another locked claim's edges — that dependent flips review_pending once, with no edit and no ledger event.",
             "No migration, and a patch bump: no schema_version, on-disk store, config or CLI change. The raw_html widening is a relaxation of where a gate applies rather than a break in it, and a review_pending flip caused only by the hash widening clears the ordinary way — `dossierx claim reaudit --confirm`, or unlock, fix, lock.",
+          ],
+        },
+        {
+          version: "v0.5.0",
+          date: "2026-08-06",
+          title: "a claims graph in the viewer",
+          tag: "Latest release",
+          // commit is set at TAG time, to the merge commit's short sha — it cannot
+          // exist before the merge. See docs/RELEASING.md.
+          highlights: [
+            "BREAKING: `dossierx check` now fails on a dependency loop that alternates `rests_on` and `governed_by`. The new `mixed-cycle` lint runs at ERROR severity, taking the registered rule count from 27 to 28. It walks the union of both graphs carrying the edge kind on every hop and reports a cycle whose hops include at least one of each — \"A rests_on B, B governed_by A\". Neither existing rule can see that shape: `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so a mixed loop presents no back edge to either walk and passed the whole registry. A project carrying one passed before this release and exits 1 after it, with no edit on its side, no content-hash move and nothing in the lock store to explain it.",
+            "There is deliberately no migration command and no migration document: a corpus containing this shape was always malformed, the engine simply could not see it. The recovery is to break the loop — the finding names every claim on it — and re-run `dossierx check`. Where those claims are locked that is unlock, edit, lock, the same as any other correction. `mirrors` is not part of the union graph and never trips the rule.",
+            "The rendered viewer now carries a \"Claims graph\" pane: a canvas view of the corpus's `rests_on`, `governed_by` and `mirrors` edges, with selectable overlays (isolated & weakly linked, dependency cycles, governance, review pending, open comment threads, draft vs locked), a per-claim detail panel that includes an `in a cycle` row, granularity collapse to modules or facets, zoom, pan and drag. Above 300 claims the pane opens at module granularity rather than drawing every claim — the threshold is a legibility limit, not a performance one: layout stays under 5ms at 3000 nodes, but readable labels fall from 12 at 300 to 0 at 880.",
+            "It is built by a new `internal/graph` package as a JSON payload inlined into the single self-contained `index.html`, alongside three new embedded client files. No external assets, so it works over `file://`. There is no new CLI noun and no new schema field. The pane is a third full-viewport overlay whose body scroll lock is additive with the sidebar drawer's and the comment panel's rather than mutually exclusive with them.",
+            "`dossierx serve` gains `GET /api/graph`, backing a refresh button that rebuilds and re-stamps the payload from the current catalog at request time rather than reusing the render's. The button is absent over `file://`, where there is nothing to refresh from.",
+            "`testdata/fixture-graph-demo` is a third committed sample viewer — a 58-claim fixture that is itself a ledger-covered dossierx project, so its comment digest is a tracked input alongside its lock store. `tests/fixture_staleness_test.go` now fails the build when a committed sample viewer no longer matches what the current renderer produces, instead of leaving a stale artifact to be noticed at release time.",
+            "Not in this release, and stated so deliberately: any code-grounding signal. The graph audits claims, not code. There is no `has_code_link` field, no \"locked, ungrounded\" rule and no `implink` argument.",
           ],
         },
 ];
