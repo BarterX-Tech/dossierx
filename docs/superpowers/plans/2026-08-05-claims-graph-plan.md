@@ -421,7 +421,7 @@ The pane itself. DOM, canvas, controls, panels, refresh, hash writing.
 | 47 | Force layout + interaction: node drag, background pan, scroll zoom, double-click to expand a group. | `node --check` **(CONDITIONAL)**; executed by step 73 |
 | 48 | Gaps rail: facts block above a visually separated hints block, hint items labelled as guesses, jump-to-node on click, live count. Keys off `graph-core.js`'s stable rule ids, never display text. | `node --check` **(CONDITIONAL)**; executed by step 70 |
 | 49 | Detail panel: id, **facet by name**, status, build role, scope-relative degree, project-wide degree, governor and governed lists, cycle membership, and an explicit "open claim" link. Design §4.2 channel 3. | `node --check` **(CONDITIONAL)**; executed by step 73 |
-| 50 | Auto-collapse: `AUTO_COLLAPSE_ABOVE = 600` as one named constant, the notice naming the real numbers, and a manual override that warns rather than blocks. | `grep -n 'AUTO_COLLAPSE_ABOVE' internal/render/viewer/template/graph-ui.js` |
+| 50 | Auto-collapse: `AUTO_COLLAPSE_ABOVE = 300` (measured; was 600) as one named constant, the notice naming the real numbers, and a manual override that warns rather than blocks. | `grep -n 'AUTO_COLLAPSE_ABOVE' internal/render/viewer/template/graph-ui.js` |
 | 51 | Hash state: read on open, write via `history.replaceState`, `hashchange` listener for externally pasted URLs only. Design §9. | `node --check` **(CONDITIONAL)**; executed by step 75 |
 | 52 | Lane gate. | `provetest ./tests/ 'TestNoNetworkReferencesAnywhereInEngine' -v && go build ./... && go test ./... && git status --porcelain` |
 
@@ -558,7 +558,7 @@ executor is missing when its lane gate runs, the lane is not done.
 | L4 step 47 | force layout, drag/pan/zoom/expand | steps 73, 74 (expand and camera only; layout has no stable assertion) |
 | L4 step 48 | gaps rail | step 70 |
 | L4 step 49 | detail panel | step 73 |
-| L4 step 50 | 600-node auto-collapse | step 73 (seeded above the threshold) |
+| L4 step 50 | 300-node auto-collapse | step 73 (seeded above the threshold) |
 | L4 step 51 | hash read/write | steps 75, 76 |
 | L2 steps 55–57 | embed, typing, payload call | steps 53/59, 71 |
 | L2 step 59 | pane mount point | step 76 |
@@ -689,7 +689,7 @@ regeneration is inside L2's commit rather than a trailing chore commit.
 6.  feat(viewer): add graph-ui.js and graph.css, the claims graph pane
 
     Canvas pane, five-group control bar, gaps rail with facts above labelled
-    heuristics, detail panel, 600-node auto-collapse, and filter state in the
+    heuristics, detail panel, 300-node auto-collapse, and filter state in the
     URL hash. Chrome colour comes from style.css's fixed theme token
     allowlist; the categorical palette is the file's one documented
     literal-colour block, because that allowlist has no categorical slots.

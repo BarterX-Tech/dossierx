@@ -652,12 +652,22 @@ The contract:
 
 Canvas from day one; no SVG, no DOM node per claim.
 
-Above **600 claim nodes** the pane opens at module granularity automatically,
+Above **300 claim nodes** the pane opens at module granularity automatically,
 shows a visible notice naming the number ("showing 1,240 claims collapsed into 9
-modules"), and offers a manual override that **warns rather than blocks**. 600 is
-a guess and will be wrong for somebody; it lives in one named constant in
-`graph-ui.js`, is stated in the notice text, and gets revisited when a real large
-corpus exists.
+modules"), and offers a manual override that **warns rather than blocks**.
+
+The number was 600, guessing that the canvas would become slow. It was measured
+in a real browser at 300 / 600 / 880 / 1500 / 3000 claims and the guess was wrong
+about which axis fails. Frame work stays between 1.6ms and 4.9ms across that
+whole range — under a third of a frame budget, pan and zoom smooth throughout.
+What fails is reading: counting the labels the collision pass actually paints at
+the fitted camera gives 12 of 300, 9 of 600, and **zero of 880**. The threshold
+now sits where legibility stops rather than where performance would have.
+
+It remains one named constant in `graph-ui.js`, stated in the notice text and
+crossable from it, because the measurement used synthetic corpora — which are
+more uniform than real ones and therefore optimistic. It can show 600 was too
+high; it could never have shown 300 is safe.
 
 The pane is **inert until first opened**. At parse time `graph-ui.js` registers
 one delegated listener and checks the hash. It builds no DOM, **parses no

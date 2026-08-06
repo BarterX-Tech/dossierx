@@ -85,12 +85,21 @@
   var HASH_PREFIX = 'g=';
 
   // AUTO_COLLAPSE_ABOVE is the claim count above which the pane opens at
-  // module granularity instead of drawing every claim. 600 is a guess and
-  // will be wrong for somebody, which is exactly why it lives here as ONE
-  // named constant, is stated out loud in the notice the reader sees, and is
-  // overridable from that notice. It gets revisited when a real corpus this
-  // large exists.
-  var AUTO_COLLAPSE_ABOVE = 600;
+  // module granularity instead of drawing every claim.
+  //
+  // It was 600, guessing that the canvas would get slow. Measured, the canvas
+  // never gets slow: median frame work is 1.6ms at 300 claims, 3.1ms at 600
+  // and 4.2ms at 3000, all under a third of a frame budget, with pan and zoom
+  // smooth throughout. LEGIBILITY is the constraint, and it fails far earlier.
+  // Counting the labels the collision pass actually paints at the fitted
+  // camera: 12 of 300, 9 of 600, and ZERO of 880. A view that is fast and
+  // unreadable is not a view, so the threshold now sits where reading stops
+  // working rather than where drawing would have.
+  //
+  // Still one named constant, still stated out loud in the notice, still
+  // overridable from it — a threshold a reader cannot see and cannot cross is
+  // a threshold nobody can report as wrong.
+  var AUTO_COLLAPSE_ABOVE = 300;
 
   // ---- Labels ------------------------------------------------------------
   //
@@ -3269,10 +3278,11 @@
   // manual override that WARNS RATHER THAN BLOCKS. A reader who wants every
   // node gets every node; they are simply told first what that costs.
   //
-  // 600 is a guess and will be wrong for somebody. That is why it is one
-  // named constant, why the notice states it, and why the override exists —
-  // a threshold a reader cannot see and cannot cross is a threshold nobody
-  // can report as wrong.
+  // The number is measured rather than guessed (see AUTO_COLLAPSE_ABOVE), but
+  // it is measured on SYNTHETIC corpora, which are more uniform than real ones
+  // and therefore optimistic. That is why it is still one named constant, why
+  // the notice states it, and why the override exists — a threshold a reader
+  // cannot see and cannot cross is a threshold nobody can report as wrong.
   //
   // A pasted deep link is never overridden: if the hash already carries a
   // granularity, that is the reader's explicit choice and this stays out of

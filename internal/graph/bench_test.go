@@ -48,8 +48,8 @@ func syntheticCorpus(n int) []model.Claim {
 // number somebody can re-measure, not a claim in a document.
 //
 // 1,000 claims is the size this benchmark fixes on: it is well above any
-// corpus this engine has actually seen and above the 600-node threshold at
-// which the pane auto-collapses to module granularity, so it measures the
+// corpus this engine has actually seen and well above the 300-node threshold
+// at which the pane auto-collapses to module granularity, so it measures the
 // case that would hurt rather than the case that is common.
 func BenchmarkBuild(b *testing.B) {
 	cfg := &config.Config{

@@ -613,7 +613,14 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 // project on the other side of AUTO_COLLAPSE_ABOVE. It shares the prefix so
 // one -run pattern still runs both.
 func TestGraphPaneInertUntilOpenedAutoCollapse(t *testing.T) {
-	const total = 601 // one over graph-ui.js's AUTO_COLLAPSE_ABOVE
+	// autoCollapseAbove mirrors graph-ui.js's AUTO_COLLAPSE_ABOVE. It is a
+	// literal here because the constant lives inside an IIFE and is not
+	// reachable from the page, so the two are coupled by this comment and by
+	// the notice assertion below, which requires the page to say the same
+	// number back. Changing the constant without changing this fails loudly
+	// rather than silently testing the wrong threshold.
+	const autoCollapseAbove = 300
+	const total = autoCollapseAbove + 1
 	p := newProjectRaw(t, `schema_version: 1
 facets:
   - contract
@@ -647,7 +654,11 @@ governed_by:
 		t.Fatalf("granularity above the threshold = %q, want module", got)
 	}
 	notice := evalString(t, ctx, `document.querySelector('.dxg-notices').textContent`)
-	for _, want := range []string{"601", "3 modules", "600-claim threshold"} {
+	for _, want := range []string{
+		fmt.Sprintf("%d", total),
+		"3 modules",
+		fmt.Sprintf("%d-claim threshold", autoCollapseAbove),
+	} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("auto-collapse notice %q does not name %q", notice, want)
 		}
@@ -658,7 +669,7 @@ governed_by:
 	runCDP(t, ctx, chromedp.Click(`.dxg-notices .dxg-notice-action`, chromedp.ByQuery))
 	pollTrue(t, ctx, `document.getElementById('dxgGranularity').value === 'claims'`)
 	pollTrue(t, ctx, `!!document.querySelector('.dxg-notices .dxg-notice--warn')`)
-	if !strings.Contains(evalString(t, ctx, `document.querySelector('.dxg-notice--warn').textContent`), "601") {
+	if !strings.Contains(evalString(t, ctx, `document.querySelector('.dxg-notice--warn').textContent`), fmt.Sprintf("%d", total)) {
 		t.Fatal("the override warning must name the real claim count")
 	}
 }
