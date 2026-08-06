@@ -17,6 +17,13 @@ a mixed loop presents no back edge to either walk and passed the entire registry
 carrying one passed `dossierx check` before this release and exits 1 after it, with no edit on
 its side, no content-hash move and nothing in `.dossierx-lock-store.json` to explain the change.
 
+**Re-run `dossierx skills export` after upgrading.** Upgrading the binary does not touch skills
+already exported into a project — they are plain files in your repo, and nothing in `dossierx check`
+reports that they are a version behind. A project that upgrades without re-exporting keeps the
+v0.4.1 router, which has no `mixed-cycle` section, so its agent meets this refusal on a corpus it did
+not touch, hunts for what it broke, finds nothing, and loops. That is the exact failure the section
+below exists to prevent.
+
 There is deliberately no migration command and no migration document: a corpus containing this
 shape was always malformed, the engine simply could not see it. The recovery is to break the loop
 — the finding names every claim on it — and re-run `dossierx check`. Where those claims are
@@ -36,7 +43,13 @@ drag. Above 300 claims the pane opens at module granularity rather than drawing 
 It is built by a new `internal/graph` package as a JSON payload inlined into the single
 self-contained `index.html`, alongside three new embedded client files (`graph-core.js`,
 `graph-ui.js`, `graph.css`). No external assets, so it works over `file://`. There is no new CLI
-noun and no new schema field. The pane is a third full-viewport overlay with its own body scroll
+noun and no new schema field.
+
+**Every project's rendered viewer changes on its next render, and gets roughly 3× larger** — the
+committed basic fixture goes from 108,577 to 348,496 bytes for the same `dossierx check`. The pane
+is rendered unconditionally; there is no config opt-out. No claim's own markup changed, so this is
+additive chrome rather than v0.4.1's shape where locked bodies re-rendered — but the artifact you
+ship does change, so re-run the render to pick it up. The pane is a third full-viewport overlay with its own body scroll
 lock (`body.dxg-open`) that is additive with the sidebar drawer's and the comment panel's rather
 than mutually exclusive with them.
 

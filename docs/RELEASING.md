@@ -64,9 +64,16 @@ checklist for that half.
       example, and the router carries a section for it.
 - [ ] **The site's release entry is appended.** In `site/src/content.ts` the
       `releases` array is **oldest-first**, and `ReleaseTimeline` treats
-      `releases[releases.length - 1]` as current. Append; do not prepend. Set
-      `commit` on the new entry, and move `tag: "Latest release"` off the
-      previous one.
+      `releases[releases.length - 1]` as current. Append; do not prepend. Move
+      `tag: "Latest release"` off the previous entry, and leave `commit`
+      **unset** — it is stamped after the tag, below.
+
+      Do not try to set `commit` here. It cannot converge: writing the sha is
+      itself a commit, so the value is stale the moment it lands. v0.4.1 shipped
+      that way — its entry names `5327923` while `refs/tags/v0.4.1` points at
+      `206b4a4`, and v0.5.0 chased it through two commits before the gate caught
+      the loop. The field is optional and the `dossierx version` example falls
+      back to `(devel)` until the real stamp lands.
 
       Every other version string on the site derives from that entry —
       the hero kicker, the hero badge, the release-history intro, and the
@@ -114,6 +121,22 @@ checklist for that half.
       git tag -a vX.Y.Z -m "vX.Y.Z — <title>"
       git push origin main
       git push origin vX.Y.Z
+
+      `git tag -a vX.Y.Z` with no ref tags HEAD, which is only right when
+      nothing has landed since the merge. Name the commit explicitly if
+      anything has.
+
+- [ ] **Stamp the release commit on the site,** now that it exists:
+
+      git rev-parse --short vX.Y.Z^{commit}
+
+      Put that value in the entry's `commit` field and push it to `main`. It
+      lands after the tag by necessity — the sha does not exist until the tag
+      does — so it is not inside the tagged tree, and that is correct. What
+      must agree is the binary and the site: GoReleaser stamps `main.commit`
+      from the tagged ref, and the site renders this field in the
+      `dossierx version` example, which is what the verification step below
+      reads.
 
 - [ ] Watch `Release`, `CI` and `CodeQL`. `Release` is the one that must pass;
       a failure there leaves a tag with no artifacts behind it.

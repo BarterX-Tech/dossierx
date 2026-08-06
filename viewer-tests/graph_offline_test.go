@@ -33,21 +33,52 @@ import (
 
 // requestLog records every request the browser issues on a tab, from before
 // the first navigation.
+// A request the tab reported, kept beside the document that issued it.
+//
+// The document matters because the log is the BROWSER's, not the page's. A
+// browser that phones home on its own — the Comet fallback in harness_test.go
+// posts Sentry telemetry to a URL whose path contains "/api/" — puts a request
+// in this log that the viewer never made. Asserting on the bare URL therefore
+// attributes the browser's traffic to the page, which is how this suite went
+// red on a machine with no real Chrome while CI (pinned to Chrome via
+// DOSSIERX_TEST_BROWSER) stayed green. Worse, it was intermittent: the
+// telemetry only fires inside some runs' observation window, so a single green
+// run proved nothing. Filter by issuing document and the whole class goes away.
+type reqEntry struct{ url, doc string }
+
 type requestLog struct {
-	mu   sync.Mutex
-	urls []string
+	mu      sync.Mutex
+	entries []reqEntry
 }
 
-func (l *requestLog) add(u string) {
+func (l *requestLog) add(u, doc string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	l.urls = append(l.urls, u)
+	l.entries = append(l.entries, reqEntry{url: u, doc: doc})
 }
 
 func (l *requestLog) snapshot() []string {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	return append([]string(nil), l.urls...)
+	out := make([]string, 0, len(l.entries))
+	for _, e := range l.entries {
+		out = append(out, e.url)
+	}
+	return out
+}
+
+// fromDocument returns only the requests issued BY the given document, which is
+// what "did the viewer ask for anything" actually means.
+func (l *requestLog) fromDocument(docURL string) []string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []string
+	for _, e := range l.entries {
+		if e.doc == docURL {
+			out = append(out, e.url)
+		}
+	}
+	return out
 }
 
 func (l *requestLog) matching(substr string) []string {
@@ -68,7 +99,7 @@ func watchRequests(t *testing.T, ctx context.Context) *requestLog {
 	log := &requestLog{}
 	chromedp.ListenTarget(ctx, func(ev any) {
 		if e, ok := ev.(*network.EventRequestWillBeSent); ok {
-			log.add(e.Request.URL)
+			log.add(e.Request.URL, e.DocumentURL)
 		}
 	})
 	runCDP(t, ctx, network.Enable())
@@ -93,19 +124,31 @@ func TestGraphViewerIssuesNoRequestOnAFileURL(t *testing.T) {
 		openGraphPane(t, ctx)
 		waitVisible(t, ctx, "#dxgPane .dxg-canvas")
 
-		if got := log.matching("/api/"); len(got) != 0 {
-			t.Fatalf("a file:// viewer issued %d API request(s): %v", len(got), got)
+		mine := log.fromDocument(url)
+		for _, u := range mine {
+			if strings.Contains(u, "/api/") {
+				t.Fatalf("a file:// viewer issued an API request: %s (all from this document: %v)", u, mine)
+			}
 		}
 		// Nothing at all left the document — no ping, no graph endpoint, no
 		// font, no favicon over http. Every request on this tab is the file
 		// itself.
-		for _, u := range log.snapshot() {
+		for _, u := range mine {
 			if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
 				t.Fatalf("a file:// viewer issued a network request: %s", u)
 			}
 		}
-		if n := len(log.snapshot()); n == 0 {
-			t.Fatal("the request log is empty, including the document itself: the listener never saw anything, so this proves nothing")
+		// The vacuity guard, and it is not optional: every assertion above is a
+		// "no such request" over a FILTERED list, so an empty list would pass
+		// them all while proving nothing. The document's own fetch is reported
+		// with DocumentURL == its own URL, so a correctly-attached listener
+		// always leaves at least that one entry here. Measured on the fallback
+		// browser: 119 request events on the tab, 118 of them the browser's own
+		// chrome:// UI, exactly 1 attributed to this document.
+		if len(mine) == 0 {
+			t.Fatalf("no request was attributed to %s — the listener never attached, or DocumentURL "+
+				"attribution changed; the silence asserted above would be vacuous. All requests seen: %v",
+				url, log.snapshot())
 		}
 
 		// ...and the pane it opened is fully working, which is what rules out
