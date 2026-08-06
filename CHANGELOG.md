@@ -32,6 +32,14 @@ other correction to a locked claim. `mirrors` is not part of the union graph and
 rule; a pure `rests_on` or pure `governed_by` loop still reports as `cycle` or `governed-cycle`
 and this rule stays silent on it.
 
+**Every project's rendered viewer changes on its next render, and roughly triples in size.** The
+basic fixture goes from 108,577 to 348,496 bytes for the same `dossierx check`. The pane is rendered
+unconditionally and there is no config opt-out. Your own gate cannot tell you this: no claim's
+content hash moves, no `review_pending` flips, and `dossierx check` reports exactly what it reported
+before — the artifact you ship is simply a different, larger file. No claim's own markup changed, so
+this is additive chrome rather than v0.4.1's shape where locked bodies re-rendered. Re-run the render
+to pick it up, and see the graph-pane section below.
+
 ### Added — a claims graph pane in the viewer
 
 The rendered viewer now carries a "Claims graph" pane: a canvas view of the corpus's `rests_on`,
@@ -45,11 +53,8 @@ self-contained `index.html`, alongside three new embedded client files (`graph-c
 `graph-ui.js`, `graph.css`). No external assets, so it works over `file://`. There is no new CLI
 noun and no new schema field.
 
-**Every project's rendered viewer changes on its next render, and gets roughly 3× larger** — the
-committed basic fixture goes from 108,577 to 348,496 bytes for the same `dossierx check`. The pane
-is rendered unconditionally; there is no config opt-out. No claim's own markup changed, so this is
-additive chrome rather than v0.4.1's shape where locked bodies re-rendered — but the artifact you
-ship does change, so re-run the render to pick it up. The pane is a third full-viewport overlay with its own body scroll
+The viewer's size and re-render consequence are stated in the preamble above, since a consumer's own
+gate cannot report either. The pane is a third full-viewport overlay with its own body scroll
 lock (`body.dxg-open`) that is additive with the sidebar drawer's and the comment panel's rather
 than mutually exclusive with them.
 

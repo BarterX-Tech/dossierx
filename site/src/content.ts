@@ -217,7 +217,10 @@ const releases: Release[] = [
           date: "2026-08-04",
           title: "raw_html becomes an attachment, and the edges footer folds away",
           tag: "Previous release",
-          commit: "5327923",
+          // 206b4a4, not the 5327923 this said until v0.5.0: that was the PR's merge
+          // commit, stamped before the tag existed, and `git rev-parse --short
+          // v0.4.1^{commit}` disagrees with it. See the note on the v0.5.0 entry.
+          commit: "206b4a4",
           highlights: [
             "`raw_html` is an ATTACHMENT legal on any layout, not a layout a claim has to adopt (closes issue #25). A claim that is genuinely a table, or a list of steps, can now carry a diagram or a small rendered mockup alongside its own content — all seven layouts render the attachment after the claim's own body/rows/steps and before the edges footer. `layout: mockup` remains a real layout with its own empty state; it simply stops being the toll gate you had to pass through to show anything rendered.",
             "That widens WHERE unescaped HTML may sit, and nothing else — not who may author it, not what reaches the viewer. Every other leg of the gate still fires on every raw_html-bearing claim whatever its layout: the mockup_modules allowlist, the tag/attribute/class markup allowlist, the raw_html_reviewed human-review flag, and the lock-lifecycle check. `dossierx claim flag`'s body-only rule moved with it — it now keys on whether a claim actually carries raw_html rather than on its layout, which was only ever a sound proxy while the two were the same question.",
