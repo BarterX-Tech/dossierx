@@ -138,6 +138,18 @@ func coreEdges() []any {
 	}
 }
 
+// coreNodesJSON is coreNodes() as a JS array literal, for the handful of cases
+// that build their own expression instead of going through fn + args — the ones
+// asking what happens when an ARGUMENT IS ABSENT, which fn + args cannot say
+// because it always passes exactly the arguments it is given.
+var coreNodesJSON = func() string {
+	b, err := json.Marshal(coreNodes())
+	if err != nil {
+		panic("marshal coreNodes: " + err.Error())
+	}
+	return string(b)
+}()
+
 func edge(from, to, typ string) map[string]any {
 	return map[string]any{"from": from, "to": to, "type": typ}
 }
@@ -201,18 +213,54 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "edgeKey", fn: "edgeKey", args: []any{edge("a", "b", "rests_on")}, want: "a|rests_on|b"},
 		{name: "edgeKey of an unusable edge is empty", fn: "edgeKey", args: []any{map[string]any{"from": "a"}}, want: ""},
 
-		// scopeFilter returns the node objects themselves, unchanged.
+		// scopeFilter is TWO INDEPENDENT AXES intersected, and returns the node
+		// objects themselves, unchanged.
+		//
+		// coreNodes is shaped to make every row here distinguishable: module a
+		// holds two contract claims, module b one contract claim, module c one
+		// schema claim. So `contract` spans two modules, `a`×`contract` is a
+		// strict subset of module a's claims, and `a`×`schema` is empty.
 		{name: "scopeFilter module keeps only that module", fn: "scopeFilter",
-			args: []any{coreNodes(), "module:a"},
+			args: []any{coreNodes(), "a", ""},
 			want: []any{coreNodes()[0], coreNodes()[1]}},
-		{name: "scopeFilter facet", fn: "scopeFilter", args: []any{coreNodes(), "facet:schema"},
+		{name: "scopeFilter facet", fn: "scopeFilter", args: []any{coreNodes(), "", "schema"},
 			post: ".map(function (n) { return n.id; })", want: []any{"c.one"}},
-		{name: "scopeFilter all", fn: "scopeFilter", args: []any{coreNodes(), "all"},
+		// The view the single flat control could never express alongside a
+		// module: one facet ACROSS EVERY MODULE. a and b both contribute.
+		{name: "scopeFilter facet alone spans every module", fn: "scopeFilter",
+			args: []any{coreNodes(), "", "contract"},
+			post: ".map(function (n) { return n.id; })", want: []any{"a.one", "a.two", "b.one"}},
+		{name: "scopeFilter both axes empty is the whole project", fn: "scopeFilter",
+			args: []any{coreNodes(), "", ""},
 			post: ".map(function (n) { return n.id; })", want: []any{"a.one", "a.two", "b.one", "c.one"}},
-		// An unrecognised scope shows everything: a pane that silently drew an
-		// empty graph would be indistinguishable from a project with no claims.
-		{name: "scopeFilter unrecognised shows everything", fn: "scopeFilter", args: []any{coreNodes(), "weird"},
+		// THE INTERSECTION. b.one is in facet contract and c.one is in module
+		// c, so a filter that ORed the axes would return both; an AND returns
+		// neither, and only a.one/a.two are in both.
+		{name: "scopeFilter intersects the two axes", fn: "scopeFilter",
+			args: []any{coreNodes(), "a", "contract"},
+			post: ".map(function (n) { return n.id; })", want: []any{"a.one", "a.two"}},
+		{name: "scopeFilter drops a claim in the module but not the facet", fn: "scopeFilter",
+			args: []any{coreNodes(), "c", "contract"},
+			post: ".map(function (n) { return n.id; })", want: []any{}},
+		// An empty intersection is a real answer, not a fault: module a simply
+		// has no schema claims. The pane states the pair in words rather than
+		// widening it back out behind the reader's back.
+		{name: "scopeFilter an empty intersection is empty", fn: "scopeFilter",
+			args: []any{coreNodes(), "a", "schema"},
+			post: ".map(function (n) { return n.id; })", want: []any{}},
+		// "" is the only "all" sentinel, so nothing is reserved: a project may
+		// name a module `all` and scoping to it means that module, not the lot.
+		{name: "scopeFilter treats all as an ordinary name", fn: "scopeFilter",
+			args: []any{coreNodes(), "all", ""},
+			post: ".map(function (n) { return n.id; })", want: []any{}},
+		// Total on junk: null and undefined are "" on their axis, so a
+		// half-built call filters on the axis it was given and nothing else.
+		{name: "scopeFilter is total on null axes", fn: "scopeFilter",
+			args: []any{coreNodes(), nil, nil},
 			post: ".map(function (n) { return n.id; })", want: []any{"a.one", "a.two", "b.one", "c.one"}},
+		{name: "scopeFilter with a missing facet argument filters on module only",
+			expr: `window.dossierxGraphCore.scopeFilter(` + coreNodesJSON + `, 'b').map(function (n) { return n.id; })`,
+			want: []any{"b.one"}},
 
 		{name: "representatives claims map every claim to itself", fn: "representatives",
 			args: []any{coreNodes(), "claims", []any{}}, post: ".repByClaim",
@@ -460,14 +508,49 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: []any{hint("missing_build_phase"), hint("density_outlier", "module:m3")}},
 
 		{name: "encodeState of the default state", fn: "encodeState",
-			args: []any{nil}, want: "sc=all&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
+			args: []any{nil}, want: "md=&fc=&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
 		{name: "encodeState escapes the separator and the delimiters", fn: "encodeState",
 			args: []any{map[string]any{
-				"scope": "module:a b", "granularity": "facet", "overlay": "governance",
+				"scopeModule": "a b", "scopeFacet": "c&d", "granularity": "facet", "overlay": "governance",
 				"types": []any{"mirrors"}, "labels": false,
 				"expanded": []any{"module:b", "module:a"}, "selected": "x.y",
 			}},
-			want: "sc=module%3Aa%20b&gr=facet&ov=governance&ty=m&lb=0&ex=module%3Aa,module%3Ab&se=x.y"},
+			want: "md=a%20b&fc=c%26d&gr=facet&ov=governance&ty=m&lb=0&ex=module%3Aa,module%3Ab&se=x.y"},
+		// The two axes are INDEPENDENT in the hash as well as in the control
+		// bar: either one alone encodes, and neither implies the other.
+		{name: "encodeState carries the module axis alone", fn: "encodeState",
+			args: []any{map[string]any{"scopeModule": "viewer"}},
+			want: "md=viewer&fc=&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
+		{name: "encodeState carries the facet axis alone", fn: "encodeState",
+			args: []any{map[string]any{"scopeFacet": "contract"}},
+			want: "md=&fc=contract&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
+		{name: "encodeState carries both axes at once", fn: "encodeState",
+			args: []any{map[string]any{"scopeModule": "viewer", "scopeFacet": "contract"}},
+			want: "md=viewer&fc=contract&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
+		{name: "decodeState reads both axes back", fn: "decodeState",
+			args: []any{"md=viewer&fc=contract"},
+			want: map[string]any{
+				"scopeModule": "viewer", "scopeFacet": "contract", "granularity": "claims", "overlay": "none",
+				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
+				"expanded": []any{}, "selected": "",
+			}},
+		// Each axis decodes on its own, so a hash carrying one is not silently
+		// completed with the other.
+		{name: "decodeState reads the module axis alone", fn: "decodeState",
+			args: []any{"md=viewer"}, post: ".scopeFacet", want: ""},
+		{name: "decodeState reads the facet axis alone", fn: "decodeState",
+			args: []any{"fc=contract"}, post: ".scopeModule", want: ""},
+		// The retired key. v0.5.0 is the release that introduces this format,
+		// so `sc` is owed no shim — it is simply a key this version does not
+		// know, and an unknown key falls back to the default rather than being
+		// half-understood or throwing.
+		{name: "decodeState ignores the retired sc key", fn: "decodeState",
+			args: []any{"sc=module%3Aviewer&gr=module"},
+			want: map[string]any{
+				"scopeModule": "", "scopeFacet": "", "granularity": "module", "overlay": "none",
+				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
+				"expanded": []any{}, "selected": "",
+			}},
 		// Same MEANING, same string: the codec canonicalises the two
 		// order-sensitive fields so a hash never churns on array order.
 		{name: "encodeState is stable under argument order",
@@ -476,16 +559,25 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 			want: true},
 		{name: "encodeState/decodeState round-trip losslessly",
 			expr: `(function () {
-				var s = { scope: 'facet:c d', granularity: 'module', overlay: 'cycles',
+				var s = { scopeModule: 'a b', scopeFacet: 'c d', granularity: 'module', overlay: 'cycles',
 					types: ['governed_by'], labels: false, expanded: ['facet:d', 'facet:c'], selected: 'a.b' };
 				var once = window.dossierxGraphCore.encodeState(s);
 				return window.dossierxGraphCore.encodeState(window.dossierxGraphCore.decodeState(once)) === once;
 			})()`,
 			want: true},
+		// The round trip above compares strings, which a codec that dropped
+		// BOTH axes would also satisfy. This one reads the fields back.
+		{name: "a round trip returns both axes by value",
+			expr: `(function () {
+				var c = window.dossierxGraphCore;
+				var back = c.decodeState(c.encodeState({ scopeModule: 'a b', scopeFacet: 'c d' }));
+				return back.scopeModule + '|' + back.scopeFacet;
+			})()`,
+			want: "a b|c d"},
 		{name: "decodeState of an empty string is the default state", fn: "decodeState",
 			args: []any{""},
 			want: map[string]any{
-				"scope": "all", "granularity": "claims", "overlay": "none",
+				"scopeModule": "", "scopeFacet": "", "granularity": "claims", "overlay": "none",
 				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
@@ -493,10 +585,13 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		// what makes "no edge types enabled" survive a round trip.
 		{name: "decodeState distinguishes an empty value from an absent key", fn: "decodeState",
 			args: []any{"ty="}, post: ".types", want: []any{}},
+		// Total on a hand-edited hash: unknown keys, a bare word with no "=",
+		// a truncated percent escape on each axis. Nothing throws, and every
+		// field a reader did not mangle keeps its default.
 		{name: "decodeState is total on a hand-mangled hash", fn: "decodeState",
-			args: []any{"ov=nonsense&gr=nonsense&junk&sc=%E0%A4%A"},
+			args: []any{"ov=nonsense&gr=nonsense&junk&md=%E0%A4%A&fc=%E0%A4%A"},
 			want: map[string]any{
-				"scope": "%E0%A4%A", "granularity": "claims", "overlay": "none",
+				"scopeModule": "%E0%A4%A", "scopeFacet": "%E0%A4%A", "granularity": "claims", "overlay": "none",
 				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},

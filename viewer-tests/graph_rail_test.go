@@ -94,14 +94,29 @@ func setGranularity(t *testing.T, ctx context.Context, g string) {
 	pollTrue(t, ctx, `document.getElementById('dxgGranularity').value === `+jsQuote(g))
 }
 
-func setScope(t *testing.T, ctx context.Context, scope string) {
+// setScopeModule and setScopeFacet drive the two scope selects the way a
+// reader does. They are separate helpers rather than one taking an axis
+// because the two controls are independent: a test that narrows one and not
+// the other is the common case, and composing them is how the intersection
+// gets exercised.
+func setScopeSelect(t *testing.T, ctx context.Context, id, value string) {
 	t.Helper()
 	evalVoid(t, ctx, `(function () {
-		var s = document.getElementById('dxgScope');
-		s.value = `+jsQuote(scope)+`;
+		var s = document.getElementById(`+jsQuote(id)+`);
+		s.value = `+jsQuote(value)+`;
 		s.dispatchEvent(new Event('change'));
 	})();`)
-	pollTrue(t, ctx, `document.getElementById('dxgScope').value === `+jsQuote(scope))
+	pollTrue(t, ctx, `document.getElementById(`+jsQuote(id)+`).value === `+jsQuote(value))
+}
+
+func setScopeModule(t *testing.T, ctx context.Context, module string) {
+	t.Helper()
+	setScopeSelect(t, ctx, "dxgModule", module)
+}
+
+func setScopeFacet(t *testing.T, ctx context.Context, facet string) {
+	t.Helper()
+	setScopeSelect(t, ctx, "dxgFacet", facet)
 }
 
 // drawnNodeIDs asks graph-core.js which nodes this granularity draws, from the
@@ -113,7 +128,7 @@ func drawnNodeIDs(t *testing.T, ctx context.Context, granularity string) []strin
 	return evalStrings(t, ctx, `(function () {
 		var c = window.dossierxGraphCore;
 		var p = JSON.parse(document.getElementById('dossierx-graph').textContent);
-		var reps = c.representatives(c.scopeFilter(p.nodes, 'all'), `+jsQuote(granularity)+`, []);
+		var reps = c.representatives(c.scopeFilter(p.nodes, '', ''), `+jsQuote(granularity)+`, []);
 		return reps.repNodes.map(function (n) { return n.id; });
 	})()`)
 }
@@ -304,7 +319,7 @@ func TestGraphDetailDegreeNamesTheNodeItsNumbersBelongTo(t *testing.T) {
 
 	t.Run("not drawn at all: no number is offered", func(t *testing.T) {
 		setGranularity(t, ctx, "claims")
-		setScope(t, ctx, "module:gadget")
+		setScopeModule(t, ctx, "gadget")
 		text, noted := degreeRow(t, ctx)
 		if text != "not drawn in this view" {
 			t.Fatalf("degree (view) for an out-of-scope claim = %q, want %q", text, "not drawn in this view")

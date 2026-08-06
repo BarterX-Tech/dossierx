@@ -25,7 +25,7 @@
   //    because the parse happens at first open.
   //
   // 2. ONE DELEGATED LISTENER ON document, never a listener on the trigger
-  //    button. The button lives inside <nav id="nav">, which a live-reload
+  //    button. The button lives inside the sidebar nav, which a live-reload
   //    fragment swap replaces wholesale by outerHTML assignment; a listener
   //    bound to the button would be destroyed with it and the pane would
   //    stop opening after the first edit of a serve session. The pane root
@@ -496,10 +496,16 @@
   }
 
   // ------------------------------------------------------------------
-  // The control bar — five groups, in the frozen prototype order
+  // The control bar — six groups, in the frozen prototype order
   // ------------------------------------------------------------------
   //
-  //   Scope · Granularity · Highlight overlay · Edge types · View
+  //   Module · Facet · Granularity · Highlight overlay · Edge types · View
+  //
+  // The prototype froze this order as Scope · Granularity · Highlight overlay
+  // · Edge types · View. Scope has since become two independent controls, and
+  // the two sit exactly where the one did rather than anywhere more
+  // convenient — the order is what a reader's hand has learnt, and splitting a
+  // control is not a licence to rearrange its neighbours.
   //
   // Built ONCE at mount; its option lists are refilled from the payload on
   // every open and on every refresh, because a refreshed payload can carry a
@@ -535,17 +541,40 @@
   function buildControls() {
     var c = core();
 
-    // Scope and granularity both change WHICH GRAPH is drawn rather than how
-    // it is painted, so both ask for a fit: five module nodes left at the
-    // previous camera occupy about a seventh of the canvas, and a reader who
-    // has to pinch-zoom after every control change stops using the controls.
-    var scopeGroup = controlGroup('Scope');
-    el.scope = selectControl('dxgScope', function () {
-      state.scope = el.scope.value;
+    // SCOPE IS TWO CONTROLS, NOT ONE, and they compose as an intersection.
+    //
+    // One flat list of every module AND every facet was fine on a four-claim
+    // fixture and unusable on a real project: a dozen modules and eight facets
+    // is a twenty-one-row dropdown in which the two kinds of entry are
+    // distinguished only by a prefix, and in which "this facet across every
+    // module" and "this module" can never be asked at the same time. Two
+    // controls make the second question expressible and make each list short
+    // enough to read.
+    //
+    // BOTH STAY ENABLED ALWAYS. There is no ordering rule between them and no
+    // disabled state to explain: any pair is a legal selection, including the
+    // pairs that select nothing — those are stated by renderEmptyScopeNotice
+    // rather than prevented.
+    //
+    // Both, like granularity, change WHICH GRAPH is drawn rather than how it
+    // is painted, so both ask for a fit: five module nodes left at the previous
+    // camera occupy about a seventh of the canvas, and a reader who has to
+    // pinch-zoom after every control change stops using the controls.
+    var moduleGroup = controlGroup('Module');
+    el.scopeModule = selectControl('dxgModule', function () {
+      state.scopeModule = el.scopeModule.value;
       requestFit();
       onControlChange(true);
     });
-    scopeGroup.appendChild(el.scope);
+    moduleGroup.appendChild(el.scopeModule);
+
+    var facetGroup = controlGroup('Facet');
+    el.scopeFacet = selectControl('dxgFacet', function () {
+      state.scopeFacet = el.scopeFacet.value;
+      requestFit();
+      onControlChange(true);
+    });
+    facetGroup.appendChild(el.scopeFacet);
 
     var granGroup = controlGroup('Granularity');
     el.granularity = selectControl('dxgGranularity', function () {
@@ -605,7 +634,8 @@
     viewGroup.appendChild(el.labels);
     viewGroup.appendChild(el.relayout);
 
-    el.controls.appendChild(scopeGroup);
+    el.controls.appendChild(moduleGroup);
+    el.controls.appendChild(facetGroup);
     el.controls.appendChild(granGroup);
     el.controls.appendChild(overlayGroup);
     el.controls.appendChild(typeGroup);
@@ -629,30 +659,46 @@
     onControlChange(true);
   }
 
-  // refreshControls repopulates the scope options from the CURRENT payload
-  // and pushes the state object back onto every control. It is the one place
-  // control DOM and state are reconciled, so a state arriving from a pasted
-  // hash and one arriving from a click take the same path.
+  // refreshControls repopulates the two scope option lists from the CURRENT
+  // payload and pushes the state object back onto every control. It is the one
+  // place control DOM and state are reconciled, so a state arriving from a
+  // pasted hash and one arriving from a click take the same path.
   function refreshControls() {
     var c = core();
     var groups = payload ? payload.groups : { modules: [], facets: [] };
 
-    clear(el.scope);
-    el.scope.appendChild(option('all', 'all claims'));
+    clear(el.scopeModule);
+    el.scopeModule.appendChild(option('', 'all modules'));
     var i;
     for (i = 0; i < groups.modules.length; i++) {
-      el.scope.appendChild(option('module:' + groups.modules[i], 'module — ' + groups.modules[i]));
+      el.scopeModule.appendChild(option(groups.modules[i], groups.modules[i]));
     }
+
+    clear(el.scopeFacet);
+    el.scopeFacet.appendChild(option('', 'all facets'));
     for (i = 0; i < groups.facets.length; i++) {
-      el.scope.appendChild(option('facet:' + groups.facets[i], 'facet — ' + groups.facets[i]));
+      el.scopeFacet.appendChild(option(groups.facets[i], groups.facets[i]));
     }
-    // A scope naming a module or facet the payload no longer has would leave
-    // the select showing something the graph is not doing. Fall back rather
-    // than draw an empty canvas.
-    el.scope.value = state.scope;
-    if (el.scope.selectedIndex < 0) {
-      state.scope = 'all';
-      el.scope.value = 'all';
+
+    // A selection naming a module or facet the payload does not have would
+    // leave the select showing something the graph is not doing. Fall back to
+    // that axis's "all" rather than filter on a name nothing can match.
+    //
+    // This is the ONE case an empty result is not stated but repaired, and the
+    // distinction is deliberate: an intersection of two REAL selections that
+    // happens to be empty is a fact about the project and gets said out loud,
+    // while a selection of something that does not exist is a fact about a
+    // stale link and is silently dropped. A reader can act on the first; the
+    // second only tells them a URL was old.
+    el.scopeModule.value = state.scopeModule;
+    if (el.scopeModule.selectedIndex < 0) {
+      state.scopeModule = '';
+      el.scopeModule.value = '';
+    }
+    el.scopeFacet.value = state.scopeFacet;
+    if (el.scopeFacet.selectedIndex < 0) {
+      state.scopeFacet = '';
+      el.scopeFacet.value = '';
     }
 
     el.granularity.value = state.granularity;
@@ -670,8 +716,8 @@
 
   // onControlChange is the single funnel every control passes through:
   // recompute the scene, write the hash, redraw. reheat is true for the
-  // changes that move nodes (scope, granularity, edge types) and false for
-  // the ones that only repaint (overlay, labels).
+  // changes that move nodes (module, facet, granularity, edge types) and false
+  // for the ones that only repaint (overlay, labels).
   function onControlChange(reheat) {
     refreshControls();
     recompute();
@@ -1093,12 +1139,74 @@
       );
     }
 
+    renderEmptyScopeNotice();
     renderCollapseNotice();
     renderEmptyOverlayNotice();
 
     if (transientNotice) {
       el.notices.appendChild(noticeRow(transientNotice.text, transientNotice.kind));
     }
+  }
+
+  // A SCOPE THAT SELECTS NOTHING SAYS SO, AND NAMES BOTH SELECTIONS.
+  //
+  // Module and facet are independent axes composing as an intersection, which
+  // creates a state the single Scope control never could: a pair that is
+  // individually valid and jointly empty. module "telemetry" may simply carry
+  // no "verification" claims. Left alone that draws a blank canvas with no
+  // message — the same failure renderEmptyOverlayNotice exists to prevent, and
+  // worse here, because scope also empties the gaps rail and the legend, so
+  // every part of the pane goes quiet at once and a reader has nothing left to
+  // distinguish an honest empty answer from a pane that broke.
+  //
+  // So it is stated, and the words name BOTH selections: "nothing here" is
+  // only actionable if the reader can see which combination produced it. The
+  // action widens the scope back out and touches nothing else — granularity,
+  // overlay and the edge-type toggles are not what went wrong, and resetting
+  // them would throw away work to fix a filter.
+  //
+  // Deliberately the same mechanism as the overlay notice — same strip, same
+  // "state it and offer the way out" shape — rather than a second empty-state
+  // device. A pane with two ways of saying "nothing here" ends up saying it
+  // two different ways.
+  function renderEmptyScopeNotice() {
+    if (!scene || scene.scoped.length > 0) {
+      return;
+    }
+    if (state.scopeModule === '' && state.scopeFacet === '') {
+      // Neither axis is filtering, so an empty result is the PROJECT's own
+      // emptiness, not this control's doing. Blaming a filter that is not
+      // running would send a reader to fix the wrong thing.
+      return;
+    }
+    el.notices.appendChild(
+      noticeRow(
+        'no claim is in ' +
+          scopeSelectionPhrase() +
+          ' — this combination has no claims, so there is nothing to draw',
+        'info',
+        'widen the scope',
+        function () {
+          state.scopeModule = '';
+          state.scopeFacet = '';
+          requestFit();
+          onControlChange(true);
+        }
+      )
+    );
+  }
+
+  // scopeSelectionPhrase names whichever axes are actually narrowed, so the
+  // notice above reads as a sentence in all three of the shapes that can
+  // produce an empty set: both axes chosen, a module with no claims at all,
+  // and a facet the project declares but no claim uses.
+  function scopeSelectionPhrase() {
+    var mod = state.scopeModule === '' ? '' : 'module "' + state.scopeModule + '"';
+    var fac = state.scopeFacet === '' ? '' : 'facet "' + state.scopeFacet + '"';
+    if (mod !== '' && fac !== '') {
+      return 'both ' + mod + ' and ' + fac;
+    }
+    return mod !== '' ? mod : fac;
   }
 
   // AN OVERLAY THAT MATCHES NOTHING SAYS SO.
@@ -1139,8 +1247,8 @@
   // applyPayload — a refresh must not throw away what you were looking at
   // ------------------------------------------------------------------
   //
-  // Preserved verbatim: the camera (zoom and pan), every control (scope,
-  // granularity, overlay, enabled edge types, labels), the expanded-group
+  // Preserved verbatim: the camera (zoom and pan), every control (module,
+  // facet, granularity, overlay, enabled edge types, labels), the expanded-group
   // set, and node positions by id. A node whose id is NEW is seeded near its
   // group's centroid rather than at the origin, so asking for fresher data
   // does not fling the layout apart. Selection survives if its id survives.
@@ -1294,7 +1402,12 @@
     }
 
     var i;
-    var scoped = c.scopeFilter(payload.nodes, state.scope);
+    // The two scope axes compose as an intersection inside scopeFilter, and
+    // everything downstream — representatives, ghosts, the gaps rail — reads
+    // only `scoped`. So none of it needs to know that scope became two fields:
+    // each of them already sees whatever set of claims the reader selected,
+    // including the empty one.
+    var scoped = c.scopeFilter(payload.nodes, state.scopeModule, state.scopeFacet);
     var inScopeIds = Object.create(null);
     for (i = 0; i < scoped.length; i++) {
       inScopeIds[str(scoped[i].id)] = true;
@@ -2848,8 +2961,8 @@
 
   // expandGroup and collapseGroup are the per-group override the granularity
   // select sets a default for. The set is stored as full group ids
-  // ("module:engine"), which is the same vocabulary the scope control and the
-  // rail use, so a reader never meets two names for one thing.
+  // ("module:engine"), which is the same vocabulary the rail and the canvas's
+  // group nodes use, so a reader never meets two names for one thing.
   function expandGroup(groupId) {
     if (state.expanded.indexOf(groupId) < 0) {
       state.expanded = state.expanded.concat([groupId]);

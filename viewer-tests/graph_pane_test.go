@@ -529,10 +529,12 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		t.Fatalf("payload parses after first open = %d, want at least 1", n)
 	}
 
-	// The control bar: five groups, in the frozen order.
+	// The control bar: six groups, in the frozen order. Scope is two of them
+	// — a module axis and a facet axis, sitting where the single Scope select
+	// sat — and their order relative to everything else is unchanged.
 	labels := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-controls .dxg-ctl .dxg-ctl-label'))
 		.map(function (e) { return e.textContent; })`)
-	wantLabels := []string{"Scope", "Granularity", "Highlight overlay", "Edge types", "View"}
+	wantLabels := []string{"Module", "Facet", "Granularity", "Highlight overlay", "Edge types", "View"}
 	if fmt.Sprint(labels) != fmt.Sprint(wantLabels) {
 		t.Fatalf("control groups = %v, want %v", labels, wantLabels)
 	}
@@ -743,12 +745,15 @@ func TestGraphRefresh(t *testing.T) {
 			t.Fatalf("refresh controls under serve = %d, want 1", n)
 		}
 
-		// A non-default scope, then a pan and a zoom, so all three of the
-		// things a refresh must preserve are away from their defaults.
+		// A non-default scope on BOTH axes, then a pan and a zoom, so
+		// everything a refresh must preserve is away from its default.
 		evalVoid(t, ctx, `(function () {
-			var s = document.getElementById('dxgScope');
-			s.value = 'module:widget';
-			s.dispatchEvent(new Event('change'));
+			var m = document.getElementById('dxgModule');
+			m.value = 'widget';
+			m.dispatchEvent(new Event('change'));
+			var f = document.getElementById('dxgFacet');
+			f.value = 'contract';
+			f.dispatchEvent(new Event('change'));
 		})();`)
 		evalVoid(t, ctx, `(function () {
 			var cv = document.querySelector('.dxg-canvas');
@@ -793,8 +798,11 @@ func TestGraphRefresh(t *testing.T) {
 		if after != before {
 			t.Fatalf("camera after refresh = %+v, want %+v unchanged", after, before)
 		}
-		if got := evalString(t, ctx, `document.getElementById('dxgScope').value`); got != "module:widget" {
-			t.Fatalf("scope after refresh = %q, want module:widget", got)
+		if got := evalString(t, ctx, `document.getElementById('dxgModule').value`); got != "widget" {
+			t.Fatalf("module scope after refresh = %q, want widget", got)
+		}
+		if got := evalString(t, ctx, `document.getElementById('dxgFacet').value`); got != "contract" {
+			t.Fatalf("facet scope after refresh = %q, want contract", got)
 		}
 		if evalInt(t, ctx, `document.querySelectorAll('#dxgPane .dxg-canvas').length`) != 1 {
 			t.Fatal("the pane must survive its own refresh")
@@ -835,7 +843,7 @@ func TestGraphHashDoesNotClobberReadingView(t *testing.T) {
 
 	// Now paste a full deep link: a reading-view target AND a graph state.
 	// Both halves must apply.
-	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=sc=all&gr=module&ov=governance&ty=rmg&lb=1&ex=&se=';`)
+	evalVoid(t, ctx, `window.location.hash = '#gadget.contract.overview!g=md=&fc=&gr=module&ov=governance&ty=rmg&lb=1&ex=&se=';`)
 	pollTrue(t, ctx, `document.getElementById('dxgOverlay').value === 'governance'`)
 	pollTrue(t, ctx, `document.querySelectorAll('.module-section')[0].hidden && !document.querySelectorAll('.module-section')[1].hidden`)
 	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {

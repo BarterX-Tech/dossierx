@@ -45,7 +45,8 @@
   //   edgeKey(edge)                       -> "from|type|to"
   //
   // Scope, representatives and edges (design section 3):
-  //   scopeFilter(nodes, scope)           -> [node]
+  //   scopeFilter(nodes, moduleScope, facetScope)
+  //                                       -> [node]
   //   representatives(nodes, granularity, expandedGroups)
   //                                       -> {repByClaim, repNodes}
   //   aggregateEdges(edges, repByClaim, enabledTypes)
@@ -223,9 +224,13 @@
   // Exported helpers
   // ------------------------------------------------------------------
 
-  // groupId is the id of a collapsed group node. The vocabulary deliberately
-  // matches the scope control's ("module:<m>", "facet:<f>") so a reader who
-  // double-clicks a group and then scopes to it sees the same token.
+  // groupId is the id of a collapsed group node: "module:<m>" / "facet:<f>".
+  // It is the vocabulary the gaps rail, the expanded-group set and the two
+  // group-level rules all speak, so a group has ONE name everywhere it can be
+  // named. The two scope selects do NOT use it — each of them already knows
+  // which axis it is, so its values are bare module and facet names — and the
+  // prefix here is what still distinguishes a module called `contract` from a
+  // facet called `contract` in the one place both can appear at once.
   function groupId(groupType, name) {
     return asString(groupType) + ':' + asString(name);
   }
@@ -246,41 +251,60 @@
   // Scope and the representative-node rule (design section 3)
   // ------------------------------------------------------------------
 
-  // scopeFilter narrows the claim set the whole pane operates on.
+  // scopeFilter narrows the claim set the whole pane operates on, along TWO
+  // INDEPENDENT AXES that compose as an INTERSECTION.
   //
-  //   scope === "all" | "" | null    every node
-  //   scope === "module:<m>"         nodes whose module is exactly <m>
-  //   scope === "facet:<f>"          nodes whose facet is exactly <f>
+  //   moduleScope  ""  every module   |  "<m>"  only claims whose module is <m>
+  //   facetScope   ""  every facet    |  "<f>"  only claims whose facet is <f>
   //
-  // An unrecognised scope returns every node rather than none. A pane that
-  // silently shows an empty graph is indistinguishable from a project with no
-  // claims, and one of those two is a lie.
+  // A claim is in scope when
+  //
+  //     (moduleScope === "" || claim.module === moduleScope)
+  //       && (facetScope === "" || claim.facet === facetScope)
+  //
+  // so "" + "" is the whole project, "<m>" + "" is one module, "" + "<f>" is
+  // one facet ACROSS EVERY MODULE — a view the design lists as a scope axis in
+  // its own right — and "<m>" + "<f>" is the intersection of the two. Neither
+  // axis constrains the other and neither has to be chosen first.
+  //
+  // THE EMPTY STRING IS THE ONLY "ALL" SENTINEL, and that is what makes this
+  // total rather than merely defensive: asString(null), asString(undefined), a
+  // missing field and a non-finite number all become "" and all mean "do not
+  // filter on this axis". There is no reserved word, so a project is free to
+  // name a module `all` without that name quietly meaning something else.
+  //
+  // THE INTERSECTION MAY BE EMPTY, AND THAT IS AN ANSWER RATHER THAN A FAULT.
+  // Module `telemetry` may simply carry no `verification` claims. This
+  // function returns the empty array for that pair; the pane STATES the empty
+  // combination in words (graph-ui.js's renderEmptyScopeNotice) so a reader can
+  // tell "this combination has no claims" from "the graph broke". That
+  // replaces the single-axis control's old rule, which returned every node for
+  // anything it did not recognise on the grounds that an unannounced empty
+  // canvas is indistinguishable from a project with no claims. The objection
+  // was right and the notice is the answer to it: with two axes an empty
+  // result is common enough to deserve being said out loud rather than hidden
+  // behind a filter that silently stops filtering.
   //
   // The returned array holds the SAME node objects, not copies: nothing here
   // mutates a payload node, and the pane's redraw path runs on every control
   // change.
-  function scopeFilter(nodes, scope) {
+  function scopeFilter(nodes, moduleScope, facetScope) {
     var list = asArray(nodes);
-    var s = asString(scope);
-    if (s === '' || s === 'all') {
-      return list.slice();
-    }
-    var cut = s.indexOf(':');
-    if (cut < 0) {
-      return list.slice();
-    }
-    var kind = s.slice(0, cut);
-    var want = s.slice(cut + 1);
-    if (kind !== 'module' && kind !== 'facet') {
+    var wantModule = asString(moduleScope);
+    var wantFacet = asString(facetScope);
+    if (wantModule === '' && wantFacet === '') {
       return list.slice();
     }
     var out = [];
     for (var i = 0; i < list.length; i++) {
       var n = list[i] || {};
-      var got = kind === 'module' ? asString(n.module) : asString(n.facet);
-      if (got === want) {
-        out.push(list[i]);
+      if (wantModule !== '' && asString(n.module) !== wantModule) {
+        continue;
       }
+      if (wantFacet !== '' && asString(n.facet) !== wantFacet) {
+        continue;
+      }
+      out.push(list[i]);
     }
     return out;
   }
@@ -1362,6 +1386,25 @@
   // character survives. "!" is escaped too, even though only the FIRST one in
   // the whole hash is structural — a state string that cannot contain the
   // separator at all is one less thing to reason about.
+  //
+  // THE KEYS, and what each carries:
+  //
+  //   md  scope: module   "" for every module, else the module name
+  //   fc  scope: facet    "" for every facet, else the facet name
+  //   gr  granularity     "claims" | "module" | "facet"
+  //   ov  overlay         one of OVERLAYS
+  //   ty  edge types      a subset of TYPE_LETTERS, positional against EDGE_TYPES
+  //   lb  labels          "1" | "0"
+  //   ex  expanded groups comma-separated group ids
+  //   se  selected node   a node id, or ""
+  //
+  // md and fc are two keys rather than one because scope is two independent
+  // axes (see scopeFilter). They replaced a single `sc` key that packed one
+  // axis into "module:<m>" / "facet:<f>" and could therefore express only one
+  // of the two at a time. THERE IS NO COMPATIBILITY SHIM FOR `sc`: this format
+  // has never been released, and decodeState ignores unknown keys, so a hash
+  // carrying the old key decodes to the default whole-project scope rather
+  // than to anything half-understood.
 
   // OVERLAYS is the closed set: six overlays plus "none". Anything else
   // decodes to "none" rather than leaving the pane in a state it cannot draw.
@@ -1384,7 +1427,8 @@
   // mutated a shared constant would poison every later default.
   function defaultState() {
     return {
-      scope: 'all',
+      scopeModule: '',
+      scopeFacet: '',
       granularity: 'claims',
       overlay: 'none',
       types: EDGE_TYPES.slice(),
@@ -1446,7 +1490,10 @@
     var s = state && typeof state === 'object' ? state : {};
     var d = defaultState();
     return {
-      scope: s.scope === undefined || s.scope === null ? d.scope : asString(s.scope),
+      scopeModule:
+        s.scopeModule === undefined || s.scopeModule === null ? d.scopeModule : asString(s.scopeModule),
+      scopeFacet:
+        s.scopeFacet === undefined || s.scopeFacet === null ? d.scopeFacet : asString(s.scopeFacet),
       granularity: normalizeGranularity(s.granularity === undefined ? d.granularity : s.granularity),
       overlay: normalizeOverlay(s.overlay === undefined ? d.overlay : s.overlay),
       types: normalizeTypes(s.types === undefined ? d.types : s.types),
@@ -1472,7 +1519,8 @@
       expanded.push(enc(s.expanded[j]));
     }
     return (
-      'sc=' + enc(s.scope) +
+      'md=' + enc(s.scopeModule) +
+      '&fc=' + enc(s.scopeFacet) +
       '&gr=' + enc(s.granularity) +
       '&ov=' + enc(s.overlay) +
       '&ty=' + letters +
@@ -1504,8 +1552,10 @@
       var at = part.indexOf('=');
       var key = at < 0 ? part : part.slice(0, at);
       var val = at < 0 ? '' : part.slice(at + 1);
-      if (key === 'sc') {
-        out.scope = dec(val);
+      if (key === 'md') {
+        out.scopeModule = dec(val);
+      } else if (key === 'fc') {
+        out.scopeFacet = dec(val);
       } else if (key === 'gr') {
         out.granularity = normalizeGranularity(dec(val));
       } else if (key === 'ov') {
@@ -1534,7 +1584,10 @@
       }
       // Unknown keys are ignored rather than preserved. A future version's
       // extra field must not survive a round trip through this one and be
-      // handed back as if this version had understood it.
+      // handed back as if this version had understood it. The retired `sc`
+      // key is exactly such a key now: a hash carrying it lands on the
+      // default whole-project scope, which is the honest reading of a
+      // selection this version cannot express.
     }
     return out;
   }

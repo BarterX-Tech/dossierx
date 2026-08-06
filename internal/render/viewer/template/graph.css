@@ -380,7 +380,9 @@ body.dxg-open {
   border-color: var(--border);
 }
 
-/* ---- control bar: five groups, in the frozen prototype order ----------- */
+/* ---- control bar: six groups, in the frozen prototype order ------------
+   Module · Facet · Granularity · Highlight overlay · Edge types · View.
+   Scope was one group and is now two; the pair sits where the one did. */
 
 .dxg-controls {
   flex-shrink: 0;

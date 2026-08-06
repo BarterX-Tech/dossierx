@@ -262,13 +262,16 @@ Scope, granularity and drill-down collapse to one rule:
 
 | Control | What it sets |
 |---|---|
-| Scope (`all` \| `module:<m>` \| `facet:<f>`) | Which claims are in play at all. |
+| Scope — module axis (`""` \| `<m>`) | Which claims are in play at all, §3.2. |
+| Scope — facet axis (`""` \| `<f>`) | Likewise, independently. |
 | Granularity (`claims` \| `module` \| `facet`) | The default expanded/collapsed state of every group. |
 | Drill-down (double-click a group) | A per-group override of that default. |
 
 Edge endpoints outside the current scope resolve to a **ghost node**: hollow,
 unlabeled, not counted in any gap rule. Scoping must never hide that a claim
-reaches outward.
+reaches outward. That holds for an intersection exactly as it held for a single
+axis — a ghost is any endpoint with no in-scope representative, and how the
+scope was arrived at is not a question `aggregateEdges` asks.
 
 ### 3.1 Cycle detection runs at claim level, never on aggregated edges
 
@@ -290,6 +293,47 @@ A component of size 1 is a cycle only if it carries a literal self-edge
 never merged into the cycle list — the engine already has a dedicated
 error-severity `self-edge` lint for it, distinct from `cycle` [VERIFIED:
 `internal/lint/self_edge.go`].
+
+### 3.2 Scope is two independent axes, intersected
+
+Scope is **two controls, not one**: a module select and a facet select, both
+always enabled, with no ordering rule between them.
+
+```
+in scope  ⟺  (module = "" or claim.module = module)
+         and (facet  = "" or claim.facet  = facet)
+```
+
+`""` is each axis's "all" sentinel, and the only one — there is no reserved word,
+so a project may name a module `all` without the name meaning something else.
+
+| module | facet | The view |
+|---|---|---|
+| `""` | `""` | the whole project |
+| `viewer` | `""` | one module |
+| `""` | `contract` | **one facet across every module** |
+| `viewer` | `contract` | the intersection of the two |
+
+The third row is why this is two controls. A single flat `all \| module:<m> \|
+facet:<f>` list could express it, but only *instead of* a module selection,
+never alongside one — and on a real project that list is every module plus every
+facet in one dropdown, where the two kinds of entry differ by a prefix and the
+list is unusably long before the project is interestingly large.
+
+**An intersection can be empty**, and that is a state the single control could
+not reach: `telemetry` × `verification` may hold no claims. `scopeFilter` returns
+the empty set for it, and the pane **states the combination in words** in the
+notice strip — `renderEmptyScopeNotice`, reusing the mechanism and the shape of
+the pane's existing "this overlay matches nothing" notice rather than inventing a
+second empty-state device — naming both selections, with an action that widens
+the scope back out. A reader must be able to tell "this combination has no
+claims" from "the graph broke", and a blank canvas says neither.
+
+One case is repaired rather than stated: a selection naming a module or facet
+the payload does not carry — a stale link — falls back to that axis's `""`. An
+empty intersection of two *real* selections is a fact about the project and is
+worth saying; an empty result from a name nothing can match is a fact about an
+old URL and is not.
 
 ---
 
@@ -313,9 +357,14 @@ Six overlays, plus "none": isolated & weakly linked · dependency cycles ·
 
 ### 4.1 Control layout (frozen from the prototype)
 
-One control bar, five groups, in this order: **Scope** (select) · **Granularity**
-(select) · **Highlight overlay** (select) · **Edge types** (three toggle buttons)
-· **View** (labels toggle, re-run layout).
+One control bar, six groups, in this order: **Module** (select) · **Facet**
+(select) · **Granularity** (select) · **Highlight overlay** (select) · **Edge
+types** (three toggle buttons) · **View** (labels toggle, re-run layout).
+
+The prototype froze this as five groups opening with a single **Scope** select.
+Scope is now the two selects of §3.2, and they sit exactly where the one sat —
+splitting a control is not a licence to rearrange its neighbours. Both are always
+enabled; there is no disabled state and no ordering rule between them.
 
 Above the control bar sits a one-line pane header carrying the payload's
 generation time and — under `serve` only — the refresh button (§6). Below the
@@ -645,6 +694,33 @@ The contract:
 - The detail panel's "open claim" link sets `location.hash` to the claim id with
   the graph suffix preserved, which fires `hashchange` and reuses the existing
   deep-link scroll-and-highlight path with zero new code.
+
+The compact state is `key=value` pairs joined by `&`, values percent-encoded:
+
+| Key | Field | Values |
+|---|---|---|
+| `md` | scope, module axis | `""` for every module, else the module name |
+| `fc` | scope, facet axis | `""` for every facet, else the facet name |
+| `gr` | granularity | `claims` \| `module` \| `facet` |
+| `ov` | overlay | one of `OVERLAYS` |
+| `ty` | enabled edge types | a subset of `rmg`, positional against `EDGE_TYPES` |
+| `lb` | labels | `1` \| `0` |
+| `ex` | expanded groups | comma-separated group ids |
+| `se` | selected node | a node id, or `""` |
+
+`md` and `fc` are two keys because scope is two axes (§3.2). They replaced a
+single `sc` key holding `all` \| `module:<m>` \| `facet:<f>`, which could express
+only one axis at a time. **There is no compatibility shim for `sc`** and none is
+owed: this format has never shipped — v0.5.0 is the release that introduces it.
+`decodeState` ignores keys it does not know, so a hash carrying `sc` lands on the
+default whole-project scope, which is the honest reading of a selection this
+version cannot express.
+
+`decodeState` is **total**, and that is the property to preserve: an empty,
+truncated, reordered, hand-edited or malformed string yields a usable state
+rather than an exception. An absent key takes its default; a key present with an
+empty value means the empty value, which is what makes `ty=` ("no edge types
+enabled") survive a round trip.
 
 ---
 

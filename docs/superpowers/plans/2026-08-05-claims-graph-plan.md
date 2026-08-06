@@ -320,7 +320,7 @@ and from a single `chromedp.Evaluate`.
 | # | Step | Proving command |
 |---|---|---|
 | 15 | File skeleton: IIFE, root binding, `dossierxGraphCore` namespace, and the doc block listing the exported testing surface. | `node --check …/graph-core.js` **(CONDITIONAL §7.3)** and `grep -n "dossierxGraphCore" internal/render/viewer/template/graph-core.js` |
-| 16 | `scopeFilter(nodes, scope)` and `representatives(nodes, granularity, expandedGroups)` → `{repByClaim, repNodes}`. Design §3. | `node -e` harness calling `representatives` on a 3-module fixture, printing JSON **(CONDITIONAL)**; executed for real by step 69 |
+| 16 | `scopeFilter(nodes, moduleScope, facetScope)` and `representatives(nodes, granularity, expandedGroups)` → `{repByClaim, repNodes}`. Design §3. | `node -e` harness calling `representatives` on a 3-module fixture, printing JSON **(CONDITIONAL)**; executed for real by step 69 |
 | 17 | `aggregateEdges(edges, repByClaim, enabledTypes)` → `[{from,to,type,weight}]`, self-loops dropped, aggregated by `(from,to,type)`, sorted. | `node -e` harness **(CONDITIONAL)**; executed for real by step 69 |
 | 18 | `degrees(nodeIds, edges)` → `{id:{in,out,total}}`, scope-relative. | `node -e` harness **(CONDITIONAL)**; executed for real by step 69 |
 | 19 | `scc(nodeIds, edges)` → `[[id,…]]`. Iterative Tarjan over the **claim-level** edge set, directed types only, deterministic ordering. Components of size 1 returned only when they carry a literal self-edge; `selfEdges(nodeIds, edges)` returns those separately. Design §3.1. Include a 10,000-node chain case to prove the iterative walk. | `node -e "…scc(['a','b','c'],[['a','b'],['b','a']])"` **(CONDITIONAL)**; executed for real by step 69 |
