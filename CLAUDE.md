@@ -32,8 +32,11 @@ What follows from it:
   none is suppressed on its way to the report. The human confirms what blocks a release; an agent
   never makes that call alone, and an override is recorded with its rationale.
 - **Verify the thing the user sees, not the thing you edited.** The site is read as rendered DOM
-  from a real build, the binary is checked by installing it, and the tag's tree is checked against
-  the tree that was actually approved.
+  from a real build, the binary is checked from the published archive, and the tag's tree is checked
+  against the tree that was actually approved. This covers output; it does not cover invariants about
+  how the source produces that output, which need their own checks — a hand-typed version string
+  renders identically to a derived one on the day it is written.
 
-The full design lives in `docs/RELEASING.md` and, while the redesign is in flight, in
-`scratchpad/pre-merge-gate-scope.md` on the release-pipeline branch.
+The procedure lives in `docs/RELEASING.md`. That file is the only description of how this project
+releases, and there is exactly one of them: if you find a second release procedure anywhere in this
+repository, that is a defect to report, not a fallback to use.
