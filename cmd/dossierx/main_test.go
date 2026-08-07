@@ -11,7 +11,9 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -438,5 +440,63 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 	}
 	if claimMatchScore("completely unrelated words", claim) != 0 {
 		t.Fatalf("an unrelated query must score 0")
+	}
+}
+
+// TestSiteMetaDescriptionNamesTheRealLeafCount: the site's <meta description>
+// is static HTML and cannot interpolate, so its command count is the one number
+// on the whole site that nothing derives and nothing checked.
+//
+// It said "a 20-command JSON CLI" from v0.3.0 until v0.5.0's post-release gate
+// read the DEPLOYED page and found it. Twenty was the v0.3.0 surface; v0.4.0 cut
+// it to nineteen, and the meta tag stayed wrong through two minor releases —
+// live, in the description search engines and link previews quote, which is
+// exactly where a stale claim is least likely to be noticed by anyone editing
+// the page.
+//
+// The count is derived here rather than pinned to a literal because this file
+// is where the leaf set is authoritative: TestSurfaceIsNineteenLeavesUnderSevenNouns
+// walks the same tree. Change the surface and this fails until the site follows.
+func TestSiteMetaDescriptionNamesTheRealLeafCount(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "site", "index.html"))
+	if err != nil {
+		t.Fatalf("read site/index.html: %v", err)
+	}
+
+	m := regexp.MustCompile(`(\d+)-command`).FindSubmatch(raw)
+	if m == nil {
+		// Phrasing that carries no count cannot go stale, so this is a pass.
+		t.Skip("site/index.html's description states no command count")
+	}
+	claimed, err := strconv.Atoi(string(m[1]))
+	if err != nil {
+		t.Fatalf("unparseable command count %q: %v", m[1], err)
+	}
+
+	leaves := 0
+	var walk func(cmd *cobra.Command, prefix string)
+	walk = func(cmd *cobra.Command, prefix string) {
+		leaf := true
+		for _, child := range cmd.Commands() {
+			if child.Name() == "help" || child.Name() == "completion" || retired(child) {
+				continue
+			}
+			leaf = false
+			name := child.Name()
+			if prefix != "" {
+				name = prefix + " " + name
+			}
+			walk(child, name)
+		}
+		if leaf && prefix != "" {
+			leaves++
+		}
+	}
+	walk(newRootCmd(), "")
+
+	if claimed != leaves {
+		t.Errorf("site/index.html's meta description claims a %d-command CLI; the surface has %d leaves.\n"+
+			"This string is served to search engines and link previews, where nobody editing the site will see it.\n"+
+			"Fix the number, or drop the count from the sentence so it cannot go stale again.", claimed, leaves)
 	}
 }
