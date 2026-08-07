@@ -1217,19 +1217,12 @@ var surfacePinVersionRE = regexp.MustCompile(`v\d+\.\d+\.\d+$`)
 // checklist's hard-coded list of pin sites went stale twice, so a pin appearing
 // in a fourth place has to show up here on its own.
 //
-// Four paths are excluded and each for its own reason. CHANGELOG.md and
+// Three paths are excluded and each for its own reason. CHANGELOG.md and
 // docs/RELEASING.md are RELEASING.md's own exclusions (both are full of
 // historical version strings that are correct precisely because they are old).
 // surface.json is excluded because this field WRITES pin tokens into it: without
 // the exclusion the next sweep would find its own output and the document would
-// never converge. scratchpad/ is the in-flight design workspace CLAUDE.md points
-// at, which surfaces.yaml declares out of scope in the same terms: its pages
-// quote the install command as a TEMPLATE, with a placeholder where the version
-// goes, so the sweep matches a line carrying no version and the extractor's
-// refuse-rather-than-drop rule (correctly) fails the whole document the moment
-// somebody commits their notes. Nothing under it is shipped or installed, and
-// every real pin site — README.md, skills/dossierx/SKILL.md and
-// scripts/ci/dossierx-check.yml — is outside it.
+// never converge.
 //
 // The exclusions are spelled out here rather than read from surfaces.yaml, and
 // that is deliberate: "not reviewed as prose" and "carries no release pin" are
@@ -1238,7 +1231,7 @@ var surfacePinVersionRE = regexp.MustCompile(`v\d+\.\d+\.\d+$`)
 // went blind, so it must stay IN this search.
 func surfaceVersionPins(root string) ([]surfacePin, error) {
 	cmd := exec.Command("git", "grep", "-nE", surfacePinSweep, "--",
-		".", ":!"+surfaceFileName, ":!CHANGELOG.md", ":!docs/RELEASING.md", ":!scratchpad/")
+		".", ":!"+surfaceFileName, ":!CHANGELOG.md", ":!docs/RELEASING.md")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {

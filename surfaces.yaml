@@ -115,6 +115,19 @@ surfaces:
       - scripts/install-git-hook.sh
       - scripts/install-git-hook.ps1
 
+  - name: release-notes
+    what: The GitHub release body, generated at tag time by GoReleaser from
+      Conventional Commit SUBJECTS. .goreleaser.yaml's changelog.groups and
+      changelog.filters.exclude are the rules that decide what it says, so the
+      config file IS the reviewable surface — the notes themselves do not exist
+      until the tag.
+    reach: Published client-facing prose that nothing audited before. A
+      user-visible change landing under a `docs:` or `chore:` subject is dropped
+      by the filters and is invisible on the release page while being fully
+      described in CHANGELOG.md.
+    paths:
+      - .goreleaser.yaml
+
   - name: binary-and-viewer
     what: The engine itself, and every string compiled into it — cobra Short and
       Long text and flag usage (`dossierx <noun> --help`), the error messages and
@@ -173,29 +186,17 @@ out_of_scope:
       - docs/decisions/
       - docs/superpowers/
 
-  - name: in-flight-design-workspace
-    reason: The working notes of a redesign that is still in flight — CLAUDE.md
-      points at scratchpad/pre-merge-gate-scope.md as where the release-gate
-      design lives WHILE it is being built, and the rendered orchestration pages
-      beside it are a workflow's own record. None of it is read by a client of
-      the binary, and it is superseded by docs/RELEASING.md rather than by a
-      release. Declared here rather than left to chance so that committing this
-      branch's workspace is not a red build; the entry matching nothing on a
-      branch that carries no workspace is the harmless direction.
-    paths:
-      - scratchpad/
-
   - name: repository-automation
     reason: Build, CI and release machinery for THIS repository. Nothing here is
       read by a client of the binary — the one workflow that is copied outward,
-      scripts/ci/dossierx-check.yml, is a surface above. The install-hook smoke
-      test and the comment end-to-end script drive the shipped scripts; they are
-      not themselves shipped.
+      scripts/ci/dossierx-check.yml, is a surface above, and .goreleaser.yaml is
+      a surface above because its changelog rules decide what the published
+      release notes say. The install-hook smoke test and the comment end-to-end
+      script drive the shipped scripts; they are not themselves shipped.
     paths:
       - .github/
       - .claude/workflows/
       - Makefile
-      - .goreleaser.yaml
       - scripts/e2e-comments.sh
       - scripts/hook-smoke-test.sh
       - scripts/normalize-claims/
