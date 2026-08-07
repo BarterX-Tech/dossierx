@@ -1,0 +1,220 @@
+# surfaces.yaml — every client-facing surface this project has, and beside it
+# every path that is DECLARED out of scope, with the reason.
+#
+# WHY THIS FILE EXISTS. The release gate reads prose against code, one agent per
+# surface. That is only as complete as the surface list, and until this file
+# existed the list lived in a scope document — so a new client-facing file
+# appeared with nothing to notice it, and the only way to find the gap was an
+# audit. tests/surfaces_manifest_test.go asserts that EVERY TRACKED FILE is
+# claimed by exactly one entry below, which turns "a surface nobody declared"
+# from a silent hole into a red build.
+#
+# THE RULE IS "EXACTLY ONE", NOT "AT LEAST ONE". An out-of-scope entry cannot
+# quietly swallow a file that a surface also claims: the test names both entries
+# and fails. That is the same principle the gate itself runs on — never narrow
+# coverage silently — applied to the list of things being covered.
+#
+# PATTERN GRAMMAR (see matchSurfacePattern in the test):
+#   - a pattern ending in "/" claims every file beneath that directory
+#   - "**/" matches any number of leading directory segments
+#   - "*" matches any run of characters within a single segment
+#   - anything else is an exact repository-relative path
+#   - an entry's "not:" patterns carve exceptions out of its own "paths"
+#
+# Adding a file that matches nothing here is a build failure. That is the point:
+# the next missing surface should cost a compile, not an audit.
+
+surfaces:
+  - name: readme
+    what: The project's front door on GitHub — install, the two roles, the noun
+      table, the exit-code table, the lock lifecycle.
+    reach: Every visitor. Carries two of the four release-version pins.
+    paths:
+      - README.md
+
+  - name: changelog
+    what: The release's own account of itself, and the only place a
+      silent-behaviour change can be announced to somebody deciding whether to
+      upgrade.
+    reach: Consumers deciding whether to upgrade.
+    paths:
+      - CHANGELOG.md
+
+  - name: claim-format-spec
+    what: The claim format — the schema, the id grammar, the layouts, and what
+      the claim-body renderer accepts.
+    reach: Anyone authoring claims. surface.json's markdown_constructs is the
+      corpus this document is a claim about.
+    paths:
+      - FORMAT.md
+
+  - name: roadmap
+    what: The deferred and unverified register. Falsification here is inverted —
+      the question is whether this release SHIPPED something the entry still
+      calls deferred.
+    reach: Sets expectations for anyone deciding to depend on this.
+    paths:
+      - ROADMAP.md
+
+  - name: contributing
+    what: How to build and test, including the two suites `go test ./...` does
+      not reach.
+    reach: Contributors.
+    paths:
+      - CONTRIBUTING.md
+
+  - name: release-procedure
+    what: The one description of how this project releases, including its own
+      pin-site list — prose that has gone stale twice and checks itself.
+    reach: The maintainer, next release.
+    paths:
+      - docs/RELEASING.md
+
+  - name: agent-skills
+    what: The SKILL.md bundles, plus the embed directive and reading order that
+      decide which of them ship and in what sequence a client's agent meets
+      them.
+    reach: Unfixable after the tag. These are go:embed-ed into the binary and
+      installed into OTHER people's repositories by `dossierx skills export`,
+      where a stale rule teaches an agent the wrong recovery against a corpus
+      nobody here will ever see. Carries one release-version pin.
+    paths:
+      - skills/
+
+  - name: exported-skills
+    what: The skills export output, checked in as symlinks so this repository's
+      own agents read exactly the bytes a client's agents would.
+    reach: Every agent operating in this repository; a divergence here means the
+      export is producing something other than the source.
+    paths:
+      - .claude/skills/
+
+  - name: site
+    what: The marketing and documentation site, sources and entry points. The
+      surface is the RENDERED DOM of a real build (plus its head metadata), not
+      the component source — but every file here decides what that DOM says.
+    reach: Every prospective user. The only client-facing statement of what this
+      project is, and the one whose counts have gone stale live.
+    paths:
+      - site/
+
+  - name: ci-merge-gate-template
+    what: The merge-gate workflow clients copy into their own repository.
+    reach: Ships a stale binary into somebody else's CI. Carries one
+      release-version pin, and it is the pin that matters most.
+    paths:
+      - scripts/ci/dossierx-check.yml
+
+  - name: install-scripts
+    what: The pre-commit hook installers, curl'd at the pinned tag by README and
+      by the router skill — which also tells the agent to SHOW the client the
+      contents before running it.
+    reach: Ships a false engine statement into somebody else's repository, and
+      is read aloud on the way in.
+    paths:
+      - scripts/install-git-hook.sh
+      - scripts/install-git-hook.ps1
+
+  - name: binary-and-viewer
+    what: The engine itself, and every string compiled into it — cobra Short and
+      Long text and flag usage (`dossierx <noun> --help`), the error messages and
+      hints, and the viewer templates, CSS and graph client rendered into every
+      client's index.html.
+    reach: Unfixable after the tag. This is the code surface.json's command,
+      flag, error-code, lint-rule, route, render and behaviour fields are all
+      extracted FROM, and prose is judged against.
+    paths:
+      - cmd/dossierx/
+      - internal/
+    not:
+      - "**/*_test.go"
+      - internal/render/markdown/generate-goldens/
+
+out_of_scope:
+  - name: tests-and-fixtures
+    reason: Tests, fixture corpora and the golden-file generator are how the
+      surfaces above are held true; they are not themselves observable by a
+      client of the binary. The committed sample viewers under testdata/ are
+      generated artifacts and are pinned by
+      tests/fixture_staleness_test.go, not by a prose review.
+    paths:
+      - "**/*_test.go"
+      - tests/
+      - viewer-tests/
+      - testdata/
+      - internal/render/markdown/generate-goldens/
+
+  - name: release-gate-artifacts
+    reason: An inventory OF the surfaces rather than one of them. surface.json is
+      derived from the tree by cmd/dossierx/surface_test.go and regenerated
+      rather than written; this manifest is the list being checked. Reviewing
+      either as prose would be reviewing the gate's own working notes.
+    paths:
+      - surface.json
+      - surfaces.yaml
+
+  - name: community-and-legal
+    reason: Makes no claim about how the engine behaves, so no release can
+      falsify it. SECURITY.md is deliberately written without a version number;
+      LICENSE is legal text.
+    paths:
+      - CODE_OF_CONDUCT.md
+      - SECURITY.md
+      - SUPPORT.md
+      - MAINTAINERS.md
+      - LICENSE
+
+  - name: design-records
+    reason: Dated design records — plans, specs and decision notes tied to the
+      release that produced them. They are historical by construction, so
+      "did this release make it false" does not apply; rewriting them would
+      destroy the record.
+    paths:
+      - docs/decisions/
+      - docs/superpowers/
+
+  - name: in-flight-design-workspace
+    reason: The working notes of a redesign that is still in flight — CLAUDE.md
+      points at scratchpad/pre-merge-gate-scope.md as where the release-gate
+      design lives WHILE it is being built, and the rendered orchestration pages
+      beside it are a workflow's own record. None of it is read by a client of
+      the binary, and it is superseded by docs/RELEASING.md rather than by a
+      release. Declared here rather than left to chance so that committing this
+      branch's workspace is not a red build; the entry matching nothing on a
+      branch that carries no workspace is the harmless direction.
+    paths:
+      - scratchpad/
+
+  - name: repository-automation
+    reason: Build, CI and release machinery for THIS repository. Nothing here is
+      read by a client of the binary — the one workflow that is copied outward,
+      scripts/ci/dossierx-check.yml, is a surface above. The install-hook smoke
+      test and the comment end-to-end script drive the shipped scripts; they are
+      not themselves shipped.
+    paths:
+      - .github/
+      - .claude/workflows/
+      - Makefile
+      - .goreleaser.yaml
+      - scripts/e2e-comments.sh
+      - scripts/hook-smoke-test.sh
+      - scripts/normalize-claims/
+
+  - name: toolchain-config
+    reason: Linter, editor, VCS and module configuration. It constrains how this
+      repository is built and formatted and states nothing about the engine's
+      behaviour.
+    paths:
+      - .editorconfig
+      - .gitattributes
+      - .gitignore
+      - .golangci.yml
+      - go.mod
+      - go.sum
+
+  - name: in-repo-agent-instructions
+    reason: Instructions to agents working IN this repository, not a statement
+      about the shipped engine. CLAUDE.md governs how a change is made here; it
+      is not something a client can observe.
+    paths:
+      - CLAUDE.md
