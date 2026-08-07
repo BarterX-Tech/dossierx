@@ -233,7 +233,7 @@ const releases: Release[] = [
         },
         {
           version: "v0.5.0",
-          date: "2026-08-06",
+          date: "2026-08-07",
           title: "a claims graph in the viewer",
           tag: "Latest release",
           // commit is set AFTER the tag exists, from `git rev-parse --short v0.5.0^{commit}`.
