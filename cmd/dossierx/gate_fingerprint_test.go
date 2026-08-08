@@ -38,6 +38,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -62,16 +63,39 @@ import (
 // DOM, per "verify the thing the user sees"). They are named as constants here
 // rather than passed in so that there is one spelling of each, and hashing FAILS
 // when one is absent rather than quietly fingerprinting a smaller evidence set.
+// gateBaselineFile is the RESOLVED baseline inventory — the previous release's
+// surface.json, written into the run's own evidence directory by the producer
+// that resolved it (scripts/gate-stage2/run.sh delta).
+//
+// It is in the key because gate/delta.json is a LOSSY READ of a pair of
+// inventories, and a projection never stands in for its source. This tree's half
+// of that pair is already here as surface.json; without the other half a key
+// carrying the delta is a key that trusts a summary of bytes it never saw. And
+// the thing that belongs here is the baseline's BYTES, never the baseline tag's
+// NAME: a tag is a mutable pointer (`git tag -f` re-points an annotated tag
+// under anything that names only the tag), so "v0.5.0" hashes identically before
+// and after it is made to mean a different commit.
 const (
 	gateSurfaceInventoryFile = "surface.json"
+	gateBaselineFile         = "gate/baseline.json"
 	gateDeltaFile            = "gate/delta.json"
 	gateSiteTextFile         = "gate/site-text.json"
 )
 
-// gateSharedEvidence is those three, in one place, so a fourth evidence file is
+// gateSharedEvidence is those four, in one place, so a fifth evidence file is
 // added once and every surface's fingerprint moves.
+//
+// SHARED means read by EVERY surface agent. An artifact only one agent reads —
+// the skills export capture, the release-notes prediction, the cross-release
+// render diff — does not belong here: folding it in would move all thirteen keys
+// whenever any one of them moved, and the whole value of the key is that a
+// one-document fix re-runs one agent. Those reach the key through the BUNDLE
+// instead: the assembler hands the surface its capture verbatim, so the bundle
+// digest covers those bytes for the one surface that reads them and for no
+// other. TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is what holds that
+// true on the run path.
 func gateSharedEvidence() []string {
-	return []string{gateSurfaceInventoryFile, gateDeltaFile, gateSiteTextFile}
+	return []string{gateSurfaceInventoryFile, gateBaselineFile, gateDeltaFile, gateSiteTextFile}
 }
 
 // ---------------------------------------------------------------------
@@ -124,19 +148,219 @@ func (m gateMethod) version(root string) (string, error) {
 }
 
 // ---------------------------------------------------------------------
+// hashing a surface's documents
+// ---------------------------------------------------------------------
+
+// gateHashDocuments is hashRepoFiles EXTENDED to the one document shape this
+// repository actually has and that function cannot read: a tracked symlink.
+//
+// WHY IT IS NOT A SECOND HASH FUNCTION. hashRepoFiles (cmd/dossierx/surface_test.go)
+// is surface.json's own hash stream and stays that; this reproduces it BYTE FOR
+// BYTE for every regular file and only adds records for shapes it refuses
+// outright. TestGateDocumentHashAgreesWithTheOneHashFunction holds the two to
+// that equality, the same way TestGateManifestPatternsAgreeWithTheTree holds
+// this file's copy of the pattern grammar to the manifest test's. What must not
+// exist is a second ANSWER to "what are these bytes" — not a second caller.
+//
+// WHY IT HAD TO EXIST AT ALL. surfaces.yaml's `exported-skills` surface is five
+// tracked entries under .claude/skills/, and all five are symlinks to
+// directories (`git ls-files -s` shows mode 120000). os.ReadFile on one returns
+// "is a directory", so the landed key could not be computed for that surface at
+// all — thirteen surfaces declared, twelve keys computable, and the repair
+// anyone reaches for under time pressure is "skip a document that will not
+// open", which leaves the run green over twelve surfaces while the manifest
+// declares thirteen. Nothing here skips anything: an entry it cannot read is an
+// error, and an entry of a shape it does not understand is an error.
+//
+// A symlink contributes BOTH its target string and the bytes reachable through
+// it, because both can change independently and each is a different release
+// defect. Re-pointing .claude/skills/dossierx at another bundle changes what
+// this repository's agents read while every byte under skills/ stays put;
+// editing skills/dossierx/SKILL.md changes what they read with the link
+// untouched. A key that covered only one of the two would carry a verdict
+// forward across the other.
+func gateHashDocuments(root string, rels []string) (string, error) {
+	sorted := append([]string(nil), rels...)
+	sort.Strings(sorted)
+
+	h := sha256.New()
+	for _, rel := range sorted {
+		if err := gateHashOneDocument(h, root, rel); err != nil {
+			return "", err
+		}
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// gateHashOneDocument writes one document's records into h.
+//
+// The regular-file record is `rel\0len\0data`, which is hashRepoFiles' record
+// exactly. The symlink record is `rel\0symlink\0target`, which cannot be
+// mistaken for one: the second field of a regular-file record is a decimal
+// length and "symlink" is not. The bytes reachable through a directory link
+// follow as ordinary `rel/sub\0len\0data` records.
+//
+// THE REACHABLE-FILE COUNT USED TO BE IN THE SYMLINK RECORD AND IS NOT ANY
+// MORE. It could not be made to fail: every length-prefixed per-file record that
+// follows already distinguishes any two trees the count could, so dropping it
+// left every assertion in this file green. A field in a hash stream that no
+// mutation can redden is a field that looks load-bearing and pins nothing, which
+// is the same vacuity this lane exists to remove one level down. The refusal of
+// a link reaching NO file is what that count was reaching for, and that refusal
+// is still here — asserted by "the link points at a tree holding no file".
+func gateHashOneDocument(h io.Writer, root, rel string) error {
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	info, err := os.Lstat(path)
+	if err != nil {
+		return fmt.Errorf("hash %s: %w", rel, err)
+	}
+
+	switch {
+	case info.Mode()&os.ModeSymlink != 0:
+		target, linkErr := os.Readlink(path)
+		if linkErr != nil {
+			return fmt.Errorf("hash %s: read the link: %w", rel, linkErr)
+		}
+		// os.Stat FOLLOWS the link, so this is the shape of what an agent
+		// reading through it would actually get. A dangling link fails here
+		// rather than hashing to "a link pointing at nothing", which is a
+		// perfectly stable value for a surface nobody can read.
+		resolved, statErr := os.Stat(path)
+		if statErr != nil {
+			return fmt.Errorf("hash %s: the link points at %q, which cannot be read: %w", rel, target, statErr)
+		}
+		if !resolved.IsDir() {
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return fmt.Errorf("hash %s: %w", rel, readErr)
+			}
+			fmt.Fprintf(h, "%s\x00symlink\x00%s", rel, filepath.ToSlash(target))
+			fmt.Fprintf(h, "%s\x00%d\x00%s", rel, len(data), data)
+			return nil
+		}
+		reachable, walkErr := gateReachableFiles(path)
+		if walkErr != nil {
+			return fmt.Errorf("hash %s: %w", rel, walkErr)
+		}
+		if len(reachable) == 0 {
+			return fmt.Errorf("hash %s: the link points at %q, which holds no file; a surface whose documents reach nothing fingerprints to a constant", rel, target)
+		}
+		fmt.Fprintf(h, "%s\x00symlink\x00%s", rel, filepath.ToSlash(target))
+		for _, sub := range reachable {
+			data, readErr := os.ReadFile(filepath.Join(path, filepath.FromSlash(sub)))
+			if readErr != nil {
+				return fmt.Errorf("hash %s: %w", rel, readErr)
+			}
+			fmt.Fprintf(h, "%s/%s\x00%d\x00%s", rel, sub, len(data), data)
+		}
+		return nil
+
+	case info.Mode().IsRegular():
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return fmt.Errorf("hash %s: %w", rel, readErr)
+		}
+		fmt.Fprintf(h, "%s\x00%d\x00%s", rel, len(data), data)
+		return nil
+
+	default:
+		return fmt.Errorf("hash %s: it is %s, which is neither a regular file nor a symlink; "+
+			"the gate has no reading of those bytes, and a document it cannot read is a surface it is not covering", rel, info.Mode().Type())
+	}
+}
+
+// gateReachableFiles lists every regular file beneath dir, as sorted
+// slash-separated paths relative to dir.
+//
+// It walks with os.ReadDir rather than filepath.WalkDir because dir is itself
+// reached through a symlink and WalkDir does not descend into one. A symlink
+// found INSIDE is refused rather than followed or skipped: nothing in this
+// repository has that shape today, so the honest answer to meeting one is that
+// the gate does not know what it is looking at.
+func gateReachableFiles(dir string) ([]string, error) {
+	var out []string
+	var walk func(prefix string) error
+	walk = func(prefix string) error {
+		entries, err := os.ReadDir(filepath.Join(dir, filepath.FromSlash(prefix)))
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			sub := entry.Name()
+			if prefix != "" {
+				sub = prefix + "/" + sub
+			}
+			info, infoErr := entry.Info()
+			if infoErr != nil {
+				return infoErr
+			}
+			switch {
+			case info.Mode()&os.ModeSymlink != 0:
+				return fmt.Errorf("%s is a symlink inside a linked document tree; the gate refuses a shape it has no reading of rather than following or skipping it", sub)
+			case entry.IsDir():
+				if err := walk(sub); err != nil {
+					return err
+				}
+			case info.Mode().IsRegular():
+				out = append(out, sub)
+			default:
+				return fmt.Errorf("%s is %s, which is neither a regular file nor a directory", sub, info.Mode().Type())
+			}
+		}
+		return nil
+	}
+	if err := walk(""); err != nil {
+		return nil, err
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// ---------------------------------------------------------------------
 // the fingerprint
 // ---------------------------------------------------------------------
 
-// gateSurfaceInputs is everything one surface agent reads.
+// gateSurfaceInputs is everything one surface agent reads, AND everything the
+// surface it is judging claims.
+//
+// TOTALITY IS TWO-SIDED, and the two sides are different objects. Coverage of
+// what the agent READS (Bundle, the shared evidence, the method) is
+// what makes a stale QUESTION impossible. Coverage of what the surface CLAIMS
+// (Documents) is what makes a stale ANSWER impossible, because every projection
+// into a bundle is lossy and the loss is where the defeat lives: `site` resolves
+// to 47 files of TSX/TS source and the agent is handed the rendered DOM text,
+// and the DOM extractor captures no href at all, so re-pointing a link in
+// site/src/content.ts leaves every byte the agent reads byte-identical.
 type gateSurfaceInputs struct {
 	// Surface is the name declared in surfaces.yaml.
 	Surface string
 	// Documents are the surface's own files, repo-relative. They come from
 	// gateSurfaceDocuments, resolved from the manifest against `git ls-files`,
 	// rather than from a hand list — a hand list is how a surface's fingerprint
-	// silently stops covering a file the surface actually has.
+	// silently stops covering a file the surface actually has. They are hashed
+	// whether or not the bundle handed them over.
 	Documents []string
-	Method    gateMethod
+	// THE PER-SURFACE CAPTURES ARE NOT A COMPONENT HERE, and that is a decision
+	// rather than an omission. The skills export capture, the release-notes
+	// prediction and the cross-release render diff are read by ONE surface each
+	// and are handed to that agent verbatim, so the Bundle digest already covers
+	// their bytes on the run path. A separate `Artifacts` component hashed the
+	// same bytes a second time: no edit to a capture could move it without also
+	// moving the bundle, so no mutation could redden it, and it survived being
+	// deleted from the run's inputs with the whole suite green. A digest
+	// component that cannot fail is the shape this lane exists to remove, so it
+	// is gone. What replaces it is an assertion that CAN fail —
+	// TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther edits a real capture
+	// on the run path and requires exactly that surface's key to move — which is
+	// also what would notice a future assembler that stopped carrying them.
+	//
+	// Bundle is the assembled bytes actually handed to the agent, framing and
+	// all. Hashing the ASSEMBLED OUTPUT rather than a list of its parts is the
+	// point: the text that wraps the parts — "report FAILED on any mismatch" —
+	// lives in a template and an assembler, and softening it asks all thirteen
+	// agents a materially weaker question while no part file moves at all.
+	Bundle []byte
+	Method gateMethod
 }
 
 // gateSurfaceFingerprint is the digest of one agent's whole input set.
@@ -153,7 +377,11 @@ func gateSurfaceFingerprint(root string, in gateSurfaceInputs) (string, error) {
 		return "", fmt.Errorf("surface fingerprint: surface %q resolved to no documents; a surface with nothing to read is a surface the gate is not covering", in.Surface)
 	}
 
-	documents, err := hashRepoFiles(root, in.Documents)
+	if len(in.Bundle) == 0 {
+		return "", fmt.Errorf("surface fingerprint: surface %q was handed no bundle; a key over zero bytes handed over is a key over a question nobody asked, and it is the same constant for every surface in that state", in.Surface)
+	}
+
+	documents, err := gateHashDocuments(root, in.Documents)
 	if err != nil {
 		return "", fmt.Errorf("surface %q: %w", in.Surface, err)
 	}
@@ -165,10 +393,11 @@ func gateSurfaceFingerprint(root string, in gateSurfaceInputs) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("surface %q: %w", in.Surface, err)
 	}
+	bundle := sha256.Sum256(in.Bundle)
 
 	h := sha256.New()
-	fmt.Fprintf(h, "dossierx-gate-surface\x00v1\x00%s\x00%s\x00%s\x00%s",
-		in.Surface, documents, evidence, method)
+	fmt.Fprintf(h, "dossierx-gate-surface\x00v3\x00%s\x00%s\x00%s\x00sha256:%s\x00%s",
+		in.Surface, documents, evidence, hex.EncodeToString(bundle[:]), method)
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
@@ -556,19 +785,26 @@ func gatePassingSurfaces(names ...string) []gateSurfaceVerdict {
 }
 
 // gateFingerprintFixture writes a whole synthetic tree — the surface's document,
-// the three shared evidence files, and a prompt — and returns the root and the
-// inputs over it.
+// the four shared evidence files, one per-surface capture and a prompt — and
+// returns the root and the inputs over it.
 //
 // It is synthetic rather than the real repository because the point of the tests
-// below is to move ONE input at a time and watch the digest move. Two of the
-// three evidence files do not exist in this tree yet (see gateDeltaFile), and a
-// fixture is also the only way to assert the direction the hashing errs in when
-// one of them is missing.
+// below is to move ONE input at a time and watch the digest move. Three of the
+// four evidence files do not exist in this tree until a run produces them (see
+// gateDeltaFile), and a fixture is also the only way to assert the direction the
+// hashing errs in when one of them is missing.
+//
+// ITS TOOL GRANT IS THE REAL ONE. It used to grant {"Bash", "Grep", "Read"} —
+// precisely the file-reading tools a surface agent must not have, in the value
+// an implementer building the harness would copy. A fixture that inverts the
+// defence it sits next to is a fixture that will be pasted into the runner, so
+// it now carries gateStage2PinnedGrant's own members and gets them from there.
 func gateFingerprintFixture(t *testing.T) (root string, in gateSurfaceInputs) {
 	t.Helper()
 	root = t.TempDir()
 	gateWrite(t, root, "site/src/content.ts", "export const latestVersion = \"v9.9.9\";\n")
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
+	gateWrite(t, root, gateBaselineFile, "{\"counts\":{\"lint_rules\":27}}\n")
 	gateWrite(t, root, gateDeltaFile, "{\"lint_rules\":{\"added\":[\"mixed-cycle\"]}}\n")
 	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.9\"}\n")
 	gateWrite(t, root, "gate/prompts/site.md", "Read the rendered site text against surface.json.\n")
@@ -576,10 +812,11 @@ func gateFingerprintFixture(t *testing.T) (root string, in gateSurfaceInputs) {
 	return root, gateSurfaceInputs{
 		Surface:   "site",
 		Documents: []string{"site/src/content.ts"},
+		Bundle:    []byte("--- the site question ---\nRead the rendered site text against surface.json.\n"),
 		Method: gateMethod{
 			Prompts: []string{"gate/prompts/site.md"},
 			Model:   "claude-opus-5",
-			Tools:   []string{"Bash", "Grep", "Read"},
+			Tools:   append([]string(nil), gateStage2PinnedGrant...),
 		},
 	}
 }
@@ -607,7 +844,10 @@ func TestGateSurfaceFingerprintIsStableForAnUnchangedTree(t *testing.T) {
 	first := gateMustFingerprint(t, root, in)
 
 	shuffled := in
-	shuffled.Method.Tools = []string{"Read", "Bash", "Grep"}
+	shuffled.Method.Tools = gateReversedStrings(in.Method.Tools)
+	if len(shuffled.Method.Tools) < 2 || gateEqualStrings(shuffled.Method.Tools, in.Method.Tools) {
+		t.Fatalf("the fixture's grant %v cannot be reordered, so the assertion below would compare a list against itself", in.Method.Tools)
+	}
 	if got := gateMustFingerprint(t, root, shuffled); got != first {
 		t.Errorf("the tool list's ORDER moved the fingerprint; the set is what the method is, and a reordering would re-run every surface for nothing\n first: %s\nsecond: %s", first, got)
 	}
@@ -625,7 +865,15 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		name   string
 		mutate func(t *testing.T, root string, in *gateSurfaceInputs)
 	}{
-		{"the surface's own document", func(t *testing.T, root string, _ *gateSurfaceInputs) {
+		// THE ROW THAT DEFEATS FAILURE 1. The fixture's bundle does not contain
+		// site/src/content.ts — it holds the question and the rendered text, the
+		// same lossy projection the real site agent is handed — so this edit
+		// moves not one byte the agent reads. The document component is the only
+		// thing in the digest that can see it, which is exactly the shape of an
+		// href re-pointed in site/src/content.ts: the DOM extractor captures no
+		// href, so gate/site-text.json is byte-identical after the edit, and
+		// site/ is outside behaviourRoots so surface.json does not move either.
+		{"a document the surface claims but the bundle never contained", func(t *testing.T, root string, _ *gateSurfaceInputs) {
 			gateWrite(t, root, "site/src/content.ts", "export const latestVersion = \"v9.9.10\";\n")
 		}},
 		{"a file joins the surface", func(t *testing.T, root string, in *gateSurfaceInputs) {
@@ -635,8 +883,27 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		{"surface.json", func(t *testing.T, root string, _ *gateSurfaceInputs) {
 			gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":29}}\n")
 		}},
+		{"the resolved baseline the delta was computed against", func(t *testing.T, root string, _ *gateSurfaceInputs) {
+			gateWrite(t, root, gateBaselineFile, "{\"counts\":{\"lint_rules\":26}}\n")
+		}},
 		{"the release delta", func(t *testing.T, root string, _ *gateSurfaceInputs) {
 			gateWrite(t, root, gateDeltaFile, "{\"lint_rules\":{\"added\":[]}}\n")
+		}},
+		// The per-surface captures are not a row here on purpose: they reach the
+		// key through the assembled bundle, which is where they are actually
+		// handed over, and the row that proves it is on the run path in
+		// gate_stage2_test.go where a real capture and a real assembler exist. A
+		// row here would have had to hold the bundle still while the capture
+		// moved, which the run path never does — a fixture arrangement that
+		// cannot occur, proving a component nothing else could redden.
+		//
+		// THE ROW THAT DEFEATS FAILURE 3. Nothing on disk moves: the same
+		// prompt, the same documents, the same evidence, the same model and
+		// grant. Only the assembled text differs, which is what softening the
+		// assembler's framing does — "report FAILED on any mismatch" becoming
+		// "note mismatches" edits no file the parts list names.
+		{"the framing the assembler wrapped around the parts", func(t *testing.T, _ string, in *gateSurfaceInputs) {
+			in.Bundle = []byte("--- the site question ---\nNote any mismatches between the rendered site text and surface.json.\n")
 		}},
 		{"the rendered site text", func(t *testing.T, root string, _ *gateSurfaceInputs) {
 			gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.8\"}\n")
@@ -690,6 +957,25 @@ func TestGateFingerprintRefusesEveryEmptyInput(t *testing.T) {
 		}
 		if _, err := gateSurfaceFingerprint(root, in); err == nil {
 			t.Error("a fingerprint was produced with the surface's own document absent")
+		}
+	})
+
+	// A missing PER-SURFACE capture — failure 6, the export capture and the
+	// release-notes prediction written by flag-driven entry points a driver has
+	// to remember to run — is refused two doors down rather than here, because
+	// that is where it is actually reachable: the assembler cannot build a
+	// bundle without it (gate_bundle_test.go, "this surface's capture is gone")
+	// and the run refuses to fingerprint at all when the run manifest does not
+	// record it as produced (gate_stage2_test.go). By the time a bundle exists,
+	// the capture's bytes are inside it.
+
+	// A bundle of zero bytes is the shape a broken assembler produces, and it
+	// hashes to the same constant for every surface that reaches it.
+	t.Run("an empty bundle", func(t *testing.T) {
+		root, in := gateFingerprintFixture(t)
+		in.Bundle = nil
+		if _, err := gateSurfaceFingerprint(root, in); err == nil {
+			t.Error("a fingerprint was produced for a surface that was handed no bundle")
 		}
 	})
 
@@ -1284,6 +1570,258 @@ func TestGateManifestPatternsAgreeWithTheTree(t *testing.T) {
 		t.Errorf("this file's reading of the manifest gives %d tracked file(s) more than one owner:\n  %s",
 			len(contested), strings.Join(contested, "\n  "))
 	}
+}
+
+// TestGateDocumentHashAgreesWithTheOneHashFunction is what keeps gateHashDocuments
+// from becoming a second answer to "what are these bytes".
+//
+// hashRepoFiles is this repository's one hash stream and surface.json's own;
+// gateHashDocuments exists only because that function cannot read a tracked
+// symlink. So wherever both apply — every set of regular files, which is twelve
+// of the thirteen surfaces — they must agree to the byte. If they ever diverge,
+// the gate and the machine contract are measuring different trees while both
+// report a digest, and nothing downstream could tell.
+//
+// The last row is the honest half: two files whose CONCATENATED contents are
+// identical but split differently. hashRepoFiles puts each file's path and byte
+// length in the stream precisely so that shape does not collide, and asserting
+// it here means the agreement above is over a stream that discriminates rather
+// than over two functions that both flatten everything to the same mush.
+func TestGateDocumentHashAgreesWithTheOneHashFunction(t *testing.T) {
+	root := t.TempDir()
+	gateWrite(t, root, "README.md", "the front door\n")
+	gateWrite(t, root, "docs/RELEASING.md", "the procedure\n")
+	gateWrite(t, root, "site/src/content.ts", "export const x = 1;\n")
+
+	for _, rels := range [][]string{
+		{"README.md"},
+		{"README.md", "docs/RELEASING.md"},
+		{"site/src/content.ts", "README.md", "docs/RELEASING.md"},
+	} {
+		want, err := hashRepoFiles(root, rels)
+		if err != nil {
+			t.Fatalf("hashRepoFiles %v: %v", rels, err)
+		}
+		got, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("gateHashDocuments %v: %v", rels, err)
+		}
+		if got != want {
+			t.Errorf("the gate's document hash disagrees with the one hash function over regular files %v:\n  contract: %s\n      gate: %s", rels, want, got)
+		}
+	}
+
+	split := t.TempDir()
+	gateWrite(t, split, "a.txt", "onetwo")
+	gateWrite(t, split, "b.txt", "")
+	first, err := gateHashDocuments(split, []string{"a.txt", "b.txt"})
+	if err != nil {
+		t.Fatalf("hash the first split: %v", err)
+	}
+	gateWrite(t, split, "a.txt", "one")
+	gateWrite(t, split, "b.txt", "two")
+	second, err := gateHashDocuments(split, []string{"a.txt", "b.txt"})
+	if err != nil {
+		t.Fatalf("hash the second split: %v", err)
+	}
+	if first == second {
+		t.Error("moving bytes between two documents left the digest unmoved; the stream is not carrying each document's path and length, so the agreement asserted above is over a hash that cannot tell two trees apart")
+	}
+}
+
+// TestGateDocumentHashReadsASymlinkedSurface is the repair for the one surface
+// whose key could not be computed at all.
+//
+// `exported-skills` is five tracked symlinks to directories; os.ReadFile on one
+// returns "is a directory". The three rows are the three ways that surface can
+// move, and the third is the one a "skip what will not open" repair would leave
+// uncovered forever.
+func TestGateDocumentHashReadsASymlinkedSurface(t *testing.T) {
+	fixture := func(t *testing.T) (root string, rels []string) {
+		t.Helper()
+		root = t.TempDir()
+		gateWrite(t, root, "skills/dossierx/SKILL.md", "the router bundle\n")
+		gateWrite(t, root, "skills/dossierx/reference.md", "the error table\n")
+		// A second bundle whose files are named the same and hold the same
+		// bytes. Re-pointing at THIS is the row that isolates the link target:
+		// re-pointing at a bundle with different contents would move the digest
+		// through the contents, and the target string could be dropped from the
+		// stream with the assertion still green. Verified — it was, and it was.
+		gateWrite(t, root, "skills/twin/SKILL.md", "the router bundle\n")
+		gateWrite(t, root, "skills/twin/reference.md", "the error table\n")
+		if err := os.MkdirAll(filepath.Join(root, ".claude", "skills"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.Symlink(filepath.Join("..", "..", "skills", "dossierx"), filepath.Join(root, ".claude", "skills", "dossierx")); err != nil {
+			// Not a skip. This repository tracks five symlinks; a machine that
+			// cannot make one cannot check out the tree the gate is supposed to
+			// judge, and reporting `ok` there is a pass over zero assertions.
+			t.Fatalf("this filesystem cannot create a symlink, so the `exported-skills` surface cannot be built here — and it cannot be checked out here either: %v", err)
+		}
+		return root, []string{".claude/skills/dossierx"}
+	}
+
+	root, rels := fixture(t)
+	base, err := gateHashDocuments(root, rels)
+	if err != nil {
+		t.Fatalf("a surface whose document is a symlink to a directory could not be hashed at all: %v", err)
+	}
+
+	t.Run("the link is re-pointed at a byte-identical twin", func(t *testing.T) {
+		// The twin holds the same file names and the same bytes on purpose. So
+		// the ONLY thing that differs is where the link points — which is what
+		// this row is for. An earlier version re-pointed at a bundle with
+		// different contents, and the digest moved through the contents: the
+		// link target could be dropped from the hash stream entirely with this
+		// assertion still green. It was a check that passed either way.
+		root, rels := fixture(t)
+		before, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash: %v", err)
+		}
+		link := filepath.Join(root, ".claude", "skills", "dossierx")
+		if err := os.Remove(link); err != nil {
+			t.Fatalf("remove the link: %v", err)
+		}
+		if err := os.Symlink(filepath.Join("..", "..", "skills", "twin"), link); err != nil {
+			t.Fatalf("re-point the link: %v", err)
+		}
+		after, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash after re-pointing: %v", err)
+		}
+		if after == before {
+			t.Error("re-pointing the link at a different directory left the digest unmoved. " +
+				"The export would be tracking another bundle while every key in the system said nothing had changed")
+		}
+	})
+
+	t.Run("bytes reachable through the link change", func(t *testing.T) {
+		root, rels := fixture(t)
+		before, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash: %v", err)
+		}
+		gateWrite(t, root, "skills/dossierx/reference.md", "the error table, rewritten\n")
+		after, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash after the edit: %v", err)
+		}
+		if after == before {
+			t.Error("editing a file reachable through the link left the digest unmoved")
+		}
+	})
+
+	t.Run("a SAME-LENGTH edit behind the link", func(t *testing.T) {
+		// The row above changes the file's LENGTH, so it passes on the length
+		// field alone: the CONTENTS could be dropped from the record entirely
+		// and it would stay green. Verified — they could, and it did. This row
+		// rewrites the file to exactly the same number of bytes, which is what a
+		// version bump, a re-spelled error code or a re-pointed URL of the same
+		// width actually looks like inside an exported skill bundle. The only
+		// thing left that can move the digest is the bytes themselves.
+		root, rels := fixture(t)
+		const was = "the error table\n"
+		const now = "the erro7 table\n"
+		if len(was) != len(now) {
+			t.Fatalf("this row only means anything if the two bodies are the same length: %d vs %d", len(was), len(now))
+		}
+		before, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash: %v", err)
+		}
+		gateWrite(t, root, "skills/dossierx/reference.md", now)
+		after, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash after the edit: %v", err)
+		}
+		if after == before {
+			t.Error("a same-length edit to a file reachable through the link left the digest unmoved. " +
+				"The key covers the file's name and size and not what it says, so the exported bundle could be rewritten under a carried-forward PASS")
+		}
+	})
+
+	t.Run("the link points at a tree holding no file", func(t *testing.T) {
+		// A surface whose documents reach nothing fingerprints to a constant —
+		// stable, indistinguishable from a match, and covering nothing that can
+		// change. It is the end state of a "repair" that empties the export
+		// rather than fixing it, and until this row existed the refusal was
+		// unexercised: replacing it with `if false` left the suite green.
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "skills", "hollow"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.MkdirAll(filepath.Join(root, ".claude", "skills"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if err := os.Symlink(filepath.Join("..", "..", "skills", "hollow"), filepath.Join(root, ".claude", "skills", "hollow")); err != nil {
+			t.Fatalf("this filesystem cannot create a symlink: %v", err)
+		}
+		if _, err := gateHashDocuments(root, []string{".claude/skills/hollow"}); err == nil {
+			t.Error("a digest was produced for a link pointing at a tree holding no file; that value is a constant, and a constant carries every verdict forward forever")
+		}
+
+		// And a tree holding only an empty SUBDIRECTORY is the same nothing,
+		// reached one level down.
+		if err := os.MkdirAll(filepath.Join(root, "skills", "hollow", "nested"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if _, err := gateHashDocuments(root, []string{".claude/skills/hollow"}); err == nil {
+			t.Error("a digest was produced for a link reaching only empty directories")
+		}
+	})
+
+	t.Run("a file joins the tree behind the link", func(t *testing.T) {
+		root, rels := fixture(t)
+		before, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash: %v", err)
+		}
+		gateWrite(t, root, "skills/dossierx/recovery.md", "a new page in the bundle\n")
+		after, err := gateHashDocuments(root, rels)
+		if err != nil {
+			t.Fatalf("hash after the addition: %v", err)
+		}
+		if after == before {
+			t.Error("a file added behind the link left the digest unmoved; the surface grew and its key did not")
+		}
+	})
+
+	t.Run("the link is dangling", func(t *testing.T) {
+		root, rels := fixture(t)
+		if err := os.RemoveAll(filepath.Join(root, "skills", "dossierx")); err != nil {
+			t.Fatalf("remove the target: %v", err)
+		}
+		if _, err := gateHashDocuments(root, rels); err == nil {
+			t.Error("a digest was produced for a link pointing at nothing; that value is stable, looks like a match, and covers a surface no agent can read")
+		}
+	})
+
+	t.Run("a document that is neither a file nor a link", func(t *testing.T) {
+		root := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(root, "docs", "decisions"), 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		if _, err := gateHashDocuments(root, []string{"docs/decisions"}); err == nil {
+			t.Error("a digest was produced for a document that is a plain directory")
+		}
+	})
+
+	// The fixture is honest: the untouched tree hashes, so every row above is
+	// the mechanism under test rather than a hasher that refuses everything.
+	if again, err := gateHashDocuments(root, rels); err != nil || again != base {
+		t.Fatalf("two hashes of one unchanged linked surface disagree (%v): %s vs %s", err, base, again)
+	}
+}
+
+// gateReversedStrings returns a reversed copy, for the ordering assertions that
+// need a list that is the same SET in a different order.
+func gateReversedStrings(in []string) []string {
+	out := make([]string, 0, len(in))
+	for i := len(in) - 1; i >= 0; i-- {
+		out = append(out, in[i])
+	}
+	return out
 }
 
 // gateEqualStrings compares two string slices element by element. A nil and an
