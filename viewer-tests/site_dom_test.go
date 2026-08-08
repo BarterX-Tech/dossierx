@@ -105,6 +105,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -164,16 +165,33 @@ type siteCodeTabs struct {
 	Panels []string `json:"panels"`
 }
 
+// siteTranscriptLine is one line of a depicted terminal session as the page
+// actually renders it. Prompt comes from the line element's own class, not from
+// the text: Cli.tsx strips the "$ " before rendering and CSS draws it back with
+// ::before, so the character a reader sees is in no text node.
+type siteTranscriptLine struct {
+	Prompt bool   `json:"prompt"`
+	Text   string `json:"text"`
+}
+
+// siteTranscript is one command card's session, keyed by the command name shown
+// on the same card.
+type siteTranscript struct {
+	Command string               `json:"command"`
+	Lines   []siteTranscriptLine `json:"lines"`
+}
+
 // siteSnapshot is one read of the whole document, as __dxSnapshot returns it.
 type siteSnapshot struct {
-	Text       []string         `json:"text"`
-	Attrs      []siteAttr       `json:"attrs"`
-	Details    []siteDetails    `json:"details"`
-	Summaries  int              `json:"summaries"`
-	Expandable []siteExpandable `json:"expandable"`
-	CodeTabs   []siteCodeTabs   `json:"codetabs"`
-	CLI        []string         `json:"cli"`
-	Head       []string         `json:"head"`
+	Text        []string         `json:"text"`
+	Attrs       []siteAttr       `json:"attrs"`
+	Details     []siteDetails    `json:"details"`
+	Summaries   int              `json:"summaries"`
+	Expandable  []siteExpandable `json:"expandable"`
+	CodeTabs    []siteCodeTabs   `json:"codetabs"`
+	CLI         []string         `json:"cli"`
+	Head        []string         `json:"head"`
+	Transcripts []siteTranscript `json:"transcripts"`
 }
 
 // sitePass is one snapshot as it is RECORDED: the text and attributes are the
@@ -200,6 +218,24 @@ type sitePage struct {
 	Attributes  []siteAttr    `json:"attributes"`
 	Details     []siteDetails `json:"details"`
 	Passes      []sitePass    `json:"passes"`
+	// Transcripts is the union across every pass, keyed by command. A command
+	// card renders its session only while it is expanded, so no single pass holds
+	// them all; the union is what the assertions read.
+	Transcripts []siteTranscript `json:"transcripts"`
+}
+
+// transcript returns the session depicted for one command, and whether the dump
+// carries one at all. Absence is a distinct answer from an empty session and the
+// caller says so differently: a command whose card was never opened is a hole in
+// the traversal, where a card with no lines is a page that shows a reader a
+// heading and lets them assume the rest.
+func (p sitePage) transcript(command string) (siteTranscript, bool) {
+	for _, tr := range p.Transcripts {
+		if tr.Command == command {
+			return tr, true
+		}
+	}
+	return siteTranscript{}, false
 }
 
 type siteDump struct {
@@ -366,6 +402,35 @@ const siteExtractorJS = `(function () {
     var names = document.querySelectorAll('#cli .cmd__name');
     for (var m = 0; m < names.length; m++) { cli.push(window.__dxTidy(names[m].textContent)); }
 
+    // The depicted terminal sessions, read as STRUCTURE rather than as text.
+    // Cli.tsx's Transcript renders one <div> per line inside a pre.term-out and
+    // marks the shell prompt with a class, and the leading "$ " a reader sees is
+    // drawn by CSS ::before — it is not in the DOM at all. So a line's own
+    // element says whether it is a command or output, which is what lets a Go
+    // assertion run the one and compare against the other. Flattening this to
+    // text would lose both the prompt/output split and the line boundaries, and
+    // a transcript is only true or false as an ordered whole.
+    //
+    // Keyed by the command name out of the same card, because at most one
+    // command is expanded at a time and the assertion has to know which session
+    // it is looking at.
+    var transcripts = [];
+    var cards = document.querySelectorAll('#cli .cmd');
+    for (var cd = 0; cd < cards.length; cd++) {
+      var nameEl = cards[cd].querySelector('.cmd__name');
+      var pre = cards[cd].querySelector('pre.term-out');
+      if (!nameEl || !pre) { continue; }
+      var tlines = [];
+      for (var tl = 0; tl < pre.children.length; tl++) {
+        var lineEl = pre.children[tl];
+        tlines.push({
+          prompt: String(lineEl.className || '').indexOf('term-out__line--prompt') >= 0,
+          text: window.__dxTidy(lineEl.textContent)
+        });
+      }
+      transcripts.push({ command: window.__dxTidy(nameEl.textContent), lines: tlines });
+    }
+
     var head = [];
     var title = window.__dxTidy(document.title);
     if (title) { head.push('title: ' + title); }
@@ -377,7 +442,7 @@ const siteExtractorJS = `(function () {
 
     return {
       text: text, attrs: attrs, details: details, summaries: document.querySelectorAll('summary').length,
-      expandable: expandable, codetabs: codetabs, cli: cli, head: head
+      expandable: expandable, codetabs: codetabs, cli: cli, head: head, transcripts: transcripts
     };
   };
   return true;
@@ -596,6 +661,7 @@ func readSitePage(t *testing.T, browser, base string, e siteEntry) sitePage {
 	seenText := map[string]bool{}
 	seenAttr := map[siteAttr]bool{}
 	seenDetails := map[siteDetails]bool{}
+	seenTranscript := map[string]bool{}
 
 	record := func(label, selector string, snap siteSnapshot) {
 		pass := sitePass{
@@ -625,6 +691,19 @@ func readSitePage(t *testing.T, browser, base string, e siteEntry) sitePage {
 				seenDetails[d] = true
 				page.Details = append(page.Details, d)
 			}
+		}
+		// FIRST reading of a command's session wins, and a session with no lines
+		// is not recorded as a reading at all. A closed card contributes no
+		// pre.term-out, so the entry simply is not there until the card opens;
+		// recording an empty one would let "the traversal never opened it" arrive
+		// downstream as "the page depicts nothing", which sends a reader to the
+		// wrong file.
+		for _, tr := range snap.Transcripts {
+			if len(tr.Lines) == 0 || seenTranscript[tr.Command] {
+				continue
+			}
+			seenTranscript[tr.Command] = true
+			page.Transcripts = append(page.Transcripts, tr)
 		}
 		page.Passes = append(page.Passes, pass)
 	}
@@ -1276,6 +1355,233 @@ func TestSiteRenderedDOMExtraction(t *testing.T) {
 				"nothing. Cli, Hero and Nav all do today — the extraction has stopped seeing them.")
 		}
 	})
+
+	// Condition 8 is the first assertion in this file that JUDGES THE SITE'S COPY
+	// rather than the dump's integrity, and it is here rather than beside the
+	// engine's tests for the reason CLAUDE.md gives: verify the thing the user
+	// sees, not the thing you edited.
+	//
+	// WHAT IT REPLACES. This claim used to be made in the root module against
+	// site/src/content.ts — a regexp pulled the `example` template literal out of
+	// the source, another substituted the interpolations it recognised, and the
+	// result was compared to a binary's output. It was defeated four separate
+	// times without a single assertion going red, and every defeat was the same
+	// shape: the file's TEXT is not the page. A five-line prose comment satisfied
+	// a substring search. A commented-out declaration satisfied it again. A second
+	// declaration after the good one satisfied it a third time, while the bundler
+	// evaluated the second. None of those survives a read of the rendered DOM: a
+	// comment renders nothing, a commented-out entry renders nothing, and a
+	// contradictory later declaration renders — and is what is compared.
+	t.Run("8 the `version` transcript depicts what the released binary prints", func(t *testing.T) {
+		assertVersionTranscriptIsRealOutput(t, dump)
+	})
+}
+
+// versionCommandCard is the CLI card whose depicted session condition 8 judges.
+const versionCommandCard = "version"
+
+// assertVersionTranscriptIsRealOutput compares the RENDERED `dossierx version`
+// session against a binary linked the way a release links one.
+//
+// THE TWO OPERANDS COME FROM DIFFERENT PLACES, which is the whole design and the
+// thing three previous versions of this check got wrong in three different ways.
+// The depicted side is read out of the browser's DOM. The real side is produced by
+// running a binary whose version was derived from the site's RELEASE TAG — not
+// from the transcript — so a page that stopped stripping the leading `v`, or that
+// started depicting a different release, makes the two disagree. A check whose two
+// operands come from one substitution is not comparing anything.
+//
+// WHAT IT CANNOT SEE, stated rather than implied. A hand-typed literal renders
+// identically to a derived one on the day it is written; this passes over it and
+// so would any read of output. That invariant is about how the source produces the
+// page, and it is held where such things can be held — viewer-tests/site_source_test.go's
+// rule 3, which forbids a renderable version literal outside the releases array in
+// BOTH spellings, the tag's and the binary's.
+func assertVersionTranscriptIsRealOutput(t *testing.T, dump siteDump) {
+	t.Helper()
+
+	page := dump.page(t, "index.html")
+	depicted, ok := page.transcript(versionCommandCard)
+	if !ok {
+		var cards []string
+		for _, tr := range page.Transcripts {
+			cards = append(cards, tr.Command)
+		}
+		t.Fatalf("the dump carries no rendered session for the %q command card. The traversal opens every `.cmd__head`, so a card whose transcript never reached the dump means the card is gone, the markup changed, or it was never opened — "+
+			"and this assertion would otherwise pass over nothing. Cards whose sessions WERE read: %v", versionCommandCard, summarise(cards, 25))
+	}
+	if len(depicted.Lines) < 2 {
+		t.Fatalf("the rendered %q session is %d line(s): %+v\nA session that abridges to nothing shows a reader a command and lets them assume what it prints", versionCommandCard, len(depicted.Lines), depicted.Lines)
+	}
+
+	// THE COMMAND, taken from the page's own prompt line. Running what the page
+	// tells a reader to run is what keeps this from being a true recording of one
+	// command labelled as another — a transcript true line by line and false as a
+	// whole, which is the worst shape a depicted session can have.
+	//
+	// The prompt is identified by the line ELEMENT's class rather than by a
+	// leading "$": Cli.tsx strips that character before rendering and CSS draws it
+	// back with ::before, so it is in no text node and a text-based split would
+	// find no prompt at all.
+	if !depicted.Lines[0].Prompt {
+		t.Fatalf("the rendered %q session does not open with a prompt line: %+v\nWithout one there is no command to run, and every line below would be judged against output this test chose for itself", versionCommandCard, depicted.Lines)
+	}
+	for _, line := range depicted.Lines[1:] {
+		if line.Prompt {
+			t.Fatalf("the rendered %q session depicts more than one command (%q). This assertion runs the first and compares everything beneath it; a second command means some depicted output belongs to a run this test never made, and it would be judged against the wrong process",
+				versionCommandCard, line.Text)
+		}
+	}
+
+	argv := strings.Fields(depicted.Lines[0].Text)
+	if len(argv) < 2 || argv[0] != "dossierx" {
+		t.Fatalf("the rendered %q session echoes %q, which is not a `dossierx <args>` invocation this test can run. The output beneath it would then be compared against nothing", versionCommandCard, depicted.Lines[0].Text)
+	}
+
+	// THE VERSION THE RELEASE WOULD STAMP, derived from the tag the site itself
+	// calls current. `.goreleaser.yaml` stamps `-X main.version={{.Version}}`, and
+	// GoReleaser's `{{.Version}}` is the tag with its leading `v` stripped —
+	// `{{.Tag}}` is the spelling that keeps it. That MODEL is not held here; it is
+	// held in the root module by gateRequireReleaseTransform, which parses
+	// .goreleaser.yaml and fails if the template ever changes. Splitting it that
+	// way is deliberate: this module cannot parse YAML (its go.mod is chromedp and
+	// nothing else), and a second hand-rolled reader of that file would be a second
+	// model to keep in step.
+	ra := repoReleases(t)
+	tag := ra.current()
+	stamped := strings.TrimPrefix(tag, "v")
+	if stamped == tag {
+		t.Fatalf("the current release entry is %q, which carries no leading \"v\" to strip. The release build's version and the release's name would then be one string, and this comparison could no longer tell the page depicting the right one from the page depicting the wrong one",
+			tag)
+	}
+
+	// The tag has to be a string the SITE renders, not only one its source
+	// declares. Without this the comparison rests on a source array the page might
+	// no longer be built from.
+	if releases := dump.page(t, "releases.html"); !containsString(releases.Text, tag) {
+		t.Fatalf("the releases page does not render %q anywhere, though content.ts declares it as the current release. The version this assertion judges the transcript against is then a fact about the source and not about the page:\n%s",
+			tag, summarise(releases.Text, 30))
+	}
+
+	binary := buildReleaseLinkedDossierx(t, ra.root, stamped)
+	out := strings.Split(strings.TrimRight(runTool(t, binary, argv[1:]...), "\n"), "\n")
+
+	// Tidied the way the browser's text nodes were tidied. The binary indents its
+	// commit and date lines; the DOM read collapses whitespace runs, so comparing
+	// raw output against rendered text would fail on indentation and say nothing
+	// about the claim.
+	printed := make([]string, 0, len(out))
+	for _, line := range out {
+		printed = append(printed, tidySpace(line))
+	}
+	if len(printed) == 0 || printed[0] == "" {
+		t.Fatalf("`dossierx %s` printed nothing; there is no real output for the page to be an abridgement of", strings.Join(argv[1:], " "))
+	}
+
+	// EVERY DEPICTED LINE, IN ORDER. Dropping lines is what makes the session an
+	// abridgement and is allowed — the page has no truthful source for the commit
+	// or the build timestamp. Inventing one, or reordering two, is not.
+	remaining := printed
+	for _, line := range depicted.Lines[1:] {
+		at := indexOfString(remaining, line.Text)
+		if at >= 0 {
+			remaining = remaining[at+1:]
+			continue
+		}
+		if indexOfString(printed, line.Text) >= 0 {
+			t.Errorf("the rendered %q session depicts %q out of order: the binary prints it, but before the line the page puts above it.\nreal output:\n  %s\nrendered:\n  %s",
+				versionCommandCard, line.Text, strings.Join(printed, "\n  "), renderedTranscript(depicted))
+			return
+		}
+		t.Errorf("the rendered %q session depicts %q, which `dossierx %s` does not print.\nreal output (from a binary linked the way the release links one, `-X main.version=%s`):\n  %s\nrendered:\n  %s\n"+
+			"The page may abridge that output and may not invent a line of it. If the difference is the version's leading `v`: the release build strips it, so the tag is %s and the binary prints %s.",
+			versionCommandCard, line.Text, strings.Join(argv[1:], " "), stamped, strings.Join(printed, "\n  "), renderedTranscript(depicted), tag, stamped)
+		return
+	}
+
+	// And it must depict the version line specifically. The walk above admits any
+	// subset, including the empty one after the prompt.
+	if !containsString(linesOf(depicted), printed[0]) {
+		t.Errorf("the rendered %q session never shows the binary's version line. The binary prints %q; the page renders:\n  %s\n"+
+			"The version is the ONE value on this page with a truthful source, and it is spelled %s — %s is the release's NAME, which is not what the command prints",
+			versionCommandCard, printed[0], renderedTranscript(depicted), stamped, tag)
+	}
+
+	// The two lines it may not depict whatever the walk above allows, because it
+	// has no truthful source for either. They would be admitted as a legitimate
+	// abridgement only if they happened to match the values THIS test linked in,
+	// which is exactly the coincidence a denylist is for.
+	for _, line := range depicted.Lines[1:] {
+		if strings.HasPrefix(line.Text, "commit:") {
+			t.Errorf("the rendered %q session depicts a `commit:` line. The site has no truthful source for it: the release entry field that fed it was deleted for naming the wrong sha two releases running, and the binary spells it as forty characters", versionCommandCard)
+		}
+		if strings.HasPrefix(line.Text, "date:") {
+			t.Errorf("the rendered %q session depicts a `date:` line. The binary prints an RFC 3339 timestamp from GoReleaser's `main.date` where the release entry carries a calendar day, so depicting it asserts output no build produces", versionCommandCard)
+		}
+	}
+
+	t.Logf("rendered %q session matches a release-linked binary (tag %s -> stamped %s):\n  %s",
+		versionCommandCard, tag, stamped, renderedTranscript(depicted))
+}
+
+// buildReleaseLinkedDossierx builds the engine from the ROOT module with the
+// three ldflags a release build passes, and returns the binary.
+//
+// The commit and date are fixed values rather than real ones on purpose: they
+// make the two lines the site may not depict impossible to match by accident, so
+// a depicted `commit:` fails the comparison instead of coinciding with whatever
+// this machine's git happens to say.
+func buildReleaseLinkedDossierx(t *testing.T, root, version string) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "dossierx")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	ldflags := "-s -w -X main.version=" + version +
+		" -X main.commit=0000000000000000000000000000000000000000" +
+		" -X main.date=2000-01-01T00:00:00Z"
+	build := exec.Command("go", "build", "-o", binary, "-ldflags", ldflags, "./cmd/dossierx")
+	build.Dir = root
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build the engine with the release's ldflags: %v\n%s\nWithout a binary there is no real output for the page's transcript to be compared against, which is a check that did not run", err, out)
+	}
+	return binary
+}
+
+// linesOf is a rendered session's text, prompt line included.
+func linesOf(tr siteTranscript) []string {
+	out := make([]string, 0, len(tr.Lines))
+	for _, line := range tr.Lines {
+		out = append(out, line.Text)
+	}
+	return out
+}
+
+// renderedTranscript is a session formatted for a failure message, with the "$"
+// the CSS draws put back so the reader sees what the page shows.
+func renderedTranscript(tr siteTranscript) string {
+	out := make([]string, 0, len(tr.Lines))
+	for _, line := range tr.Lines {
+		if line.Prompt {
+			out = append(out, "$ "+line.Text)
+			continue
+		}
+		out = append(out, line.Text)
+	}
+	return strings.Join(out, "\n  ")
+}
+
+func containsString(pool []string, want string) bool { return indexOfString(pool, want) >= 0 }
+
+// indexOfString is the position of want in pool, or -1. The subsequence walk
+// above needs the INDEX and not merely whether it is there.
+func indexOfString(pool []string, want string) int {
+	for i, got := range pool {
+		if got == want {
+			return i
+		}
+	}
+	return -1
 }
 
 // TestSiteProseFloorCatchesADumpThatLostProse is condition 6's floor tested the

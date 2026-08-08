@@ -71,6 +71,16 @@ export interface ContentSpec {
  * than hand-copied: the hero kicker, the hero badge list, the release-history
  * intro and the `dossierx version` example all read `latestRelease` below.
  * Every one of them had gone stale against this array at least once.
+ *
+ * NO ENTRY CARRIES A `commit`, and none may be given one. The field held the
+ * tagged release's short sha and could not converge: writing the sha is itself a
+ * commit, so the value was stale the moment it landed. v0.4.1 shipped naming
+ * `5327923` while `refs/tags/v0.4.1` pointed at `206b4a4`, and v0.5.0 chased its
+ * own sha through two commits before anything caught the loop. It also disagreed
+ * with the binary by construction — GoReleaser stamps `main.commit` from
+ * `{{.Commit}}`, the full forty characters, against seven here. Nothing on the
+ * site reads it now, so re-adding one would be adding a claim with no reader and
+ * no way to be right.
  */
 const releases: Release[] = [
         {
@@ -183,7 +193,6 @@ const releases: Release[] = [
           date: "2026-07-30",
           title: "A documentation-grade renderer",
           tag: "Previous release",
-          commit: "d3b1e30",
           highlights: [
             "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
             "Constructs: backslash escapes, bold, italic in both spellings under CommonMark left/right-flanking rules, strikethrough, double-backtick code spans, autolinks in both forms, blockquotes, horizontal rules, headings at ### and deeper, unbounded list nesting, task items, hard line breaks, loose lists, ordered-list start numbers, fence language classes, GFM pipe tables, and images. Emphasis is held to all 132 emphasis examples of CommonMark 0.31.2.",
@@ -199,7 +208,6 @@ const releases: Release[] = [
           date: "2026-08-03",
           title: "Migration removed, and governed_by becomes a drift edge",
           tag: "Previous release",
-          commit: "4a8fec4",
           highlights: [
             "BREAKING: `dossierx migrate` is gone, and with it every automatic adoption path. A project whose lock store predates the lock ledger crosses by holding nothing locked: re-propose any locked build order, unlock every locked claim, then re-lock only what you still stand behind. That first lock in a project with nothing locked is what stamps the store onto the ledger schema — and it records a real approval, which is the whole difference from the adoption path this release deletes. `migrate` survives only as a hidden stub that names the new path, because README, the skills and the CI template spent a release telling agents to type it, and flag parsing runs before any unknown-command handler.",
             "BREAKING, on the wire: error.code `adoption_required` is renamed `pre_ledger_unadopted`; `already_migrated` is removed outright; the finding `lock-ledger-adoption-required` is renamed `lock-ledger-pre-ledger`. Nothing is grandfathered any more, but `claim show` keeps `ledger.grandfathered` — always false for new records.",
@@ -217,10 +225,6 @@ const releases: Release[] = [
           date: "2026-08-04",
           title: "raw_html becomes an attachment, and the edges footer folds away",
           tag: "Previous release",
-          // 206b4a4, not the 5327923 this said until v0.5.0: that was the PR's merge
-          // commit, stamped before the tag existed, and `git rev-parse --short
-          // v0.4.1^{commit}` disagrees with it. See the note on the v0.5.0 entry.
-          commit: "206b4a4",
           highlights: [
             "`raw_html` is an ATTACHMENT legal on any layout, not a layout a claim has to adopt (closes issue #25). A claim that is genuinely a table, or a list of steps, can now carry a diagram or a small rendered mockup alongside its own content — all seven layouts render the attachment after the claim's own body/rows/steps and before the edges footer. `layout: mockup` remains a real layout with its own empty state; it simply stops being the toll gate you had to pass through to show anything rendered.",
             "That widens WHERE unescaped HTML may sit, and nothing else — not who may author it, not what reaches the viewer. Every other leg of the gate still fires on every raw_html-bearing claim whatever its layout: the mockup_modules allowlist, the tag/attribute/class markup allowlist, the raw_html_reviewed human-review flag, and the lock-lifecycle check. `dossierx claim flag`'s body-only rule moved with it — it now keys on whether a claim actually carries raw_html rather than on its layout, which was only ever a sound proxy while the two were the same question.",
@@ -236,7 +240,6 @@ const releases: Release[] = [
           date: "2026-08-07",
           title: "a claims graph in the viewer",
           tag: "Latest release",
-          commit: "3217a48",
           highlights: [
             "BREAKING: `dossierx check` now fails on a dependency loop that alternates `rests_on` and `governed_by`. The new `mixed-cycle` lint runs at ERROR severity, taking the registered rule count from 27 to 28. It walks the union of both graphs carrying the edge kind on every hop and reports a cycle whose hops include at least one of each — \"A rests_on B, B governed_by A\". Neither existing rule can see that shape: `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so a mixed loop presents no back edge to either walk and passed the whole registry. A project carrying one passed before this release and exits 1 after it, with no edit on its side, no content-hash move and nothing in the lock store to explain it.",
             "There is deliberately no migration command and no migration document: a corpus containing this shape was always malformed, the engine simply could not see it. The recovery is to break the loop — the finding names every claim on it — and re-run `dossierx check`. Where those claims are locked that is unlock, edit, lock, the same as any other correction. `mirrors` is not part of the union graph and never trips the rule.",
@@ -254,6 +257,27 @@ export const latestRelease: Release = releases[releases.length - 1];
 
 /** The single source for every version string on the site. */
 export const latestVersion: string = latestRelease.version;
+
+/**
+ * What the RELEASED BINARY prints for its version, which is NOT the string above.
+ *
+ * `.goreleaser.yaml` stamps `-X main.version={{.Version}}`, and GoReleaser's
+ * `{{.Version}}` is the tag with the leading `v` stripped — `{{.Tag}}` is the one
+ * that keeps it. Measured against the published archive rather than reasoned
+ * about: `dossierx_darwin_arm64.tar.gz` from the v0.5.0 release prints
+ * `dossierx version 0.5.0`, and its recorded build settings read
+ * `-X main.version=0.5.0`.
+ *
+ * So `v0.5.0` and `0.5.0` are both correct, in different jobs. `latestVersion` is
+ * the RELEASE — the tag, the ledger entry, the thing prose names — and the `v` is
+ * this project's display convention for it. `latestBinaryVersion` is a
+ * TRANSCRIPT value: it may only appear where the page is depicting what a command
+ * prints, and there the tag spelling is a fabrication. The site depicted
+ * `dossierx v0.5.0` in the `version` example while the binary printed
+ * `dossierx version 0.5.0`, which is two errors in one short line, and nothing
+ * compared it to real output until gate_release_stamp_test.go did.
+ */
+export const latestBinaryVersion: string = latestRelease.version.replace(/^v/, "");
 
 /**
  * Lowercases only the first character, so a release title reads as a clause
@@ -1139,8 +1163,39 @@ export const contentSpec: ContentSpec = {
                 summary: "Print the binary's version, commit and build date.",
                 detail:
                   "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere — which is exactly why a bootstrapping agent calls it first. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
+                // The transcript shows the ONE line this page can derive. The
+                // binary prints three — a version line, a "commit:" line and a
+                // "date:" line — and the site has a truthful source for only
+                // the first.
+                //
+                // `commit` used to come from a hand-stamped field on the release
+                // entry: a value that could not converge (writing the sha is
+                // itself a commit, so it was stale the moment it landed), that
+                // named the wrong sha for two releases, and that the binary
+                // spells as a full 40-character sha where the site carried
+                // seven. `date` was no better — the entry's `date` is a calendar
+                // day, where the binary prints the RFC 3339 timestamp
+                // GoReleaser stamps into `main.date`, so depicting it as the
+                // "date:" line asserted output no build produces.
+                //
+                // Both are dropped rather than approximated: an abridged
+                // transcript states less than the truth, where an approximated
+                // one states something else. What remains is literal — including
+                // the word "version", which this line lost for several releases,
+                // and `latestBinaryVersion` rather than `latestVersion`, because
+                // the release build strips the leading `v` and a transcript is
+                // the one place on this page that spelling is wrong.
+                //
+                // This is held against a binary linked the way the release links
+                // one — but not from here. viewer-tests/site_dom_test.go reads
+                // the session out of the RENDERED page and compares it, because
+                // four attempts to read this line as SOURCE were defeated
+                // without an assertion going red: a prose comment satisfied the
+                // search, a commented-out entry satisfied it, and a second
+                // declaration after the good one satisfied it while the bundler
+                // evaluated the second. A comment renders nothing.
                 example:
-                  `$ dossierx version --format text\ndossierx ${latestRelease.version}\n  commit: ${latestRelease.commit ?? "(devel)"}\n  date:   ${latestRelease.date}`,
+                  `$ dossierx version --format text\ndossierx version ${latestBinaryVersion}`,
               },
             ],
           },

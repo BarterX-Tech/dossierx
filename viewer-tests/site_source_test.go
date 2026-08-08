@@ -61,13 +61,29 @@ import (
 // is defined relative to current() — the LAST version line that matched — and a
 // missed line does not fail, it silently moves current() back one release. The
 // rules then guard a version that can no longer go stale and wave through the
-// one that can. Two things keep that shut. reReleaseEntry tolerates a trailing
-// line comment, which is not hypothetical: entries in this very array carry
-// inline comments on their `commit` field. And loadReleasesArray cross-checks
-// the number of version lines it read against the number of objects actually in
-// the array (topLevelObjects), so any OTHER unreadable shape — a different quote
-// style, a reformat onto two lines, a field renamed — is a red build rather than
-// a quieter definition of "current".
+// one that can. Two things keep that shut.
+//
+// reReleaseEntry tolerates a trailing line comment. THAT TOLERANCE OUTLIVED ITS
+// ORIGINAL REASON, which was that entries in this array carried inline comments
+// on their `commit` field — a field that has since been deleted outright, so no
+// entry carries a comment today and this comment used to assert, in the present
+// tense, something the array had stopped doing. (The deletion is held by
+// cmd/dossierx/gate_release_stamp_test.go, which refuses the field's data, its
+// readers and its type declaration; `commit` is not coming back.)
+//
+// The tolerance is kept anyway, and on a different argument. It is not here to
+// admit a shape the file has — it is here so that a shape the file is ALLOWED to
+// have cannot turn this suite red for a formatting choice. A trailing `//` on a
+// version line changes nothing a visitor reads, and a rule that went red on one
+// would be a rule maintainers learn to work around.
+//
+// And loadReleasesArray cross-checks the number of version lines it read against
+// the number of objects actually in the array (topLevelObjects), so any OTHER
+// unreadable shape — a different quote style, a reformat onto two lines, a field
+// renamed — is a red build rather than a quieter definition of "current". That
+// cross-check is what makes the tolerance safe to keep: with it in place an
+// unreadable line is an error, never a silent slide of current() back one
+// release, so the tolerance can only ever prevent a false red.
 var (
 	reReleasesOpen  = regexp.MustCompile(`(?m)^const releases: Release\[\] = \[$`)
 	reReleasesClose = regexp.MustCompile(`(?m)^\];$`)
@@ -502,6 +518,40 @@ func checkNoHardCodedVersions(ra releasesArray, declared []historyLiteral) (vers
 			scan.offenders = append(scan.offenders, fmt.Sprintf("%s:%d (%s) — %s", rel,
 				1+strings.Count(body[:loc[0]], "\n"), lit, why))
 		}
+
+		// THE OTHER SPELLING, and it is the one the rule above is shaped to miss.
+		//
+		// reVersionLit requires a leading `v`, so it reads the RELEASE's name and
+		// is blind to the BINARY's: `.goreleaser.yaml` stamps
+		// `-X main.version={{.Version}}`, which is the tag with that `v` stripped,
+		// and the site's `dossierx version` transcript therefore depicts `0.5.0`
+		// where every other version string on the page reads `v0.5.0`.
+		//
+		// That gap was not theoretical. Replacing the transcript's interpolation
+		// with the literal it renders today left this rule, the root suite and the
+		// browser suite all green — the literal carried no `v` to match — and the
+		// page would have gone on depicting THIS release's output from the next tag
+		// onward. A rendered read cannot catch it either: a hand-typed string and a
+		// derived one render the same bytes on the day they are written. Only the
+		// source can, and only if it is looking for the right spelling.
+		//
+		// It is not exempted inside the releases array. That array declares tags,
+		// and every one of them carries its `v`; a bare current version inside it is
+		// a copy that happens to live in the same brackets.
+		for _, loc := range binaryVersionLocs(body, binaryOf(current)) {
+			if comments[loc[0]] {
+				continue
+			}
+			rel, relErr := filepath.Rel(ra.root, path)
+			if relErr != nil {
+				rel = path
+			}
+			scan.offenders = append(scan.offenders, fmt.Sprintf("%s:%d (%s) — %s", rel,
+				1+strings.Count(body[:loc[0]], "\n"), body[loc[0]:loc[1]],
+				"the current release as the BINARY spells it — what `dossierx version` prints. "+
+					"Correct today and false at the next tag, and carrying no leading `v`, it is the one "+
+					"spelling nothing else in this repository looks for; derive it from latestBinaryVersion"))
+		}
 		return nil
 	})
 	if walkErr != nil {
@@ -516,6 +566,53 @@ func checkNoHardCodedVersions(ra releasesArray, declared []historyLiteral) (vers
 		}
 	}
 	return scan, nil
+}
+
+// binaryOf is the release transform: the version a release build stamps into the
+// binary, given the tag. `.goreleaser.yaml` stamps `{{.Version}}`, which is the
+// tag with its leading `v` stripped; that template is held against the file by
+// gateRequireReleaseTransform in the root module, which parses it — this module's
+// go.mod is chromedp and nothing else, so it cannot read YAML and does not
+// pretend to.
+func binaryOf(tag string) string { return strings.TrimPrefix(tag, "v") }
+
+// binaryVersionLocs finds every occurrence of a bare version literal that is not
+// part of a longer number and not the tail of the `v`-prefixed spelling.
+//
+// The boundary conditions are what keep this from being a substring search. A
+// preceding `v` means the match is the tail of `v0.5.0`, which reVersionLit
+// already judges and which would otherwise be reported twice with two different
+// stories. A preceding or following digit or dot means the match is part of
+// something else entirely — `127.0.0.1` contains `0.0.1`, and content.ts's own
+// code samples are full of addresses.
+func binaryVersionLocs(body, lit string) [][2]int {
+	if lit == "" {
+		return nil
+	}
+	var out [][2]int
+	for at := 0; ; {
+		i := strings.Index(body[at:], lit)
+		if i < 0 {
+			return out
+		}
+		start := at + i
+		end := start + len(lit)
+		at = start + 1
+
+		if start > 0 {
+			switch prev := body[start-1]; {
+			case prev == 'v', prev == '.', prev >= '0' && prev <= '9':
+				continue
+			}
+		}
+		if end < len(body) {
+			switch next := body[end]; {
+			case next == '.', next >= '0' && next <= '9':
+				continue
+			}
+		}
+		out = append(out, [2]int{start, end})
+	}
 }
 
 // coveringSpan returns the declaration covering the literal at [start,end), or
@@ -834,16 +931,23 @@ func TestSiteSourceRulesCatchTheirOwnDefects(t *testing.T) {
 		}
 		t.Logf("unparseable entry rejected: %v", err)
 
-		// The healthy twin, and the reason the tolerance exists: entries in the
-		// real array carry inline comments on their `commit` field, so one
-		// landing on a `version` field is a formatting choice and not a defect.
+		// The healthy twin. A trailing `//` on a version line is a formatting
+		// choice, not a defect, and this is the case that must NOT be rejected.
+		//
+		// It used to be justified by pointing at the real array, whose entries
+		// carried inline comments on their `commit` field. They no longer do —
+		// that field was deleted, and no entry carries a comment today — so the
+		// justification is now the one at the head of this file: with
+		// topLevelObjects cross-checking the count, an unreadable line is already
+		// a hard error, which leaves this tolerance able only to prevent a false
+		// red and never to hide a real one.
 		commented := fixtureRoot(t, map[string]string{
 			"site/src/content.ts": `const releases: Release[] = [
   {
     version: "v0.4.0",
   },
   {
-    version: "v0.5.0", // the sha this entry names is the tagged one
+    version: "v0.5.0", // re-tagged after the notes fix
     tag: "Latest release",
   },
 ];
