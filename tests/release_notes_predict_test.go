@@ -24,13 +24,29 @@
 //     eab3a63, "Merge pull request #32 — v0.5.0, a claims graph in the
 //     viewer" — that range and commit are still what .goreleaser.yaml's own
 //     changelog.filters.exclude comment cites as the motivating real-world
-//     case). It was rebuilt hermetic because CI's checkout
-//     (actions/checkout@v7, no fetch-depth/fetch-tags override) is depth-1
-//     with no tags fetched, so `git log v0.4.1..v0.5.0` fails with exit 128
-//     on every one of ci.yml's six "test" matrix cells — a real, immutable
-//     git range is still exactly as fragile as the CI checkout that has to
-//     resolve it. A hermetic repo needs nothing from the ambient checkout
-//     and proves the same claim regardless of clone depth.
+//     case). It was rebuilt hermetic because a test that reads the ambient
+//     clone's TAG SET is not a test of this predictor: it is a test of
+//     whatever checkout happened to produce the tree it is running in, and
+//     that setting lives in another file, owned by another concern, free to
+//     change without anyone reading this one. `git log v0.4.1..v0.5.0` exits
+//     128 in a checkout that fetched no tags — a shallow clone, a
+//     `--no-tags` mirror, a fork, a CI checkout at its default depth — and
+//     that failure says nothing whatever about whether "^Merge " excludes a
+//     merge commit.
+//
+//     The reason is deliberately stated WITHOUT reference to how ci.yml
+//     checks out today, because an earlier version of this paragraph did the
+//     opposite: it asserted, as the justification, that CI's checkout "is
+//     depth-1 with no tags fetched, so `git log v0.4.1..v0.5.0` fails with
+//     exit 128 on every one of ci.yml's six 'test' matrix cells". That
+//     sentence stopped being true the moment the `test` job gained
+//     `fetch-depth: 0` — tags are fetched on all six cells now — and a
+//     rationale that a one-line edit to an unrelated file can falsify was
+//     never the real one. The decision is unchanged and remains the better
+//     one either way: a hermetic repo needs nothing from the ambient
+//     checkout and proves the same claim regardless of clone depth, which is
+//     also why this test would keep working if that `fetch-depth: 0` were
+//     ever removed again.
 //
 //   - TestPredictReleaseNotesForRange_PublishedEqualAcrossMergeBoundary
 //     builds on the same hermetic repo to prove PublishedEqual's contract:
@@ -736,12 +752,12 @@ func predictNotesGit(t *testing.T, dir string, args ...string) string {
 // and commits into itself, standing in for "this repository's real history"
 // the way TestPredictReleaseNotesForRange_MergeCommitExcluded used to depend
 // on directly. See that test's doc comment for why: a real, immutable git
-// range (v0.4.1..v0.5.0) is exactly as fragile as the ambient checkout that
-// has to resolve it, and CI's checkout is shallow with no tags. Building the
-// history here instead means every assertion below is checked against a
-// REAL git invocation (the whole point — no rawLines fixture stands in for
-// git) while depending on nothing about the checkout this test happens to
-// run inside.
+// range (v0.4.1..v0.5.0) is only as resolvable as the ambient checkout that
+// has to resolve it, and which tags that checkout holds is decided in another
+// file by a concern that is not this one. Building the history here instead
+// means every assertion below is checked against a REAL git invocation (the
+// whole point — no rawLines fixture stands in for git) while depending on
+// nothing about the checkout this test happens to run inside.
 type hermeticReleaseHistory struct {
 	root       string
 	cfg        ReleaseNotesConfig
@@ -1665,9 +1681,10 @@ func TestPredictReleaseNotesForRange_G1Capture_RequiresNonEmptyValueWhenFlagGive
 // whose fresh prediction is exactly `## Changelog\n` with no groups and no
 // dropped commits, in ANY checkout — no tag, no history depth, no ambient git
 // config is involved. That matters for the same reason
-// TestPredictReleaseNotesForRange_MergeCommitExcluded was rebuilt hermetic: CI
-// checks this suite out at depth 1 with no tags, so a case pinned to a real
-// range (v0.5.0..HEAD) would fail with git exit 128 for a reason that has
+// TestPredictReleaseNotesForRange_MergeCommitExcluded was rebuilt hermetic: a
+// case pinned to a real range (v0.5.0..HEAD) resolves only in a checkout that
+// fetched the tag, and whether any given checkout did is decided somewhere this
+// test does not read — so it would fail with git exit 128 for a reason that has
 // nothing to do with what it claims to pin. The RECORDED side is then written
 // by hand per case, which is what makes each disagreement precise: one case
 // disagrees only in Body, one only in Dropped, and two agree — so a mutation
