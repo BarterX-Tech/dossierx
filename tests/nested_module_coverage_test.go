@@ -1,6 +1,6 @@
 // This file guards one thing: a Go module in this repository that the root
-// `go test ./...` cannot reach must be reachable by SOMETHING ELSE that runs on
-// every pull request, and that something must be able to fail.
+// `go test ./...` cannot reach must be WIRED INTO the CI workflow, the Makefile
+// and the linter — for every such module, not just the one that exists today.
 //
 // The hole it closes was real and silent. viewer-tests/ is a separate module by
 // design — chromedp and its transitive dependencies must never enter the
@@ -14,17 +14,26 @@
 // was a maintainer's laptop. The root module covers the viewer's MARKUP; nothing
 // covered its behaviour in a browser.
 //
-// So this is a meta-test, in the same spirit as lint_coverage_meta_test.go: it
-// reads the CI workflow and the Makefile as text and refuses to let a nested
-// module exist unwired. It deliberately checks the three ways the wiring can be
-// present but worthless, not just its absence:
+// THE WALK IS THE POINT. Everything below is asked once per go.mod found on
+// disk, so a nested module added next year is covered by the check as written
+// rather than by somebody remembering to add a line to it.
 //
-//   - no job at all                 -> the original hole
-//   - a job that cannot fail        -> continue-on-error turns the badge into
-//     decoration, which is the same false green in nicer clothes
-//   - a job whose suite SKIPS       -> viewer-tests resolves a browser and
-//     t.Skip()s when it finds none, so a job that does not name a browser
-//     explicitly reports success over zero assertions
+// WHAT IS ASKED ABOUT THE WORKFLOW IS ASKED THROUGH tests/ci_workflow_test.go's
+// PARSER, not with a substring search over the file, and that is a correction.
+// Three checks here used to be `strings.Contains` over the whole of ci.yml —
+// for `working-directory: <mod>`, for `continue-on-error` and for
+// `DOSSIERX_TEST_BROWSER`. Deleting the ENTIRE viewer job left the first and the
+// third of them green, because those strings survive elsewhere in the document,
+// including inside comments. Two files asserting one fact by two techniques that
+// can disagree is not redundancy, it is a defect: whichever is weaker sets the
+// real bar. So there is now one reader of that document, and both files use it.
+//
+// AND WHAT IS NOT ASKED, deliberately. Nothing here reads `continue-on-error:`,
+// `if:` or the workflow's trigger list any more. Those were an attempt to
+// establish that a declared job EXECUTES, which no reader of a file can do, and
+// the list of ways a job fails to execute is not finite — tests/ci_workflow_test.go's
+// header sets out that boundary in full and names where the question is answered
+// instead. This file's subject is the wiring a document declares.
 package tests
 
 import (
@@ -110,21 +119,27 @@ func TestEveryNestedModuleIsRunSomewhere(t *testing.T) {
 			"if the browser suite was removed, remove this test with it, but do not let it merely stop being found")
 	}
 
-	ci := wiringReadFile(t, ".github/workflows/ci.yml")
+	wf := ciLoadWorkflow(t, ciWorkflowPath)
 	mk := wiringReadFile(t, "Makefile")
 
 	for _, mod := range mods {
 		t.Run(mod, func(t *testing.T) {
-			// CI: a job must actually cd into the module and run its tests.
-			// "working-directory: <mod>" is how the workflow spells that, and
-			// pinning the literal is the point — a rename that forgets the
-			// workflow should break here rather than in six months.
-			if !strings.Contains(ci, "working-directory: "+mod) {
-				t.Errorf("no job in .github/workflows/ci.yml runs in %q.\n"+
+			// CI: some job must declare a step that cds into the module and
+			// runs its whole suite there. Read through the shared parser, so
+			// a commented-out step is not a step and the near miss — a step
+			// that enters the module and runs something else — is reported as
+			// what it is rather than as "no job at all".
+			found, nearly := ciSuiteJobsFor(wf, mod)
+			if len(found) == 0 {
+				detail := "No step declares `working-directory: " + mod + "` at all."
+				if len(nearly) > 0 {
+					detail = "Steps that enter the module without declaring a run of its suite:\n\t" + strings.Join(nearly, "\n\t")
+				}
+				t.Errorf("no job in %s declares a run of %q's test suite.\n"+
 					"The root `go test ./...` does NOT descend into a nested module, so this\n"+
-					"module's tests would run on no machine but a maintainer's. Add a job with\n"+
+					"module's tests are declared to run on no machine but a maintainer's. Add a job with\n"+
 					"    working-directory: %s\n"+
-					"that runs `go test ./...`.", mod, mod)
+					"whose `run:` body is `go test -count=1 ./...`.\n%s", ciWorkflowPath, mod, mod, detail)
 			}
 
 			// Makefile: the same suite must be runnable locally without
@@ -156,20 +171,38 @@ func TestEveryNestedModuleIsRunSomewhere(t *testing.T) {
 			// caught that particular bug, but the point stands: the module was
 			// carrying real logic that no linter had ever read.
 			//
-			// Checked PER STEP, not per file. The first version of this asked
-			// whether ci.yml contained "working-directory: <mod>" and
-			// "golangci-lint" anywhere, and it passed immediately against a
-			// workflow that lints nothing but the root: the working-directory
-			// belonged to the browser TEST job and the golangci-lint to a
-			// separate root lint job. Two true facts about different jobs read
-			// as one true fact about one job. Splitting on step boundaries is
-			// what makes this an assertion rather than a coincidence.
+			// Checked PER PARSED STEP. The first version asked whether ci.yml
+			// contained "working-directory: <mod>" and "golangci-lint"
+			// anywhere, and it passed immediately against a workflow that lints
+			// nothing but the root: the working-directory belonged to the
+			// browser TEST job and the golangci-lint to a separate root lint
+			// job. Two true facts about different jobs read as one true fact
+			// about one job.
+			//
+			// The second version split the raw text on the literal "- name:"
+			// and probed the chunks, which fixed that and left a smaller
+			// version of it: comments do not survive a parse but they do
+			// survive a text split, so commenting out the whole lint step with
+			// a leading `#` on every line kept both substrings inside one chunk
+			// and kept this green while no linter read the module anywhere.
+			// A step that is not in a `steps:` list does not exist.
+			//
+			// The third version — the parse — then read the wrong KEY, and
+			// was worse than either: it compared the step-level
+			// `working-directory:`, which GitHub ignores on a `uses:` step
+			// and which golangci-lint-action therefore takes as an INPUT
+			// under `with:`. No valid workflow could make this branch true.
+			// So the lint requirement had quietly narrowed to "a Makefile
+			// target exists", and deleting the CI lint step outright left
+			// this green — this file's own subject, committed by the check
+			// itself. ciStepDirectory reads the key that carries the
+			// directory for the kind of step it is.
 			lintedInCI := false
-			for _, step := range strings.Split(ci, "- name:") {
-				if strings.Contains(step, "golangci-lint") &&
-					strings.Contains(step, "working-directory: "+mod) {
-					lintedInCI = true
-					break
+			for _, jobName := range ciJobNames(wf) {
+				for _, step := range wf.Jobs[jobName].Steps {
+					if strings.Contains(step.Uses, "golangci-lint") && ciStepDirectory(step) == mod {
+						lintedInCI = true
+					}
 				}
 			}
 			var lintTarget string
@@ -190,31 +223,20 @@ func TestEveryNestedModuleIsRunSomewhere(t *testing.T) {
 	}
 }
 
-// TestNestedModuleJobsCanActuallyFail covers the two ways a job can be present
-// and still mean nothing.
-func TestNestedModuleJobsCanActuallyFail(t *testing.T) {
-	ci := wiringReadFile(t, ".github/workflows/ci.yml")
-
-	// continue-on-error anywhere in this workflow would let the job that runs a
-	// nested module report success while its assertions failed. There is no
-	// legitimate use of it here: every job in this workflow is a gate.
-	if strings.Contains(ci, "continue-on-error") {
-		t.Error(".github/workflows/ci.yml uses continue-on-error. Every job in this workflow is a gate; " +
-			"a job that cannot fail is a green badge over an unrun or failing suite, which is the exact " +
-			"condition the viewer suite was already in.")
-	}
-
-	// viewer-tests resolves a browser and t.Skip()s when it cannot find one —
-	// correct on a laptop, catastrophic in CI, where a skip is indistinguishable
-	// from a pass. The workflow must therefore name the browser explicitly, so
-	// the harness's "override set but missing" branch t.Fatal()s instead.
-	if !strings.Contains(ci, "DOSSIERX_TEST_BROWSER") {
-		t.Error(".github/workflows/ci.yml never sets DOSSIERX_TEST_BROWSER. The viewer suite SKIPS " +
-			"when it cannot resolve a browser, so without an explicit path the job goes green having " +
-			"run zero browser assertions.")
-	}
-}
-
+// TestNestedModuleJobsCanActuallyFail IS GONE, and its absence is a decision.
+//
+// It made two whole-file substring assertions over ci.yml. The first — that the
+// document nowhere says `continue-on-error` — was an attempt to establish that a
+// declared job can fail on the runner, which is one member of an open-ended set
+// (`if:`, `paths:`, a skipped `needs:`, `|| true` in a body, a runner label
+// nothing matches) and could never be finished. The second — that the document
+// somewhere says `DOSSIERX_TEST_BROWSER` — was satisfied by the literal
+// appearing in ANY job or comment, and stayed green through the deletion of the
+// entire viewer job. tests/ci_workflow_test.go now asks the second question of
+// the job that declares the suite, which is where it means something; the first
+// is not asked anywhere, and that file's header states the boundary and names
+// where the run-time question is answered instead.
+//
 // TestNestedModulesAreNotInTheRootBuild pins the reason the wiring is needed at
 // all, so the tests above cannot be "fixed" by folding the module back into the
 // root one. chromedp must stay out of the engine's dependency graph: the whole
@@ -228,11 +250,43 @@ func TestNestedModulesAreNotInTheRootBuild(t *testing.T) {
 		}
 	}
 
+	// The three names above are the dependencies as they stand TODAY, and a list
+	// of names ages. This is the same invariant stated so it cannot: the root
+	// module must not name a nested module's own module path at all. A `require`
+	// on viewer-tests pulls its entire graph — chromedp, cdproto, gobwas and
+	// whatever they grow next — back into the engine's, which is the one thing the
+	// split exists to prevent, and it does so without ever spelling any of those
+	// three words in this file.
+	//
+	// WHAT USED TO BE HERE was a loop that re-stat'ed `<mod>/go.mod` for every
+	// path wiringNestedModules had just returned — and it builds that list by
+	// walking for files named `go.mod` and returning their parent directories. The
+	// condition could only fire on a race between the two walks. It was a
+	// tautology wearing the shape of a guard, which is worse than nothing: it
+	// added a line to the count of things that are checked while checking nothing.
 	for _, mod := range wiringNestedModules(t) {
-		// A nested module directory must not also be covered by a root-module
-		// package path, which would mean the isolation is not real.
-		if _, err := os.Stat(filepath.Join(wiringRepoRoot(t), filepath.FromSlash(mod), "go.mod")); err != nil {
-			t.Errorf("%s was reported as a nested module but has no go.mod: %v", mod, err)
+		modPath := wiringModulePath(t, mod)
+		if strings.Contains(rootMod, modPath) {
+			t.Errorf("the root go.mod names %q, the module path of nested module %s.\n"+
+				"That module exists precisely so its dependency graph is not the engine's:\n"+
+				"requiring or replacing it here pulls chromedp and everything under it back\n"+
+				"into cobra + yaml.v3, and no `grep chromedp go.mod` would show it.", modPath, mod)
 		}
 	}
+}
+
+// wiringModulePath reads a module's declared path out of its go.mod. A go.mod
+// without a `module` line is a t.Fatal and not a shrug: the check above compares
+// against that path, and comparing against "" would pass over everything.
+func wiringModulePath(t *testing.T, mod string) string {
+	t.Helper()
+	for _, line := range strings.Split(wiringReadFile(t, mod+"/go.mod"), "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "module "); ok {
+			if path := strings.TrimSpace(rest); path != "" {
+				return path
+			}
+		}
+	}
+	t.Fatalf("%s/go.mod declares no `module` line, so this file cannot say what path the root module would have to name to break the isolation", mod)
+	return ""
 }

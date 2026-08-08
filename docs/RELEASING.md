@@ -15,7 +15,44 @@ checklist for that half.
 
 - [ ] **`go test ./...` passes**, including the two suites it does not reach on
       its own — see [CONTRIBUTING.md](../CONTRIBUTING.md#the-two-suites-go-test--does-not-reach).
+
+      It needs nothing but Go. The two checks with an external prerequisite — a
+      browser and a `goreleaser` binary — live in `viewer-tests/`, which
+      `go test ./...` does not descend into; the next item runs them.
+- [ ] **The release build has been run, before the tag.** Every other check reads
+      what the release build was *told* to do; this is the one that watches it do
+      it. It **fails rather than skips** when either tool is unnamed, so supply
+      both:
+
+          go install github.com/goreleaser/goreleaser/v2@latest
+          DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
+          DOSSIERX_TEST_BROWSER=/path/to/chrome \
+          make viewer-test
+
+      `TestGoreleaserSnapshotBuildsSixArchivesAndStampsTheBinary` in
+      `viewer-tests/` runs `goreleaser release --snapshot --clean` against a temp
+      `dist`, then asserts the six archives exist under the names the
+      **Verifying** section tells you to download, that `checksums.txt` lists all
+      six, and that the snapshot binary reports the same version, commit and date
+      that its own recorded `-ldflags` line names.
 - [ ] **CI is green on `main`** — not on the branch, on the merge commit.
+
+      **Open the run; a green badge is not the check.** Nothing in this
+      repository can establish that CI executed anything — `tests/ci_workflow_test.go`
+      reads what the workflow *declares* and says so in its header — so this item
+      is where a person answers it, and there are three things to look at:
+
+      - the **viewer** job appears on the merge commit at all. A workflow whose
+        triggers or `paths:` filter stopped matching produces no job, and a
+        commit with nothing to report reads as a commit with nothing wrong.
+      - its conclusion is **not "skipped"**. A skipped job is not a pass; it is a
+        pass over zero assertions.
+      - its **Viewer browser suite** step shows Go tests that actually ran —
+        named tests and timings, not `[no tests to run]` beside every `ok`. A
+        step allowed to continue on error reports the job green over a red
+        suite; a suite narrowed by a `-run`/`-tags` selector reaching it at run
+        time reports `ok` over zero assertions. Neither is distinguishable from
+        a real pass without opening the step.
 - [ ] **CHANGELOG.md has an entry** for the new version, dated, following
       [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GoReleaser's
       generated notes are commit subjects; they are not a substitute for this.
@@ -25,6 +62,24 @@ checklist for that half.
       event — `dossierx check` reported exactly what it reported before. A
       change a consumer's gate cannot detect for them belongs at the top of the
       entry, not in a bullet halfway down.
+- [ ] **The two contract snapshots are read, and the entry above is written
+      from them.** These are the files that tell you a silent change happened:
+
+          git diff vX.Y.Z-previous -- testdata/render-across-releases.golden.txt \
+                                      testdata/envelope-contract.golden.txt
+
+      `render-across-releases.golden.txt` diffs everything this tree renders
+      against everything the previous release rendered; it is kept current on
+      every push, so reading it is the step, not regenerating it. Every entry
+      under **SILENT RENDER CHANGES** is a locked, byte-identical claim rendering
+      differently and needs a CHANGELOG line. Read **EXPLAINED BY AN INPUT
+      CHANGE** too — a hunk the named inputs do not account for is a silent
+      change wearing an explanation.
+
+      `envelope-contract.golden.txt` is the same for the JSON envelope: per
+      pinned invocation, the keys of `data` with each one's JSON type, the error
+      code, and the exit status. A diff there is a change to the machine contract
+      `skills/dossierx/SKILL.md` documents to every client's agent.
 - [ ] **The version pins are moved.** Sweep for them rather than recalling
       where they are:
 
@@ -63,23 +118,34 @@ checklist for that half.
       skill names it, that is blocking. v0.5.0's `mixed-cycle` is the worked
       example, and the router carries a section for it.
 - [ ] **The site's release entry is appended.** In `site/src/content.ts` the
-      `releases` array is **oldest-first**, and `ReleaseTimeline` treats
-      `releases[releases.length - 1]` as current. Append; do not prepend. Move
-      `tag: "Latest release"` off the previous entry, and leave `commit`
-      **unset** — it is stamped after the tag, below.
+      `releases` array is **oldest-first**, and the last entry is the current
+      release. Append; do not prepend. Move `tag: "Latest release"` off the
+      previous entry.
 
-      Do not try to set `commit` here. It cannot converge: writing the sha is
-      itself a commit, so the value is stale the moment it lands. v0.4.1 shipped
-      that way — its entry names `5327923` while `refs/tags/v0.4.1` points at
-      `206b4a4`, and v0.5.0 chased it through two commits before the gate caught
-      the loop. The field is optional and the `dossierx version` example falls
-      back to `(devel)` until the real stamp lands.
+      **Two expressions say "last", in two files, and they must agree.**
+      `content.ts` selects `releases[releases.length - 1]` and
+      `ReleaseTimeline.tsx` badges `releases.length - 1` "latest". Change one and
+      every derived string names one release while the timeline badges another.
+      Both are pinned by `TestSiteSelectsTheReleaseThisTreeModels`.
+
+      **There is no `commit` field, and no step that stamps one.** It held the
+      tagged release's short sha and was deleted outright, because it could not
+      converge: writing the sha is itself a commit, so the value was stale the
+      moment it landed — v0.4.1 shipped naming `5327923` while `refs/tags/v0.4.1`
+      points at `206b4a4`. If you find an entry carrying one, delete it; do not
+      fill it in.
 
       Every other version string on the site derives from that entry —
       the hero kicker, the hero badge, the release-history intro, and the
       `dossierx version` example all read `latestRelease` / `latestVersion`.
       Do not reintroduce a hand-typed copy; each of those four had one, and
       three of them went stale.
+
+      **The `dossierx version` example reads `latestBinaryVersion`, not
+      `latestVersion`, and the difference is a leading `v`.** GoReleaser's
+      `{{.Version}}` strips it, so the archive published for `v0.5.0` prints
+      `dossierx version 0.5.0`. `v0.5.0` is right everywhere the site names the
+      RELEASE and wrong in a block depicting what a command prints.
 - [ ] **The three committed sample viewers are regenerated.** This is the last
       item deliberately: regeneration has to reflect the branch's finished
       renderer, lint and CSS state, so it runs after everything above.
@@ -115,6 +181,18 @@ checklist for that half.
 
 ## Tagging
 
+- [ ] **`origin/main` is already an ancestor of the release branch.**
+
+      git fetch origin && git merge-base --is-ancestor origin/main <branch>
+
+      Exit 0 or the merge below is a real three-way merge, whose tree carries
+      content from `main` that nothing verified. The recovery is
+      `git merge origin/main` into the branch and re-run the checks above.
+
+      The `git fetch` is not politeness: `origin/main` is a file in your clone,
+      and asked without refreshing it the question answers "yes" exactly when the
+      release is about to go wrong.
+
 - [ ] Merge to `main` with `--no-ff` so the release has a merge commit to name.
 - [ ] Tag and push:
 
@@ -126,17 +204,24 @@ checklist for that half.
       nothing has landed since the merge. Name the commit explicitly if
       anything has.
 
-- [ ] **Stamp the release commit on the site,** now that it exists:
+      **No sha is stamped onto the site after this.** The step that wrote the
+      release commit's short sha into `site/src/content.ts` is gone with the
+      field it wrote to.
 
-      git rev-parse --short vX.Y.Z^{commit}
+- [ ] **Regenerate the cross-release render report against the new baseline,**
+      and push it to `main`:
 
-      Put that value in the entry's `commit` field and push it to `main`. It
-      lands after the tag by necessity — the sha does not exist until the tag
-      does — so it is not inside the tagged tree, and that is correct. What
-      must agree is the binary and the site: GoReleaser stamps `main.commit`
-      from the tagged ref, and the site renders this field in the
-      `dossierx version` example, which is what the verification step below
-      reads.
+      go test ./tests -run TestRenderedOutputAcrossReleases -regenerate-goldens
+
+      The report is compared against the newest tag reachable from HEAD, so the
+      tag you just pushed *is* the baseline from now on and the report empties
+      out. It lands after the tag by necessity, so it is not inside the tagged
+      tree; unlike the sha stamp it replaces in that position, it converges.
+
+      Skipping it does not hide a change, it fabricates one: the next push reds
+      `TestRenderedOutputAcrossReleases` with "written against a different
+      release than the one it is now being compared with", and whoever meets
+      that message goes looking for a rendering diff that was never there.
 
 - [ ] Watch `Release`, `CI` and `CodeQL`. `Release` is the one that must pass;
       a failure there leaves a tag with no artifacts behind it.
@@ -158,9 +243,48 @@ claims and only the last one matters.
       go install github.com/BarterX-Tech/dossierx/cmd/dossierx@vX.Y.Z
       dossierx version --format text
 
-      If it prints a `(devel)` fallback instead of the tag, the ldflags did not
-      apply — see the comment in `.goreleaser.yaml` about `-X main.version`
-      needing the `main.` prefix rather than the full import path.
+      This proves the module proxy serves the tag and that the tagged source
+      builds and runs. It proves **nothing about the ldflags**: `go install
+      ...@vX.Y.Z` builds from source with none at all, and the binary then falls
+      back to `debug.ReadBuildInfo`'s `info.Main.Version`, which the proxy sets to
+      the tag — so it prints a version either way. (It cannot print `(devel)`
+      either; that value is excluded and the last-resort fallback is `dev`.)
+
+- [ ] **The ldflags reached the published binary.** This is the check the item
+      above cannot make, and it is an artifact check: download the archive the
+      release actually publishes and inspect *that* binary.
+
+      gh release download vX.Y.Z --repo BarterX-Tech/dossierx --pattern 'dossierx_<os>_<arch>*'
+      # unpack, then:
+      go version -m ./dossierx
+      ./dossierx version --format json
+
+      **The `-ldflags` build setting is the signal, and it is the only one you
+      should rest a verdict on.** `go version -m` prints the flags the binary
+      was linked with, and the output must carry a `build -ldflags=` line
+      naming `-X main.version=`. A build that got no ldflags carries no such
+      line at all, and the historical failure — `-X` aimed at the full import
+      path instead of `main.` — shows up here as an `-ldflags` line that never
+      names `-X main.version=`. Neither `-s` nor `-w` hides it: those drop the
+      symbol table and DWARF, not the build-info section `go version -m` reads.
+
+      **Read the same line for `-X main.commit=` and `-X main.date=`.** The
+      no-op is per symbol: the version can be stamped correctly while those two
+      are aimed at the import path, and the binary then reports the sha and the
+      *commit's* timestamp out of `debug.ReadBuildInfo` — both well-formed, both
+      wrong about which build this is. Compare each of the three values the
+      `-ldflags` line names against the matching field of `version --format
+      json` below; a field the flags do not name at all is the tell.
+
+      **Do not read the `version` output as proof of stamping.** Measured side by
+      side on the v0.5.0 tree, an unstamped build reports the byte-identical
+      commit and a plausible RFC 3339 date; only the version differs, and only by
+      a leading `v`. Read the envelope to confirm the values the flags CARRIED are
+      right, never to decide whether they applied.
+
+      If the `-ldflags` line is absent or does not name `-X main.version=`, see
+      the comment in `.goreleaser.yaml` about `-X main.version` needing the
+      `main.` prefix rather than the full import path.
 - [ ] **The site redeployed.** `deploy-site.yml` triggers only on changes under
       `site/**`, so a release that touches no site file publishes nothing and
       the site keeps serving the previous version. Use `workflow_dispatch` if

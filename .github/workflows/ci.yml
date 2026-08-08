@@ -9,6 +9,18 @@ on:
 permissions:
   contents: read
 
+env:
+  # THE GORELEASER PIN, in one place because the version is read from more than
+  # one file and a version written down twice is a version that drifts. `latest`
+  # is deliberately not used: viewer-tests/site_toolchain_test.go and
+  # tests/release_notes_predict_test.go reimplement this tool's changelog and
+  # archive behaviour against a NAMED version — release_notes_predict_lib_test.go
+  # cites goreleaser/goreleaser/v2@v2.17.1's own changelog.go by line — so a
+  # moving version would drift out from under them on somebody else's release
+  # day, arriving as a red job on an unrelated pull request with nothing in the
+  # diff to point at.
+  DOSSIERX_GORELEASER_VERSION: v2.17.1
+
 jobs:
   test:
     name: test (go ${{ matrix.go-version }}, ${{ matrix.os }})
@@ -21,12 +33,111 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # tests/render_across_releases_test.go compares what this tree renders
+          # against what the PREVIOUS RELEASE rendered, so it needs that tag's
+          # source — v0.5.0 carries no surface.json, the emitter landed after it.
+          # actions/checkout fetches no tags at its default depth of 1, and that
+          # test used to t.Skip() when it could not find one: `go test` printed
+          # `ok`, and the detector for the release class this project has shipped
+          # twice ran in no automated context at all. It fails now instead of
+          # skipping, and this is the line that lets it run.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
           go-version: ${{ matrix.go-version }}
           cache: true
+
+      # Resolved into DOSSIERX_PREV_RELEASE_TAG explicitly, exactly as the viewer
+      # job resolves the browser it hands the browser suite, and for the same
+      # reason: a resolver step that finds nothing says so in the job log, where
+      # a maintainer reads it, and names the knob. The test cannot skip either
+      # way — but "no tag is reachable" is a checkout problem, and it belongs
+      # next to the checkout.
+      #
+      # THE BROWSER VARIABLE'S NAME used to be forbidden in this comment, and that
+      # prohibition is lifted rather than quietly kept. The reason for it was a
+      # whole-file substring check that was satisfied by a mention out here in the
+      # `test` job — and with it satisfied from outside, the entire viewer job
+      # could be deleted with that check still green, which is what happened.
+      # Holding the count of a word at one is not a check, only a habit that has
+      # to survive every future edit. That check is gone;
+      # tests/ci_workflow_test.go requires the variable in the STEPS OF THE JOB
+      # THAT DECLARES THE SUITE, identified by the step that enters the module and
+      # runs `go test ./...` there. A mention anywhere else proves nothing and
+      # costs nothing, and a mention in a COMMENT is not read at all: that file
+      # parses this workflow rather than searching it.
+      - name: Name the previous release
+        shell: bash
+        env:
+          # Honoured rather than overwritten, because the failure message below
+          # names this variable as the way out and a named fix that does not
+          # work is the same defect as no fix at all. Set it at job or
+          # repository level and this step reports the choice instead of
+          # re-deriving one.
+          DOSSIERX_PREV_RELEASE_TAG: ${{ vars.DOSSIERX_PREV_RELEASE_TAG }}
+        # GitHub runs `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`,
+        # so -e is on for this body whether or not it says so. Every capture below
+        # is therefore written to exit zero on its own — `|| true`, `wc -l` rather
+        # than `grep -c` — because under -e a bare `x="$(cmd)"` whose command
+        # substitution exits non-zero kills the step at that line, before the
+        # branch that exists to explain it. That hazard was found the expensive
+        # way, in a step that failed with ZERO OUTPUT for three of its own
+        # diagnostics because each was a `grep` that legitimately matched nothing.
+        run: |
+          tag="${DOSSIERX_PREV_RELEASE_TAG:-}"
+          if [ -n "$tag" ]; then
+            echo "baseline named explicitly: $tag"
+          else
+            tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
+          fi
+          if [ -z "$tag" ]; then
+            # ANSWERED, not asserted. An earlier version of this message told the
+            # maintainer as a FACT that "the checkout in this job already uses
+            # fetch-depth: 0, so the checkout is NOT the cause" — a sentence this
+            # step never checked, and which is false in the one case that actually
+            # happens: a shallow, tagless checkout, where the checkout is the ONLY
+            # cause. Naming a fix that does not work and excluding the fix that
+            # does are the same defect. The step already runs git, so it can look.
+            shallow="$(git rev-parse --is-shallow-repository 2>/dev/null || echo unknown)"
+            tags="$(git tag 2>/dev/null | wc -l | tr -d ' ')"
+            echo "no release tag is reachable from HEAD, so the cross-release render" >&2
+            echo "comparison has no baseline and this job would be asserting nothing" >&2
+            echo "about the one release class a consumer's own gate cannot detect." >&2
+            echo "" >&2
+            echo "What this checkout actually looks like, observed just now:" >&2
+            echo "    git rev-parse --is-shallow-repository -> $shallow" >&2
+            echo "    git tag                                -> $tags tag(s) present" >&2
+            echo "" >&2
+            if [ "$shallow" = "true" ]; then
+              echo "It is SHALLOW, so history was truncated and 'git describe' has nothing" >&2
+              echo "to walk back to. That is a checkout problem and it is the cause here:" >&2
+              echo "this job declares 'fetch-depth: 0' on actions/checkout, so a shallow" >&2
+              echo "tree means that setting was removed, overridden, or this body is not" >&2
+              echo "running under that checkout at all. Restore it before looking further." >&2
+            elif [ "$tags" = "0" ]; then
+              echo "History is complete but this checkout holds NO TAGS AT ALL, so there is" >&2
+              echo "nothing for 'git describe' to name. With 'fetch-depth: 0' actions/checkout" >&2
+              echo "fetches tags, so either that setting was removed or the remote genuinely" >&2
+              echo "has none — a fork whose tags were never pushed, or a clone of a" >&2
+              echo "repository that has not cut its first release. Fix it at the source:" >&2
+              echo "    git fetch upstream --tags && git push --tags" >&2
+            else
+              echo "History is complete and $tags tag(s) were fetched, so the checkout is not" >&2
+              echo "the cause: none of those tags is an ancestor of this commit. That is a" >&2
+              echo "branch built from an unrelated root, or a tag set that belongs to a" >&2
+              echo "different lineage than HEAD." >&2
+            fi
+            echo "" >&2
+            echo "Or, if this repository deliberately compares against a release other than" >&2
+            echo "the newest reachable one, set the repository variable" >&2
+            echo "DOSSIERX_PREV_RELEASE_TAG to that tag; this step reads it." >&2
+            exit 1
+          fi
+          echo "comparing rendered output against $tag"
+          echo "DOSSIERX_PREV_RELEASE_TAG=$tag" >>"$GITHUB_ENV"
 
       - name: Build
         run: go build ./...
@@ -78,12 +189,60 @@ jobs:
   # markup assertions only. This job is what makes the green mean something.
   #
   # The browser is the runner image's preinstalled Google Chrome; no third-party
-  # action is used to fetch one. It is resolved EXPLICITLY into
-  # DOSSIERX_TEST_BROWSER rather than left to the suite's own probe, because that
+  # action is used to fetch one. It is resolved EXPLICITLY into the suite's
+  # browser-path variable rather than left to the suite's own probe, because that
   # probe t.Skip()s when it finds nothing — a runner image that quietly dropped
   # Chrome would turn this job green while running zero assertions, which is the
   # exact failure this job exists to end. Set explicitly, the harness t.Fatal()s
   # on a path that is not there.
+  #
+  # THE BROWSER VARIABLE IS REQUIRED IN THIS JOB, not merely somewhere in this
+  # file. A whole-file substring check used to stand for that, and it was
+  # satisfied by prose in any job — so for a while this entire job could be
+  # deleted with the assertion still green, and a comment here carried the
+  # invariant on its behalf by promising the name was written exactly once. A
+  # promise about how often a word appears is not a check. That one is deleted;
+  # tests/ci_workflow_test.go's TestTheViewerJobDeclaresTheBrowserVariable
+  # replaces it: it parses this workflow, identifies the job by the step that
+  # enters viewer-tests and runs `go test ./...` there, and requires the variable
+  # in THAT job's steps. Mentioning it in a comment satisfies nothing now, so
+  # this one may say it.
+  #
+  # WHAT NOTHING IN THIS REPOSITORY CHECKS, so nobody looks for a guard that is
+  # not there: that this job EXECUTES. No file-reader can establish it — `if:`,
+  # a `paths:` filter, a skipped `needs:`, `continue-on-error:` and a runner
+  # label nothing matches are an open-ended list, and a check that stops at the
+  # ones somebody remembered reports "we did not check" while reading as a pass.
+  # tests/ci_workflow_test.go's header sets out that boundary; docs/RELEASING.md's
+  # "CI is green on `main`" item is where a human answers it, by opening the run.
+  #
+  # THE SUITE STEP IS HELD TO THREE CLOSED SETS by that same file, because a run
+  # that selects nothing is a green job over nothing:
+  #
+  #   - its ARGUMENTS. `go test -count=1 -run '^$' ./...` still names `./...` and
+  #     runs zero tests, so every argument must appear in ciAllowedTestFlags there.
+  #   - its ENVIRONMENT. `GOFLAGS: -run=^$` does the same thing from an `env:`
+  #     mapping, and prints `ok <pkg> [no tests to run]` for every package while
+  #     the job goes green — so every variable name declared for that step, by the
+  #     step, by this job or at the top of this file, must appear in
+  #     ciAllowedSuiteEnv. That is why an unrelated variable added up there reds
+  #     this: list it deliberately, or scope it to the job that needs it.
+  #   - its SHAPE. The body is ONE command. `go test ./... || true`, a `set +e`
+  #     above it or an `exit 0` below it all swallow a red suite, and that file
+  #     refuses a second command outright rather than trying to tell a harmless
+  #     neighbour from a suppressing one. Setup goes in its own step.
+  #
+  # Adding to either list is a deliberate edit with a reason attached, which is
+  # the point of their being lists.
+  #
+  # THIS JOB ALSO RUNS THE RELEASE BUILD. The GoReleaser dry run used to be a job
+  # of its own, driving a test in the root module — which meant plain
+  # `go test ./...` was red for any developer without GoReleaser installed, and the
+  # cross-compiling release build ran on all six cells of the `test` matrix for a
+  # result that does not depend on the host. The test now lives in viewer-tests
+  # beside the browser suite, on the same "supply the tool or fail" contract, so
+  # the tool is supplied here and the root suite is green on a clean machine. It
+  # still FAILS rather than skips wherever it does run.
   viewer:
     name: viewer (headless chrome)
     runs-on: ubuntu-latest
@@ -100,6 +259,93 @@ jobs:
           cache-dependency-path: |
             go.sum
             viewer-tests/go.sum
+
+      # This suite does not only drive a browser; it BUILDS site/ with npm and
+      # then reads the result as rendered DOM. That DOM is evidence about the
+      # page a visitor gets only for as long as it was produced by the toolchain
+      # that publishes the page, and deploy-site.yml publishes it under a pinned
+      # Node 20. Without this step the job builds under whatever ubuntu-latest
+      # happens to ship that week — a version that moves on its own schedule,
+      # under nobody's review, in a file nobody edited.
+      #
+      # The risk is that the drift is SILENT in the direction that matters. A
+      # newer Node that actually broke vite or tsc would fail loudly and be
+      # noticed. A newer Node that merely emits a slightly different tree does
+      # not fail at all: every assertion in viewer-tests/site_dom_test.go stays
+      # green while describing a page no visitor is served, which is the exact
+      # shape of "a check that ran over the wrong thing and reads as a pass".
+      #
+      # So it is pinned to the SAME major deploy-site.yml pins, and what holds the
+      # two together is OUTSIDE this file: tests/ci_workflow_test.go parses both
+      # workflows, finds the job that runs viewer-tests by the step that enters
+      # that directory, and requires this step's node-version to equal the one
+      # deploy-site.yml publishes with.
+      #
+      # It lives out there because the previous arrangement lived in HERE, as a
+      # `run:` guard step directly below this one, and a guard inside the job it
+      # guards can travel with what it guards: moving this step and that guard
+      # together into another job left the guard slicing out THAT job, finding the
+      # pin it had moved with, printing "site toolchain pinned" and exiting 0.
+      # Nothing that reads this file as text can close that — the durable form is
+      # a reader that is not part of the workflow, keyed to the step that runs the
+      # suite rather than to any name.
+      #
+      # viewer-tests/site_toolchain_test.go's checkNodeFloor is still the other
+      # half and is still blind in one direction: it compares deploy-site.yml's pin
+      # against the RUNNING process's Node and never opens this file, so it catches
+      # the publish workflow drifting UP and cannot see this step being deleted.
+      #
+      # `cache: npm` for a plainer reason: the suite runs `npm ci` in a copy of
+      # site/ on every run, and the key is site/package-lock.json — the same
+      # dependency path deploy-site.yml caches on, because it is the same
+      # install.
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+
+      # PINNED, not latest. viewer-tests/site_toolchain_test.go and
+      # tests/release_notes_predict_test.go reimplement this tool's changelog and
+      # archive behaviour against a NAMED version, so a moving one would drift out
+      # from under them on somebody else's release day.
+      #
+      # Installed with `go install <module>@<version>` rather than through
+      # goreleaser-action, for the reason the lint job gives about install-mode:
+      # goinstall — it builds with the toolchain this job already set up, takes no
+      # third-party action into the release path, and the version is a module
+      # version the proxy can be held to rather than a moving tag.
+      - name: Install a pinned GoReleaser
+        run: go install github.com/goreleaser/goreleaser/v2@${{ env.DOSSIERX_GORELEASER_VERSION }}
+
+      # The resolver, shaped exactly like `Locate a headless-capable Chrome`: name
+      # the tool EXPLICITLY, and fail HERE if the install did not land rather than
+      # letting the failure surface three minutes later inside a test run. The dry
+      # run fails either way — it is written to — but "the pinned install did not
+      # produce a binary" and "the release build is broken" are different findings,
+      # and a job log should not make a maintainer read a Go test's output to tell
+      # them apart.
+      - name: Locate the pinned GoReleaser
+        shell: bash
+        # `shell: bash` is `bash --noprofile --norc -eo pipefail {0}`, so -e is on.
+        # The version capture is an OR-list on purpose: `--version` prints an ASCII
+        # banner ahead of the real line, so the grep that finds the version can
+        # legitimately match nothing, and under -e a bare assignment would end this
+        # step at that line with no output at all.
+        run: |
+          g="$(go env GOPATH)/bin/goreleaser"
+          if [ ! -x "$g" ]; then
+            echo "no goreleaser at $g. The pinned install above did not take, so the" >&2
+            echo "snapshot dry run has no tool to run: the release build would not be" >&2
+            echo "exercised at all, and nothing would be asserted about the six" >&2
+            echo "archives, the checksum file, or the ldflags stamp. That is a" >&2
+            echo "FAILURE of this job, not a reason to continue without it." >&2
+            exit 1
+          fi
+          ver="$("$g" --version 2>&1 | grep -E 'GitVersion' | head -1)" || ver="(version unreadable)"
+          echo "using $g — $ver"
+          echo "DOSSIERX_TEST_GORELEASER=$g" >>"$GITHUB_ENV"
 
       - name: Locate a headless-capable Chrome
         run: |
@@ -118,6 +364,10 @@ jobs:
         working-directory: viewer-tests
         # No -race: this suite is I/O bound on a browser and a subprocess, and
         # the code under test is JavaScript in a page, not Go.
+        #
+        # ONE COMMAND, no `env:` outside the allowed names — see the three closed
+        # sets described above this job. Anything more here is refused by
+        # tests/ci_workflow_test.go rather than interpreted.
         run: go test -count=1 ./...
 
   lint:
@@ -152,8 +402,18 @@ jobs:
       # the same job rather than a second job: it needs the identical toolchain
       # and install-mode reasoning above, and duplicating a job to duplicate
       # that comment is how the two drift apart.
-      # tests/nested_module_coverage_test.go fails the build if this step is
-      # removed, or if a future nested module lands without one.
+      # tests/nested_module_coverage_test.go requires every nested module to be
+      # linted by THIS step or by a Makefile target — it is a disjunction, so
+      # deleting this step alone leaves it green while `make viewer-lint`
+      # survives, and deleting both is what reds it. That file reads this
+      # workflow through a PARSER, so commenting this step out is deleting it.
+      #
+      # KEEP `working-directory` UNDER `with:`. It is an INPUT to this action, not
+      # the step-level key of the same name — GitHub ignores that one on a `uses:`
+      # step. The check reads it here for exactly that reason: while it compared
+      # the step-level key instead, this half of the disjunction could not be true
+      # for any valid workflow, so the lint requirement had quietly become "the
+      # Makefile target exists" and deleting this step cost nothing.
       - name: golangci-lint (viewer-tests)
         uses: golangci/golangci-lint-action@v6
         with:
