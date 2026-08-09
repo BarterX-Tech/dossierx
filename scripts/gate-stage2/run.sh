@@ -39,6 +39,8 @@
 #   2  an input could not be read
 #   3  the baseline could not be RESOLVED — never reported as an empty delta
 #   4  an artifact the run is supposed to have produced is missing
+#   5  the fan-out could not be produced — no run was minted, so there is no
+#      identifier any answer on disk can be attributed to
 
 set -eu
 
@@ -47,6 +49,12 @@ die() { printf 'gate-stage2: %s\n' "$1" >&2; exit "${2:-1}"; }
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MANIFEST_FILE="surfaces.yaml"
 METHOD_FILE="gate/method.yaml"
+# The fan-out's ONE implementation, which `fanout` below invokes and never
+# re-implements. It is named here so that pointing this script at a checkout that
+# does not carry it is a refusal with a reason rather than a `go test` error
+# about an unknown package.
+PRODUCER_FILE="cmd/dossierx/gate_fanout_test.go"
+PRODUCER_TEST="^TestGateFanoutProduce$"
 
 # ---------------------------------------------------------------------------
 # sha256, from whichever of the two spellings this machine has. A missing hasher
@@ -243,6 +251,9 @@ usage: run.sh <mode> [options]
   grant                          the exact tool grant, read from gate/method.yaml
   model                          the model id, read from gate/method.yaml
   command --surface S --bundle P the invocation the harness would exec
+  fanout  --tree T               mint this run, write gate/bundles/<surface>.md
+                                 for every declared surface and gate/fanout.json,
+                                 then print one invocation per surface
   delta   --tree T --baseline-ref R --baseline-commit C --baseline-file F
                                  resolve the baseline, write gate/baseline.json
                                  and gate/delta.json
@@ -313,6 +324,53 @@ case "$MODE" in
     # the next name anybody invents, and the screen stays green while doing it.
     printf '%s --model %s --allowed-tools %s --bundle-file %s\n' \
       "${DOSSIERX_GATE_AGENT:-<DOSSIERX_GATE_AGENT is unset>}" "$model" "$tools" "$BUNDLE"
+    ;;
+
+  # -------------------------------------------------------------------------
+  # fanout — mint this run, write every surface's bundle, then say what to exec.
+  #
+  # A THIN WRAPPER OVER THE GO PRODUCER, and thin is the whole design. Every rule
+  # a fan-out obeys already lives in cmd/dossierx: the fan-out is surfaces.yaml's
+  # (gateDeclaredSurfaces), a surface's documents are `git ls-files` resolved
+  # against the manifest's patterns, what is handed over and what is only named is
+  # gateStage2BundleSpec's answer, and the exact bytes are gateBundleAssemble's —
+  # the same bytes every surface key is a digest of. An awk re-implementation of
+  # any of that here would be a second answer to "what is this agent being asked",
+  # and the two would diverge in silence, because only the Go one is under test.
+  #
+  # SO THIS MODE DOES EXACTLY THREE THINGS: it refuses what it can refuse before
+  # spending a toolchain invocation, it runs the producer and dies with the
+  # producer's own message, and it prints one line per DECLARED surface by calling
+  # `command` — never by re-deriving the model, the grant or the fan-out.
+  # -------------------------------------------------------------------------
+  fanout)
+    [ -n "$TREE" ] || die "fanout: --tree is required. A fan-out mints an identifier that every one of its answers must name, and an identifier minted over no tree attaches those answers to no release at all." 1
+
+    # THE PRODUCER IS THE CHECKOUT'S OWN. It assembles the bundles from the files
+    # under --root and its assembler must be that tree's assembler, because the
+    # bundle digest IS the surface key: bytes assembled by another checkout's code
+    # are a question no key in the tree being released was ever taken over.
+    [ -f "$ROOT/$PRODUCER_FILE" ] || die "fanout: $ROOT carries no $PRODUCER_FILE, so the checkout being fanned out holds no producer. There is exactly one implementation of a fan-out and it is that file; this mode will not stand in for it." 2
+
+    # A missing toolchain is a refusal, not a fallback, for sha256_of's reason one
+    # screen up: there is no smaller fan-out to fall back to, and a mode that
+    # printed thirteen invocations without minting a run would hand the harness
+    # thirteen paths holding nothing and an answer set nobody can attribute.
+    command -v go >/dev/null 2>&1 || die "fanout: no go toolchain on PATH, so the fan-out cannot be produced. A check that cannot run is a failure, not a pass." 2
+
+    # The producer's own output — the refusal, or the run it minted — goes to
+    # stderr, so stdout carries the invocations and nothing else.
+    ( cd "$ROOT" && go test ./cmd/dossierx -run "$PRODUCER_TEST" -count=1 -v -fanout-out -fanout-tree="$TREE" ) >&2 \
+      || die "fanout: the producer refused this run (its reason is above). No run was minted and gate/fanout.json was not written, so nothing downstream can attribute an answer to this release; fix what it named and run \`fanout\` again." 5
+
+    # ONE LINE PER SURFACE THE MANIFEST DECLARES, and the fan-out is read from the
+    # manifest here for the same reason it is read from the manifest inside the
+    # producer: a count written down in this file is a count that goes stale on the
+    # day a fourteenth surface is declared, and the run would then exec thirteen
+    # agents and report on fourteen surfaces' worth of nothing.
+    for _surface in $(declared_surfaces); do
+      "$0" command --root "$ROOT" --surface "$_surface" --bundle "gate/bundles/$_surface.md"
+    done
     ;;
 
   delta)
