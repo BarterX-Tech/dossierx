@@ -30,13 +30,36 @@ make viewer-test   # viewer-tests/, a separate module
 make hook-test     # scripts/hook-smoke-test.sh
 ```
 
-**`make viewer-test`** drives the built binary and a real headless browser through the
-viewer's inline JavaScript (the comment panel, the comment chip, the edge labels). It is a
-separate Go module because it needs `chromedp`, and the engine's `go.mod` stays cobra +
-yaml.v3 — `go test ./...` therefore cannot descend into it. It **skips** when it finds no
-Chrome/Chromium; set `DOSSIERX_TEST_BROWSER=/path/to/chrome` to point it at one, which also
-turns "no browser" from a skip into a failure. The root module tests the viewer's *markup*
-(`internal/render`); this is the only thing that tests its *behaviour*.
+**`make viewer-test`** is no longer only the browser suite, and it no longer skips its way to
+green. It runs the whole `viewer-tests/` module, which is now three things: the viewer's inline
+JavaScript driven through a real headless browser (the comment panel, the comment chip, the edge
+labels), the marketing site read as **rendered DOM** from a real `npm` build, and a GoReleaser
+dry run that builds the release archives and reads the version back out of the binary. It is a
+separate Go module because it needs `chromedp`, and the engine's `go.mod` stays cobra + yaml.v3 —
+`go test ./...` therefore cannot descend into it. The root module tests the viewer's *markup*
+(`internal/render`); this is the only thing that tests its *behaviour*, the site's, or the release
+build's.
+
+**It fails, rather than skips, when it cannot run** — a skipped check is indistinguishable from a
+pass over zero assertions, so "we did not look" must not exit 0. On a machine that has all four
+prerequisites it is a normal test run; on one that has none it fails immediately and tells you
+which is missing. You need:
+
+| Prerequisite | How it is supplied | What it is for |
+| --- | --- | --- |
+| Chrome/Chromium | `DOSSIERX_TEST_BROWSER=/path/to/chrome` | the viewer suite and the site's rendered DOM. The viewer suite still falls back to the usual install locations and only skips when nothing is found; the site extraction **requires** the variable and fails without it |
+| `node` | on `PATH` | building the site the way the publish workflow builds it |
+| `npm` | on `PATH`, with network access | same — the build runs `npm ci`, which reaches the registry |
+| `goreleaser` | `DOSSIERX_TEST_GORELEASER=/path/to/goreleaser` | the release dry run. `go install github.com/goreleaser/goreleaser/v2@latest` puts one in `$(go env GOPATH)/bin`; nothing here downloads it for you, on purpose |
+
+CI supplies all four as pinned job dependencies. Locally, the shape of an invocation that runs
+everything is:
+
+```sh
+DOSSIERX_TEST_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
+make viewer-test
+```
 
 **`make hook-test`** is the pre-commit gate's suite. The gate is shell driving a real binary
 against a real git repository, so no Go test can cover it; CI runs this on Linux, macOS and

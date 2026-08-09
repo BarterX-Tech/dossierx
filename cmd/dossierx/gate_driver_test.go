@@ -4,10 +4,11 @@
 // tells the world a release exists.
 //
 // THE INVARIANT IT EXISTS FOR. No irreversible act happens except as the tail of
-// a process that, in that same process, read the tree being published and found
-// it green — and no such process starts except when a human asked for that
-// specific release. Everything below is one of the four clauses that make up
-// that sentence, and none of them is a consequence of the others.
+// a process that, in that same process, read the tree being published, found it
+// green, and found that the tree declares the very release being published — and
+// no such process starts except when a human asked for that specific release.
+// Everything below is one of the six clauses that make up that sentence, and none
+// of them is a consequence of the others.
 //
 //  1. THE RECEIPT IS MEASURED, NOT ACCEPTED. The value the driver publishes
 //     against is produced by calling gateRecordReceipt in THIS process, which
@@ -48,6 +49,38 @@
 //     pushed before main is — a failure after the first irreversible act must
 //     state which acts already completed. A bare non-zero exit after a partial
 //     release sends the operator in blind.
+//
+//  5. THE RELEASE BEING TAGGED IS THE RELEASE THE TREE DECLARES. The version
+//     arrives as a string a human typed into two environment variables, and
+//     before this clause existed nothing ever compared it to anything: the
+//     receipt stored it verbatim, the tag was created from it, and every other
+//     check in this file is about CONTENT — which tree, which commit, which
+//     fingerprint — and therefore silent about the NAME. So D1 derives the
+//     version from the tree it is about to publish, out of the two documents
+//     that tell a reader which release this is (CHANGELOG.md's newest heading
+//     and site/src/content.ts's last releases[] entry), and refuses when the
+//     typed version disagrees with either of them, or when those two disagree
+//     with each other. The failure it forecloses is a tree that is perfectly
+//     self-consistent about one release, tagged as another: every content check
+//     passes, and the forge ends up carrying a tag whose archives, changelog and
+//     site all describe a different release from the one the tag names.
+//
+//  6. CI RAN OVER THIS CONTENT, AND THE RECORD THAT SAYS SO IS REQUIRED. The
+//     gate's own thirteen surfaces do not include "the test suites passed on a
+//     machine that is not the maintainer's"; that is `make ci-evidence`, whose
+//     stage writes a record naming the commit it adjudicated. D1 requires that
+//     record to exist and to be about the tree being released, and reports its
+//     absence as errGateUncheckable — a release published with no CI evidence at
+//     all is the skip-that-reads-as-a-pass CLAUDE.md forbids, arrived at by
+//     nobody running the stage rather than by the stage saying nothing.
+//     WHAT THAT CHECK DOES NOT ESTABLISH, because the honest boundary is the
+//     same one clause 1 draws: the record is PAPER. Nothing here authenticates
+//     it, and a file typed by hand that names the right object satisfies it.
+//     What it closes is "the stage was never run for this content", which is the
+//     failure that actually happens; what stands behind the record's contents is
+//     the stage that wrote it, which fails loudly rather than writing a clearing
+//     record. The driver cannot close that gap without re-running CI itself, and
+//     it says so rather than implying it is closed.
 //
 // AND ONE THING THE INVARIANT DOES NOT CLAIM, stated here rather than discovered
 // later: it says nothing about whether the thirteen agents' verdicts are honest.
@@ -172,6 +205,46 @@ const (
 	// is exactly one of these, so the order the driver performs and the order the
 	// document describes cannot be allowed to disagree.
 	gateDriverProcedureFile = "docs/RELEASING.md"
+
+	// The two documents that DECLARE which release a tree is. They are the
+	// version's tree-side sources (clause 5) and there are exactly two because
+	// these are the two files a human reads to learn what the current release is
+	// — the changelog a consumer opens, and the page the site publishes. A third
+	// source would be a third thing to keep in step; one source would make a
+	// typo in it indistinguishable from a correct rename.
+	gateDriverChangelogFile = "CHANGELOG.md"
+	gateDriverSiteFile      = "site/src/content.ts"
+
+	// gateDriverSiteReleasesDecl and gateDriverSiteLatestDecl bound the array in
+	// that file, and gateDriverSiteLatestDecl is also the reason "the last entry"
+	// is the newest one rather than an assumption this driver makes: the site
+	// itself derives its current release that way, and if that line ever goes,
+	// the ordering this parser depends on has gone with it and the version
+	// becomes unreadable rather than quietly read backwards.
+	gateDriverSiteReleasesDecl = "const releases: Release[] = ["
+	gateDriverSiteLatestDecl   = "releases[releases.length - 1]"
+
+	// gateDriverCIEvidenceEnv names where `make ci-evidence` wrote its verdict
+	// record, and gateDriverCIEvidenceDefault is the path it defaults to.
+	//
+	// THE DEFAULT IS DUPLICATED FROM THE MAKEFILE ON PURPOSE, and
+	// TestTheDriverLooksForTheCIEvidenceRecordWhereTheRecipeWritesIt is what
+	// keeps the two equal. Make exports a recipe's environment from the
+	// variables that came from the environment or the command line — measured:
+	// `make show FOO=cmdline` prints FOO=[cmdline] and a `FOO ?= defaultval` in
+	// the makefile prints FOO=[] — so `make ci-evidence
+	// DOSSIERX_GATE_CI_EVIDENCE_OUT=/elsewhere` reaches this driver on the next
+	// invocation and the `?=` default never does. If the two spellings of the
+	// default drift apart, the driver looks for a record at a path nothing
+	// writes and refuses every release with a message about a missing file.
+	gateDriverCIEvidenceEnv     = "DOSSIERX_GATE_CI_EVIDENCE_OUT"
+	gateDriverCIEvidenceDefault = "/tmp/dossierx-ci-run-evidence.json"
+
+	// gateDriverCIEvidenceTarget is the target that writes that record. It is
+	// named in every refusal about a missing one, because "the record is absent"
+	// without the command that produces it is a refusal an operator has to go
+	// and research.
+	gateDriverCIEvidenceTarget = "ci-evidence"
 )
 
 // gateDriverTimeoutFloor is the smallest `-timeout` the release-time invocation
@@ -198,13 +271,27 @@ type gateDriverPlan struct {
 	Version   string
 	Authorize string
 	Record    string
+
+	// CIEvidence is where `make ci-evidence` left its verdict record. It is a
+	// PATH and never the record's contents, which is the same distinction the
+	// receipt draws: what crosses this boundary is where to look, and the
+	// looking is done here. It is a plan field rather than a read of the
+	// environment deep inside the sequence so that the tests below can point one
+	// run at a record and another at nothing without mutating the environment of
+	// every other test in this binary.
+	CIEvidence string
 }
 
 func gateDriverPlanFromEnv() gateDriverPlan {
+	evidence := strings.TrimSpace(os.Getenv(gateDriverCIEvidenceEnv))
+	if evidence == "" {
+		evidence = gateDriverCIEvidenceDefault
+	}
 	return gateDriverPlan{
-		Version:   strings.TrimSpace(os.Getenv(gateDriverVersionEnv)),
-		Authorize: strings.TrimSpace(os.Getenv(gateDriverAuthorizeEnv)),
-		Record:    strings.TrimSpace(os.Getenv(gateDriverRecordEnv)),
+		Version:    strings.TrimSpace(os.Getenv(gateDriverVersionEnv)),
+		Authorize:  strings.TrimSpace(os.Getenv(gateDriverAuthorizeEnv)),
+		Record:     strings.TrimSpace(os.Getenv(gateDriverRecordEnv)),
+		CIEvidence: evidence,
 	}
 }
 
@@ -313,7 +400,7 @@ type gateDriverStep struct {
 // goes first, the archives are verified, and main goes last.
 var gateDriverSequence = []gateDriverStep{
 	{ID: "D0", What: "authorize — a human named this release, twice, on the named target"},
-	{ID: "D1", What: "precondition — refuse a partly-published release, record the receipt IN THIS PROCESS, recompute the verdict against the tree about to be released"},
+	{ID: "D1", What: "precondition — refuse a partly-published release, derive the version from the tree and refuse a tag that disagrees with it, record the receipt IN THIS PROCESS, recompute the verdict against the tree about to be released, and require the CI-run evidence for that tree"},
 	{ID: "D2", What: "merge the release branch into main with --no-ff, capturing the merge commit by value"},
 	{ID: "D3", What: "handshake — the named merge commit's tree is the tree the receipt records"},
 	{ID: "D4", What: "tag the named merge commit, never HEAD"},
@@ -591,7 +678,7 @@ func gateDriverExecute(r *gateDriverRun, ev gateDriverEvidence) *gateDriverRun {
 	return r
 }
 
-// precondition is D1, and it is four questions rather than one.
+// precondition is D1, and it is six questions rather than one.
 func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 	// The base ref this driver re-asserts against is gateBaseRef, which is
 	// origin/main and deliberately not "main". A repository whose remote and base
@@ -608,7 +695,15 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 		return err
 	}
 
-	// (b) The tree the evidence is about, read before the evidence is asked for.
+	// (b) The NAME. Every other question in this function is about content, so
+	// this is the only one that can catch a self-consistent tree tagged as some
+	// other release. It is asked before the merge, before the receipt and before
+	// a single write, because it needs nothing but the branch.
+	if err := r.requireTheTreeDeclaresThisRelease(); err != nil {
+		return err
+	}
+
+	// (c) The tree the evidence is about, read before the evidence is asked for.
 	tree, err := gateTreeSHA(r.Repo.Dir, r.Repo.Branch)
 	if err != nil {
 		return fmt.Errorf("%w: %s has no readable tree, so there is nothing to gather evidence about: %w", errGateUncheckable, r.Repo.Branch, err)
@@ -622,7 +717,7 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 		return err
 	}
 
-	// (c) The receipt, MEASURED here. gateRecordReceipt re-asserts the ancestry
+	// (d) The receipt, MEASURED here. gateRecordReceipt re-asserts the ancestry
 	// precondition itself, resolves the head and the tree from git, and refuses a
 	// surface reported twice.
 	receipt, err := gateRecordReceipt(r.Repo.Dir, r.Plan.Version, r.Repo.Branch, verdicts, findings)
@@ -643,7 +738,7 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 		return err
 	}
 
-	// (d) Green, RECOMPUTED. Not read, not inferred from an empty findings list —
+	// (e) Green, RECOMPUTED. Not read, not inferred from an empty findings list —
 	// evaluate makes six separate refusals about coverage that "no findings"
 	// cannot stand in for.
 	verdict, err := r.Receipt.evaluate(declared, current)
@@ -654,7 +749,216 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 	if verdict != gateVerdictPass {
 		return fmt.Errorf("%w: the recomputed verdict is %q, which is not %s", errGateUncheckable, verdict, gateVerdictPass)
 	}
+
+	// (f) And the half of the evidence this gate does not gather: the CI run over
+	// this content. It is asked last because it is the only question here whose
+	// answer lives in a file rather than in git, and it is asked at all because
+	// nothing else in the sequence would notice that `make ci-evidence` was never
+	// run — which is a check that did not happen reading as a check that passed.
+	return r.requireCIRunEvidence()
+}
+
+// ---------------------------------------------------------------------
+// the version, derived from the tree rather than accepted from the caller
+// ---------------------------------------------------------------------
+
+// errGateVersionMismatch is the ANSWER "no": the tree was read, it says which
+// release it is, and it is not the release being published. It is a separate
+// sentinel from errGateUncheckable for the reason errGateTreeMismatch is — the
+// two are different accusations with different recoveries. A mismatch accuses the
+// INVOCATION (or the tree): somebody typed the wrong version, or the release
+// branch was never updated for this one, and the recovery is to correct one of
+// them. Uncheckable accuses the READING: the document is missing or its shape
+// moved, and the recovery is to make the tree declare its release again.
+var errGateVersionMismatch = errors.New("the version being published is not the version this tree declares")
+
+// gateDriverChangelogHeadingRE is Keep a Changelog's release heading. The
+// document's newest release is its FIRST such heading — the format is
+// newest-first, which is the opposite of the site's array, and getting the two
+// backwards is the failure this pair of regexps has to not have.
+var gateDriverChangelogHeadingRE = regexp.MustCompile(`(?m)^## \[v?([0-9]+\.[0-9]+\.[0-9]+)\]`)
+
+// gateDriverSiteVersionRE is one entry's version field in the site's releases
+// array.
+var gateDriverSiteVersionRE = regexp.MustCompile(`(?m)^\s*version:\s*"v?([0-9]+\.[0-9]+\.[0-9]+)"`)
+
+// gateDriverNormalizeVersion strips the leading v, because the two documents
+// spell the same release differently on purpose — the changelog heading is
+// `## [0.5.0]` and the site entry is `version: "v0.5.0"` — and a comparison that
+// treated that as a disagreement would refuse every correct release.
+func gateDriverNormalizeVersion(v string) string {
+	return strings.TrimPrefix(strings.TrimSpace(v), "v")
+}
+
+// gateDriverTreeFile reads one file OUT OF THE TREE being released, never off
+// the working copy. `git show <branch>:<path>` is the whole reason: the working
+// copy can carry an edit that is not on the branch, and an uncommitted CHANGELOG
+// heading is exactly the shape of a maintainer who bumped the version and has not
+// committed it — which would clear this check and then be absent from the tag.
+func gateDriverTreeFile(dir, branch, path string) (string, error) {
+	return gateGit(dir, "show", branch+":"+path)
+}
+
+// gateDriverChangelogVersion is the release CHANGELOG.md's newest heading names.
+func gateDriverChangelogVersion(dir, branch string) (string, error) {
+	body, err := gateDriverTreeFile(dir, branch, gateDriverChangelogFile)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s carries no readable %s, so the tree cannot say which release it is: %w",
+			errGateUncheckable, branch, gateDriverChangelogFile, err)
+	}
+	m := gateDriverChangelogHeadingRE.FindStringSubmatch(body)
+	if m == nil {
+		return "", fmt.Errorf("%w: %s in %s declares no `## [X.Y.Z]` release heading. "+
+			"That heading is one of the two places this tree states which release it is, and a changelog that names no release cannot be compared with the version being tagged",
+			errGateUncheckable, gateDriverChangelogFile, branch)
+	}
+	return m[1], nil
+}
+
+// gateDriverSiteVersion is the release the site's newest releases[] entry names.
+//
+// It is scoped to the array and it REQUIRES the line the site derives its own
+// current release from. Without that line, "the newest entry" is this driver's
+// guess about somebody else's data structure, and a guess that is wrong reads a
+// release out of the wrong end of the array and refuses (or clears) the wrong
+// thing silently. With it, a site that started prepending its entries makes this
+// unreadable instead, which is the failure-not-guess direction.
+func gateDriverSiteVersion(dir, branch string) (string, error) {
+	body, err := gateDriverTreeFile(dir, branch, gateDriverSiteFile)
+	if err != nil {
+		return "", fmt.Errorf("%w: %s carries no readable %s, so the site half of the release's own name cannot be read: %w",
+			errGateUncheckable, branch, gateDriverSiteFile, err)
+	}
+	start := strings.Index(body, gateDriverSiteReleasesDecl)
+	if start < 0 {
+		return "", fmt.Errorf("%w: %s in %s no longer declares `%s`, so there is no array to read the current release out of",
+			errGateUncheckable, gateDriverSiteFile, branch, gateDriverSiteReleasesDecl)
+	}
+	end := strings.Index(body[start:], gateDriverSiteLatestDecl)
+	if end < 0 {
+		return "", fmt.Errorf("%w: %s in %s no longer derives its current release as `%s`. "+
+			"This driver reads the LAST entry of that array because the site itself does; without that line, 'the newest release' is a guess about the order somebody else's data structure is written in, and a wrong guess reads the wrong release and says nothing",
+			errGateUncheckable, gateDriverSiteFile, branch, gateDriverSiteLatestDecl)
+	}
+	matches := gateDriverSiteVersionRE.FindAllStringSubmatch(body[start:start+end], -1)
+	if len(matches) == 0 {
+		return "", fmt.Errorf("%w: %s in %s declares a releases array holding no `version: \"vX.Y.Z\"` entry, so the site names no current release",
+			errGateUncheckable, gateDriverSiteFile, branch)
+	}
+	return matches[len(matches)-1][1], nil
+}
+
+// requireTheTreeDeclaresThisRelease is clause 5.
+//
+// Three values, and the refusal names all three whichever pair disagrees,
+// because the reader's next question is always "which one is wrong?" and a
+// message naming two of them makes them go and look up the third.
+func (r *gateDriverRun) requireTheTreeDeclaresThisRelease() error {
+	typed := gateDriverNormalizeVersion(r.Plan.Version)
+	if typed == "" {
+		return fmt.Errorf("%w: the release was named as %q, which carries no X.Y.Z version to compare with what the tree declares", errGateUncheckable, r.Plan.Version)
+	}
+
+	changelog, err := gateDriverChangelogVersion(r.Repo.Dir, r.Repo.Branch)
+	if err != nil {
+		return err
+	}
+	site, err := gateDriverSiteVersion(r.Repo.Dir, r.Repo.Branch)
+	if err != nil {
+		return err
+	}
+	changelog, site = gateDriverNormalizeVersion(changelog), gateDriverNormalizeVersion(site)
+
+	if changelog != site {
+		return fmt.Errorf("%w: this tree does not agree with itself about which release it is.\n"+
+			"  typed on the command line: %s\n"+
+			"  %s newest heading declares: %s\n"+
+			"  %s last releases[] entry declares: %s\n"+
+			"One of the two documents was bumped and the other was not, so whichever version is tagged, one of the two things a reader consults about this release is wrong from the moment it is published",
+			errGateVersionMismatch, r.Plan.Version, gateDriverChangelogFile, changelog, gateDriverSiteFile, site)
+	}
+	if typed != changelog {
+		// The recovery spells the tree's version the way the human spelled
+		// theirs — prefix is whatever came before the digits, so a repository
+		// that tags `v0.6.0` is told `v0.6.0` and one that tags `0.6.0` is told
+		// `0.6.0`, rather than being handed this file's assumption about tag
+		// names as a command to paste.
+		prefix := strings.TrimSuffix(r.Plan.Version, typed)
+		return fmt.Errorf("%w: the tree is self-consistent about %s%s and this run was told to publish %s.\n"+
+			"  typed on the command line: %s\n"+
+			"  %s newest heading declares: %s\n"+
+			"  %s last releases[] entry declares: %s\n"+
+			"Every other check this driver makes is about CONTENT — which tree, which commit, which fingerprint — and all of them pass here, because the tree is not wrong, the NAME is. Publishing would put a tag on the forge whose archives, changelog and site all describe %s%s. "+
+			"Either correct %s=%s%s and %s=%s%s, or bump the tree to %s and re-run the gate",
+			errGateVersionMismatch, prefix, changelog, r.Plan.Version,
+			r.Plan.Version, gateDriverChangelogFile, changelog, gateDriverSiteFile, site,
+			prefix, changelog,
+			gateDriverVersionEnv, prefix, changelog, gateDriverAuthorizeEnv, prefix, changelog, r.Plan.Version)
+	}
 	return nil
+}
+
+// ---------------------------------------------------------------------
+// the CI-run evidence, required rather than assumed
+// ---------------------------------------------------------------------
+
+// gateDriverObjectRE is a full object name as it appears anywhere in the record.
+//
+// The record is read as TEXT and matched, never decoded — the same rule the AST
+// pin below enforces for the receipt, and here it is also the honest shape of the
+// claim being made. Decoding would let this file talk about the record's fields
+// as though it trusted them; matching an object name and then asking GIT what
+// that object holds means the only thing taken from the file is a pointer, and
+// every conclusion drawn from it is measured here.
+var gateDriverObjectRE = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
+
+// requireCIRunEvidence is clause 6.
+//
+// It requires a record that names an object whose TREE is the tree being
+// released. Naming the object is not enough and naming the version would be
+// worse: `make ci-evidence` is keyed to a commit, the merge that lands a
+// converging release branch carries the same tree as the branch head, and it is
+// the CONTENT that CI ran over — which is the same reason the receipt compares
+// trees rather than commits.
+func (r *gateDriverRun) requireCIRunEvidence() error {
+	recovery := fmt.Sprintf("Run `make %s DOSSIERX_GATE_CI_SHA=<the commit CI ran over>` and re-run this target. "+
+		"If that record lives somewhere other than %s, hand the same %s=<path> to this target too — make exports a command-line variable into a recipe's environment, and its `?=` default is not exported at all",
+		gateDriverCIEvidenceTarget, gateDriverCIEvidenceDefault, gateDriverCIEvidenceEnv)
+
+	path := r.Plan.CIEvidence
+	if path == "" {
+		return fmt.Errorf("%w: no path to a CI-run evidence record was given, so this run cannot tell a release whose suites were adjudicated from one where nobody looked. %s",
+			errGateUncheckable, recovery)
+	}
+	blob, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("%w: there is no readable CI-run evidence record at %s (%v), so nothing in this release says the test suites were accounted for on any machine but this one. "+
+			"An absent record is a FAILED check and never a skipped one: `go test` exits 0 for a suite that ran nothing, which is the exact failure that stage exists to catch, and not running the stage at all is that failure with no one watching. %s",
+			errGateUncheckable, path, err, recovery)
+	}
+	if len(strings.TrimSpace(string(blob))) == 0 {
+		return fmt.Errorf("%w: the CI-run evidence record at %s is empty. An empty file is what a stage that died mid-write leaves, and it says nothing about any commit. %s",
+			errGateUncheckable, path, recovery)
+	}
+
+	seen := map[string]bool{}
+	var named []string
+	for _, object := range gateDriverObjectRE.FindAllString(string(blob), -1) {
+		if seen[object] {
+			continue
+		}
+		seen[object] = true
+		named = append(named, object)
+		if tree, err := gateTreeSHA(r.Repo.Dir, object+"^{commit}"); err == nil && tree == r.Receipt.Tree {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("%w: the CI-run evidence record at %s names no object carrying the tree being released.\n"+
+		"  the tree about to be tagged: %s\n"+
+		"  objects the record names:    %v\n"+
+		"So the record is about some other adjudication — an earlier release, an earlier push, or a commit this clone has never fetched — and it says nothing about the content %s would publish. %s",
+		errGateUncheckable, path, r.Receipt.Tree, named, r.Plan.Version, recovery)
 }
 
 // refuseIfAlreadyPublished is the answer to "the tag is pushed and D7 failed;
@@ -894,12 +1198,18 @@ func gateDriverGreenEvidence() gateDriverFixtureEvidence {
 	}
 }
 
-// gateDriverFixture builds the converging topology with a real `origin` and
-// returns the repo descriptor the driver acts on.
-func gateDriverFixture(t *testing.T) gateDriverRepo {
+// gateDriverFixture builds the converging topology with a real `origin`, makes
+// the branch DECLARE the release it is for, and returns the repo descriptor the
+// driver acts on.
+//
+// declares is a parameter rather than a constant because the tree's own
+// statement of which release it is became a precondition (clause 5), so a fixture
+// that could not be pointed at a different release could not construct the
+// failure that precondition exists for.
+func gateDriverFixture(t *testing.T, declares string) gateDriverRepo {
 	t.Helper()
 	work := gateFixtureRepo(t)
-	return gateDriverRepo{
+	repo := gateDriverRepo{
 		Dir:    work,
 		Branch: "release",
 		Base:   "main",
@@ -911,12 +1221,64 @@ func gateDriverFixture(t *testing.T) gateDriverRepo {
 			"GIT_COMMITTER_DATE=2026-08-09T00:00:00Z",
 		},
 	}
+	gateDriverDeclareRelease(t, repo, declares, declares)
+	return repo
 }
 
-// gateDriverAuthorized is a plan a human authorized for one version.
-func gateDriverAuthorized(t *testing.T, version string) gateDriverPlan {
+// gateDriverDeclareRelease writes the two documents that state which release a
+// tree is, and commits them on the release branch.
+//
+// The two versions are separate parameters so a tree can be made to disagree with
+// ITSELF, which is one of the three shapes clause 5 refuses and the only one that
+// cannot be constructed by changing what the human typed.
+//
+// The site fixture carries an OLDER entry ahead of the release one on purpose: it
+// is what makes "the last entry" load-bearing. A parser that took the first match
+// would read v0.0.1 here and every assertion below would be about the wrong end of
+// the array.
+func gateDriverDeclareRelease(t *testing.T, repo gateDriverRepo, changelog, site string) {
 	t.Helper()
-	return gateDriverPlan{Version: version, Authorize: version, Record: filepath.Join(t.TempDir(), "record.json")}
+	gateWrite(t, repo.Dir, gateDriverChangelogFile, fmt.Sprintf(
+		"# Changelog\n\n## [%s] - 2026-08-09\n\nThe release under test.\n\n## [0.0.1] - 2026-07-21\n\nThe one before it.\n",
+		gateDriverNormalizeVersion(changelog)))
+	gateWrite(t, repo.Dir, gateDriverSiteFile, fmt.Sprintf(
+		"type Release = { version: string };\n\n%s\n"+
+			"  {\n    version: \"v0.0.1\",\n  },\n"+
+			"  {\n    version: %q,\n  },\n"+
+			"];\n\nexport const latestRelease: Release = %s;\n",
+		gateDriverSiteReleasesDecl, site, gateDriverSiteLatestDecl))
+	gateTestGit(t, repo.Dir, "add", "-A")
+	gateTestGit(t, repo.Dir, "commit", "-qm", "docs: declare the release this branch is for")
+}
+
+// gateDriverCIEvidenceRecord writes a fixture stand-in for what `make
+// ci-evidence` leaves behind, naming one object, and returns its path.
+//
+// It is a hand-written file, which is the point rather than a shortcut: the
+// driver's check is a presence-and-subject check over paper it cannot
+// authenticate (clause 6), and a fixture that pretended otherwise would be
+// claiming a guarantee this driver does not make.
+func gateDriverCIEvidenceRecord(t *testing.T, object string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "ci-run-evidence.json")
+	body := fmt.Sprintf("{\n  \"sha\": %q,\n  \"verdict\": \"PASS\",\n  \"written_by\": \"a fixture, not the stage\"\n}\n", object)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write the fixture CI-run evidence record: %v", err)
+	}
+	return path
+}
+
+// gateDriverAuthorized is a plan a human authorized for one version, with the
+// CI-run evidence for the branch head in place — the ordinary state of a release
+// that is ready to go.
+func gateDriverAuthorized(t *testing.T, repo gateDriverRepo, version string) gateDriverPlan {
+	t.Helper()
+	return gateDriverPlan{
+		Version:    version,
+		Authorize:  version,
+		Record:     filepath.Join(t.TempDir(), "record.json"),
+		CIEvidence: gateDriverCIEvidenceRecord(t, gateTestGit(t, repo.Dir, "rev-parse", repo.Branch)),
+	}
 }
 
 // gateDriverRemoteTag is the object `origin` carries for version, or "" when it
@@ -1007,6 +1369,7 @@ func TestTheAuthorizationDecisionIsExhaustive(t *testing.T) {
 // returned refuse" and "nothing was published" are different claims. A driver
 // that computed the refusal and then ran the merge anyway satisfies the first.
 func TestTheDriverPublishesNothingUnlessAHumanAuthorizedIt(t *testing.T) {
+	const version = "v9.9.9"
 	for _, tc := range []struct {
 		name string
 		plan gateDriverPlan
@@ -1017,7 +1380,7 @@ func TestTheDriverPublishesNothingUnlessAHumanAuthorizedIt(t *testing.T) {
 		{"authorized with nowhere to record it", gateDriverPlan{Version: "v9.9.9", Authorize: "v9.9.9"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := gateDriverFixture(t)
+			repo := gateDriverFixture(t, version)
 			mainWas := gateDriverRemoteHead(t, repo, repo.Base)
 
 			run := gateDriverPublish(tc.plan, repo, gateDriverGreenEvidence())
@@ -1053,10 +1416,10 @@ func TestTheDriverPublishesNothingUnlessAHumanAuthorizedIt(t *testing.T) {
 // moment origin must carry the tag and must NOT have moved main.
 func TestTheDriverPublishesInOrderAndOnlyWhatItHandshaked(t *testing.T) {
 	const version = "v9.9.9"
-	repo := gateDriverFixture(t)
+	repo := gateDriverFixture(t, version)
 	mainWas := gateDriverRemoteHead(t, repo, repo.Base)
 
-	plan := gateDriverAuthorized(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
 	var sawTagBeforeMain bool
 
 	run := gateDriverPublishWithHooks(plan, repo, gateDriverGreenEvidence(), map[string]func(){
@@ -1117,8 +1480,8 @@ func gateDriverPublishWithHooks(plan gateDriverPlan, repo gateDriverRepo, ev gat
 // nobody read, and every check it made before that stays green.
 func TestTheDriverTagsTheMergeItHandshakedAndNeverHEAD(t *testing.T) {
 	const version = "v9.9.9"
-	repo := gateDriverFixture(t)
-	plan := gateDriverAuthorized(t, version)
+	repo := gateDriverFixture(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
 
 	var intruder string
 	run := gateDriverPublishWithHooks(plan, repo, gateDriverGreenEvidence(), map[string]func(){
@@ -1166,9 +1529,9 @@ func TestTheDriverTagsTheMergeItHandshakedAndNeverHEAD(t *testing.T) {
 // ref about to be published points at.
 func TestThePreTagHandshakeRefusesATagThatMoved(t *testing.T) {
 	const version = "v9.9.9"
-	repo := gateDriverFixture(t)
+	repo := gateDriverFixture(t, version)
 	mainWas := gateDriverRemoteHead(t, repo, repo.Base)
-	plan := gateDriverAuthorized(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
 
 	run := gateDriverPublishWithHooks(plan, repo, gateDriverGreenEvidence(), map[string]func(){
 		"D4": func() {
@@ -1205,9 +1568,9 @@ func TestThePreTagHandshakeRefusesATagThatMoved(t *testing.T) {
 // deliverable at that point.
 func TestTheDriverNamesWhatIsAlreadyPublishedWhenItStopsHalfway(t *testing.T) {
 	const version = "v9.9.9"
-	repo := gateDriverFixture(t)
+	repo := gateDriverFixture(t, version)
 	mainWas := gateDriverRemoteHead(t, repo, repo.Base)
-	plan := gateDriverAuthorized(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
 
 	evidence := gateDriverGreenEvidence()
 	evidence.archives = gateDriverUnwired{}.Archives(version, "the merge commit")
@@ -1259,9 +1622,9 @@ func TestTheDriverNamesWhatIsAlreadyPublishedWhenItStopsHalfway(t *testing.T) {
 // surfaces and never fixes.
 func TestTheDriverRefusesToReEnterAPartlyPublishedRelease(t *testing.T) {
 	const version = "v9.9.9"
-	repo := gateDriverFixture(t)
+	repo := gateDriverFixture(t, version)
 	mainWas := gateDriverRemoteHead(t, repo, repo.Base)
-	plan := gateDriverAuthorized(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
 
 	// The first run: it publishes the tag and stops at D7.
 	first := gateDriverPublish(plan, repo, func() gateDriverFixtureEvidence {
@@ -1342,10 +1705,10 @@ func TestTheDriverRefusesAGateThatIsNotGreen(t *testing.T) {
 		}, "it looked, and it looked at a different tree — the receipt's PASS is attached to nothing here"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := gateDriverFixture(t)
+			repo := gateDriverFixture(t, version)
 			mainWas := gateDriverRemoteHead(t, repo, repo.Base)
 
-			run := gateDriverPublish(gateDriverAuthorized(t, version), repo, tc.evidence(gateDriverGreenEvidence()))
+			run := gateDriverPublish(gateDriverAuthorized(t, repo, version), repo, tc.evidence(gateDriverGreenEvidence()))
 
 			if run.Err == nil {
 				t.Fatalf("the driver published on a gate that is not green: %s", tc.why)
@@ -1372,10 +1735,10 @@ func TestTheDriverRefusesAGateThatIsNotGreen(t *testing.T) {
 // natural thing for the next implementer to write.
 func TestTheDriverStopsBeforeTheMergeWhenItsEvidenceIsUnwired(t *testing.T) {
 	const version = "v9.9.9"
-	repo := gateDriverFixture(t)
+	repo := gateDriverFixture(t, version)
 	mainWas := gateDriverRemoteHead(t, repo, repo.Base)
 
-	run := gateDriverPublish(gateDriverAuthorized(t, version), repo, gateDriverUnwired{})
+	run := gateDriverPublish(gateDriverAuthorized(t, repo, version), repo, gateDriverUnwired{})
 
 	if run.Err == nil {
 		t.Fatal("the driver published a release with no gate run behind it")
@@ -1387,6 +1750,252 @@ func TestTheDriverStopsBeforeTheMergeWhenItsEvidenceIsUnwired(t *testing.T) {
 		t.Errorf("the refusal must say the driver does not invent the verdicts it was not given; got:\n%v", run.Err)
 	}
 	gateDriverAssertNothingPublished(t, repo, version, mainWas)
+}
+
+// TestTheDriverRefusesToTagAReleaseTheTreeDoesNotDeclare is clause 5, and its
+// first row is the failure the clause exists for.
+//
+// THAT ROW IS THE ONE TO READ. The tree is not broken in it: the changelog, the
+// site and the code all agree, the branch converges, the gate is green and the
+// receipt is measured over exactly the content about to be tagged. Everything
+// this driver checked before clause 5 existed passes, because every one of those
+// checks is about CONTENT and the thing that is wrong is the NAME the human
+// typed. What reaches the forge is a tag reading v9.9.8 over archives, a
+// changelog and a site that all say v9.9.9, and no later check can catch it: the
+// archives are built FROM the tag, so they are stamped consistently wrong, and
+// the site page the release announces is the one in the tree.
+//
+// The other rows are the shapes where the tree cannot be read at all. They are
+// errGateUncheckable rather than a mismatch because they accuse a different
+// party: nothing here says the version is wrong, only that this driver could not
+// find out, and CLAUDE.md makes that a failed check rather than a quiet pass.
+func TestTheDriverRefusesToTagAReleaseTheTreeDoesNotDeclare(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		declares string
+		mutate   func(*testing.T, gateDriverRepo)
+		publish  string
+		want     error
+		names    []string
+		why      string
+	}{
+		{
+			name:     "a self-consistent tree for one release, tagged as another",
+			declares: "v9.9.9",
+			publish:  "v9.9.8",
+			want:     errGateVersionMismatch,
+			names:    []string{"v9.9.8", "9.9.9", gateDriverChangelogFile, gateDriverSiteFile},
+			why:      "the reader has to see all three values — what was typed, what the changelog says, what the site says — or they have to go and look the third one up before they can act",
+		},
+		{
+			name:     "the changelog was bumped and the site was not",
+			declares: "v9.9.9",
+			mutate:   func(t *testing.T, repo gateDriverRepo) { gateDriverDeclareRelease(t, repo, "v9.9.9", "v9.9.8") },
+			publish:  "v9.9.9",
+			want:     errGateVersionMismatch,
+			names:    []string{"9.9.9", "9.9.8"},
+			why:      "whichever version is tagged, one of the two documents a reader consults about this release is wrong the moment it is published",
+		},
+		{
+			name:     "the tree carries no changelog at all",
+			declares: "v9.9.9",
+			mutate: func(t *testing.T, repo gateDriverRepo) {
+				gateTestGit(t, repo.Dir, "rm", "-q", gateDriverChangelogFile)
+				gateTestGit(t, repo.Dir, "commit", "-qm", "chore: drop the changelog")
+			},
+			publish: "v9.9.9",
+			want:    errGateUncheckable,
+			names:   []string{gateDriverChangelogFile},
+			why:     "a tree that states no release cannot be checked against the version being tagged, and 'could not check' is a failed gate",
+		},
+		{
+			name:     "the site declares no releases array",
+			declares: "v9.9.9",
+			mutate: func(t *testing.T, repo gateDriverRepo) {
+				gateWrite(t, repo.Dir, gateDriverSiteFile, "export const contentSpec = { siteTitle: \"DossierX\" };\n")
+				gateTestGit(t, repo.Dir, "add", "-A")
+				gateTestGit(t, repo.Dir, "commit", "-qm", "refactor: rewrite the site content")
+			},
+			publish: "v9.9.9",
+			want:    errGateUncheckable,
+			names:   []string{gateDriverSiteReleasesDecl},
+			why:     "the site is the other half of what the tree says it is, and half an answer is not one",
+		},
+		{
+			name:     "the site no longer derives its current release from the last entry",
+			declares: "v9.9.9",
+			mutate: func(t *testing.T, repo gateDriverRepo) {
+				gateWrite(t, repo.Dir, gateDriverSiteFile,
+					gateDriverSiteReleasesDecl+"\n  {\n    version: \"v9.9.9\",\n  },\n  {\n    version: \"v0.0.1\",\n  },\n];\n\nexport const latestRelease = releases[0];\n")
+				gateTestGit(t, repo.Dir, "add", "-A")
+				gateTestGit(t, repo.Dir, "commit", "-qm", "refactor: newest release first")
+			},
+			publish: "v9.9.9",
+			want:    errGateUncheckable,
+			names:   []string{gateDriverSiteLatestDecl},
+			why:     "reading the last entry is right only while the site itself reads the last entry; once it does not, 'newest' is this driver's guess about someone else's array, and a wrong guess would have cleared v0.0.1 here",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := gateDriverFixture(t, tc.declares)
+			if tc.mutate != nil {
+				tc.mutate(t, repo)
+			}
+			mainWas := gateDriverRemoteHead(t, repo, repo.Base)
+
+			run := gateDriverPublish(gateDriverAuthorized(t, repo, tc.publish), repo, gateDriverGreenEvidence())
+
+			if run.Err == nil {
+				t.Fatalf("the driver published %s over a tree that does not declare it. %s", tc.publish, tc.why)
+			}
+			if run.Failed != "D1" {
+				t.Errorf("the run stopped at %s; the version is checked in the precondition, before anything is merged", run.Failed)
+			}
+			if !errors.Is(run.Err, tc.want) {
+				t.Errorf("the refusal is %v, and it must be %v — a version that disagrees accuses the invocation, a version that cannot be read accuses the tree, and they take different recoveries", run.Err, tc.want)
+			}
+			for _, want := range tc.names {
+				if !strings.Contains(run.Err.Error(), want) {
+					t.Errorf("the refusal does not name %q. %s.\nIt reads:\n%v", want, tc.why, run.Err)
+				}
+			}
+			gateDriverAssertNothingPublished(t, repo, tc.publish, mainWas)
+		})
+	}
+}
+
+// TestTheVersionParsersReadThisRepositorysOwnDocuments points clause 5's two
+// parsers at the real files, because every other test of them runs against a
+// fixture this file wrote.
+//
+// A fixture proves the parser reads the shape the fixture has. It cannot prove
+// that shape is the one CHANGELOG.md and site/src/content.ts actually carry — and
+// if it is not, the driver refuses every release with "this tree declares no
+// version", which is safe but useless, or worse, reads a heading out of the wrong
+// end of a document and refuses the correct release. So this asks the two
+// documents in THIS repository, at HEAD, and requires them to be readable and to
+// agree with each other. It deliberately does not require any particular version:
+// which release this tree is depends on where in a release cycle it sits, and a
+// test that pinned a number would have to be edited by every release.
+func TestTheVersionParsersReadThisRepositorysOwnDocuments(t *testing.T) {
+	root := surfaceRepoRoot(t)
+
+	changelog, err := gateDriverChangelogVersion(root, "HEAD")
+	if err != nil {
+		t.Fatalf("clause 5's changelog parser cannot read this repository's own %s: %v\n"+
+			"Its only other exercise is against a fixture this file writes, so a shape mismatch here would be invisible until a release refused for a reason that has nothing to do with the release", gateDriverChangelogFile, err)
+	}
+	site, err := gateDriverSiteVersion(root, "HEAD")
+	if err != nil {
+		t.Fatalf("clause 5's site parser cannot read this repository's own %s: %v", gateDriverSiteFile, err)
+	}
+	if gateDriverNormalizeVersion(changelog) != gateDriverNormalizeVersion(site) {
+		t.Errorf("this repository's two release declarations disagree: %s's newest heading says %s and %s's last releases[] entry says %s.\n"+
+			"That is the release-time refusal, met here at lane-landing time instead: one of the two documents was bumped and the other was not, and whichever version is tagged, one of them is wrong the moment it is published",
+			gateDriverChangelogFile, changelog, gateDriverSiteFile, site)
+	}
+}
+
+// TestTheDriverRefusesToPublishWithoutTheCIRunEvidenceForThisTree is clause 6.
+//
+// The first row is the whole finding: a gate that is green in every one of its
+// own thirteen surfaces, over a tree that declares its own release, with a
+// measured receipt — and nobody ran `make ci-evidence`. Before this check the
+// driver merged, tagged and pushed that release, because no step of the sequence
+// had any reason to notice: the record is written by a stage the driver does not
+// invoke, and a file that was never written raises nothing.
+//
+// The third row is the one that makes the check about THIS release rather than
+// about a file existing. A record from the previous release is on disk at the
+// default path on any machine that has released before — `make ci-evidence`
+// writes to /tmp and nothing cleans it up — so "the file is there" would be
+// satisfied on exactly the machines this check exists to protect.
+func TestTheDriverRefusesToPublishWithoutTheCIRunEvidenceForThisTree(t *testing.T) {
+	const version = "v9.9.9"
+	for _, tc := range []struct {
+		name  string
+		point func(*testing.T, gateDriverRepo) string
+		why   string
+	}{
+		{
+			name:  "nobody ran the stage",
+			point: func(t *testing.T, _ gateDriverRepo) string { return filepath.Join(t.TempDir(), "never-written.json") },
+			why:   "a release published with no CI evidence at all is the skip that reads as a pass, arrived at by nobody running the stage rather than by the stage saying nothing",
+		},
+		{
+			name: "the stage died mid-write and left an empty file",
+			point: func(t *testing.T, _ gateDriverRepo) string {
+				path := filepath.Join(t.TempDir(), "ci-run-evidence.json")
+				if err := os.WriteFile(path, nil, 0o600); err != nil {
+					t.Fatalf("write the empty record: %v", err)
+				}
+				return path
+			},
+			why: "an empty file is present, readable, and says nothing about any commit",
+		},
+		{
+			name: "the record left over from the last release",
+			point: func(t *testing.T, repo gateDriverRepo) string {
+				return gateDriverCIEvidenceRecord(t, gateTestGit(t, repo.Dir, "rev-parse", gateBaseRef))
+			},
+			why: "the record names a real commit that CI really ran over, and it is not the content this release would publish — which is what every stale record in /tmp looks like",
+		},
+		{
+			name:  "no path to look at",
+			point: func(*testing.T, gateDriverRepo) string { return "" },
+			why:   "an unset path must refuse rather than skip the question",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := gateDriverFixture(t, version)
+			mainWas := gateDriverRemoteHead(t, repo, repo.Base)
+
+			plan := gateDriverAuthorized(t, repo, version)
+			plan.CIEvidence = tc.point(t, repo)
+
+			run := gateDriverPublish(plan, repo, gateDriverGreenEvidence())
+
+			if run.Err == nil {
+				t.Fatalf("the driver published a release whose CI evidence it never had. %s", tc.why)
+			}
+			if run.Failed != "D1" {
+				t.Errorf("the run stopped at %s; the CI-run evidence is required in the precondition, before anything is merged", run.Failed)
+			}
+			if !errors.Is(run.Err, errGateUncheckable) {
+				t.Errorf("a missing CI-run evidence record must be reported as a check that could not be made; got %v", run.Err)
+			}
+			if !strings.Contains(run.Err.Error(), "make "+gateDriverCIEvidenceTarget) {
+				t.Errorf("the refusal does not name `make %s`. A refusal that states a missing file without the command that produces it is one the operator has to go and research at the worst moment.\nIt reads:\n%v",
+					gateDriverCIEvidenceTarget, run.Err)
+			}
+			gateDriverAssertNothingPublished(t, repo, version, mainWas)
+		})
+	}
+}
+
+// TestTheDriverLooksForTheCIEvidenceRecordWhereTheRecipeWritesIt keeps the two
+// spellings of one path equal.
+//
+// The driver and `make ci-evidence` are in different languages and there is no
+// compile-time link between them, so the default path exists twice: once as a
+// `?=` assignment in the Makefile and once as a Go constant here. Make does not
+// export a `?=` default into a recipe's environment — measured: a makefile
+// carrying `FOO ?= defaultval` prints FOO=[] from `echo $$FOO`, while `make show
+// FOO=cmdline` prints FOO=[cmdline] — so the Go constant is what the driver
+// actually uses on an ordinary run, and if the two drift the driver looks for a
+// record at a path nothing writes and refuses every release for a reason that has
+// nothing to do with the release.
+func TestTheDriverLooksForTheCIEvidenceRecordWhereTheRecipeWritesIt(t *testing.T) {
+	makefile := gateReadRepoFile(t, surfaceRepoRoot(t), "Makefile")
+
+	if want := gateDriverCIEvidenceEnv + " ?= " + gateDriverCIEvidenceDefault; !strings.Contains(makefile, want) {
+		t.Errorf("the Makefile no longer carries `%s`. That assignment is where the CI-run evidence record is written, and %s is where this driver looks for it; the two are the same path spelled in two languages, and nothing but this test holds them together",
+			want, gateDriverCIEvidenceDefault)
+	}
+	if want := gateDriverCIEvidenceEnv + `="$(` + gateDriverCIEvidenceEnv + `)"`; !strings.Contains(makefile, want) {
+		t.Errorf("the `%s` recipe no longer hands %q to the stage that writes the record. Make does not export its own variables to a recipe's environment, so without that line the stage writes wherever ITS default points and this driver looks somewhere else",
+			gateDriverCIEvidenceTarget, want)
+	}
 }
 
 // ---------------------------------------------------------------------

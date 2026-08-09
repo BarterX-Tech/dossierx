@@ -27,10 +27,24 @@ What follows from it:
   edit, merge, tag, or push. The irreversible half of a release is carried out by a deterministic
   driver whose precondition is a green gate whose recorded tree still matches what is about to be
   released, and which runs only under a human's explicit authorization for that release. No model
-  ever decides to publish.
-- **Every finding reaches the human.** Findings are classified by the evidence they carry, but
-  none is suppressed on its way to the report. The human confirms what blocks a release; an agent
-  never makes that call alone, and an override is recorded with its rationale.
+  ever decides to publish. That precondition is about content, so it is joined by two questions
+  content cannot answer: the release being tagged must be the release the tree itself declares
+  (`CHANGELOG.md`'s newest heading and the site's newest `releases[]` entry), and the CI-run
+  evidence record for that tree must exist — a release nobody ran `make ci-evidence` for is
+  refused, not assumed.
+- **Every finding reaches the human, and the human's ruling is the classification.** Nothing is
+  filtered, deduplicated away or dropped on its way to the report, and a receipt carrying any
+  finding at all evaluates to FAILED. A finding does carry a severity, but that word is free text
+  the reporting agent wrote about its own work — nothing derives it from the evidence behind the
+  finding, and nothing in the gate acts on it: one sort comparator orders the record by it so that
+  a re-run over an unchanged tree produces the identical document, and no verdict, filter or
+  threshold consults it. So an agent never presents its own severity as a verdict: it reports, the
+  human rules. Two consequences to know before you meet them — there is no override field on the
+  receipt, so a finding the human has judged non-blocking can be cleared only by fixing the tree or
+  by deleting the finding from the record by hand, and deleting it leaves an adjudicated finding
+  indistinguishable from one nobody raised. Why neither the evidence-derived classifier nor the
+  override record was built, and what each would need first, is recorded at
+  `cmd/dossierx/gate_stage3_test.go:42-57`.
 - **Verify the thing the user sees, not the thing you edited.** The site is read as rendered DOM
   from a real build, the binary is checked from the published archive, and the tag's tree is checked
   against the tree that was actually approved. This covers output; it does not cover invariants about
