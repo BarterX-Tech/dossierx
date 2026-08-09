@@ -263,12 +263,14 @@ checklist for that half.
       avoid, and it is reached only by doing the merge and then running the
       driver.
 
-      **While the driver still stops at D1** — the machinery behind D7's archive
-      verification is unbuilt, and a step that cannot run is a failure, not a
-      pass — it never reaches D2 at all, so today the merge is performed by hand
-      together with the tag and the two pushes in the next item, in exactly the
-      order that item gives. Do both by hand or neither; the half-and-half is
-      what produces the no-op above.
+      **So there is no hand-merge step in this procedure, and you are not
+      skipping one.** The driver's evidence is wired to this repository's own
+      gate run: D1 reads the fan-out record produced for the tree being
+      released, collects one answer per declared surface, recomputes the verdict
+      against that tree and requires the CI-run evidence, and D2 through D8 then
+      run unattended. The merge is D2's and nobody else's. If D1 refuses, read
+      what it names — most often that no fan-out was produced for this tree —
+      and fix that; merging by hand does not unblock it, it empties the step.
 
       **Either way, start from a clean tree**: `git status --porcelain` empty and
       local `main` in sync with `origin/main`. Anything modified or untracked at
@@ -310,12 +312,18 @@ checklist for that half.
       driver carries the merge commit by value from the merge to the tag and
       re-reads `<tag>^{tree}` immediately before pushing it.
 
-      While the pipeline is being built the driver refuses before it publishes
-      anything — the machinery behind the archive verification does not exist
-      yet, and a step that cannot run is a failure, not a pass — so today a
-      maintainer performs these commands by hand, in exactly this order. When
-      the driver stops after an irreversible step it prints which steps are
-      already public and which are not; it never resumes and never undoes.
+      **Those commands are the driver's; you type none of them.** They are
+      written out so the order is readable, not as a procedure to follow — D2
+      through D8 are executed by the target above, including the archive
+      verification between the two pushes. What this step asks of a person is
+      the two things a program cannot do: confirm the gate's findings before
+      authorizing, and type the version into the two variables. The one step the
+      driver does not perform is D9, the read of the deployed site, which stays
+      a person's along with the two checks beside it in **Three checks that stay
+      a person's** — so a green run ends stopped at D9 with both pushes done and
+      those three checks waiting. When the driver stops after an irreversible
+      step it prints which steps are already public and which are not; it never
+      resumes and never undoes.
 
       **No sha is stamped onto the site after this.** The step that wrote the
       release commit's short sha into `site/src/content.ts` is gone with the

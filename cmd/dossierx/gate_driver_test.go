@@ -90,17 +90,34 @@
 // resolved baseline and the digest of every artifact the keys cover — and that
 // boundary is here, at gateDriverEvidence, not implied away.
 //
-// WHAT THIS DRIVER CANNOT DO TODAY, and it is deliberate rather than unfinished.
-// gateDriverUnwired is the evidence source the real repository gets, and every
-// one of its four answers is errGateUncheckable naming the lane that owes it:
-// nothing in this tree turns thirteen agent answers into []gateSurfaceVerdict,
-// nothing downloads and verifies a published archive, and nothing reads the
-// rendered site. So an authorized run against this repository refuses at D1 and
-// publishes nothing at all, and it will keep refusing one step later at a time
-// as those lanes land. That is CLAUDE.md's rule applied to the driver's own
-// incompleteness — a check that cannot run is a failure, not a pass — and it is
-// what makes this file safe to land before the pipeline exists: it can refuse,
-// and it cannot complete a release.
+// WHAT THIS DRIVER DOES AND DOES NOT DO TODAY, and both halves are deliberate.
+// gateDriverWired (gate_evidence_test.go) is the evidence source the real
+// repository gets, and three of its four answers are wired to this tree: the
+// per-surface verdicts and findings are collected from the fan-out record this
+// run produced and the answers given against it, the fingerprints green is
+// recomputed against are the manifest's surfaces and stage 2's keys, and D7
+// verifies the archives the forge is actually serving. The fourth is Site, and
+// it stays errGateUncheckable by a recorded ruling rather than by omission:
+// reading the deployed site is one of the three checks docs/RELEASING.md keeps a
+// person's, because a deploy that never fired leaves this repository
+// byte-identical to one that did, so there is nothing here for a check to read.
+// So a run whose gate is green performs D0 through D8 and stops at D9 with both
+// the tag and main published, and its report names them. That is the same rule
+// as ever — a check that cannot run is a failure, not a pass — applied now to
+// the one step nothing in this tree can make.
+//
+// AND IT STOPS FAR EARLIER THAN THAT UNTIL A FAN-OUT HAS ACTUALLY BEEN
+// PRODUCED. Everything gateDriverWired reads under gate/ is per-run evidence
+// with no committed form (gate/.gitignore), so between releases there is no
+// gate/fanout.json for the tree being released and D1 refuses before the merge,
+// naming the missing record. That is this repository's ordinary state, and it is
+// the correct one: the alternative is a driver that reads "no fan-out was
+// produced" as "nothing was found".
+//
+// gateDriverUnwired stays in this file beside it, and several tests below still
+// hand it to the driver on purpose. It is how they construct a step whose
+// machinery does not exist, which is the only way to prove that the sequence
+// stops there rather than falling through.
 //
 // WHY IT IS TEST CODE, which is a resolution rather than a preference, recorded
 // here so the next person does not re-derive it. Every gate symbol this driver
@@ -433,8 +450,10 @@ type gateDriverRepo struct {
 //
 // It carries no gateReceipt and cannot: the receipt is measured here (clause 1),
 // and what crosses this boundary is the material a receipt is measured FROM. The
-// production implementation is gateDriverUnwired, which answers every one of
-// these with errGateUncheckable naming the lane that owes it.
+// production implementation is gateDriverWired in gate_evidence_test.go, which
+// answers the first three from this repository's own gate run and leaves Site a
+// refusal. gateDriverUnwired below answers all four with errGateUncheckable and
+// is what the tests hand the driver when they need a step that cannot run.
 type gateDriverEvidence interface {
 	// Verdicts are the per-surface answers and findings the gate run produced
 	// for tree. They are the receipt's contents, never the receipt.
@@ -448,12 +467,16 @@ type gateDriverEvidence interface {
 	Site(version string) error
 }
 
-// gateDriverUnwired is the evidence source the real repository gets today.
+// gateDriverUnwired is the evidence source that answers nothing.
 //
-// Every answer is errGateUncheckable, which is not a stub standing in for a
-// missing implementation — it IS the implementation, and it is the correct one
-// under CLAUDE.md until the lanes below land. A driver that assumed any of these
-// would be narrowing coverage silently at the only moment it matters.
+// Every answer is errGateUncheckable. It was the real repository's evidence
+// source until gateDriverWired landed, and it is kept — rather than deleted with
+// the wiring — because it is the only way to construct a step whose machinery
+// does not exist, which is what the tests below need in order to prove the
+// sequence stops rather than falling through. Its texts still name what is
+// missing, because a refusal that does not say what was needed sends an operator
+// nowhere. A driver that assumed any of these would be narrowing coverage
+// silently at the only moment it matters.
 type gateDriverUnwired struct{}
 
 func (gateDriverUnwired) Verdicts(string) ([]gateSurfaceVerdict, []gateFinding, error) {
@@ -1125,7 +1148,12 @@ func TestReleaseDriverPublishes(t *testing.T) {
 
 	root := surfaceRepoRoot(t)
 	repo := gateDriverRepo{Dir: root, Branch: gateDriverReleaseBranch(), Base: "main", Remote: "origin"}
-	run := gateDriverPublish(plan, repo, gateDriverUnwired{})
+	// The real evidence source, pointed at the checkout being released. It is the
+	// same root the repo descriptor names, and that is not a coincidence to be
+	// tidied away: the verdicts, the fingerprints and the tree D1 handshakes over
+	// all have to be about one checkout, and two roots in this call would be two
+	// releases being reasoned about in one process.
+	run := gateDriverPublish(plan, repo, gateDriverWired{Root: root})
 
 	if plan.Record != "" {
 		gateDriverWriteRecord(t, plan.Record, run)
@@ -1560,12 +1588,15 @@ func TestThePreTagHandshakeRefusesATagThatMoved(t *testing.T) {
 // TestTheDriverNamesWhatIsAlreadyPublishedWhenItStopsHalfway is clause 4 of the
 // invariant, at the one place it cannot be recovered from.
 //
-// D7 is unbuilt (see gateDriverUnwired.Archives) and therefore
-// errGateUncheckable, so an authorized run stops after the tag push, forever,
-// until W12b lands. That is the correct state and not a defect — a driver that
-// pushed main without verifying the archives would be narrowing coverage silently
-// at the only moment it matters — but it means the report is the whole
-// deliverable at that point.
+// D7 is wired now (gateArchivesVerify, through gateDriverWired.Archives), so the
+// state this constructs is no longer the tree's own — it is the state a failed
+// archive check produces on any release: the tag is out, main is not, and the
+// human is looking at a half-published release. The fixture builds it from
+// gateDriverUnwired.Archives because that refusal is a step whose machinery does
+// not exist, which is the cheapest honest way to stop the sequence exactly
+// between the two irreversible acts. A driver that pushed main anyway would be
+// narrowing coverage silently at the only moment it matters, and at that point
+// the report is the whole deliverable.
 func TestTheDriverNamesWhatIsAlreadyPublishedWhenItStopsHalfway(t *testing.T) {
 	const version = "v9.9.9"
 	repo := gateDriverFixture(t, version)
@@ -1724,15 +1755,18 @@ func TestTheDriverRefusesAGateThatIsNotGreen(t *testing.T) {
 	}
 }
 
-// TestTheDriverStopsBeforeTheMergeWhenItsEvidenceIsUnwired is the state this file
-// lands in, asserted rather than described: pointed at a real gate run source
-// that does not exist yet, an authorized driver refuses at D1 and publishes
-// nothing.
+// TestTheDriverStopsBeforeTheMergeWhenItsEvidenceIsUnwired asserts what an
+// evidence source that cannot answer does to the sequence: pointed at one, an
+// authorized driver refuses at D1 and publishes nothing.
 //
-// It is the failure-not-skip rule turned on the driver itself. The alternative —
-// treating an absent verdict transport as "no findings, therefore green" — is a
-// release published on evidence nobody produced, and it is the single most
-// natural thing for the next implementer to write.
+// It survives the wiring unchanged and is not obsolete, because the shape it
+// pins is not "this repository has no gate run" — it is the failure-not-skip
+// rule turned on the driver itself. The alternative — treating an absent verdict
+// transport as "no findings, therefore green" — is a release published on
+// evidence nobody produced, and it is the single most natural thing for the next
+// implementer to write. gateDriverWired reaches this same D1 refusal whenever
+// the tree being released has no fan-out record, which between releases is
+// always.
 func TestTheDriverStopsBeforeTheMergeWhenItsEvidenceIsUnwired(t *testing.T) {
 	const version = "v9.9.9"
 	repo := gateDriverFixture(t, version)
