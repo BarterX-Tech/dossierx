@@ -33,6 +33,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -178,6 +179,18 @@ func gateStage2Method(root, surface string) (gateMethod, error) {
 //
 // TestGateStage2EverySurfaceNamedInAPolicyIsDeclared holds the names here to the
 // manifest, so renaming a surface cannot silently orphan its capture.
+//
+// A CAPTURE MAY HAVE MORE THAN ONE READER, and gate/render-diff.json has two.
+// That is not a widening of the shared evidence set by the back door: shared
+// means EVERY surface reads it, and a capture named here reaches exactly the
+// surfaces that name it and no other — which is the property
+// TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther asserts, per reader.
+// The render diff has two readers because two surfaces ask two different
+// questions of it: `changelog` has to ANNOUNCE a silent rendering change, and
+// `binary-and-viewer` has to say whether the viewer's own visible strings are
+// what changed. Its prompt has demanded that comparison since the prompt was
+// written; until the second entry below existed, the file was never in its
+// bundle and the question was put to an agent with no material to answer it.
 func gateStage2Artifacts(surface string) []string {
 	switch surface {
 	case "exported-skills":
@@ -190,6 +203,13 @@ func gateStage2Artifacts(surface string) []string {
 		// tests/render_across_releases_test.go: the cross-release render diff,
 		// which is what a CHANGELOG entry describing a silent rendering change
 		// has to be written from.
+		return []string{"gate/render-diff.json"}
+	case "binary-and-viewer":
+		// The same diff, read for the other half of the question:
+		// gate/prompts/binary-and-viewer.md asks whether the viewer's labels,
+		// legends and empty states still describe what the viewer shows, and
+		// "the cross-release render diff says whether that changed" is the
+		// sentence in the prompt that names this file.
 		return []string{"gate/render-diff.json"}
 	}
 	return nil
@@ -210,8 +230,111 @@ func gateStage2Artifacts(surface string) []string {
 // so re-pointing a link in site/src/content.ts leaves every byte the agent reads
 // byte-identical. That is why the withheld documents are still hashed into the
 // surface's key, and why the bundle names them without carrying them.
+//
+// FOR `binary-and-viewer` THE EXTRACT IS NO LONGER surface.json ALONE. The
+// inventory carries {path, short, flags} per command and nothing else — no Long
+// text, no flag usage, no error message, no hint, no viewer template — so three
+// of that surface's five checks were being put to an agent holding none of the
+// material they are about. The classes it now also receives verbatim are
+// gateStage2BinaryStringClasses below; everything else the surface resolves to
+// stays withheld and named, because surface.json IS a faithful mechanical
+// projection of the engine's behaviour and is not of its prose.
 func gateStage2HandsAnExtract(surface string) bool {
 	return surface == "site" || surface == "binary-and-viewer"
+}
+
+// gateStage2BinaryStringClasses are the file classes whose BYTES
+// gate/prompts/binary-and-viewer.md asks direct questions about.
+//
+// WHY A CLASS AND NOT A FILE LIST. A list of paths goes stale the day a noun
+// gets its own file, and it goes stale silently: the new file lands in the
+// withheld list, the agent is never handed the cobra text it carries, and every
+// check in this file stays green. A class is a directory the whole of which is
+// this material, so a new file inside one is handed over on the day it is
+// added, and a class that resolves to nothing at all is a REFUSAL — see
+// gateStage2CheckExtractIsWhole.
+//
+// WHOLE FILES, NOT EXTRACTED STRINGS. Handing a scraped list of string literals
+// would be a second lossy projection, of exactly the kind the note above says
+// is where the defeat lives — the agent could not see which command a Long
+// belongs to, which error a hint follows, or that a label is behind a
+// conditional. The cost is real: these four classes are roughly 800 KB against
+// the surface's 1.95 MB. It is the honest cost of asking the question, and
+// CLAUDE.md's rule is that coverage is never narrowed to stay inside a budget.
+// The gate cost model still records this surface's document basis as undecided
+// (gate-cost-model.yaml), and deciding it is a separate, human-ratified edit.
+var gateStage2BinaryStringClasses = []struct {
+	Dir      string
+	Suffix   string
+	Question string
+}{
+	{"cmd/dossierx/", ".go", "every command's cobra Short and Long text and flag usage, which the prompt's first check is entirely about"},
+	{"internal/cliout/", ".go", "the error-code registry and the envelope every error message and hint is built from, which the prompt's second and third checks are about"},
+	{"internal/render/viewer/template/", "", "the viewer shell, its CSS and the graph client rendered into every client's index.html, which carry the labels, legends and empty states the prompt's fourth check names"},
+	{"internal/render/components/", ".html", "the claim-body component templates, which carry the rest of the viewer's visible strings"},
+}
+
+// gateStage2CarriesAJudgedString reports whether rel is one of the classes
+// above, and which.
+func gateStage2CarriesAJudgedString(rel string) (string, bool) {
+	for _, class := range gateStage2BinaryStringClasses {
+		if strings.HasPrefix(rel, class.Dir) && strings.HasSuffix(rel, class.Suffix) {
+			return class.Dir, true
+		}
+	}
+	return "", false
+}
+
+// gateStage2CheckExtractIsWhole refuses a bundle for `binary-and-viewer` that
+// does not carry the material its own question is about.
+//
+// IT IS CALLED FROM gateStage2BundleSpec RATHER THAN ONLY TESTED, because that
+// is the only path a real run takes to a bundle: refused here, the surface gets
+// no bundle, so it gets no key, so gateStage2Keys refuses the whole run by name
+// and no verdict for it can be recorded or carried forward. A version of this
+// that lived only in a test would leave the actual fan-out free to hand the
+// agent an inventory and five questions, three of which it cannot answer — and
+// an agent with no material does not report FAILED, it reports what it could
+// see, which reads exactly like a pass.
+//
+// A class that resolves to no handed file is the failure this is really for. It
+// is what a directory rename looks like from here, and it is silent: the files
+// are still in the surface's document set, still hashed into the key, still
+// named in the withheld list — and the question about them is being put to
+// nobody.
+func gateStage2CheckExtractIsWhole(spec gateBundleSpec) error {
+	if spec.Surface != "binary-and-viewer" {
+		return nil
+	}
+	handed := map[string]bool{}
+	for _, rel := range spec.Handed {
+		if class, judged := gateStage2CarriesAJudgedString(rel); judged {
+			handed[class] = true
+		}
+	}
+	var problems []string
+	for _, class := range gateStage2BinaryStringClasses {
+		if !handed[class.Dir] {
+			problems = append(problems, fmt.Sprintf(
+				"no file under %s is handed over. The agent is asked about %s, and holds none of it — the question would be answered from surface.json, which carries no Long text, no flag usage, no error string and no template at all",
+				class.Dir, class.Question))
+		}
+	}
+	var carries bool
+	for _, rel := range spec.Artifacts {
+		if rel == "gate/render-diff.json" {
+			carries = true
+		}
+	}
+	if !carries {
+		problems = append(problems, "the cross-release render diff (gate/render-diff.json) is not in this surface's bundle, and its prompt asks whether the viewer's visible strings changed since the previous release; without the diff that check has nothing to compare and the agent has no way to say so except by not saying it")
+	}
+	if len(problems) > 0 {
+		sort.Strings(problems)
+		return fmt.Errorf("%w: surface %q would be asked questions it holds no material for:\n  %s",
+			errGateBundleIncomplete, spec.Surface, strings.Join(problems, "\n  "))
+	}
+	return nil
 }
 
 // gateStage2BundleSpec is what one surface's bundle is assembled from.
@@ -220,10 +343,24 @@ func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, e
 		return gateBundleSpec{}, fmt.Errorf("surface %q resolved to no document", surface)
 	}
 	spec := gateBundleSpec{Surface: surface, Artifacts: gateStage2Artifacts(surface)}
-	if gateStage2HandsAnExtract(surface) {
+	switch {
+	case surface == "binary-and-viewer":
+		// Handed and Withheld together are still the whole resolved set: every
+		// document goes to exactly one of the two lists.
+		for _, rel := range documents {
+			if _, judged := gateStage2CarriesAJudgedString(rel); judged {
+				spec.Handed = append(spec.Handed, rel)
+			} else {
+				spec.Withheld = append(spec.Withheld, rel)
+			}
+		}
+	case gateStage2HandsAnExtract(surface):
 		spec.Withheld = append([]string(nil), documents...)
-	} else {
+	default:
 		spec.Handed = append([]string(nil), documents...)
+	}
+	if err := gateStage2CheckExtractIsWhole(spec); err != nil {
+		return gateBundleSpec{}, err
 	}
 	return spec, nil
 }
@@ -308,16 +445,31 @@ var gateStage2ObjectName = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // in git. Nothing else here has a committed form at all, which is exactly why
 // whatever happened to be at those paths on the day of a run used to hash
 // cleanly into all thirteen keys.
+// IT IS A SET AND NOT A LIST. gate/render-diff.json has two readers, so walking
+// the declared surfaces yields it twice, and a duplicate here is not cosmetic: a
+// producer stamping the manifest writes two entries for one path, and "the
+// manifest holds exactly one entry for this artifact" — which is how a
+// dropped-from-the-manifest artifact is detected at all — stops being true.
 func gateStage2ProducedArtifacts(declared []string) []string {
+	seen := map[string]bool{}
 	var out []string
+	add := func(rel string) {
+		if seen[rel] {
+			return
+		}
+		seen[rel] = true
+		out = append(out, rel)
+	}
 	for _, rel := range gateSharedEvidence() {
 		if rel == gateSurfaceInventoryFile {
 			continue
 		}
-		out = append(out, rel)
+		add(rel)
 	}
 	for _, surface := range declared {
-		out = append(out, gateStage2Artifacts(surface)...)
+		for _, rel := range gateStage2Artifacts(surface) {
+			add(rel)
+		}
 	}
 	sort.Strings(out)
 	return out
@@ -489,6 +641,112 @@ func gateStage2ReadDelta(root string) (gateStage2Delta, error) {
 // consistent — and about a different release than the one being gated.
 var errGateStage2StaleDelta = errors.New("the release delta does not describe the release being gated")
 
+// gateStage2Canonical is one JSON value in a form two documents can be compared
+// in: object keys sorted, whitespace gone, number literals preserved.
+//
+// UseNumber rather than float64 because the inventory carries counts and the
+// round-trip through a float is a comparison that can call two different
+// documents equal. Nothing here needs the numeric value; it needs the identity.
+func gateStage2Canonical(raw json.RawMessage) (string, error) {
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	var v interface{}
+	if err := dec.Decode(&v); err != nil {
+		return "", err
+	}
+	out, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+// gateStage2TopLevel reads one inventory as its top-level keys and their
+// canonical values — the same unit scripts/gate-stage2/run.sh compares, because
+// a delta that says only "the inventory moved" tells thirteen agents nothing
+// they could act on.
+func gateStage2TopLevel(root, rel string) (map[string]string, error) {
+	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return nil, fmt.Errorf("%s cannot be read: %w", rel, err)
+	}
+	var doc map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("%s is not a JSON object: %w", rel, err)
+	}
+	if len(doc) == 0 {
+		return nil, fmt.Errorf("%s holds no top-level key; every comparison against it would report that nothing moved", rel)
+	}
+	out := make(map[string]string, len(doc))
+	for key, value := range doc {
+		canonical, canonErr := gateStage2Canonical(value)
+		if canonErr != nil {
+			return nil, fmt.Errorf("%s: the value of %q is not readable JSON: %w", rel, key, canonErr)
+		}
+		out[key] = canonical
+	}
+	return out, nil
+}
+
+// gateStage2ChangedKeys RE-DERIVES the delta's `changed` list from the two
+// inventories that are on disk at the moment the delta is read.
+//
+// WHY THE PAYLOAD IS RECOMPUTED AND NOT BELIEVED. Everything else about the
+// delta was provenance — which tree, which ref, which commit, which baseline
+// bytes — and provenance says who wrote a number, never whether the number is
+// right. A delta can pass every one of those checks carrying `"changed": []`,
+// and an empty changed list is not an error to any reader: it is the legitimate
+// answer for a release that moved no shipped code, which is exactly why it is
+// accepted. Handed one, all thirteen agents are told the previous release and
+// this one are identical in every field, and each of them then judges its
+// document against a comparison that never happened. The producer is a shell
+// script whose changed_keys pipeline is four awk programs and two temporary
+// files; a `mktemp` that fails, a truncated write, or an inventory that reflowed
+// produces exactly this shape and nothing downstream could see it.
+//
+// The comparison is over CANONICAL VALUES rather than the producer's raw text
+// blocks. Two inventories that differ only in whitespace did not move, and the
+// honest answer to "what changed" must not depend on how the emitter indented.
+func gateStage2ChangedKeys(root string) ([]string, error) {
+	mine, err := gateStage2TopLevel(root, gateSurfaceInventoryFile)
+	if err != nil {
+		return nil, err
+	}
+	theirs, err := gateStage2TopLevel(root, gateBaselineFile)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for key, value := range mine {
+		if other, held := theirs[key]; !held || other != value {
+			out = append(out, key)
+		}
+	}
+	for key := range theirs {
+		if _, held := mine[key]; !held {
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// gateStage2MissingFrom names every member of want that got does not hold.
+func gateStage2MissingFrom(want, got []string) []string {
+	held := make(map[string]bool, len(got))
+	for _, s := range got {
+		held[s] = true
+	}
+	var out []string
+	for _, s := range want {
+		if !held[s] {
+			out = append(out, s)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // gateStage2CheckDeltaCovers makes the delta's own account of itself
 // load-bearing.
 //
@@ -510,6 +768,14 @@ var errGateStage2StaleDelta = errors.New("the release delta does not describe th
 // Any two of them agreeing while the third does not is a key hashing an
 // inventory that belongs to neither claim, and that is not a hypothetical shape
 // — it is what a re-resolved baseline with an un-recomputed delta looks like.
+//
+// AND THEN THE PAYLOAD, WHICH IS THE PART ANY AGENT ACTUALLY READS. All of the
+// above is provenance: it says who wrote this document and what they say they
+// compared. None of it looks at `changed`. A delta whose provenance is perfect
+// and whose changed list is empty passes every check above and tells thirteen
+// agents that this release and the last are identical in every field — see
+// gateStage2ChangedKeys, which re-derives the list from the two inventories on
+// disk so that the answer is checked and not merely attributed.
 func gateStage2CheckDeltaCovers(root, tree string, run gateStage2Run, delta gateStage2Delta) error {
 	var problems []string
 
@@ -544,6 +810,34 @@ func gateStage2CheckDeltaCovers(root, tree string, run gateStage2Run, delta gate
 		problems = append(problems, fmt.Sprintf(
 			"%s was computed against a baseline inventory hashing %s and %s on disk hashes %s; the keys would carry bytes the comparison never saw",
 			gateDeltaFile, delta.Baseline.SHA256, gateBaselineFile, digest))
+	}
+
+	// THE PAYLOAD ITSELF, recomputed from the two inventories on disk. See
+	// gateStage2ChangedKeys: every check above establishes who produced this
+	// document and against what, and none of them looks at the one field the
+	// thirteen agents actually read.
+	switch recomputed, err := gateStage2ChangedKeys(root); {
+	case err != nil:
+		problems = append(problems, fmt.Sprintf(
+			"the `changed` list in %s cannot be checked against the inventories it claims to compare, so the one field thirteen agents read would be taken on trust: %v",
+			gateDeltaFile, err))
+	case delta.Changed == nil:
+		problems = append(problems, fmt.Sprintf(
+			"%s carries no `changed` list at all; nothing was compared, and an absent comparison must not read as an empty one", gateDeltaFile))
+	default:
+		stated := append([]string(nil), *delta.Changed...)
+		sort.Strings(stated)
+		if !gateEqualStrings(stated, recomputed) {
+			said := fmt.Sprintf("%s says %v moved and comparing %s against %s on disk says %v moved",
+				gateDeltaFile, stated, gateSurfaceInventoryFile, gateBaselineFile, recomputed)
+			if missed := gateStage2MissingFrom(recomputed, stated); len(missed) > 0 {
+				said += fmt.Sprintf("\n    it does not mention %v, which every surface agent would therefore be told is unchanged since the previous release; an empty or short list is not a smaller answer here, it is thirteen agents judging their document against a comparison that did not happen", missed)
+			}
+			if invented := gateStage2MissingFrom(stated, recomputed); len(invented) > 0 {
+				said += fmt.Sprintf("\n    it names %v, which did not move, so agents would be sent looking for a change nobody made", invented)
+			}
+			problems = append(problems, said)
+		}
 	}
 
 	if len(problems) > 0 {
@@ -750,11 +1044,35 @@ func gateStage2Overlay(t *testing.T) (overlay, realRoot string) {
 	}
 	gateWrite(t, overlay, gateStage2MethodFile, string(method))
 
-	gateStage2WriteEvidence(t, overlay, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":28}}\n", "[]")
+	// The baseline is a COPY OF THIS TREE'S OWN INVENTORY, so the delta's empty
+	// `changed` list is the true answer for it. Since gateStage2CheckDeltaCovers
+	// re-derives that list rather than believing it, a fixture that wrote a
+	// baseline differing from the real surface.json while claiming nothing moved
+	// would be refused — correctly, and for a reason that has nothing to do with
+	// what any test using this overlay is about.
+	inventory, err := os.ReadFile(filepath.Join(overlay, filepath.FromSlash(gateSurfaceInventoryFile)))
+	if err != nil {
+		t.Fatalf("read the overlay's %s: %v", gateSurfaceInventoryFile, err)
+	}
+	gateStage2WriteEvidence(t, overlay, gateStage2FixtureTree, string(inventory), "[]")
 	gateWrite(t, overlay, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
-	for _, surface := range []string{"exported-skills", "release-notes", "changelog"} {
+
+	// The captures are DERIVED FROM THE MANIFEST rather than listed, so a surface
+	// that starts reading one is stubbed here on the day it does. Written once
+	// per PATH: gate/render-diff.json has two readers, and writing it once per
+	// reader would leave its bytes a function of the order they were visited in.
+	declared, err := gateDeclaredSurfaces(overlay)
+	if err != nil {
+		t.Fatalf("read the overlay's declared surfaces: %v", err)
+	}
+	written := map[string]bool{}
+	for _, surface := range declared {
 		for _, rel := range gateStage2Artifacts(surface) {
-			gateWrite(t, overlay, rel, "{\"captured\":\""+surface+"\"}\n")
+			if written[rel] {
+				continue
+			}
+			written[rel] = true
+			gateWrite(t, overlay, rel, "{\"captured\":\""+rel+"\"}\n")
 		}
 	}
 	return overlay, realRoot
@@ -1111,37 +1429,49 @@ func TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther(t *testing.T) {
 		t.Fatalf("key the real thirteen: %v", err)
 	}
 
+	// Which surfaces read which capture, resolved from the policy rather than
+	// listed. A capture may have more than one reader — gate/render-diff.json has
+	// two — and the property is per capture: every surface that reads it moves,
+	// and every surface that does not read it does not.
+	readers := map[string][]string{}
 	for _, surface := range declared {
-		captures := gateStage2Artifacts(surface)
-		if len(captures) == 0 {
-			continue
+		for _, rel := range gateStage2Artifacts(surface) {
+			readers[rel] = append(readers[rel], surface)
 		}
-		for _, rel := range captures {
-			t.Run(surface+" ← "+rel, func(t *testing.T) {
-				original, readErr := os.ReadFile(filepath.Join(overlay, filepath.FromSlash(rel)))
-				if readErr != nil {
-					t.Fatalf("read %s: %v", rel, readErr)
-				}
-				gateWrite(t, overlay, rel, "{\"captured\":\"a different release\"}\n")
-				defer gateWrite(t, overlay, rel, string(original))
+	}
+	captures := make([]string, 0, len(readers))
+	for rel := range readers {
+		captures = append(captures, rel)
+	}
+	sort.Strings(captures)
 
-				after, keyErr := gateStage2Keys(overlay, tracked)
-				if keyErr != nil {
-					t.Fatalf("re-key: %v", keyErr)
-				}
-				if after[surface] == before[surface] {
-					t.Errorf("replacing %s left %q's key unmoved. The agent is handed that file as this release's evidence, so last release's copy would sit under a verdict carried forward as current", rel, surface)
-				}
-				for _, other := range declared {
-					if other == surface {
-						continue
-					}
-					if after[other] != before[other] {
-						t.Errorf("replacing %s moved %q's key as well; that capture is evidence for %q alone, and a key that moves for every surface re-runs thirteen agents for one file", rel, other, surface)
-					}
-				}
-			})
+	for _, rel := range captures {
+		reads := map[string]bool{}
+		for _, surface := range readers[rel] {
+			reads[surface] = true
 		}
+		t.Run(rel+" → "+strings.Join(readers[rel], ", "), func(t *testing.T) {
+			original, readErr := os.ReadFile(filepath.Join(overlay, filepath.FromSlash(rel)))
+			if readErr != nil {
+				t.Fatalf("read %s: %v", rel, readErr)
+			}
+			gateWrite(t, overlay, rel, "{\"captured\":\"a different release\"}\n")
+			defer gateWrite(t, overlay, rel, string(original))
+
+			after, keyErr := gateStage2Keys(overlay, tracked)
+			if keyErr != nil {
+				t.Fatalf("re-key: %v", keyErr)
+			}
+			for _, surface := range declared {
+				moved := after[surface] != before[surface]
+				switch {
+				case reads[surface] && !moved:
+					t.Errorf("replacing %s left %q's key unmoved, and %q is handed that file as this release's evidence; last release's copy would sit under a verdict carried forward as current", rel, surface, surface)
+				case !reads[surface] && moved:
+					t.Errorf("replacing %s moved %q's key, and %q is not handed it; a capture that moves keys it is not evidence for re-runs agents that read nothing new", rel, surface, surface)
+				}
+			}
+		})
 	}
 
 	// And a capture that is not there refuses the run rather than shrinking it.
@@ -1216,6 +1546,268 @@ func TestGateStage2EveryClaimedDocumentIsAccountedForInItsBundle(t *testing.T) {
 	}
 }
 
+// TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout is the
+// closure of B3, asserted against the REAL manifest and the real tree.
+//
+// THE FAILURE IT CLOSES. gate/prompts/binary-and-viewer.md asks five questions.
+// Three of them — do the Short and Long texts still describe what each command
+// does, does every error message and hint name a recovery that still exists, do
+// the viewer's labels and empty states describe what the viewer now shows — are
+// about strings that surface.json does not carry, and the surface's bundle
+// handed the agent surface.json and withheld all 106 of its files. The fourth
+// asks whether the cross-release render diff says the viewer's strings changed,
+// and gate/render-diff.json was attached to `changelog` alone. An agent handed
+// none of that does not report FAILED: it answers from what it has and reports
+// a PASS over the two checks it could make, which is the skip-reading-as-a-pass
+// shape at surface granularity, and the verdict is then cached and carried
+// forward across every release that does not move surface.json.
+func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testing.T) {
+	const surface = "binary-and-viewer"
+	overlay, realRoot := gateStage2Overlay(t)
+	tracked := surfaceTrackedFiles(t, realRoot)
+
+	documents, err := gateSurfaceDocuments(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve documents: %v", err)
+	}
+	spec, err := gateStage2BundleSpec(surface, documents[surface])
+	if err != nil {
+		t.Fatalf("the real %s surface could not be given a bundle spec: %v", surface, err)
+	}
+
+	// Every class the prompt asks about resolves to at least one handed file of
+	// the REAL tree. A class that resolves to nothing is what a directory rename
+	// looks like from here, and it is otherwise silent.
+	for _, class := range gateStage2BinaryStringClasses {
+		found := 0
+		for _, rel := range spec.Handed {
+			if strings.HasPrefix(rel, class.Dir) && strings.HasSuffix(rel, class.Suffix) {
+				found++
+			}
+		}
+		if found == 0 {
+			t.Errorf("no file under %s is handed to %q, and its prompt asks about %s", class.Dir, surface, class.Question)
+		}
+	}
+
+	// Handed and Withheld are still the whole resolved set, each document on
+	// exactly one list. Handing a class over must not drop a file from the
+	// account the agent is given of its own surface.
+	accounted := map[string]int{}
+	for _, rel := range append(append([]string(nil), spec.Handed...), spec.Withheld...) {
+		accounted[rel]++
+	}
+	for _, rel := range documents[surface] {
+		if accounted[rel] != 1 {
+			t.Errorf("%s appears on %d of this surface's two lists; a document on neither is a file the agent is never told about, and one on both is a bundle that hands over bytes while saying it did not", rel, accounted[rel])
+		}
+	}
+	if len(accounted) != len(documents[surface]) {
+		t.Errorf("the bundle spec accounts for %d documents and the manifest resolves %d", len(accounted), len(documents[surface]))
+	}
+	if len(spec.Withheld) == 0 {
+		t.Errorf("nothing is withheld from %q any more; the surface resolves to %d files and the extract exists because most of them are the engine's logic, which surface.json IS a faithful projection of", surface, len(documents[surface]))
+	}
+
+	// THE BYTES, not the names. This is the whole difference between a question
+	// that can be answered and one that cannot.
+	bundle, err := gateBundleAssemble(overlay, spec)
+	if err != nil {
+		t.Fatalf("assemble %q's bundle: %v", surface, err)
+	}
+	text := string(bundle)
+	for _, rel := range spec.Handed {
+		body, readErr := os.ReadFile(filepath.Join(overlay, filepath.FromSlash(rel)))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", rel, readErr)
+		}
+		if !strings.Contains(text, string(body)) {
+			t.Errorf("%q's bundle names %s and does not carry its bytes; the prompt's questions about the strings in that file would be answered from the mechanical inventory, which holds none of them", surface, rel)
+		}
+	}
+	render, err := os.ReadFile(filepath.Join(overlay, filepath.FromSlash("gate/render-diff.json")))
+	if err != nil {
+		t.Fatalf("read the render diff: %v", err)
+	}
+	if !strings.Contains(text, string(render)) {
+		t.Errorf("%q's bundle does not carry gate/render-diff.json, and its prompt asks whether the viewer's visible strings changed since the previous release", surface)
+	}
+
+	// And the whole run refuses when the diff is not there, for BOTH readers of
+	// it rather than for the one that has always read it.
+	t.Run("the render diff is not there", func(t *testing.T) {
+		rel := "gate/render-diff.json"
+		original, readErr := os.ReadFile(filepath.Join(overlay, filepath.FromSlash(rel)))
+		if readErr != nil {
+			t.Fatalf("read %s: %v", rel, readErr)
+		}
+		if err := os.Remove(filepath.Join(overlay, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("remove %s: %v", rel, err)
+		}
+		defer gateWrite(t, overlay, rel, string(original))
+
+		keys, keyErr := gateStage2Keys(overlay, tracked)
+		if keyErr == nil {
+			t.Fatal("every surface was keyed with the cross-release render diff absent; two surfaces would answer questions about it from nothing")
+		}
+		if keys != nil {
+			t.Errorf("a partial key map came back alongside the error (%d entries)", len(keys))
+		}
+		if !strings.Contains(keyErr.Error(), "2 of 13") {
+			t.Errorf("the refusal must report both readers of the diff, not one; got:\n%v", keyErr)
+		}
+	})
+
+	// A spec that carries the strings and not the diff is refused by the bundle
+	// check itself, so the two halves of B3 cannot be closed one at a time.
+	t.Run("a spec with the strings and no diff", func(t *testing.T) {
+		bare := spec
+		bare.Artifacts = nil
+		if err := gateStage2CheckExtractIsWhole(bare); err == nil {
+			t.Fatal("a bundle for this surface with no render diff was accepted")
+		} else if !errors.Is(err, errGateBundleIncomplete) {
+			t.Errorf("the refusal must be the incomplete-bundle sentinel; got %v", err)
+		}
+	})
+
+	// And a class that stops resolving is refused ON THE RUN PATH — which is what
+	// makes gateStage2CheckExtractIsWhole a check rather than a test.
+	t.Run("a class that resolves to nothing", func(t *testing.T) {
+		was := gateStage2BinaryStringClasses
+		defer func() { gateStage2BinaryStringClasses = was }()
+		gateStage2BinaryStringClasses = append(append([]struct {
+			Dir      string
+			Suffix   string
+			Question string
+		}(nil), was...), struct {
+			Dir      string
+			Suffix   string
+			Question string
+		}{"cmd/dossierx/renamed-away/", ".go", "a class whose directory was renamed"})
+
+		if _, err := gateStage2BundleSpec(surface, documents[surface]); err == nil {
+			t.Fatal("a class resolving to no handed file was accepted; the files are still in the key and still named as withheld, and the question about them is being put to nobody")
+		}
+		keys, keyErr := gateStage2Keys(overlay, tracked)
+		if keyErr == nil {
+			t.Fatal("the run was keyed anyway; the check is not on the path a run takes")
+		}
+		if keys != nil {
+			t.Errorf("a partial key map came back alongside the error (%d entries)", len(keys))
+		}
+		if !strings.Contains(keyErr.Error(), surface) {
+			t.Errorf("the refusal must name the surface; got:\n%v", keyErr)
+		}
+	})
+}
+
+// TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot is the
+// difference the paragraph above rests on, measured rather than asserted.
+//
+// It runs on a synthetic tree because the assertion is about EDITING one of
+// those files, and the real-tree overlay reaches cmd/ and internal/ through
+// symlinks — an edit there would be an edit to the repository, which no test in
+// this file is allowed to make.
+func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testing.T) {
+	const (
+		surface = "binary-and-viewer"
+		handed  = "internal/render/viewer/template/shell.html"
+	)
+	root, tracked := gateStage2BinaryFixture(t)
+
+	documents, err := gateSurfaceDocuments(root, tracked)
+	if err != nil {
+		t.Fatalf("resolve documents: %v", err)
+	}
+	key := func(t *testing.T) (string, []byte) {
+		t.Helper()
+		spec, specErr := gateStage2BundleSpec(surface, documents[surface])
+		if specErr != nil {
+			t.Fatalf("bundle spec: %v", specErr)
+		}
+		bundle, bundleErr := gateBundleAssemble(root, spec)
+		if bundleErr != nil {
+			t.Fatalf("assemble: %v", bundleErr)
+		}
+		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		if inErr != nil {
+			t.Fatalf("inputs: %v", inErr)
+		}
+		fingerprint, fpErr := gateSurfaceFingerprint(root, in)
+		if fpErr != nil {
+			t.Fatalf("fingerprint: %v", fpErr)
+		}
+		return fingerprint, bundle
+	}
+
+	beforeKey, beforeBundle := key(t)
+	if !strings.Contains(string(beforeBundle), "the legend nobody has read since v0.3") {
+		t.Fatalf("the handed viewer template's bytes are not in the bundle, so the rest of this test would be measuring nothing")
+	}
+
+	gateWrite(t, root, handed, "<h1>DossierX</h1>\n<p>a legend that now says something else</p>\n")
+	afterKey, afterBundle := key(t)
+	if bytes.Equal(beforeBundle, afterBundle) {
+		t.Error("editing a handed viewer template left the bundle byte-identical; its strings are not in the material the agent reads")
+	}
+	if afterKey == beforeKey {
+		t.Error("editing a handed viewer template left the surface's key unmoved, so the previous verdict — given over the previous strings — would be carried forward as current")
+	}
+
+	// The other half, and the state this lane found the WHOLE surface in: a
+	// withheld document moves the key — it is in the document hash — and does not
+	// move the bundle by a single byte, because the bundle only ever held its
+	// name. That is precisely why an agent asked about the strings inside a
+	// withheld file had nothing to read, and why it is the bundle rather than the
+	// key that had to change.
+	const withheld = "internal/lock/lock.go"
+	beforeKey, beforeBundle = key(t)
+	gateWrite(t, root, withheld, "package lock\n\n// different ledger arithmetic, still not prose\n")
+	afterKey, afterBundle = key(t)
+	if !bytes.Equal(beforeBundle, afterBundle) {
+		t.Error("editing a withheld document changed the bundle, which is supposed to carry its name and not its bytes; if the bytes were in there, gateSurfaceInputs.Documents would be a component no mutation could move on its own")
+	}
+	if afterKey == beforeKey {
+		t.Error("editing a withheld document left the surface's key unmoved; a document nobody was handed is still part of the surface, and a verdict must not be carried across a change to it")
+	}
+}
+
+// gateStage2BinaryFixture is a synthetic tree that resolves `binary-and-viewer`
+// to one file per judged class plus one file that is judged by none, so an edit
+// to either can be measured without touching the repository.
+func gateStage2BinaryFixture(t *testing.T) (root string, tracked []string) {
+	t.Helper()
+	root = t.TempDir()
+
+	gateWrite(t, root, gateManifestFile, "surfaces:\n"+
+		"  - name: binary-and-viewer\n    paths: [cmd/dossierx/, internal/]\n    not: [\"**/*_test.go\"]\n"+
+		"out_of_scope:\n  - name: tests\n    paths: [\"**/*_test.go\"]\n")
+
+	tracked = []string{
+		"cmd/dossierx/main.go",
+		"internal/cliout/codes.go",
+		"internal/render/components/card.html",
+		"internal/render/viewer/template/shell.html",
+		"internal/lock/lock.go",
+	}
+	gateWrite(t, root, "cmd/dossierx/main.go", "package main\n\n// Short: turn claims into a viewer\n")
+	gateWrite(t, root, "internal/cliout/codes.go", "package cliout\n\nconst hint = \"run `dossierx check` first\"\n")
+	gateWrite(t, root, "internal/render/components/card.html", "<div class=\"card\">no claims yet</div>\n")
+	gateWrite(t, root, "internal/render/viewer/template/shell.html", "<h1>DossierX</h1>\n<p>the legend nobody has read since v0.3</p>\n")
+	gateWrite(t, root, "internal/lock/lock.go", "package lock\n\n// ledger arithmetic, not prose\n")
+
+	gateWrite(t, root, gateStage2MethodFile, "model: claude-opus-5\ntools:\n  - SurfaceFinding\n  - SurfaceVerdict\n")
+	gateWrite(t, root, gateBundleFrameFile, "# Surface review — "+gateBundleSurfaceMarker+"\n\n"+
+		"Report FAILED on any mismatch you can demonstrate from the material below.\n\n"+gateBundlePartsMarker+"\n")
+	gateWrite(t, root, gateBundlePromptFile("binary-and-viewer"), "Read the engine's own strings against surface.json.\n")
+
+	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
+	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+	gateWrite(t, root, "gate/render-diff.json", "{\"artifacts\":[]}\n")
+	gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":28}}\n", "[]")
+	return root, tracked
+}
+
 // TestGateStage2EverySurfaceNamedInAPolicyIsDeclared: the two per-surface
 // policies are keyed by surface NAME, and a name that no longer exists in the
 // manifest is a policy that silently applies to nothing.
@@ -1234,7 +1826,7 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 		isDeclared[name] = true
 	}
 
-	for _, named := range []string{"exported-skills", "release-notes", "changelog"} {
+	for _, named := range []string{"exported-skills", "release-notes", "changelog", "binary-and-viewer"} {
 		if !isDeclared[named] {
 			t.Errorf("gateStage2Artifacts attaches a capture to surface %q, which surfaces.yaml does not declare; that capture is in no key and reaches no agent", named)
 		}
@@ -1256,7 +1848,7 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 	for _, name := range declared {
 		artifacts := gateStage2Artifacts(name)
 		switch name {
-		case "exported-skills", "release-notes", "changelog":
+		case "exported-skills", "release-notes", "changelog", "binary-and-viewer":
 			if len(artifacts) == 0 {
 				t.Errorf("surface %q lost its capture", name)
 			}
@@ -1593,6 +2185,138 @@ func TestGateStage2DistinguishesAnEmptyDeltaFromOneThatWasNeverComputed(t *testi
 	}
 }
 
+// TestGateStage2RecomputesTheDeltaRatherThanBelievingIt is I6.
+//
+// Every other check on the delta is PROVENANCE: which tree it was computed over,
+// which ref and commit it resolved, which baseline bytes it read. Provenance
+// says who wrote a number. It cannot say whether the number is right, and
+// `changed` is the only field of that document any of the thirteen agents reads.
+//
+// The failing shape is not adversarial. `changed` comes out of a shell pipeline
+// — two mktemps, two awk passes over pretty-printed JSON, a sort — and every one
+// of those has a way to produce an empty or short list while exiting 0. An empty
+// list cannot be refused on its own account either, because it is the CORRECT
+// answer for a release that moved no shipped code, which this project's first
+// gated release is. So the only way to tell the true empty list from the broken
+// one is to derive it again from the two inventories that are on disk.
+func TestGateStage2RecomputesTheDeltaRatherThanBelievingIt(t *testing.T) {
+	run := gateStage2Run{Tree: gateStage2FixtureTree}
+	run.Baseline.Ref = gateStage2FixtureRef
+	run.Baseline.Commit = gateStage2FixtureBaseline
+
+	fixture := func(t *testing.T, inventory, baseline, changed string) string {
+		t.Helper()
+		root := t.TempDir()
+		gateWrite(t, root, gateSurfaceInventoryFile, inventory)
+		gateStage2WriteEvidence(t, root, gateStage2FixtureTree, baseline, changed)
+		return root
+	}
+	check := func(t *testing.T, root string) error {
+		t.Helper()
+		delta, err := gateStage2ReadDelta(root)
+		if err != nil {
+			t.Fatalf("the fixture's delta does not even read back, so this row is about the wrong thing: %v", err)
+		}
+		return gateStage2CheckDeltaCovers(root, gateStage2FixtureTree, run, delta)
+	}
+
+	// An honest delta over a moved inventory, and an honest EMPTY one over an
+	// unmoved tree. Both must pass, or every refusal below proves nothing and the
+	// check would fire on this project's first gated release.
+	if err := check(t, fixture(t, "{\"commands\":[\"claim new\"],\"counts\":{\"lint_rules\":28}}\n",
+		"{\"commands\":[\"claim new\"],\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")); err != nil {
+		t.Fatalf("an honest delta naming the one field that moved was refused: %v", err)
+	}
+	if err := check(t, fixture(t, "{\"counts\":{\"lint_rules\":28}}\n", "{\"counts\":{\"lint_rules\":28}}\n", "[]")); err != nil {
+		t.Fatalf("an EMPTY delta over a tree where nothing moved was refused; on this tree that is the correct answer for the first gated release: %v", err)
+	}
+	// And formatting is not movement: the emitter's indentation and key order are
+	// not facts about the release, and a delta must not be forced to claim they
+	// are.
+	if err := check(t, fixture(t, "{\n  \"counts\": {\n    \"lint_rules\": 28,\n    \"nouns\": 7\n  }\n}\n",
+		"{\"counts\":{\"nouns\":7,\"lint_rules\":28}}\n", "[]")); err != nil {
+		t.Fatalf("two inventories differing only in whitespace and key order were reported as a change: %v", err)
+	}
+
+	for _, tc := range []struct {
+		name                        string
+		inventory, baseline, stated string
+		want                        string
+	}{
+		{
+			"nothing moved, said of a tree where something did",
+			"{\"counts\":{\"lint_rules\":28}}\n", "{\"counts\":{\"lint_rules\":27}}\n", "[]",
+			"[counts], which every surface agent would therefore be told is unchanged",
+		},
+		{
+			"a field the inventory gained is not mentioned",
+			"{\"counts\":{},\"http_routes\":[\"/claims\"]}\n", "{\"counts\":{}}\n", "[]",
+			"[http_routes]",
+		},
+		{
+			"a field the inventory LOST is not mentioned",
+			"{\"counts\":{}}\n", "{\"counts\":{},\"retired\":[\"lint\"]}\n", "[]",
+			"[retired]",
+		},
+		{
+			"a field that did not move is named anyway",
+			"{\"counts\":{\"lint_rules\":28},\"commands\":[]}\n", "{\"counts\":{\"lint_rules\":28},\"commands\":[]}\n", "[\"commands\"]",
+			"[commands], which did not move",
+		},
+		{
+			"the list is right about one field and silent about the other",
+			"{\"counts\":{\"lint_rules\":28},\"commands\":[\"claim new\"]}\n", "{\"counts\":{\"lint_rules\":27},\"commands\":[]}\n", "[\"counts\"]",
+			"[commands], which every surface agent",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := check(t, fixture(t, tc.inventory, tc.baseline, tc.stated))
+			if err == nil {
+				t.Fatal("the delta was accepted; thirteen agents would be handed it as the truth about what this release changed, and each would judge its own document against a comparison that did not happen")
+			}
+			if !errors.Is(err, errGateStage2StaleDelta) {
+				t.Errorf("a delta that does not describe this release must be reported as one, so the reader is sent to the producer; got %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("the refusal must say which field the human should look at; want a mention of %q, got:\n%v", tc.want, err)
+			}
+		})
+	}
+
+	// An inventory that cannot be compared is a FAILED run and never a delta that
+	// happens to agree. This is the same rule as everywhere else in the gate: a
+	// check that cannot execute is not a check that passed.
+	for _, tc := range []struct {
+		name                string
+		inventory, baseline string
+		want                string
+	}{
+		{"the baseline inventory is not JSON", "{\"counts\":{}}\n", "not an inventory at all\n", "is not a JSON object"},
+		{"the baseline inventory is empty", "{\"counts\":{}}\n", "{}\n", "holds no top-level key"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			gateWrite(t, root, gateSurfaceInventoryFile, tc.inventory)
+			gateWrite(t, root, gateBaselineFile, tc.baseline)
+			digest, err := gateStage2FileDigest(root, gateBaselineFile)
+			if err != nil {
+				t.Fatalf("digest the baseline: %v", err)
+			}
+			gateWrite(t, root, gateDeltaFile, fmt.Sprintf(
+				"{\"tree\":%q,\"baseline\":{\"ref\":%q,\"commit\":%q,\"sha256\":%q},\"changed\":[]}\n",
+				gateStage2FixtureTree, gateStage2FixtureRef, gateStage2FixtureBaseline, digest))
+
+			err = check(t, root)
+			if err == nil {
+				t.Fatal("the delta was accepted over inventories that could not be compared; the run would report on a comparison nobody could make")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("the refusal must say what could not be read; want %q, got:\n%v", tc.want, err)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------
 // the tests: the plan, which is the only path any of this is on
 // ---------------------------------------------------------------------
@@ -1732,6 +2456,22 @@ func TestGateStage2PlanRefusesEveryRunItCannotStandBehind(t *testing.T) {
 			gateWrite(t, root, gateDeltaFile, "{\"tree\":\""+gateStage2FixtureTree+"\",\"baseline\":{\"ref\":\""+gateStage2FixtureRef+"\",\"commit\":\""+gateStage2FixtureBaseline+"\"},\"changed\":[]}\n")
 			gateStage2Restamp(t, root)
 		}, "does not record the digest of the baseline inventory"},
+
+		// ---- and the payload, which is the field the agents actually read ----
+		//
+		// The fixture's inventory says 28 lint rules and its baseline says 27, so
+		// `counts` moved. A delta whose provenance is perfect in every other
+		// respect and whose changed list is empty tells thirteen agents that
+		// nothing moved since the previous release, and every one of them then
+		// judges its document against a comparison that did not happen.
+		{"the delta says nothing moved over a tree where something did", func(t *testing.T, root string) {
+			gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":27}}\n", "[]")
+			gateStage2Restamp(t, root)
+		}, "which every surface agent would therefore be told is unchanged"},
+		{"the delta names a field that did not move", func(t *testing.T, root string) {
+			gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\",\"commands\"]")
+			gateStage2Restamp(t, root)
+		}, "which did not move, so agents would be sent looking for a change nobody made"},
 
 		// ---- and the keys themselves --------------------------------------
 		{"one surface's question is gone", func(t *testing.T, root string) {

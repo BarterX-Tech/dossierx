@@ -54,7 +54,13 @@
 //     has judged non-blocking is to delete it from the record. Adding the field
 //     is an edit to gate_receipt_test.go, which is in no lane's write set this
 //     wave. Until it exists, an adjudicated finding and a finding nobody raised
-//     are indistinguishable to the next release.
+//     are indistinguishable to the next release. THIS NOW HAS A ROUTINE CALLER:
+//     a subject no surface claims is a legitimate state of a tree and is raised
+//     as a finding (gateStage3JoinFindings), so the first release with a quiet
+//     subject blocks until a human either answers the subject, removes it from
+//     the frame's vocabulary, or has somewhere to record the override. That is
+//     the honest ordering — the human is asked — but it is a real cost and it is
+//     the strongest argument for the field.
 //   - A PRODUCER. Nothing in this repository writes gate/answers/<surface>.json
 //     yet; scripts/gate-stage2/run.sh has six modes and none of them reads an
 //     agent's answer back. This file pins the SCHEMA and refuses everything
@@ -607,6 +613,13 @@ func gateStage3StrayAnswers(root string, rerun []string) []error {
 // list, fresh or carried alike. Nothing is filtered, deduplicated or downgraded
 // on the way, because a run over a finding nobody can see is a run that did not
 // happen.
+//
+// AND NOTHING STAGE 3 DERIVED ITSELF IS LEFT BEHIND EITHER. The verdicts are a
+// per-surface projection and have nowhere to carry a cross-surface result, so
+// the join's collisions and its vocabulary-decay report travel out through the
+// FINDINGS — see gateStage3JoinFindings. Before they did, both computations ran
+// only inside their own fixture tests and a real disagreement reached no
+// verdict, no report and no human.
 func gateStage3Verdicts(answers []gateStage3Answer) []gateSurfaceVerdict {
 	out := make([]gateSurfaceVerdict, 0, len(answers))
 	for _, a := range answers {
@@ -615,7 +628,93 @@ func gateStage3Verdicts(answers []gateStage3Answer) []gateSurfaceVerdict {
 	return out
 }
 
-func gateStage3Findings(answers []gateStage3Answer) []gateFinding {
+// gateStage3JoinSurface is the surface name every finding the JOIN raises is
+// filed under.
+//
+// IT IS DELIBERATELY NOT A DECLARED SURFACE, and TestGateStage3TheJoinsFindings
+// ReachTheReceipt asserts surfaces.yaml does not declare it. A collision belongs
+// to no single surface by construction: each of the disagreeing agents is
+// internally consistent, none of them was handed the others' documents, and the
+// disagreement exists only in the union. Filing it under one of the four
+// surfaces that stated a value would accuse whichever one the sort happened to
+// reach first, and filing it under all of them would multiply one disagreement
+// into four things a human has to read and reconcile.
+const gateStage3JoinSurface = "cross-surface-join"
+
+// The two rules the join reports under. They are named constants because the
+// receipt sorts findings by rule and a human filters on it.
+const (
+	gateStage3RuleCollision = "cross-surface-disagreement"
+	gateStage3RuleUnclaimed = "subject-claimed-by-nobody"
+)
+
+// gateStage3JoinFindings turns the join's two results into findings.
+//
+// WHY THIS EXISTS AT ALL. gateStage3Join and gateStage3UnclaimedSubjects were
+// computed only inside their own tests: the fixture built four answers, called
+// the join, asserted a collision came back, and threw it away. Nothing on the
+// path from a fan-out to a receipt called either of them. So on the release the
+// join was specified for — go.mod's floor moves, README and the CI template are
+// updated, CONTRIBUTING and the site's badge are not — all thirteen agents
+// PASS, the record is green to gateIsGreen, the receipt carries no finding,
+// evaluate() returns PASS, and the driver publishes. The disagreement was
+// computable at every moment of that run and reached no verdict, no report and
+// no human.
+//
+// A COLLISION IS A FINDING AND NOT A VERDICT. It does not overrule any surface's
+// answer — every one of them may be right about its own document — it says the
+// union is inconsistent and names who said what, which is the only form a human
+// can act on. That a finding blocks the release is gateReceipt.evaluate's rule
+// and CLAUDE.md's: every finding reaches the human, and the human confirms what
+// blocks.
+//
+// AN UNCLAIMED SUBJECT IS A FINDING FOR THE SAME REASON A SKIPPED CHECK IS A
+// FAILURE. A subject every surface answers `not-claimed` is a subject the join
+// CANNOT fire on: it reports agreement over that subject on this tree and on
+// every future tree, and it looks identical to a subject that genuinely agrees.
+// That is the "indistinguishable from a pass over zero assertions" shape, and
+// this repository's rule is that it reaches the human rather than being logged
+// where nobody reads it. It is a legitimate state of a tree — which is why the
+// finding says so and leaves the call to the human — but it is never invisible.
+func gateStage3JoinFindings(answers []gateStage3Answer, vocabulary []gateStage3Subject) ([]gateFinding, error) {
+	collisions, err := gateStage3Join(answers, vocabulary)
+	if err != nil {
+		return nil, err
+	}
+	var out []gateFinding
+	for _, c := range collisions {
+		var said []string
+		for _, v := range c.Values {
+			said = append(said, fmt.Sprintf("%s say %q", strings.Join(v.Surfaces, ", "), v.Value))
+		}
+		out = append(out, gateFinding{
+			Surface:  gateStage3JoinSurface,
+			Rule:     gateStage3RuleCollision,
+			Severity: "major",
+			Detail: fmt.Sprintf("the surfaces do not agree about %s: %s. No per-surface agent can see this — each document is internally consistent and none of them was handed the others — so every one of these surfaces passed. Decide which value is right and correct the documents that state the other.",
+				c.Subject, strings.Join(said, "; ")),
+		})
+	}
+	for _, subject := range gateStage3UnclaimedSubjects(answers, vocabulary) {
+		out = append(out, gateFinding{
+			Surface:  gateStage3JoinSurface,
+			Rule:     gateStage3RuleUnclaimed,
+			Severity: "major",
+			Detail: fmt.Sprintf("not one surface stated a value for %s, so the cross-surface join cannot fire on it: it reports agreement on this tree and on every future one, and that reads exactly like %d surfaces agreeing. Either a surface stopped stating it, or the subject no longer describes anything this project publishes and belongs out of the vocabulary in %s.",
+				subject, len(answers), gateBundleFrameFile),
+		})
+	}
+	return out, nil
+}
+
+// gateStage3Findings collects every finding the record carries, and then the
+// join's own.
+//
+// The join's findings are appended HERE rather than left to the caller for the
+// reason the whole lane exists: a projection the receipt takes is a thing that
+// runs, and a computation beside it that the caller must remember to invoke is a
+// computation that reaches no human the first time somebody forgets.
+func gateStage3Findings(answers []gateStage3Answer, vocabulary []gateStage3Subject) ([]gateFinding, error) {
 	var out []gateFinding
 	for _, a := range answers {
 		if a.Findings == nil {
@@ -623,7 +722,11 @@ func gateStage3Findings(answers []gateStage3Answer) []gateFinding {
 		}
 		out = append(out, *a.Findings...)
 	}
-	return out
+	joined, err := gateStage3JoinFindings(answers, vocabulary)
+	if err != nil {
+		return nil, err
+	}
+	return append(out, joined...), nil
 }
 
 // gateStage3Fresh names the surfaces whose answers were produced by this run, as
@@ -722,12 +825,18 @@ func gateStage3Join(answers []gateStage3Answer, vocabulary []gateStage3Subject) 
 
 // gateStage3UnclaimedSubjects names every subject that not one surface claimed.
 //
-// It is reported rather than refused, because a subject nobody speaks to is a
-// legitimate state of a tree and refusing it would be a check that fires on an
-// honest release. What it must never be is invisible: a subject every surface
-// answers `not-claimed` is a subject the join CANNOT fire on, and a vocabulary
-// quietly decaying into subjects like that is how this whole stage becomes a
-// group-by that reports green forever while looking busy.
+// It is REPORTED rather than refused: the run still collects, the record is
+// still whole, and no surface's answer is overruled — because a subject nobody
+// speaks to is a legitimate state of a tree and refusing it outright would be a
+// check that fires on an honest release. What it must never be is invisible: a
+// subject every surface answers `not-claimed` is a subject the join CANNOT fire
+// on, and a vocabulary quietly decaying into subjects like that is how this
+// whole stage becomes a group-by that reports green forever while looking busy.
+//
+// So the report leaves here as a FINDING (gateStage3JoinFindings), which reaches
+// the receipt and therefore the human, who decides whether it blocks. That is
+// the difference between reported and refused: an agent does not make the call,
+// and it does not quietly make it by saying nothing either.
 func gateStage3UnclaimedSubjects(answers []gateStage3Answer, vocabulary []gateStage3Subject) []string {
 	var out []string
 	for _, subject := range vocabulary {
@@ -1170,6 +1279,23 @@ func TestGateStage3CoversEveryDeclaredSurfaceOfTheRealManifest(t *testing.T) {
 		t.Fatalf("the record stage 3 produced is not green to gateIsGreen: %v", err)
 	}
 
+	// EVERY ANSWER HERE IS `not-claimed` FOR EVERY SUBJECT, which is the shape a
+	// fan-out that looked at nothing also produces: thirteen well-formed answers,
+	// thirteen PASSes, a green record, and a join that can fire on nothing. It
+	// must reach the human as findings rather than as a clean run.
+	findings, err := gateStage3Findings(answers, vocabulary)
+	if err != nil {
+		t.Fatalf("project the findings: %v", err)
+	}
+	if len(findings) != len(vocabulary) {
+		t.Errorf("a run in which not one of the %d real subjects was claimed by any of the %d surfaces produced %d findings; a vocabulary nobody answers reports agreement forever and reads exactly like agreement", len(vocabulary), len(declared), len(findings))
+	}
+	for _, f := range findings {
+		if f.Rule != gateStage3RuleUnclaimed {
+			t.Errorf("an all-silent run raised a %q finding: %s", f.Rule, f.Detail)
+		}
+	}
+
 	// A PLAN THAT COVERS TWELVE. This is the shape the coverage rule exists for
 	// and the one the missing-file case does NOT exercise: nothing failed to
 	// load, nothing was malformed, and every answer the run asked for is present
@@ -1310,7 +1436,10 @@ func TestGateStage3CarriesTheWholeAnswerOrNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	findings := gateStage3Findings(answers)
+	findings, err := gateStage3Findings(answers, vocabulary)
+	if err != nil {
+		t.Fatalf("project the findings: %v", err)
+	}
 	if len(findings) != 2 {
 		t.Fatalf("the record holds %d findings; run 1 raised one per surface and a re-run must lose neither: %+v", len(findings), findings)
 	}
@@ -1414,21 +1543,28 @@ func TestGateStage3HandsTheReceiptEveryFindingItCollected(t *testing.T) {
 		gateStage3WriteAnswer(t, root, a)
 	}
 
+	vocabulary := gateStage3Vocab(t)
 	answers, err := gateStage3Collect(gateStage3Inputs{
 		Root: root, Run: run, Declared: declared, Current: current,
 		Plan:       gateRerunPlan{Rerun: append([]string(nil), declared...)},
-		Vocabulary: gateStage3Vocab(t),
+		Vocabulary: vocabulary,
 	})
 	if err != nil {
 		t.Fatalf("collect: %v", err)
 	}
-	if got := len(gateStage3Findings(answers)); got != want {
+	projected, err := gateStage3Findings(answers, vocabulary)
+	if err != nil {
+		t.Fatalf("project the findings: %v", err)
+	}
+	// Every surface states the same two subject values, so the join raises
+	// nothing here and the count is the record's own findings exactly.
+	if got := len(projected); got != want {
 		t.Fatalf("%d of %d findings reached the record; a finding nobody can see is a run that did not happen", got, want)
 	}
 	// Including the ones an agent labelled minor: severity orders a report and
 	// decides nothing, because the human confirms what blocks a release.
 	var minor int
-	for _, f := range gateStage3Findings(answers) {
+	for _, f := range projected {
 		if f.Severity == "minor" {
 			minor++
 		}
@@ -1503,6 +1639,32 @@ func TestGateStage3TheJoinFiresOnASubjectNoSurfaceCanSeeAlone(t *testing.T) {
 		t.Errorf("1.27 is attributed to %v", c.Values[1].Surfaces)
 	}
 
+	// AND IT LEAVES STAGE 3. Everything above was true before this lane and
+	// reached nobody: the join ran here, in this test, and the value it returned
+	// was asserted about and dropped. The projection the receipt takes is the only
+	// way out of stage 3, so the collision has to be in it.
+	findings, err := gateStage3Findings(answers, vocabulary)
+	if err != nil {
+		t.Fatalf("project the findings: %v", err)
+	}
+	var raised []gateFinding
+	for _, f := range findings {
+		if f.Rule == gateStage3RuleCollision {
+			raised = append(raised, f)
+		}
+	}
+	if len(raised) != 1 {
+		t.Fatalf("the projection carries %d collision findings over four surfaces stating two Go floors; every surface PASSED, so this is the only thing that can reach the human: %+v", len(raised), findings)
+	}
+	for _, want := range []string{"go-toolchain-floor", "1.26", "1.27", "contributing", "readme"} {
+		if !strings.Contains(raised[0].Detail, want) {
+			t.Errorf("the finding does not mention %q, so the human is told there is a disagreement and not what it is or who is in it:\n%s", want, raised[0].Detail)
+		}
+	}
+	if raised[0].Surface != gateStage3JoinSurface {
+		t.Errorf("the collision is filed under surface %q; it belongs to none of the four, and filing it under one of them accuses whichever the sort reached first", raised[0].Surface)
+	}
+
 	// Four surfaces AGREEING — this tree today — produce no collision, or the
 	// join is a check that fires on every release and is read by nobody.
 	t.Run("agreement is not a collision", func(t *testing.T) {
@@ -1541,7 +1703,104 @@ func TestGateStage3TheJoinFiresOnASubjectNoSurfaceCanSeeAlone(t *testing.T) {
 		if unclaimed := gateStage3UnclaimedSubjects(answers, vocabulary); len(unclaimed) != 1 || unclaimed[0] != "cli-operator" {
 			t.Errorf("the unclaimed subjects read %v; go-toolchain-floor is claimed by three surfaces here and cli-operator by none", unclaimed)
 		}
+		// And "never invisible" means it leaves stage 3, not that it is computed.
+		findings, err := gateStage3Findings(answers, vocabulary)
+		if err != nil {
+			t.Fatalf("project the findings: %v", err)
+		}
+		var decay []gateFinding
+		for _, f := range findings {
+			if f.Rule == gateStage3RuleUnclaimed {
+				decay = append(decay, f)
+			}
+		}
+		if len(decay) != 1 || !strings.Contains(decay[0].Detail, "cli-operator") {
+			t.Fatalf("a subject not one surface claimed produced %d findings; the join cannot fire on it, on this tree or any future one, and that is indistinguishable from four surfaces agreeing: %+v", len(decay), findings)
+		}
 	})
+}
+
+// TestGateStage3TheJoinsFindingsReachTheReceipt is the end of the path I7 is
+// about: not that the join computes a collision, but that a human reading the
+// release's own record is told about it.
+//
+// The run below is the specified failure in full. Two surfaces state two
+// different Go floors; both agents PASS, because each document is internally
+// consistent and neither was handed the other's; the record is green to
+// gateIsGreen; and the receipt is written by the same call the driver makes.
+// Before this lane, that receipt held no finding and evaluate() returned PASS —
+// the release publishes, with the disagreement computable at every moment of the
+// run and recorded nowhere.
+func TestGateStage3TheJoinsFindingsReachTheReceipt(t *testing.T) {
+	const run = "0123456789abcdef0123456789abcdef"
+	declared := []string{"contributing", "readme"}
+	current := map[string]string{"contributing": "sha256:c", "readme": "sha256:r"}
+	vocabulary := gateStage3Vocab(t)
+
+	root := t.TempDir()
+	floors := map[string]string{"contributing": "1.26", "readme": "1.27"}
+	for _, surface := range declared {
+		a := gateStage3Good(surface, run, current[surface], gateVerdictPass)
+		a.Subjects["go-toolchain-floor"] = floors[surface]
+		gateStage3WriteAnswer(t, root, a)
+	}
+
+	in := gateStage3Inputs{Root: root, Run: run, Declared: declared, Current: current,
+		Plan: gateRerunPlan{Rerun: append([]string(nil), declared...)}, Vocabulary: vocabulary}
+	answers, err := gateStage3Collect(in)
+	if err != nil {
+		t.Fatalf("collect: %v", err)
+	}
+	verdicts := gateStage3Verdicts(answers)
+	if err := gateIsGreen(declared, verdicts, current); err != nil {
+		t.Fatalf("the fixture is not the case being described — some surface did not pass: %v", err)
+	}
+	findings, err := gateStage3Findings(answers, vocabulary)
+	if err != nil {
+		t.Fatalf("project the findings: %v", err)
+	}
+
+	work := gateFixtureRepo(t)
+	receipt, err := gateRecordReceipt(work, "v9.9.9", "release", verdicts, findings)
+	if err != nil {
+		t.Fatalf("record the receipt: %v", err)
+	}
+	var got *gateFinding
+	for i := range receipt.Findings {
+		if receipt.Findings[i].Rule == gateStage3RuleCollision {
+			got = &receipt.Findings[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("the receipt carries no cross-surface finding over a run where two surfaces state two different Go floors and both PASSED; it is the only reader of all thirteen answers, and its verdict would be PASS: %+v", receipt.Findings)
+	}
+	if !strings.Contains(got.Detail, "go-toolchain-floor") {
+		t.Errorf("the receipt's finding does not name the subject:\n%s", got.Detail)
+	}
+
+	// The verdict the driver recomputes, which is the thing that actually stops a
+	// release. A finding in a receipt nobody evaluates would be a longer document
+	// and the same published tag.
+	verdict, err := receipt.evaluate(declared, current)
+	if verdict != gateVerdictFailed {
+		t.Fatalf("the recomputed verdict is %q over a receipt carrying a cross-surface disagreement; the driver publishes on PASS", verdict)
+	}
+	if err == nil || !strings.Contains(err.Error(), "finding(s) reached the report") {
+		t.Errorf("the FAILED does not say why, so the human is stopped and not told what to look at; got %v", err)
+	}
+
+	// The join's own name is not a surface anybody declares. If it ever became
+	// one, a real surface's findings and the join's would be indistinguishable in
+	// the receipt, and gateIsGreen would start demanding a verdict for it.
+	realDeclared, err := gateDeclaredSurfaces(surfaceRepoRoot(t))
+	if err != nil {
+		t.Fatalf("read the declared surfaces: %v", err)
+	}
+	for _, name := range realDeclared {
+		if name == gateStage3JoinSurface {
+			t.Errorf("%s declares a surface called %q, which is the name the join files its own findings under", gateManifestFile, name)
+		}
+	}
 }
 
 // A collision between a CARRIED surface and a FRESH one is the case a re-run
