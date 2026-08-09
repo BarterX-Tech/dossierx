@@ -230,15 +230,46 @@ checklist for that half.
       release is about to go wrong.
 
 - [ ] Merge to `main` with `--no-ff` so the release has a merge commit to name.
-- [ ] Tag and push:
 
-      git tag -a vX.Y.Z -m "vX.Y.Z — <title>"
-      git push origin main
+- [ ] **Tag and push, in the driver's order.**
+
+      make release-publish DOSSIERX_RELEASE_VERSION=vX.Y.Z \
+                           DOSSIERX_RELEASE_AUTHORIZE=vX.Y.Z
+
+      That target is the executor of every irreversible step below, and running
+      it is the authorization: the driver publishes when a human types this and
+      at no other time. `DOSSIERX_RELEASE_AUTHORIZE` is the version a second
+      time on purpose — a boolean left in a profile or a secret would authorize
+      every release forever, including the next one triggered by accident.
+
+      The driver is `TestReleaseDriverPublishes` in
+      `cmd/dossierx/gate_driver_test.go`. It records its own receipt in the same
+      process, recomputes the verdict against the tree it is about to publish,
+      and performs the steps in **this order**:
+
+      git tag -a vX.Y.Z -m "vX.Y.Z — <title>" <merge-commit>
       git push origin vX.Y.Z
+      # Verify the archives — see the section below — and only then:
+      git push origin main
 
-      `git tag -a vX.Y.Z` with no ref tags HEAD, which is only right when
-      nothing has landed since the merge. Name the commit explicitly if
-      anything has.
+      **The tag goes first and `main` goes last, and the order is not
+      interchangeable.** The release branch edits `site/src/content.ts`, so
+      pushing `main` fires `.github/workflows/deploy-site.yml` and publishes a
+      page announcing that vX.Y.Z is the current release — while `Release`,
+      which fires only on a tag push, has not built a single archive. Pushing
+      `main` first therefore announces a release nobody can download.
+
+      **Name the merge commit explicitly.** `git tag -a vX.Y.Z` with no ref tags
+      HEAD, which is only right when nothing has landed since the merge; the
+      driver carries the merge commit by value from the merge to the tag and
+      re-reads `<tag>^{tree}` immediately before pushing it.
+
+      While the pipeline is being built the driver refuses before it publishes
+      anything — the machinery behind the archive verification does not exist
+      yet, and a step that cannot run is a failure, not a pass — so today a
+      maintainer performs these commands by hand, in exactly this order. When
+      the driver stops after an irreversible step it prints which steps are
+      already public and which are not; it never resumes and never undoes.
 
       **No sha is stamped onto the site after this.** The step that wrote the
       release commit's short sha into `site/src/content.ts` is gone with the

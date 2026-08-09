@@ -8,7 +8,7 @@
 BINARY := dossierx
 PKG := ./cmd/dossierx
 
-.PHONY: build test viewer-test viewer-lint hook-test ci-evidence
+.PHONY: build test viewer-test viewer-lint hook-test ci-evidence release-publish
 
 build:
 	go build -trimpath -o bin/$(BINARY) $(PKG)
@@ -97,3 +97,87 @@ ci-evidence:
 	  echo "some other adjudication and says nothing about the commit about to be tagged."       >&2; \
 	  exit 1; }
 	@cat "$(DOSSIERX_GATE_CI_EVIDENCE_OUT)"
+
+# THE RELEASE DRIVER — the one command that performs the irreversible half of a
+# release, and the only thing that authorizes it.
+#
+# WHY IT IS A TARGET AND NOT A `go test -run` LINE. The driver lives in a
+# _test.go file, because every gate symbol it calls does (nothing in the gate is
+# compiled into the shipped binary, and a Go package anywhere else reds the
+# behaviour-fingerprint meta-test for the whole tree). That means `go test ./...`
+# — `make test`, and every lane landing — also runs it, on a maintainer's machine
+# with a maintainer's push credentials. So the driver acts only when a human
+# NAMED a release, never when its preconditions merely happen to be satisfiable:
+# at a lane landing the gate can be green, the ancestry can hold and the trees can
+# match, which is exactly why every guard inside the driver would pass.
+#
+# The authorization is the version typed TWICE. A boolean (`=1`, `=yes`) left in
+# a shell profile, a history or a CI secret authorizes every release forever,
+# including the next one somebody triggers by accident; a second spelling of the
+# version authorizes one release and nothing else.
+#
+#     make release-publish DOSSIERX_RELEASE_VERSION=vX.Y.Z \
+#                          DOSSIERX_RELEASE_AUTHORIZE=vX.Y.Z
+#
+# WHAT THIS RECIPE ADDS THAT THE DRIVER CANNOT ADD FOR ITSELF, and each one is a
+# release it saves:
+#
+#   -count=1  `go test` caches a successful package result and REPLAYS it, and a
+#             subprocess's effects are not tracked inputs. Without this the
+#             second invocation for the same version prints `ok (cached)` in
+#             under a second and exits 0 having merged nothing, tagged nothing
+#             and pushed nothing — and that exit 0 is then read as "the release
+#             happened".
+#   -timeout  `go test`'s default is ten minutes and the answer to exceeding it
+#             is a PANIC. The driver's step between pushing the tag and pushing
+#             main waits for the Release workflow to build six GOOS/GOARCH
+#             archives and then verifies them, which routinely exceeds ten. On
+#             the default the binary panics THERE: tag on the forge, main behind
+#             it, and the per-step report naming what is already published never
+#             printed.
+#   the record refuses to exit 0 over a run that did nothing, the same way
+#             ci-evidence does above, and additionally requires the record to
+#             name the version this invocation was asked about.
+#
+# The recipe passes the three variables explicitly because make does not export
+# its variables to a recipe's environment. cmd/dossierx/gate_driver_test.go's
+# TestTheReleaseInvocationCannotSucceedHavingDoneNothing parses this recipe and
+# holds every one of those mechanisms, so no side of it can move alone.
+#
+# DOSSIERX_RELEASE_RECORD_OUT defaults OUTSIDE the repository, for ci-evidence's
+# reason — the release requires `git status --porcelain` to be empty — and for a
+# second one: gate/.gitignore ignores everything it does not name, so a record
+# written there would be invisible to git, which is the wrong property for
+# something a human is meant to find.
+DOSSIERX_RELEASE_RECORD_OUT ?= /tmp/dossierx-release-record.json
+
+release-publish:
+	@test -n "$(DOSSIERX_RELEASE_VERSION)" || { \
+	  echo "DOSSIERX_RELEASE_VERSION is unset, so no release was named and this driver does"     >&2; \
+	  echo "nothing. Publishing is authorized by a human running this target for one specific"   >&2; \
+	  echo "release, never by the gate's preconditions being satisfiable. Run:"                  >&2; \
+	  echo "    make release-publish DOSSIERX_RELEASE_VERSION=vX.Y.Z \\"                         >&2; \
+	  echo "                         DOSSIERX_RELEASE_AUTHORIZE=vX.Y.Z"                          >&2; \
+	  exit 1; }
+	@test -n "$(DOSSIERX_RELEASE_AUTHORIZE)" || { \
+	  echo "DOSSIERX_RELEASE_AUTHORIZE is unset. The authorization is the version typed a"       >&2; \
+	  echo "second time, and it is deliberately not a boolean: a =1 left in a profile or a"      >&2; \
+	  echo "secret authorizes every release forever, including the next one triggered by"        >&2; \
+	  echo "accident. Re-run with DOSSIERX_RELEASE_AUTHORIZE=$(DOSSIERX_RELEASE_VERSION)"        >&2; \
+	  exit 1; }
+	@rm -f "$(DOSSIERX_RELEASE_RECORD_OUT)"
+	DOSSIERX_RELEASE_VERSION="$(DOSSIERX_RELEASE_VERSION)" \
+	DOSSIERX_RELEASE_AUTHORIZE="$(DOSSIERX_RELEASE_AUTHORIZE)" \
+	DOSSIERX_RELEASE_RECORD_OUT="$(DOSSIERX_RELEASE_RECORD_OUT)" \
+	go test -count=1 -timeout 90m -run '^TestReleaseDriverPublishes$$' ./cmd/dossierx/
+	@test -s "$(DOSSIERX_RELEASE_RECORD_OUT)" || { \
+	  echo "the driver exited 0 without writing a run record to"                                 >&2; \
+	  echo "$(DOSSIERX_RELEASE_RECORD_OUT), so it published NOTHING and this is a FAILED"        >&2; \
+	  echo "release, not a completed one. go test exits 0 for a cached result, for a skip and"   >&2; \
+	  echo "for a selector that matches nothing, and all three look exactly like success."       >&2; \
+	  exit 1; }
+	@grep -q "$(DOSSIERX_RELEASE_VERSION)" "$(DOSSIERX_RELEASE_RECORD_OUT)" || { \
+	  echo "the run record does not name $(DOSSIERX_RELEASE_VERSION), so it is the record of"    >&2; \
+	  echo "some other release and says nothing about the one just asked for."                   >&2; \
+	  exit 1; }
+	@cat "$(DOSSIERX_RELEASE_RECORD_OUT)"
