@@ -1217,12 +1217,31 @@ var surfacePinVersionRE = regexp.MustCompile(`v\d+\.\d+\.\d+$`)
 // checklist's hard-coded list of pin sites went stale twice, so a pin appearing
 // in a fourth place has to show up here on its own.
 //
-// Three paths are excluded and each for its own reason. CHANGELOG.md and
+// Four paths are excluded and each for its own reason. CHANGELOG.md and
 // docs/RELEASING.md are RELEASING.md's own exclusions (both are full of
 // historical version strings that are correct precisely because they are old).
 // surface.json is excluded because this field WRITES pin tokens into it: without
 // the exclusion the next sweep would find its own output and the document would
-// never converge.
+// never converge. surface.baseline.json is excluded for CHANGELOG.md's reason
+// exactly: it is a frozen copy of THIS document as of v0.5.0, so it carries that
+// release's four pin tokens forever and they are correct precisely because they
+// are old. The surface.json exclusion does not reach it — that one keeps the
+// field from finding its own output, and this is a copy of that output under
+// another name — so without this line the live pin inventory grows entries
+// pointing at a historical record, and the release checklist then tells a
+// maintainer to move them. See gate_baseline_test.go for what moving them costs.
+//
+// That path is spelled out here rather than taken from gate_baseline_test.go's
+// gateBaselineBootstrapFile, and the reason is a property of THIS FILE that is
+// easy to break by accident: surface_test.go has to compile on its own inside an
+// OLD tree, because manufacturing a baseline for a release that predates the
+// emitter means copying this file (and surface_meta_test.go) into a detached
+// worktree of that release and running it there. A reference to an identifier
+// declared in any other file of this package makes that copy fail to build, and
+// the failure appears years later in the hands of whoever is trying to
+// reconstruct a baseline. The two spellings cannot drift in silence:
+// TestGateBaselineIsExcludedFromTheVersionPinSweep writes a file named by the
+// constant into a fixture repository and requires this sweep not to report it.
 //
 // The exclusions are spelled out here rather than read from surfaces.yaml, and
 // that is deliberate: "not reviewed as prose" and "carries no release pin" are
@@ -1231,7 +1250,7 @@ var surfacePinVersionRE = regexp.MustCompile(`v\d+\.\d+\.\d+$`)
 // went blind, so it must stay IN this search.
 func surfaceVersionPins(root string) ([]surfacePin, error) {
 	cmd := exec.Command("git", "grep", "-nE", surfacePinSweep, "--",
-		".", ":!"+surfaceFileName, ":!CHANGELOG.md", ":!docs/RELEASING.md")
+		".", ":!"+surfaceFileName, ":!CHANGELOG.md", ":!docs/RELEASING.md", ":!surface.baseline.json")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {
