@@ -93,6 +93,28 @@ resolved_object_name() {
 }
 
 # ---------------------------------------------------------------------------
+# provenance_bearing — which of the artifacts `record` names state, on their own
+# face, which tree and which baseline they were produced from.
+#
+# Everything else this mode is handed is opaque bytes it can only digest. These
+# two are documents THIS repository writes with a declared shape, so recording
+# one that disagrees with the run is a disagreement that can be caught at the
+# moment it is created rather than several minutes of agent time later.
+#
+# It is a function rather than a literal comparison inside the loop because the
+# guard used to be `[ "$a" = "gate/delta.json" ] || continue`, and the second
+# artifact that needed it — gate/render-diff.json, the cross-release render diff
+# the CHANGELOG agent writes its silent-change entries from — was walked straight
+# past. A third one added later is covered by adding a line here.
+# ---------------------------------------------------------------------------
+provenance_bearing() {
+  case "$1" in
+    gate/delta.json | gate/render-diff.json) return 0 ;;
+  esac
+  return 1
+}
+
+# ---------------------------------------------------------------------------
 # THE FAN-OUT, read from surfaces.yaml and never written down here.
 #
 # A count in this file is a count that goes stale on the day a fourteenth surface
@@ -333,24 +355,48 @@ case "$MODE" in
     [ -n "$BASELINE_REF" ] || die "record: --baseline-ref is required" 1
     [ -n "$ARTIFACTS" ] || die "record: name the artifacts this run produced; a manifest over zero artifacts asserts nothing" 1
 
-    # RECORDING A DELTA MEANS CLAIMING IT. Every other artifact this mode names
-    # is opaque bytes it can only digest, but the delta states which tree and
-    # which baseline it was computed from — so recording one that disagrees with
-    # this run is refused HERE, at the point the disagreement is created.
+    # RECORDING A PROVENANCED ARTIFACT MEANS CLAIMING IT. Every other artifact
+    # this mode names is opaque bytes it can only digest, but these state which
+    # tree and which baseline they were computed from — so recording one that
+    # disagrees with this run is refused HERE, at the point the disagreement is
+    # created.
     #
     # The sequence is ordinary and it is why this exists: a gate FAILS, a fix
     # lands, the tree moves, and the driver re-runs the captures and `record`
-    # but not `delta`. Re-digesting whatever is on disk would launder the old
-    # delta into a manifest that is honest about every byte it names.
+    # but not `delta` — or re-runs `delta` and not the captures. Re-digesting
+    # whatever is on disk would launder the stale one into a manifest that is
+    # honest about every byte it names.
+    #
+    # THESE DOCUMENTS ARE READ WITH json_scalar, which takes the FIRST match on
+    # any line and exits. That is correct only because both of them put "tree"
+    # and "baseline"."commit" before everything else, so no later key and no
+    # diff hunk can be read in their place. The ordering is a promise the
+    # producers make to this reader, and it is pinned on their side —
+    # tests/render_diff_capture_test.go, TestRenderDiffCaptureProvenanceComesFirst.
     for a in $ARTIFACTS; do
-      [ "$a" = "gate/delta.json" ] || continue
-      [ -f "$ROOT/$a" ] || continue
+      provenance_bearing "$a" || continue
+      # NOT `|| continue`. This loop IS the guard, and stepping over a
+      # provenance-bearing artifact because it is absent would be the guard
+      # declining to run on a state it exists for. Same refusal, same exit code
+      # as the digest loop below.
+      [ -f "$ROOT/$a" ] || die "record: $a was named as produced by this run and is not there" 4
       _dtree="$(json_scalar "$ROOT/$a" tree)"
       _dcommit="$(json_scalar "$ROOT/$a" commit)"
+      # THE IDENTITY RULE APPLIED TO WHAT THE FILE SAYS, not just to what the
+      # caller said. An artifact that names NEITHER a tree nor a baseline —
+      # `printf '{}' > gate/render-diff.json`, the one-line workaround for a
+      # gate that has been refusing for ten minutes — is refused here rather
+      # than stepped over: downstream it is indistinguishable from a comparison
+      # that ran and found nothing, because the manifest is honest about its
+      # bytes and its digest matches.
+      resolved_object_name "$_dtree" \
+        || die "record: $a records tree ${_dtree:-nothing}, which is not a full 40-digit object name. An artifact that cannot say which tree it covers cannot be checked against this run at all, and a file that says nothing hashes into every key exactly as cleanly as one that says the truth." 3
+      resolved_object_name "$_dcommit" \
+        || die "record: $a records baseline commit ${_dcommit:-nothing}, which is not a full 40-digit object name. A tag is a mutable pointer and an abbreviation is a prefix; either can mean a different release tomorrow than it meant when this run recorded it." 3
       [ "$_dtree" = "$TREE" ] \
-        || die "record: $a was computed over tree ${_dtree:-nothing} and this run covers $TREE. Re-run \`delta\` for this tree; recording it as produced here would hand every surface agent a comparison against a different release." 3
+        || die "record: $a was computed over tree $_dtree and this run covers $TREE. Re-produce it for this tree — \`delta\` for gate/delta.json, the -render-diff-out capture entry point for gate/render-diff.json; recording it as produced here would hand every surface agent a comparison against a different release." 3
       [ "$_dcommit" = "$BASELINE_COMMIT" ] \
-        || die "record: $a compared against baseline ${_dcommit:-nothing} and this run resolved $BASELINE_COMMIT" 3
+        || die "record: $a compared against baseline $_dcommit and this run resolved $BASELINE_COMMIT" 3
     done
 
     # Every artifact is checked and digested BEFORE anything is written. A

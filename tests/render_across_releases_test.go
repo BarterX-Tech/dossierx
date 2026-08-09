@@ -273,8 +273,56 @@ type renderMove struct {
 	tooLarge      bool
 }
 
-func TestRenderedOutputAcrossReleases(t *testing.T) {
-	tag, commit := resolveBaseline(t)
+// renderComparison is ONE cross-release comparison, held apart from the two
+// documents that render it.
+//
+// There are two readers of "what rendered differently since the last release"
+// and they need different documents: testdata/render-across-releases.golden.txt
+// is committed, goes red when it drifts, and is read by a human; gate/render-diff.json
+// is produced per run, is never committed, and is read by the CHANGELOG agent.
+// They must not be two COMPARISONS. A second implementation of this would be the
+// second release procedure CLAUDE.md forbids, one directory over — and the two
+// would diverge in silence, because only one of them has a committed golden that
+// goes red. So the comparison is a function with two callers, and this struct is
+// its answer.
+type renderComparison struct {
+	// compared is every rendered artifact present at BOTH revisions. It is the
+	// coverage witness: an empty artifacts list means something completely
+	// different when compared is 147 than when it is 0.
+	compared []string
+	added    []string
+	removed  []string
+	// silent is the section that obliges a CHANGELOG line: rendered output
+	// moved and not one byte of its inputs did.
+	silent []renderMove
+	// explained moved after its own inputs moved. It carries the SAME diff —
+	// see the long comment in compareRenderedOutput for why suppressing it here
+	// was reproduced as a real hole, not theorised.
+	explained []renderMove
+}
+
+// compareRenderedOutput compares every rendered artifact under testdata/ at
+// baselineCommit against the WORKING TREE, and classifies each move.
+//
+// baselineLabel is the human-readable name of what baselineCommit resolved from
+// — a tag for the committed report, whatever the driver supplied for the gate
+// capture. It appears only in messages; every question asked of git uses the
+// commit.
+//
+// THE BASELINE IS A PARAMETER, NEVER RE-PROBED HERE. resolveBaseline is the
+// human report's business: a maintainer running this by hand is entitled to have
+// the tag found for them. A gate run is not, because the driver has already
+// resolved one and passed an identity down, and a second resolver inside the
+// same run is a second answer to "which release is this being compared against"
+// that can disagree without either side being wrong on its own terms. Worse,
+// once the release's own tag exists `git describe --tags --abbrev=0` names IT,
+// and the comparison becomes the release against itself, reporting zero silent
+// changes with perfect confidence.
+// Deliberately NOT a t.Helper: the four refusals below are the load-bearing part
+// of this function, and attributing them to the caller's line would point a
+// reader at the report or at the capture instead of at the refusal that fired.
+func compareRenderedOutput(t *testing.T, baselineLabel, commit string) renderComparison {
+	tag := baselineLabel
 	root := repoRootDir(t)
 
 	// The head side is the WORKING TREE, not HEAD: the gate renders a verdict
@@ -403,14 +451,23 @@ func TestRenderedOutputAcrossReleases(t *testing.T) {
 		silent = append(silent, move)
 	}
 
-	report := renderAcrossReleasesReport(tag, commit, len(compared), added, removed, silent, explained)
+	return renderComparison{compared: compared, added: added, removed: removed, silent: silent, explained: explained}
+}
+
+func TestRenderedOutputAcrossReleases(t *testing.T) {
+	tag, commit := resolveBaseline(t)
+	root := repoRootDir(t)
+
+	cmp := compareRenderedOutput(t, tag, commit)
+
+	report := renderAcrossReleasesReport(tag, commit, len(cmp.compared), cmp.added, cmp.removed, cmp.silent, cmp.explained)
 	goldenPath := filepath.Join(root, filepath.FromSlash(renderAcrossReleasesFile))
 
 	if *regenerateGoldens {
 		if err := os.WriteFile(goldenPath, []byte(report), 0o644); err != nil {
 			t.Fatalf("write %s: %v", renderAcrossReleasesFile, err)
 		}
-		t.Logf("regenerated %s against %s (%s): %d silent, %d input-driven", renderAcrossReleasesFile, tag, commit[:7], len(silent), len(explained))
+		t.Logf("regenerated %s against %s (%s): %d silent, %d input-driven", renderAcrossReleasesFile, tag, commit[:7], len(cmp.silent), len(cmp.explained))
 		return
 	}
 
