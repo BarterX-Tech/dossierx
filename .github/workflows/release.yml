@@ -1,3 +1,37 @@
+# Release — what a `v*` tag is allowed to publish.
+#
+# WHAT THIS FILE USED TO BE. `on: push: tags: ['v*']` and, one job later, six
+# archives and a GitHub release. There was no condition of any kind between the
+# two: any commit, on any branch, tagged anything beginning with `v`, by anyone
+# who could push a tag, published a release of this project. Nothing downstream
+# rechecked it, because publishing is where the pipeline ends.
+#
+# WHAT IT IS NOW. The `gate` job below runs first and the publishing job `needs:`
+# it, so a tag that does not get past the gate produces no archives at all. Two
+# facts have to hold, and both are about the TAGGED TREE rather than about
+# whoever pushed:
+#
+#   (a) the tagged commit is reachable from origin/main — the release is a thing
+#       that was merged, not a branch someone tagged;
+#   (b) the tree at that commit carries the release stamp for exactly this
+#       version — site/src/content.ts's last `releases[]` entry names the tag
+#       being pushed. That stamp is what the whole site derives its version
+#       strings from (the hero, the release history, the `dossierx version`
+#       transcript), so a tag whose tree disagrees with it publishes a binary
+#       that the project's own site describes as a different release.
+#
+# RESIDUAL, ACCEPTED. This gate lives in the repository, and the workflow GitHub
+# runs for a tag is the one in the tagged tree — so anyone with push rights can
+# push a commit that weakens or deletes this job and tag that commit, and the
+# weakened gate is the one that runs. Nothing inside this repository can close
+# that: a check cannot be its own enforcement. Only a forge-side setting can —
+# a tag protection rule on `v*`, or a deployment environment with required
+# reviewers attached to the publishing job — and neither is expressible here or
+# assertable by any test in this tree. It is recorded as an accepted residual,
+# not described as fixed. What this file does close is the ordinary failure:
+# tagging the wrong commit, tagging before the merge, and tagging a tree whose
+# own stamp names another version.
+
 name: Release
 
 on:
@@ -9,8 +43,116 @@ permissions:
   contents: write
 
 jobs:
+  gate:
+    name: refuse an ungated tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: The tag is on main, and its tree stamps this release
+        env:
+          TAG: ${{ github.ref_name }}
+          STAMP_FILE: site/src/content.ts
+          LANDMARK: 'const releases: Release[] = ['
+        run: |
+          set -euo pipefail
+
+          # Every exit path out of this script that is not a pass is a REFUSAL.
+          # There is deliberately no branch that reports "could not check" and
+          # exits 0: an unresolvable ref, a missing file and an unreadable stamp
+          # all end here, because a publish step guarded by a check that did not
+          # run is a publish step with no guard (CLAUDE.md).
+          refuse() {
+            printf '\nRELEASE REFUSED — %s\n\n' "$1" >&2
+            exit 1
+          }
+
+          [ -n "${TAG:-}" ] || refuse "this workflow was reached with no tag name. It publishes on \`push: tags\` and nothing else, so a run without one is a run whose subject is unknown."
+
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) refuse "the tag is \"$TAG\", which does not name a version. The release stamp this gate compares against is written as \`v<major>.<minor>.<patch>\`, so a tag outside that shape can never match one and must not be allowed to try." ;;
+          esac
+
+          # `^{commit}` peels an annotated tag: the tag OBJECT's sha is not a
+          # tree, and every check below reads the tree.
+          COMMIT="$(git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}")" || COMMIT=""
+          [ -n "$COMMIT" ] || refuse "refs/tags/${TAG} resolves to no commit in this checkout. This job checks out with fetch-depth: 0 precisely so the tag and the full history are present; if they are not, this gate has read nothing."
+
+          # (a) REACHABLE FROM origin/main. Fetched explicitly by refspec rather
+          # than trusted to whatever the checkout action's default refspec
+          # happens to be this major version: the branch this compares against
+          # is the entire meaning of the check, so it is named here.
+          git fetch --no-tags --quiet origin '+refs/heads/main:refs/remotes/origin/main' \
+            || refuse "origin/main could not be fetched, so it is not known whether ${TAG} is on main. That is a failed check, not a skipped one."
+          MAIN="$(git rev-parse --verify --quiet refs/remotes/origin/main)" || MAIN=""
+          [ -n "$MAIN" ] || refuse "origin/main resolves to no commit after fetching it. The branch this release must come from cannot be read, so nothing about the tag has been established."
+
+          if ! git merge-base --is-ancestor "$COMMIT" "$MAIN"; then
+            refuse "${TAG} names ${COMMIT}, which is NOT reachable from origin/main (${MAIN}).
+          A release is the tree that was reviewed and merged. This tag is on something else — an unmerged branch, a commit that was rebased away, or a tree that never went through a pull request — and publishing it would ship code that the project's own history does not contain.
+          Merge first, then tag the merge."
+          fi
+
+          # (b) THE TREE AT THE TAG STAMPS THIS VERSION. Read out of the tagged
+          # commit with `git show <commit>:<path>`, not out of the working
+          # directory: a working tree can be edited after the tag is written and
+          # the thing being published is the tree, not the checkout.
+          git cat-file -e "${COMMIT}:${STAMP_FILE}" 2>/dev/null \
+            || refuse "the tree at ${TAG} has no ${STAMP_FILE}. That file carries the release stamp — the \`releases[]\` entry every version string on the site is derived from — so there is nothing to compare the tag against."
+
+          # A deliberately small structural read of one array, not a second model
+          # of the site. Whole-line comments are dropped so that a commented-out
+          # entry stamps nothing; the authoritative comment-stripping read of
+          # these declarations is TestSiteSelectsTheReleaseThisTreeModels in
+          # cmd/dossierx/gate_release_stamp_test.go, which runs in CI on every
+          # push. RESIDUAL: this reader is line-based, so a block comment opened
+          # mid-line could hide an entry from it. It refuses when the array's
+          # landmark is missing or duplicated rather than reporting an empty
+          # read, which is the failure that would otherwise pass quietly.
+          READ="$(git show "${COMMIT}:${STAMP_FILE}" | awk -v landmark="$LANDMARK" '
+            {
+              s = $0
+              sub(/^[ \t]+/, "", s)
+              if (incomment) { if (s ~ /\*\//) incomment = 0; next }
+              if (s ~ /^\/\*/) { if (s !~ /\*\//) incomment = 1; next }
+              if (s ~ /^\/\//) next
+              if (s ~ /^\*/) next
+              if (index($0, landmark) > 0) { landmarks++; block = 1; next }
+              if (block && s ~ /^\];/) { block = 0; next }
+              if (block && match($0, /version:[ \t]*"[^"]*"/)) {
+                v = substr($0, RSTART, RLENGTH)
+                sub(/^version:[ \t]*"/, "", v)
+                sub(/"$/, "", v)
+                stamp = v
+                entries++
+              }
+            }
+            END { printf "%d %d %s\n", landmarks + 0, entries + 0, (entries > 0 ? stamp : "-") }
+          ')"
+          # Defaults on every field: an awk that produced nothing at all must
+          # arrive at the refusals below with a readable message, not as an
+          # unbound-variable exit whose text says nothing about the release.
+          set -- $READ
+          LANDMARKS="${1:-0}"; ENTRIES="${2:-0}"; STAMP="${3:--}"
+
+          [ "$LANDMARKS" = 1 ] || refuse "${STAMP_FILE} at ${TAG} carries ${LANDMARKS} occurrences of \`${LANDMARK}\` outside its comments, and this gate reads exactly one. None means the release stamp has moved and this check has lost its subject; more than one means two arrays, only one of which the site renders, and this gate cannot say which."
+          [ "$ENTRIES" != 0 ] || refuse "${STAMP_FILE} at ${TAG} declares the releases array but no \`version:\` entry inside it. The tree names no release at all, so it cannot name this one."
+
+          if [ "$STAMP" != "$TAG" ]; then
+            refuse "the tag is ${TAG} but the tree at ${COMMIT} stamps ${STAMP}.
+          The last \`releases[]\` entry in ${STAMP_FILE} is what the site derives every version string from — the hero badge, the release history, and the \`dossierx version\` transcript. Publishing this tag would ship ${TAG}'s binary beside a site that calls the current release ${STAMP}.
+          Either the release stamp was not moved before tagging, or the tag was cut from the wrong commit."
+          fi
+
+          printf '%s is reachable from origin/main (%s) and its tree stamps %s. Publishing may proceed.\n' "$TAG" "$COMMIT" "$STAMP"
+
   goreleaser:
     name: goreleaser
+    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
