@@ -121,34 +121,52 @@
 // run, an unfetchable log, an unparseable one, an instantiation with no account,
 // and an account whose events cannot be attributed are each a finding.
 //
+// WHY THE ADJUDICATION IS CODE AND NOT A PROMPT, and the reason is inherited
+// rather than invented here: it is the one the retired release checklist gave for
+// making its agent PURE TRANSPORT — run one command, carry its output back
+// verbatim, read nothing, count nothing, decide nothing. A prompt that says
+// "confirm the suites actually executed" is satisfied by an agent that reads a
+// conclusion and paraphrases it, and nothing downstream can tell that answer from
+// one obtained by parsing the account: both arrive as fluent prose asserting a
+// pass. So the fetching, the parsing, the counting and the deciding are all in
+// this file, where a mutation makes a test go red rather than making a sentence
+// read slightly differently. The checklist is gone and the transport role with
+// it; the rule survives it, and it is why the driver's D1 reads a machine-written
+// record instead of asking anybody how CI went.
+//
 // WHY THE GATE'S OWN ENTRY POINT IS HELD TO THE SAME INVARIANT. `go test` exits 0
 // for a skipped test and exits 0 for a selector that matches nothing
 // (`ok … [no tests to run]`, both observed on go1.26.5), so an exit status cannot
-// tell "adjudicated and cleared" from "adjudicated nothing". And until this file
-// landed, nothing in this repository read .claude/workflows/release-checklist.js
-// as a file at all — the only mention in any Go source was a prose sentence in a
-// comment — so the release-time invocation and the code it invokes could drift
-// apart by one identifier with `go test ./...` green forever. That is the same
-// defect this lane exists to close, living at the one place that was supposed to
-// close it. Two things answer it, and both are needed:
+// tell "adjudicated and cleared" from "adjudicated nothing". The release-time
+// invocation and the code it invokes can therefore drift apart by one identifier
+// with `go test ./...` green forever — the same defect this lane exists to close,
+// living at the one place that was supposed to close it. Three things answer it,
+// and all three are needed:
 //
 //   - POSITIVE EVIDENCE. The stage writes a verdict record naming the commit it
 //     examined, the suites it derived, every instantiation and what each one
 //     accounted for. `make ci-evidence` refuses to exit 0 unless that record
 //     exists and names the sha it was asked about, so an invocation that
-//     adjudicated nothing is as loud as a suite that ran nothing. The checklist
-//     maps a missing record to COULD_NOT_RUN, which the existing `clear`
-//     computation already treats as blocking. That converts a silent no-op into a
-//     could-not-run for an honest transport, and — since RESULT.evidence is
-//     agent-authored free text — does nothing against a fabricating one.
-//   - THE STRUCTURAL PIN, which holds regardless of agent behaviour.
-//     TestTheReleaseTimeInvocationNamesThisStage reads the Makefile, the
-//     checklist and docs/RELEASING.md and requires all three to name the same
-//     identifiers this file exposes. Rename either side and the ORDINARY suite
-//     goes red. The precedent is cmd/dossierx/gate_receipt_test.go's
+//     adjudicated nothing is as loud as a suite that ran nothing.
+//   - A CONSUMER THAT REFUSES WITHOUT IT. The record used to be carried to a
+//     human by an agent transporting it into a checklist phase, where an absent
+//     record was reported as COULD_NOT_RUN and the phase's own `clear`
+//     computation treated that as blocking. That checklist is retired — it
+//     published main before the tag, the forbidden order — and the record's
+//     consumer is now the release driver itself: clause 6 of
+//     cmd/dossierx/gate_driver_test.go, whose D1 reads the record at
+//     DOSSIERX_GATE_CI_EVIDENCE_OUT and refuses the release as uncheckable
+//     unless it names an object carrying the tree about to be published. The
+//     transport was only ever as honest as the agent doing it; the driver's
+//     refusal is not a result anybody reports, it is a release that does not
+//     happen.
+//   - THE STRUCTURAL PIN, which holds regardless of who runs what.
+//     TestTheReleaseTimeInvocationNamesThisStage reads this file, the Makefile,
+//     the driver and docs/RELEASING.md, and requires all four to name the same
+//     identifiers. Rename any one side and the ORDINARY suite goes red. The
+//     precedent is cmd/dossierx/gate_receipt_test.go's
 //     TestReleaseProcedurePinsTheAncestryPrecondition, whose comment records a
-//     review deleting a whole procedure item with the package still green; this
-//     is that pattern applied to the ENCODED procedure as well as the written one.
+//     review deleting a whole procedure item with the package still green.
 //
 // AND WHY THE ASSEMBLY ITSELF IS HELD TO IT, which is a third thing and was
 // missing. Each stage above — the run selection, the matrix expansion, the
@@ -186,10 +204,10 @@ import (
 // The identifiers BOTH sides of the release-time invocation must name.
 //
 // They are constants here, and TestTheReleaseTimeInvocationNamesThisStage
-// requires the Makefile target, the encoded checklist and the written procedure
-// to spell each of them. That is the whole defence against the invoker and the
-// invoked drifting apart: change one of these and the ordinary suite fails until
-// every side has been changed with it.
+// requires the Makefile target, the release driver that consumes the record and
+// the written procedure to spell each of them. That is the whole defence against
+// the invoker and the invoked drifting apart: change one of these and the
+// ordinary suite fails until every side has been changed with it.
 // ---------------------------------------------------------------------------
 const (
 	// ciEvShaEnv names the commit under verification. Nothing is fetched without
@@ -214,23 +232,24 @@ const (
 	// deciding. The Makefile selects it by this exact name.
 	ciEvStageTestName = "TestReleaseGateCIRunEvidence"
 
-	// ciEvChecklistKey is the key of the pre-tag check in
-	// .claude/workflows/release-checklist.js that transports the record.
-	ciEvChecklistKey = "ci-run-evidence"
-
 	// ciEvStageFile is this file, addressed from the repository root. The pin
 	// reads it to confirm the function ciEvStageTestName names actually exists,
 	// so renaming the function without renaming the constant is a failure rather
 	// than a selector that quietly matches nothing.
 	ciEvStageFile = "tests/ci_run_evidence_test.go"
 
-	// ciEvChecklistFile is the ENCODED release procedure. Nothing in this
-	// repository read it as a file before this lane.
-	ciEvChecklistFile = ".claude/workflows/release-checklist.js"
+	// ciEvDriverFile is the release driver, and it is this record's CONSUMER.
+	// Its D1 refuses to publish unless the record at ciEvOutEnv names an object
+	// carrying the tree being released, which is what makes writing the record
+	// worth doing: an unread record is a file, not a gate. An agent used to
+	// carry the record into a checklist phase instead; that checklist is
+	// retired, and this is the path that replaced it.
+	ciEvDriverFile = "cmd/dossierx/gate_driver_test.go"
 
-	// ciEvProcedureFile is the WRITTEN release procedure. CLAUDE.md: there is
-	// exactly one of these, and release-checklist.js calls itself that file
-	// "encoded", so the two must not describe different gates.
+	// ciEvProcedureFile is the WRITTEN release procedure, and since the encoded
+	// one was retired it is the ONLY one — which is what CLAUDE.md has always
+	// required and what was not true while a second, drifting copy of it lived
+	// in .claude/workflows/.
 	ciEvProcedureFile = "docs/RELEASING.md"
 
 	// ciEvFixtureDir holds the recorded accounts the parser and the adjudicator
@@ -1441,10 +1460,11 @@ type ciEvSuiteRecord struct {
 	Conclusions    map[string]string      `json:"conclusions_recorded_not_adjudicated"`
 }
 
-// The two verdicts the record can carry. `PASS` is spelled in
-// .claude/workflows/release-checklist.js as the string the transporting agent is
-// told to look for, so it is a constant here rather than a literal in three
-// places.
+// The two verdicts the record can carry. They are constants rather than literals
+// in three places because the record is read outside this file — a human reads it
+// at docs/RELEASING.md's CI item, and the driver scans it for the object it is
+// about to publish — so the spelling is part of the record's contract, not a
+// detail of how this stage happens to print.
 const (
 	ciEvVerdictPass   = "PASS"
 	ciEvVerdictFailed = "FAILED"
@@ -2128,17 +2148,6 @@ func TestTheStageRefusesToBeInvokedHalfway(t *testing.T) {
 // target line and every tab-indented line under it.
 var ciEvMakeTargetRE = regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(ciEvMakeTarget) + `:[^\n]*\n(?:\t[^\n]*\n?)+`)
 
-// ciEvChecklistPreTagRE isolates the pre-tag phase of the encoded procedure.
-// Scoped to that array rather than searched whole-file for the reason
-// gate_receipt_test.go's item regexes give: the document discusses CI in several
-// places, and the question is what the PRE-TAG phase runs, not what the file
-// mentions.
-var ciEvChecklistPreTagRE = regexp.MustCompile(`(?s)const PRE_TAG = \[.*?\n\]`)
-
-// ciEvChecklistCheckRE isolates the one check inside that phase, from its `key:`
-// to the end of its object literal.
-var ciEvChecklistCheckRE = regexp.MustCompile(`(?s)key: '` + regexp.QuoteMeta(ciEvChecklistKey) + `'.*?\n  \},`)
-
 // ciEvProcedureItemRE isolates docs/RELEASING.md's "CI is green on `main`" item,
 // from its bolded title to the next item at the same level.
 var ciEvProcedureItemRE = regexp.MustCompile("(?s)- \\[ \\] \\*\\*CI is green on `main`\\*\\*.*?\\n- \\[ \\] ")
@@ -2149,43 +2158,6 @@ var ciEvProcedureItemRE = regexp.MustCompile("(?s)- \\[ \\] \\*\\*CI is green on
 // description of the log this lane made stale.
 const ciEvProcedureHumanHalf = "**Then open the run**"
 
-// ciEvCouldNotRun is the RESULT the checklist's own schema already carries for a
-// check that could not be performed, and which its `clear` computation already
-// treats as blocking. This lane builds no second fail-closed mechanism beside it.
-const ciEvCouldNotRun = "COULD_NOT_RUN"
-
-// ciEvChecklistBulletMarker splits a check's prose into its `  - ` bullets.
-var ciEvChecklistBulletMarker = regexp.MustCompile(`(?m)^  - `)
-
-// ciEvChecklistBullet returns the one WHAT-TO-REPORT bullet naming `fragment`,
-// with its line wrapping flattened to a single line.
-//
-// A CHECK'S BULLETS ARE ITS RULES: each maps an OUTCOME to a RESULT, and the
-// mapping is what the transporting agent obeys. They wrap across lines, so a
-// `strings.Contains` cannot see one whole, and searching the check for
-// `COULD_NOT_RUN` on its own proves only that the word occurs somewhere in it —
-// which it does three times. An earlier version of this test did exactly that,
-// and rewriting the load-bearing bullet's mapping to `-> FAIL` left it green.
-// Flattening ONE bullet is what turns "the file mentions the result" into "this
-// outcome maps to that result".
-func ciEvChecklistBullet(check, fragment string) string {
-	parts := ciEvChecklistBulletMarker.Split(check, -1)
-	if len(parts) < 2 {
-		return ""
-	}
-	for _, bullet := range parts[1:] {
-		// A bullet ends at the next bullet — which is where the split already put
-		// it — or at the blank line that ends the list.
-		if i := strings.Index(bullet, "\n\n"); i >= 0 {
-			bullet = bullet[:i]
-		}
-		if strings.Contains(bullet, fragment) {
-			return strings.Join(strings.Fields(bullet), " ")
-		}
-	}
-	return ""
-}
-
 // TestTheReleaseTimeInvocationNamesThisStage is the half of the blocking finding
 // that holds regardless of how honestly an agent reports.
 //
@@ -2193,11 +2165,10 @@ func ciEvChecklistBullet(check, fragment string) string {
 // the identifier the release-time procedure invokes — an environment variable
 // renamed on one side, a test selector edited on the other, one token in one
 // file. From then on the invocation runs, adjudicates nothing, exits 0, and the
-// transporting agent reports a pass; the gate is clear having fetched no evidence
-// for any commit, and this lane's own target defect lives at the one place that
-// was supposed to close it. Nothing caught that before this test: `grep -rn
-// release-checklist --include="*.go" .` returned exactly one hit, a prose
-// sentence in a comment.
+// release is gated by an examination of no commit at all; this lane's own target
+// defect, living at the one place that was supposed to close it. That drift is
+// invisible to every other check in this repository, because none of them reads
+// two of these documents at once.
 //
 // It is written as four reads of four documents rather than one, so a failure
 // says WHICH side moved.
@@ -2216,8 +2187,8 @@ func TestTheReleaseTimeInvocationNamesThisStage(t *testing.T) {
 	makefile := wiringReadFile(t, "Makefile")
 	recipe := ciEvMakeTargetRE.FindString(makefile)
 	if recipe == "" {
-		t.Fatalf("the Makefile no longer declares a `%s:` target with a recipe. That target IS the release-time invocation — docs/RELEASING.md and %s both name it — and it is also the only thing that turns `go test`'s exit 0 over an empty selection into a non-zero exit, by refusing to succeed unless a verdict record was written",
-			ciEvMakeTarget, ciEvChecklistFile)
+		t.Fatalf("the Makefile no longer declares a `%s:` target with a recipe. That target IS the release-time invocation — %s and %s both name it — and it is also the only thing that turns `go test`'s exit 0 over an empty selection into a non-zero exit, by refusing to succeed unless a verdict record was written",
+			ciEvMakeTarget, ciEvProcedureFile, ciEvDriverFile)
 	}
 	//
 	// EVERY MECHANISM HERE IS PINNED AS A WHOLE LINE RATHER THAN AS A NAME, and
@@ -2245,59 +2216,38 @@ func TestTheReleaseTimeInvocationNamesThisStage(t *testing.T) {
 		}
 	}
 
-	// (3) The ENCODED procedure. Nothing in this repository read this file before
-	// this test, so the invoker and the invoked could drift apart by one token
-	// with `go test ./...` green forever.
-	checklist := wiringReadFile(t, ciEvChecklistFile)
-	preTag := ciEvChecklistPreTagRE.FindString(checklist)
-	if preTag == "" {
-		t.Fatalf("%s no longer declares a `const PRE_TAG = [ … ]` array. The pre-tag phase is the only phase that observes the merge commit, and it is where this stage's record is transported from", ciEvChecklistFile)
-	}
-	// Scoped to the CHECK, not to the phase. The phase's other checks discuss CI
-	// and one of them names this one in prose, so a fragment found anywhere in
-	// the array proves only that the file mentions it — which is how a pin comes
-	// to pass while the check it pins has been renamed out from under it.
-	check := ciEvChecklistCheckRE.FindString(preTag)
-	if check == "" {
-		t.Fatalf("%s's pre-tag phase carries no check declared `key: '%s'`, so nothing at release time invokes this stage or carries its record.\n"+
-			"The phase reads:\n%s", ciEvChecklistFile, ciEvChecklistKey, preTag)
-	}
-	preTag = check
+	// (3) THE CONSUMER. A record nobody reads is a file, and this side of the pin
+	// is what keeps it from becoming one.
+	//
+	// It used to be an agent, transporting the record into a checklist phase that
+	// treated its absence as blocking. That checklist is retired — it published
+	// main before the tag and knew nothing about the driver — and the consumer is
+	// now the driver's own D1, which reads the record at ciEvOutEnv and refuses
+	// the release unless it names an object carrying the tree about to be
+	// published. Neither side may drift alone: rename the variable here and the
+	// driver goes looking at a path nothing writes; rename the target and its
+	// refusal tells an operator to run a command that does not exist.
+	//
+	// Pinned as ASSIGNED VALUES rather than as bare names, for the reason the
+	// recipe list above gives. Both identifiers are discussed in that file's prose
+	// as well as used by it, so `Contains(driver, ciEvOutEnv)` would be satisfied
+	// by a comment that mentions this stage while the code reads somewhere else.
+	// `= "NAME"` is the declaration.
+	driver := wiringReadFile(t, ciEvDriverFile)
 	for _, want := range []struct{ fragment, why string }{
-		{"make " + ciEvMakeTarget, "the check must invoke the stage by the one named command, not by a `go test -run` incantation a paraphrase can narrow to nothing"},
-		{ciEvShaEnv, "the check must name the commit under verification; a run keyed to anything else is evidence about a tree that is not being tagged"},
-		{ciEvOutEnv, "the check must name where the record lands, because reporting the record is the check"},
-		{"produced NO record", "the check must tell the agent what a missing record means. `go test` exits 0 for a skip and for a selector that matches nothing, so an invocation that adjudicated nothing is indistinguishable from one that cleared everything except by the record's absence"},
+		{`= "` + ciEvOutEnv + `"`, "the driver must declare the SAME record path this recipe writes to. Nothing hands it over — make does not export a `?=` default into a recipe's environment — so the driver carries its own spelling of the name and the two are equal only because this line requires it. Drift here does not silently pass a release: it refuses every release with a message about a file nothing writes, which is the same gate broken the other way"},
+		{`= "` + ciEvMakeTarget + `"`, "the driver names this target in every refusal about a missing record, because \"the record is absent\" without the command that produces it is a refusal an operator has to go and research — and a researched refusal is one somebody switches off"},
+		{ciEvShaEnv + "=", "the driver's recovery must tell an operator to key the stage to a commit. `make " + ciEvMakeTarget + "` with no sha refuses, so a recovery that omits it sends the operator into the guard rather than through it"},
 	} {
-		if !strings.Contains(preTag, want.fragment) {
-			t.Errorf("%s's pre-tag phase no longer names %q. %s", ciEvChecklistFile, want.fragment, want.why)
+		if !strings.Contains(driver, want.fragment) {
+			t.Errorf("%s no longer names %q. %s.\n"+
+				"That file is this record's only consumer: it is what makes writing the record a gate rather than a filing habit. If the driver has stopped reading the record, this stage can be run, skipped or never invoked and a release publishes either way",
+				ciEvDriverFile, want.fragment, want.why)
 		}
 	}
 
-	// THE RULE ITSELF, not a mention of the result it names. The whole point of
-	// the check is what an agent does when there is NO record, and that answer is
-	// one bullet: the outcome and the result have to be in the same sentence or
-	// the pin is satisfied by a check that merely says the words somewhere.
-	absence := ciEvChecklistBullet(preTag, "produced NO record")
-	switch {
-	case absence == "":
-		t.Errorf("%s's `%s` check no longer carries a WHAT-TO-REPORT bullet for a run that produced NO record.\n"+
-			"That bullet is the check: an invocation that adjudicated nothing exits 0 exactly like one that adjudicated everything and cleared it, so the record's absence is the only thing that tells them apart, and an agent that has not been told what to do with an absence will report a pass",
-			ciEvChecklistFile, ciEvChecklistKey)
-	case !strings.Contains(absence, "-> "+ciEvCouldNotRun):
-		t.Errorf("%s's `%s` check no longer maps a missing record to `%s`.\n"+
-			"Mentioning the result elsewhere is not the rule — the rule is that THIS outcome carries THAT result, because `%s` is what release-checklist.js's own `clear` computation already treats as blocking and nothing else in this lane builds a second fail-closed mechanism beside it.\n"+
-			"The bullet reads:\n%s",
-			ciEvChecklistFile, ciEvChecklistKey, ciEvCouldNotRun, ciEvCouldNotRun, absence)
-	case !strings.Contains(absence, "The ABSENCE OF A RECORD IS NEVER A PASS"):
-		t.Errorf("%s's `%s` check no longer tells the agent, in as many words, that the ABSENCE OF A RECORD IS NEVER A PASS.\n"+
-			"This is the one instruction that has to survive being skim-read at the end of a release, and the transporting agent is the only reader of it. Pinned as a sentence because it is a sentence — reword it and this test asks you to reword the pin with it.\n"+
-			"The bullet reads:\n%s",
-			ciEvChecklistFile, ciEvChecklistKey, absence)
-	}
-
-	// (4) The WRITTEN procedure. CLAUDE.md: there is exactly one release
-	// procedure, and release-checklist.js calls itself that file "encoded".
+	// (4) The WRITTEN procedure — and since the encoded one was retired, the ONLY
+	// procedure, which is what CLAUDE.md always required.
 	procedure := wiringReadFile(t, ciEvProcedureFile)
 	item := ciEvProcedureItemRE.FindString(procedure)
 	if item == "" {
@@ -2305,7 +2255,7 @@ func TestTheReleaseTimeInvocationNamesThisStage(t *testing.T) {
 			ciEvProcedureFile)
 	}
 	for _, want := range []struct{ fragment, why string }{
-		{"make " + ciEvMakeTarget, "the written procedure must name the same command the encoded one runs, or the two describe different gates"},
+		{"make " + ciEvMakeTarget, "the written procedure must name the command a maintainer actually runs. It is the only description of this gate a person reads, so a procedure that names something else is not a second opinion, it is the instruction"},
 		{ciEvShaEnv, "it must tell a maintainer to key the run to the merge commit"},
 		{ciEvOutEnv, "it must tell a maintainer where the record they are asked to read lands"},
 	} {
@@ -2358,6 +2308,79 @@ func TestTheProcedureNoLongerAsksForSomethingTheLogCannotShow(t *testing.T) {
 	}
 }
 
+// ciEvHumanSectionRE isolates the block of docs/RELEASING.md holding the checks
+// that were left to a person when the encoded checklist was retired, from its
+// heading to the next section. Scoped rather than searched whole-file for the
+// reason every item regex in this repository is: the document discusses the
+// Release workflow and the site deploy in several places, and the question is
+// what a maintainer is TOLD TO DO, not what the file mentions.
+var ciEvHumanSectionRE = regexp.MustCompile(`(?s)### Three checks that stay a person's\n.*?\n## `)
+
+// ciEvHumanItemRE counts the items inside it that are marked as a person's.
+var ciEvHumanItemRE = regexp.MustCompile(`(?m)^- \[ \] \*\*\(human\) `)
+
+// TestTheThreeChecksThatStayHumanSurvivedTheRetirement holds the part of the
+// retired checklist that could not be inherited by anything.
+//
+// WHAT WAS RETIRED AND WHAT IT CARRIED. The encoded checklist's post-release
+// phase asked an agent whether the Release workflow itself passed, whether
+// deploy-site fired for this release, and whether the bundle the site is serving
+// is the one that was built. Every other check it carried was either already
+// machine-covered or became so; these three were not, and cannot be: each asks
+// whether a system OUTSIDE this repository did what it was told, and a workflow
+// that never fired, a deploy that kept serving yesterday's bundle and a run that
+// concluded without producing an artifact all leave this tree byte-identical to
+// the release that went right. There is nothing here for a check to read.
+//
+// WHY THAT NEEDS A TEST AT ALL, given that no test can make the checks. Because
+// an item a machine cannot perform is the easiest thing in a long procedure to
+// tidy away: it reads as a leftover from before the automation, and the reader
+// deleting it is not doing anything obviously wrong. The landed precedent is
+// cmd/dossierx/gate_receipt_test.go's ancestry pin, whose comment records a
+// review deleting an entire procedure item with the package green. This asserts
+// that the three survive, that each still says which system it is about, and
+// that each is still MARKED as a person's — an item quietly restyled as though
+// something checked it is the same deletion with the words left in.
+func TestTheThreeChecksThatStayHumanSurvivedTheRetirement(t *testing.T) {
+	procedure := wiringReadFile(t, ciEvProcedureFile)
+
+	section := ciEvHumanSectionRE.FindString(procedure)
+	if section == "" {
+		t.Fatalf("%s no longer carries a `### Three checks that stay a person's` section.\n"+
+			"Those three checks were the part of the retired release checklist that nothing inherited, because each one asks whether a system outside this repository obeyed and this tree is byte-identical either way. Deleting them does not remove a description of a check; it removes the only performance of it",
+			ciEvProcedureFile)
+	}
+
+	if n := len(ciEvHumanItemRE.FindAllString(section, -1)); n != 3 {
+		t.Errorf("%s's human section carries %d items marked `- [ ] **(human) `, not 3.\n"+
+			"The marker is not decoration: it is what tells a maintainer that nothing behind this item ran, so the item is theirs to perform rather than theirs to confirm. An item restyled as an ordinary one reads as something already checked.\nThe section reads:\n%s",
+			ciEvProcedureFile, n, section)
+	}
+
+	for _, want := range []struct{ fragment, why string }{
+		{"The `Release` workflow itself passed",
+			"a tag on the forge is not an artifact on the forge. A run that failed or stopped halfway leaves a published tag with nothing behind it, and the tag is what every consumer resolves"},
+		{"`deploy-site` ran for this release",
+			"deploy-site.yml triggers only on changes under `site/**`, so a release touching no site file publishes nothing, fails nowhere, and leaves the site serving the previous version. Nothing in this repository can tell that state from a successful deploy"},
+		{"The deployed bundle is the one that was built",
+			"a deploy that succeeded while a cache served an older build is a green workflow over a stale page. The asset hashes Vite content-hashes into the live index.html are the only thing that separates them, and they are read off the live site"},
+	} {
+		if !strings.Contains(section, want.fragment) {
+			t.Errorf("%s's human section no longer names %q. %s.\nThe section reads:\n%s",
+				ciEvProcedureFile, want.fragment, want.why, section)
+		}
+	}
+
+	// And the REASON, because an item whose reason has been trimmed is an item
+	// the next reader deletes. "We have not automated this yet" and "this cannot
+	// be automated from a file" are read very differently by somebody tidying.
+	if !strings.Contains(section, "no file in this tree can answer that") {
+		t.Errorf("%s's human section no longer says WHY these three are a person's.\n"+
+			"Without the reason they read as an automation backlog, and the honest response to a backlog item is to close it. The reason is that the answer is not in this repository at all",
+			ciEvProcedureFile)
+	}
+}
+
 // TestTheWorkflowFileNoLongerClaimsNothingReadsStepOutput corrects the three
 // sentences this lane made false, in the only file where they can be corrected.
 //
@@ -2385,5 +2408,308 @@ func TestTheWorkflowFileNoLongerClaimsNothingReadsStepOutput(t *testing.T) {
 	}
 	if !strings.Contains(header, ciEvStageFile) {
 		t.Errorf("tests/ci_workflow_test.go's header does not name %s. That file is where the question its header declares unanswerable from disk is now answered from the run, and a reader of the boundary needs to be sent there", ciEvStageFile)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The retirement itself, held.
+//
+// Everything above this point pins what the retired checklist LEFT BEHIND — the
+// three human checks, the record's consumer, the identifiers both sides name.
+// None of it pins the retirement. Restoring
+// .claude/workflows/release-checklist.js verbatim from the commit that deleted
+// it leaves every test in this repository green, because nothing here has ever
+// read that directory: the deletion was a fact about one commit and not an
+// invariant about the tree.
+// ---------------------------------------------------------------------------
+
+const (
+	// ciEvWorkflowsDir is the directory the agent harness loads as INVOCABLE
+	// workflows. That is why this directory and not some general search: a file
+	// here is not inert text that happens to describe a release, it is a
+	// procedure something can be asked to run, and while release-checklist.js sat
+	// here it was offered to every agent in this repository as a live skill under
+	// its own name.
+	ciEvWorkflowsDir = ".claude/workflows"
+
+	// ciEvRetiredChecklist is the encoded release procedure the gate pipeline
+	// retired. It is named as an exact path because that is the only part of this
+	// question that can be answered exactly.
+	ciEvRetiredChecklist = ciEvWorkflowsDir + "/release-checklist.js"
+
+	// ciEvRetiredChecklistName is the identity it declared to the harness in its
+	// `meta` block — the name an agent invoked it by.
+	ciEvRetiredChecklistName = "release-checklist"
+
+	// ciEvMetaDecl opens the declaration the harness reads to learn what a
+	// workflow file IS. It is a machine-read structure rather than prose, which
+	// is what makes it something this file can parse and adjudicate instead of
+	// pattern-matching over.
+	ciEvMetaDecl = "export const meta = {"
+)
+
+// ciEvMetaStrings returns every string literal declared inside a workflow file's
+// `export const meta = { … }` object, at any depth, with its escapes decoded.
+//
+// It is a scanner and not a search. It finds the declaration, walks the object
+// from its opening brace to the matching close while tracking string literals
+// and comments, and collects only what is inside a quoted literal — so a file's
+// comments, its identifiers and its code are all outside what this reads. That
+// boundary is the point: an assertion over a parsed declared value says
+// something about what the file CLAIMS TO BE, where the same assertion over the
+// whole file text would only say which words it contains.
+//
+// Anything it cannot walk is an error rather than an empty result. A file under
+// this directory whose declaration cannot be read is a file this check cannot
+// clear, and under CLAUDE.md's rule an examination that could not be made is a
+// failure and never a pass.
+func ciEvMetaStrings(src string) ([]string, error) {
+	i := strings.Index(src, ciEvMetaDecl)
+	if i < 0 {
+		return nil, fmt.Errorf("no `%s` declaration", ciEvMetaDecl)
+	}
+	if strings.Contains(src[i+len(ciEvMetaDecl):], ciEvMetaDecl) {
+		return nil, fmt.Errorf("more than one `%s` declaration, so which one the harness reads is not decidable here", ciEvMetaDecl)
+	}
+
+	var out []string
+	depth := 0
+	for p := i + len(ciEvMetaDecl) - 1; p < len(src); p++ {
+		switch c := src[p]; {
+		case c == '{' || c == '[':
+			depth++
+		case c == '}' || c == ']':
+			depth--
+			if depth == 0 {
+				return out, nil
+			}
+		case c == '\'' || c == '"':
+			lit, next, err := ciEvReadJSString(src, p)
+			if err != nil {
+				return nil, err
+			}
+			out, p = append(out, lit), next
+		case c == '`':
+			// Refused rather than skipped. A template literal can interpolate an
+			// expression containing braces, so walking past one correctly means
+			// implementing more of the grammar than this file should carry — and
+			// guessing is how a scanner comes to report an empty declaration for a
+			// file it never actually read.
+			return nil, fmt.Errorf("a template literal at offset %d, which this scanner does not read", p)
+		case c == '/' && p+1 < len(src) && src[p+1] == '/':
+			if n := strings.IndexByte(src[p:], '\n'); n < 0 {
+				p = len(src)
+			} else {
+				p += n
+			}
+		case c == '/' && p+1 < len(src) && src[p+1] == '*':
+			n := strings.Index(src[p+2:], "*/")
+			if n < 0 {
+				return nil, fmt.Errorf("an unterminated block comment at offset %d", p)
+			}
+			p += 2 + n + 1
+		}
+	}
+	return nil, fmt.Errorf("the `%s` object is never closed", ciEvMetaDecl)
+}
+
+// ciEvReadJSString reads the quoted literal beginning at src[start] and returns
+// its decoded content and the index of its closing quote.
+func ciEvReadJSString(src string, start int) (string, int, error) {
+	quote := src[start]
+	var b strings.Builder
+	for p := start + 1; p < len(src); p++ {
+		switch src[p] {
+		case '\\':
+			if p+1 >= len(src) {
+				return "", 0, fmt.Errorf("a trailing backslash at offset %d", p)
+			}
+			p++
+			switch src[p] {
+			case 'n':
+				b.WriteByte('\n')
+			case 't':
+				b.WriteByte('\t')
+			case 'r':
+				b.WriteByte('\r')
+			default:
+				b.WriteByte(src[p])
+			}
+		case quote:
+			return b.String(), p, nil
+		case '\n':
+			return "", 0, fmt.Errorf("an unterminated string literal at offset %d", start)
+		default:
+			b.WriteByte(src[p])
+		}
+	}
+	return "", 0, fmt.Errorf("an unterminated string literal at offset %d", start)
+}
+
+// TestTheWorkflowDeclarationScannerReadsWhatItClaimsTo holds the scanner to the
+// two properties the test below rests on, because both are claims about what
+// this file DOES NOT read and neither is visible from a passing repository.
+//
+// The first is the boundary: only string literals inside `meta` are collected,
+// so a comment or a body naming the release procedure is deliberately outside.
+// If that stopped being true the check would start refusing files on the words
+// they contain, which is the pattern-matching it exists instead of.
+//
+// The second is fail-closed. Every shape the scanner cannot walk returns an
+// error, and the caller turns an error into a failing test. A scanner that
+// quietly returned no strings for a file it could not parse would report a
+// clean directory for exactly the file worth looking at — the silent no-op this
+// whole file exists to refuse, one level down.
+func TestTheWorkflowDeclarationScannerReadsWhatItClaimsTo(t *testing.T) {
+	const tick = "`"
+	for _, tc := range []struct {
+		name, src string
+		want      []string
+		wantErr   bool
+	}{
+		{
+			name: "the retired checklist's own shape, nesting and all",
+			src: "export const meta = {\n" +
+				"  name: 'release-checklist',\n" +
+				"  description: 'Runs docs/RELEASING.md as three verification gates.',\n" +
+				"  phases: [\n" +
+				"    { title: 'Pre-merge', detail: 'pin sweep' },\n" +
+				"  ],\n}\nconst REPO = '/somewhere/else'\n",
+			want: []string{"release-checklist", "Runs docs/RELEASING.md as three verification gates.", "Pre-merge", "pin sweep"},
+		},
+		{
+			name: "a brace inside a string does not end the object early",
+			src:  "export const meta = {\n  name: 'a}b',\n  after: 'docs/RELEASING.md',\n}\n",
+			want: []string{"a}b", "docs/RELEASING.md"},
+		},
+		{
+			// The boundary, stated as a test. release-checklist.js's header called
+			// itself "docs/RELEASING.md, encoded" IN A COMMENT, and that sentence is
+			// not what the check reads — it was refused on its declared description
+			// and on its declared name instead.
+			name: "comments inside the declaration are not read",
+			src:  "export const meta = {\n  // docs/RELEASING.md, encoded\n  /* also docs/RELEASING.md */\n  name: 'chores',\n}\n",
+			want: []string{"chores"},
+		},
+		{name: "no declaration at all", src: "const meta = {name: 'x'}\n", wantErr: true},
+		{name: "two declarations", src: "export const meta = {a:'1'}\nexport const meta = {b:'2'}\n", wantErr: true},
+		{name: "a template literal", src: "export const meta = {\n  name: " + tick + "release-checklist" + tick + ",\n}\n", wantErr: true},
+		{name: "an object that never closes", src: "export const meta = {\n  name: 'x',\n", wantErr: true},
+		{name: "a string that never closes", src: "export const meta = {\n  name: 'x,\n}\n", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ciEvMetaStrings(tc.src)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("ciEvMetaStrings returned %q and no error.\nThis shape must be an ERROR, because the caller turns an error into a failing test and a nil-error empty result into a cleared file. A declaration the scanner cannot walk must not read as a declaration that said nothing", got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ciEvMetaStrings: %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("ciEvMetaStrings = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestTheRetiredReleaseChecklistStaysRetired refuses a second release procedure
+// under .claude/workflows/.
+//
+// THE FAILURE IT EXISTS FOR. Somebody restores
+// .claude/workflows/release-checklist.js — from the commit that deleted it, from
+// a stale worktree, from a revert of the retirement commit — and this repository
+// once again offers two release procedures. That is the state CLAUDE.md calls a
+// defect in as many words: "there is exactly one of them: if you find a second
+// release procedure anywhere in this repository, that is a defect to report, not
+// a fallback to use". Until this test existed, the finding-of-it was left
+// entirely to a person noticing, and the restored file is not a dormant
+// document — it is a runnable skill the harness offers by name, it publishes
+// `main` before the tag (the order the driver refuses to perform), it blocks on
+// a content.ts commit field that no longer exists, and no gate in this pipeline
+// can see it.
+//
+// WHAT IT PINS, IN TWO PARTS.
+//
+//   - THE EXACT PATH, which is exact and needs no judgement.
+//   - THE DECLARED IDENTITY of every other file in that directory: its parsed
+//     `meta` object may not name the written release procedure, and may not
+//     re-claim the retired workflow's name. release-checklist.js announced
+//     itself to the harness as running docs/RELEASING.md, so a successor doing
+//     the same job under a different filename is caught by what it says it is
+//     rather than by what it is called.
+//
+// WHAT IT DOES NOT PIN, stated plainly because a check whose limits are unwritten
+// gets trusted past them:
+//
+//   - A file under this directory that encodes the release procedure WITHOUT
+//     saying so in its `meta` — one whose description says "post-merge chores"
+//     while its body walks the tag and the pushes — passes this. Deciding that
+//     from the body means asking whether a paragraph of English is a release
+//     procedure, which is not a question with a mechanical answer and is not
+//     attempted here.
+//   - Anywhere else in the tree. A second procedure dropped in docs/, scripts/
+//     or skills/ is not this test's subject. .claude/workflows/ is pinned
+//     because it is where the retired file lived and where a file is offered as
+//     something to RUN; the general search is the unbounded one this test
+//     declines to write.
+//
+// So this is a floor and not a ceiling, and CLAUDE.md's rule still needs a
+// reader. What it guarantees is that the specific retirement this pipeline
+// performed cannot be quietly undone.
+func TestTheRetiredReleaseChecklistStaysRetired(t *testing.T) {
+	root := repoRoot(t)
+
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(ciEvRetiredChecklist))); err == nil {
+		t.Errorf("%s exists again.\n"+
+			"It is the release procedure this pipeline retired, and its own header called it %q — a second, runnable copy of the document CLAUDE.md requires there to be exactly one of. Restored, it publishes `main` before the tag, which is the ordering the release driver refuses to perform; it blocks on a commit field that no longer exists; and no gate in this pipeline reads it, so it can disagree with %s indefinitely without anything saying so.\n"+
+			"If it came back by a revert or a merge, the deletion is what to keep. If it came back on purpose, that is a decision for a human to record, not for this file to accommodate",
+			ciEvRetiredChecklist, "docs/RELEASING.md, encoded", ciEvProcedureFile)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("cannot determine whether %s exists: %v.\nA check that could not look is reported as a failure and never as a pass", ciEvRetiredChecklist, err)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(ciEvWorkflowsDir)))
+	if errors.Is(err, os.ErrNotExist) {
+		// The whole directory is gone, which is the intended end state — git does
+		// not track empty directories and release-checklist.js was the only file
+		// in it. Nothing to adjudicate.
+		return
+	}
+	if err != nil {
+		t.Fatalf("cannot read %s: %v.\nA check that could not look is reported as a failure and never as a pass", ciEvWorkflowsDir, err)
+	}
+
+	for _, entry := range entries {
+		rel := ciEvWorkflowsDir + "/" + entry.Name()
+		if entry.IsDir() {
+			t.Errorf("%s is a directory, and this check reads files.\n"+
+				"It is refused rather than descended into because a workflow this check has not read is one it has not cleared, and an unexamined corner of the directory the harness loads is where a second release procedure would sit unnoticed. Either flatten it or teach this test to walk it",
+				rel)
+			continue
+		}
+
+		declared, err := ciEvMetaStrings(wiringReadFile(t, rel))
+		if err != nil {
+			t.Errorf("%s: this check cannot read the declaration the harness reads — %v.\n"+
+				"Every file here is offered to agents as something to run, and the `%s` block is what says what it is. A file whose declaration cannot be parsed is one this check cannot clear, so it is a failure rather than a pass: it is exactly where a restored release procedure would be invisible",
+				rel, err, ciEvMetaDecl)
+			continue
+		}
+
+		for _, s := range declared {
+			if strings.Contains(s, ciEvProcedureFile) {
+				t.Errorf("%s declares itself as running %s: %q.\n"+
+					"That is a second release procedure, which CLAUDE.md calls a defect to report rather than a fallback to use — the retired checklist announced itself the same way. The one procedure is %s and it is read by a person and by the driver; a runnable encoding of it drifts from it silently, because nothing compares the two",
+					rel, ciEvProcedureFile, s, ciEvProcedureFile)
+			}
+			if s == ciEvRetiredChecklistName {
+				t.Errorf("%s declares the name %q, which is the identity the retired release checklist was invoked by.\n"+
+					"A successor under a new filename is the retirement undone with the path changed. If this workflow does something else entirely, give it a name that is not the retired one",
+					rel, ciEvRetiredChecklistName)
+			}
+		}
 	}
 }

@@ -19,6 +19,14 @@ checklist for that half.
       It needs nothing but Go. The two checks with an external prerequisite — a
       browser and a `goreleaser` binary — live in `viewer-tests/`, which
       `go test ./...` does not descend into; the next item runs them.
+
+      **A clean `go vet` is not a clean lint.** If you are running the checks
+      locally rather than reading them off CI, run `golangci-lint run ./...` as
+      well: `errcheck` with `check-blank` failed CI during a release after a
+      clean local vet, and the two tools do not look for the same things. The
+      lint job is not one of the suites `make ci-evidence` accounts for — it
+      emits no `go test -json` account of anything — so nothing downstream
+      recovers this for you.
 - [ ] **The release build has been run, before the tag.** Every other check reads
       what the release build was *told* to do; this is the one that watches it do
       it. It **fails rather than skips** when either tool is unnamed, so supply
@@ -46,6 +54,16 @@ checklist for that half.
       machine half first:
 
           make ci-evidence DOSSIERX_GATE_CI_SHA=$(git log --merges -1 --format=%H main)
+
+      **`git fetch` first — that command reads your local `main`.** The commit
+      you name has to be an object this clone actually has, because the driver's
+      D1 later resolves it locally to compare its tree against the tree being
+      released; on a stale clone the pipe silently yields an older merge commit,
+      and a sha pasted from the forge is not present at all. Either way the
+      record is about the wrong commit and D1 refuses the release with "the
+      CI-run evidence record … names no object carrying the tree being released
+      … or a commit this clone has never fetched" — the refusal names this
+      mistake, so read it as this mistake rather than as a broken gate.
 
       That fetches the CI run **for that exact sha** — never HEAD, because the
       `content.ts` commit stamp lands on `main` after the merge as a matter of
@@ -229,7 +247,35 @@ checklist for that half.
       and asked without refreshing it the question answers "yes" exactly when the
       release is about to go wrong.
 
-- [ ] Merge to `main` with `--no-ff` so the release has a merge commit to name.
+- [ ] **The merge belongs to the driver — never merge and then invoke it.** The
+      merge is D2: `git merge --no-ff --no-edit` onto `main`, with the resulting
+      merge commit captured by value and carried into the tag D4 creates. It is
+      the step the whole ordering hangs off, because the release has to have a
+      merge commit to name.
+
+      **Merging first does not skip D2, it empties it.** `git merge --no-ff`
+      finds `main` already contains the branch, prints `Already up to date.`,
+      exits 0 and creates nothing. D2 then reports done having done nothing, and
+      the driver tags whatever `main` already pointed at. Every guarantee D2
+      exists for — that the merge was `--no-ff` rather than a squash or a rebase,
+      that the commit the tag names is the merge the driver itself made — is
+      gone, and nothing anywhere says so. That silent no-op is the state to
+      avoid, and it is reached only by doing the merge and then running the
+      driver.
+
+      **While the driver still stops at D1** — the machinery behind D7's archive
+      verification is unbuilt, and a step that cannot run is a failure, not a
+      pass — it never reaches D2 at all, so today the merge is performed by hand
+      together with the tag and the two pushes in the next item, in exactly the
+      order that item gives. Do both by hand or neither; the half-and-half is
+      what produces the no-op above.
+
+      **Either way, start from a clean tree**: `git status --porcelain` empty and
+      local `main` in sync with `origin/main`. Anything modified or untracked at
+      this point is content no gate read and the merge carries it in. Both
+      records this procedure writes — the ci-evidence record and the driver's own
+      run record — default to paths outside the repository so that neither of
+      them is what dirties it.
 
 - [ ] **Tag and push, in the driver's order.**
 
@@ -290,8 +336,10 @@ checklist for that half.
       release than the one it is now being compared with", and whoever meets
       that message goes looking for a rendering diff that was never there.
 
-- [ ] Watch `Release`, `CI` and `CodeQL`. `Release` is the one that must pass;
-      a failure there leaves a tag with no artifacts behind it.
+- [ ] Watch `Release`, `CI` and `CodeQL` while they run. `Release` is the one
+      that must pass. Watching is not confirming — a run can fail after you stop
+      looking — so its outcome is read again as a human check in **Three checks
+      that stay a person's** below.
 
 ## Verifying — check the artifact, not the source
 
@@ -352,14 +400,6 @@ claims and only the last one matters.
       If the `-ldflags` line is absent or does not name `-X main.version=`, see
       the comment in `.goreleaser.yaml` about `-X main.version` needing the
       `main.` prefix rather than the full import path.
-- [ ] **The site redeployed.** `deploy-site.yml` triggers only on changes under
-      `site/**`, so a release that touches no site file publishes nothing and
-      the site keeps serving the previous version. Use `workflow_dispatch` if
-      that happens.
-- [ ] **The deployed bundle is the one you built.** Compare the asset hashes in
-      the live `index.html` against your local `dist/` — Vite content-hashes
-      them, so a match rules out a stale cache or a failed deploy having served
-      an older build.
 - [ ] **The rendered pages read correctly.** Load the live site and read the
       text, both `/` and `/releases.html` (a second Rollup entry point, not a
       route — `/releases/` is a 404).
@@ -375,6 +415,36 @@ claims and only the last one matters.
       release is correct and must not be bumped — "v0.3.0 made the machine
       contract the product's spine" describes history; rewriting it would make
       the page lie. Only the claims about what is *current* move.
+
+### Three checks that stay a person's
+
+These three ask whether a system outside this repository did what it was told,
+and no file in this tree can answer that. A workflow that never fired, a deploy
+that kept serving yesterday's bundle and a run that concluded without producing
+an artifact all leave the repository byte-identical to the release that went
+right, so there is nothing here for a check to read. They are not leftovers
+waiting to be automated; they are read off the forge and off the live site, by a
+person, every release. Skipping one is not "the machine has it" — it is nobody
+having looked.
+
+- [ ] **(human) The `Release` workflow itself passed.** Not "the tag is on the
+      forge", not "the release page loads" — the run's own outcome. A run that
+      failed or stopped halfway leaves a published tag with no archives behind
+      it, and the tag is what every consumer resolves. Open the run for this
+      tag and read its conclusion.
+- [ ] **(human) `deploy-site` ran for this release.** `deploy-site.yml` triggers
+      only on changes under `site/**`, so a release touching no site file
+      publishes nothing, fails nowhere, and leaves the site serving the previous
+      version — the quiet failure this item exists for. Check the workflow's
+      runs for this release's commit; if it did not fire, the fix is a
+      `workflow_dispatch`.
+- [ ] **(human) The deployed bundle is the one that was built.** Vite
+      content-hashes its assets, so fetch the live `index.html`, read the asset
+      hashes out of it, and compare them against your local `dist/`. A match
+      rules out a stale CDN copy and a deploy that succeeded while serving an
+      older build. If you cannot build locally, at minimum confirm the live
+      hashes CHANGED from what the previous deploy served — an unchanged hash
+      after a site edit is the failure.
 
 ## After
 

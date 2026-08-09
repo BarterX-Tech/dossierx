@@ -63,21 +63,20 @@
 // and the boundary drawn above is unchanged — it is a boundary on what a reader
 // of a FILE can establish, and nothing here has started reading a run.
 //
-// TWO AUTOMATED READERS EXIST AND THEY ANSWER DIFFERENT QUESTIONS.
-// .claude/workflows/release-checklist.js carries a pre-tag check keyed
-// `ci-on-merge-commit` that runs
-// `gh api repos/<owner>/<repo>/commits/<merge-sha>/check-runs` and requires every
-// check on the merge commit to be a pass, counting a pending one as
-// COULD_NOT_RUN. That reader closes the two cases this file cannot see from
-// disk: a job that was skipped, and a workflow that never fired at all — a
-// commit with no check runs is not "every check passed". What it cannot close is
-// a check run whose conclusion is success over nothing, because a conclusion is
-// all it reads. Its sibling check `ci-run-evidence` closes that half by reading
-// the account the test binary itself emitted: a suite step that printed
-// `[no tests to run]` beside every `ok` is a package that passed having executed
-// no test, and a step marked continue-on-error that failed and was forgiven
-// leaves a `"Action":"fail"` event that no forgiveness above the binary can
-// remove. Neither reader is a substitute for the other and both are required.
+// THERE USED TO BE A SECOND AUTOMATED READER AND THERE IS NOT ANY MORE, which
+// is worth stating because its absence is a coverage boundary and not an
+// oversight. A checklist under .claude/workflows/ carried a pre-tag check that
+// ran `gh api repos/<owner>/<repo>/commits/<merge-sha>/check-runs` and required
+// every check run on the merge commit to be a pass. That checklist was retired
+// with the release-gate pipeline — it published main before the tag, the order
+// the driver refuses to perform — and nothing inherited its whole subject. What
+// it saw that is still seen: a workflow that never fired for the commit, and a
+// declared job that produced no account, are both findings of
+// tests/ci_run_evidence_test.go (`no-ci-run-for-sha`, `missing-instantiation`).
+// What it saw that no machine sees now: check runs belonging to workflows other
+// than ci.yml — `Release`, `CodeQL`, `Deploy site` — because the reader that
+// replaced it derives its subject from THIS file's workflow and accounts for
+// nothing else. Those are read by a person, in docs/RELEASING.md.
 //
 // THE HUMAN ITEM SURVIVES ANYWAY, and for a reason that has also changed. It used
 // to survive because it was the only thing that could see a suite that ran

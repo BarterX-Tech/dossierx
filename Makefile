@@ -23,10 +23,20 @@ test:
 # stays cobra + yaml.v3. That isolation means the "test" target above CANNOT
 # reach it — "go test ./..." does not descend into a nested module — so it needs
 # a target of its own or it is code nobody can run without knowing it is there.
-# It is not folded into "test" because it needs a real Chrome/Chromium: without
-# one the suite t.Skip()s, and a skip inside "make test" would read as a pass.
+# It is not folded into "test" because it needs a real Chrome/Chromium, and what
+# happens without one is no longer uniform across the module. The original
+# chromedp tests still SKIP when DOSSIERX_TEST_BROWSER is unset
+# (viewer-tests/harness_test.go:85) — the right answer on a laptop that has no
+# browser to drive. The release gate's checks, which moved in here, do NOT: the
+# rendered-DOM extraction (site_dom_test.go:490) and the release dry run
+# (site_toolchain_test.go:968) FAIL when the browser or the `goreleaser` binary
+# is unnamed, because "we did not look" must not read as "nothing is wrong".
+# So this target's exit status is meaningful only with both tools supplied, and
+# folding it into "test" would put a laptop's legitimate skips and a release
+# gate's refusals behind one green line.
 # CI's "viewer" job runs this against the runner image's Chrome.
-# Set DOSSIERX_TEST_BROWSER to point at a specific browser binary.
+# Set DOSSIERX_TEST_BROWSER to point at a specific browser binary, and
+# DOSSIERX_TEST_GORELEASER at a `goreleaser` binary for the release dry run.
 viewer-test:
 	cd viewer-tests && go test -count=1 ./...
 
@@ -62,16 +72,34 @@ hook-test:
 # was asked about. An invocation that examined nothing is then as loud as a
 # suite that ran nothing, which is the whole subject of the check applied to
 # itself. tests/ci_run_evidence_test.go's TestTheReleaseTimeInvocationNamesThisStage
-# holds this recipe, docs/RELEASING.md and .claude/workflows/release-checklist.js
-# to the same identifiers, so no one side of it can move alone.
+# holds this recipe, docs/RELEASING.md and cmd/dossierx/gate_driver_test.go — the
+# release driver, whose D1 refuses to publish a tree no record accounts for — to
+# the same identifiers, so no one side of it can move alone. The record is a gate
+# because something reads it; a record nobody reads is a filing habit.
 #
 #     make ci-evidence DOSSIERX_GATE_CI_SHA=<the merge commit's full sha>
 #
+# WHY THE SHA IS DEMANDED RATHER THAN DEFAULTED, and this reason is inherited
+# rather than invented here: it is the one the encoded release checklist retired
+# with this pipeline spent forty lines arguing, and it outlived that file. The
+# script took the phase, the version and the previous version as arguments, and
+# each of the three once carried a fallback. All three fallbacks failed the same
+# way — not by erroring, but by running a complete, clean-looking gate against
+# the wrong subject. A missing `phase` re-ran the
+# pre-merge checks and reported the pre-tag gate clear. A defaulted `previous`
+# fired for real in v0.4.1: every gate that release ran believing the predecessor
+# was v0.3.1 when it was v0.4.0, so the pin sweep and the stale-mention checks
+# were comparing against a baseline two releases old and reported nothing wrong.
+# Nothing was missed that time, because the agents derived the real predecessor
+# themselves — which is exactly the accident a gate may not depend on. So a
+# parameter that names WHAT IS UNDER VERIFICATION is never defaulted here: the
+# recipe refuses, loudly, rather than picking a plausible commit.
+#
 # DOSSIERX_GATE_CI_EVIDENCE_OUT may be overridden to put the record elsewhere.
-# It defaults OUTSIDE the repository on purpose: the pre-tag phase also requires
-# `git status --porcelain` to be empty, and a gate that leaves an untracked file
-# at the repository root every time it runs would either fail the next check or
-# get committed by somebody clearing it.
+# It defaults OUTSIDE the repository on purpose: docs/RELEASING.md requires the
+# working tree to be clean when the driver is invoked, and a gate that leaves an
+# untracked file at the repository root every time it runs would either fail that
+# check or get committed by somebody clearing it.
 DOSSIERX_GATE_CI_EVIDENCE_OUT ?= /tmp/dossierx-ci-run-evidence.json
 
 ci-evidence:
