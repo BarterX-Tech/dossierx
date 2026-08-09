@@ -1,0 +1,60 @@
+# gate-cost-model.yaml fixture — k moved twice, and both moves are written down
+#
+# Invariant 6 says EVERY move of k leaves a record showing the value in force,
+# the value it replaced and why it moved. This fixture is the second move, which
+# is the one a model with room for a single edit cannot hold: the second move's
+# `previous` is the first move's value, so anchoring every edit to the seed
+# rejects the truthful record of it, and the only remaining way to write the
+# second move down is to overwrite the first — making the diff that is supposed
+# to BE the record of a move the diff that erases the record of the one before
+# it.
+#
+# So `k` is an ordered chain, oldest first, and each move is anchored to the one
+# before it rather than to the seed. The last entry is the value in force. These
+# same values, in this order, are the only numbers a recorded run may say it was
+# quoted at.
+#
+# 1.2 -> 1.5 is +25%, exactly on the raise bound. 1.5 -> 1.8 is +20%. Both are
+# inside the bounds measured against what actually preceded them, and neither
+# needs an override. Measured against the SEED instead, the second move would be
+# +50% and refused — which is the check this fixture exists to keep honest.
+schema: dossierx.gate-cost-model/1
+reserve:
+  value: 20000
+  unit: output_tokens
+backstop_factor:
+  value: 1.5
+classes:
+  - name: falsification-dense
+    seed:
+      value: 1.2
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value. It is not a measurement of this project and must never be copied into the committed model."
+    k:
+      - value: 1.5
+        numerator_unit: output_tokens
+        denominator_unit: bytes
+        previous: 1.2
+        rationale: "The first wave came in over its quote on every falsification-dense surface."
+      - value: 1.8
+        numerator_unit: output_tokens
+        denominator_unit: bytes
+        previous: 1.5
+        rationale: "And the second wave came in over the raised quote as well, so this is a trend and not one bad run."
+  - name: newest-entry-only
+    seed:
+      value: 0.6
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value. It is not a measurement of this project and must never be copied into the committed model."
+surfaces:
+  - name: readme
+    class: falsification-dense
+    document_basis: manifest.tracked_files
+  - name: changelog
+    class: newest-entry-only
+    document_basis: manifest.tracked_files
+  - name: roadmap
+    class: newest-entry-only
+    document_basis: manifest.tracked_files
