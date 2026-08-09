@@ -165,6 +165,20 @@ out_of_scope:
     paths:
       - surface.json
       - surfaces.yaml
+      # Declared before the lanes that create them, which is legal: this manifest
+      # constrains files to have an entry, not entries to have files (verified
+      # against TestEveryTrackedFileIsDeclaredASurfaceOrExcluded and
+      # TestSurfaceManifestEntriesAreWellFormed). Every lane adding a file would
+      # otherwise need this one file, and a convention saying "one lane owns it"
+      # did not survive five concurrent agents once already.
+      - surface.baseline.json
+      - gate/
+      - gate-cost-model.yaml
+      - gate-cost-ledger.json
+      - scripts/gate-stage2/
+      # No testdata/ entries here: out_of_scope tests-and-fixtures already claims
+      # testdata/ wholesale, and the manifest rule is EXACTLY one entry per file.
+      # Declaring the gate's fixture directories again double-claimed them.
 
   - name: community-and-legal
     reason: Makes no claim about how the engine behaves, so no release can
