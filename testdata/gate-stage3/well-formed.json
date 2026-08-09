@@ -1,0 +1,18 @@
+{
+  "run": "<<RUN>>",
+  "surface": "changelog",
+  "verdict": "FAILED",
+  "fingerprint": "<<FINGERPRINT>>",
+  "findings": [
+    {
+      "surface": "changelog",
+      "rule": "counted-claim-mismatch",
+      "severity": "major",
+      "detail": "the entry for v0.6.0 says nineteen commands and the inventory holds twenty"
+    }
+  ],
+  "subjects": {
+    "cli-operator": "agent",
+    "go-toolchain-floor": "1.26"
+  }
+}
