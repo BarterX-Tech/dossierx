@@ -145,8 +145,33 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # `-json` IS THE ACCOUNT, and it is the reason this step's log is no longer
+      # one `ok <pkg> <time>` line per package.
+      #
+      # Every layer above the test binary reports a CONCLUSION, and a conclusion
+      # is `success` over zero tests: a suite emptied by a `-run` selector
+      # exported into $GITHUB_ENV by an earlier step prints `ok <pkg>
+      # [no tests to run]` for every package and concludes success at the step,
+      # the job and the check run alike. `-json` makes the binary state what it
+      # actually executed, per test, in a form nothing above it can paraphrase —
+      # tests/ci_run_evidence_test.go fetches this log for the merge commit,
+      # per matrix cell, and refuses a release whose packages passed having run
+      # nothing.
+      #
+      # IT IS STILL ONE COMMAND, and that is not an accident of spelling. The
+      # body may hold exactly one command, which is what closes `|| true`,
+      # `set +e`, a trailing `exit 0` and a pipe into `tee` without a case per
+      # trick; capturing this stream to a file would need a redirect or a pipe
+      # and is refused rather than interpreted. `-json` is already inside
+      # ciAllowedTestFlags because it changes reporting and not selection, so
+      # the closed vocabularies are satisfied unchanged.
+      #
+      # THE COST, measured rather than assumed: this step's output goes from a
+      # couple of dozen lines to roughly 14,500 (~3.4 MB) per cell. That is a
+      # machine's account and it is not a thing a person skims — docs/RELEASING.md's
+      # CI item says so, and points at `make ci-evidence` instead.
       - name: Test (race)
-        run: go test -race ./...
+        run: go test -race -json ./...
 
   # The pre-commit gate is a shell script running a real binary against a real
   # git repository, so no Go test can cover it: the assertions that matter are
@@ -208,13 +233,22 @@ jobs:
   # in THAT job's steps. Mentioning it in a comment satisfies nothing now, so
   # this one may say it.
   #
-  # WHAT NOTHING IN THIS REPOSITORY CHECKS, so nobody looks for a guard that is
-  # not there: that this job EXECUTES. No file-reader can establish it — `if:`,
-  # a `paths:` filter, a skipped `needs:`, `continue-on-error:` and a runner
-  # label nothing matches are an open-ended list, and a check that stops at the
-  # ones somebody remembered reports "we did not check" while reading as a pass.
-  # tests/ci_workflow_test.go's header sets out that boundary; docs/RELEASING.md's
-  # "CI is green on `main`" item is where a human answers it, by opening the run.
+  # WHAT NO FILE-READER IN THIS REPOSITORY CHECKS, so nobody looks for a guard
+  # that is not there: that this job EXECUTES. `if:`, a `paths:` filter, a
+  # skipped `needs:`, `continue-on-error:` and a runner label nothing matches are
+  # an open-ended list, and a check that stops at the ones somebody remembered
+  # reports "we did not check" while reading as a pass.
+  # tests/ci_workflow_test.go's header sets out that boundary and does not cross
+  # it.
+  #
+  # IT IS ANSWERED ELSEWHERE NOW, from the run rather than from the file.
+  # tests/ci_run_evidence_test.go fetches this job's log for the merge commit,
+  # parses the `-json` account the suite step emits and requires every
+  # instantiation the matrix declares to carry one in which no test failed and
+  # no package passed having executed nothing. It reads no conclusion at all, so
+  # a step forgiven by `continue-on-error` reaches it exactly as a step that was
+  # not. What it cannot see remains open and is stated there: the hooks job below
+  # runs a shell script, which emits no countable account of anything.
   #
   # THE SUITE STEP IS HELD TO THREE CLOSED SETS by that same file, because a run
   # that selects nothing is a green job over nothing:
@@ -368,7 +402,15 @@ jobs:
         # ONE COMMAND, no `env:` outside the allowed names — see the three closed
         # sets described above this job. Anything more here is refused by
         # tests/ci_workflow_test.go rather than interpreted.
-        run: go test -count=1 ./...
+        #
+        # `-json` for the reason the root suite step gives at length: this step's
+        # ENTIRE output on v0.5.0's run was one line —
+        # `ok  github.com/BarterX-Tech/dossierx/viewer-tests  89.327s` — and a
+        # suite emptied at run time would have printed one line too, with `[no
+        # tests to run]` on the end and a green conclusion above it. The account
+        # tests/ci_run_evidence_test.go reads is what tells those apart, and it
+        # exists only if the binary is asked to emit it.
+        run: go test -count=1 -json ./...
 
   lint:
     name: lint

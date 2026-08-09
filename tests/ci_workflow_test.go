@@ -53,29 +53,37 @@
 // it does to the step's exit status means modelling a shell, and this file does
 // not model a shell. Setup goes in its own step, where its own failure is its own.
 //
-// WHERE THE OTHER QUESTION IS ANSWERED: by a person, at
-// docs/RELEASING.md's pre-merge item "CI is green on `main`". That item is the
-// only step in this project that observes a RUN rather than a file, and it now
-// says what to look at — that the viewer job is present on the merge commit,
-// that its conclusion is not "skipped", and that its suite step's log shows Go
-// tests executing rather than a step that was allowed to fail. A green badge
-// distinguishes none of those on its own.
+// WHERE THE OTHER QUESTION IS ANSWERED, and this paragraph has been rewritten
+// because the answer changed. It is answered from the RUN, in
+// tests/ci_run_evidence_test.go, which fetches the CI run for one commit,
+// derives from this same workflow which suites exist and in how many matrix
+// instantiations, fetches each instantiation's job log, and parses the
+// `go test -json` account the suite steps now emit. That file's subject is the
+// run and this file's subject is the document; neither can do the other's job,
+// and the boundary drawn above is unchanged — it is a boundary on what a reader
+// of a FILE can establish, and nothing here has started reading a run.
 //
-// AND IT IS NOT DISCHARGED ONTO THE AUTOMATED READER THAT DOES EXIST, which is
-// the part worth being exact about. .claude/workflows/release-checklist.js
-// carries a pre-tag check keyed `ci-on-merge-commit` that runs
+// TWO AUTOMATED READERS EXIST AND THEY ANSWER DIFFERENT QUESTIONS.
+// .claude/workflows/release-checklist.js carries a pre-tag check keyed
+// `ci-on-merge-commit` that runs
 // `gh api repos/<owner>/<repo>/commits/<merge-sha>/check-runs` and requires every
 // check on the merge commit to be a pass, counting a pending one as
-// COULD_NOT_RUN. That reader is real, it is tracked, and it closes the two cases
-// this file cannot see from disk: a job that was skipped, and a workflow that
-// never fired at all — a commit with no check runs is not "every check passed".
+// COULD_NOT_RUN. That reader closes the two cases this file cannot see from
+// disk: a job that was skipped, and a workflow that never fired at all — a
+// commit with no check runs is not "every check passed". What it cannot close is
+// a check run whose conclusion is success over nothing, because a conclusion is
+// all it reads. Its sibling check `ci-run-evidence` closes that half by reading
+// the account the test binary itself emitted: a suite step that printed
+// `[no tests to run]` beside every `ok` is a package that passed having executed
+// no test, and a step marked continue-on-error that failed and was forgiven
+// leaves a `"Action":"fail"` event that no forgiveness above the binary can
+// remove. Neither reader is a substitute for the other and both are required.
 //
-// What it does NOT close is a check run whose conclusion is success over nothing.
-// It reads conclusions, never step output, so a suite step that printed
-// `[no tests to run]` beside every `ok`, or a step marked continue-on-error that
-// failed and was forgiven, reaches it as a green check. That residue is exactly
-// what the human item's third look-for was added to catch, and it is why the
-// human item survives rather than being replaced by the reader.
+// THE HUMAN ITEM SURVIVES ANYWAY, and for a reason that has also changed. It used
+// to survive because it was the only thing that could see a suite that ran
+// nothing. It survives now because the machine reads only what it derives — the
+// suites this workflow declares — and the `hooks` job runs a shell script, which
+// emits no countable account of anything.
 //
 // WHY THE JOB IS FOUND BY WHAT ITS STEPS DO, NOT BY NAME. The invariant used to
 // be a `run:` guard step inside ci.yml, in the very job it protected: it read the

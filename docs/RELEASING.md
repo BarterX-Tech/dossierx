@@ -35,24 +35,51 @@ checklist for that half.
       **Verifying** section tells you to download, that `checksums.txt` lists all
       six, and that the snapshot binary reports the same version, commit and date
       that its own recorded `-ldflags` line names.
-- [ ] **CI is green on `main`** — not on the branch, on the merge commit.
+- [ ] **CI is green on `main`** — not on the branch, on the merge commit, and
+      not on the strength of a conclusion.
 
-      **Open the run; a green badge is not the check.** Nothing in this
-      repository can establish that CI executed anything — `tests/ci_workflow_test.go`
-      reads what the workflow *declares* and says so in its header — so this item
-      is where a person answers it, and there are three things to look at:
+      **A green badge is not the check, and neither is a green check run.** Every
+      layer above the test binary reports a *conclusion*, and a conclusion is
+      `success` over zero tests: a suite emptied by a `-run` selector exported at
+      run time prints `ok <pkg> [no tests to run]` for every package, and the
+      step, the job and the check run all conclude success over it. So run the
+      machine half first:
 
-      - the **viewer** job appears on the merge commit at all. A workflow whose
-        triggers or `paths:` filter stopped matching produces no job, and a
-        commit with nothing to report reads as a commit with nothing wrong.
-      - its conclusion is **not "skipped"**. A skipped job is not a pass; it is a
-        pass over zero assertions.
-      - its **Viewer browser suite** step shows Go tests that actually ran —
-        named tests and timings, not `[no tests to run]` beside every `ok`. A
-        step allowed to continue on error reports the job green over a red
-        suite; a suite narrowed by a `-run`/`-tags` selector reaching it at run
-        time reports `ok` over zero assertions. Neither is distinguishable from
-        a real pass without opening the step.
+          make ci-evidence DOSSIERX_GATE_CI_SHA=$(git log --merges -1 --format=%H main)
+
+      That fetches the CI run **for that exact sha** — never HEAD, because the
+      `content.ts` commit stamp lands on `main` after the merge as a matter of
+      routine — derives from `.github/workflows/ci.yml` which suites exist and in
+      how many matrix instantiations, fetches each instantiation's log, and reads
+      the `go test -json` account the suite step emits. It fails, rather than
+      passing quietly, when a declared instantiation produced no account, when a
+      package reported `PASS` having executed no test, when any test failed
+      (including one a `continue-on-error` step forgave — it never reads a
+      conclusion), and when the account cannot be attributed or fetched at all.
+      It writes a verdict record to `DOSSIERX_GATE_CI_EVIDENCE_OUT`
+      (`/tmp/dossierx-ci-run-evidence.json` by default) and refuses to exit 0
+      without one, because `go test` exits 0 for a skip and for a selector that
+      matches nothing — so a *silent* pass here would be indistinguishable from a
+      gate that examined nothing. **Read the record and confirm it names the sha
+      you are about to tag** and the instantiations you expect.
+
+      GitHub's log retention is finite, so this will FAIL rather than pass when
+      re-run against an older release. That is intended.
+
+      **Then open the run**, because two things are still a person's:
+
+      - the account is now a `-json` event stream, so the suite steps' logs are
+        several thousand lines of JSON rather than one `ok <pkg> <time>` line per
+        package. Do not try to skim it — that is what the record above is for.
+        What is worth a glance is whether the run contains jobs the command did
+        *not* account for: `hooks` runs a shell script, which emits no countable
+        account of anything, so a smoke test that degenerated into asserting
+        nothing still reaches you as a green conclusion.
+      - the run exists and belongs to this commit at all. A workflow whose
+        triggers or `paths:` filter stopped matching produces no run, and a
+        commit with nothing to report reads as a commit with nothing wrong. The
+        command above reports that as a failure; confirm you agree with what it
+        found rather than assuming a clean exit means a run was there.
 - [ ] **CHANGELOG.md has an entry** for the new version, dated, following
       [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GoReleaser's
       generated notes are commit subjects; they are not a substitute for this.
@@ -84,7 +111,16 @@ checklist for that half.
       where they are:
 
       git grep -nE "dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v" \
-        -- . ':!CHANGELOG.md' ':!docs/RELEASING.md'
+        -- . ':!CHANGELOG.md' ':!docs/RELEASING.md' ':!surface.baseline.json'
+
+      `surface.baseline.json` is excluded for CHANGELOG.md's reason: it is the
+      frozen surface inventory of v0.5.0, so the four v0.5.0 pins inside it are
+      historical facts that are correct precisely because they are old. It is
+      also the ONLY record of what v0.5.0's surface was — that release shipped
+      before the emitter existed and carries no `surface.json` of its own — so
+      bumping a pin in it does not leave a stale file behind, it destroys the
+      baseline the first gated release is diffed against, and every delta after
+      that reports as unchanged the surfaces that changed.
 
       This used to be a `grep -rn --include="*.md" --include="*.yml"`, which does
       not search `*.yaml` — and this repo has 232 of those against 10 `.yml`. It

@@ -262,7 +262,55 @@ Confirm the merge used --no-ff and produced a real merge commit (git log --merge
 the checklist requires so the release has a merge commit to name. A squashed or rebased merge
 is a FAIL — report it; do not try to repair history.
 
-Every check on that commit must be a pass. A pending check is COULD_NOT_RUN, not a PASS.`,
+Every check on that commit must be a pass. A pending check is COULD_NOT_RUN, not a PASS.
+
+A conclusion is NOT the whole answer and this check does not pretend otherwise: a check run
+concludes success over zero tests. The 'ci-run-evidence' check below reads what the test
+binaries actually executed. Both are required; neither replaces the other.`,
+  },
+  {
+    key: 'ci-run-evidence', effort: 'medium',
+    prompt: `CHECK: the suites CI is configured to run actually EXECUTED on the merge commit, in every
+instantiation the workflow declares, and none of them failed.
+
+YOU ARE TRANSPORT HERE, NOT THE JUDGE. Do not read a log yourself, do not count anything, and
+do not decide anything. The fetching, parsing, counting and deciding are done by deterministic
+code — tests/ci_run_evidence_test.go — because a prompt saying "count the tests" is satisfiable
+by an agent that reads a conclusion and paraphrases, and nothing would notice. Your entire job
+is to run one command and carry its output back verbatim.
+
+    cd ${REPO}
+    make ci-evidence DOSSIERX_GATE_CI_SHA=<the full sha of main's merge commit>
+
+Get that sha with 'git log --merges -1 --format=%H main'. It is the MERGE COMMIT, never HEAD:
+commits land on main between the merge and the tag as a matter of routine — the content.ts sha
+stamp necessarily does — so a run fetched any other way is evidence about a tree that is not
+the one being tagged.
+
+The command writes a verdict record to DOSSIERX_GATE_CI_EVIDENCE_OUT (default
+/tmp/dossierx-ci-run-evidence.json) naming the sha examined, the suites derived from
+.github/workflows/ci.yml, every matrix instantiation, and what each one accounted for. It prints
+that record on success.
+
+WHAT TO REPORT:
+  - the command exited 0 and printed a record whose "verdict" is "PASS" and whose "sha" is the
+    merge commit you named -> PASS, and paste the WHOLE record into 'evidence'. Not a summary of
+    it, not "the record showed a pass" — the record.
+  - the command exited non-zero with findings -> FAIL, and paste the findings and the record.
+  - the command could not be run at all, or ran and produced NO record — 'gh' missing or
+    unauthenticated, no network, the target absent, the sha unknown — -> COULD_NOT_RUN, with the
+    exact output. The ABSENCE OF A RECORD IS NEVER A PASS. 'go test' exits 0 for a skipped test
+    and for a selector that matches nothing, so an invocation that adjudicated nothing looks
+    exactly like one that adjudicated everything and cleared it; the record is the only thing
+    that tells them apart, and this checklist already treats COULD_NOT_RUN as blocking.
+  - the record's "sha" is not the merge commit you asked about -> COULD_NOT_RUN. It is a record
+    of some other adjudication.
+
+EXPECTED FAILURES THAT ARE NOT BUGS IN THE CHECK. GitHub's log retention is finite (~90 days),
+so re-running this against an older release reports that the account could not be obtained, and
+that is a designed FAILURE rather than a pass. Do not work around it and do not re-run the gate
+hoping for a different answer: a finding here is cleared by a new CI run over a fixed tree, not
+by asking again.`,
   },
   {
     key: 'commit-sha-set', effort: 'medium',
