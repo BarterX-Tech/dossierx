@@ -74,6 +74,18 @@ package viewertests
 // ran under are stamped into site-text.json rather than left to whichever ones
 // the machine happened to have.
 //
+// AND A REPEAT IS EVIDENCE, NOT NOISE. The artifact records each pass by what it
+// was the first to reveal, so ~30 clicks do not store ~30 copies of one page.
+// That saving was once taken per STRING, which also deleted every repetition
+// WITHIN a page: the hero's "v0.5.1" arrives first, and the release-history
+// intro's and the timeline's copies of it were dropped as already-seen. The
+// gate's site agent read the survivor, found the version in one place, and
+// reported that the landing page names no release version — a false finding
+// produced by the gate's own eyes, not by the site. The dedupe is now counted
+// per OCCURRENCE (readSitePage's counters, and sitePass), and condition 9 pins
+// that the intro and the timeline still reach the artifact through the hero's
+// shadow.
+//
 // NOTHING IS WRITTEN INTO site/. The tree under review is the tree being read,
 // so the build happens in a copy under t.TempDir(); site/node_modules and
 // site/dist never appear.
@@ -198,6 +210,23 @@ type siteSnapshot struct {
 // ones this interaction revealed for the first time, because storing every
 // string again for each of ~30 clicks would make the artifact thirty times the
 // size and say nothing extra. The union lives on sitePage.
+//
+// "FOR THE FIRST TIME" IS COUNTED PER OCCURRENCE, NOT PER STRING, and that
+// distinction is the whole difference between an artifact that is smaller than
+// the traversal and one that is smaller than the PAGE. A page may render the
+// same string in several places on purpose — the current release is spelled
+// v0.5.1 in the hero kicker, in the hero badge list, inside the release-history
+// intro's <strong>, and again as the timeline entry's version label — and every
+// one of those is a separate thing a visitor reads. Flagging a string as "seen"
+// the first time any element emitted it deleted the other three from this
+// artifact, the gate's site agent read what was left, and it reported that the
+// landing page names no version at all. The page was right; the evidence was
+// lossy. So the counter below keeps, for every distinct string, as many copies
+// as the snapshot that showed the most of them, in the tree-walker's order —
+// which is what makes a repeat readable as a repeat, and its neighbours the
+// only locality the artifact needs to state. The ~30x saving that motivated
+// this dedupe is untouched: it comes from passes that reveal nothing new, and a
+// pass that reveals nothing new still records nothing.
 type sitePass struct {
 	Label      string           `json:"label"`
 	Selector   string           `json:"selector,omitempty"`
@@ -658,9 +687,18 @@ func readSitePage(t *testing.T, browser, base string, e siteEntry) sitePage {
 	}
 
 	page := sitePage{Entry: e.name, URL: url}
-	seenText := map[string]bool{}
-	seenAttr := map[siteAttr]bool{}
-	seenDetails := map[siteDetails]bool{}
+	// HOW MANY of each string, attribute and disclosure the richest snapshot so
+	// far has held — not WHETHER one has been seen. The dedupe these counters
+	// implement is across PASSES, where the same page re-reads the same DOM ~30
+	// times; a page that renders one string in four places is not a repetition to
+	// collapse but four things a visitor reads, and the collapse is what took the
+	// release version out of this artifact and put a false finding in the gate's
+	// report. See sitePass. A counter reaches the same volume as the old flag on
+	// everything the flag was written for, because a pass that reveals no new
+	// OCCURRENCE increments nothing.
+	textSeen := map[string]int{}
+	attrSeen := map[siteAttr]int{}
+	detailsSeen := map[siteDetails]int{}
 	seenTranscript := map[string]bool{}
 
 	record := func(label, selector string, snap siteSnapshot) {
@@ -672,25 +710,39 @@ func readSitePage(t *testing.T, browser, base string, e siteEntry) sitePage {
 			Expandable: snap.Expandable,
 			CodeTabs:   snap.CodeTabs,
 		}
+		// nth is this snapshot's running occurrence index for the value in hand.
+		// The nth copy is new to the artifact exactly when no earlier snapshot
+		// carried n of them, and it is appended where the tree walker found it,
+		// so the neighbours a reader needs to tell one copy from another travel
+		// with it.
+		textNth := map[string]int{}
 		for _, s := range snap.Text {
-			if !seenText[s] {
-				seenText[s] = true
-				pass.NewText = append(pass.NewText, s)
-				page.Text = append(page.Text, s)
+			textNth[s]++
+			if textNth[s] <= textSeen[s] {
+				continue
 			}
+			textSeen[s] = textNth[s]
+			pass.NewText = append(pass.NewText, s)
+			page.Text = append(page.Text, s)
 		}
+		attrNth := map[siteAttr]int{}
 		for _, a := range snap.Attrs {
-			if !seenAttr[a] {
-				seenAttr[a] = true
-				pass.NewAttrs = append(pass.NewAttrs, a)
-				page.Attributes = append(page.Attributes, a)
+			attrNth[a]++
+			if attrNth[a] <= attrSeen[a] {
+				continue
 			}
+			attrSeen[a] = attrNth[a]
+			pass.NewAttrs = append(pass.NewAttrs, a)
+			page.Attributes = append(page.Attributes, a)
 		}
+		detailsNth := map[siteDetails]int{}
 		for _, d := range snap.Details {
-			if !seenDetails[d] {
-				seenDetails[d] = true
-				page.Details = append(page.Details, d)
+			detailsNth[d]++
+			if detailsNth[d] <= detailsSeen[d] {
+				continue
 			}
+			detailsSeen[d] = detailsNth[d]
+			page.Details = append(page.Details, d)
 		}
 		// FIRST reading of a command's session wins, and a session with no lines
 		// is not recorded as a reading at all. A closed card contributes no
@@ -1375,6 +1427,241 @@ func TestSiteRenderedDOMExtraction(t *testing.T) {
 	t.Run("8 the `version` transcript depicts what the released binary prints", func(t *testing.T) {
 		assertVersionTranscriptIsRealOutput(t, dump)
 	})
+
+	// Condition 9 is not one of the gate's numbered conditions. It is here
+	// because the dump lost something none of the eight above could notice, and
+	// the gate then published the loss as a fact about the site: with the
+	// cross-pass dedupe taken per string, the hero's copy of the release version
+	// arrived first and the release-history intro's and the timeline's copies
+	// were dropped as already-seen. Conditions 1-7 are integrity checks that all
+	// stayed green — nothing they count changed — and condition 8 reads the
+	// `version` CARD, a different string in a different section. The finding that
+	// came back said the landing page names no version anywhere. It was wrong,
+	// and it was wrong because of this file.
+	//
+	// So this condition asserts the one property the artifact silently did not
+	// have: a string a page renders more than once reaches the artifact more than
+	// once, positioned so a reader can tell the copies apart.
+	t.Run("9 the release version survives in every place the page renders it", func(t *testing.T) {
+		assertRepeatedVersionSurvivesTheDump(t, dump)
+	})
+}
+
+// ---------------------------------------------------------------------
+// condition 9 — the repetition the dump used to eat
+// ---------------------------------------------------------------------
+
+// releaseIntroVersionExpr is how content.ts states the current version inside
+// the release-history intro: an interpolation wrapped in markdown bold, which
+// the renderer turns into a <strong> and therefore into a text node of its own,
+// separate from the sentence that introduces it. Both halves of that split are
+// what condition 9 anchors on.
+const releaseIntroVersionExpr = "**${latestRelease.version}**"
+
+// reReleaseDate reads an entry's `date` the way reReleaseEntry reads its
+// version, and for the same reason: the timeline renders the two as adjacent
+// siblings inside .release__head, so the date is the anchor that says WHICH of a
+// page's several copies of the version string is the timeline's.
+var reReleaseDate = regexp.MustCompile(`(?m)^[ \t]*date: "(\d{4}-\d{2}-\d{2})",(?:[ \t]*//.*)?$`)
+
+// currentReleaseDate is the date of the entry ReleaseTimeline badges "latest".
+//
+// It cross-checks the count of date lines against the count of version lines
+// loadReleasesArray already parsed, for the reason that file gives about
+// versions: a date line this regex cannot read does not fail, it silently makes
+// the PREVIOUS release's date the anchor, and the condition below would then
+// look for a neighbour pair the page never renders and report the dump as lossy
+// when it is whole. A red build nobody can fix is the failure a gate may not
+// have.
+func currentReleaseDate(t *testing.T, ra releasesArray) string {
+	t.Helper()
+	var dates []string
+	for _, m := range reReleaseDate.FindAllStringSubmatch(ra.src[ra.start:ra.end], -1) {
+		dates = append(dates, m[1])
+	}
+	if len(dates) != len(ra.versions) {
+		t.Fatalf("%s: the releases array holds %d readable `version:` line(s) but %d readable `date:` "+
+			"line(s) (%v).\nCondition 9 identifies the timeline's copy of the version string by the date "+
+			"rendered beside it, and a date line this suite cannot parse would move that anchor to the "+
+			"wrong release — which reads as a lossy dump rather than as an unreadable source line.\n"+
+			"Restore the field to `date: \"YYYY-MM-DD\",` or teach reReleaseDate the new shape",
+			ra.path, len(ra.versions), len(dates), dates)
+	}
+	return dates[len(dates)-1]
+}
+
+// releaseIntroLeadIn is the sentence content.ts writes immediately before the
+// bolded version in the release-history intro, as the page will render it.
+//
+// It is DERIVED from content.ts rather than typed here, which is what keeps
+// condition 9 from going red on a copy edit: reword the intro and both sides of
+// the comparison move together. Only removing the bolded interpolation — the
+// thing that makes the version its own text node — breaks it, and that is a
+// change to the shape this condition is about, so it is a red build with a real
+// answer rather than a formatting tax.
+//
+// The cut is at the last markdown, interpolation or newline boundary before the
+// version, so what remains is a run of plain prose that survives rendering
+// unchanged. Anything shorter than a clause is refused: a two-word anchor would
+// match half the page and the condition would pass on a dump that had kept
+// nothing.
+func releaseIntroLeadIn(t *testing.T, ra releasesArray) string {
+	t.Helper()
+	at := strings.Index(ra.src, releaseIntroVersionExpr)
+	if at < 0 {
+		t.Fatalf("%s no longer writes %s. The release-history intro states the current version there, and "+
+			"the markdown bold is what gives it a text node of its own — which is the copy this condition "+
+			"checks survived the dump. If the intro states the version some other way, this anchor has to "+
+			"be re-derived from the new shape; if it no longer states it at all, that is a site change to "+
+			"make deliberately, since both pages carry that sentence today",
+			ra.path, releaseIntroVersionExpr)
+	}
+	before := ra.src[:at]
+	lead := tidySpace(before[strings.LastIndexAny(before, "`*}$\n")+1:])
+	if len(lead) < proseTextMinLen || len(strings.Fields(lead)) < proseTextMinWord {
+		t.Fatalf("%s: the prose immediately before %s reads %q, which is too short to identify one "+
+			"paragraph on a page. Condition 9 would then match anywhere and assert nothing",
+			ra.path, releaseIntroVersionExpr, lead)
+	}
+	return lead
+}
+
+// occurrencesOf is every index at which pool holds want, where indexOfString
+// gives only the first. The plural is the point of this condition: "is it in
+// there" is exactly the question the collapsed dump answered YES to while three
+// of the four copies were gone.
+func occurrencesOf(pool []string, want string) []int {
+	var at []int
+	for i, got := range pool {
+		if got == want {
+			at = append(at, i)
+		}
+	}
+	return at
+}
+
+// neighbourhood is the dump around one position, for a failure a human can read
+// without opening the artifact.
+func neighbourhood(pool []string, at, span int) string {
+	lo, hi := at-span, at+span+1
+	if lo < 0 {
+		lo = 0
+	}
+	if hi > len(pool) {
+		hi = len(pool)
+	}
+	var b strings.Builder
+	for i := lo; i < hi; i++ {
+		marker := "   "
+		if i == at {
+			marker = ">> "
+		}
+		fmt.Fprintf(&b, "\n  %s[%d] %q", marker, i, pool[i])
+	}
+	return b.String()
+}
+
+// assertRepeatedVersionSurvivesTheDump is condition 9.
+//
+// THE SITE RENDERS THE CURRENT VERSION IN SEVERAL PLACES ON ONE PAGE, all of
+// them derived from one array so they cannot disagree: index.html spells it in
+// the hero kicker, in the hero badge list, in the release-history intro's bold
+// span, and as the timeline entry's version label. That is a design decision of
+// the site's, and it is exactly the input the artifact used to be unable to
+// carry.
+//
+// TWO OF THOSE PLACES ARE IDENTIFIED HERE, and each by a neighbour derived from
+// content.ts rather than by its ordinal in the dump: the INTRO copy is the one
+// whose preceding text node is the sentence that introduces it, and the TIMELINE
+// copy is the one whose following text node is the release's date, because
+// ReleaseTimeline renders .release__version and .release__date as adjacent
+// siblings. An ordinal would be satisfied by any three copies in any order,
+// which is a count again.
+//
+// AND THE SHADOW IS ASSERTED TOO, on index.html. This check only proves the
+// G4FIX loss cannot recur while some element still emits the version BEFORE the
+// intro and the timeline do — that earlier copy is what the collapse kept and
+// the later two are what it deleted. If the hero stops rendering the version,
+// the two positions below can be found by an extraction that is lossy again, so
+// the absence of the shadow fails here rather than quietly weakening the
+// condition to nothing.
+func assertRepeatedVersionSurvivesTheDump(t *testing.T, dump siteDump) {
+	t.Helper()
+
+	ra := repoReleases(t)
+	tag := ra.current()
+	date := currentReleaseDate(t, ra)
+	lead := releaseIntroLeadIn(t, ra)
+
+	// Both pages: they share the section, so they share the intro sentence and
+	// the timeline, and a dump that lost the repetition lost it on both.
+	for _, entry := range []string{"index.html", "releases.html"} {
+		page := dump.page(t, entry)
+		at := occurrencesOf(page.Text, tag)
+		if len(at) == 0 {
+			t.Fatalf("%s: the dump does not carry %q as a text node at all, though content.ts declares it "+
+				"the current release and this page renders it in the release-history intro and in the "+
+				"timeline. Either the site stopped saying which release it is, or the extraction stopped "+
+				"carrying it — and the second is what the gate reads as the first.\n%s",
+				entry, tag, summarise(page.Text, 40))
+		}
+
+		intro, timeline := -1, -1
+		for _, i := range at {
+			if intro < 0 && i > 0 && strings.HasSuffix(page.Text[i-1], lead) {
+				intro = i
+			}
+			if timeline < 0 && i+1 < len(page.Text) && page.Text[i+1] == date {
+				timeline = i
+			}
+		}
+
+		if intro < 0 {
+			t.Fatalf("%s: %q appears %d time(s) in the dump, and none of them follows the release-history "+
+				"intro's sentence %q.\nThat sentence and the bolded version are one paragraph the reader "+
+				"sees; in the artifact the version is a text node of its own, so losing it leaves the "+
+				"sentence ending in mid-air and a prose agent reading this file cannot tell which release "+
+				"the page names. If the copies collapsed, the cross-pass dedupe in readSitePage is counting "+
+				"strings again instead of occurrences. Copies found:%s",
+				entry, tag, len(at), lead, neighbourhood(page.Text, at[0], 2))
+		}
+		if timeline < 0 {
+			t.Fatalf("%s: %q appears %d time(s) in the dump, and none of them is followed by %q, the "+
+				"current release's date.\nReleaseTimeline renders .release__version and .release__date as "+
+				"adjacent siblings, so the timeline's copy of the version has that date immediately after "+
+				"it. Without it the artifact carries a release history whose newest entry has no version "+
+				"label — which is a site defect if the page really renders none, and a lossy extraction if "+
+				"it does. Copies found:%s",
+				entry, tag, len(at), date, neighbourhood(page.Text, at[len(at)-1], 3))
+		}
+		if intro == timeline {
+			t.Fatalf("%s: one copy of %q at index %d is answering for both the intro and the timeline. "+
+				"They are different paragraphs of the page and cannot be the same text node; the anchors "+
+				"this condition uses have stopped identifying what they name.%s",
+				entry, tag, intro, neighbourhood(page.Text, intro, 3))
+		}
+		t.Logf("%s: %q reaches the dump %d time(s), including the intro (index %d) and the timeline "+
+			"(index %d)", entry, tag, len(at), intro, timeline)
+
+		if entry != "index.html" {
+			continue
+		}
+		// The shadow. On the landing page the hero states the version before
+		// either of the two positions above, and that is the copy a per-string
+		// dedupe keeps while dropping these.
+		if first := at[0]; first >= intro || first >= timeline {
+			t.Fatalf("index.html renders %q first at index %d, which is the intro's copy (%d) or the "+
+				"timeline's (%d) — nothing on the page emits it earlier.\nThis condition is about a "+
+				"repetition SURVIVING: the copy that arrives first is the one a per-string dedupe keeps, "+
+				"and the later ones are what it deletes. With no earlier copy the two checks above pass "+
+				"over an extraction that never had to keep a duplicate, so they would go on passing after "+
+				"the defect came back. The hero's kicker and badge list carry that earlier copy today; if "+
+				"they no longer do, this condition needs a page that still repeats the version.%s",
+				tag, first, intro, timeline, neighbourhood(page.Text, first, 3))
+		}
+		t.Logf("index.html: the first copy of %q is at index %d, ahead of both the intro and the "+
+			"timeline — the repetition this condition exists for is present", tag, at[0])
+	}
 }
 
 // versionCommandCard is the CLI card whose depicted session condition 8 judges.
