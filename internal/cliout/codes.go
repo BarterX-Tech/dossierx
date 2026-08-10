@@ -191,7 +191,7 @@ const (
 	CodeDependencyNotLocked Code = "dependency_not_locked"
 	// CodeStructuredLayout is a body-only operation refused on a claim whose
 	// rendered content lives outside body — a table's rows, a steps list, a
-	// raw-HTML mockup. "dossierx flag" raises it because a flag-sourced reaudit
+	// raw-HTML mockup. "dossierx claim flag" raises it because a flag-sourced reaudit
 	// rewrites body and nothing else, so accepting the flag would clear
 	// review_pending while leaving the actually-rendered content stale.
 	CodeStructuredLayout Code = "structured_layout"

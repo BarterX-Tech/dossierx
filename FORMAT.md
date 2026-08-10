@@ -1146,7 +1146,12 @@ source_dirs: [path, ...]         # optional; directories scanned for
                                   # the code is. Without it, a code link can
                                   # only be recorded by `dossierx claim link`.
 mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
-                                  # to author layout: mockup claims — the module
+                                  # to author a claim carrying raw_html AT ALL —
+                                  # on ANY layout, not only layout: mockup. The
+                                  # name predates v0.4.1, which made raw_html an
+                                  # attachment legal beside card, banner, list
+                                  # and tree content; the gate moved with it and
+                                  # the field's name did not. It is the module
                                   # allowlist leg of raw-html-scope's gate. Every
                                   # entry must also appear in modules[]. An
                                   # unset/empty list means NO module may author

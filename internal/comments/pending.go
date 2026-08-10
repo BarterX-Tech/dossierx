@@ -17,7 +17,7 @@ import (
 //     lock.DetectStale — via ls.Baseline(c.ID, dep) compared to
 //     lock.ContentHash(depClaim) — and deliberately NOT via ls.Hashes[dep],
 //     which does not exist as a flat map (Store.Hashes is per-dependent).
-//   - flag: a pending `dossierx flag` entry parked in fs.Flags[c.ID].
+//   - flag: a pending `dossierx claim flag` entry parked in fs.Flags[c.ID].
 //   - openThreads: the count of c's comment threads still status: open.
 //
 // review_pending is meaningful only for a LOCKED claim; callers apply the

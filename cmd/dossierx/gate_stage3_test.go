@@ -895,7 +895,7 @@ func gateStage3Fixture(t *testing.T, name, run, fingerprint string) string {
 func gateStage3Vocab(t *testing.T) []gateStage3Subject {
 	t.Helper()
 	return []gateStage3Subject{
-		{ID: "cli-operator", Match: regexp.MustCompile(`^(?:agent|human|either)$`)},
+		{ID: "cli-operator", Match: regexp.MustCompile(`^(?:agent|human|either|ci)$`)},
 		{ID: "go-toolchain-floor", Match: regexp.MustCompile(`^\d+\.\d+$`)},
 	}
 }

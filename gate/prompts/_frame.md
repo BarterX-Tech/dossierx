@@ -55,7 +55,13 @@ EVERY subject below, whether or not your surface speaks to it.
   Match: `^(?:unlock-fix-lock|edit-in-place)$`
 - `cli-operator` — who your documents say runs the `dossierx` commands.
   `agent` if the operator is the coding agent, `human` if it is the person
-  reviewing, `either` if they say both parties do. Match: `^(?:agent|human|either)$`
+  reviewing, `either` if they say both parties do, and `ci` if the commands are
+  run by an automated job with no interactive operator at all — a workflow step,
+  a pre-commit hook — where the person's role is to READ the result rather than
+  to invoke it. `ci` is a real answer and not a way of avoiding one: a document
+  describing a CI check genuinely does not say that a human or an agent types
+  the command, and forcing it into `either` reports agreement with surfaces that
+  are describing something else. Match: `^(?:agent|human|either|ci)$`
 - `hook-role` — what your documents say the git pre-commit hook IS, relative to
   branch protection. `fast-feedback` if the hook is described as local, skippable
   feedback in front of an authority elsewhere; `enforcement` if the hook is

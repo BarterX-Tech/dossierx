@@ -980,6 +980,51 @@ func TestGateFanoutProduce_FlagContract(t *testing.T) {
 	}
 	root := surfaceRepoRoot(t)
 
+	// THIS TEST IS HERMETIC IN gate/fanout.json, and it has to be, because it
+	// drives the REAL producer against the REAL checkout while asserting that no
+	// record exists afterwards.
+	//
+	// WHAT WENT WRONG, MEASURED. In a checkout where `make ci-evidence` has
+	// already written a fan-out record — which is every checkout in the middle of
+	// a release, the one moment this suite is most likely to be run — all five
+	// refusal rows below failed, each reporting "a run that refused wrote
+	// gate/fanout.json into the checkout under test" about a run that wrote
+	// nothing at all. The file was somebody else's, already on disk, and the
+	// assertion could not tell that from a record the run had just produced. Five
+	// false findings that read exactly like true ones.
+	//
+	// WHAT DID NOT HAPPEN, stated because the opposite is the natural guess.
+	// gateFanoutProduce does deliberately `os.Remove` the previous run's record —
+	// deliberate and right, because a refusal that left the old record in place
+	// would leave the driver reading a run identifier for a fan-out nobody
+	// re-ran. Every row here refuses BEFORE that point, though: the tree
+	// arguments are checked first, precisely so a mistyped tree does not cost a
+	// run somebody already paid thirteen agents for. So this test never destroyed
+	// a release's evidence, and the stash is not what stops it from doing so.
+	//
+	// The stash earns its place by making the assertion mean what it says. With
+	// the file moved aside the baseline is genuinely "no record", so anything
+	// found afterwards was written by the run under test — and the checkout is
+	// left exactly as it was found, including for a future row that does reach
+	// the removal.
+	fanoutPath := filepath.Join(root, filepath.FromSlash(gateFanoutFile))
+	switch stashed, err := os.ReadFile(fanoutPath); {
+	case err == nil:
+		if err := os.Remove(fanoutPath); err != nil {
+			t.Fatalf("the checkout holds a fan-out record at %s and it could not be moved aside: %v\nThis test drives the real producer against this checkout, and every row below asserts that no record exists afterwards. Run without stashing it, the rows that produce nothing would fail over somebody else's file and the rows that produce would DELETE it", gateFanoutFile, err)
+		}
+		t.Cleanup(func() {
+			if err := os.WriteFile(fanoutPath, stashed, 0o644); err != nil {
+				t.Errorf("the fan-out record stashed from %s could not be restored: %v\nThe checkout is now missing evidence it had before this test ran, and the release driver's D1 refuses a tree whose fan-out record is absent. The bytes were:\n%s", gateFanoutFile, err, stashed)
+			}
+		})
+	case errors.Is(err, os.ErrNotExist):
+		// The ordinary case outside a release. Nothing to stash, and the rows
+		// below start from the baseline they assume.
+	default:
+		t.Fatalf("the fan-out record at %s could not be read to stash it: %v\nIt is not absent and it is not readable, so this test can neither establish its baseline nor promise to leave the checkout as it found it", gateFanoutFile, err)
+	}
+
 	run := func(t *testing.T, args ...string) (output string, code int) {
 		t.Helper()
 		full := append([]string{"test", "./cmd/dossierx", "-run", "^TestGateFanoutProduce$", "-count=1", "-v"}, args...)

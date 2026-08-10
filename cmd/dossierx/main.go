@@ -2522,7 +2522,7 @@ func newUnlockCmd() *cobra.Command {
 // re-show that the write happened, without re-deriving anything.
 //
 // Trigger names why the claim is review_pending at all: "flag" (a recorded
-// dossierx flag), "drift" (a dependency changed), or "none" (a drift that was
+// dossierx claim flag), "drift" (a dependency changed), or "none" (a drift that was
 // reverted, leaving the flag set with nothing left to explain it). It matters
 // because reaudit is the DRIFT tool, and an agent that finds trigger "none"
 // should be reaching for unlock -> fix -> lock, not for this command.
