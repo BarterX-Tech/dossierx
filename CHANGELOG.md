@@ -5,6 +5,130 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-08-10
+
+**SILENT: the embedded agent skills changed, and nothing on your side reports it.
+Re-run `dossierx skills export` after upgrading.** Those bundles are written into a project as
+committed artifacts, and nothing in `dossierx check` compares an exported copy against the
+binary's. A project that skips the re-export keeps v0.5.1's guidance: an install line fetching
+`scripts/install-git-hook.sh` from the v0.5.1 raw path, and a build-order rule with no answer for
+a declared contract.
+
+**VISIBLE, and the one thing to check before upgrading: `dossierx version` prints a different
+string from the published archive.** v0.5.1's archive printed `0.5.1`; v0.5.2's prints `v0.5.2`.
+
+The same release used to answer that question two ways depending on how it was installed.
+`.goreleaser.yaml` stamped `-X main.version={{.Version}}`, which is the tag with its leading `v`
+stripped, so the archive printed the bare form. `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.1`
+applies no ldflags at all, falls back to `debug.ReadBuildInfo`, and gets the tag verbatim from the
+module proxy — so that binary printed `v0.5.1`. The practical hazard was never cosmetic: a scripted
+`dossierx version --format json | jq -r .data.version` compared against a `vX.Y.Z` tag succeeded via
+one install path and failed via the other. The stamp is now `{{.Tag}}`, both paths print the tag
+exactly as tagged, and that is the form the git tag, this file's own headings and every string on
+the site already used. **If your tooling compares that field against a bare `X.Y.Z`, this is the
+release where it changes.** Nothing in `cmd/dossierx` moved to achieve it — `resolveVersionInfo`
+already produced the tag verbatim, so the two paths converge rather than being reconciled.
+
+**Nothing else a consumer runs behaves differently.** No new or changed command, flag,
+`error.code`, lint rule or schema field, and no engine behaviour moves. The engine changes in this
+release are five doc comments naming a verb this CLI has not had since the noun surface landed —
+`dossierx flag`, where the verb is `dossierx claim flag` — and one that described the `mockup_modules`
+allowlist as gating `layout: mockup` when v0.4.1 widened it to gate any claim carrying `raw_html`,
+on any layout.
+
+### The release pipeline can complete unattended
+
+This is what the release is for. The driver pushes the tag first, verifies the six archives, and
+pushes main last — deliberately, so the site never announces a release whose archives do not exist
+yet. The forge's gate then required the tagged commit to be reachable from `origin/main`. Each
+guard is right on its own and proven by its own mutation test; together they deadlock. The gate job
+fires on the **tag** push and asks there for a branch the driver pushes two steps later, so it
+refuses, so no archives are built, so the driver waits for archives that can never exist, so main
+never moves. Nothing in that ring can move first and no timeout resolves it. Measured in v0.5.1:
+the driver polled for twenty minutes and stopped with the tag public and nothing else done, and a
+human finished that release by hand following the driver's printed recovery.
+
+Reachability is replaced by a fact the gate can establish at tag-push time holding nothing but the
+tag: **the tagged commit must be a merge.** A real release always passes, because the driver merges
+with `--no-ff` and tags that merge by value.
+
+The cost is stated rather than described as fixed, in `.github/workflows/release.yml`'s header and
+in `docs/RELEASING.md`. Reachability refused a tag on any commit not on main; merge-ness refuses a
+tag on a single-parent commit. So this still closes the failure the old check was written for —
+tagging the release branch instead of the merge — and no longer closes a merge commit created
+locally and never pushed. The release stamp does not cover that either: a branch ready to merge
+already carries this release's stamp, which is exactly when it would be mistagged. And the gate
+receipt cannot close it from the forge, because the receipt is never committed — `gate/.gitignore`
+ignores every run-produced artifact on purpose, so that a copy left on disk cannot look
+authoritative. A forge-side tag protection rule on `v*` is what would close it, which is the same
+accepted residual that file already recorded.
+
+Nothing pinned the forge's guard list, so deleting a guard was invisible to `go test ./...` and so
+is restoring one. `TestTheReleaseGateDoesNotAskTheForgeForOriginMain` now refuses both spellings of
+the restoration and requires the replacement to still be present.
+
+### The gate stopped re-reporting a class of finding about itself
+
+`surfaces.yaml` claims every tracked file for exactly one surface, and each reviewing agent is
+handed that one surface's documents split into handed and withheld. So a sentence in
+`CONTRIBUTING.md` whose truth turns on `docs/RELEASING.md` was unanswerable **by construction**:
+that file belongs to another surface, so it was not handed, not withheld, and not present at all.
+The frame tells an agent that a byte it does not hold is never a reason to guess and never a reason
+to pass, so every gate round produced the same findings — correct each time, and about the gate's
+own material rather than about the release.
+
+A surface entry may now carry a `reads:` list of exact repository-relative paths it does not own
+but needs. Those bytes are handed over as context and marked as belonging to another surface.
+Ownership is untouched: `reads:` takes no part in the manifest's exactly-one rule, and the
+assembler refuses any overlap with the surface's own documents. An unresolvable entry refuses the
+whole fan-out rather than producing a shorter bundle, because a bundle assembled over less than it
+should be still hashes, still looks like a match, and still carries a verdict forward.
+
+The frame now distinguishes three states rather than two — yours and handed, yours and withheld,
+handed as context and not yours. Without that an agent reviews another surface's file under its own
+name, and since nothing is filtered on the way to the human that finding arrives twice, attributed
+to the wrong surface.
+
+### Fixed
+
+- **The release page never showed the BREAKING notice.** A published release page carried grouped
+  commit subjects and nothing else, so v0.5.0's breaking change appeared as an ordinary Features
+  bullet. Every page now carries a footer pointing at this file. The footer resolves no template,
+  and that is deliberate: goreleaser composes header and footer into the release **body** at publish
+  time, so a broken template is caught by nothing — `goreleaser check` validates one naming a field
+  that does not exist, and `--skip=publish` never composes a body at all. The release-notes
+  predictor models the literal footer and refuses a templated one. (#33)
+- **A release branch named `vX.Y.Z` collides with the tag it becomes.** `git push origin v0.5.0`
+  failed outright with `src refspec … matches more than one`, and `git rev-parse v0.5.0^{commit}`
+  succeeded by git's search order while the branch pointed elsewhere. The procedure's commands are
+  fully qualified, and it now refuses the colliding branch name up front. (#40)
+- **`build_role` had no phase for a declared contract.** `schema` is documented as covering anything
+  that must exist before the things below it can conform to it, which includes a signature an
+  implementation is written against. No code changes and no corpus revalidates. (#31)
+- **The site under-described what shipped.** The `serve` card omitted `GET /api/graph`, and the
+  claims graph appeared nowhere outside its own release entry. (#34)
+- **A local green said less than it looked like.** `CONTRIBUTING.md` now states that the CI hook
+  matrix outranks a local `make hook-test`, and that a green against a Chromium fork is not a green
+  against Chrome. (#36)
+- **Two test guards advertised more than they checked.** The summary dash guard promised to refuse
+  both the en dash and the em dash and checked one — and could not check the other against rendered
+  output, since the em dash is live in the same emitter. The `</details>` ordering probe found the
+  first closer in the output, which is the footer's only because that fixture claim carries an edge.
+  (#29, #28)
+- **A gate test reported findings about a file it never touched.** In a checkout where
+  `make ci-evidence` had already written a fan-out record, all five refusal rows of the fanout
+  flag-contract test failed, each claiming a run had written `gate/fanout.json` when it had written
+  nothing.
+- **The `cli-operator` subject vocabulary had no value for a CI check**, forcing a hand override at
+  every release. It gains `ci`.
+
+### Closed without a change
+
+- **#39** asked that the ldflags assertion move off the `go install` path onto the published
+  archive. `docs/RELEASING.md` already does exactly that, and the file the issue names was deleted
+  with the old checklist.
+- **#35** is a stale example version inside that same deleted file.
+
 ## [0.5.1] - 2026-08-10
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
