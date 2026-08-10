@@ -15,7 +15,7 @@ description: >-
 
 # DossierX claims — authoring and lifecycle
 
-Read **[[dossierx]]** first: the envelope, the exit codes, the `error.code` recovery table and
+Read **[`dossierx`](../dossierx/SKILL.md)** first: the envelope, the exit codes, the `error.code` recovery table and
 the five rules are there and are not repeated here.
 
 ## The contract, in one table
@@ -62,7 +62,7 @@ it out.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required
   before a claim can lock** once a module uses the feature. It orders implementation (see
-  **[[dossierx-build-order]]**) and has nothing to do with `section`/`order`, which are the
+  **[`dossierx-build-order`](../dossierx-build-order/SKILL.md)**) and has nothing to do with `section`/`order`, which are the
   human's reading order in the viewer.
 - Edges: `mirrors` (value equality; both sides must declare it), `rests_on` (semantic dependency;
   the target must exist), `governed_by: {type, reason}` —
@@ -156,8 +156,8 @@ three independent triggers stands:
 | trigger | set by | cleared by |
 |---|---|---|
 | a baselined dependency's content changed underneath it — `mirrors`, `rests_on`, or a claim-valued `governed_by.type` | `dossierx check`, from a stored hash | `dossierx claim reaudit <id> --confirm --reason "..."` |
-| shipped code no longer matches the claim | `dossierx claim flag` (see **[[dossierx-code-links]]**) | the same confirmed reaudit |
-| an open comment thread on the claim | anyone commenting (see **[[dossierx-comments]]**) | the **human** resolving it in the viewer |
+| shipped code no longer matches the claim | `dossierx claim flag` (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**) | the same confirmed reaudit |
+| an open comment thread on the claim | anyone commenting (see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**) | the **human** resolving it in the viewer |
 
 It is set automatically and never cleared automatically: it clears only once *every* standing
 trigger is gone. `unlock` also clears it, by leaving the locked state entirely. A claim locked
@@ -194,7 +194,7 @@ engine.
 **Branch on `rule` inside `data.ledger_findings`, not on the code** — one is not tampering.
 `lock-ledger-pre-ledger` means the project's lock store predates the ledger and it still holds
 something locked: the fix is the ordered crossing — re-propose every locked build order, unlock
-every locked claim, then re-lock what the human stands behind (see **[[dossierx]]**). There is no
+every locked claim, then re-lock what the human stands behind (see **[`dossierx`](../dossierx/SKILL.md)**). There is no
 migration command. Do not confuse it with `lock-ledger-absent`, which means the ledger file is
 **gone** while locked claims remain — the two are told apart by the store itself, not by history.
 To move `claims_dir` legitimately, move the claims and the stores in the **same** commit, claim

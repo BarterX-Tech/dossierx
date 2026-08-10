@@ -1,0 +1,54 @@
+# gate-cost-model.yaml fixture — a second move that names the seed as what it
+# replaced
+#
+# This is the shape a model is pushed into when every edit is anchored to the
+# seed. k really did move twice — 1.2 -> 1.5, then 1.5 -> 1.38 — but the second
+# move here says it replaced 1.2. That is false: 1.2 stopped being in force at
+# the first move. The file then reads as though 1.5 was never in force at all,
+# so any run recorded while it was becomes a run quoted at a number the model
+# does not account for.
+#
+# NOTHING ABOUT THE SIZE OF THE MOVE REFUSES THIS. As claimed, 1.2 -> 1.38 is
+# +15% and inside the raise bound; as it actually happened, 1.5 -> 1.38 is -8%
+# and inside the lower bound. Both readings are legal moves. What refuses it is
+# the chain: what stood before this edit is the move before it, at 1.5.
+schema: dossierx.gate-cost-model/1
+reserve:
+  value: 20000
+  unit: output_tokens
+backstop_factor:
+  value: 1.5
+classes:
+  - name: falsification-dense
+    seed:
+      value: 1.2
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value. It is not a measurement of this project and must never be copied into the committed model."
+    k:
+      - value: 1.5
+        numerator_unit: output_tokens
+        denominator_unit: bytes
+        previous: 1.2
+        rationale: "The first wave came in over its quote."
+      - value: 1.38
+        numerator_unit: output_tokens
+        denominator_unit: bytes
+        previous: 1.2
+        rationale: "Trimmed after the second wave."
+  - name: newest-entry-only
+    seed:
+      value: 0.6
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value. It is not a measurement of this project and must never be copied into the committed model."
+surfaces:
+  - name: readme
+    class: falsification-dense
+    document_basis: manifest.tracked_files
+  - name: changelog
+    class: newest-entry-only
+    document_basis: manifest.tracked_files
+  - name: roadmap
+    class: newest-entry-only
+    document_basis: manifest.tracked_files

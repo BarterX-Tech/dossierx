@@ -35,8 +35,12 @@ archives:
     name_template: >-
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
+      # `formats` (plural), not the deprecated `format`: GoReleaser's own
+      # `check` fails a configuration that uses the singular spelling, and the
+      # release gate reads that check's exit status. See
+      # https://goreleaser.com/deprecations#archivesformat_overridesformat
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
@@ -56,6 +60,15 @@ changelog:
     exclude:
       - "^chore:"
       - "^docs:"
+      # Without this, the branch-range prediction (pre-merge, no merge commit
+      # yet) and the merge-commit-range prediction (post-merge) can never
+      # agree: a "--no-ff" merge's own subject ("Merge pull request #32 —
+      # v0.5.0, a claims graph in the viewer", eab3a63 in this repo's history)
+      # matches neither ^chore: nor ^docs:, so GoReleaser's catch-all "Other
+      # changes" group swallows it into the PUBLISHED release notes, and no
+      # pre-merge prediction can ever have seen it (git log --merges
+      # v0.4.1..v0.5.0 confirms it is the only merge subject in that range).
+      - "^Merge "
 
 release:
   github:

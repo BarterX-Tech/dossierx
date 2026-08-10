@@ -1,0 +1,34 @@
+# gate-cost-model.yaml fixture — the legal model every ledger fixture below is checked against
+#
+# Three surfaces, two classes, every decision made. Nothing here describes
+# this repository: the seeds are round numbers chosen so the arithmetic in the
+# ledger fixtures can be read off the page.
+schema: dossierx.gate-cost-model/1
+reserve:
+  value: 20000
+  unit: output_tokens
+backstop_factor:
+  value: 1.5
+classes:
+  - name: falsification-dense
+    seed:
+      value: 1.2
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value. It is not a measurement of this project and must never be copied into the committed model."
+  - name: newest-entry-only
+    seed:
+      value: 0.6
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value. It is not a measurement of this project and must never be copied into the committed model."
+surfaces:
+  - name: readme
+    class: falsification-dense
+    document_basis: manifest.tracked_files
+  - name: changelog
+    class: newest-entry-only
+    document_basis: manifest.tracked_files
+  - name: roadmap
+    class: newest-entry-only
+    document_basis: manifest.tracked_files

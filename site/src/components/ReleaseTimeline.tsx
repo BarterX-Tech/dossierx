@@ -6,12 +6,17 @@ export interface Release {
   title: string;
   tag: string;
   highlights: string[];
-  /**
-   * The tagged commit, on the newest entry only. Not rendered here — it feeds
-   * the `dossierx version` example in content.ts, which used to carry its own
-   * hand-typed copy of the version, commit and date and went stale on release.
-   */
-  commit?: string;
+  // There is deliberately NO `commit` field. It held the tagged release's short
+  // sha, it could not converge (writing the sha is itself a commit, so the value
+  // was stale the moment it landed), it named the wrong sha for two releases
+  // running, and it disagreed with the binary by construction — seven characters
+  // against the forty GoReleaser stamps into `main.commit`. The data, its one
+  // reader and the release step that wrote it are all gone.
+  //
+  // The DECLARATION is what outlived them, and it is why this comment exists
+  // rather than nothing. An optional field on the interface is a standing
+  // invitation: it makes `commit: "abc1234"` on an entry type-check, so the
+  // field comes back silently and only then acquires a reader. Do not re-add it.
 }
 
 interface ReleaseTimelineProps {

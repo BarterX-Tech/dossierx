@@ -14,7 +14,7 @@ description: >-
 
 # DossierX comments — the human's half of the loop
 
-Read **[[dossierx]]** first for the envelope, exit codes and error codes.
+Read **[`dossierx`](../dossierx/SKILL.md)** first for the envelope, exit codes and error codes.
 
 A comment is a threaded conversation attached to a claim. It is **dialogue about** a claim, never
 a change to one. It is also the only channel in this design that runs from the human to you, so
@@ -152,7 +152,7 @@ with them. It would also forge the approval that the lock gate is waiting for.
 
 **Can you state a specific before/after for the claim's wording?**
 
-- **Yes → `dossierx claim flag`** (see **[[dossierx-code-links]]**). Only for a **locked** claim
+- **Yes → `dossierx claim flag`** (see **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**). Only for a **locked** claim
   whose stated meaning has drifted from what the code now does. It carries `--claim-says` /
   `--now-does` / `--reason`, sets `review_pending`, and feeds the reaudit diff.
 - **No → a comment.** "Is this still true?", "why was it done this way?", "I think this rests_on

@@ -1,0 +1,11 @@
+{
+  "run": "<<RUN>>",
+  "surface": "changelog",
+  "verdict": "FAILED",
+  "fingerprint": "<<FINGERPRINT>>",
+  "findings": [],
+  "subjects": {
+    "cli-operator": "agent",
+    "go-toolchain-floor": "1.26"
+  }
+}

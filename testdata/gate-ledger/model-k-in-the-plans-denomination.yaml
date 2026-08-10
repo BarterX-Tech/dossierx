@@ -1,0 +1,39 @@
+# gate-cost-model.yaml fixture — k stated in the denomination the release plan uses
+#
+# The plan defines k as total tokens an agent spends per token of document it
+# reads — its own document, plus the shared surface.json and delta, plus
+# reasoning and written findings — and gives the three class seeds 3.5 / 2.5 /
+# 2.0 in that denomination. C18 pins the enforceable unit as output tokens,
+# which excludes everything the agent READS. This file states the plan's
+# denomination faithfully; the validator refuses it on both units. That refusal
+# is the only place in this repository where the two statements sit beside each
+# other.
+schema: dossierx.gate-cost-model/1
+reserve:
+  value: 20000
+  unit: output_tokens
+backstop_factor:
+  value: 1.5
+classes:
+  - name: falsification-dense
+    seed:
+      value: 3.5
+      numerator_unit: total_tokens
+      denominator_unit: document_tokens
+      derived_from: "release-pipeline-plan.html:1519-1568, the constants table and the k anatomy figure"
+  - name: newest-entry-only
+    seed:
+      value: 2.0
+      numerator_unit: total_tokens
+      denominator_unit: document_tokens
+      derived_from: "release-pipeline-plan.html:1519-1568, the constants table and the k anatomy figure"
+surfaces:
+  - name: readme
+    class: falsification-dense
+    document_basis: manifest.tracked_files
+  - name: changelog
+    class: newest-entry-only
+    document_basis: manifest.tracked_files
+  - name: roadmap
+    class: newest-entry-only
+    document_basis: manifest.tracked_files

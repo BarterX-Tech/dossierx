@@ -8,3 +8,10 @@ dossierx
 chrome-user-data/
 chromedp-*/
 /tmp/
+
+# site-text.json is the site extraction's OUTPUT (site_dom_test.go): every
+# string a visitor can reach on either entry point, derived from a build of
+# site/ at test time. It is evidence for one gate run, not a tracked artifact —
+# unlike surface.json it cannot be byte-stable across machines, since producing
+# it means running npm and a real browser.
+site-text.json

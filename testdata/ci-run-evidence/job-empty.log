@@ -1,0 +1,254 @@
+﻿2026-08-07T06:17:32.6523814Z Current runner version: '2.336.0'
+2026-08-07T06:17:32.6547968Z ##[group]Runner Image Provisioner
+2026-08-07T06:17:32.6549268Z Hosted Compute Agent
+2026-08-07T06:17:32.6549955Z Version: 20260729.566
+2026-08-07T06:17:32.6550580Z Commit: cf7153fe6e25b664e8693c24944bf2b00355d109
+2026-08-07T06:17:32.6551854Z Build Date: 2026-07-29T19:17:02Z
+2026-08-07T06:17:32.6552621Z Worker ID: {e95b9b24-b79d-442a-a784-2ddeb0f7e063}
+2026-08-07T06:17:32.6553320Z Azure Region: eastus
+2026-08-07T06:17:32.6553923Z ##[endgroup]
+2026-08-07T06:17:32.6555453Z ##[group]Operating System
+2026-08-07T06:17:32.6556078Z Ubuntu
+2026-08-07T06:17:32.6556726Z 24.04.4
+2026-08-07T06:17:32.6557237Z LTS
+2026-08-07T06:17:32.6557771Z ##[endgroup]
+2026-08-07T06:17:32.6558342Z ##[group]Runner Image
+2026-08-07T06:17:32.6558932Z Image: ubuntu-24.04
+2026-08-07T06:17:32.6559567Z Version: 20260804.265.1
+2026-08-07T06:17:32.6560755Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20260804.265/images/ubuntu/Ubuntu2404-Readme.md
+2026-08-07T06:17:32.6562582Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20260804.265
+2026-08-07T06:17:32.6563540Z ##[endgroup]
+2026-08-07T06:17:32.6564726Z ##[group]GITHUB_TOKEN Permissions
+2026-08-07T06:17:32.6566866Z Contents: read
+2026-08-07T06:17:32.6567846Z Metadata: read
+2026-08-07T06:17:32.6568449Z ##[endgroup]
+2026-08-07T06:17:32.6571535Z Secret source: Actions
+2026-08-07T06:17:32.6573073Z Prepare workflow directory
+2026-08-07T06:17:32.6898555Z Prepare all required actions
+2026-08-07T06:17:32.6946711Z Getting action download info
+2026-08-07T06:17:32.8997029Z Download action repository 'actions/checkout@v7' (SHA:3d3c42e5aac5ba805825da76410c181273ba90b1)
+2026-08-07T06:17:33.0461837Z Download action repository 'actions/setup-go@v7' (SHA:b7ad1dad31e06c5925ef5d2fc7ad053ef454303e)
+2026-08-07T06:17:33.3194343Z Complete job name: viewer (headless chrome)
+2026-08-07T06:17:33.3951100Z ##[group]Run actions/checkout@v7
+2026-08-07T06:17:33.3952042Z with:
+2026-08-07T06:17:33.3952516Z   repository: BarterX-Tech/dossierx
+2026-08-07T06:17:33.3956409Z   token: ***
+2026-08-07T06:17:33.3956854Z   ssh-strict: true
+2026-08-07T06:17:33.3957297Z   ssh-user: git
+2026-08-07T06:17:33.3957753Z   persist-credentials: true
+2026-08-07T06:17:33.3958251Z   clean: true
+2026-08-07T06:17:33.3958706Z   sparse-checkout-cone-mode: true
+2026-08-07T06:17:33.3959241Z   fetch-depth: 1
+2026-08-07T06:17:33.3959680Z   fetch-tags: false
+2026-08-07T06:17:33.3960132Z   show-progress: true
+2026-08-07T06:17:33.3960588Z   lfs: false
+2026-08-07T06:17:33.3961192Z   submodules: false
+2026-08-07T06:17:33.3961669Z   set-safe-directory: true
+2026-08-07T06:17:33.3962189Z   allow-unsafe-pr-checkout: false
+2026-08-07T06:17:33.3962984Z ##[endgroup]
+2026-08-07T06:17:33.5011854Z Syncing repository: BarterX-Tech/dossierx
+2026-08-07T06:17:33.5014564Z ##[group]Getting Git version info
+2026-08-07T06:17:33.5015871Z Working directory is '/home/runner/work/dossierx/dossierx'
+2026-08-07T06:17:33.5017571Z [command]/usr/bin/git version
+2026-08-07T06:17:33.5089497Z git version 2.54.0
+2026-08-07T06:17:33.5111662Z ##[endgroup]
+2026-08-07T06:17:33.5129976Z Temporarily overriding HOME='/home/runner/work/_temp/96e4474d-03ba-45bf-b7ef-7272b3d19ede' before making global git config changes
+2026-08-07T06:17:33.5133012Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-07T06:17:33.5138421Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/dossierx/dossierx
+2026-08-07T06:17:33.5195306Z Deleting the contents of '/home/runner/work/dossierx/dossierx'
+2026-08-07T06:17:33.5199274Z ##[group]Determining repository object format
+2026-08-07T06:17:33.5201549Z ##[endgroup]
+2026-08-07T06:17:33.5202879Z ##[group]Initializing the repository
+2026-08-07T06:17:33.5206429Z [command]/usr/bin/git init /home/runner/work/dossierx/dossierx
+2026-08-07T06:17:33.5332918Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-08-07T06:17:33.5334160Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-08-07T06:17:33.5335702Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-08-07T06:17:33.5336482Z hint: call:
+2026-08-07T06:17:33.5336901Z hint:
+2026-08-07T06:17:33.5337440Z hint: 	git config --global init.defaultBranch <name>
+2026-08-07T06:17:33.5338067Z hint:
+2026-08-07T06:17:33.5338666Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-08-07T06:17:33.5339602Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-08-07T06:17:33.5340333Z hint:
+2026-08-07T06:17:33.5340764Z hint: 	git branch -m <name>
+2026-08-07T06:17:33.5341829Z hint:
+2026-08-07T06:17:33.5342500Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-08-07T06:17:33.5351862Z Initialized empty Git repository in /home/runner/work/dossierx/dossierx/.git/
+2026-08-07T06:17:33.5365664Z [command]/usr/bin/git remote add origin https://github.com/BarterX-Tech/dossierx
+2026-08-07T06:17:33.5419128Z ##[endgroup]
+2026-08-07T06:17:33.5420416Z ##[group]Disabling automatic garbage collection
+2026-08-07T06:17:33.5423798Z [command]/usr/bin/git config --local gc.auto 0
+2026-08-07T06:17:33.5457923Z ##[endgroup]
+2026-08-07T06:17:33.5459182Z ##[group]Setting up auth
+2026-08-07T06:17:33.5460089Z Removing SSH command configuration
+2026-08-07T06:17:33.5463623Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-07T06:17:33.5503915Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-07T06:17:33.5938045Z Removing HTTP extra header
+2026-08-07T06:17:33.5945015Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-07T06:17:33.5981893Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-07T06:17:33.6198668Z Removing includeIf entries pointing to credentials config files
+2026-08-07T06:17:33.6204585Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-07T06:17:33.6251224Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-07T06:17:33.6493047Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-08-07T06:17:33.6567072Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/dossierx/dossierx/.git.path /home/runner/work/_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:17:33.6604116Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/dossierx/dossierx/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:17:33.6645189Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:17:33.6683203Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:17:33.6718705Z ##[endgroup]
+2026-08-07T06:17:33.6719732Z ##[group]Fetching the repository
+2026-08-07T06:17:33.6726963Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +3217a48b4a123ea4b8b02f93fac6337b985eb7ce:refs/remotes/origin/main
+2026-08-07T06:17:34.3175897Z From https://github.com/BarterX-Tech/dossierx
+2026-08-07T06:17:34.3211594Z  * [new ref]         3217a48b4a123ea4b8b02f93fac6337b985eb7ce -> origin/main
+2026-08-07T06:17:34.3217317Z [command]/usr/bin/git branch --list --remote origin/main
+2026-08-07T06:17:34.3318670Z   origin/main
+2026-08-07T06:17:34.3326886Z [command]/usr/bin/git rev-parse refs/remotes/origin/main
+2026-08-07T06:17:34.3352674Z 3217a48b4a123ea4b8b02f93fac6337b985eb7ce
+2026-08-07T06:17:34.3357355Z ##[endgroup]
+2026-08-07T06:17:34.3358466Z ##[group]Determining the checkout info
+2026-08-07T06:17:34.3359393Z ##[endgroup]
+2026-08-07T06:17:34.3361795Z [command]/usr/bin/git sparse-checkout disable
+2026-08-07T06:17:34.3409155Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-08-07T06:17:34.3441753Z ##[group]Checking out the ref
+2026-08-07T06:17:34.3445762Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2026-08-07T06:17:34.4098899Z Switched to a new branch 'main'
+2026-08-07T06:17:34.4100771Z branch 'main' set up to track 'origin/main'.
+2026-08-07T06:17:34.4112705Z ##[endgroup]
+2026-08-07T06:17:34.4165923Z [command]/usr/bin/git log -1 --format=%H
+2026-08-07T06:17:34.4197198Z 3217a48b4a123ea4b8b02f93fac6337b985eb7ce
+2026-08-07T06:17:34.4509436Z ##[group]Run actions/setup-go@v7
+2026-08-07T06:17:34.4510287Z with:
+2026-08-07T06:17:34.4510761Z   go-version: 1.26.x
+2026-08-07T06:17:34.4511576Z   cache: true
+2026-08-07T06:17:34.4512258Z   cache-dependency-path: go.sum
+viewer-tests/go.sum
+
+2026-08-07T06:17:34.4513223Z   check-latest: false
+2026-08-07T06:17:34.4522939Z   token: ***
+2026-08-07T06:17:34.4523437Z ##[endgroup]
+2026-08-07T06:17:34.5700754Z Setup go version spec 1.26.x
+2026-08-07T06:17:34.5852725Z Found in cache @ /opt/hostedtoolcache/go/1.26.5/x64
+2026-08-07T06:17:34.5854677Z Added go to the path
+2026-08-07T06:17:34.5855973Z Successfully set up Go version 1.26.x
+2026-08-07T06:17:35.2010746Z [command]/opt/hostedtoolcache/go/1.26.5/x64/bin/go env GOMODCACHE
+2026-08-07T06:17:35.2050033Z [command]/opt/hostedtoolcache/go/1.26.5/x64/bin/go env GOCACHE
+2026-08-07T06:17:35.2083063Z /home/runner/go/pkg/mod
+2026-08-07T06:17:35.2108093Z /home/runner/.cache/go-build
+2026-08-07T06:17:35.2921009Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.5-1b5605de73522962f675d22b65268745b8124d44adde7ce006221275a9f1ef89
+2026-08-07T06:17:35.5955801Z Received 39795327 of 39795327 (100.0%), 147.1 MBs/sec
+2026-08-07T06:17:35.5956522Z Cache Size: ~38 MB (39795327 B)
+2026-08-07T06:17:35.5990114Z [command]/usr/bin/tar -xf /home/runner/work/_temp/715d493b-8462-43ff-b4d3-23534f0e00b9/cache.tzst -P -C /home/runner/work/dossierx/dossierx --use-compress-program unzstd
+2026-08-07T06:17:35.9001176Z Cache restored successfully
+2026-08-07T06:17:35.9022600Z Cache restored from key: setup-go-Linux-x64-ubuntu24-go-1.26.5-1b5605de73522962f675d22b65268745b8124d44adde7ce006221275a9f1ef89
+2026-08-07T06:17:35.9044847Z go version go1.26.5 linux/amd64
+2026-08-07T06:17:35.9045087Z 
+2026-08-07T06:17:35.9045376Z ##[group]go env
+2026-08-07T06:17:35.9435686Z AR='ar'
+2026-08-07T06:17:35.9436173Z CC='gcc'
+2026-08-07T06:17:35.9436604Z CGO_CFLAGS='-O2 -g'
+2026-08-07T06:17:35.9437031Z CGO_CPPFLAGS=''
+2026-08-07T06:17:35.9437438Z CGO_CXXFLAGS='-O2 -g'
+2026-08-07T06:17:35.9437949Z CGO_ENABLED='1'
+2026-08-07T06:17:35.9438361Z CGO_FFLAGS='-O2 -g'
+2026-08-07T06:17:35.9438757Z CGO_LDFLAGS='-O2 -g'
+2026-08-07T06:17:35.9439129Z CXX='g++'
+2026-08-07T06:17:35.9439462Z GCCGO='gccgo'
+2026-08-07T06:17:35.9439818Z GO111MODULE=''
+2026-08-07T06:17:35.9440171Z GOAMD64='v1'
+2026-08-07T06:17:35.9440568Z GOARCH='amd64'
+2026-08-07T06:17:35.9441172Z GOAUTH='netrc'
+2026-08-07T06:17:35.9441555Z GOBIN=''
+2026-08-07T06:17:35.9441943Z GOCACHE='/home/runner/.cache/go-build'
+2026-08-07T06:17:35.9442457Z GOCACHEPROG=''
+2026-08-07T06:17:35.9442714Z GODEBUG=''
+2026-08-07T06:17:35.9443728Z GOENV='/home/runner/.config/go/env'
+2026-08-07T06:17:35.9444036Z GOEXE=''
+2026-08-07T06:17:35.9444262Z GOEXPERIMENT=''
+2026-08-07T06:17:35.9444501Z GOFIPS140='off'
+2026-08-07T06:17:35.9444726Z GOFLAGS=''
+2026-08-07T06:17:35.9445792Z GOGCCFLAGS='-fPIC -m64 -pthread -Wl,--no-gc-sections -fmessage-length=0 -ffile-prefix-map=/tmp/go-build1442512490=/tmp/go-build -gno-record-gcc-switches'
+2026-08-07T06:17:35.9446807Z GOHOSTARCH='amd64'
+2026-08-07T06:17:35.9447420Z GOHOSTOS='linux'
+2026-08-07T06:17:35.9447655Z GOINSECURE=''
+2026-08-07T06:17:35.9447949Z GOMOD='/home/runner/work/dossierx/dossierx/go.mod'
+2026-08-07T06:17:35.9448320Z GOMODCACHE='/home/runner/go/pkg/mod'
+2026-08-07T06:17:35.9448616Z GONOPROXY=''
+2026-08-07T06:17:35.9448871Z GONOSUMDB=''
+2026-08-07T06:17:35.9449276Z GOOS='linux'
+2026-08-07T06:17:35.9520521Z GOPATH='/home/runner/go'
+2026-08-07T06:17:35.9521218Z GOPRIVATE=''
+2026-08-07T06:17:35.9521969Z GOPROXY='https://proxy.golang.org,direct'
+2026-08-07T06:17:35.9522649Z GOROOT='/opt/hostedtoolcache/go/1.26.5/x64'
+2026-08-07T06:17:35.9523170Z GOSUMDB='sum.golang.org'
+2026-08-07T06:17:35.9523590Z GOTELEMETRY='local'
+2026-08-07T06:17:35.9524051Z GOTELEMETRYDIR='/home/runner/.config/go/telemetry'
+2026-08-07T06:17:35.9524581Z GOTMPDIR=''
+2026-08-07T06:17:35.9524925Z GOTOOLCHAIN='local'
+2026-08-07T06:17:35.9525525Z GOTOOLDIR='/opt/hostedtoolcache/go/1.26.5/x64/pkg/tool/linux_amd64'
+2026-08-07T06:17:35.9526166Z GOVCS=''
+2026-08-07T06:17:35.9526908Z GOVERSION='go1.26.5'
+2026-08-07T06:17:35.9527299Z GOWORK=''
+2026-08-07T06:17:35.9527663Z PKG_CONFIG='pkg-config'
+2026-08-07T06:17:35.9527920Z 
+2026-08-07T06:17:35.9528373Z ##[endgroup]
+2026-08-07T06:17:35.9622306Z ##[group]Run for c in /usr/bin/google-chrome /usr/bin/chromium /usr/bin/chromium-browser; do
+2026-08-07T06:17:35.9623046Z [36;1mfor c in /usr/bin/google-chrome /usr/bin/chromium /usr/bin/chromium-browser; do[0m
+2026-08-07T06:17:35.9623503Z [36;1m  if [ -x "$c" ]; then[0m
+2026-08-07T06:17:35.9623760Z [36;1m    echo "using $c"[0m
+2026-08-07T06:17:35.9624066Z [36;1m    echo "DOSSIERX_TEST_BROWSER=$c" >>"$GITHUB_ENV"[0m
+2026-08-07T06:17:35.9624388Z [36;1m    exit 0[0m
+2026-08-07T06:17:35.9624593Z [36;1m  fi[0m
+2026-08-07T06:17:35.9624790Z [36;1mdone[0m
+2026-08-07T06:17:35.9625133Z [36;1mecho "no Chrome/Chromium found on this runner image; the viewer suite" >&2[0m
+2026-08-07T06:17:35.9625675Z [36;1mecho "would silently SKIP rather than run, so this job fails instead." >&2[0m
+2026-08-07T06:17:35.9626086Z [36;1mexit 1[0m
+2026-08-07T06:17:35.9814962Z shell: /usr/bin/bash -e {0}
+2026-08-07T06:17:35.9815275Z env:
+2026-08-07T06:17:35.9815490Z   GOTOOLCHAIN: local
+2026-08-07T06:17:35.9815816Z ##[endgroup]
+2026-08-07T06:17:35.9926589Z using /usr/bin/google-chrome
+2026-08-07T06:17:35.9964568Z ##[group]Run go test -count=1 -json ./...
+2026-08-07T06:17:35.9964893Z [36;1mgo test -count=1 -json ./...[0m
+2026-08-07T06:17:36.0027829Z shell: /usr/bin/bash -e {0}
+2026-08-07T06:17:36.0028096Z env:
+2026-08-07T06:17:36.0028297Z   GOTOOLCHAIN: local
+2026-08-07T06:17:36.0028566Z   DOSSIERX_TEST_BROWSER: /usr/bin/google-chrome
+2026-08-07T06:17:36.0028870Z ##[endgroup]
+2026-08-07T06:19:11.3708857Z Post job cleanup.
+2026-08-07T06:19:11.4842509Z [command]/opt/hostedtoolcache/go/1.26.5/x64/bin/go env GOMODCACHE
+2026-08-07T06:19:11.4884554Z [command]/opt/hostedtoolcache/go/1.26.5/x64/bin/go env GOCACHE
+2026-08-07T06:19:11.4920499Z /home/runner/go/pkg/mod
+2026-08-07T06:19:11.4941564Z /home/runner/.cache/go-build
+2026-08-07T06:19:11.4948627Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu24-go-1.26.5-1b5605de73522962f675d22b65268745b8124d44adde7ce006221275a9f1ef89, not saving cache.
+2026-08-07T06:19:11.5161619Z Post job cleanup.
+2026-08-07T06:19:11.6014954Z [command]/usr/bin/git version
+2026-08-07T06:19:11.6056713Z git version 2.54.0
+2026-08-07T06:19:11.6102687Z Temporarily overriding HOME='/home/runner/work/_temp/9584bf41-e884-4c22-b5ff-b393cdc73b34' before making global git config changes
+2026-08-07T06:19:11.6104024Z Adding repository directory to the temporary git global config as a safe directory
+2026-08-07T06:19:11.6108247Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/dossierx/dossierx
+2026-08-07T06:19:11.6141511Z Removing SSH command configuration
+2026-08-07T06:19:11.6148124Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-08-07T06:19:11.6184710Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-08-07T06:19:11.6438815Z Removing HTTP extra header
+2026-08-07T06:19:11.6445200Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-08-07T06:19:11.6481768Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-08-07T06:19:11.6758543Z Removing includeIf entries pointing to credentials config files
+2026-08-07T06:19:11.6767261Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-08-07T06:19:11.6809842Z includeif.gitdir:/home/runner/work/dossierx/dossierx/.git.path
+2026-08-07T06:19:11.6812525Z includeif.gitdir:/home/runner/work/dossierx/dossierx/.git/worktrees/*.path
+2026-08-07T06:19:11.6813458Z includeif.gitdir:/github/workspace/.git.path
+2026-08-07T06:19:11.6814251Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-08-07T06:19:11.6823742Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/dossierx/dossierx/.git.path
+2026-08-07T06:19:11.6858579Z /home/runner/work/_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:19:11.6872658Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/dossierx/dossierx/.git.path \/home\/runner\/work\/_temp\/git\-credentials\-cdd4e811\-4bed\-4f7d\-a2c6\-ca9dff05b27e\.config
+2026-08-07T06:19:11.6926462Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/dossierx/dossierx/.git/worktrees/*.path
+2026-08-07T06:19:11.6963041Z /home/runner/work/_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:19:11.7006937Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/dossierx/dossierx/.git/worktrees/*.path \/home\/runner\/work\/_temp\/git\-credentials\-cdd4e811\-4bed\-4f7d\-a2c6\-ca9dff05b27e\.config
+2026-08-07T06:19:11.7074754Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-08-07T06:19:11.7108063Z /github/runner_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:19:11.7126885Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path \/github\/runner_temp\/git\-credentials\-cdd4e811\-4bed\-4f7d\-a2c6\-ca9dff05b27e\.config
+2026-08-07T06:19:11.7168835Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-08-07T06:19:11.7206458Z /github/runner_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config
+2026-08-07T06:19:11.7217887Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path \/github\/runner_temp\/git\-credentials\-cdd4e811\-4bed\-4f7d\-a2c6\-ca9dff05b27e\.config
+2026-08-07T06:19:11.7253531Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-08-07T06:19:11.7493558Z Removing credentials config '/home/runner/work/_temp/git-credentials-cdd4e811-4bed-4f7d-a2c6-ca9dff05b27e.config'
+2026-08-07T06:19:11.7644543Z Cleaning up orphan processes

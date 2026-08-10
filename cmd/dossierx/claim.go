@@ -397,7 +397,16 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 			actions = append(actions, fmt.Sprintf("%d implementation link(s) drifted -> re-run dossierx claim link, or if the code is right and the claim is wrong: dossierx claim unlock %s --reason \"<their words>\", edit, relock (a %s layout cannot be flagged)", drifted, id, lay))
 			break
 		}
-		actions = append(actions, fmt.Sprintf("%d implementation link(s) drifted -> re-run dossierx claim link, or dossierx claim flag %s if the code is right and the claim is wrong", drifted, id))
+		// The flag invocation is printed WHOLE, with its three required flags,
+		// for the same reason the branch above consults the layout gate: this
+		// function's contract is that its advice can never disagree with what
+		// the command would do, and flag.go refuses a bare `claim flag <id>`
+		// with missing_flag before it reads anything else — --claim-says,
+		// --now-does and --reason are all required and all non-empty. Naming
+		// the verb alone was advice, and a hint that has to be repaired before
+		// it runs is the defect cmd/dossierx/output.go's reasonInvocations
+		// exists to have stopped printing.
+		actions = append(actions, fmt.Sprintf("%d implementation link(s) drifted -> re-run dossierx claim link, or if the code is right and the claim is wrong: dossierx claim flag %s --claim-says \"<what the claim asserts>\" --now-does \"<what the code does>\" --reason \"<their words>\"", drifted, id))
 	case len(links) == 0 && claim.Module != "":
 		actions = append(actions, fmt.Sprintf("no implementation link yet -> dossierx claim link --module %s --claim %s --file <path>", claim.Module, id))
 	}

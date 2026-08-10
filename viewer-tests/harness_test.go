@@ -109,8 +109,15 @@ func browserAllocOpts(browser string) []chromedp.ExecAllocatorOption {
 // returned context is cleaned up automatically via t.Cleanup.
 func browserContext(t *testing.T) context.Context {
 	t.Helper()
-	browser := resolveBrowser(t) // may t.Skip / t.Fatal
+	return browserContextFor(t, resolveBrowser(t)) // may t.Skip / t.Fatal
+}
 
+// browserContextFor is browserContext with the browser already chosen. It is
+// split out for the site-extraction suite (site_dom_test.go), which resolves
+// STRICTLY — an unset DOSSIERX_TEST_BROWSER is a failure there, never a skip —
+// while still sharing this one browser process with everything else.
+func browserContextFor(t *testing.T, browser string) context.Context {
+	t.Helper()
 	allocMu.Lock()
 	if allocCtx == nil {
 		allocCtx, allocCancel = chromedp.NewExecAllocator(context.Background(), browserAllocOpts(browser)...)

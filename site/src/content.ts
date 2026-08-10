@@ -71,6 +71,16 @@ export interface ContentSpec {
  * than hand-copied: the hero kicker, the hero badge list, the release-history
  * intro and the `dossierx version` example all read `latestRelease` below.
  * Every one of them had gone stale against this array at least once.
+ *
+ * NO ENTRY CARRIES A `commit`, and none may be given one. The field held the
+ * tagged release's short sha and could not converge: writing the sha is itself a
+ * commit, so the value was stale the moment it landed. v0.4.1 shipped naming
+ * `5327923` while `refs/tags/v0.4.1` pointed at `206b4a4`, and v0.5.0 chased its
+ * own sha through two commits before anything caught the loop. It also disagreed
+ * with the binary by construction — GoReleaser stamps `main.commit` from
+ * `{{.Commit}}`, the full forty characters, against seven here. Nothing on the
+ * site reads it now, so re-adding one would be adding a claim with no reader and
+ * no way to be right.
  */
 const releases: Release[] = [
         {
@@ -183,7 +193,6 @@ const releases: Release[] = [
           date: "2026-07-30",
           title: "A documentation-grade renderer",
           tag: "Previous release",
-          commit: "d3b1e30",
           highlights: [
             "A claim body is now somewhere you can write real documentation. Numbered steps with commands under them, tables, diagrams, quotes and sub-headings all render as written — previously a fenced code block under a numbered step split the list in two and restarted the numbering at 1.",
             "Constructs: backslash escapes, bold, italic in both spellings under CommonMark left/right-flanking rules, strikethrough, double-backtick code spans, autolinks in both forms, blockquotes, horizontal rules, headings at ### and deeper, unbounded list nesting, task items, hard line breaks, loose lists, ordered-list start numbers, fence language classes, GFM pipe tables, and images. Emphasis is held to all 132 emphasis examples of CommonMark 0.31.2.",
@@ -199,7 +208,6 @@ const releases: Release[] = [
           date: "2026-08-03",
           title: "Migration removed, and governed_by becomes a drift edge",
           tag: "Previous release",
-          commit: "4a8fec4",
           highlights: [
             "BREAKING: `dossierx migrate` is gone, and with it every automatic adoption path. A project whose lock store predates the lock ledger crosses by holding nothing locked: re-propose any locked build order, unlock every locked claim, then re-lock only what you still stand behind. That first lock in a project with nothing locked is what stamps the store onto the ledger schema — and it records a real approval, which is the whole difference from the adoption path this release deletes. `migrate` survives only as a hidden stub that names the new path, because README, the skills and the CI template spent a release telling agents to type it, and flag parsing runs before any unknown-command handler.",
             "BREAKING, on the wire: error.code `adoption_required` is renamed `pre_ledger_unadopted`; `already_migrated` is removed outright; the finding `lock-ledger-adoption-required` is renamed `lock-ledger-pre-ledger`. Nothing is grandfathered any more, but `claim show` keeps `ledger.grandfathered` — always false for new records.",
@@ -217,10 +225,6 @@ const releases: Release[] = [
           date: "2026-08-04",
           title: "raw_html becomes an attachment, and the edges footer folds away",
           tag: "Previous release",
-          // 206b4a4, not the 5327923 this said until v0.5.0: that was the PR's merge
-          // commit, stamped before the tag existed, and `git rev-parse --short
-          // v0.4.1^{commit}` disagrees with it. See the note on the v0.5.0 entry.
-          commit: "206b4a4",
           highlights: [
             "`raw_html` is an ATTACHMENT legal on any layout, not a layout a claim has to adopt (closes issue #25). A claim that is genuinely a table, or a list of steps, can now carry a diagram or a small rendered mockup alongside its own content — all seven layouts render the attachment after the claim's own body/rows/steps and before the edges footer. `layout: mockup` remains a real layout with its own empty state; it simply stops being the toll gate you had to pass through to show anything rendered.",
             "That widens WHERE unescaped HTML may sit, and nothing else — not who may author it, not what reaches the viewer. Every other leg of the gate still fires on every raw_html-bearing claim whatever its layout: the mockup_modules allowlist, the tag/attribute/class markup allowlist, the raw_html_reviewed human-review flag, and the lock-lifecycle check. `dossierx claim flag`'s body-only rule moved with it — it now keys on whether a claim actually carries raw_html rather than on its layout, which was only ever a sound proxy while the two were the same question.",
@@ -235,8 +239,7 @@ const releases: Release[] = [
           version: "v0.5.0",
           date: "2026-08-07",
           title: "a claims graph in the viewer",
-          tag: "Latest release",
-          commit: "3217a48",
+          tag: "Previous release",
           highlights: [
             "BREAKING: `dossierx check` now fails on a dependency loop that alternates `rests_on` and `governed_by`. The new `mixed-cycle` lint runs at ERROR severity, taking the registered rule count from 27 to 28. It walks the union of both graphs carrying the edge kind on every hop and reports a cycle whose hops include at least one of each — \"A rests_on B, B governed_by A\". Neither existing rule can see that shape: `cycle` walks `rests_on` alone and `governed-cycle` walks `governed_by` alone, so a mixed loop presents no back edge to either walk and passed the whole registry. A project carrying one passed before this release and exits 1 after it, with no edit on its side, no content-hash move and nothing in the lock store to explain it.",
             "There is deliberately no migration command and no migration document: a corpus containing this shape was always malformed, the engine simply could not see it. The recovery is to break the loop — the finding names every claim on it — and re-run `dossierx check`. Where those claims are locked that is unlock, edit, lock, the same as any other correction. `mirrors` is not part of the union graph and never trips the rule.",
@@ -247,6 +250,25 @@ const releases: Release[] = [
             "Not in this release, and stated so deliberately: any code-grounding signal. The graph audits claims, not code. There is no `has_code_link` field, no \"locked, ungrounded\" rule and no `implink` argument.",
           ],
         },
+        {
+          version: "v0.5.1",
+          date: "2026-08-10",
+          title: "The release pipeline itself, gated end to end",
+          tag: "Latest release",
+          highlights: [
+            "SILENT: the embedded agent skills changed, and nothing on your side reports it — RE-RUN `dossierx skills export` after upgrading. Those bundles are written into a project as committed artifacts and nothing in `dossierx check` compares an exported copy against the binary's, so a project that skips the re-export keeps the previous release's guidance: an install line fetching the hook script from the v0.5.0 raw path, and a stale account of when `dossierx claim flag` is refused.",
+            "Nothing a consumer runs behaves differently. No new or changed command, flag, error code, lint rule, schema field or rendered-viewer byte, and no engine behaviour moves — `internal/` is untouched end to end and there is nothing to re-render. Outside the release machinery what moved is the four install pins, now v0.5.1, one of them inside the exported skill itself; and seven wrong strings in what a consumer's own tooling prints or ships. Three came from the binary, each naming an invocation it rejects: the retired `implink` stub's replacement command, the missing-`--reason` refusal, and `claim show`'s next action for a drifted implementation link, which offered a bare `claim flag <id>` at a verb that requires `--claim-says`, `--now-does` and `--reason`, all three, before it does anything at all. Each was a shape the reader had to repair before it would run, and each now prints whole. Two are carried by the exported skill bundles: the cross-references between bundles were written as `[[wikilink]]`, which the two derived export forms rewrote into an anchor and the SKILL.md tree — the form Claude Code loads — shipped to a client's agent as the literal characters `[[` and `]]`; and the code-links bundle's `claim flag` rule still stated v0.4.0's layout test after v0.4.1 made the refusal key on content. Four non-test Go files move for those five, and none of them changes anything but the text a reader is handed. The last two are in the pre-commit hook: the installer's note attributed core.hooksPath to \"this repository\" when the value is read across every git config scope and is just as often global, and the hook body's \"remove the hook\" recovery named a path inside THIS repository, which the consumer fetching one file into their own project does not have. The note now says where to look up the setting's origin, and the recovery names the hook where git actually looks for it; the hook body goes to v7 with it.",
+            "What ships otherwise is the machinery that publishes the NEXT release, because everything that has ever gone wrong with a DossierX release has been in the half a person performs by hand.",
+            "`surfaces.yaml` declares all thirteen client-facing surfaces this project has, from the README to the compiled binary, beside seven declarations of what is deliberately out of scope and why. Every tracked file must be claimed by EXACTLY one entry — a file matching nothing fails the build, and an out-of-scope entry cannot quietly swallow a path a surface also claims, because both entries are named and the build goes red. The list of things to review used to live in a scope document, so a new client-facing file could appear with nothing to notice it and the only way to find the gap was an audit.",
+            "At release each surface is read by its own agent over a bundle assembled for it, and the cache key is the digest of what that agent was ACTUALLY handed rather than the surface's name — change a byte of the evidence and the surface is re-read instead of carried forward. The tool grant is an exact set of two report-only tools, an allow-list and not a deny list: no file, shell, search, network or subagent tool, because \"the bundle is the whole evidence set\" is the property every key in the system rests on. What the repository cannot promise, and says so rather than implying otherwise, is that the harness outside it honoured the request.",
+            "Publishing is a nine-step driver rather than a sequence of commands somebody types, authorized by the version typed twice — deliberately not a boolean, since a `=1` left in a shell profile or a CI secret authorizes every release forever, including the next one triggered by accident. Before it touches git it refuses a release already half-published, requires the TREE to declare the release being tagged (the changelog's newest heading and the site's last release entry must agree with each other and with what was typed), RECOMPUTES the gate in its own process rather than reading a verdict off a record, and demands the CI-run evidence for that exact commit. Then it merges, tags the named object, reads the tag back and re-checks the tree it points at, pushes the tag by value, verifies the published archives, and only then pushes main.",
+            "The archives are read the way somebody downloading them reads them, between the two irreversible acts. It polls the forge until the assets exist — one second after a tag push the ordinary state is \"the tag is there and the assets are not\", and there is no second attempt once a tag is public — then refuses a release with no checksum file as UNCHECKABLE rather than reporting no mismatches, derives the expected archive names from the release config at the released commit instead of hard-coding six, compares every archive against its checksum line AND every line against an archive it actually read, and extracts and RUNS the host platform's binary. An archive can carry a correct name, a correct checksum and a stale binary while every metadata check passes over it.",
+            "The forge now refuses an ungated tag. The publishing job runs behind a gate job that establishes two facts about the tagged TREE rather than about whoever pushed: the commit is reachable from origin/main, and the tree at that commit carries the release stamp for exactly this version. Every exit path that is not a pass is a refusal — there is no branch that reports \"could not check\" and exits 0. One residual is recorded rather than described as fixed: the workflow a tag runs is the one in the tagged tree, so only a forge-side tag protection rule can close that, and nothing inside a repository can be its own enforcement.",
+            "A green badge is not the check and neither is a green check run: a conclusion reads `success` over zero tests, so a suite emptied by a run selector prints \"no tests to run\" for every package while the step, the job and the check run all conclude success over it. The release now adjudicates the per-test account the test binary itself emitted, per package and per matrix cell, for the merge commit being tagged. No conclusion is read as evidence anywhere; they are recorded for a human to look at and adjudicated by nothing. A release nobody gathered that evidence for is refused, not assumed.",
+            "Two things a reader could see were wrong, and are fixed. The site's meta description had advertised a 20-command CLI since v0.3.0 — v0.4.0 cut the surface to seven nouns and nineteen leaves and the tag stayed wrong through two minor releases, because it is the one count on the page that nothing derives and the one string search engines quote. And the `dossierx version` transcript depicted the tag spelling where the published binary prints the stripped one; it now derives that string and is compared against a binary linked the way a release links one, read out of the RENDERED page. The hand-stamped `commit` field is deleted outright — data, reader, release step and its optional type declaration, which was the part that would have let the field come back silently.",
+            "Not in this release, and stated so deliberately: nothing derives a finding's classification from the evidence behind it, and there is no override field on a receipt — a finding a human has judged non-blocking is cleared by fixing the tree or by deleting the finding by hand, and deleting it leaves an adjudicated finding indistinguishable from one nobody raised. Nor does anything here verify the deployed site, the workflow run or the CDN: those are the three checks the driver hands to a person at the end, and it says in those words that it examined none of them.",
+          ],
+        },
 ];
 
 /** The current release — the last entry, matching ReleaseTimeline's own rule. */
@@ -254,6 +276,27 @@ export const latestRelease: Release = releases[releases.length - 1];
 
 /** The single source for every version string on the site. */
 export const latestVersion: string = latestRelease.version;
+
+/**
+ * What the RELEASED BINARY prints for its version, which is NOT the string above.
+ *
+ * `.goreleaser.yaml` stamps `-X main.version={{.Version}}`, and GoReleaser's
+ * `{{.Version}}` is the tag with the leading `v` stripped — `{{.Tag}}` is the one
+ * that keeps it. Measured against the published archive rather than reasoned
+ * about: `dossierx_darwin_arm64.tar.gz` from the v0.5.0 release prints
+ * `dossierx version 0.5.0`, and its recorded build settings read
+ * `-X main.version=0.5.0`.
+ *
+ * So `v0.5.0` and `0.5.0` are both correct, in different jobs. `latestVersion` is
+ * the RELEASE — the tag, the ledger entry, the thing prose names — and the `v` is
+ * this project's display convention for it. `latestBinaryVersion` is a
+ * TRANSCRIPT value: it may only appear where the page is depicting what a command
+ * prints, and there the tag spelling is a fabrication. The site depicted
+ * `dossierx v0.5.0` in the `version` example while the binary printed
+ * `dossierx version 0.5.0`, which is two errors in one short line, and nothing
+ * compared it to real output until gate_release_stamp_test.go did.
+ */
+export const latestBinaryVersion: string = latestRelease.version.replace(/^v/, "");
 
 /**
  * Lowercases only the first character, so a release title reads as a clause
@@ -547,7 +590,7 @@ export const contentSpec: ContentSpec = {
           {
             name: "governed_by",
             semantics:
-              "Names the doctrine claim backing this claim's authority — or type: none with a required reason. With doctrine_facet set, a claim can't lock until its named doctrine claim is itself locked (hub-gating). Since v0.4.0 it is also a DRIFT edge alongside mirrors and rests_on: a claim-valued governor whose content changes under a locked claim flags that claim review_pending. It is not a gating edge — hub gating is unchanged. Self-edges are rejected and the governance graph is cycle-checked in its own pass.",
+              "Names the doctrine claim backing this claim's authority — or type: none with a required reason. It is NOT a gating edge: with doctrine_facet set, hub-gating walks mirrors and rests_on only, so a doctrine claim named solely through governed_by does not hold up the lock, and to have hub-gating cover it you name it in rests_on as well. Since v0.4.0 it is also a DRIFT edge alongside mirrors and rests_on: a claim-valued governor whose content changes under a locked claim flags that claim review_pending. Self-edges are rejected and the governance graph is cycle-checked in its own pass.",
           },
         ],
       },
@@ -583,7 +626,7 @@ export const contentSpec: ContentSpec = {
             trigger: 'dossierx claim lock <id> --reason "…"',
             mandate: "Human — in chat",
             execute: "Agent",
-            note: "Refused on any lint error, on hub-gating (a doctrine dependency still draft), and on any open comment thread. --reason is required, so an unprompted lock is loud and attributable.",
+            note: "Refused on any lint error, on hub-gating (a doctrine-facet claim named in mirrors or rests_on still draft), and on any open comment thread. --reason is required, so an unprompted lock is loud and attributable.",
           },
           {
             from: "locked",
@@ -599,7 +642,7 @@ export const contentSpec: ContentSpec = {
             trigger: "dossierx claim flag <id>",
             mandate: "Agent — reporting, not deciding",
             execute: "Agent",
-            note: "The agent asserts that code drifted from the claim. Requires --claim-says --now-does --reason, all non-empty. Locked claims only; refused on structured layouts.",
+            note: "The agent asserts that code drifted from the claim. Requires --claim-says --now-does --reason, all non-empty. Locked claims only; refused (structured_layout) on any claim carrying rows, steps or raw_html — the test is on content, not on the layout name, so a card bearing raw_html is refused too.",
           },
           {
             from: "locked",
@@ -908,7 +951,7 @@ export const contentSpec: ContentSpec = {
           {
             code: "dependency_not_locked",
             recovery:
-              "Hub-gating: the doctrine claim backing this one is still draft. Lock that first, with its own approval.",
+              "Hub-gating: a doctrine-facet claim this one names in mirrors or rests_on is still draft. Lock that one first, with its own approval.",
           },
           {
             code: "not_review_pending",
@@ -982,7 +1025,7 @@ export const contentSpec: ContentSpec = {
                 usage: 'dossierx claim lock <id> --reason "…" [--dry-run]',
                 summary: "Promote a draft claim to locked — with your yes on it.",
                 detail:
-                  "Refused on any lint error, on hub-gating (rests_on a doctrine claim that is still draft), on any unresolved comment thread, and on a claim that is already locked (already_locked) — re-locking would sign a fresh approval over whatever the file now says and clear review_pending with no diff, so the path stays unlock → fix → lock. Takes the claims file lock, saves the claim, snapshots the per-dependent content-hash baseline, and writes the ledger record — {hash, at, actor, reason} — that makes any later out-of-band edit detectable. --reason is required: it is the human approval this command executes, in their words.",
+                  "Refused on any lint error, on hub-gating (mirrors or rests_on names a doctrine-facet claim that is still draft — governed_by does not gate), on any unresolved comment thread, and on a claim that is already locked (already_locked) — re-locking would sign a fresh approval over whatever the file now says and clear review_pending with no diff, so the path stays unlock → fix → lock. Takes the claims file lock, saves the claim, snapshots the per-dependent content-hash baseline, and writes the ledger record — {hash, at, actor, reason} — that makes any later out-of-band edit detectable. --reason is required: it is the human approval this command executes, in their words.",
                 example:
                   '$ dossierx claim lock logger.contract.api-surface --reason "reviewed in the viewer, resolved c-8f3a2b" --format text\nlock: logger.contract.api-surface is now locked',
               },
@@ -1003,7 +1046,7 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "The agent's one report-a-problem verb: code and claim now disagree.",
                 detail:
-                  "All three flags required and non-empty; only a LOCKED claim can be flagged, and structured layouts are refused (there is no body to diff). Writes a one-shot pending flag and sets review_pending, which routes the claim through the visible reaudit path rather than letting an agent quietly rewrite a locked fact.",
+                  "All three flags required and non-empty; only a LOCKED claim can be flagged, and a claim whose content is not just `body` is refused with structured_layout — rows or steps present, layout: mockup, or raw_html on ANY layout. The test is on CONTENT, not on the layout name: raw_html is an attachment legal on every layout, so a card, banner, list or tree claim carrying one is refused too, and no layout is flaggable by name. A flag-sourced reaudit rewrites body and nothing else, so accepting one of those would clear review_pending while the content a reader actually sees stayed stale. Writes a one-shot pending flag and sets review_pending, which routes the claim through the visible reaudit path rather than letting an agent quietly rewrite a locked fact.",
                 example:
                   '$ dossierx claim flag logger.internals.dispatch \\\n  --claim-says "dispatch is synchronous" \\\n  --now-does   "dispatch runs on a worker pool" \\\n  --reason     "concurrency added in PR #42"',
               },
@@ -1129,9 +1172,9 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "Write the binary's embedded agent skills in every form this repo reads — plain markdown, any harness.",
                 detail:
-                  "One embedded source, written in three forms, because no two harnesses read the same file: a SKILL.md tree (into [dir], else .claude/skills when .claude already exists), an idempotent marker-delimited section spliced into an existing AGENTS.md, and a self-contained docs/dossierx-agent-guide.md that needs no loader or plugin. Detection, not creation: the tree and the AGENTS.md section only go where the layout already exists, the guide is always written. The AGENTS.md section deliberately carries the ROUTER ONLY — that text is resident on every turn, so inlining all five bundles would bill four skills of context to work that has nothing to do with DossierX. The bundle is the router (the nouns, the envelope, the exit codes, the error-code recovery table, the rules that never bend) plus one companion per workflow: claims, build order, code links, comments. Re-running it is how a project picks up a new release's guidance, so the derived forms are committed artifacts like the ledger.",
+                  "One embedded source, written in three forms, because no two harnesses read the same file: a SKILL.md tree (into [dir], else .claude/skills when .claude already exists), an idempotent marker-delimited section spliced into an existing AGENTS.md, and a self-contained agent guide that needs no loader or plugin. Detection, not creation: the tree and the AGENTS.md section only go where the layout already exists, the guide is always written. Where the guide lands follows the project root: in a DossierX project — anywhere project.config.yaml is found — it is docs/dossierx-agent-guide.md beside that config, which is exactly the path the AGENTS.md section's links point at, and the AGENTS.md section is written only in that same case. Run in a directory with no project yet, which is what a bootstrap agent does first, and there is no root to hang docs/ off: the guide is written beside the bundles instead and no AGENTS.md is touched. The AGENTS.md section deliberately carries the ROUTER ONLY — that text is resident on every turn, so inlining all five bundles would bill four skills of context to work that has nothing to do with DossierX. The bundle is the router (the nouns, the envelope, the exit codes, the error-code recovery table, the rules that never bend) plus one companion per workflow: claims, build order, code links, comments. Re-running it is how a project picks up a new release's guidance, so the derived forms are committed artifacts like the ledger.",
                 example:
-                  "$ dossierx skills export ./.claude/skills --format text\nskills export: wrote .claude/skills/dossierx/SKILL.md\nskills export: skill-tree (claude-code) -> ./.claude/skills [written]\nskills export: generic-guide (any) -> .claude/skills/dossierx-agent-guide.md [written]\nskills export: wrote 6 file(s)",
+                  "$ dossierx skills export .claude/skills --format text\nskills export: wrote .claude/skills/dossierx/SKILL.md\nskills export: wrote .claude/skills/dossierx-build-order/SKILL.md\nskills export: wrote .claude/skills/dossierx-claims/SKILL.md\nskills export: wrote .claude/skills/dossierx-code-links/SKILL.md\nskills export: wrote .claude/skills/dossierx-comments/SKILL.md\nskills export: wrote ~/myproject/AGENTS.md\nskills export: wrote ~/myproject/docs/dossierx-agent-guide.md\nskills export: skill-tree (claude-code) -> .claude/skills [written]\nskills export: agents-md-section (codex) -> ~/myproject/AGENTS.md [updated]\nskills export: generic-guide (any) -> ~/myproject/docs/dossierx-agent-guide.md [written]\nskills export: wrote 7 file(s)",
               },
               {
                 name: "version",
@@ -1139,8 +1182,39 @@ export const contentSpec: ContentSpec = {
                 summary: "Print the binary's version, commit and build date.",
                 detail:
                   "Describes the binary itself, so unlike every other command it never loads a project config and runs from anywhere — which is exactly why a bootstrapping agent calls it first. The root command also exposes the equivalent built-in --version flag. Values are ldflag-stamped at release, with a debug.ReadBuildInfo fallback for plain go install builds.",
+                // The transcript shows the ONE line this page can derive. The
+                // binary prints three — a version line, a "commit:" line and a
+                // "date:" line — and the site has a truthful source for only
+                // the first.
+                //
+                // `commit` used to come from a hand-stamped field on the release
+                // entry: a value that could not converge (writing the sha is
+                // itself a commit, so it was stale the moment it landed), that
+                // named the wrong sha for two releases, and that the binary
+                // spells as a full 40-character sha where the site carried
+                // seven. `date` was no better — the entry's `date` is a calendar
+                // day, where the binary prints the RFC 3339 timestamp
+                // GoReleaser stamps into `main.date`, so depicting it as the
+                // "date:" line asserted output no build produces.
+                //
+                // Both are dropped rather than approximated: an abridged
+                // transcript states less than the truth, where an approximated
+                // one states something else. What remains is literal — including
+                // the word "version", which this line lost for several releases,
+                // and `latestBinaryVersion` rather than `latestVersion`, because
+                // the release build strips the leading `v` and a transcript is
+                // the one place on this page that spelling is wrong.
+                //
+                // This is held against a binary linked the way the release links
+                // one — but not from here. viewer-tests/site_dom_test.go reads
+                // the session out of the RENDERED page and compares it, because
+                // four attempts to read this line as SOURCE were defeated
+                // without an assertion going red: a prose comment satisfied the
+                // search, a commented-out entry satisfied it, and a second
+                // declaration after the good one satisfied it while the bundler
+                // evaluated the second. A comment renders nothing.
                 example:
-                  `$ dossierx version --format text\ndossierx ${latestRelease.version}\n  commit: ${latestRelease.commit ?? "(devel)"}\n  date:   ${latestRelease.date}`,
+                  `$ dossierx version --format text\ndossierx version ${latestBinaryVersion}`,
               },
             ],
           },
@@ -1260,7 +1334,7 @@ export const contentSpec: ContentSpec = {
       contentMd:
         // Derived, deliberately: an elaboration written by hand here would be a
         // second copy of the newest entry's highlights, which sit directly below.
-        `Every change ships as a tagged release with its own changelog entry. The current release is **${latestRelease.version}** — ${lowerFirst(latestRelease.title)}, tagged ${latestRelease.date}. What it changed is listed first below, followed by the full history since the engine's public extraction.`,
+        `Every change ships as a tagged release with its own changelog entry. The current release is **${latestRelease.version}** — ${lowerFirst(latestRelease.title)}, tagged ${latestRelease.date}. The release ledger reads oldest first, from the engine's public extraction forward, so the current release is the LAST entry on it and the one marked "latest".`,
       data: {
         releases,
       },

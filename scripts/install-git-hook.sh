@@ -5,7 +5,9 @@
 #
 # WHY A SCRIPT AND NOT A CLI COMMAND
 #
-# v0.3.0 fixes the CLI surface at 19 leaves, and writing an executable into
+# The CLI surface is a fixed one — v0.3.0 cut 26 commands to 20 leaves under
+# eight nouns, and v0.4.0 cut that to the 19 leaves under seven nouns the
+# binary ships today — and writing an executable into
 # someone's .git is not a thing a docs engine should be able to do as a side
 # effect of some other verb. So the hook install is this: a standalone,
 # self-contained script that a bootstrap agent runs AFTER the human has said
@@ -99,10 +101,24 @@ set -eu
 hook_body() {
 	cat <<'PRECOMMIT_HOOK'
 #!/bin/sh
-# dossierx-hook: pre-commit v6
+# dossierx-hook: pre-commit v7
 #
 # Refuses a commit that changes a LOCKED claim without an approval record on the
 # lock ledger.
+#
+# v7 REPLACED the "remove the hook" recovery on both refusal paths. It used to
+# read "scripts/install-git-hook.sh --uninstall" — a path that exists in
+# dossierx's own repository and in no consumer's. This installer is deliberately
+# one file with this body embedded so it can be copied or curl'd into a project
+# that has the dossierx BINARY and not this repository, and that is the ordinary
+# case, so the escape hatch was a file-not-found for exactly the reader being
+# refused. It now names the hook where git will actually look for it, resolved
+# by git at the moment the reader runs the line, which is right under
+# core.hooksPath and in a linked worktree where a literal ".git/hooks/pre-commit"
+# is not. The version number moves with the body because that is the only place
+# it lives: the installer greps the marker line WITHOUT its version, so an older
+# hook is still recognised as ours and replaced without the foreign-hook
+# ceremony, and this number is what tells a human which body they are holding.
 #
 # v6 REMOVED the second half v5 had added: a recovery block for two SCOPE
 # refusals (integrity-store-removed, claims-scope-narrowed) raised by comparing
@@ -168,7 +184,7 @@ if ! command -v "$bin" >/dev/null 2>&1; then
 		'  install it:   go install github.com/BarterX-Tech/dossierx/cmd/dossierx@latest' \
 		'  or point at it: DOSSIERX_BIN=/path/to/dossierx git commit ...' \
 		'  or skip once:   git commit --no-verify' \
-		'  or remove the hook: scripts/install-git-hook.sh --uninstall' \
+		'  or remove the hook: rm "$(git rev-parse --git-path hooks/pre-commit)"' \
 		>&2
 	exit 1
 fi
@@ -295,7 +311,7 @@ check_one() {
 			'          so the hook cannot see what you are committing.' \
 			'' \
 			'  upgrade:  go install github.com/BarterX-Tech/dossierx/cmd/dossierx@latest' \
-			'  or remove the hook: scripts/install-git-hook.sh --uninstall' \
+			'  or remove the hook: rm "$(git rev-parse --git-path hooks/pre-commit)"' \
 			>&2
 		return 1
 		;;
@@ -491,11 +507,22 @@ if [ -e "$target" ]; then
 	fi
 fi
 
+# The value is read with a plain `git config --get`, which resolves across
+# system, global, worktree and local scope and returns whichever wins — the
+# right thing to read, since it is what git itself will obey. It is deliberately
+# NOT reported as something "this repository" set: a `git config --global
+# core.hooksPath ~/.githooks` is an ordinary single-machine setup, and telling
+# that reader their repository asked for it sends them looking in a .git/config
+# that never mentions it. So the note states the value and hands over the one
+# command that answers where it came from.
 if [ -n "$configured_hooks_path" ]; then
 	printf '%s\n' \
-		"note: this repository sets core.hooksPath = $configured_hooks_path" \
-		"      installing there. This script never sets or changes core.hooksPath —" \
-		"      repointing it would silently disable every other hook you run." ""
+		"note: core.hooksPath is set to $configured_hooks_path, so that is where git" \
+		"      looks for hooks and that is where this installs. The setting may be" \
+		"      this repository's or your global one — \"git config --show-origin --get" \
+		"      core.hooksPath\" says which. This script only READS it: it never sets or" \
+		"      changes core.hooksPath, because repointing it would silently disable" \
+		"      every other hook you run." ""
 fi
 
 # --- uninstall --------------------------------------------------------------

@@ -1,6 +1,6 @@
 # DossierX
 
-DossierX turns a directory of YAML "claims" — atomic, reviewable facts about a system — into a linted, cross-checked HTML site a human can actually read and argue with. Each claim can be **locked** once a human has approved it, after which it never changes silently: a drifted dependency, a code change that contradicts it, or an open comment thread flags it for review instead. It is built to be operated by an **agent** and reviewed by a **human**, and this release gives each of them their own surface.
+DossierX turns a directory of YAML "claims" — atomic, reviewable facts about a system — into a linted, cross-checked HTML site a human can actually read and argue with. Each claim can be **locked** once a human has approved it, after which it never changes silently: a drifted dependency, a code change that contradicts it, or an open comment thread flags it for review instead. It is built to be operated by an **agent** and reviewed by a **human**, and since v0.3.0 each of them has their own surface.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/BarterX-Tech/dossierx/ci.yml?branch=main&label=CI)](https://github.com/BarterX-Tech/dossierx/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/BarterX-Tech/dossierx)](https://github.com/BarterX-Tech/dossierx/blob/main/LICENSE)
@@ -24,7 +24,7 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.0`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.1`,
    then run `dossierx version` and show me the output.
 2. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Load what it
@@ -33,7 +33,7 @@ Set up DossierX in this repository.
    propose a title, the facets, and the modules, and WAIT for me to confirm
    before writing anything.
 4. ASK ME before installing the git pre-commit hook. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.0/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.1/scripts/install-git-hook.sh
    to a file, show me what it does, then run `sh install-git-hook.sh --yes`.
    If I say no, add the CI workflow instead and tell me so — CI is the
    authority either way.
@@ -86,9 +86,9 @@ Open the URL it prints. That is a local viewer of every claim, facet, build orde
 5. You click **Resolve**. That click *is* the approval — and it is load-bearing, because a claim cannot be locked while it carries an unresolved thread.
 6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>"`.
 
-Closing a thread is yours alone **on the CLI**, and in v0.3.0 that is structural rather than polite: `dossierx comment` is `inbox · list · add · reply` and nothing else. Resolve, reopen, edit and delete were removed from the CLI in this release and live only in the viewer and in `dossierx serve`'s HTTP API.
+Closing a thread is yours alone **on the CLI**, and in v0.3.0 that is structural rather than polite: `dossierx comment` is `inbox · list · add · reply` and nothing else. Resolve, reopen, edit and delete were removed from the CLI in v0.3.0 and live only in the viewer and in `dossierx serve`'s HTTP API.
 
-**How far that enforcement actually goes.** Advisory rights — an actor may act only on its own messages — are enforced in the engine, and on the CLI the actor is whatever you passed as `--as`. On the CLI that is now structural rather than enforced: `dossierx comment` is `inbox · list · add · reply`, and none of those can close a thread at all — the verbs that could were removed in this release. An agent following its skills also never asserts `--as human` for something it decided. **The viewer's write API is a different trust boundary.** It takes the actor from the request body and treats a request that omits `as` as `human`, so any local caller that can reach `dossierx serve` gets full human rights: it can resolve, reopen, edit or delete your thread, and the record it leaves positively attests `human`. That is a deliberate choice, not an oversight — the server binds `127.0.0.1` and refuses cross-origin requests, but anything that can curl it can already open the claim's YAML in an editor, so a token on the API would move the lock rather than add one. Read the rule as: **enforced for the CLI actor, and the same trust level as filesystem access for the viewer API.** It is the operating rule of the review loop either way, and an agent that goes around it has forged the only approval signal in the design.
+**How far that enforcement actually goes.** Advisory rights — an actor may act only on its own messages — are enforced in the engine, and on the CLI the actor is whatever you passed as `--as`. On the CLI that is now structural rather than enforced: `dossierx comment` is `inbox · list · add · reply`, and none of those can close a thread at all — the verbs that could were removed in v0.3.0. An agent following its skills also never asserts `--as human` for something it decided. **The viewer's write API is a different trust boundary.** It takes the actor from the request body and treats a request that omits `as` as `human`, so any local caller that can reach `dossierx serve` gets full human rights: it can resolve, reopen, edit or delete your thread, and the record it leaves positively attests `human`. That is a deliberate choice, not an oversight — the server binds `127.0.0.1` and refuses cross-origin requests, but anything that can curl it can already open the claim's YAML in an editor, so a token on the API would move the lock rather than add one. Read the rule as: **enforced for the CLI actor, and the same trust level as filesystem access for the viewer API.** It is the operating rule of the review loop either way, and an agent that goes around it has forged the only approval signal in the design.
 
 A static `file://` export of the viewer is read-only by design — comments need `dossierx serve`.
 

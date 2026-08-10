@@ -1,0 +1,767 @@
+{
+  "commands": [
+    {
+      "path": "build-order lock",
+      "short": "Lock --module's proposed build-order artifact, snapshotting a content-hash baseline",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--module",
+        "--reason"
+      ]
+    },
+    {
+      "path": "build-order propose",
+      "short": "Propose (and write) a build-order artifact for --module (refused unless every claim in it is locked)",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--module"
+      ]
+    },
+    {
+      "path": "build-order status",
+      "short": "Show --module's build-order artifact state: proposed/locked/stale and coverage",
+      "flags": [
+        "--config",
+        "--format",
+        "--module"
+      ]
+    },
+    {
+      "path": "check",
+      "short": "Run lint, catalog, render and the lock-ledger gate in one shot, stopping at first failure; --validate for a read-only run, --staged to judge the git index",
+      "flags": [
+        "--config",
+        "--format",
+        "--staged",
+        "--validate"
+      ]
+    },
+    {
+      "path": "claim flag",
+      "short": "Flag a locked claim as needing reaudit, with an explicit before/after and reason",
+      "flags": [
+        "--claim-says",
+        "--config",
+        "--dry-run",
+        "--format",
+        "--now-does",
+        "--reason"
+      ]
+    },
+    {
+      "path": "claim link",
+      "short": "Link --file (optionally at --symbol) to --claim as its implementation (immediate, no confirm step)",
+      "flags": [
+        "--claim",
+        "--config",
+        "--dry-run",
+        "--file",
+        "--format",
+        "--module",
+        "--symbol"
+      ]
+    },
+    {
+      "path": "claim list",
+      "short": "List claims, optionally filtered by review state, migration note, code drift, facet, module, or a fuzzy --match",
+      "flags": [
+        "--config",
+        "--drifted",
+        "--facet",
+        "--format",
+        "--match",
+        "--migrated",
+        "--module",
+        "--review-pending"
+      ]
+    },
+    {
+      "path": "claim lock",
+      "short": "Lock a draft claim (refused if lint fails); --reason records the human approval it executes",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
+      "path": "claim new",
+      "short": "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
+      "flags": [
+        "--body",
+        "--build-role",
+        "--config",
+        "--dry-run",
+        "--file",
+        "--format",
+        "--governed-by",
+        "--governed-reason",
+        "--layout",
+        "--mirrors",
+        "--rests-on",
+        "--section"
+      ]
+    },
+    {
+      "path": "claim reaudit",
+      "short": "Propose (and, with --confirm and --reason, apply) a diff for a review_pending claim",
+      "flags": [
+        "--config",
+        "--confirm",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
+      "path": "claim show",
+      "short": "Report one claim's full state in a single call: lifecycle, both edge directions, code links, discussion, and the legal next actions",
+      "flags": [
+        "--config",
+        "--format"
+      ]
+    },
+    {
+      "path": "claim unlock",
+      "short": "Unlock a locked claim back to draft; --reason records the human approval it executes",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
+        "--reason"
+      ]
+    },
+    {
+      "path": "comment add",
+      "short": "Open a new comment thread on a claim",
+      "flags": [
+        "--as",
+        "--body",
+        "--config",
+        "--dry-run",
+        "--format"
+      ]
+    },
+    {
+      "path": "comment inbox",
+      "short": "Every open comment thread in the project, in one call — what the human left for you",
+      "flags": [
+        "--config",
+        "--format",
+        "--since"
+      ]
+    },
+    {
+      "path": "comment list",
+      "short": "List the comment threads on a claim (--open for unresolved only)",
+      "flags": [
+        "--config",
+        "--format",
+        "--open"
+      ]
+    },
+    {
+      "path": "comment reply",
+      "short": "Add a reply to an open comment thread",
+      "flags": [
+        "--as",
+        "--body",
+        "--config",
+        "--dry-run",
+        "--format"
+      ]
+    },
+    {
+      "path": "serve",
+      "short": "Serve the claims viewer with a localhost comment API",
+      "flags": [
+        "--config",
+        "--format",
+        "--port"
+      ]
+    },
+    {
+      "path": "skills export",
+      "short": "Write the embedded skills in every form this repo uses: a SKILL.md tree, an idempotent AGENTS.md section, and a self-contained agent guide",
+      "flags": [
+        "--config",
+        "--format"
+      ]
+    },
+    {
+      "path": "version",
+      "short": "Print the dossierx version, commit, and build date",
+      "flags": [
+        "--config",
+        "--format"
+      ]
+    }
+  ],
+  "root_flags": [
+    "--config",
+    "--format",
+    "--version"
+  ],
+  "retired": [
+    "catalog",
+    "comment delete",
+    "comment edit",
+    "comment reopen",
+    "comment resolve",
+    "coverage",
+    "deps",
+    "implink",
+    "lint",
+    "migrate",
+    "render",
+    "stale"
+  ],
+  "lint_rules": [
+    "ambiguous",
+    "asset-scope",
+    "body-edge-hint",
+    "build-role-required-for-locked",
+    "code-orphan",
+    "comments-unresolved",
+    "cycle",
+    "dangling",
+    "governed-cycle",
+    "governed-required",
+    "id-shape",
+    "layout-shape-mismatch",
+    "markdown-sanity",
+    "mirror-mismatch",
+    "mirror-reciprocal",
+    "mirror-unanchored",
+    "mixed-cycle",
+    "orientation-note-order",
+    "orientation-note-shape",
+    "orphan",
+    "raw-html-scope",
+    "rest-on-locked",
+    "roll-up",
+    "rows-shape",
+    "self-edge",
+    "status-shape",
+    "supersede",
+    "validated-on-missing"
+  ],
+  "error_codes": [
+    "already_locked",
+    "bad_request",
+    "banner_claim",
+    "build_order_hand_edited",
+    "build_order_refused",
+    "build_order_stale",
+    "claim_file_changed",
+    "claim_not_found",
+    "claim_not_serializable",
+    "comment_digest_drift",
+    "comment_digest_unavailable",
+    "config_not_found",
+    "dependency_not_locked",
+    "empty_body",
+    "implink_refused",
+    "integrity_failed",
+    "internal",
+    "invalid_actor",
+    "invalid_claim",
+    "invalid_config",
+    "lint_failed",
+    "missing_flag",
+    "no_artifact",
+    "not_locked",
+    "not_proposed",
+    "not_review_pending",
+    "pre_ledger_unadopted",
+    "read_only",
+    "reply_not_found",
+    "review_pending",
+    "rights_denied",
+    "structured_layout",
+    "thread_not_found",
+    "thread_open",
+    "thread_resolved",
+    "unknown_module",
+    "unresolved_comments",
+    "unsafe_body",
+    "unsupported_format",
+    "untracked_config",
+    "usage",
+    "write_conflict",
+    "write_failed",
+    "wrong_state"
+  ],
+  "skills": [
+    "dossierx",
+    "dossierx-claims",
+    "dossierx-comments",
+    "dossierx-build-order",
+    "dossierx-code-links"
+  ],
+  "http_routes": [
+    "DELETE /api/claims/{id}/comments/{tid}",
+    "GET /api/comments",
+    "GET /api/events",
+    "GET /api/fragment",
+    "GET /api/graph",
+    "GET /api/ping",
+    "GET /api/status",
+    "GET /claim-assets/{rest...}",
+    "GET /{$}",
+    "PATCH /api/claims/{id}/comments/{tid}",
+    "POST /api/claims/{id}/comments",
+    "POST /api/claims/{id}/comments/{tid}/reopen",
+    "POST /api/claims/{id}/comments/{tid}/replies",
+    "POST /api/claims/{id}/comments/{tid}/resolve"
+  ],
+  "markdown_constructs": [
+    "autolink-angle",
+    "autolink-angle-rejected",
+    "autolink-bare",
+    "autolink-bare-suppressed",
+    "autolink-bare-termination",
+    "autolink-bare-wins-over-delimiters",
+    "blockquote-hard-break",
+    "blockquote-heading-and-rule",
+    "blockquote-nested-is-literal",
+    "blockquote-no-lazy-continuation",
+    "blockquote-simple",
+    "blockquote-task-items",
+    "blockquote-with-list",
+    "blockquote-with-paragraph",
+    "bold-double-star",
+    "container-fence-in-blockquote",
+    "container-fence-in-ordered-list",
+    "container-fence-in-unordered-list",
+    "container-fence-indented-in-ordered-list",
+    "container-fence-indented-in-unordered-list",
+    "emphasis-bold-at-column-zero",
+    "emphasis-delimiter-leftovers",
+    "emphasis-in-link-text",
+    "emphasis-nesting",
+    "emphasis-star-not-a-list",
+    "emphasis-underscore-intraword",
+    "emphasis-underscore-punctuation-flanked",
+    "emphasis-underscore-word-boundary",
+    "emphasis-unicode-neighbours",
+    "escape-backtick",
+    "escape-star",
+    "fenced-basic",
+    "fenced-html-injection",
+    "fenced-info-string-rejected",
+    "fenced-multi-block",
+    "fenced-with-info-string",
+    "hard-break-code-span-does-not-span",
+    "hard-break-dangling-at-block-end",
+    "hard-break-double-backslash-literal",
+    "hard-break-in-list-item",
+    "hard-break-trailing-backslash",
+    "hard-break-two-spaces",
+    "heading-closing-sequence",
+    "heading-h3",
+    "heading-h4",
+    "heading-h5-and-h6",
+    "heading-inline-markup",
+    "heading-interrupts-paragraph",
+    "heading-reserved-levels",
+    "heading-seven-hashes-literal",
+    "horizontal-rule",
+    "hostile-ampersand",
+    "hostile-angle-brackets",
+    "hostile-control-scheme",
+    "hostile-pipe-in-text",
+    "hostile-quotes",
+    "hostile-script-tag",
+    "hr-asterisks-are-literal",
+    "hr-ends-an-open-list",
+    "hr-interrupts-paragraph",
+    "hr-long-dash-run",
+    "image-absolute-rejected",
+    "image-simple",
+    "inline-code-simple",
+    "inline-code-unclosed",
+    "italic-star",
+    "italic-underscore",
+    "link-data-rejected",
+    "link-fragment",
+    "link-http",
+    "link-javascript-rejected",
+    "link-network-path-rejected",
+    "link-relative",
+    "list-dedent-snaps-to-open-level",
+    "list-deep-nesting",
+    "list-item-block-constructs-are-literal",
+    "list-nested-ordered",
+    "list-nested-unordered",
+    "list-tab-indent",
+    "list-unresolvable-indent-folds",
+    "list-with-continuation",
+    "loose-list-blank-line-between-items",
+    "loose-list-blank-line-fence-nested",
+    "loose-list-blank-line-fence-ordered",
+    "loose-list-blank-line-fence-unordered",
+    "loose-list-blank-line-then-prose-ends-list",
+    "loose-list-nested-stays-tight",
+    "ordered-list-basic",
+    "ordered-list-lettered-subitems",
+    "ordered-list-nested-start",
+    "ordered-list-start-at-five",
+    "paragraph-multiple",
+    "paragraph-simple",
+    "strikethrough",
+    "strikethrough-nested",
+    "table-alignment",
+    "table-alignment-default-column",
+    "table-cell-block-constructs-are-literal",
+    "table-cell-content-is-trimmed",
+    "table-cell-inline-markup",
+    "table-cell-trailing-backslash-is-literal",
+    "table-centred-ragged-rows-is-a-table",
+    "table-code-span-pipe-splits",
+    "table-delimiter-arity-mismatch-is-prose",
+    "table-delimiter-row-needs-a-pipe",
+    "table-double-backslash-splits",
+    "table-empty-cells-preserved",
+    "table-ends-at-blank-line",
+    "table-ends-at-line-without-pipe",
+    "table-escaped-pipe",
+    "table-escaped-pipe-in-code-span",
+    "table-extra-cells-dropped",
+    "table-header-only",
+    "table-hostile-cell-content",
+    "table-in-blockquote",
+    "table-in-list-item-is-literal",
+    "table-indented-is-prose",
+    "table-interrupts-paragraph",
+    "table-many-columns-few-cells-is-a-table",
+    "table-no-delimiter-row-is-prose",
+    "table-outer-pipes-optional",
+    "table-pipe-simple",
+    "table-short-row-renders-short",
+    "task-list-item",
+    "task-list-item-loose",
+    "task-list-item-nested",
+    "task-list-item-not-a-checkbox",
+    "unordered-list-basic",
+    "wrapped-bullet-continuation"
+  ],
+  "render_fingerprint": "sha256:141a8df5e3b9f11aa598170d34844caf47c6c13aa501723506d722f48402005f",
+  "behaviour_fingerprint": {
+    "cmd/dossierx": "sha256:94cce10f77b1d0707c6508ee9d84339b40bd10423ba1f91ffa323984853c24f2",
+    "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
+    "internal/catalog": "sha256:88601d14728e83723460b5bd7bdfa8aadbd3fba3c81d5230b67bcf7529fbe569",
+    "internal/check": "sha256:202896d4373112a54cb8e14542d70101a11ca5f2c1d989bf83039228a881a3d6",
+    "internal/cliout": "sha256:ef12954b96a74dc1f124b930805f07fbe11cd183e10badcc2dc3339faf169560",
+    "internal/comments": "sha256:9acf7113bf0a840917e78593611ccb9f15bd228b714f28a9f94c3f15c3f54dfb",
+    "internal/config": "sha256:ebb6de39e4166d078bdd1caedd4bd78ff0353de29ee773d9389c8904644b313f",
+    "internal/digest": "sha256:f7637ed8419ecbd919cb28ea38fd65e3eb631e8ff4ba3bd942948cf9f9c51526",
+    "internal/graph": "sha256:6c47a116d08e977ecd4590e419e136d76e5b80306b2ffc7ec6b5cb40780a59a6",
+    "internal/implink": "sha256:b7afa9b1052202d41c7329c9e2b4be42f0deaec9141835193c2069d986caa630",
+    "internal/lint": "sha256:b013b495429c78345f155c99cea75821bd151e9f28641ab8a7897e0bf50635e0",
+    "internal/loader": "sha256:04a25e29820e9bb1a023cb09b13904295a3a398897664966950d349a42f7f671",
+    "internal/lock": "sha256:da172a9c392e2d737ec7cd2ac04c94e9aa3b6c43a46e0d0e48824bc48cbf4eba",
+    "internal/model": "sha256:58bb9080007f5b13c3d69772c9a21fe1c7310eac37e1801a44f31722f35aeb3b",
+    "internal/reaudit": "sha256:a527b1db4b36f06a94866cdfc0b1104d8d1160f34038ae717cfadd71a81e053a",
+    "internal/render": "sha256:42958c8de8fd836868e701f71c5542ef5615850a0b3590bc6ccea465ee11c822",
+    "internal/render/components": "sha256:0731029bbdf961fe8fac4f41b3385caa67b9c0cbc480d4219ec52b11477f0755",
+    "internal/render/markdown": "sha256:97f01925c4c6d07debb5f723c3d404c645cec8b6b5816ca0ce08786379d00845",
+    "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
+    "internal/serve": "sha256:666581146fab56ef80e5686bdaf48fc8bee708a74b7f2b13b127978dbdbcade4",
+    "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
+    "skills": "sha256:6a7b00822d533d763d9f5623c9145e5a9fccc9476ca6a172726f30403d91b683"
+  },
+  "envelope": {
+    "keys": [
+      "command",
+      "data",
+      "error",
+      "ok",
+      "stopped_at",
+      "warnings"
+    ],
+    "exit_codes": {
+      "already_locked": 1,
+      "bad_request": 1,
+      "banner_claim": 1,
+      "build_order_hand_edited": 1,
+      "build_order_refused": 1,
+      "build_order_stale": 1,
+      "claim_file_changed": 1,
+      "claim_not_found": 2,
+      "claim_not_serializable": 1,
+      "comment_digest_drift": 1,
+      "comment_digest_unavailable": 1,
+      "config_not_found": 2,
+      "dependency_not_locked": 1,
+      "empty_body": 1,
+      "implink_refused": 1,
+      "integrity_failed": 1,
+      "internal": 1,
+      "invalid_actor": 1,
+      "invalid_claim": 1,
+      "invalid_config": 1,
+      "lint_failed": 1,
+      "missing_flag": 1,
+      "no_artifact": 1,
+      "not_locked": 2,
+      "not_proposed": 1,
+      "not_review_pending": 2,
+      "pre_ledger_unadopted": 1,
+      "read_only": 1,
+      "reply_not_found": 2,
+      "review_pending": 2,
+      "rights_denied": 1,
+      "structured_layout": 1,
+      "thread_not_found": 2,
+      "thread_open": 1,
+      "thread_resolved": 1,
+      "unknown_module": 1,
+      "unresolved_comments": 1,
+      "unsafe_body": 1,
+      "unsupported_format": 1,
+      "untracked_config": 1,
+      "usage": 1,
+      "write_conflict": 1,
+      "write_failed": 1,
+      "wrong_state": 2
+    },
+    "payloads": {
+      "buildOrderLockData": [
+        "locked_at",
+        "module",
+        "path",
+        "reason"
+      ],
+      "buildOrderPhaseData": [
+        "claims",
+        "phase"
+      ],
+      "buildOrderProposeData": [
+        "excluded",
+        "locked",
+        "module",
+        "path",
+        "phases"
+      ],
+      "buildOrderStatusData": [
+        "covered_claims",
+        "excluded_count",
+        "locked",
+        "locked_at",
+        "module",
+        "proposed",
+        "stale",
+        "stale_ids",
+        "total_claims"
+      ],
+      "checkData": [
+        "catalog_count",
+        "catalog_path",
+        "comment_digests_adopted",
+        "ledger_finding_count",
+        "ledger_findings",
+        "lint_error_count",
+        "lint_findings",
+        "lint_warning_count",
+        "next_steps",
+        "open_comments",
+        "orientation_notes",
+        "read_only",
+        "scan_errors",
+        "scan_files_scanned",
+        "skipped",
+        "staged",
+        "staged_files",
+        "viewer_path"
+      ],
+      "claimEdgesData": [
+        "depended_on_by",
+        "governed_by",
+        "governed_reason",
+        "mirrored_by",
+        "mirrors",
+        "rests_on"
+      ],
+      "claimLinkData": [
+        "claim_id",
+        "file",
+        "linked_count",
+        "module",
+        "path",
+        "symbol"
+      ],
+      "claimListData": [
+        "claims",
+        "count",
+        "filters",
+        "percent_of_total",
+        "total"
+      ],
+      "claimNewData": [
+        "claim_id",
+        "facet",
+        "layout",
+        "lint_error_count",
+        "lint_warning_count",
+        "module",
+        "path",
+        "status"
+      ],
+      "claimShowData": [
+        "build_role",
+        "claim_id",
+        "comments",
+        "edges",
+        "facet",
+        "implemented_in",
+        "kind",
+        "layout",
+        "ledger",
+        "locked",
+        "locked_at",
+        "migrated_from",
+        "module",
+        "next_actions",
+        "review_pending",
+        "review_pending_trigger",
+        "section",
+        "source_path",
+        "status",
+        "title"
+      ],
+      "cliout.DryRun": [
+        "blocked",
+        "from",
+        "missing",
+        "preconditions",
+        "proposed",
+        "side_effects",
+        "to",
+        "would"
+      ],
+      "commentInboxData": [
+        "claims",
+        "count",
+        "cursor",
+        "since",
+        "threads"
+      ],
+      "commentListData": [
+        "claim_id",
+        "count",
+        "open_only",
+        "threads"
+      ],
+      "commentWriteData": [
+        "actor",
+        "body",
+        "claim_id",
+        "reply_id",
+        "thread_id"
+      ],
+      "flagData": [
+        "claim_id",
+        "claim_says",
+        "flagged_at",
+        "now_does",
+        "reason",
+        "review_pending"
+      ],
+      "lintFindingData": [
+        "claim_id",
+        "lint",
+        "message",
+        "severity"
+      ],
+      "lockData": [
+        "claim_id",
+        "from",
+        "locked_at",
+        "reason",
+        "to"
+      ],
+      "lockRefusedData": [
+        "claim_id",
+        "gate",
+        "lint_errors",
+        "lint_findings",
+        "open_threads",
+        "unlocked_dependency"
+      ],
+      "reauditData": [
+        "applied",
+        "body_diff_html",
+        "claim_id",
+        "no_change",
+        "note",
+        "reason",
+        "resulting_body",
+        "review_pending",
+        "side_effects",
+        "trigger"
+      ],
+      "scanErrorData": [
+        "claim_id",
+        "file",
+        "line",
+        "message"
+      ],
+      "skillsExportData": [
+        "count",
+        "forms",
+        "project_root",
+        "skipped",
+        "target_dir",
+        "written"
+      ],
+      "unlockData": [
+        "claim_id",
+        "flag_cleared",
+        "from",
+        "reason",
+        "to"
+      ],
+      "versionData": [
+        "commit",
+        "date",
+        "name",
+        "version"
+      ]
+    }
+  },
+  "version_pins": [
+    {
+      "file": "README.md",
+      "pin": "dossierx/cmd/dossierx@v0.5.0",
+      "version": "v0.5.0"
+    },
+    {
+      "file": "README.md",
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.5.0",
+      "version": "v0.5.0"
+    },
+    {
+      "file": "scripts/ci/dossierx-check.yml",
+      "pin": "dossierx/cmd/dossierx@v0.5.0",
+      "version": "v0.5.0"
+    },
+    {
+      "file": "skills/dossierx/SKILL.md",
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.5.0",
+      "version": "v0.5.0"
+    }
+  ],
+  "counts": {
+    "commands": 19,
+    "error_codes": 44,
+    "http_routes": 14,
+    "lint_rules": 28,
+    "nouns": 7
+  }
+}

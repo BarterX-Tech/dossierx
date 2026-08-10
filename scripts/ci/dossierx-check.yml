@@ -29,21 +29,26 @@
 # WHY IT RUNS ONE dossierx COMMAND, AND WHY IT NEEDS NO GIT HISTORY
 # ---------------------------------------------------------------------------
 #
-# REMOVED IN THIS RELEASE, so that nobody re-adds either out of caution: the
-# second step ("dossierx check --staged", the scope guard) and the
-# fetch-depth: 0 that existed to feed it.
+# THIS TEMPLATE HAS CARRIED ONE dossierx STEP SINCE v0.3.0, and the reason is
+# recorded here so that nobody re-adds out of caution what v0.3.0 deliberately
+# left out: a second step ("dossierx check --staged", the scope guard) and the
+# fetch-depth: 0 that would exist to feed it. Nothing about it has changed since;
+# if you are upgrading a pinned dossierx, this section describes the template you
+# already have, not a behaviour that moved under you.
 #
-# The previous release made "check --staged" compare the commit under judgement
-# against its PARENT, to catch a commit that shrank its own audit scope —
-# repoint claims_dir at an empty directory AND delete the lock ledger, and there
-# is nothing left in scope for any rule to have an opinion about. The diagnosis
-# was right. The FIX was in the wrong layer: the parent commit is outside the
-# COMMIT but not outside the COMMITTER, and git history is written by the same
-# person the gate is judging, so --orphan, a second config file or a rebase all
-# switch the comparison off. It never bound anyone who did not want to be bound.
+# A build during the v0.3.0 cycle made "check --staged" compare the commit under
+# judgement against its PARENT, to catch a commit that shrank its own audit scope
+# — repoint claims_dir at an empty directory AND delete the lock ledger, and there
+# is nothing left in scope for any rule to have an opinion about. It was withdrawn
+# before shipping, so no released dossierx has ever performed that comparison and
+# no CI job built on this template has ever needed git history. The diagnosis was
+# right. The FIX was in the wrong layer: the parent commit is outside the COMMIT
+# but not outside the COMMITTER, and git history is written by the same person the
+# gate is judging, so --orphan, a second config file or a rebase all switch the
+# comparison off. It would never have bound anyone who did not want to be bound.
 #
-# What it DID bind was ordinary git work, because it could not see intent the
-# tree does not record:
+# What it DID bind, in the pre-release builds that carried it, was ordinary git
+# work, because it could not see intent the tree does not record:
 #
 #   · a plain "git revert" of a commit that contained a lock was REFUSED. A
 #     legitimate revert removes that lock's records, which is byte-identical to
@@ -53,8 +58,8 @@
 #     project's ledger in a monorepo, and refused with findings naming another
 #     project's claims.
 #
-# So the comparison is gone, and with it the only thing in this job that ever
-# needed more than one commit. "dossierx check" evaluates ONE tree — which is
+# So the comparison never shipped, and nothing in this job has ever needed more
+# than one commit. "dossierx check" evaluates ONE tree — which is
 # precisely what a checkout is — and runs every rule that survives: the whole
 # lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
 # -orphan / -abandoned / -absent / -pre-ledger / -downgraded,
@@ -190,7 +195,7 @@ jobs:
       # you adopt on purpose, in a commit someone reviewed — not something that
       # arrives on a Tuesday and starts failing everyone's builds.
       - name: Install dossierx
-        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.0
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.1
 
       # The full pipeline: lint, catalog, render, and the lock-ledger gate.
       # --format text because the audience here is a human reading a failed
@@ -205,17 +210,20 @@ jobs:
       - name: dossierx check
         run: dossierx check --format text
 
-      # THERE IS NO SECOND dossierx STEP ANY MORE, and that is deliberate rather
-      # than an oversight.
+      # THERE IS NO SECOND dossierx STEP, and that is deliberate rather than an
+      # oversight. It is also not new: this template has looked like this since
+      # v0.3.0, the release that first published it.
       #
-      # This job used to run "dossierx check --staged --format text" here, as
-      # the scope guard. --staged is the one entry point defined against git, so
-      # it was the one that could compare this commit against its parent. With
-      # that comparison removed (see the header for why), --staged in CI reads
-      # the git INDEX of a freshly checked-out tree — which is byte-for-byte the
-      # tree the step above already judged, since a checkout has no staged edits
-      # — so it re-ran the same rules over the same content and could not reach
-      # a different verdict. Adding it back buys a slower job and nothing else.
+      # A "dossierx check --staged --format text" step belongs here only if
+      # --staged can see something this job's first step cannot. --staged is the
+      # one entry point defined against git, so it is the one that COULD have
+      # compared this commit against its parent — but that comparison was
+      # withdrawn before it ever shipped (see the header for why). Without it,
+      # --staged in CI reads the git INDEX of a freshly checked-out tree — which
+      # is byte-for-byte the tree the step above already judged, since a checkout
+      # has no staged edits — so it would re-run the same rules over the same
+      # content and could not reach a different verdict. Adding it buys a slower
+      # job and nothing else.
       #
       # "check --staged" itself is NOT deprecated and did not lose anything else:
       # it still judges the index rather than the worktree, and still writes

@@ -1,0 +1,41 @@
+# gate-cost-model.yaml fixture — a reason recorded for a move that is inside the bounds
+#
+# 1.2 to 1.3 is +8.3%, well inside the +25% raise bound. An override on a move
+# that did not need one is refused, or the field becomes the sentence every entry
+# carries and nobody reads.
+schema: dossierx.gate-cost-model/1
+reserve:
+  value: 20000
+  unit: output_tokens
+backstop_factor:
+  value: 1.5
+classes:
+  - name: falsification-dense
+    seed:
+      value: 1.2
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value."
+    k:
+      - value: 1.3
+        numerator_unit: output_tokens
+        denominator_unit: bytes
+        previous: 1.2
+        rationale: "Nudged up after the first run."
+        bound_override: "Because I am pasting the template."
+  - name: newest-entry-only
+    seed:
+      value: 0.6
+      numerator_unit: output_tokens
+      denominator_unit: bytes
+      derived_from: "A fixture value."
+surfaces:
+  - name: readme
+    class: falsification-dense
+    document_basis: manifest.tracked_files
+  - name: changelog
+    class: newest-entry-only
+    document_basis: manifest.tracked_files
+  - name: roadmap
+    class: newest-entry-only
+    document_basis: manifest.tracked_files

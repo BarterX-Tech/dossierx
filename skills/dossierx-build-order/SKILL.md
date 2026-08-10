@@ -15,7 +15,7 @@ description: >-
 
 # DossierX build order — implementation sequencing
 
-Read **[[dossierx]]** for the envelope and error codes, and **[[dossierx-claims]]** for
+Read **[`dossierx`](../dossierx/SKILL.md)** for the envelope and error codes, and **[`dossierx-claims`](../dossierx-claims/SKILL.md)** for
 `build_role` and the lock lifecycle.
 
 Once every claim in a module is `locked`, Build Order derives the sequence to **build** it in.
@@ -88,7 +88,7 @@ frozen `hashes` so it stops reporting `stale` are all the same act as editing a 
 Commit the locked artifact along with the ledger; the sequence a human approved has to travel with
 the repository for CI to check it.
 
-As each claim's code lands, ground it — that is **[[dossierx-code-links]]**, the natural next step
+As each claim's code lands, ground it — that is **[`dossierx-code-links`](../dossierx-code-links/SKILL.md)**, the natural next step
 after finishing a claim from this sequence.
 
 ## When it goes stale
@@ -107,4 +107,4 @@ order as authoritative.
 
 Nothing here is project-specific. The phase sequence, the completeness gate and the topological
 sort operate purely on `build_role`, `rests_on` and `status` — fields every DossierX project
-already has. No configuration beyond what **[[dossierx-claims]]** requires.
+already has. No configuration beyond what **[`dossierx-claims`](../dossierx-claims/SKILL.md)** requires.

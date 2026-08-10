@@ -135,7 +135,12 @@ func retiredTopLevelCmds() []*cobra.Command {
 			`run: dossierx claim list --migrated`),
 		retiredCmd("implink",
 			`implink: removed in v0.3.0; recording a code link is dossierx claim link, and reading one back is part of what claim show reports`,
-			`run: dossierx claim link <id> --file <path> (to record one), or dossierx claim show <id> (to read them back)`),
+			// `claim link` is declared cobra.NoArgs and requires --module, --claim
+			// and --file, so the old `claim link <id> --file <path>` shape this hint
+			// printed exits non-zero twice over: the positional id is rejected before
+			// the body runs, and two required flags are absent. The spelling below is
+			// claim.go's own next_actions spelling, which is the one that runs.
+			`run: dossierx claim link --module <module> --claim <id> --file <path> (to record one), or dossierx claim show <id> (to read them back)`),
 		// migrate is the one stub NOT from v0.3.0, and it is the one that most
 		// needs to exist: README, SKILL.md, the CI template and CHANGELOG all
 		// spent a release telling every agent to type exactly `dossierx migrate
