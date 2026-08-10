@@ -5,6 +5,210 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-08-10
+
+**Nothing a consumer runs changes in this release.** Not one non-test Go file moved:
+`git diff v0.5.0..v0.5.1 -- '*.go'` touches `_test.go` files and nothing else, `internal/` and
+`skills/` are untouched end to end, and there is no new command, flag, `error.code`, lint rule,
+schema field or rendered-viewer byte. The engine is v0.5.0's engine, rebuilt at a new tag. There is
+nothing to re-export, nothing to re-render, and nothing on your side that behaves differently after
+upgrading.
+
+What this release is instead is the machinery that publishes the next one. Everything that has ever
+gone wrong with a DossierX release has been in the half a maintainer performs by hand — a version
+string copied into prose and left behind, a verification step that read the source instead of the
+artifact, a `commit` field that named the wrong sha for two releases running — and every one of
+those was a promise to look rather than something that fails when it is not true. Each item in
+`docs/RELEASING.md` now has a check behind it, the release itself is performed by a program rather
+than by a person following a list, and the parts that genuinely cannot be checked from inside this
+repository are named as such instead of being quietly assumed.
+
+### Added — `surfaces.yaml`, and one reading agent per surface
+
+`surfaces.yaml` declares every client-facing surface this project has — thirteen of them, from
+`README.md` to the compiled binary — and, beside them, seven declarations of what is deliberately
+out of scope and why. `tests/surfaces_manifest_test.go` requires every tracked file to be claimed by
+**exactly one** entry: a file matching nothing fails the build, and an out-of-scope entry cannot
+quietly swallow a path a surface also claims, because the test names both and fails. Before this,
+the list of things to review lived in a scope document, so a new client-facing file could appear
+with nothing to notice it and the only way to find the gap was an audit.
+
+At release time each surface is read by its own agent against a bundle assembled for it — the
+prompt (`gate/prompts/<surface>.md`), the surface's own files, and the extracted evidence its
+questions need. The bundle is fingerprinted, and the cache key is the digest of what the agent was
+**actually handed**, not the surface's name: change a byte in the evidence and that surface is
+re-read rather than carried forward. `gate/method.yaml` grants the agent exactly two tools, both
+report-only (`SurfaceFinding`, `SurfaceVerdict`), as an exclusive allow-list rather than a deny
+list — there is no file, shell, search, network or subagent tool, because "the bundle is the whole
+evidence set" is the property every key in the system rests on. What that file cannot promise, and
+says so, is that the harness outside this repository honoured the request.
+
+Findings are never filtered, deduplicated or ranked away on their route to the report, and a receipt
+carrying any finding at all evaluates to FAILED. A finding's `severity` is free text the reporting
+agent wrote about its own work: one sort comparator reads it so that a re-run over an unchanged tree
+produces an identical document, and no verdict, filter or threshold consults it anywhere.
+
+### Added — `make release-publish`, the only thing in this repository that tags
+
+The irreversible half of a release is now a nine-step driver rather than a sequence of commands a
+person types. It is authorized by the version typed twice —
+`make release-publish DOSSIERX_RELEASE_VERSION=vX.Y.Z DOSSIERX_RELEASE_AUTHORIZE=vX.Y.Z` — and
+deliberately not by a boolean, because a `=1` left in a shell profile or a CI secret authorizes
+every release forever, including the next one somebody triggers by accident.
+
+Before it touches git it establishes, in this order: that no part of this release is already
+published; that **the tree declares the release being tagged** — `CHANGELOG.md`'s newest heading and
+`site/src/content.ts`'s last `releases[]` entry must agree with each other and with what the human
+typed, which is the one question content-matching cannot answer, since a self-consistent tree tagged
+as some other release passes every other check; that the gate is green, **recomputed in this
+process** rather than read out of a record, because "no findings" cannot stand in for six separate
+refusals about coverage; and that the CI-run evidence for this exact commit exists. Then it merges
+`--no-ff`, reads the merge commit once and uses that value everywhere after, tags the named object,
+reads the tag back through its ref and re-checks the tree it points at, pushes the tag **by value**,
+verifies the published archives, and only then pushes `main`.
+
+A run that stops leaves a state a human can read: the step it stopped at, what had already been
+published, and what had not. It never proposes a retry it cannot perform.
+
+### Added — the published archives are verified before `main` moves
+
+Between the two irreversible acts, the driver reads the artifacts the way somebody downloading them
+does. It polls the forge until the Release workflow's assets exist — the ordinary state one second
+after a tag push is "the tag is there and the assets are not", so waiting happens inside the step
+rather than as advice to run the command again, which there is no way to do once the tag is public.
+Then: a missing `checksums.txt` is UNCHECKABLE and never "no mismatches found"; the expected archive
+names are derived from `.goreleaser.yaml` at the released commit — the build matrix, the
+`name_template` and the format overrides — so the day a seventh target is added this check grows
+with it instead of counting six and passing; every archive's sha256 is compared against its line
+**and** every line against an archive that was actually read; and the host platform's archive is
+extracted and its binary **run**, because an archive can carry a correct name, a correct checksum
+and a stale binary while every metadata check passes over it.
+
+### Added — the forge refuses an ungated tag
+
+`.github/workflows/release.yml` used to be `on: push: tags: ['v*']` and, one job later, six archives
+and a GitHub release, with no condition of any kind between the two. A new `gate` job now runs first
+and the publishing job `needs:` it, so a tag that does not get past it produces no archives at all.
+Two facts have to hold, both about the tagged tree rather than about whoever pushed: the tagged
+commit is reachable from `origin/main`, and the tree at that commit carries the release stamp for
+exactly this version. Every exit path that is not a pass is a refusal — there is deliberately no
+branch that reports "could not check" and exits 0.
+
+One residual is recorded in that file rather than described as fixed: the workflow GitHub runs for a
+tag is the one in the tagged tree, so anyone with push rights can weaken this job and tag that
+commit. Nothing inside this repository closes that — a check cannot be its own enforcement — and
+only a forge-side tag protection rule can.
+
+### Added — `make ci-evidence`: the run's own account, not the run's conclusion
+
+A green badge is not the check, and neither is a green check run: a conclusion is `success` over
+zero tests, so a suite emptied by a `-run` selector prints `ok [no tests to run]` for every package
+and the step, the job and the check run all conclude success over it. `make ci-evidence` fetches the
+CI run for a named merge commit and adjudicates the `go test -json` account the test binary itself
+emitted — per package, per test, per matrix cell — against the job set derived from `ci.yml`. No
+conclusion is read as evidence anywhere; conclusions are recorded in the verdict record for a human
+to look at and are adjudicated by nothing. The record is required to exist and to name the commit
+being released: a release nobody ran this for is refused, not assumed.
+
+### Added — `surface.json`, and v0.5.0's inventory frozen as the baseline
+
+`surface.json` is the machine-readable inventory of what this tree exposes — 19 commands under 7
+nouns, 3 root flags, 12 retired spellings, 28 lint rules, 44 error codes, 5 skills, 14 HTTP routes,
+129 markdown constructs, a render fingerprint, a per-package behaviour fingerprint, the JSON
+envelope's keys and exit codes, and the version pins — extracted from the tree by a test and
+regenerated, never written by hand. It is what prose gets judged against, which is what turns "the
+README says twenty commands" from a reviewer's memory into a comparison.
+
+`surface.baseline.json` freezes v0.5.0's inventory, because v0.5.0 shipped before the emitter existed
+and carries no `surface.json` of its own. It is the only record of what that release's surface was,
+so the first gated release has a real predecessor to be diffed against.
+`testdata/render-across-releases.golden.txt` does the same job for rendered output: the class of
+change a consumer's own gate cannot detect for them is exactly the class this project has shipped
+three times, and it is now compared release to release rather than noticed.
+
+### Changed — the published release notes no longer carry the merge commit's subject
+
+`.goreleaser.yaml`'s `changelog.filters.exclude` gains `^Merge `. The GitHub release body is
+generated from Conventional Commit subjects at tag time, and a `--no-ff` merge's own subject matches
+neither `^chore:` nor `^docs:`, so the catch-all "Other changes" group swallowed it — v0.5.0's range
+carries exactly one such subject, `eab3a63`, "Merge pull request #32 — v0.5.0, a claims graph in the
+viewer". It also made the notes unpredictable by construction: the pre-merge prediction runs before
+the merge commit exists, so it could never have seen the line the published page would carry. Both
+are closed by the one exclude, proved against a real `git merge --no-ff` in a from-scratch
+repository rather than against this project's own history, with the pre-fix config kept as the
+negative control so the scenario is shown to be real and not hypothetical.
+
+The release notes are a declared surface in their own right, and `.goreleaser.yaml` is its only
+path: the notes themselves do not exist until the tag, so the rules that decide what they say are
+what gets reviewed. The reason that surface exists is a shape nothing audited before — a
+user-visible change landing under a `docs:` or `chore:` subject is dropped by the filters and is
+invisible on the release page while being fully described in this file.
+
+### Changed — one release procedure, and the encoded second one is retired
+
+`.claude/workflows/release-checklist.js` — 447 lines that offered themselves to every agent in this
+repository as a runnable release procedure under their own name — is deleted, and the deletion is
+pinned. That distinction is the whole of it: restoring the file verbatim used to leave every test in
+this repository green, because nothing had ever read that directory, so the deletion was a fact
+about one commit rather than an invariant about the tree. `tests/ci_run_evidence_test.go` now parses
+every workflow declaration under `.claude/workflows/` and refuses any that declares itself a release
+procedure; a file it cannot parse is a failure and not a pass, because an unexamined corner of the
+directory the harness loads is exactly where a second procedure would sit unnoticed.
+
+`docs/RELEASING.md` is the single description of how this project releases, and it is now read by
+tests as well as by people — its pin sweep, the ordering of its tagging steps, and the three checks
+it keeps a person's are all held against the driver that performs them.
+
+### Changed — CI reports what it ran
+
+The test job checks out at `fetch-depth: 0`, because a checkout with no tags cannot resolve a
+release baseline and would otherwise take the "no tag yet" branch of every date and cross-release
+comparison and pass. `go test -race ./...` becomes `go test -race -json ./...`, which is what makes
+the run's per-test account exist at all — and it stays ONE command, spelled entirely out of the
+closed vocabulary that keeps `|| true`, `set +e` and `| tee` out of a suite step. The viewer job
+installs a pinned GoReleaser (v2.17.1) and fails rather than skips when the binary is not there, so
+the release build is watched doing its job instead of being read for what it was told to do; the
+site is built with a real toolchain so the browser suite reads rendered DOM rather than source.
+
+### Fixed — the site advertised a twenty-command CLI
+
+`site/index.html`'s `<meta name="description">` had claimed "a 20-command JSON CLI" since v0.3.0.
+Twenty was the v0.3.0 surface; v0.4.0 cut it to seven nouns and nineteen leaves, and the tag stayed
+wrong through two minor releases. It survived because it is the one count on the site that nothing
+derives — every other version and count comes from `latestRelease` / `latestVersion` /
+`commandCount`, deliberately, after three of them went stale once before — and `index.html` is
+static HTML that cannot interpolate. It is also the string search engines and link previews quote,
+which is the least likely place for anyone editing the site to look. The guard walks the real
+command tree rather than pinning a second literal, so changing the surface fails the build until the
+site follows; a phrasing that carries no count at all is not held to one, since a sentence without a
+number cannot go stale.
+
+### Fixed — the `dossierx version` transcript, and the hand-stamped release sha
+
+The site depicted `dossierx v0.5.0` where the published binary prints `dossierx version 0.5.0` —
+two errors in one short line, and nothing compared it to real output. GoReleaser's `{{.Version}}` is
+the tag with its leading `v` stripped, so the release spelling and the transcript spelling are
+different strings for good reasons; the transcript now derives from the release entry with the `v`
+removed, and it is checked against a binary linked the way a release links one, read out of the
+**rendered page** rather than out of the source.
+
+The `commit` field is deleted from every release entry, along with the step that wrote it, the
+fallback that rendered it and its type declaration. It could not converge — writing the sha is
+itself a commit, so the value was stale the moment it landed — and it named the wrong sha twice
+running: v0.4.1 shipped naming `5327923` while `refs/tags/v0.4.1` points at `206b4a4`. It also
+disagreed with the binary by construction, seven characters against the forty GoReleaser stamps into
+`main.commit`. The optional type declaration outlived the data, the reader and the release step,
+which is what would have let the field come back silently: `commit: "abc1234"` on a new entry would
+have type-checked, and the compiler was the only thing that would have objected.
+
+**Not in this release, and stated so deliberately.** Nothing derives a finding's classification from
+the evidence behind it, and there is no override field on a receipt — a finding a human has judged
+non-blocking can be cleared only by fixing the tree or by deleting the finding by hand, and deleting
+it leaves an adjudicated finding indistinguishable from one nobody raised. Why neither was built, and
+what each would need first, is recorded in the tests rather than left to be rediscovered. Nor does
+anything here verify the deployed site, the workflow run or the CDN: those are the three checks the
+driver hands to a person at the end, and it says in those words that it examined none of them.
+
 ## [0.5.0] - 2026-08-07
 
 **BREAKING: `dossierx check` now fails on a dependency loop that alternates `rests_on` and
