@@ -236,6 +236,17 @@ func gateFanoutProduce(root, tree, checkoutTree string, tracked []string) (gateF
 		return gateFanout{}, fmt.Errorf("the surfaces' documents could not be resolved against the tracked tree, so at least one agent would be asked about a document set nobody can state: %w", err)
 	}
 
+	// The context each surface borrows from other surfaces, resolved against the
+	// same tracked set the documents were. It is resolved HERE, beside them and
+	// before a single bundle is assembled, so that a `reads:` entry naming a file
+	// that has moved refuses the whole fan-out rather than one surface's bundle:
+	// a run that covered twelve of thirteen surfaces is the shape every refusal
+	// in this producer exists to prevent.
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		return gateFanout{}, fmt.Errorf("the surfaces' borrowed context could not be resolved against the tracked tree, so at least one agent would be asked its question without material this manifest says it needs: %w", err)
+	}
+
 	// MINTED, NOT DERIVED. See gateStage3MintRun: a tree-derived identifier is
 	// identical across the re-run that follows a partial fan-out, which is exactly
 	// the case the identifier exists to catch.
@@ -248,7 +259,7 @@ func gateFanoutProduce(root, tree, checkoutTree string, tracked []string) (gateF
 		return gateFanout{}, fmt.Errorf("the bundle directory %s could not be created: %w", gateFanoutBundleDir, err)
 	}
 	for _, surface := range declared {
-		spec, specErr := gateStage2BundleSpec(surface, documents[surface])
+		spec, specErr := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if specErr != nil {
 			// A REFUSAL, NEVER A SHORTER FAN-OUT. The one shape this really guards
 			// is gateStage2CheckExtractIsWhole's: a surface asked five questions

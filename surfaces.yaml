@@ -14,6 +14,42 @@
 # and fails. That is the same principle the gate itself runs on — never narrow
 # coverage silently — applied to the list of things being covered.
 #
+# READS: WHAT A SURFACE BORROWS BUT DOES NOT OWN. A surface entry may carry a
+# `reads:` list of exact repository-relative paths whose bytes its reviewing
+# agent needs in order to judge its OWN documents. It is not a second claim on
+# those files: ownership is decided by `paths:` alone, the exactly-one rule is
+# about `paths:` alone, and a file's reviewing agent is still the one surface
+# that claims it.
+#
+# WHY IT EXISTS. Because every file belongs to exactly one surface, and the gate
+# hands each agent that one surface's documents, a sentence whose truth turns on
+# ANOTHER surface's file was unanswerable by construction — the file was not
+# handed, not withheld, and not present. The frame tells an agent that a byte it
+# does not hold is never a reason to guess and never a reason to pass: report
+# FAILED and name the byte you needed. So every gate round produced the same
+# class of finding, correct each time, about the gate's own material rather than
+# about the release. `reads:` closes each one permanently: declare the path, and
+# that pair cannot recur.
+#
+# THE RULES, all enforced by gateSurfaceReferences in
+# cmd/dossierx/gate_fingerprint_test.go, each as a refusal rather than a
+# silently shorter bundle:
+#   - exact paths only, never patterns. A surface borrowing another's material
+#     names what it borrowed; a glob would let the borrowed set grow as the
+#     other surface does, without anyone deciding.
+#   - the path must be a tracked file. One that has moved refuses the whole
+#     fan-out, because the alternative is an agent reporting the coverage gap
+#     this list exists to close.
+#   - it may not be a file this surface's own `paths:` already claim. That is
+#     either a stale entry or a pattern that has grown, and those are different
+#     edits.
+#   - an out_of_scope path is legal, and often the point: `.github/` and
+#     `Makefile` are deliberately not reviewed AS PROSE, which is a statement
+#     about who reports on them, not about who may read them.
+#
+# The borrowed bytes reach the surface's key through the bundle, so editing a
+# referenced file re-runs the surfaces that declared it and no others.
+#
 # PATTERN GRAMMAR (see matchSurfacePattern in the test):
 #   - a pattern ending in "/" claims every file beneath that directory
 #   - "**/" matches any number of leading directory segments
@@ -62,6 +98,20 @@ surfaces:
     reach: Contributors.
     paths:
       - CONTRIBUTING.md
+    reads:
+      # "Adding a file is two steps: `surfaces.yaml` has to claim it" describes
+      # this file's own rules — exactly-one, the pattern grammar, what an
+      # out_of_scope entry means. Judging any of that without the manifest is
+      # judging a summary against nothing.
+      - surfaces.yaml
+      # The suite table names `make hook-test` and `make viewer-test` and says
+      # what each reaches; the nested-module claim is that a new module needs a
+      # CI job AND a Makefile target.
+      - Makefile
+      # "`.goreleaser.yaml`'s changelog grouping ... depend[s] on this" is a
+      # claim about that file's `changelog.groups` regexps, made in the
+      # Conventional Commits section.
+      - .goreleaser.yaml
 
   - name: release-procedure
     what: The one description of how this project releases, including its own
@@ -69,6 +119,15 @@ surfaces:
     reach: The maintainer, next release.
     paths:
       - docs/RELEASING.md
+    reads:
+      # The procedure states what the publish build stamps and under which
+      # template, and its archive step names the artifacts this file's
+      # name_template and format_overrides produce.
+      - .goreleaser.yaml
+      # It describes the forge's gate on a tag — what is checked, in which
+      # order, and what a refusal means — and since v0.5.2 also why the
+      # reachability check is gone and must not come back.
+      - .github/workflows/release.yml
 
   - name: agent-skills
     what: The SKILL.md bundles, plus the embed directive and reading order that

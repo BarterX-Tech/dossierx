@@ -628,6 +628,16 @@ type gateManifestEntry struct {
 	Name  string   `yaml:"name"`
 	Paths []string `yaml:"paths"`
 	Not   []string `yaml:"not"`
+	// Reads are documents this surface DOES NOT OWN but whose bytes its agent
+	// needs to judge its own. They are exact repo-relative paths, never
+	// patterns: a surface borrowing another's material has to name what it
+	// borrowed, and a glob would let the borrowed set grow silently as the other
+	// surface does.
+	//
+	// They take no part in ownership. gateEntryClaims reads Paths and Not only,
+	// so a `reads:` entry never makes this surface a second claimant of a file
+	// and never disturbs the manifest's exactly-one rule.
+	Reads []string `yaml:"reads"`
 }
 
 // gateLoadManifest reads surfaces.yaml. A manifest that cannot be read is an
@@ -688,6 +698,51 @@ func gateSurfaceDocuments(root string, tracked []string) (map[string][]string, e
 		}
 		sort.Strings(owned)
 		out[entry.Name] = owned
+	}
+	return out, nil
+}
+
+// gateSurfaceReferences resolves every surface's `reads:` list against the
+// tracked set, or refuses.
+//
+// EVERY REFUSAL HERE IS A REFUSAL AND NOT A SHORTER LIST, for the reason
+// gateBundleAssemble gives about its own: a bundle assembled over less material
+// than it should be still hashes, still looks like a match, and still carries a
+// verdict forward. A `reads:` entry that resolves to nothing is a question the
+// agent was supposed to be able to answer and now cannot, and it would go
+// unnoticed — the finding it produces looks exactly like the coverage gap this
+// mechanism exists to close.
+func gateSurfaceReferences(root string, tracked []string) (map[string][]string, error) {
+	m, err := gateLoadManifest(root)
+	if err != nil {
+		return nil, err
+	}
+	isTracked := make(map[string]bool, len(tracked))
+	for _, file := range tracked {
+		isTracked[file] = true
+	}
+
+	out := make(map[string][]string, len(m.Surfaces))
+	for _, entry := range m.Surfaces {
+		if len(entry.Reads) == 0 {
+			continue
+		}
+		seen := map[string]bool{}
+		refs := make([]string, 0, len(entry.Reads))
+		for _, rel := range entry.Reads {
+			switch {
+			case !isTracked[rel]:
+				return nil, fmt.Errorf("surface %q reads %q, which is not a tracked file. A reads: entry is an exact repository-relative path, never a pattern; if the file moved, move this entry with it. An unresolvable one is refused rather than dropped, because a dropped one leaves the agent reporting the coverage gap this list exists to close", entry.Name, rel)
+			case seen[rel]:
+				return nil, fmt.Errorf("surface %q reads %q twice; the bundle would carry it twice under the same heading", entry.Name, rel)
+			case gateEntryClaims(entry, rel):
+				return nil, fmt.Errorf("surface %q reads %q, which its own paths: already claim. reads: is for documents another surface owns — borrowing your own is either a stale entry or a paths: pattern that has grown, and the two are different edits", entry.Name, rel)
+			}
+			seen[rel] = true
+			refs = append(refs, rel)
+		}
+		sort.Strings(refs)
+		out[entry.Name] = refs
 	}
 	return out, nil
 }

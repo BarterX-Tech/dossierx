@@ -24,9 +24,31 @@ does.
    byte that is not in this message, that is not a reason to guess and not a
    reason to pass — report FAILED and name the byte you needed. A question you
    could not answer is not a question that answered itself.
-3. **A section marked "not handed over" is still part of your surface.** Those
-   files decide what the material you did receive says. If your reading depends
-   on one of them, say so; do not assume it agrees.
+
+   **Name the file exactly**, repository-relative. A byte you needed and were not
+   given is also a defect in the gate's own material: `surfaces.yaml` lets a
+   surface declare the documents it reads but does not own, and a missing one is
+   fixed there, once, so the same gap cannot reach you again. Your finding is
+   reported to the human either way — nothing is filtered — but an exact path is
+   what makes it fixable rather than merely true.
+3. **Know which of three things each section is.** The material below arrives in
+   three kinds and they are not interchangeable:
+   - **Yours, handed over.** Your surface's documents, bytes included. These are
+     what you report on.
+   - **Yours, not handed over.** Named in the "not handed over" section, bytes
+     withheld. They are still part of your surface and they decide what the
+     material you did receive says. If your reading depends on one, say so; do
+     not assume it agrees.
+   - **Context from another surface, handed over.** Marked
+     "NOT yours to report on". These are files your surface does not own,
+     included because a claim of YOURS turns on them. Use them to judge your own
+     documents. Do **not** review them: another agent has that surface, and a
+     finding filed here about a file you do not own arrives under the wrong
+     surface's name and is reported twice.
+
+   If a finding of yours rests on a context section, name that file — every
+   section states its source path — so the human can see the finding came in by
+   reference.
 4. **Report every finding.** Nothing is filtered on the way to the human, and
    severity is not yours to act on. A finding you decide is minor still goes in.
 5. **Say what you checked.** A PASS means you read every part below and found no

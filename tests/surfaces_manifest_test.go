@@ -57,6 +57,13 @@ type surfaceEntry struct {
 	Reason string   `yaml:"reason"`
 	Paths  []string `yaml:"paths"`
 	Not    []string `yaml:"not"`
+	// Reads are documents this surface does NOT own, whose bytes its reviewing
+	// agent needs to judge its own. They take no part in ownership: `claims`
+	// below reads Paths and Not only, so a reads: entry never makes this entry
+	// a second claimant and never disturbs the exactly-one rule. See
+	// surfaces.yaml's header for what the list is for and the rules it answers
+	// to.
+	Reads []string `yaml:"reads"`
 }
 
 // TestEveryTrackedFileIsDeclaredASurfaceOrExcluded is the whole point of the
@@ -264,4 +271,81 @@ func trackedFiles(t *testing.T, root string) []string {
 	}
 	sort.Strings(files)
 	return files
+}
+
+// TestReadsDoesNotCountTowardTheExactlyOneRule pins the scoping that makes
+// `reads:` possible at all.
+//
+// A surface entry may carry a `reads:` list naming documents it does NOT own but
+// whose bytes its reviewing agent needs — see surfaces.yaml's own header for why
+// that exists. Ownership stays with `paths:`, and this file's central rule is
+// that every tracked file is claimed by EXACTLY ONE entry. If the coverage walk
+// ever started counting `reads:` as a claim, the first entry to land would make
+// its target doubly-claimed and redden the build immediately, and the obvious
+// repair — deleting the reads: entry — throws away the mechanism.
+//
+// So the property is asserted directly rather than left to the coverage test to
+// discover: a file named in some surface's reads: is claimed by whichever entry
+// owns it, and by that entry alone.
+func TestReadsDoesNotCountTowardTheExactlyOneRule(t *testing.T) {
+	root := repoRoot(t)
+	manifest := loadSurfaceManifest(t, root)
+
+	var referenced []string
+	for _, entry := range manifest.Surfaces {
+		referenced = append(referenced, entry.Reads...)
+	}
+	if len(referenced) == 0 {
+		t.Skip("no surface declares reads: yet, so there is nothing to double-count")
+	}
+
+	for _, file := range referenced {
+		var claimants []string
+		for _, entry := range allSurfaceEntries(manifest) {
+			if entry.claims(t, file) {
+				claimants = append(claimants, entry.Name)
+			}
+		}
+		if len(claimants) != 1 {
+			t.Errorf("%q is named in a surface's reads: and is claimed by %d entries (%v); it must be claimed by exactly one.\n"+
+				"reads: is not a claim — ownership is decided by paths: alone. If the coverage walk has started counting reads: as ownership, fix the walk rather than the manifest: deleting the reads: entry to make this green removes material an agent needs and re-opens the coverage gap it was declared to close.",
+				file, len(claimants), claimants)
+		}
+	}
+}
+
+// TestReadsEntriesAreExactTrackedPathsSomebodyElseOwns holds the three rules a
+// reads: entry answers to, at the manifest level.
+//
+// The gate enforces the same three in gateSurfaceReferences, as refusals on the
+// run path, which is what makes them checks rather than tests. They are asserted
+// here as well because this file is where a person edits the manifest, and a
+// failure here names the entry and the rule in one place instead of surfacing as
+// a refused fan-out several steps later.
+func TestReadsEntriesAreExactTrackedPathsSomebodyElseOwns(t *testing.T) {
+	root := repoRoot(t)
+	manifest := loadSurfaceManifest(t, root)
+	tracked := trackedFiles(t, root)
+
+	isTracked := make(map[string]bool, len(tracked))
+	for _, file := range tracked {
+		isTracked[file] = true
+	}
+
+	for _, entry := range manifest.Surfaces {
+		seen := map[string]bool{}
+		for _, rel := range entry.Reads {
+			switch {
+			case strings.ContainsAny(rel, "*?"):
+				t.Errorf("surface %q reads %q, which is a pattern. reads: takes exact repository-relative paths: a surface borrowing another's material names what it borrowed, and a glob lets the borrowed set grow as the other surface does without anyone deciding", entry.Name, rel)
+			case !isTracked[rel]:
+				t.Errorf("surface %q reads %q, which is not a tracked file. If it moved, move this entry with it — the gate refuses the whole fan-out over an unresolvable one rather than dropping it, because a dropped entry leaves the agent reporting the coverage gap this list exists to close", entry.Name, rel)
+			case seen[rel]:
+				t.Errorf("surface %q reads %q twice", entry.Name, rel)
+			case entry.claims(t, rel):
+				t.Errorf("surface %q reads %q, which its own paths: already claim. reads: is for documents another surface owns — borrowing your own is either a stale entry or a paths: pattern that has grown, and those are different edits", entry.Name, rel)
+			}
+			seen[rel] = true
+		}
+	}
 }

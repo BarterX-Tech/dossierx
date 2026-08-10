@@ -338,11 +338,20 @@ func gateStage2CheckExtractIsWhole(spec gateBundleSpec) error {
 }
 
 // gateStage2BundleSpec is what one surface's bundle is assembled from.
-func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, error) {
+func gateStage2BundleSpec(surface string, documents, references []string) (gateBundleSpec, error) {
 	if len(documents) == 0 {
 		return gateBundleSpec{}, fmt.Errorf("surface %q resolved to no document", surface)
 	}
-	spec := gateBundleSpec{Surface: surface, Artifacts: gateStage2Artifacts(surface)}
+	spec := gateBundleSpec{
+		Surface:   surface,
+		Artifacts: gateStage2Artifacts(surface),
+		// Context this surface borrows from others. It sits OUTSIDE the
+		// Handed/Withheld split below, which is what keeps that split's totality
+		// enforceable: those two together are still exactly the resolved
+		// document set, and this is a third list of documents the surface does
+		// not own. gateBundleAssemble refuses any overlap between them.
+		Referenced: append([]string(nil), references...),
+	}
 	switch {
 	case surface == "binary-and-viewer":
 		// Handed and Withheld together are still the whole resolved set: every
@@ -366,8 +375,8 @@ func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, e
 }
 
 // gateStage2Inputs is one surface's whole key input set.
-func gateStage2Inputs(root, surface string, documents []string) (gateSurfaceInputs, error) {
-	spec, err := gateStage2BundleSpec(surface, documents)
+func gateStage2Inputs(root, surface string, documents, references []string) (gateSurfaceInputs, error) {
+	spec, err := gateStage2BundleSpec(surface, documents, references)
 	if err != nil {
 		return gateSurfaceInputs{}, err
 	}
@@ -892,10 +901,15 @@ func gateStage2Keys(root string, tracked []string) (map[string]string, error) {
 		return nil, err
 	}
 
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		return nil, err
+	}
+
 	keys := make(map[string]string, len(declared))
 	var problems []string
 	for _, surface := range declared {
-		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface])
 		if inErr != nil {
 			problems = append(problems, inErr.Error())
 			continue
@@ -1542,8 +1556,13 @@ func TestGateStage2EveryClaimedDocumentIsAccountedForInItsBundle(t *testing.T) {
 		t.Fatalf("resolve documents: %v", err)
 	}
 
+	references, err := gateSurfaceReferences(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
+
 	for _, surface := range declared {
-		spec, err := gateStage2BundleSpec(surface, documents[surface])
+		spec, err := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if err != nil {
 			t.Errorf("surface %q: %v", surface, err)
 			continue
@@ -1591,7 +1610,12 @@ func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testin
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
-	spec, err := gateStage2BundleSpec(surface, documents[surface])
+
+	references, err := gateSurfaceReferences(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
+	spec, err := gateStage2BundleSpec(surface, documents[surface], references[surface])
 	if err != nil {
 		t.Fatalf("the real %s surface could not be given a bundle spec: %v", surface, err)
 	}
@@ -1706,7 +1730,7 @@ func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testin
 			Question string
 		}{"cmd/dossierx/renamed-away/", ".go", "a class whose directory was renamed"})
 
-		if _, err := gateStage2BundleSpec(surface, documents[surface]); err == nil {
+		if _, err := gateStage2BundleSpec(surface, documents[surface], references[surface]); err == nil {
 			t.Fatal("a class resolving to no handed file was accepted; the files are still in the key and still named as withheld, and the question about them is being put to nobody")
 		}
 		keys, keyErr := gateStage2Keys(overlay, tracked)
@@ -1740,9 +1764,14 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
+
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
 	key := func(t *testing.T) (string, []byte) {
 		t.Helper()
-		spec, specErr := gateStage2BundleSpec(surface, documents[surface])
+		spec, specErr := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if specErr != nil {
 			t.Fatalf("bundle spec: %v", specErr)
 		}
@@ -1750,7 +1779,7 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 		if bundleErr != nil {
 			t.Fatalf("assemble: %v", bundleErr)
 		}
-		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface])
 		if inErr != nil {
 			t.Fatalf("inputs: %v", inErr)
 		}
