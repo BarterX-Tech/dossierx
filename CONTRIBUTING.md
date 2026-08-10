@@ -65,6 +65,29 @@ make viewer-test
 against a real git repository, so no Go test can cover it; CI runs this on Linux, macOS and
 Windows, because the hook body executes under git's own bundled `sh`.
 
+### Two places a local green proves less than it looks like
+
+Neither of these is a reason to skip the local run. Both are reasons not to report one as the
+result.
+
+**The CI `git hook` matrix outranks a local `make hook-test`.** The hook body executes under git's
+own bundled `sh`, which is a different shell on each of the three platforms — so a local PASS
+covers one of three legs. Treat it as fast feedback; the authoritative answer is the matrix.
+
+**A green against a Chromium fork is not a green against Chrome.** `resolveBrowser` falls back to
+Comet when no Chrome or Chromium is installed, and since v0.5.0 the suite logs which browser it
+actually drove — read that line before quoting a result. The difference is not hypothetical: Comet
+serves its own `chrome://` UI and posts telemetry through a path containing `/api/`, and
+`graph_offline_test.go` was reading that traffic as the page's own — 119 request events on the tab,
+118 of them the browser's. v0.5.0 fixed that specific misread by attributing requests via CDP's
+`DocumentURL`, but the class remains: a fork is a different browser, and the suite cannot tell you
+what Chrome would have done.
+
+Comet deliberately stays in the candidate list. On a machine with no other browser, removing it
+means the suite cannot run locally at all, and a suite nobody can run is worse than one whose
+evidence needs a caveat. `DOSSIERX_TEST_BROWSER` is how you remove the caveat: it pins which
+browser is driven, and turns "no browser found" from a skip into a failure.
+
 `tests/nested_module_coverage_test.go` fails the build if a nested module is ever added
 without a CI job *and* a Makefile target, so this list cannot quietly go stale.
 

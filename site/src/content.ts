@@ -386,6 +386,7 @@ export const contentSpec: ContentSpec = {
             commandNote: "the one DossierX command you run",
             can: [
               "Read every claim, facet, build order and code link",
+              "Open the claims graph — every rests_on, governed_by and mirrors edge as one canvas, with overlays for cycles, governance, isolated claims and open threads",
               "Comment on any card — including a card with no thread yet",
               "Reply; resolve and reopen any thread",
               "Edit and delete your own messages",
@@ -495,7 +496,7 @@ export const contentSpec: ContentSpec = {
       title: "The claim — the atomic unit of everything.",
       kind: "model-diagram",
       contentMd:
-        "A **claim** is one reviewable, YAML-authored fact: prose, a table, a sequence, or a mockup. Its `module.facet.slug` id, content, status, and typed relationships give the engine enough structure to validate what ordinary prose cannot.\n\nThe agent authors them with `dossierx claim new` and inspects them with `dossierx claim show` — hand-editing YAML is the thing being gated, so there is a sanctioned way to write one. Claims form a dependency graph through `mirrors`, `rests_on`, and `governed_by`; separately, `build_role` places a fact in the implementation sequence, while `kind` distinguishes facts from reading guidance. The schema, examples, and real on-disk layout below show the full contract.",
+        "A **claim** is one reviewable, YAML-authored fact: prose, a table, a sequence, or a mockup. Its `module.facet.slug` id, content, status, and typed relationships give the engine enough structure to validate what ordinary prose cannot.\n\nThe agent authors them with `dossierx claim new` and inspects them with `dossierx claim show` — hand-editing YAML is the thing being gated, so there is a sanctioned way to write one. Claims form a dependency graph through `mirrors`, `rests_on`, and `governed_by`, and the viewer draws that graph: a **Claims graph** pane renders every edge as one canvas, with overlays for dependency cycles, governance, isolated and weakly linked claims, draft versus locked, and open comment threads, plus a per-claim detail panel and collapse to modules or facets. Separately, `build_role` places a fact in the implementation sequence, while `kind` distinguishes facts from reading guidance. The schema, examples, and real on-disk layout below show the full contract.",
       codeExamples: [
         {
           title: "A minimal claim",
@@ -1161,7 +1162,7 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "The human's one command: the viewer, with a localhost-only comment write-back API.",
                 detail:
-                  "Binds 127.0.0.1 on a random high port (override with --port), renders the viewer from memory, and exposes the comment operations over a same-origin JSON API — so a reviewer opens, replies to and resolves threads in the browser while the agent works from the CLI. Every request passes Host + Origin admission checks (DNS-rebinding and CSRF defence) and no CORS header is ever sent; the page live-reloads over server-sent events as claim files change. It renders to memory only — never writing viewer/index.html or .catalog.json on a page load — and every claim write goes through the one claims-locked path. It is also the single permanently text-only command: a long-running process cannot be one envelope, and its consumer is the human anyway.",
+                  "Binds 127.0.0.1 on a random high port (override with --port), renders the viewer from memory, and exposes the comment operations over a same-origin JSON API — so a reviewer opens, replies to and resolves threads in the browser while the agent works from the CLI. It also serves GET /api/graph, which backs the claims-graph pane's refresh button by rebuilding and re-stamping the graph payload from the current catalog at request time rather than reusing the one baked into the render; over file:// there is nothing to refresh from, so the button is absent. Every request passes Host + Origin admission checks (DNS-rebinding and CSRF defence) and no CORS header is ever sent; the page live-reloads over server-sent events as claim files change. It renders to memory only — never writing viewer/index.html or .catalog.json on a page load — and every claim write goes through the one claims-locked path. It is also the single permanently text-only command: a long-running process cannot be one envelope, and its consumer is the human anyway.",
                 example:
                   "$ dossierx serve\nserving: http://127.0.0.1:52431/",
               },
