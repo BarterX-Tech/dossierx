@@ -474,7 +474,7 @@
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
     "internal/serve": "sha256:666581146fab56ef80e5686bdaf48fc8bee708a74b7f2b13b127978dbdbcade4",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:67264427afdc9930bd26389f882d15ee9af5a980a4c280bfde8be3511655000b"
+    "skills": "sha256:f125fee9844edc952ae166045ac9e81e503764e24a346431afe1b7500588c150"
   },
   "envelope": {
     "keys": [

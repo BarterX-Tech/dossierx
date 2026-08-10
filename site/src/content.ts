@@ -536,7 +536,7 @@ export const contentSpec: ContentSpec = {
           },
           {
             name: "build_role",
-            desc: "orientation | schema | behavior | api | verification | out-of-scope. Optional while draft, REQUIRED once locked.",
+            desc: "orientation | schema | behavior | api | verification | out-of-scope. Optional while draft, REQUIRED once locked. `schema` covers anything that must exist before the things below it can conform to it — data shapes, and also a declared contract such as a signature an implementation is written against. `api` is for entry points that wrap the behavior they call into.",
           },
           {
             name: "kind",

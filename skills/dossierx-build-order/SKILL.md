@@ -50,16 +50,44 @@ Never reordered, never interleaved:
 
 1. **orientation** — context and process claims. Read for background; never build code directly
    from one.
-2. **schema** — data shapes. Build first; everything below assumes these types exist.
+2. **schema** — anything that must exist before the things below it can conform to it. Build
+   first; everything below assumes these exist. Data shapes are the common case; a **declared
+   contract** is the other — see below.
 3. **behavior** — workflow and logic, the bulk of the work. Ordered *within* the phase by a real
    topological sort over `rests_on`, so a claim resting on another behavior claim is built strictly
    after it.
-4. **api** — public entry points, after the behavior they wrap.
+4. **api** — public entry points that wrap or compose the behavior below them, built after it. An
+   `api` claim points *down* at what it calls into.
 5. **verification** — test-checklist claims, read last so tests are written against everything
    already built.
 
 `out-of-scope` claims are never placed in the sequence, but are always still reported as
 `excluded` — never silently dropped from view.
+
+### A declared contract is `schema`, not `api`
+
+When a module is documented at two levels — a caller-facing contract and a maintainer-facing
+internals spec — each entry point produces two claims: a **declaration** (the signature, its
+parameters and return, who may call it) and an **implementation** (what it does internally). The
+implementation `rests_on` the declaration, because changing the signature makes the implementation
+claim false.
+
+Give the declaration `build_role: api` and every one of those edges points the wrong way through
+the phases: `behavior` builds before `api`, so the sequence tells you to build the implementation
+first and then the contract it was written against. In one audited module that single cause
+produced 35 of 70 forward references.
+
+Give it `schema` and the order is right, because `schema` means "build first; everything below
+assumes these exist" — which is what a declaration is.
+
+Do **not** reach for either workaround. Flipping the edge (asserting the declaration rests on the
+implementation) is false: a signature does not become wrong because an implementation changed.
+Merging the two claims discards a distinction the source documentation drew deliberately, for two
+different audiences.
+
+One consequence to expect: a module whose whole purpose is a public API can end up with an **empty
+`api` phase**. The sequence is right; it just reads oddly. That is the accepted cost of the rule,
+not a sign you have mis-roled something.
 
 `build_role` and `kind` are different axes. `build_role` says *where in the build sequence* a claim
 sits; `kind: orientation-note` says *what the claim is* — reading guidance rather than a fact about

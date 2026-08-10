@@ -426,18 +426,53 @@ claim in that module is locked.
   (`out-of-scope` is never part of the sequence — see below):
   1. `orientation` — context/process claims read for background but never
      themselves acted on during implementation.
-  2. `schema` — data-shape claims (types, fields, storage layout); built
-     first among the "real work" phases.
+  2. `schema` — anything that must EXIST before the things below it can
+     conform to it; built first among the "real work" phases. Data shapes
+     (types, fields, storage layout) are the common case, and a DECLARED
+     CONTRACT is the other: a function signature with its parameters,
+     its return and who may call it, where the module documents that
+     separately from what the function does internally. See "a declared
+     contract is `schema`, not `api`" below.
   3. `behavior` — workflow/logic claims, the bulk of the real
      implementation work; ordered within this phase by `rests_on` edges to
      other `behavior` claims in the same module.
-  4. `api` — public-function/entry-point claims, built after the behavior
-     they call into.
+  4. `api` — public-function/entry-point claims that WRAP or COMPOSE the
+     behavior below them, built after that behavior. An `api` claim points
+     DOWN at what it calls into; a claim that points at nothing and is
+     instead conformed TO is a declared contract, and belongs in `schema`.
   5. `verification` — test-checklist/acceptance-criteria claims, read last
      so tests can be written against everything else already built.
   6. `out-of-scope` — deferred/future-scope claims. Never placed in a
      module's build order, but still reported (as excluded) by
      `internal/buildorder`, so nothing silently vanishes from view.
+**A declared contract is `schema`, not `api`.** A module documented at two
+levels — a caller-facing contract and a maintainer-facing internals spec —
+produces two claims per entry point: a DECLARATION (the signature, its
+parameters and return, who may call it) and an IMPLEMENTATION (what the
+function does internally, step by step). The implementation `rests_on` the
+declaration, because changing the signature makes the implementation claim
+false.
+
+Role the declaration `api` and every one of those edges is a forward
+reference: `behavior` builds before `api`, so the sequence would say build
+the implementation first and then the contract it was written against. In
+one audited module this single cause accounted for 35 of 70 forward
+references. Role it `schema` and the ordering is simply right, because
+`schema` means "build first; everything below assumes these exist" — which
+is exactly what a declaration is.
+
+Two things this deliberately does not do. It does not flip the edge:
+a signature does not become wrong because an implementation changed, and
+reversing `rests_on` to satisfy a phase order inverts what the edge means.
+And it does not merge the two claims: the split serves two audiences and
+the source documentation drew it on purpose.
+
+The residual is real and is stated rather than papered over. A module whose
+whole purpose is a public API can end up with an EMPTY `api` phase, every
+entry point having become `schema`. The sequence is right and it reads
+wrong, and there is no third answer here that is not either a false edge or
+a lost distinction.
+
 - A `rests_on` edge from one claim to another claim in the SAME module
   whose `build_role` is a later phase in the sequence above is a
   phase-order violation — a modeling error the dependency graph doesn't
