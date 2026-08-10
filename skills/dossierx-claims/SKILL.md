@@ -56,8 +56,11 @@ it out.
   Every `rows` cell gets the narrower **inline-only** ceiling — escapes, code spans, links,
   emphasis, strikethrough and autolinks, but no block construct and no image. In both,
   `[text](url)` links render with an allowlisted scheme; `javascript:`/`data:` URLs are
-  neutralized. See FORMAT.md's "`body` and the markdown ceiling" section for the full
-  construct-by-surface account — do not reach past either ceiling.
+  neutralized. The full construct-by-surface account is FORMAT.md's "`body` and the markdown
+  ceiling" section, which is **not in your repository** — this bundle was exported into it and
+  FORMAT.md was not. Read it at
+  https://github.com/BarterX-Tech/dossierx/blob/v0.5.2/FORMAT.md — do not reach past either
+  ceiling.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required
@@ -209,8 +212,10 @@ step*: the untouched files still agree with the touched one. It cannot prove a c
 record were not rewritten **together** — an in-repo ledger cannot attest anything against the person
 who can write it, and a re-lock mints a record whose hash is correctly that of the new content, while
 `reason`, `at` and `actor` are prose nothing checks. So never report `ok: true` as "nobody tampered",
-and never propose an edit that touches a locked claim and its record in the same breath. FORMAT.md
-states the principle; the diff and a required CI check are where it is caught.
+and never propose an edit that touches a locked claim and its record in the same breath. The
+principle is stated in full in FORMAT.md, which did not ship into this repository with this bundle:
+https://github.com/BarterX-Tech/dossierx/blob/v0.5.2/FORMAT.md. The diff and a required CI check
+are where it is caught.
 
 **Three project-root files are tracked, committed artifacts**, beside `project.config.yaml` and
 never `.gitignore`d: `.dossierx-lock-store.json` (the ledger; missing → `lock-ledger-absent`),

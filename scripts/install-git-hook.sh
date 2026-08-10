@@ -419,11 +419,30 @@ usage() {
 	# twice is how the two drift apart. Piped-from-stdin invocations have no
 	# readable $0, so fall back to the one line that matters.
 	if [ -r "$0" ]; then
-		sed -n '/^# USAGE/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//'
+		sed -n '/^# USAGE/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//' \
+			| sed "s|^  scripts/install-git-hook\.sh |  $self_invocation |"
 	else
-		printf '%s\n' 'usage: install-git-hook.sh [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]'
+		printf '%s\n' "usage: $self_invocation [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]"
 	fi
 }
+
+# HOW TO NAME THIS SCRIPT BACK TO THE READER. Every recovery this file prints
+# used to say "scripts/install-git-hook.sh", which is where the file lives in
+# the DossierX repository and nowhere else. The ordinary reader curl'd one file
+# into their own project — README and the router skill both hand them a pinned
+# raw URL — so that path is a file-not-found, and it was the only instruction
+# offered to somebody whose hook had just been refused. This is the same defect
+# already fixed once in the hook body itself, which used to name a repository
+# path for "remove the hook".
+#
+# So: name the invocation the reader actually used when we can see it, and fall
+# back to the pinned URL when we cannot, which is exactly the piped-from-stdin
+# case above.
+if [ -r "$0" ]; then
+	self_invocation="sh \"$0\""
+else
+	self_invocation="curl -fsSL https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.2/scripts/install-git-hook.sh | sh -s --"
+fi
 
 assume_yes=0
 dry_run=0
@@ -523,6 +542,27 @@ if [ -n "$configured_hooks_path" ]; then
 		"      core.hooksPath\" says which. This script only READS it: it never sets or" \
 		"      changes core.hooksPath, because repointing it would silently disable" \
 		"      every other hook you run." ""
+
+	# SAY THE MACHINE-WIDE CASE OUT LOUD. Naming the setting and handing over
+	# the command that resolves its origin is not the same as telling somebody
+	# what is about to happen to them: a reader who does not already know how
+	# core.hooksPath scopes will read the note above as being about this
+	# repository. When the value came from global or system config, this write
+	# lands outside the repository the operator is standing in and the hook then
+	# runs for EVERY repository on the machine. That is legitimate — a global
+	# hooks path is an ordinary single-machine setup and repointing it would be
+	# worse — but it must be stated rather than inferred, which is a maintainer's
+	# ruling of 11 Aug 2026 on a v0.5.2 gate finding.
+	hooks_path_origin=$(git ${repo_dir:+-C "$repo_dir"} config --show-origin --get core.hooksPath 2>/dev/null | cut -f1)
+	case "$hooks_path_origin" in
+	file:*/.gitconfig | file:*/.config/git/config | file:/etc/*)
+		printf '%s\n' \
+			"      THAT SETTING IS NOT THIS REPOSITORY'S. It comes from" \
+			"      ${hooks_path_origin#file:}, so this hook will run for EVERY git" \
+			"      repository on this machine, not only this one. Uninstall with" \
+			"      \"$self_invocation --uninstall\", which removes the same path." ""
+		;;
+	esac
 fi
 
 # --- uninstall --------------------------------------------------------------
@@ -585,9 +625,11 @@ foreign)
 			"  replace it   re-run with --force. The existing hook is copied to" \
 			"               <hook>.pre-dossierx.<timestamp> first, and this script tells you where." \
 			"" \
-			"  chain it     keep your hook and call ours from it:" \
+			"  chain it     keep your hook and call ours from it. Re-run THIS" \
+			"               script with --print-hook; if you piped it in and have" \
+			"               no copy on disk, fetch it again from the same URL:" \
 			"" \
-			"                 scripts/install-git-hook.sh --print-hook > \\" \
+			"                 $self_invocation --print-hook > \\" \
 			"                     \"$hooks_dir/dossierx-pre-commit\"" \
 			"                 chmod +x \"$hooks_dir/dossierx-pre-commit\"" \
 			"" \
@@ -655,8 +697,10 @@ fi
 printf '%s\n' "" \
 	"Two things this hook does NOT do:" \
 	"  · it does not fire on clean merges, rebases, cherry-picks or reverts —" \
-	"    git simply does not run pre-commit for those. Add the CI workflow" \
-	"    (scripts/ci/dossierx-check.yml); CI is the authority." \
+	"    git simply does not run pre-commit for those. Add the CI workflow;" \
+	"    CI is the authority. It is not in your repository yet — copy it from" \
+	"    https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.2/scripts/ci/dossierx-check.yml" \
+	"    into .github/workflows/." \
 	"  · it does not check anything you did not stage. --staged reads the index." \
 	"" \
 	"Three project-root files are TRACKED ARTIFACTS. Commit them; never" \

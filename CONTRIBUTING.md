@@ -124,14 +124,32 @@ The pattern grammar (`dir/`, `**/`, `*`, exact paths, and per-entry `not:` excep
 documented in the comment at the top of `surfaces.yaml`. A file matching nothing is a build
 failure on purpose: the next undeclared surface should cost a compile, not an audit.
 
+**There is a third kind of entry, and it can fail your build on a file you did not touch.** New
+in v0.5.2, a surface may carry a `reads:` list naming exact paths it borrows but does not own —
+the documents its reviewing agent needs in order to judge its own prose. `reads:` is not a second
+claim: ownership is decided by `paths:` alone and the exactly-one rule is about `paths:` alone.
+What it adds is a second way to go red. `gateSurfaceReferences` in
+`cmd/dossierx/gate_fingerprint_test.go` requires every `reads:` path to be an exact tracked file
+that the declaring surface does not already claim, and a path that has **moved refuses the whole
+fan-out** rather than producing a shorter bundle. So moving, renaming or deleting a tracked file
+that some other surface declares in `reads:` is a red build even though your file is still
+claimed exactly once — and the failure names a surface you may have had no reason to read. Fix it
+by updating the `reads:` entry, not by widening it to a pattern: patterns are refused, precisely
+so a borrowed set cannot grow without someone deciding.
+
 ## Linting
 
 ```sh
-golangci-lint run
+golangci-lint run    # the root module
+make viewer-lint     # viewer-tests/, which the line above does not read
 ```
 
-CI runs this with the pinned version in `.github/workflows/ci.yml`; install the same version
-locally to avoid surprises.
+CI runs both, as two steps of the lint job, with the pinned version in
+`.github/workflows/ci.yml`; install the same version locally to avoid surprises.
+
+**`golangci-lint run ./...` at the root has the same blind spot `go test ./...` has.**
+`viewer-tests/` is a separate module, so a root run does not read a line of it. That is the same
+boundary the two-suites section above describes for tests, and it needs the same second command.
 
 ## Running the CLI locally
 

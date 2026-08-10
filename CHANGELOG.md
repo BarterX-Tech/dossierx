@@ -131,6 +131,69 @@ to the wrong surface.
   created, and the assertion passing against an ordinary missing file. Mutation-checked — with the
   removal silently skipped, the test reports SKIP and the package prints `ok`.
 
+### Fixed — found by this release's own reading gate
+
+Thirteen agents read the thirteen declared surfaces against this tree and returned 39 findings. The
+ones a consumer can observe:
+
+- **The hook installer told you to run a file you do not have.** Every recovery it printed named
+  `scripts/install-git-hook.sh`, which is where that file lives in *this* repository. The ordinary
+  reader curls one file into their own project, so the single instruction offered to somebody whose
+  hook had just been refused was a file-not-found. It now names the invocation you actually used, or
+  the pinned raw URL when it was piped from stdin and there is no `$0` to name. The same fix reaches
+  the "add the CI workflow" message, which named a path in this repository and gave no way to obtain
+  it. This is the defect v0.5.1 fixed inside the hook body and left standing in the installer around
+  it.
+- **A global `core.hooksPath` install is now stated to be machine-wide.** The installer reads that
+  setting rather than assuming `.git/hooks`, which is right — but when the value comes from your
+  global or system config, the hook it writes runs for every repository on the machine, and the note
+  only named the setting and the command to inspect it. It now says so outright, and names the
+  uninstall command that removes the same path. The behaviour is unchanged and deliberate: repointing
+  `core.hooksPath` would silently disable every other hook you run.
+- **Two shipped skill bundles cited a file that never ships with them.** `dossierx-claims` and
+  `dossierx-comments` both defer to `FORMAT.md` for the markdown ceiling and for the in-repo-ledger
+  principle. `dossierx skills export` writes the SKILL.md tree, the AGENTS.md section and the agent
+  guide — never `FORMAT.md`. Both now link it at this release's tag, which is the convention the
+  router bundle already used for the two other files it knows are absent.
+- **`dossierx claim new --help` promised a card layout for a facet that gets a banner.** A claim in
+  the reserved `overview` facet is written as `layout: banner` when `--layout` is not given, because a
+  card there fails `orientation-note-shape`. The behaviour was correct and the help text described the
+  behaviour it replaced.
+- **`mailto:` was the one allowlisted link scheme nothing pinned.** `FORMAT.md` promised it twice and
+  the construct corpus had no case for it — every other allowed scheme and every rejected one did. It
+  renders correctly; it is now pinned as `link-mailto`, so the promise cannot quietly stop being true.
+- **`FORMAT.md` stated an absolute about tables that its own corpus contradicts.** "A well-formed
+  table is always rendered as a table" is true of size and shape but not of position: a table indented
+  at the top level is prose, which is a separate rule from the list-item one and was undescribed. The
+  blockquote section had the matching gap — it described only the permissive half and never said there
+  is no lazy continuation, which CommonMark trains an author to expect.
+
+And the ones only a maintainer sees, each of which is this release being wrong about itself:
+
+- `docs/RELEASING.md` opened by saying the forge checks that the tagged commit is reachable from
+  `origin/main` — the check this very release removed, contradicted by the same file further down.
+- The gate's own baseline command still passed `surface.baseline.json`, the v0.5.0 bootstrap, with the
+  correction sitting *below* the block rather than in it. Somebody running this release's gate copied
+  it and caught the mismatch only by reading on. The command now does the right thing and the note
+  says when it does not apply.
+- Step 1 said a bundle is assembled from four things. Since this release it is five — `reads:`
+  documents are the fifth.
+- `CHANGELOG.md` had no `[0.5.2]` link definition, so the shipped release was the only version in the
+  file whose heading was not a link, and `[Unreleased]` still compared from `v0.5.1`, which would have
+  presented this entire release as unreleased the moment it was tagged.
+- `CONTRIBUTING.md` never mentioned `make viewer-lint`, so a contributor following it end to end
+  linted strictly less than CI does; and its account of `surfaces.yaml` described two kinds of entry
+  when this release added a third.
+- The `Makefile` comment said the browser tests skip "when `DOSSIERX_TEST_BROWSER` is unset".
+  `resolveBrowser` skips only when no browser is found anywhere, and *fails* when the variable is set
+  to a path that does not exist. `CONTRIBUTING.md` was right and the Makefile was wrong.
+- A second fan-out test carried the same defect this release fixed in its sibling — asserting no
+  record was written while a real one sat on disk — and reported a false finding during this release's
+  own gate run. The stash is now one shared helper rather than two copies of which one was fixed.
+- Twelve surfaces now declare, in `surfaces.yaml`, the documents they read but do not own. Twenty of
+  the 39 findings were an agent naming a byte it needed and was not handed; `reads:` is the mechanism
+  this release shipped to close exactly that, and it was under-applied at the moment it landed.
+
 ### Closed without a change
 
 - **#39** asked that the ldflags assertion move off the `go install` path onto the published
@@ -273,6 +336,12 @@ Two facts have to hold, both about the tagged tree rather than about whoever pus
 commit is reachable from `origin/main`, and the tree at that commit carries the release stamp for
 exactly this version. Every exit path that is not a pass is a refusal — there is deliberately no
 branch that reports "could not check" and exits 0.
+
+> **SUPERSEDED BY 0.5.2.** The first of those two facts no longer holds. Reachability from
+> `origin/main` was removed in 0.5.2 because it deadlocked the release driver, and the gate now asks
+> instead that the tagged commit be a **merge**. The stamp check is unchanged. This paragraph is left
+> as written because it is the record of what 0.5.1 shipped; read the 0.5.2 entry for what the gate
+> does today.
 
 One residual is recorded in that file rather than described as fixed: the workflow GitHub runs for a
 tag is the one in the tagged tree, so anyone with push rights can weaken this job and tag that
@@ -1754,7 +1823,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.0...v0.4.1

@@ -81,8 +81,9 @@ claim then **locks cleanly**, because an open thread was the only thing blocking
 pair the exact shape of "get the objection out of the way", and no tool will stop you. It is the
 laundering the advisory-rights rule exists to prevent: the human resolves threads, you never delete
 one. This is the general boundary applied to review history — **an in-repo ledger cannot attest
-anything against the person who can write it**, and both files are yours to write; FORMAT.md states
-the principle. (On a *locked* claim the same edit is caught as `comment-digest-missing`, which keys
+anything against the person who can write it**, and both files are yours to write. The principle is
+stated in full in FORMAT.md, which did not ship into this repository with this bundle:
+https://github.com/BarterX-Tech/dossierx/blob/v0.5.2/FORMAT.md. (On a *locked* claim the same edit is caught as `comment-digest-missing`, which keys
 on the standing lock-ledger record rather than on the claim's content hash — `comments:` is excluded
 from that hash, so `lock-content-drift` plays no part on either.)
 

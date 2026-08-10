@@ -3,19 +3,36 @@
 A `v*` tag no longer publishes anything on its own. `.github/workflows/release.yml`
 opens with a `gate` job that the publishing job `needs:`, so a tag that does not
 get past it produces no archives at all. The gate establishes two facts about the
-tagged **tree** rather than about whoever pushed: that the tagged commit is
-reachable from `origin/main`, and that the tree at that commit carries the release
-stamp for exactly this version — `site/src/content.ts`'s last `releases[]` entry
-names the tag being pushed. Every exit path that is not a pass is a refusal; there
+tagged **commit and its tree** rather than about whoever pushed: that the tagged
+commit is a **merge** — it has two or more parents — and that the tree at that
+commit carries the release stamp for exactly this version, meaning
+`site/src/content.ts`'s last `releases[]` entry names the tag being pushed. Every
+exit path that is not a pass is a refusal; there
 is deliberately no branch that reports "could not check" and exits 0. Only once
 that job passes does GoReleaser run, building the six platform archives, stamping
 `main.version` / `main.commit` / `main.date` via ldflags, generating the GitHub
 release notes from Conventional Commit subjects, and publishing.
 
+**Merge-ness is what the first fact used to be reachability from `origin/main`,
+and the swap is load-bearing rather than cosmetic.** The gate job fires on the TAG
+push, and the driver pushes the tag two steps before it pushes main — so a
+reachability question asked at tag-push time can never be true at the moment it is
+asked, no matter how correct the release is. That is a deadlock, not a strict
+check, and it is what stopped v0.5.1 with a public tag and no archives. Merge-ness
+is a fact the gate can establish holding nothing but the tag, and a real release
+always satisfies it because the driver merges with `--no-ff` and tags that merge by
+value. The cost is stated where it is paid, in the workflow's own header: this
+still refuses the mistake the old check was written for — tagging the release
+branch instead of the merge — and no longer refuses a merge commit created locally
+and never pushed. Do not restore the `origin/main` check without moving the driver
+first.
+
 That file records one residual rather than describing it as fixed: the workflow
 GitHub runs for a tag is the one in the tagged tree, so anyone with push rights can
 weaken the gate and tag that commit. Nothing in this repository closes it — a check
-cannot be its own enforcement — and only a forge-side tag protection rule can.
+cannot be its own enforcement — and only a forge-side tag protection rule can. The
+never-pushed-merge residual above is closed by the same forge-side rule and by
+nothing in here.
 
 You do not push that tag by hand either. The irreversible half of a release is
 `make release-publish`, a nine-step driver whose preconditions include the gate
@@ -141,9 +158,11 @@ them, and the three post-publish checks that leave this repository entirely.
       the comparison was against is the whole value of this gate.
 
       **1. Stage the run's evidence — each artifact by its producer, never by
-      hand.** A bundle is assembled from four things: the surface's question
+      hand.** A bundle is assembled from five things: the surface's question
       (`gate/prompts/<surface>.md`), the surface's own files read out of the tree,
-      the committed inventory `surface.json`, and the six uncommitted artifacts
+      the documents the surface DECLARES IN `reads:` but does not own — read out of
+      the tree the same way and handed over marked as another surface's — the
+      committed inventory `surface.json`, and the six uncommitted artifacts
       under `gate/` produced below. Only those six are staged here, and the
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
@@ -172,10 +191,14 @@ them, and the three post-publish checks that leave this repository entirely.
             -release-notes-range="$PREV..HEAD" \
             -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
 
-          # the resolved baseline inventory, and the surface delta over it
+          # the resolved baseline inventory, and the surface delta over it.
+          # The baseline is read OUT OF THE TAG. See the note below for the one
+          # release where it is not, and why pasting that case by mistake is the
+          # worst move available here.
+          git show "$PREV:surface.json" > "$ROOT/gate/baseline-input.json"
           scripts/gate-stage2/run.sh delta --tree "$TREE" \
             --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
-            --baseline-file "$ROOT/surface.baseline.json"
+            --baseline-file "$ROOT/gate/baseline-input.json"
 
           # the run manifest: this tree, this baseline, these exact bytes
           scripts/gate-stage2/run.sh record --tree "$TREE" \
@@ -216,17 +239,24 @@ them, and the three post-publish checks that leave this repository entirely.
       them. Change a byte of either and every surface is re-read rather than
       carried forward.
 
-      **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
-      the previous release.** That release shipped before the surface emitter
+      **`surface.baseline.json` is a bootstrap for exactly one predecessor, and it
+      is no longer that predecessor.** v0.5.0 shipped before the surface emitter
       existed and carries no `surface.json` of its own, which is the only reason
-      `surface.baseline.json` is in this tree. Every later release carries its
-      own, and the baseline is then read out of the tag —
-      `git show "$PREV:surface.json" > "$ROOT/gate/baseline-input.json"`, and
-      that path is what `--baseline-file` gets. Falling back on the committed
-      bootstrap because a tag could not be read is the one move never to make: in
-      a shallow clone that failure reads character for character like an absent
-      tag, and the delta would then span two releases — full, plausible, and
-      handed to thirteen agents as the truth about the past.
+      that file is in this tree. Every release from v0.5.1 on carries its own, so
+      the block above reads the baseline out of the tag and hands `--baseline-file`
+      the extracted copy. Pass `surface.baseline.json` only if `$PREV` is literally
+      `v0.5.0`.
+
+      This paragraph used to sit under a block that still passed
+      `surface.baseline.json`, which is a correction a reader has to notice AFTER
+      copying the command — and in the v0.5.2 gate run somebody did copy it and
+      caught the mismatch only by reading on. The command now says what to do and
+      this note says when not to, rather than the other way round.
+
+      Falling back on the committed bootstrap because a tag could not be read is
+      the one move never to make: in a shallow clone that failure reads character
+      for character like an absent tag, and the delta would then span two releases
+      — full, plausible, and handed to thirteen agents as the truth about the past.
 
       Skipping any of this does not produce a smaller gate, it produces a failed
       one. The freshness check refuses with "it was found on disk rather than

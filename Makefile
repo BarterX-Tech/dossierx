@@ -25,9 +25,17 @@ test:
 # a target of its own or it is code nobody can run without knowing it is there.
 # It is not folded into "test" because it needs a real Chrome/Chromium, and what
 # happens without one is no longer uniform across the module. The original
-# chromedp tests still SKIP when DOSSIERX_TEST_BROWSER is unset
-# (viewer-tests/harness_test.go:85) — the right answer on a laptop that has no
-# browser to drive. The release gate's checks, which moved in here, do NOT: the
+# chromedp tests SKIP only when NO browser can be found at all: resolveBrowser
+# (viewer-tests/harness_test.go:52) tries DOSSIERX_TEST_BROWSER first, then the
+# common install locations, and reaches its t.Skip at line 85 only when every one
+# of them misses — the right answer on a laptop that has no browser to drive.
+# Note the asymmetry, because it is the point: when the variable IS set and names
+# a path that does not exist, the same function calls t.Fatalf rather than
+# skipping, so a CI job that sets it cannot skip its way to green. An earlier
+# version of this comment said the tests skip "when DOSSIERX_TEST_BROWSER is
+# unset", which is a different and weaker claim — it reads as though an unset
+# variable alone is enough to skip past a browser the machine actually has.
+# The release gate's checks, which moved in here, do NOT skip at all: the
 # rendered-DOM extraction (site_dom_test.go:490) and the release dry run
 # (site_toolchain_test.go:968) FAIL when the browser or the `goreleaser` binary
 # is unnamed, because "we did not look" must not read as "nothing is wrong".

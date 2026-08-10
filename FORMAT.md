@@ -204,6 +204,11 @@ constructs below; the only thing that differs between them is images (see
   thematic breaks, fenced code and pipe tables inside a quote all come
   free, while a second leading `>` inside that interior stays literal
   text — `>> x` renders one quote whose content is the literal text `> x`.
+  **There is no lazy continuation, and CommonMark has trained you to expect
+  one.** Every line of a quote carries its own `>`; a wrapped line without
+  it is not folded into the paragraph above, it leaves the quote and
+  becomes ordinary body text. Write the marker on each line rather than
+  only on the first. Pinned as `blockquote-no-lazy-continuation`.
 - Hard line breaks — a trailing backslash, or two trailing spaces, becomes
   a `<br>`. Both spellings are captured before the line is trimmed and
   carried through the paragraph join, so the inline pass still runs once
@@ -231,12 +236,21 @@ constructs below; the only thing that differs between them is images (see
      header emits exactly the cells it has — no empty `<td>`s are invented
      to square it off — and a longer row has its extra cells dropped. A
      well-formed table (a valid header plus a valid delimiter row of the
-     same arity) is always rendered as a table; there is no size or shape
-     at which it degrades to prose. The only thing that renders as prose is
-     a pipe-bearing line with no valid delimiter row after it.
-  - Tables are legal at the top level and inside a blockquote; a
-    pipe-bearing line indented under a list item is item prose, not a
-    table. That is the general list-item rule — block constructs indented
+     same arity) at a legal position is rendered as a table whatever its
+     size or contents; there is no row count, column count or cell width
+     at which it degrades to prose. **Position is the one thing that does
+     demote it**, and there are two cases, below. What renders as prose for
+     any other reason is a pipe-bearing line with no valid delimiter row
+     after it.
+  - Tables are legal at the top level and inside a blockquote. Two
+    positions demote a perfectly well-formed table to prose, and they are
+    separate rules rather than one: a pipe-bearing line **indented under a
+    list item** is item prose (the general rule — block constructs indented
+    under a list item stay literal), and a table **indented at the top
+    level**, under no list at all, is prose too. The second one catches an
+    author who indents a table to line it up under the paragraph it belongs
+    to. Both are pinned in the construct corpus, as
+    `table-in-list-item-is-literal` and `table-indented-is-prose`. That is the general list-item rule — block constructs indented
     under a list item stay literal — and **fenced code is the one documented
     exception to it**, not the precedent for it: fences are recognized by the
     line scanner itself, so an indented fence *does* render inside the

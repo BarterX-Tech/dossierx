@@ -37,9 +37,11 @@
 
 baseline   v0.5.1 (8c3a9c1c1b0a4ef8f752d3d73c3f072432584c1e)
 compared   147 rendered artifacts present at both revisions
-added      0
+added      1
 removed    0
 silent     0 rendered differently from byte-identical inputs
 explained  0 rendered differently after their own inputs changed
 
-no rendered artifact has moved since the baseline.
+ADDED SINCE THE BASELINE
+------------------------
+testdata/markdown-cases/link-mailto.golden.html

@@ -2141,14 +2141,6 @@ func newLockCmd() *cobra.Command {
 				return cmdResult{Warnings: adoptionWarnings(adopted)}, err
 			}
 
-			// THE ROLL-UP GATE, ahead of lock.Lock because lock.Lock cannot see
-			// it: roll-up is a warning-severity lint now (internal/lint/roll_up.go
-			// explains why an error deadlocked every ordinary module), and Lock's
-			// lint gate counts error-severity findings only. Without this, locking
-			// a banner whose module still holds a draft would SUCCEED — the exact
-			// misrepresentation the rule exists to prevent, since a banner is a
-			// module-wide "reviewed" callout.
-			//
 			updated, err := lock.Lock(claim, claims, cfg, store, lock.Approval{Actor: lock.DefaultActor(), Reason: reason})
 			if err != nil {
 				// THE PRE-LEDGER PROJECT, classified before everything else.

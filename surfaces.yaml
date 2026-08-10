@@ -67,6 +67,23 @@ surfaces:
     reach: Every visitor. Carries two of the four release-version pins.
     paths:
       - README.md
+    reads:
+      # "runs plain `dossierx check`, one step, and pins no `fetch-depth`" is a
+      # claim about that file's contents, made where the README tells a reader
+      # to copy it into their own .github/workflows/.
+      - scripts/ci/dossierx-check.yml
+      # Five behavioural claims about the installer — asks first, resolves
+      # core.hooksPath, handles linked worktrees, refuses a foreign hook without
+      # --force, re-running is a no-op — plus the `--yes` flag the paste-to-your-
+      # agent block instructs an agent to type.
+      - scripts/install-git-hook.sh
+      - scripts/install-git-hook.ps1
+      # Two deep anchors, each described by what the reader will find at it.
+      - FORMAT.md
+      # "the CHANGELOG's full migration table", and CONTRIBUTING covering the
+      # workflow, the boundary rules and how to run tests and lint.
+      - CHANGELOG.md
+      - CONTRIBUTING.md
 
   - name: changelog
     what: The release's own account of itself, and the only place a
@@ -75,6 +92,14 @@ surfaces:
     reach: Consumers deciding whether to upgrade.
     paths:
       - CHANGELOG.md
+    reads:
+      # v0.5.2's headline VISIBLE change is a claim about the ldflags stamp —
+      # `{{.Version}}` strips the leading v, `{{.Tag}}` keeps it. The file that
+      # decides it is the only thing that can confirm or refute the entry, and
+      # surface.json has no field for the binary's version string at all, so
+      # without this the one thing consumers are told to check before upgrading
+      # is unanswerable.
+      - .goreleaser.yaml
 
   - name: claim-format-spec
     what: The claim format — the schema, the id grammar, the layouts, and what
@@ -83,6 +108,25 @@ surfaces:
       corpus this document is a claim about.
     paths:
       - FORMAT.md
+    reads:
+      # THE TWO SCHEMAS AND THE ID GRAMMAR ARE THIS DOCUMENT'S SUBJECT, and until
+      # v0.5.2 no reviewing agent could check any of them: surface.json carries
+      # the lint rule NAME `id-shape` and a flat list of error codes, but no
+      # grammar, no rule-to-code mapping and no field list. The site repeats the
+      # same prose, and prose agreeing with prose is what this gate exists to
+      # distrust. These are the engine's own side of each claim.
+      - internal/lint/id_shape.go
+      - internal/model/claim.go
+      - internal/config/config.go
+      # Cited by exact path as where the locked-claim hash deny-list lives.
+      - internal/lock/lockedhash.go
+      # Linked as the two tests that "pin rather than assume" the staged-audit
+      # boundary. A test folded into another file leaves the citation dangling.
+      - internal/lock/audit_boundary_test.go
+      - internal/check/staged_no_parent_test.go
+      # "is one `dossierx check` step and pins no `fetch-depth`" — a claim about
+      # a file this release moved, since its version pin changed.
+      - scripts/ci/dossierx-check.yml
 
   - name: roadmap
     what: The deferred and unverified register. Falsification here is inverted —
@@ -112,6 +156,29 @@ surfaces:
       # claim about that file's `changelog.groups` regexps, made in the
       # Conventional Commits section.
       - .goreleaser.yaml
+      # "Cutting a release" makes three checkable statements about that document
+      # and its driver, including the COUNT and identity of the post-publish
+      # checks it says stay a person's.
+      - docs/RELEASING.md
+      # Which suites CI runs, on which platforms, in a job named "git hook", and
+      # with which pinned golangci-lint version a contributor is told to install
+      # locally. Every one of those reads the same if a job was renamed.
+      - .github/workflows/ci.yml
+      # "Package boundaries" names the depguard rule `render-is-top-of-stack` and
+      # states its deny list as an EXACT set. A widened deny set would leave a
+      # contributor believing the build enforces a boundary it does not.
+      - .golangci.yml
+      # The stated build floor, "Go 1.26 or newer". Nothing in surface.json or
+      # the delta carries a Go directive, so a toolchain bump would otherwise be
+      # invisible to every check the gate has.
+      - go.mod
+      # The prerequisite table says the viewer suite "only skips when nothing is
+      # found" while the Makefile comment said it skips on an unset variable.
+      # resolveBrowser is the authority that settles which sentence is right.
+      - viewer-tests/harness_test.go
+      # The first command a contributor types, under "Running the CLI locally".
+      # A renamed fixture makes it fail on a clean tree.
+      - testdata/fixture-basic/project.config.yaml
 
   - name: release-procedure
     what: The one description of how this project releases, including its own
@@ -139,6 +206,20 @@ surfaces:
       nobody here will ever see. Carries one release-version pin.
     paths:
       - skills/
+    reads:
+      # Two bundles defer to FORMAT.md by name — the markdown ceiling, and the
+      # principle that an in-repo ledger cannot attest anything against the
+      # person who can write it. Whether those attributions are still true is
+      # unanswerable without the file.
+      - FORMAT.md
+      # THE RECOVERY TABLES ARE THE POINT OF THIS SURFACE, and the delta reports
+      # only that a package's behaviour fingerprint MOVED, never what changed
+      # inside it. Seven moved this release, including internal/lock and
+      # internal/comments — exactly the packages behind the recoveries these
+      # bundles teach. The project's own account of what changed is the only
+      # thing that can close the gap between "the hash moved" and "the recovery
+      # is still right".
+      - CHANGELOG.md
 
   - name: exported-skills
     what: The skills export output, checked in as symlinks so this repository's
@@ -163,6 +244,18 @@ surfaces:
       release-version pin, and it is the pin that matters most.
     paths:
       - scripts/ci/dossierx-check.yml
+    reads:
+      # The workflow header names THIRTEEN ledger findings a client's tree will
+      # produce — lock-content-drift, the lock-ledger-* family, the comment-digest
+      # ones, the build-order ones. None of that vocabulary is in surface.json:
+      # ledger findings are neither lint rules nor error codes, so the inventory
+      # can neither confirm nor refute the list. The header also quotes a section
+      # title of this file verbatim.
+      - FORMAT.md
+      # "The boundary is pinned in Go, in ..." — named by exact path, and one of
+      # the two is in a package whose fingerprint moved this release.
+      - internal/check/staged_no_parent_test.go
+      - internal/lock/audit_boundary_test.go
 
   - name: install-scripts
     what: The pre-commit hook installers, curl'd at the pinned tag by README and
@@ -173,6 +266,21 @@ surfaces:
     paths:
       - scripts/install-git-hook.sh
       - scripts/install-git-hook.ps1
+    reads:
+      # Both script headers assert "Both paths are exercised by
+      # scripts/hook-smoke-test.sh, which CI runs on windows-latest" — a claim
+      # about that script AND about a job existing in that workflow. The router
+      # skill tells an agent to read these scripts ALOUD to a client before
+      # running them, so a stale sentence here is a false statement about the
+      # engine spoken into somebody else's repository.
+      - scripts/hook-smoke-test.sh
+      - .github/workflows/ci.yml
+      # The header names a FORMAT.md section by its exact wording and calls it
+      # the canonical statement of the staged-audit boundary.
+      - FORMAT.md
+      # The hook body justifies its `-c core.quotepath=false` override by saying
+      # the engine's git runner prepends the same override for the same reason.
+      - internal/check/staged.go
 
   - name: release-notes
     what: The GitHub release body, generated at tag time by GoReleaser from
