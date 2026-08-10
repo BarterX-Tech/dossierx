@@ -3117,11 +3117,18 @@ func TestTheWrittenProcedureAndTheDriverAgreeAboutThePushOrder(t *testing.T) {
 			"That item is the written half of the ordering this driver performs, and without it this repository carries two descriptions of how it releases that disagree about which push happens first — which CLAUDE.md calls a defect to report, not a fallback to use")
 	}
 
-	tag := strings.Index(item, "git push origin vX.Y.Z")
+	// THE TAG PUSH IS MATCHED FULLY QUALIFIED, and that is the assertion rather
+	// than a spelling preference. A release developed on a branch named `vX.Y.Z`
+	// makes the bare form fail outright — `error: src refspec v0.5.0 matches more
+	// than one` — so a document prescribing it prescribes a command that does not
+	// run for the release most likely to be reading it. The driver already pushes
+	// `<tag-object>:refs/tags/<version>`; this keeps the written half from
+	// drifting back to the ambiguous spelling.
+	tag := strings.Index(item, "git push origin refs/tags/vX.Y.Z")
 	main := strings.Index(item, "git push origin main")
 	switch {
 	case tag < 0:
-		t.Error("the item no longer tells a maintainer to push the TAG. The tag push is what fires the Release workflow, and it is the first irreversible act")
+		t.Error("the item no longer tells a maintainer to push the TAG as `git push origin refs/tags/vX.Y.Z`. The tag push is what fires the Release workflow and it is the first irreversible act — and it is written fully qualified because a bare `git push origin vX.Y.Z` is refused by git as an ambiguous refspec whenever a branch shares the name, which is exactly the case on a release developed on a branch called vX.Y.Z")
 	case main < 0:
 		t.Error("the item no longer tells a maintainer to push main")
 	case tag > main:
@@ -3149,7 +3156,16 @@ func TestTheWrittenProcedureAndTheDriverAgreeAboutThePushOrder(t *testing.T) {
 	}
 
 	// And the old order must not survive anywhere else in the document.
-	if strings.Contains(procedure, "git push origin main\n      git push origin vX.Y.Z") {
+	if strings.Contains(procedure, "git push origin main\n      git push origin refs/tags/vX.Y.Z") {
 		t.Error("docs/RELEASING.md still carries the old command block that pushes main before the tag. Two orders in one document is the second release procedure CLAUDE.md forbids, and this one publishes a site announcing a release whose archives do not exist")
+	}
+
+	// The ambiguous spelling must not survive as an INSTRUCTION anywhere in the
+	// document. It is still quoted inside the branch-naming item, deliberately,
+	// as the transcript of the error a colliding branch produces — so the search
+	// is for the command in a prescribed position, at the indentation the
+	// document's command blocks use, and not for the characters anywhere at all.
+	if strings.Contains(procedure, "\n      git push origin vX.Y.Z") {
+		t.Error("docs/RELEASING.md still prescribes `git push origin vX.Y.Z` in a command block. That form is ambiguous the moment a branch shares the tag's name: git refuses it with `src refspec ... matches more than one` rather than choosing, so it is a command that fails for the release most likely to be following this document. Write it as `git push origin refs/tags/vX.Y.Z`, which the driver already does")
 	}
 }

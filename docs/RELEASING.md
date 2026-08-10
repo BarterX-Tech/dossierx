@@ -126,7 +126,13 @@ them, and the three post-publish checks that leave this repository entirely.
           ROOT=$(git rev-parse --show-toplevel)
           TREE=$(git rev-parse "HEAD^{tree}")
           PREV=${DOSSIERX_PREV_RELEASE_TAG:-$(git describe --tags --abbrev=0)}
-          PREV_COMMIT=$(git rev-parse "$PREV^{commit}")
+          PREV_COMMIT=$(git rev-parse "refs/tags/${PREV}^{commit}")
+
+      `PREV` is a bare tag name — `git describe` returns one and the environment
+      variable is written as one — so it is resolved through `refs/tags/` rather
+      than on its own. A clone that still has a branch named after that release
+      would otherwise resolve it by git's search order, silently, and this
+      baseline is the thing every comparison below is made against.
 
       Both are full 40-digit object names and every step refuses anything else. A
       tag NAME is a mutable pointer that `git tag -f` re-points, and an
@@ -455,6 +461,32 @@ them, and the three post-publish checks that leave this repository entirely.
 
 ## Tagging
 
+- [ ] **The release branch is not named `vX.Y.Z`.** Name it `release/vX.Y.Z`, or
+      let the worktree tooling name it — anything that cannot collide with the tag
+      it is about to become.
+
+      A branch and a tag of the same name make git resolve by search order rather
+      than by intent, and both halves of that bite:
+
+      $ git push origin v0.5.0
+      error: src refspec v0.5.0 matches more than one
+      error: failed to push some refs
+
+      $ git rev-parse --short v0.5.0^{commit}
+      warning: refname 'v0.5.0' is ambiguous.
+      3217a48
+
+      The push fails outright. The `rev-parse` is worse, because it SUCCEEDS: git
+      searches `refs/tags` before `refs/heads`, so it returns the tag's commit
+      while the branch of the same name points at a different one. It was right
+      by convention, over a question where being right by convention and being
+      right are not the same thing.
+
+      Both were real in v0.5.0, which was developed on a branch named `v0.5.0`.
+      The commands below are written fully qualified so they are correct whatever
+      branches exist, but a colliding branch name should not be created in the
+      first place.
+
 - [ ] **`origin/main` is already an ancestor of the release branch.**
 
       git fetch origin && git merge-base --is-ancestor origin/main <branch>
@@ -532,9 +564,16 @@ them, and the three post-publish checks that leave this repository entirely.
       and performs the steps in **this order**:
 
       git tag -a vX.Y.Z -m "vX.Y.Z — <title>" <merge-commit>
-      git push origin vX.Y.Z
+      git push origin refs/tags/vX.Y.Z
       # Verify the archives — see the section below — and only then:
       git push origin main
+
+      **The tag is pushed fully qualified**, as `refs/tags/vX.Y.Z` rather than
+      `vX.Y.Z`, and the driver does the same (it pushes `<tag-object>:refs/tags/
+      <version>`). A bare name is ambiguous the moment a branch shares it, and
+      `git push` refuses an ambiguous refspec rather than choosing — see the
+      branch-naming item above. Written this way the command is correct whatever
+      branches happen to exist in the clone it runs from.
 
       **The tag goes first and `main` goes last, and the order is not
       interchangeable.** The release branch edits `site/src/content.ts`, so
