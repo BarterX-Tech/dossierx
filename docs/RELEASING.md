@@ -1,15 +1,27 @@
 # Releasing DossierX
 
-The mechanical half of a release is one command: push a `v*` tag and
-`.github/workflows/release.yml` runs GoReleaser, which builds the six
-platform archives, stamps `main.version` / `main.commit` / `main.date` via
-ldflags, generates the GitHub release notes from Conventional Commit subjects,
-and publishes.
+A `v*` tag no longer publishes anything on its own. `.github/workflows/release.yml`
+opens with a `gate` job that the publishing job `needs:`, so a tag that does not
+get past it produces no archives at all. The gate establishes two facts about the
+tagged **tree** rather than about whoever pushed: that the tagged commit is
+reachable from `origin/main`, and that the tree at that commit carries the release
+stamp for exactly this version — `site/src/content.ts`'s last `releases[]` entry
+names the tag being pushed. Every exit path that is not a pass is a refusal; there
+is deliberately no branch that reports "could not check" and exits 0. Only once
+that job passes does GoReleaser run, building the six platform archives, stamping
+`main.version` / `main.commit` / `main.date` via ldflags, generating the GitHub
+release notes from Conventional Commit subjects, and publishing.
 
-Everything that has ever gone wrong with a DossierX release has been in the
-other half: the copies of the version number that live in prose, and the
-verification step that checked the wrong artifact. This document is the
-checklist for that half.
+That file records one residual rather than describing it as fixed: the workflow
+GitHub runs for a tag is the one in the tagged tree, so anyone with push rights can
+weaken the gate and tag that commit. Nothing in this repository closes it — a check
+cannot be its own enforcement — and only a forge-side tag protection rule can.
+
+You do not push that tag by hand either. The irreversible half of a release is
+`make release-publish`, a nine-step driver whose preconditions include the gate
+below; the commands it runs are the driver's and you type none of them. What this
+document is for is the half a program cannot do: reading the findings, ruling on
+them, and the three post-publish checks that leave this repository entirely.
 
 ## Before tagging
 
@@ -260,8 +272,14 @@ checklist for that half.
       carries a severity, but that word is the reporting agent's own about its own
       work — no verdict, filter or threshold in the gate consults it — so the
       ruling is yours, not the agent's. There is also no override field on the
-      receipt: a finding you judge non-blocking is cleared by fixing the tree and
-      by nothing else.
+      receipt, so a finding you judge non-blocking has exactly two ways off it:
+      fix the tree, or delete the finding from `gate/answers/<surface>.json` by
+      hand. Know what the second one costs before you reach for it — a deleted
+      finding leaves no trace, so an adjudicated finding becomes indistinguishable
+      from one nobody ever raised, and the next reader of that record cannot tell
+      that you looked. Why the classifier that would derive a finding's weight
+      from its evidence was not built, and why no override record was added in its
+      place, is recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out

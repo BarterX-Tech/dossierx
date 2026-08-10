@@ -15,7 +15,7 @@ description: >-
 
 # DossierX code links — grounding claims in real code
 
-Read **[[dossierx]]** for the envelope and error codes, and **[[dossierx-claims]]** for the lock
+Read **[`dossierx`](../dossierx/SKILL.md)** for the envelope and error codes, and **[`dossierx-claims`](../dossierx-claims/SKILL.md)** for the lock
 lifecycle.
 
 Two deliberately separate channels close the loop from spec back to code:
@@ -84,7 +84,7 @@ locked claim's stated behavior is no longer true. Channel B must not paper over 
 
 **First, is it actually a flag?** The discriminator is one question — *can you state a specific
 before/after for the claim's wording?* If you only have a question or a doubt, that is a **comment**
-(see **[[dossierx-comments]]**), not a flag.
+(see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**), not a flag.
 
 **Then, which channel?** Did the code's *meaning* change relative to what the claim states, or did
 it just move, get renamed, or get refactored with identical behavior?
@@ -103,7 +103,7 @@ it just move, get renamed, or get refactored with identical behavior?
   All three are required, and `--dry-run` previews it. This sets `locked, review_pending` and hands
   the claim to the human: `--claim-says` renders as the removal and `--now-does` as the addition in
   `dossierx claim reaudit`'s diff, so they review a real before/after instead of reverse-engineered
-  prose. Continue from **[[dossierx-claims]]**'s reaudit section. This is the **only** place a human
+  prose. Continue from **[`dossierx-claims`](../dossierx-claims/SKILL.md)**'s reaudit section. This is the **only** place a human
   re-enters this otherwise fully autonomous workflow — a genuine mismatch, never routine linking.
 
   **The before/after lives in `.dossierx-flag-store.json`, and that file is a tracked artifact.**
@@ -115,11 +115,19 @@ it just move, get renamed, or get refactored with identical behavior?
   `review_pending`, `reaudit` proposes an empty diff, and confirming that empty diff clears the
   flag having changed nothing. After flagging, tell the human the store needs committing.
 
-  `dossierx claim flag` works only on **body-rendered** claims (`card`, `banner`, `list`, `tree`).
-  On a `table`, `steps` or `mockup` claim it is refused with `structured_layout`: a flag-sourced
-  reaudit rewrites `body` and nothing else, so accepting it would clear `review_pending` while
-  leaving the actually-rendered `rows`/`steps`/`raw_html` stale. For those, take the claim through
-  **unlock → fix → lock** with the human's approval instead.
+  `dossierx claim flag` works only on claims whose content really is **just `body`**. The test is
+  on CONTENT, not on the layout name — since v0.4.1 the two are different questions. A claim is
+  refused with `structured_layout` when it carries `rows` or `steps` (whether or not `layout:` says
+  `table`/`steps` — an omitted layout is inferred from exactly those fields), when its layout is
+  `mockup`, **or when it carries `raw_html` at all, on any layout including `card`, `banner`,
+  `list` and `tree`**. `raw_html` became an attachment legal on every layout in v0.4.1, and the
+  refusal moved with it: a `card` claim bearing markup the viewer renders is refused, and there is
+  no layout that is flaggable by name.
+
+  The reason is one sentence: a flag-sourced reaudit rewrites `body` and nothing else, so accepting
+  it on any of those would clear `review_pending` while the `rows`, `steps` or `raw_html` a reader
+  actually sees stayed stale. For those, take the claim through **unlock → fix → lock** with the
+  human's approval instead. The refusal message names which of the three it was.
 
 ## Portability
 

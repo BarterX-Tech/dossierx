@@ -35,7 +35,10 @@ if (-not (Test-Path -LiteralPath $sh)) {
 # Find a bash. Preference order is deliberate: a bash the user has put on PATH
 # is the one they expect to be used, and only if there is none do we go digging
 # in the Git installation. git --exec-path points at <git>\mingw64\libexec\
-# git-core, from which the bundled bash is two directories up in bin\.
+# git-core, and the Git install root is THREE directories up from there
+# (git-core -> libexec -> mingw64 -> <git>) — which is what the three
+# Split-Path -Parent calls below compute. The bundled bash is under that root,
+# in bin\ or usr\bin\.
 function Find-Bash {
     $onPath = Get-Command bash -ErrorAction SilentlyContinue
     if ($onPath) { return $onPath.Source }

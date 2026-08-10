@@ -256,7 +256,9 @@ const releases: Release[] = [
           title: "The release pipeline itself, gated end to end",
           tag: "Latest release",
           highlights: [
-            "Nothing a consumer runs changes. Not one non-test Go file moved in this release — `internal/` and `skills/` are untouched end to end — so there is no new command, flag, error code, lint rule, schema field or rendered-viewer byte. The engine is the previous release's engine, rebuilt at a new tag. Nothing to re-export, nothing to re-render, nothing on your side that behaves differently after upgrading. What ships is the machinery that publishes the NEXT release, because everything that has ever gone wrong with a DossierX release has been in the half a person performs by hand.",
+            "SILENT: the embedded agent skills changed, and nothing on your side reports it — RE-RUN `dossierx skills export` after upgrading. Those bundles are written into a project as committed artifacts and nothing in `dossierx check` compares an exported copy against the binary's, so a project that skips the re-export keeps the previous release's guidance: an install line fetching the hook script from the v0.5.0 raw path, and a stale account of when `dossierx claim flag` is refused.",
+            "Nothing a consumer runs behaves differently. No new or changed command, flag, error code, lint rule, schema field or rendered-viewer byte, and no engine behaviour moves — `internal/` is untouched end to end and there is nothing to re-render. Outside the release machinery what moved is the four install pins, now v0.5.1, one of them inside the exported skill itself; and four user-facing strings that were wrong. Two are refusal hints naming invocations the binary rejects — the retired `implink` stub's replacement command and the missing-`--reason` refusal, each printed without required flags the verb also demands. The third is the link the spliced AGENTS.md section gives for the exported agent guide, which named a `docs/` path while the prescribed export invocation writes it beside the skills. The fourth is the code-links skill's `claim flag` rule, still stating v0.4.0's layout test after v0.4.1 made the refusal key on content. Three non-test Go files move for those, and all three change printed text only.",
+            "What ships otherwise is the machinery that publishes the NEXT release, because everything that has ever gone wrong with a DossierX release has been in the half a person performs by hand.",
             "`surfaces.yaml` declares all thirteen client-facing surfaces this project has, from the README to the compiled binary, beside seven declarations of what is deliberately out of scope and why. Every tracked file must be claimed by EXACTLY one entry — a file matching nothing fails the build, and an out-of-scope entry cannot quietly swallow a path a surface also claims, because both entries are named and the build goes red. The list of things to review used to live in a scope document, so a new client-facing file could appear with nothing to notice it and the only way to find the gap was an audit.",
             "At release each surface is read by its own agent over a bundle assembled for it, and the cache key is the digest of what that agent was ACTUALLY handed rather than the surface's name — change a byte of the evidence and the surface is re-read instead of carried forward. The tool grant is an exact set of two report-only tools, an allow-list and not a deny list: no file, shell, search, network or subagent tool, because \"the bundle is the whole evidence set\" is the property every key in the system rests on. What the repository cannot promise, and says so rather than implying otherwise, is that the harness outside it honoured the request.",
             "Publishing is a nine-step driver rather than a sequence of commands somebody types, authorized by the version typed twice — deliberately not a boolean, since a `=1` left in a shell profile or a CI secret authorizes every release forever, including the next one triggered by accident. Before it touches git it refuses a release already half-published, requires the TREE to declare the release being tagged (the changelog's newest heading and the site's last release entry must agree with each other and with what was typed), RECOMPUTES the gate in its own process rather than reading a verdict off a record, and demands the CI-run evidence for that exact commit. Then it merges, tags the named object, reads the tag back and re-checks the tree it points at, pushes the tag by value, verifies the published archives, and only then pushes main.",
@@ -588,7 +590,7 @@ export const contentSpec: ContentSpec = {
           {
             name: "governed_by",
             semantics:
-              "Names the doctrine claim backing this claim's authority — or type: none with a required reason. With doctrine_facet set, a claim can't lock until its named doctrine claim is itself locked (hub-gating). Since v0.4.0 it is also a DRIFT edge alongside mirrors and rests_on: a claim-valued governor whose content changes under a locked claim flags that claim review_pending. It is not a gating edge — hub gating is unchanged. Self-edges are rejected and the governance graph is cycle-checked in its own pass.",
+              "Names the doctrine claim backing this claim's authority — or type: none with a required reason. It is NOT a gating edge: with doctrine_facet set, hub-gating walks mirrors and rests_on only, so a doctrine claim named solely through governed_by does not hold up the lock, and to have hub-gating cover it you name it in rests_on as well. Since v0.4.0 it is also a DRIFT edge alongside mirrors and rests_on: a claim-valued governor whose content changes under a locked claim flags that claim review_pending. Self-edges are rejected and the governance graph is cycle-checked in its own pass.",
           },
         ],
       },
@@ -624,7 +626,7 @@ export const contentSpec: ContentSpec = {
             trigger: 'dossierx claim lock <id> --reason "…"',
             mandate: "Human — in chat",
             execute: "Agent",
-            note: "Refused on any lint error, on hub-gating (a doctrine dependency still draft), and on any open comment thread. --reason is required, so an unprompted lock is loud and attributable.",
+            note: "Refused on any lint error, on hub-gating (a doctrine-facet claim named in mirrors or rests_on still draft), and on any open comment thread. --reason is required, so an unprompted lock is loud and attributable.",
           },
           {
             from: "locked",
@@ -640,7 +642,7 @@ export const contentSpec: ContentSpec = {
             trigger: "dossierx claim flag <id>",
             mandate: "Agent — reporting, not deciding",
             execute: "Agent",
-            note: "The agent asserts that code drifted from the claim. Requires --claim-says --now-does --reason, all non-empty. Locked claims only; refused on structured layouts.",
+            note: "The agent asserts that code drifted from the claim. Requires --claim-says --now-does --reason, all non-empty. Locked claims only; refused (structured_layout) on any claim carrying rows, steps or raw_html — the test is on content, not on the layout name, so a card bearing raw_html is refused too.",
           },
           {
             from: "locked",
@@ -949,7 +951,7 @@ export const contentSpec: ContentSpec = {
           {
             code: "dependency_not_locked",
             recovery:
-              "Hub-gating: the doctrine claim backing this one is still draft. Lock that first, with its own approval.",
+              "Hub-gating: a doctrine-facet claim this one names in mirrors or rests_on is still draft. Lock that one first, with its own approval.",
           },
           {
             code: "not_review_pending",
@@ -1023,7 +1025,7 @@ export const contentSpec: ContentSpec = {
                 usage: 'dossierx claim lock <id> --reason "…" [--dry-run]',
                 summary: "Promote a draft claim to locked — with your yes on it.",
                 detail:
-                  "Refused on any lint error, on hub-gating (rests_on a doctrine claim that is still draft), on any unresolved comment thread, and on a claim that is already locked (already_locked) — re-locking would sign a fresh approval over whatever the file now says and clear review_pending with no diff, so the path stays unlock → fix → lock. Takes the claims file lock, saves the claim, snapshots the per-dependent content-hash baseline, and writes the ledger record — {hash, at, actor, reason} — that makes any later out-of-band edit detectable. --reason is required: it is the human approval this command executes, in their words.",
+                  "Refused on any lint error, on hub-gating (mirrors or rests_on names a doctrine-facet claim that is still draft — governed_by does not gate), on any unresolved comment thread, and on a claim that is already locked (already_locked) — re-locking would sign a fresh approval over whatever the file now says and clear review_pending with no diff, so the path stays unlock → fix → lock. Takes the claims file lock, saves the claim, snapshots the per-dependent content-hash baseline, and writes the ledger record — {hash, at, actor, reason} — that makes any later out-of-band edit detectable. --reason is required: it is the human approval this command executes, in their words.",
                 example:
                   '$ dossierx claim lock logger.contract.api-surface --reason "reviewed in the viewer, resolved c-8f3a2b" --format text\nlock: logger.contract.api-surface is now locked',
               },
@@ -1044,7 +1046,7 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "The agent's one report-a-problem verb: code and claim now disagree.",
                 detail:
-                  "All three flags required and non-empty; only a LOCKED claim can be flagged, and structured layouts are refused (there is no body to diff). Writes a one-shot pending flag and sets review_pending, which routes the claim through the visible reaudit path rather than letting an agent quietly rewrite a locked fact.",
+                  "All three flags required and non-empty; only a LOCKED claim can be flagged, and a claim whose content is not just `body` is refused with structured_layout — rows or steps present, layout: mockup, or raw_html on ANY layout. The test is on CONTENT, not on the layout name: raw_html is an attachment legal on every layout, so a card, banner, list or tree claim carrying one is refused too, and no layout is flaggable by name. A flag-sourced reaudit rewrites body and nothing else, so accepting one of those would clear review_pending while the content a reader actually sees stayed stale. Writes a one-shot pending flag and sets review_pending, which routes the claim through the visible reaudit path rather than letting an agent quietly rewrite a locked fact.",
                 example:
                   '$ dossierx claim flag logger.internals.dispatch \\\n  --claim-says "dispatch is synchronous" \\\n  --now-does   "dispatch runs on a worker pool" \\\n  --reason     "concurrency added in PR #42"',
               },
@@ -1170,9 +1172,9 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "Write the binary's embedded agent skills in every form this repo reads — plain markdown, any harness.",
                 detail:
-                  "One embedded source, written in three forms, because no two harnesses read the same file: a SKILL.md tree (into [dir], else .claude/skills when .claude already exists), an idempotent marker-delimited section spliced into an existing AGENTS.md, and a self-contained docs/dossierx-agent-guide.md that needs no loader or plugin. Detection, not creation: the tree and the AGENTS.md section only go where the layout already exists, the guide is always written. The AGENTS.md section deliberately carries the ROUTER ONLY — that text is resident on every turn, so inlining all five bundles would bill four skills of context to work that has nothing to do with DossierX. The bundle is the router (the nouns, the envelope, the exit codes, the error-code recovery table, the rules that never bend) plus one companion per workflow: claims, build order, code links, comments. Re-running it is how a project picks up a new release's guidance, so the derived forms are committed artifacts like the ledger.",
+                  "One embedded source, written in three forms, because no two harnesses read the same file: a SKILL.md tree (into [dir], else .claude/skills when .claude already exists), an idempotent marker-delimited section spliced into an existing AGENTS.md, and a self-contained agent guide that needs no loader or plugin. Detection, not creation: the tree and the AGENTS.md section only go where the layout already exists, the guide is always written. Where the guide lands follows the project root: in a DossierX project — anywhere project.config.yaml is found — it is docs/dossierx-agent-guide.md beside that config, which is exactly the path the AGENTS.md section's links point at, and the AGENTS.md section is written only in that same case. Run in a directory with no project yet, which is what a bootstrap agent does first, and there is no root to hang docs/ off: the guide is written beside the bundles instead and no AGENTS.md is touched. The AGENTS.md section deliberately carries the ROUTER ONLY — that text is resident on every turn, so inlining all five bundles would bill four skills of context to work that has nothing to do with DossierX. The bundle is the router (the nouns, the envelope, the exit codes, the error-code recovery table, the rules that never bend) plus one companion per workflow: claims, build order, code links, comments. Re-running it is how a project picks up a new release's guidance, so the derived forms are committed artifacts like the ledger.",
                 example:
-                  "$ dossierx skills export ./.claude/skills --format text\nskills export: wrote .claude/skills/dossierx/SKILL.md\nskills export: skill-tree (claude-code) -> ./.claude/skills [written]\nskills export: generic-guide (any) -> .claude/skills/dossierx-agent-guide.md [written]\nskills export: wrote 6 file(s)",
+                  "$ dossierx skills export .claude/skills --format text\nskills export: wrote .claude/skills/dossierx/SKILL.md\nskills export: wrote .claude/skills/dossierx-build-order/SKILL.md\nskills export: wrote .claude/skills/dossierx-claims/SKILL.md\nskills export: wrote .claude/skills/dossierx-code-links/SKILL.md\nskills export: wrote .claude/skills/dossierx-comments/SKILL.md\nskills export: wrote ~/myproject/AGENTS.md\nskills export: wrote ~/myproject/docs/dossierx-agent-guide.md\nskills export: skill-tree (claude-code) -> .claude/skills [written]\nskills export: agents-md-section (codex) -> ~/myproject/AGENTS.md [updated]\nskills export: generic-guide (any) -> ~/myproject/docs/dossierx-agent-guide.md [written]\nskills export: wrote 7 file(s)",
               },
               {
                 name: "version",

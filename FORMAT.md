@@ -21,16 +21,19 @@ facet: string                  # must be in project.config.yaml's facets[]
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
 layout: card | table | list | steps | tree | banner | mockup  # optional
+kind: fact | orientation-note  # optional, default fact (see below)
 build_role: orientation | schema | behavior | api | verification | out-of-scope  # optional (see below)
-body: markdown string          # optional, illustrative prose
-rows: [ { ... } ]              # optional, table rows; each cell must be a string
-steps: [ string ]              # optional, ordered steps
-raw_html: string               # optional, legal on any layout (review-gated)
+# CONTENT — at least one of the next four is REQUIRED (see "Content is required"):
+body: markdown string          # optional on its own, illustrative prose
+rows: [ { ... } ]              # optional on its own, table rows; each cell must be a string
+steps: [ string ]              # optional on its own, ordered steps
+raw_html: string               # optional on its own, legal on any layout (review-gated)
 raw_html_reviewed: bool        # optional, human-set gate for raw_html
 section: string                # optional, in-content section heading (see below)
-mirrors: [ id, ... ]
-rests_on: [ id, ... ]
-governed_by:
+emphasis: bool                 # optional, renders the claim as a warn / hard-boundary card
+mirrors: [ id, ... ]           # optional
+rests_on: [ id, ... ]          # optional
+governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
   type: none | doctrine_id
   reason: string                # required when type is "none"
 migrated_from: string           # optional provenance note
@@ -63,6 +66,46 @@ comments:                       # optional, engine-managed review threads — au
 - `slug` — a free-form, kebab-case identifier unique within that
   `module.facet` pair.
 
+### Content is required
+
+The four content-bearing fields are each optional **on their own**, and at
+least one of them is required: a claim must carry `body`, `rows`, `steps` or
+`raw_html`. A claim carrying none of the four is reported by the
+`layout-shape-mismatch` lint — "claim has no content: body, rows, and steps
+are all empty" — at **error** severity, so it fails `dossierx check` and
+refuses `dossierx claim lock` like any other error-severity finding.
+`raw_html` counts even with an empty `body`, because a markup blob rendered by
+`mockup.html` is the field's documented primary use; the finding's message
+predates that and names three fields rather than four.
+
+### `kind` and orientation notes
+
+`kind` is optional and defaults to `fact`: a claim stating something about the
+system, which is everything the engine rendered before this field existed. The
+other value is `orientation-note` — a claim that is *reading guidance about
+other claims* rather than a fact ("if you only call the public API, read
+Contract, never Internals").
+
+This is a different axis from `build_role`. A `build_role: orientation` claim
+is still a fact the module rests on ("why this module exists"); a
+`kind: orientation-note` claim is a pointer *at* other claims. Two lints police
+the non-default value — `orientation-note-shape` and `orientation-note-order` —
+and every claim under the reserved `overview` facet is an orientation note
+whether or not the field is set, so a claim there need not repeat it.
+
+### `emphasis` and hard-boundary cards
+
+`emphasis: true` is optional and marks a claim as carrying outsized weight for
+its facet; the viewer renders it as a warn / hard-boundary card. It is
+deliberately its own field rather than being derived from `governed_by`: what
+backs a claim's truth and how loudly it should render are different questions —
+a governed claim can still be a hard boundary, and an ungoverned-with-reason
+claim usually is not.
+
+Both `kind` and `emphasis` are outside the dependency-drift `ContentHash` (see
+"What is signed, and what is not"), so changing either never flags a dependent
+`review_pending`.
+
 ### `layout` inference
 
 When `layout` is omitted, it is inferred from the claim's shape:
@@ -76,8 +119,9 @@ them explicitly. `mockup` renders its `body` the same as every other
 layout — the exception `raw_html` provides is the *field*, not the layout:
 it is not exclusive to `layout: mockup`, but legal on any layout, rendered
 as an attachment alongside that layout's own body/rows/steps content,
-subject to the module allowlist, the markup allowlist, and its own human
-review gate — see the `raw-html-scope` lint for the full constraints.
+subject to the module allowlist (`mockup_modules` in `project.config.yaml`),
+the markup allowlist, and its own human review gate (`raw_html_reviewed`) —
+see the `raw-html-scope` lint for the full constraints.
 
 ### `body` and the markdown ceiling
 
@@ -192,7 +236,13 @@ constructs below; the only thing that differs between them is images (see
      a pipe-bearing line with no valid delimiter row after it.
   - Tables are legal at the top level and inside a blockquote; a
     pipe-bearing line indented under a list item is item prose, not a
-    table, matching every other block construct's list-item rule above. A
+    table. That is the general list-item rule — block constructs indented
+    under a list item stay literal — and **fenced code is the one documented
+    exception to it**, not the precedent for it: fences are recognized by the
+    line scanner itself, so an indented fence *does* render inside the
+    deepest open list item, across a blank line included (see the fenced-code
+    bullet above). No other block construct behaves that way, tables least of
+    all. A
     table cell is inline-only and single-line by construction — see the
     INLINE ceiling below — so no block construct, including another table,
     can appear inside one.
@@ -475,9 +525,10 @@ edge, each with a different meaning:
 ### Graph invariants
 
 Each edge kind is not just a per-claim field but a directed graph over the
-whole claim set, and each of those three graphs has a shape it must hold to.
-These are enforced by the lint suite, so a violation blocks `dossierx claim lock`
-the same way any other error-severity finding does:
+whole claim set, and each of those graphs has a shape it must hold to — plus a
+fourth graph, the union of two of them, whose shape neither of its halves can
+see. These are enforced by the lint suite, so a violation blocks
+`dossierx claim lock` the same way any other error-severity finding does:
 
 1. **`rests_on` must be acyclic.** It is a dependency edge, so a cycle means
    a set of claims each of which is true only if the others are — no claim
@@ -496,8 +547,23 @@ the same way any other error-severity finding does:
    steps — that sentinel is the only grounded end state. A cycle in this
    graph means a set of claims whose authority rests only on each other,
    which is to say on nothing, and is reported by the `governed-cycle` lint.
+4. **The UNION of `rests_on` and `governed_by` must be acyclic** — new in
+   v0.5.0, and that release's one BREAKING change to what a claim corpus may
+   look like. `mixed-cycle` walks both edge kinds as one graph, carrying the
+   edge kind on every hop, and reports a cycle whose hops include at least one
+   of each: "A `rests_on` B, B `governed_by` A". Neither rule above can see that
+   shape — `cycle` walks `rests_on` alone and `governed-cycle` walks
+   `governed_by` alone, so a mixed loop presents no back edge to either walk and
+   passed the whole registry before v0.5.0. It runs at **error** severity, so
+   satisfying `cycle` and `governed-cycle` is *not* the whole of the cycle rule:
+   a corpus carrying a mixed loop passed `dossierx check` before v0.5.0 and
+   exits 1 after it, with no edit on the author's side, no content-hash move and
+   nothing in the lock store to explain it. The recovery is to break the loop —
+   the finding names every claim on it — and re-run `check`; where those claims
+   are locked that is unlock, edit, lock, like any other correction. `mirrors`
+   is not part of the union graph and never trips this rule.
 
-Across all three, a claim may never name **its own id** in any edge
+Across all four, a claim may never name **its own id** in any edge
 (`self-edge`). A self-edge is trivially satisfied by every content rule —
 a claim always equals itself, always mirrors itself back, and always
 resolves — so it asserts nothing while looking like a well-formed edge. An
@@ -1036,6 +1102,20 @@ claims_dir: path                 # resolved relative to this file's own director
                                   # (directory layout inside it is not part of
                                   # this spec — see "Directory layout" below)
 doctrine_facet: string           # optional; omitted disables hub-gating entirely
+source_dirs: [path, ...]         # optional; directories scanned for
+                                  # "dossierx-claim: <id>" comments, resolved
+                                  # relative to this file's own directory like
+                                  # claims_dir. Unset/empty means DO NOT SCAN —
+                                  # `check` behaves as it did before the field
+                                  # existed, and the engine never guesses where
+                                  # the code is. Without it, a code link can
+                                  # only be recorded by `dossierx claim link`.
+mockup_modules: [string, ...]    # optional; the allowlist of modules permitted
+                                  # to author layout: mockup claims — the module
+                                  # allowlist leg of raw-html-scope's gate. Every
+                                  # entry must also appear in modules[]. An
+                                  # unset/empty list means NO module may author
+                                  # one; it is not a vacuous pass.
 viewer:
   template_overrides: path        # optional override dir; resolved relative
                                     # to this file's own directory. Eligible

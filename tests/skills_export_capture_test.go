@@ -35,6 +35,21 @@ import (
 // for the three concrete mutations this closes.
 var rawWikilinkPattern = regexp.MustCompile(`\[\[[^\]\n]+\]\]`)
 
+// siblingSkillLinkPattern matches the cross-reference spelling the bundles
+// actually use — "](../<name>/SKILL.md)" — capturing <name>.
+//
+// It has two jobs, and they pull in opposite directions, which is why one
+// pattern serves both. In the VERBATIM tree the link must be there and must
+// resolve to a bundle that ships. In either DERIVED form it must be gone,
+// because "one directory up, then sideways" reaches nothing from a single
+// concatenated guide or from a section spliced into a repo-root AGENTS.md.
+// Matching on the shape rather than on the five embedded names is deliberate,
+// for the same reason rawWikilinkPattern is broad: rewriteSkillLinks
+// (cmd/dossierx/skills_embed.go) only retargets names it actually loaded, so a
+// renamed or typo'd target — the realistic failure — is by construction not a
+// name any name-scoped needle would be looking for.
+var siblingSkillLinkPattern = regexp.MustCompile(`\]\(\.\./([^/)\n]+)/SKILL\.md\)`)
+
 var skillsExportCaptureOut = flag.String("skills-export-capture-out", "", "write the captured `dossierx skills export` output (surfaces.yaml's `agent-skills` surface) to this path as export-output.json")
 
 // The five bundles this repo ships, in their embedded directory names. Kept
@@ -129,19 +144,18 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 	// rather than inlining every companion skill.
 	//
 	// A bare strings.Contains(section, name) here is vacuous: the router's
-	// OWN body already names every companion skill in its prose (it links to
-	// them — see the [[wikilink]] cross-references in skills/dossierx/SKILL.md
-	// buildAgentsSection rewrites), so that assertion passes whether or not
-	// the index loop that follows the router body ever runs, and it ALSO
-	// passes if a regression inlined every companion's body in full instead
-	// of indexing it. Two more specific checks close both gaps:
+	// OWN body already names every companion skill in its prose — its "Which
+	// skill to load" table lists all four as plain code spans — so that
+	// assertion passes whether or not the index loop that follows the router
+	// body ever runs, and it ALSO passes if a regression inlined every
+	// companion's body in full instead of indexing it. Two more specific
+	// checks close both gaps:
 	//   - the exact link buildAgentsSection's index loop writes
 	//     ("](docs/dossierx-agent-guide.md#name)") must be present, which
-	//     only that loop produces (the router's own body has no such
-	//     literal — it uses [[wikilink]] syntax, and the router itself never
-	//     links to a companion "the other direction", per
-	//     TestCaptureSkillsExport_NoRawWikilinksSurvive's comment) — this
-	//     catches the index loop being skipped or emptied;
+	//     only that loop produces (the router names its companions as plain
+	//     code spans and links to none of them, so nothing in its body can
+	//     supply this literal) — this catches the index loop being skipped or
+	//     emptied;
 	//   - the companion's own opening heading (its first body line, verbatim
 	//     from SkillTree) must be ABSENT — this catches the companion being
 	//     inlined in full instead of merely indexed.
@@ -197,25 +211,58 @@ func TestCaptureSkillsExport_NoRawWikilinksSurvive(t *testing.T) {
 		t.Errorf("agent guide capture still contains raw wikilink %q; rewriteWikilinks did not resolve it", m)
 	}
 
-	// The verbatim tree is the one form that is NOT rewritten (Form 1 is a
-	// byte-for-byte copy of the embedded bundle) — so if the companion skills'
-	// SKILL.md sources contained no wikilink at all, the assertion above
-	// would be passing over nothing. Every companion links back to the
-	// router as "[[dossierx]]" (the router itself carries none the other
-	// direction, which is why this checks a companion rather than
-	// "dossierx/SKILL.md").
-	if !strings.Contains(capture.SkillTree["dossierx-claims/SKILL.md"], "[[dossierx]]") {
-		t.Fatalf("expected the verbatim dossierx-claims/SKILL.md to still contain a raw [[dossierx]] wikilink (proving Form 1 is untouched and the rewrite assertion above is exercising something real), got:\n%s", capture.SkillTree["dossierx-claims/SKILL.md"])
-	}
-
 	// The AGENTS.md section carries the ROUTER's body only (see
 	// buildAgentsSection's doc comment), and the router's own SKILL.md has no
-	// [[wikilink]] of its own to rewrite — so the meaningful place to prove
+	// cross-reference of its own to retarget — so the meaningful place to prove
 	// the rewrite ran is the guide (checked above), not this section. What IS
-	// worth pinning here is that whatever wikilink syntax the router's body
-	// might one day gain does not leak through unrewritten either.
+	// worth pinning here is that whatever cross-reference syntax the router's
+	// body might one day gain does not leak through unrewritten either.
 	if m := rawWikilinkPattern.FindString(capture.AgentsMDSection); m != "" {
-		t.Errorf("AGENTS.md section capture contains raw wikilink %q; rewriteWikilinks did not resolve it", m)
+		t.Errorf("AGENTS.md section capture contains raw wikilink %q; rewriteSkillLinks did not resolve it", m)
+	}
+
+	// The SIBLING-LINK half, which is the shape the bundles actually use. A
+	// bundle spells a cross-reference as "](../<name>/SKILL.md)" — a link that
+	// resolves in the exported TREE, the one form nothing rewrites. That target
+	// is meaningless in either derived form: the guide is a single concatenated
+	// document and the AGENTS.md section sits at the client's repo root, and
+	// neither has a sibling directory to reach. So a surviving "](../" in either
+	// is the same defect a surviving "[[" is, and it is checked the same broad
+	// way — on the SHAPE, not on the five names — because rewriteSkillLinks only
+	// retargets names it loaded, so a typo'd or renamed target is precisely what
+	// a name-scoped needle cannot see.
+	for _, form := range []struct{ what, text string }{
+		{"agent guide", capture.AgentGuide},
+		{"AGENTS.md section", capture.AgentsMDSection},
+	} {
+		if m := siblingSkillLinkPattern.FindString(form.text); m != "" {
+			t.Errorf("%s capture still contains sibling skill link %q, which resolves to nothing in that form; rewriteSkillLinks did not retarget it", form.what, m)
+		}
+	}
+
+	// Form 1 is a byte-for-byte copy of the embedded bundle, so if the sources
+	// carried no cross-reference at all the two assertions above would be
+	// passing over nothing. Every companion links back to the router (the router
+	// links to none of them the other direction, which is why this reads a
+	// companion rather than "dossierx/SKILL.md").
+	const routerLink = "](../dossierx/SKILL.md)"
+	if !strings.Contains(capture.SkillTree["dossierx-claims/SKILL.md"], routerLink) {
+		t.Fatalf("expected the verbatim dossierx-claims/SKILL.md to still contain %s (proving Form 1 is untouched and the rewrite assertions above are exercising something real), got:\n%s", routerLink, capture.SkillTree["dossierx-claims/SKILL.md"])
+	}
+
+	// And the point of the spelling: every one of those links has to RESOLVE in
+	// the tree a client's agent reads. The tree is keyed by path relative to the
+	// export directory, so "<dir>/a/SKILL.md" linking "../b/SKILL.md" resolves
+	// exactly when "b/SKILL.md" is a key. A link naming a bundle that does not
+	// ship is the failure this closes — it reached a client as a dead link
+	// before, and as four literal brackets before that.
+	for _, path := range sortedSkillTreeKeys(capture.SkillTree) {
+		for _, m := range siblingSkillLinkPattern.FindAllStringSubmatch(capture.SkillTree[path], -1) {
+			target := m[1] + "/SKILL.md"
+			if _, ok := capture.SkillTree[target]; !ok {
+				t.Errorf("exported %s links %q, which resolves to %q — not a file this export writes. Every cross-reference in the verbatim tree must name a bundle that ships, or a client's agent follows it to nothing", path, m[0], target)
+			}
+		}
 	}
 }
 
@@ -260,7 +307,7 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 	root := newSkillsExportFixture(t)
 	capture := captureSkillsExport(t, root)
 
-	data, err := json.MarshalIndent(capture, "", "  ")
+	data, err := json.MarshalIndent(readableCapture(capture), "", "  ")
 	if err != nil {
 		t.Fatalf("marshal capture: %v", err)
 	}
@@ -268,6 +315,51 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 		t.Fatalf("write %s: %v", *skillsExportCaptureOut, err)
 	}
 	t.Logf("wrote skills export capture to %s", *skillsExportCaptureOut)
+}
+
+// skillsExportCaptureDoc is SkillsExportCapture as it is WRITTEN to
+// export-output.json: every document is an array of its own lines rather than
+// one string.
+//
+// This is not formatting taste, it is whether the evidence can be read at all.
+// json.MarshalIndent indents the OBJECT; it cannot break a string value, so a
+// document holding its newlines as "\n" escapes marshals to a single physical
+// line however the object around it is indented. The agent guide is every
+// bundle concatenated — the last capture put it on one line roughly 25,000
+// tokens long, above what any single read returns, and a line-based reader
+// cannot open part of a line. That surface's answer recorded, in those words,
+// that it read two of the three forms and could not say what was in the third.
+// A gate whose own evidence file is unopenable is a gate that reports "could
+// not check" for a surface nobody chose to skip.
+//
+// Splitting on "\n" makes each source line its own JSON element, so the file is
+// as readable line by line as the documents it captures. Nothing downstream
+// constrains the shape: the gate's freshness key is a digest of whatever bytes
+// this writes, so changing them re-keys the bundle and re-reads the surface,
+// which is the correct consequence of the evidence changing.
+type skillsExportCaptureDoc struct {
+	SkillTree       map[string][]string `json:"skill_tree"`
+	AgentGuide      []string            `json:"agent_guide"`
+	AgentsMDSection []string            `json:"agents_md_section"`
+}
+
+// readableCapture converts a capture to its line-per-element written form.
+//
+// strings.Split on "\n" is exact and lossless: a document ending in a newline
+// yields a final empty element, and strings.Join(lines, "\n") reproduces the
+// original bytes for every input including the empty string. A reader
+// reassembling a document from this file gets what the export wrote, not an
+// approximation of it.
+func readableCapture(c SkillsExportCapture) skillsExportCaptureDoc {
+	doc := skillsExportCaptureDoc{
+		SkillTree:       make(map[string][]string, len(c.SkillTree)),
+		AgentGuide:      strings.Split(c.AgentGuide, "\n"),
+		AgentsMDSection: strings.Split(c.AgentsMDSection, "\n"),
+	}
+	for path, body := range c.SkillTree {
+		doc.SkillTree[path] = strings.Split(body, "\n")
+	}
+	return doc
 }
 
 // TestCaptureSkillsExport_G1Capture_RequiresNonEmptyValueWhenFlagGiven is the

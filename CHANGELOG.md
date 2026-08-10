@@ -7,14 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.1] - 2026-08-10
 
-**Nothing a consumer runs changes in this release.** Not one non-test Go file moved:
-`git diff v0.5.0..v0.5.1 -- '*.go'` touches `_test.go` files and nothing else, `internal/` and
-`skills/` are untouched end to end, and there is no new command, flag, `error.code`, lint rule,
-schema field or rendered-viewer byte. The engine is v0.5.0's engine, rebuilt at a new tag. There is
-nothing to re-export, nothing to re-render, and nothing on your side that behaves differently after
-upgrading.
+**SILENT: the embedded agent skills changed, and nothing on your side reports it.
+Re-run `dossierx skills export` after upgrading.** Those bundles are written into a project as
+committed artifacts, and nothing in `dossierx check` compares an exported copy against the binary's
+— v0.5.0's entry below says so in as many words. A project that skips the re-export keeps v0.5.0's
+guidance, including an install line that fetches `scripts/install-git-hook.sh` from the v0.5.0 raw
+path and a stale account of when `dossierx claim flag` is refused.
 
-What this release is instead is the machinery that publishes the next one. Everything that has ever
+**Nothing a consumer runs behaves differently.** There is no new or changed command, flag,
+`error.code`, lint rule, schema field or rendered-viewer byte, and no engine behaviour moves:
+`internal/` is untouched end to end and there is nothing to re-render. What moved outside the
+release machinery is the four install pins, now `v0.5.1` — one of them inside
+`skills/dossierx/SKILL.md`, which is the byte that makes the exported bundle a different bundle —
+and four user-facing strings that were wrong. Two are refusal hints that named invocations the
+binary rejects: the retired `implink` stub's replacement command, which omitted `--module` and
+`--claim` and passed the id positionally at a command declared `cobra.NoArgs`, and the
+missing-`--reason` refusal, which printed the verb without the id or `--module` the verb also
+requires. The third is the link the spliced `AGENTS.md` section gives for the exported agent guide,
+which named `docs/dossierx-agent-guide.md` while the export invocation this project prescribes
+writes it beside the skills. The fourth is the code-links skill's account of `dossierx claim flag`,
+which still stated v0.4.0's layout rule after v0.4.1 made the refusal key on content. Three non-test
+Go files move for those — `cmd/dossierx/retired.go`, `cmd/dossierx/output.go` and
+`cmd/dossierx/skills_embed.go` — and all three change printed text only.
+
+What this release is otherwise is the machinery that publishes the next one. Everything that has ever
 gone wrong with a DossierX release has been in the half a maintainer performs by hand — a version
 string copied into prose and left behind, a verification step that read the source instead of the
 artifact, a `commit` field that named the wrong sha for two releases running — and every one of
@@ -1574,7 +1590,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.3.1...v0.4.0

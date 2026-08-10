@@ -97,28 +97,39 @@ go run ./cmd/dossierx check --config testdata/fixture-basic/project.config.yaml
 
 ## Cutting a release
 
-Maintainers only: [docs/RELEASING.md](docs/RELEASING.md). Tagging is automated;
-the checklist covers the parts that are not — the version numbers copied into
-prose, and verifying the published artifact rather than the source you edited.
+Maintainers only: [docs/RELEASING.md](docs/RELEASING.md). Releasing is a driver,
+`make release-publish`, not a list somebody works through: it refuses to tag unless
+the tree already declares the release being cut, and it verifies the published
+archives itself before `main` moves. What that document is for is the half no
+program does — reading the release gate's findings and ruling on them, and the
+three post-publish checks (the deployed site, the workflow run, the CDN) that the
+driver hands back to a person because they leave this repository.
 
 ## Package boundaries
 
 `internal/` is organized as a dependency graph with a small number of hard rules, enforced by
 `.golangci.yml`'s `depguard` configuration rather than left to convention alone (see "Why
-loosely coupled" below for why that matters here). The current packages are:
+loosely coupled" below for why that matters here). The current packages, which is what
+`go list ./internal/...` prints today rather than what this list used to say:
 
-`buildorder`, `catalog`, `config`, `implink`, `lint`, `loader`, `lock`, `model`, `reaudit`,
-`render`.
+`buildorder`, `catalog`, `check`, `cliout`, `comments`, `config`, `digest`, `graph`,
+`implink`, `lint`, `loader`, `lock`, `model`, `reaudit`, `render`, `render/components`,
+`render/markdown`, `render/markdown/generate-goldens`, `serve`, `urlsafe`.
 
 The rules:
 
 - **`model` and `config` are dependency-free leaves.** Neither may import any other package
   under `internal/`. Everything else in the engine depends on the claim/config shapes these
   two packages define, so they must not depend back on anything.
-- **`render` is a top-of-stack sink.** It may import other `internal/` packages, but nothing
-  under `internal/` may import `render` in return — not `lint`, not `catalog`, not `lock`,
-  not `loader`, not `implink`. Rendering is the last stage of the pipeline; nothing upstream
-  of it should need to know how output gets drawn.
+- **`render` is a top-of-stack sink for everything upstream of it.** It may import other
+  `internal/` packages, and the five that sit upstream in the pipeline may not import it back:
+  `lint`, `catalog`, `lock`, `loader` and `implink`. That is the exact set `.golangci.yml`'s
+  `render-is-top-of-stack` rule denies, and the rule is deliberately not "nothing under
+  `internal/`" — `check` and `serve` both import `render` and are supposed to. They are the two
+  packages that DRIVE the pipeline rather than sitting inside it: `check` runs lint → catalog →
+  render as its stages, and `serve` renders the viewer from memory on each request. The rule to
+  keep in your head is direction, not a blanket ban: nothing that produces input for the
+  renderer may depend on how output gets drawn.
 - **`lint` must never import `lock`.** The dependency runs the other way: `lock` imports
   `lint`, because locking a claim is gated on that claim passing a clean lint run. A `lint`
   package that imported `lock` back would create a cycle and would also be backwards from

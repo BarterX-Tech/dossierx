@@ -502,8 +502,16 @@ func exitStatusFor(err error) int {
 
 // requireReason enforces --reason on the four verbs that change what the
 // project treats as approved: claim lock, claim unlock, claim reaudit
-// --confirm, and build-order lock. verb is the full command path, so the hint
-// it composes is a command the caller can actually run.
+// --confirm, and build-order lock.
+//
+// verb is the full command path, and it names the failure. The HINT is looked up
+// in reasonInvocations rather than composed from verb, because composing it was
+// wrong for all four callers: this used to print `run: dossierx <verb> --reason
+// "…"`, and `claim lock`, `claim unlock` and `claim reaudit` are each declared
+// cobra.ExactArgs(1) while `build-order lock` refuses without --module, so every
+// one of those four lines named an invocation that exits non-zero before it could
+// reach the missing --reason. internal/cliout's WithHint doc says a hint is "a
+// literal next command to run"; a shape the reader has to repair first is not one.
 //
 // The reason is not paperwork. Under the v0.3.0 split the human never types
 // these commands — they say "good, lock it" in chat and the agent executes —
@@ -514,11 +522,37 @@ func exitStatusFor(err error) int {
 // difference between a convention that can be audited and one that cannot.
 // Phase 3 persists this string into the lock ledger; Phase 1 requires it and
 // echoes it back so the record it will be written into already exists.
+// reasonInvocations is, for each verb that calls requireReason, the WHOLE
+// invocation that verb accepts, minus --reason. Every required argument the verb
+// declares is present, because that is the difference between a hint and a shape:
+// `dossierx claim lock --reason "…"` exits 1 on the missing positional id long
+// before --reason is looked at.
+//
+// The four keys are the four call sites, and there are no others:
+// cmd/dossierx/main.go's claim lock, claim unlock and claim reaudit, and
+// cmd/dossierx/build_order.go's build-order lock. Adding a fifth caller without
+// adding its entry here is handled below rather than left to print the old wrong
+// shape.
+var reasonInvocations = map[string]string{
+	"claim lock":       "dossierx claim lock <id>",
+	"claim unlock":     "dossierx claim unlock <id>",
+	"claim reaudit":    "dossierx claim reaudit <id> --confirm",
+	"build-order lock": "dossierx build-order lock --module <module>",
+}
+
 func requireReason(verb, reason string) error {
 	if strings.TrimSpace(reason) != "" {
 		return nil
 	}
-	return cliout.Errorf(cliout.CodeMissingFlag,
-		"%s: --reason is required and must be non-empty; it records the human approval this action is executing", verb).
-		WithHint(fmt.Sprintf(`run: dossierx %s --reason "<the approving words>"`, verb))
+	err := cliout.Errorf(cliout.CodeMissingFlag,
+		"%s: --reason is required and must be non-empty; it records the human approval this action is executing", verb)
+	invocation, known := reasonInvocations[verb]
+	if !known {
+		// A verb with no entry has no hint. That is deliberate: guessing
+		// `dossierx <verb> --reason "…"` is how this defect existed in the first
+		// place, and an absent hint sends the reader to --help, which is right,
+		// where a wrong one sends them to a command that fails.
+		return err
+	}
+	return err.WithHint(fmt.Sprintf(`run: %s --reason "<the approving words>"`, invocation))
 }

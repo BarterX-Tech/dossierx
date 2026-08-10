@@ -5,7 +5,9 @@
 #
 # WHY A SCRIPT AND NOT A CLI COMMAND
 #
-# v0.3.0 fixes the CLI surface at 19 leaves, and writing an executable into
+# The CLI surface is a fixed one — v0.3.0 cut 26 commands to 20 leaves under
+# eight nouns, and v0.4.0 cut that to the 19 leaves under seven nouns the
+# binary ships today — and writing an executable into
 # someone's .git is not a thing a docs engine should be able to do as a side
 # effect of some other verb. So the hook install is this: a standalone,
 # self-contained script that a bootstrap agent runs AFTER the human has said
