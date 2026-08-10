@@ -175,13 +175,25 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 	// The panel is a SIBLING of the footer disclosure, emitted immediately
 	// after </details> — never nested inside it. A claim's threads must stay
 	// readable without expanding its edges.
+	//
+	// THIS ONE STRING IS THE WHOLE ORDERING PROOF. Matching
+	// `</ul></details><div class="comments-panel"` as a single literal asserts
+	// the adjacency and the order together: the panel opens immediately after
+	// the footer closes, with nothing between them.
+	//
+	// A SECOND, INDEX-BASED PROBE WAS DELETED HERE. It read
+	// `closeIdx := strings.Index(got, "</details>")` and compared it against the
+	// panel's index — but strings.Index takes the FIRST closer in the output,
+	// which is the footer's only because this fixture claim happens to carry a
+	// rests_on edge, so a footer is emitted at all. On a claim with NO edges but
+	// WITH resolved threads the footer is suppressed entirely (correct since
+	// v0.4.1) and the same literal would find the comments panel's own
+	// <details class="comments-resolved"> closer instead — leaving the probe
+	// comparing the panel against itself and passing for the wrong reason. It
+	// proved nothing the adjacency match above does not already prove, and it
+	// could degrade silently as the fixture changed underneath it.
 	if !strings.Contains(got, `</ul></details><div class="comments-panel"`) {
 		t.Fatalf("the panel must follow </details> as a sibling with no whitespace between, got: %s", got)
-	}
-	panelIdx := strings.Index(got, `<div class="comments-panel"`)
-	closeIdx := strings.Index(got, `</details>`)
-	if panelIdx < 0 || closeIdx < 0 || panelIdx < closeIdx {
-		t.Fatalf("the panel must come AFTER the footer's </details>, got: %s", got)
 	}
 
 	// The chip is not in the footer's output at all any more.
