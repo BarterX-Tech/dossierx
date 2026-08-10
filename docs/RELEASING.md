@@ -207,10 +207,45 @@ checklist for that half.
       read-only: `gate/method.yaml` grants `SurfaceFinding` and `SurfaceVerdict`
       and nothing else, and the harness passes that as an exclusive allow-list —
       the assembled bundle is the whole evidence set, which is the property every
-      key in this gate rests on. Each agent leaves one answer at
-      `gate/answers/<surface>.json` naming this run's identifier and its own
-      surface. An answer that is missing, unparseable, or attributed to a
-      different run is a FAILED gate; it is never a gate over twelve surfaces.
+      key in this gate rests on. What comes back from each agent is its own three
+      facts and nothing else, in one file:
+
+          {"verdict": "PASS"|"FAILED", "findings": [...], "subjects": {...}}
+
+      **The agent cannot write the answer file, so you record it.** An answer has
+      to carry this run's identifier and the surface's CURRENT stage-2 key, and
+      only the Go side computes that key. As each agent returns, record what it
+      produced:
+
+          go test ./cmd/dossierx -run '^TestGateAnswerRecord$' -count=1 -args \
+            -answer-record -answer-surface=<surface> -answer-file=<payload.json>
+
+      That reads `gate/fanout.json` for the run this checkout was fanned out
+      under, refuses a surface `surfaces.yaml` does not declare, refuses a
+      payload carrying anything beyond those three keys — a `surface` or a
+      `fingerprint` written by the agent would otherwise be dropped in silence —
+      computes the key, and puts the assembled answer through the SAME validation
+      the collection applies, so a malformed answer is refused here, in front of
+      you, rather than at the end of the run. It then writes
+      `gate/answers/<surface>.json`. `-count=1` is part of the invocation as
+      belt and braces, not as the thing holding the belt: a replayed cache would
+      print `ok (cached)`, write nothing, exit 0, and never reach the refusal
+      below, which you would read as an answer that landed. Today `go test` will
+      not cache this run in any case — it caches nothing whose command line
+      carries a flag outside its own cacheable set, and everything after `-args`
+      is outside it — but that is a promise the toolchain makes about itself, so
+      the invocation states what the gate needs instead of relying on it.
+
+      **It will not overwrite an answer.** One agent per surface per run is the
+      whole shape of the run, so a second answer is not a correction: it is a
+      second opinion replacing the first with nothing left on disk to say the
+      first was ever given, and over {FAILED, PASS} that silently converts a
+      blocked surface into a clean one. If an answer is wrong, delete
+      `gate/answers/` in full and go back to step 2 — a re-run is a fresh
+      fan-out, which mints a new identifier every answer must then name.
+
+      An answer that is missing, unparseable, or attributed to a different run is
+      a FAILED gate; it is never a gate over twelve surfaces.
 
       **4. Then loop, and expect to.** Any finding at all makes the receipt
       FAILED — there is no severity threshold, and nothing waves a finding
