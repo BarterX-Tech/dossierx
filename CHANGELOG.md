@@ -131,6 +131,31 @@ to the wrong surface.
   created, and the assertion passing against an ordinary missing file. Mutation-checked — with the
   removal silently skipped, the test reports SKIP and the package prints `ok`.
 
+### Fixed — the claims file lock could refuse the one case it exists for, on Windows
+
+**If you run DossierX on Windows and two `dossierx` invocations can touch one project at the same
+time — a parallel script, a CI matrix, an agent and a human — this is the fix to have.**
+`AcquireFileLock` serialises concurrent CLI runs against a project's lock ledger with an `O_EXCL`
+sentinel file, retrying until the holder releases. It retried only when the open failed with "already
+exists".
+
+Windows does not remove a deleted file's directory entry when the unlink returns. The entry survives
+in a **delete-pending** state until the last handle closes, and while it is there every open of that
+path fails with `ERROR_ACCESS_DENIED` rather than `ERROR_FILE_EXISTS`. That state begins at the exact
+instant the holder releases the lock — which is the instant a waiter is polling. `os.IsExist` is false
+for it, so the waiter stopped retrying and returned `acquire file lock …: Access is denied.` at the
+one moment it should have waited one more poll.
+
+The failure is intermittent by construction, which is how it survived: it needs the waiter's poll to
+land inside the holder's release. It reddened a `windows-latest` leg of this release's own CI, in
+`TestConcurrentClaimWritersNeverCorruptClaimFiles`, having passed the two runs before it.
+
+POSIX never reaches this — `unlink` is atomic, so `EACCES` on a lock path is a real permission problem
+that should fail fast rather than spin. The classification is therefore per-platform and is pinned as
+such, and the two contended timeouts now report apart: a holder that never let go names the holder and
+the manual recovery, while a path that stayed unopenable for the whole window says so and points at
+permissions instead of at a process that was never there.
+
 ### Fixed — found by this release's own reading gate
 
 Thirteen agents read the thirteen declared surfaces against this tree and returned 39 findings. The
