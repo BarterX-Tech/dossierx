@@ -317,13 +317,19 @@ checklist for that half.
       through D8 are executed by the target above, including the archive
       verification between the two pushes. What this step asks of a person is
       the two things a program cannot do: confirm the gate's findings before
-      authorizing, and type the version into the two variables. The one step the
-      driver does not perform is D9, the read of the deployed site, which stays
-      a person's along with the two checks beside it in **Three checks that stay
-      a person's** — so a green run ends stopped at D9 with both pushes done and
-      those three checks waiting. When the driver stops after an irreversible
-      step it prints which steps are already public and which are not; it never
-      resumes and never undoes.
+      authorizing, and type the version into the two variables.
+
+      **A green run ends at D9, the handoff — and D9 is not a check.** The
+      driver performs D0 through D8 and then hands the release over: its last
+      act is to print, and to write into the run record, that vX.Y.Z is
+      published and that the three checks in **Three checks that stay a
+      person's** below have been made by nothing. After it pushes `main` it
+      reads no workflow run, no release page and no byte of the live site —
+      that is exactly why those three stay a person's — so read the handoff as
+      the start of your work and never as a report that the release came back
+      clean. It is the one ending that is not a failure; a run that stops
+      anywhere earlier stops AS a failure, names the step, prints which steps
+      are already public and which are not, and never resumes and never undoes.
 
       **No sha is stamped onto the site after this.** The step that wrote the
       release commit's short sha into `site/src/content.ts` is gone with the

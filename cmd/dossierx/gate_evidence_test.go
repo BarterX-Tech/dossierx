@@ -26,10 +26,18 @@
 // and that every error is returned rather than summarised. That is exactly what
 // the tests at the bottom mutate.
 //
-// THREE ANSWERS WIRED AND ONE DELIBERATELY NOT. Verdicts, Current and Archives
-// now read this repository. Site stays errGateUncheckable — see gateDriverWired.Site:
-// D9 is the accepted human residual, recorded as such in docs/RELEASING.md's
-// "Three checks that stay a person's", and its unbuilt state is a decision.
+// THREE ANSWERS, ALL WIRED. Verdicts, Current and Archives read this
+// repository, and there is no fourth. There was: Site answered D9 with
+// errGateUncheckable, because reading the deployed site is one of the three
+// checks docs/RELEASING.md keeps a person's — a workflow that never fired and a
+// deploy still serving yesterday's bundle leave this tree byte-identical to the
+// release that went right, so there is nothing here for a check to read. That
+// ruling stands and the question is simply no longer asked here: by a
+// maintainer's ruling of 10 Aug 2026, D9 is a terminal handoff rather than a
+// check, so the driver ENDS by naming those three checks and saying it made none
+// of them. The reasoning is recorded on the D9 step in gate_driver_test.go, with
+// the tests that hold the handoff honest; nothing about it is this file's to
+// answer any more.
 //
 // WHAT THE WIRING STILL DOES NOT ESTABLISH, stated here rather than discovered
 // at the worst moment. It does not make the thirteen agents' answers honest.
@@ -217,28 +225,18 @@ func (gateDriverWired) Archives(version, commit string) error {
 	return gateArchivesVerify(version, commit)
 }
 
-// Site is D9, and it is the one answer here that stays a refusal.
+// THERE IS NO Site METHOD HERE, and its absence is the recorded shape rather
+// than a deletion somebody tidied. It answered D9 with a refusal for as long as
+// D9 was a question; D9 is now the driver's terminal handoff, so the site is
+// named in what the driver hands over and asked of nothing in this file.
+// Leaving a Site behind — even one that refuses — would leave a seam whose
+// obvious next move is to wire a browser to it, which is this driver running a
+// public URL between two irreversible acts and taking a verdict from it.
 //
-// ITS UNBUILT STATE IS A DECISION AND NOT AN OMISSION. Reading the deployed
-// site is one of the three checks docs/RELEASING.md's "Three checks that stay a
-// person's" records as a person's, by a ruling that is written down there: they
-// ask whether a system outside this repository did what it was told — a
-// workflow that never fired, a deploy still serving yesterday's bundle — and a
-// tree that went right and a tree that went wrong are byte-identical here, so
-// there is nothing in this repository for a check to read. Building it would
-// mean this driver running a browser against a public URL between two
-// irreversible acts and taking a verdict from it.
-//
-// So it refuses, and the refusal is gateDriverUnwired's own text rather than a
-// second spelling of it: two sentences saying "the site is not read here" is
-// the beginning of two of them disagreeing. What the refusal COSTS is real and
-// is not hidden — an authorized run reaches D9 and stops there, after both
-// pushes, and the report names D6 and D8 as already published. The human then
-// performs the three checks. That is the honest shape: the driver never reports
-// a check it did not make.
-func (gateDriverWired) Site(version string) error {
-	return gateDriverUnwired{}.Site(version)
-}
+// What that costs is real and is not hidden: an authorized run reaches D9 with
+// both pushes done and NOTHING having examined the published release. The
+// driver says so, names the three checks, and stops. The human performs them.
+// The rule is untouched — the driver never reports a check it did not make.
 
 // ---------------------------------------------------------------------
 // the fixture: a checkout with a whole gate run in it
@@ -680,22 +678,11 @@ func TestTheWiredArchivesAnswerIsTheArchiveCheck(t *testing.T) {
 	}
 }
 
-// TestTheWiredSiteAnswerIsStillARefusal pins D9 as the accepted residual.
-//
-// It is here so that the unbuilt state is asserted rather than assumed. A Site
-// that started returning nil would be the exact failure this whole gate is
-// written against — a check nobody made reading as a check that passed — and it
-// would show up nowhere else: D9 is the last step, so a nil turns a run that
-// stopped honestly into a completed release.
-func TestTheWiredSiteAnswerIsStillARefusal(t *testing.T) {
-	err := gateDriverWired{}.Site("v9.9.9")
-	if err == nil {
-		t.Fatal("D9 reported that the deployed site describes this release. Nothing in this tree reads the deployed site, so that is a check that did not happen reading as one that passed — and it is the last step, so the run would report a complete release")
-	}
-	if !errors.Is(err, errGateUncheckable) {
-		t.Errorf("D9's refusal must be uncheckable — the question was not asked, and the answer is not 'no'; got %v", err)
-	}
-	if !strings.Contains(err.Error(), "v9.9.9") {
-		t.Errorf("the refusal does not name the release it could not check, and the operator is reading it beside a forge carrying several tags.\nIt reads:\n%v", err)
-	}
-}
+// THE PIN THAT USED TO BE HERE, and where it went.
+// TestTheWiredSiteAnswerIsStillARefusal asserted that Site had not started
+// returning nil, because a nil there turned a run that stopped honestly into a
+// completed release. That failure mode did not disappear with the method — it
+// moved. A driver that claims the deployed site is fine now does it by printing
+// a handoff that reads as a pass, so the pin is
+// TestAGreenRunEndsHandedOverAndNotRead and its denylist of claim words in
+// cmd/dossierx/gate_driver_test.go, which is where the terminal state is built.

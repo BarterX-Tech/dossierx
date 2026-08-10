@@ -92,19 +92,22 @@
 //
 // WHAT THIS DRIVER DOES AND DOES NOT DO TODAY, and both halves are deliberate.
 // gateDriverWired (gate_evidence_test.go) is the evidence source the real
-// repository gets, and three of its four answers are wired to this tree: the
+// repository gets, and every answer it owes is wired to this tree: the
 // per-surface verdicts and findings are collected from the fan-out record this
 // run produced and the answers given against it, the fingerprints green is
 // recomputed against are the manifest's surfaces and stage 2's keys, and D7
-// verifies the archives the forge is actually serving. The fourth is Site, and
-// it stays errGateUncheckable by a recorded ruling rather than by omission:
-// reading the deployed site is one of the three checks docs/RELEASING.md keeps a
-// person's, because a deploy that never fired leaves this repository
-// byte-identical to one that did, so there is nothing here for a check to read.
-// So a run whose gate is green performs D0 through D8 and stops at D9 with both
-// the tag and main published, and its report names them. That is the same rule
-// as ever — a check that cannot run is a failure, not a pass — applied now to
-// the one step nothing in this tree can make.
+// verifies the archives the forge is actually serving.
+//
+// So a run whose gate is green performs D0 through D8 and then ENDS AT D9, THE
+// HANDOFF. D9 asks the evidence nothing. It is a terminal state that says two
+// things in one breath — the release is published, and the three checks
+// docs/RELEASING.md keeps a person's have been made by nothing — and it is a
+// different claim from every other ending in this file, which are all failures.
+// The ruling that made it one, and the earlier ruling that made reading the
+// deployed site a person's work at all, are recorded on the D9 step itself.
+// Nothing here has stopped being true: the driver still never reports a check it
+// did not make, and the handoff's whole text is about the checks it did not
+// make.
 //
 // AND IT STOPS FAR EARLIER THAN THAT UNTIL A FAN-OUT HAS ACTUALLY BEEN
 // PRODUCED. Everything gateDriverWired reads under gate/ is per-run evidence
@@ -427,7 +430,107 @@ var gateDriverSequence = []gateDriverStep{
 	{ID: "D7", What: "verify the published archives"},
 	{ID: "D8", What: "push main", Irreversible: true,
 		Published: "main carries the release commit, and deploy-site has published a site announcing %s. There is no automatic rewrite of a published page; the gate surfaces, it does not fix"},
-	{ID: "D9", What: "G3 — the rendered site describes this release"},
+
+	// D9 IS A HANDOFF AND NOT A CHECK, by a maintainer's ruling of 10 Aug 2026,
+	// and this is the recorded form of that ruling rather than a shape somebody
+	// tidied into.
+	//
+	// It used to be "G3 — the rendered site describes this release", asked of
+	// gateDriverEvidence.Site, which answered errGateUncheckable by an EARLIER
+	// ruling: reading the deployed site is one of the three checks
+	// docs/RELEASING.md keeps a person's, because a workflow that never fired and
+	// a deploy still serving yesterday's bundle both leave this repository
+	// byte-identical to the release that went right, so there is nothing in this
+	// tree for a check to read. That ruling stands. What it produced, though, was
+	// that EVERY successful release ended with the driver reporting FAILURE at
+	// D9, both pushes done — and a red that fires on every success is a red an
+	// operator learns to scroll past, which costs the driver the only signal it
+	// has for the releases that really did stop halfway.
+	//
+	// So the ending is a different claim, not a softer one. "A check could not
+	// run" is what D7 says when the archives cannot be read, and it is a failure.
+	// "Handed off" says the driver examined NOTHING about the deployed release
+	// and that three named checks now begin — which is not a skip that reads as a
+	// pass, because the report's subject is precisely what was not examined and
+	// by whom it now must be. The words for it are gateDriverHumanChecks and
+	// gateDriverHandoffNotChecked, one of which is pinned to the procedure and
+	// the other of which the handoff must carry verbatim.
+	{ID: "D9", What: "hand off — the release is published, and the three checks that stay a person's begin"},
+}
+
+// ---------------------------------------------------------------------
+// the three checks D9 hands over
+// ---------------------------------------------------------------------
+
+// gateDriverHumanCheckPrefix opens each of those checks in docs/RELEASING.md.
+// The "(human)" is the document's own marking and is what makes the section
+// countable: TestTheHandoffNamesEveryCheckTheProcedureKeepsAPersons requires the
+// number of items carrying this prefix to equal the number of checks declared
+// below, so a fourth check added to the procedure and not to the driver is a
+// handoff that quietly hands over three of four.
+const gateDriverHumanCheckPrefix = "- [ ] **(human) "
+
+// gateDriverHumanCheckSection is the heading those items live under, spelled as
+// the section is NAMED rather than as markdown writes it: the handoff prints
+// this to send a reader there, and the pin below is what knows it is an `###`.
+const gateDriverHumanCheckSection = "Three checks that stay a person's"
+
+// gateDriverHumanCheck is one check the driver hands to a person at D9.
+//
+// Item is the checklist item's title in docs/RELEASING.md, spelled exactly as
+// that document spells it, and the handoff report prints Title() — the same
+// string with the markdown taken off. ONE string with two readers, deliberately:
+// a report that named these checks in its own words would be a second wording of
+// the procedure, and the day the two drift the operator reads a name that is not
+// in the document they are being sent to.
+type gateDriverHumanCheck struct {
+	Item string `json:"item"`
+
+	// Do is what the person does, in the imperative. It is here because the
+	// handoff is read at the one moment when going and finding the procedure is
+	// least likely: the release is already public.
+	Do string `json:"do"`
+
+	// Silently is what a release nobody performed this check on looks like.
+	// Every one of the three is the same shape — a failure that leaves the
+	// forge, the site and this repository looking exactly like a release that
+	// worked — and that is the whole reason none of them can be checked here.
+	Silently string `json:"silently"`
+}
+
+// Title is Item without the checklist markup.
+func (c gateDriverHumanCheck) Title() string {
+	return strings.TrimSuffix(strings.TrimPrefix(c.Item, gateDriverHumanCheckPrefix), "**")
+}
+
+// gateDriverHumanChecks are docs/RELEASING.md's three, in the document's order.
+//
+// THEY ARE DECLARED HERE RATHER THAN READ OFF THE DOCUMENT AT RELEASE TIME, and
+// that is a decision about WHEN they are needed. The handoff is composed after
+// the last irreversible act, so any I/O it depends on is I/O that can fail with
+// the tag and main already published — and the report that could not be produced
+// is the report the operator has nothing to read instead of. Nothing is read
+// from disk after D8. What keeps these equal to the document is a test at
+// lane-landing time, where a disagreement costs a red run and not a release.
+var gateDriverHumanChecks = []gateDriverHumanCheck{
+	{
+		Item: gateDriverHumanCheckPrefix + "The `Release` workflow itself passed.**",
+		Do:   "open the run for this tag on the forge and read the run's own conclusion — not that the tag is there, and not that the release page loads",
+		Silently: "a run that failed or stopped halfway leaves a published tag with no archives behind it, " +
+			"and the tag is what every consumer resolves",
+	},
+	{
+		Item: gateDriverHumanCheckPrefix + "`deploy-site` ran for this release.**",
+		Do:   "look at deploy-site.yml's runs for this release's commit; if it never fired, the fix is a workflow_dispatch",
+		Silently: "deploy-site triggers only on changes under site/**, so a release touching no site file publishes nothing, " +
+			"fails nowhere, and leaves the live site naming the previous release",
+	},
+	{
+		Item: gateDriverHumanCheckPrefix + "The deployed bundle is the one that was built.**",
+		Do: "fetch the live index.html, read Vite's content-hashed asset names out of it and compare them against your own dist/ — " +
+			"or at minimum satisfy yourself that they CHANGED from what the last deploy served",
+		Silently: "a deploy that succeeded while a CDN kept serving yesterday's bundle looks like a deploy that worked from every angle but this one",
+	},
 }
 
 // gateDriverRepo is the repository the sequence acts on.
@@ -451,9 +554,16 @@ type gateDriverRepo struct {
 // It carries no gateReceipt and cannot: the receipt is measured here (clause 1),
 // and what crosses this boundary is the material a receipt is measured FROM. The
 // production implementation is gateDriverWired in gate_evidence_test.go, which
-// answers the first three from this repository's own gate run and leaves Site a
-// refusal. gateDriverUnwired below answers all four with errGateUncheckable and
-// is what the tests hand the driver when they need a step that cannot run.
+// answers all three from this repository's own gate run. gateDriverUnwired below
+// answers all three with errGateUncheckable and is what the tests hand the
+// driver when they need a step that cannot run.
+//
+// THERE ARE THREE QUESTIONS AND NOT FOUR. Site was the fourth until D9 became a
+// handoff; it is gone rather than left answering errGateUncheckable, because an
+// interface method nobody asks is a question the next reader will wire an answer
+// to. The deployed site is read by a person — see the D9 step for the two
+// rulings — and the driver's honesty about that is now a state it ENDS in rather
+// than an answer it receives.
 type gateDriverEvidence interface {
 	// Verdicts are the per-surface answers and findings the gate run produced
 	// for tree. They are the receipt's contents, never the receipt.
@@ -463,8 +573,6 @@ type gateDriverEvidence interface {
 	Current(tree string) (declared []string, current map[string]string, err error)
 	// Archives is D7: the published artifacts for version, verified.
 	Archives(version, commit string) error
-	// Site is D9: the rendered site, read as a browser sees it.
-	Site(version string) error
 }
 
 // gateDriverUnwired is the evidence source that answers nothing.
@@ -495,11 +603,6 @@ func (gateDriverUnwired) Archives(version, commit string) error {
 		"Nothing here downloads a release artifact, checks a sha256 against checksums.txt, or reads the stamped version, commit and date out of an extracted binary. "+
 		"So the driver stops HERE, after the tag is published and before main is, and says so — which is the failure-not-skip rule applied to the driver's own incompleteness. "+
 		"A driver that pushed main without verifying the archives would announce a release whose artifacts nobody checked", errGateUncheckable, version, commit)
-}
-
-func (gateDriverUnwired) Site(version string) error {
-	return fmt.Errorf("%w: reading the rendered site to confirm it describes %s is not built in this tree. "+
-		"The site is checked as rendered DOM from a real build, and that extractor is not wired to this driver", errGateUncheckable, version)
 }
 
 // gateDriverRun is one execution: what it completed, what it failed at, and the
@@ -562,14 +665,106 @@ func (r *gateDriverRun) git(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// report is what a human reads when a run stops. It names the failed step, then
-// what is already public, then what is not, and then the one thing this driver
-// will not do about it.
-func (r *gateDriverRun) report() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "the release of %s stopped at %s (%s):\n%v\n\n", r.Plan.Version, r.Failed, gateDriverWhat(r.Failed), r.Err)
+// gateDriverHandoffNotChecked is the sentence the terminal state exists to say,
+// and it is a named constant because two things carry it — the report a human
+// reads and the record they read afterwards — and because a test requires it
+// verbatim in both. A sentence assembled twice is a sentence that ends up said
+// two ways, and the two ways of saying this one are not equally true.
+//
+// It is phrased as what the driver DID: it read nothing. That is the whole
+// difference between this state and a pass. CLAUDE.md's rule is that a check
+// which did not happen must never read as one that did, and the ending a release
+// now gets says exactly what was not examined and by whom it now must be.
+const gateDriverHandoffNotChecked = "THIS DRIVER MADE NONE OF THEM. After it pushed main it read nothing at all — not the workflow run, " +
+	"not the release page, not one byte of the live site — so the list below is not an account of how this release came back. " +
+	"It is three pieces of work nobody has started, on a release that is already public."
 
-	var published, remaining []string
+// gateDriverHandoff is the state a run ENDS IN when it completed the sequence,
+// and it is the one ending in this file that is not a failure.
+//
+// WHY IT IS A VALUE WITH A CONSTRUCTOR rather than a message printed at the
+// bottom of gateDriverExecute: the property that matters about it is
+// reachability. "Published, and here are the three checks nobody has made" is
+// true only after main is pushed; printed anywhere else it is a driver telling
+// an operator to go and read a site that no release put there. So the state can
+// be built exactly one way — gateDriverRun.handoff, which refuses a run that has
+// not completed D8 — and both readers of it, the report and the record, go
+// through that constructor.
+type gateDriverHandoff struct {
+	Version string `json:"version"`
+
+	// Published is the irreversible half, in the same words the failure report
+	// uses for it, because it is the same fact and an operator should not have
+	// to notice that two endings describe one forge differently.
+	Published []string `json:"published"`
+
+	// Checks are gateDriverHumanChecks, carried into the record so that the
+	// account of a release names them even when nobody kept the terminal output.
+	Checks []gateDriverHumanCheck `json:"checks_that_stay_a_persons"`
+
+	// Examined is gateDriverHandoffNotChecked. The field is called what it is
+	// called because its VALUE is the answer to "what did this driver examine
+	// about the published release", and the answer is nothing.
+	Examined string `json:"what_this_driver_examined"`
+}
+
+// handoff is the only constructor of a terminal state, and its two refusals are
+// the safety property rather than defensive habit.
+//
+//   - NOT PAST D8, so nothing that stopped earlier can wear this ending. A run
+//     that failed at D7 has published a tag and no main; handing it off would
+//     tell an operator that a release is out and that their remaining work is
+//     three checks, when their actual position is a half-published release the
+//     report for a stopped run is written to describe.
+//   - AND NOTHING FAILED. D8 is the last step that can fail today, so this
+//     clause refuses nothing the first one does not — until a step is added
+//     after D8, at which point it is the difference between "the sequence
+//     finished" and "the sequence got past the last push". Both clauses are
+//     exercised below; neither is here on the strength of an argument.
+func (r *gateDriverRun) handoff() (*gateDriverHandoff, error) {
+	if !r.completed("D8") {
+		return nil, fmt.Errorf("this run has not completed D8, so there is no release to hand off: it completed %v. "+
+			"The handoff says a release is published and that three named checks are now a person's; said over a run that did not push main, it sends an operator to read a site nothing deployed and to open a workflow run that does not exist", r.Done)
+	}
+	if r.Failed != "" {
+		return nil, fmt.Errorf("this run completed D8 and then stopped at %s (%s), so it ended as a failure and a failure is what it reports. "+
+			"A handoff over a run that stopped would be this driver reporting the release as finished at the one moment the operator most needs to be told it is not", r.Failed, gateDriverWhat(r.Failed))
+	}
+	published, _ := r.irreversible()
+	return &gateDriverHandoff{
+		Version:   r.Plan.Version,
+		Published: published,
+		Checks:    gateDriverHumanChecks,
+		Examined:  gateDriverHandoffNotChecked,
+	}, nil
+}
+
+// report is the terminal state as a human reads it.
+func (h *gateDriverHandoff) report() string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s IS PUBLISHED. The driver's part of this release is over; the release itself is not.\n\n", h.Version)
+
+	b.WriteString("ALREADY PUBLISHED — these have happened and cannot be taken back:\n")
+	b.WriteString(strings.Join(h.Published, "\n") + "\n\n")
+
+	b.WriteString("HANDED OFF — three things begin here, and they are a person's:\n")
+	b.WriteString(h.Examined + "\n\n")
+	for i, check := range h.Checks {
+		fmt.Fprintf(&b, "  %d. %s\n     WHAT A PERSON DOES: %s.\n     WHAT NOBODY DOING IT LEAVES: %s.\n", i+1, check.Title(), check.Do, check.Silently)
+	}
+
+	fmt.Fprintf(&b, "\nThese three are the section %q in %s. Each asks whether a system outside this repository did what it was told, and a workflow that never fired, "+
+		"a deploy still serving yesterday's bundle and a run that concluded having produced nothing all leave this repository byte-identical to the release that went right — "+
+		"so there is nothing in the tree for any of them to be read from. Skipping one is not \"the machine has it\"; it is nobody having looked.\n",
+		gateDriverHumanCheckSection, gateDriverProcedureFile)
+	return b.String()
+}
+
+// irreversible splits the acts that leave this machine into the ones this run
+// performed and the ones it did not. Both endings print it, from here, because
+// "what is already on the forge" is one fact and a release that described it two
+// ways would be asking an operator to work out which description they are in.
+func (r *gateDriverRun) irreversible() (published, remaining []string) {
 	for _, step := range gateDriverSequence {
 		if !step.Irreversible {
 			continue
@@ -581,6 +776,35 @@ func (r *gateDriverRun) report() string {
 			remaining = append(remaining, line)
 		}
 	}
+	return published, remaining
+}
+
+// report is what a human reads when a run ENDS, and a run ends one of two ways.
+//
+// Handed off, which is the state above and says the release is published and
+// unread; or stopped, which names the failed step, then what is already public,
+// then what is not, and then the one thing this driver will not do about it. The
+// choice between them is made by the handoff's own constructor and not by a
+// condition spelled a second time here — the question "may this run be handed
+// off?" has one answer in this file.
+func (r *gateDriverRun) report() string {
+	handoff, handoffErr := r.handoff()
+	switch {
+	case handoffErr == nil:
+		return handoff.report()
+	case r.Failed == "":
+		// Not reachable from gateDriverExecute, which stops at a named step or
+		// reaches D9. It is reachable from a run assembled by hand, and what it
+		// must not do then is fall through to a failure report naming an empty
+		// step, which reads as a release that stopped at nothing.
+		return fmt.Sprintf("the release of %s is in no state this driver can report: it recorded no failed step, and it cannot be handed off either.\n%v\n\n"+
+			"Treat that as a release whose position on the forge is unknown and go and look, rather than as either ending.\n", r.Plan.Version, handoffErr)
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "the release of %s stopped at %s (%s):\n%v\n\n", r.Plan.Version, r.Failed, gateDriverWhat(r.Failed), r.Err)
+
+	published, remaining := r.irreversible()
 
 	if len(published) == 0 {
 		b.WriteString("ALREADY PUBLISHED: nothing. No irreversible step ran, so this release has left no trace outside this machine.\n")
@@ -693,8 +917,12 @@ func gateDriverExecute(r *gateDriverRun, ev gateDriverEvidence) *gateDriverRun {
 	}
 	r.step("D8")
 
-	// D9.
-	if err := ev.Site(plan.Version); err != nil {
+	// D9. The handoff, asked of nothing outside this process — the whole of it is
+	// what this driver did not do. It is constructed here rather than only at
+	// print time so that the sequence is fail-closed in this direction too: a run
+	// whose terminal state cannot be built has not finished, and it says so at a
+	// named step instead of returning a completed run nobody can describe.
+	if _, err := r.handoff(); err != nil {
 		return r.stop("D9", err)
 	}
 	r.step("D9")
@@ -1090,16 +1318,25 @@ func (r *gateDriverRun) recheckTag() error {
 // ignore-everything-then-name-the-tracked, so a record dropped in gate/ would be
 // invisible to git, which is the wrong property for something a human is meant to
 // find.
+//
+// Handoff is present exactly when the run ended handed off, and it is here
+// rather than left to the prose because the record outlives the terminal it was
+// printed to. A release is audited weeks later from this file, and "which three
+// checks were outstanding when the driver let go, and had anything examined
+// them" is the question that gets asked; a record that carried only "completed
+// D0…D9" answers it with a list of step names that read like nine things going
+// right.
 type gateDriverRecord struct {
-	Version     string      `json:"version"`
-	Branch      string      `json:"branch"`
-	WrittenBy   string      `json:"written_by"`
-	Completed   []string    `json:"completed"`
-	FailedAt    string      `json:"failed_at,omitempty"`
-	Verdict     string      `json:"verdict,omitempty"`
-	MergeCommit string      `json:"merge_commit,omitempty"`
-	Receipt     gateReceipt `json:"receipt"`
-	Report      string      `json:"report,omitempty"`
+	Version     string             `json:"version"`
+	Branch      string             `json:"branch"`
+	WrittenBy   string             `json:"written_by"`
+	Completed   []string           `json:"completed"`
+	FailedAt    string             `json:"failed_at,omitempty"`
+	Verdict     string             `json:"verdict,omitempty"`
+	MergeCommit string             `json:"merge_commit,omitempty"`
+	Receipt     gateReceipt        `json:"receipt"`
+	Handoff     *gateDriverHandoff `json:"handoff,omitempty"`
+	Report      string             `json:"report,omitempty"`
 }
 
 func gateDriverWriteRecord(t *testing.T, path string, r *gateDriverRun) {
@@ -1114,8 +1351,13 @@ func gateDriverWriteRecord(t *testing.T, path string, r *gateDriverRun) {
 		MergeCommit: r.Merge,
 		Receipt:     r.Receipt,
 	}
-	if r.Err != nil {
-		record.Report = r.report()
+	// The report is written for BOTH endings now. It used to be conditional on
+	// there being an error, which was right while every ending that was not a
+	// failure was a run that had published nothing — and wrong the moment a
+	// completed release started ending in a state somebody has to act on.
+	record.Report = r.report()
+	if handoff, err := r.handoff(); err == nil {
+		record.Handoff = handoff
 	}
 	blob, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
@@ -1159,8 +1401,13 @@ func TestReleaseDriverPublishes(t *testing.T) {
 		gateDriverWriteRecord(t, plan.Record, run)
 	}
 
+	// A completed run PRINTS THE HANDOFF, because that text is the deliverable of
+	// the last step. `%s published: [D0 D1 …]` was the old line, and a list of
+	// nine step names is the shape of a release reporting nine things that went
+	// right — with no mention that nothing has looked at the published release at
+	// all.
 	if run.Err == nil {
-		t.Logf("%s published: %v", plan.Version, run.Done)
+		t.Log(run.report())
 		return
 	}
 
@@ -1201,7 +1448,6 @@ type gateDriverFixtureEvidence struct {
 	declared []string
 	current  map[string]string
 	archives error
-	site     error
 }
 
 func (e gateDriverFixtureEvidence) Verdicts(string) ([]gateSurfaceVerdict, []gateFinding, error) {
@@ -1213,11 +1459,10 @@ func (e gateDriverFixtureEvidence) Current(string) ([]string, map[string]string,
 }
 
 func (e gateDriverFixtureEvidence) Archives(string, string) error { return e.archives }
-func (e gateDriverFixtureEvidence) Site(string) error             { return e.site }
 
 // gateDriverGreenEvidence is a clean run over one surface: a PASS whose
-// fingerprint is the one this tree produces, no findings, and both post-tag
-// checks satisfied.
+// fingerprint is the one this tree produces, no findings, and the one post-tag
+// check satisfied.
 func gateDriverGreenEvidence() gateDriverFixtureEvidence {
 	return gateDriverFixtureEvidence{
 		verdicts: gatePassingSurfaces("readme"),
@@ -1499,6 +1744,259 @@ func gateDriverPublishWithHooks(plan gateDriverPlan, repo gateDriverRepo, ev gat
 	return gateDriverExecute(&gateDriverRun{Plan: plan, Repo: repo, after: after}, ev)
 }
 
+// TestAGreenRunEndsHandedOverAndNotRead is the ending itself: what a release
+// that went entirely right leaves behind, in the terminal and in the record.
+//
+// THE THING BEING ASSERTED IS A DISTINCTION, not a success. A completed run is
+// allowed to say the release is published — it pushed it — and is not allowed to
+// say anything at all about whether that release is any good, because after D8
+// it read nothing. Those two are one sentence apart in the writing and a long
+// way apart in what an operator does next, and the second one is the release
+// that ships broken while its report reads fine.
+//
+// So this asks for all four halves of the ending in one place: the state exists,
+// it names what is already public, it names the three checks by the procedure's
+// own titles, and it carries the sentence saying nothing made them — and then
+// the denylist below asks the opposite question, which is whether anything in
+// the driver's own prose claims otherwise.
+func TestAGreenRunEndsHandedOverAndNotRead(t *testing.T) {
+	const version = "v9.9.9"
+	repo := gateDriverFixture(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
+
+	run := gateDriverPublish(plan, repo, gateDriverGreenEvidence())
+	if run.Err != nil {
+		t.Fatalf("a clean, authorized, converging release was refused:\n%s", run.report())
+	}
+	if run.Failed != "" {
+		t.Fatalf("a completed release recorded a failed step (%s). Every successful release used to end this way — the site read was a check nobody could make, so the run reported FAILURE with both pushes done — and a red that fires on every success is one an operator stops reading", run.Failed)
+	}
+	if last := run.Done[len(run.Done)-1]; last != "D9" {
+		t.Fatalf("the run ended after %s rather than at D9. D9 is the handoff, and a run that stops before it has published a release and said nothing about who now looks at it", last)
+	}
+
+	handoff, err := run.handoff()
+	if err != nil {
+		t.Fatalf("a run that completed the whole sequence cannot state its own ending: %v", err)
+	}
+	if handoff.Version != version {
+		t.Errorf("the handoff names %q and the release is %s; an operator reads it beside a forge carrying several tags", handoff.Version, version)
+	}
+	if len(handoff.Checks) != len(gateDriverHumanChecks) {
+		t.Fatalf("the handoff carries %d check(s) and this repository keeps %d a person's", len(handoff.Checks), len(gateDriverHumanChecks))
+	}
+
+	report := run.report()
+	for _, want := range []struct{ fragment, why string }{
+		{version + " IS PUBLISHED", "the first thing the reader needs is which release this is about and that it is out"},
+		{"ALREADY PUBLISHED", "the irreversible half is named in the same words a stopped run names it in; it is the same forge either way"},
+		{"D6 push the tag", "the tag is public"},
+		{"D8 push main", "and so is main, which is what fired deploy-site"},
+		{gateDriverHandoffNotChecked, "the sentence the whole state exists to say, verbatim — that this driver examined none of what follows"},
+		{gateDriverHumanCheckSection, "the reader is being sent to a section of the procedure, so the section is named as it is spelled there"},
+		{gateDriverProcedureFile, "and the file it is in, because this is read at the moment when going and finding it is least likely"},
+	} {
+		if !strings.Contains(report, want.fragment) {
+			t.Errorf("the handoff does not carry %q. %s.\nThe report reads:\n%s", want.fragment, want.why, report)
+		}
+	}
+	for _, check := range gateDriverHumanChecks {
+		for _, want := range []string{check.Title(), check.Do, check.Silently} {
+			if !strings.Contains(report, want) {
+				t.Errorf("the handoff does not name %q.\nThe three checks are the entire content of this state: one dropped is a release handed over as though two checks were all of it, and nothing downstream says otherwise.\nThe report reads:\n%s", want, report)
+			}
+		}
+	}
+
+	// THE DRIVER'S OWN PROSE, which is the report with the procedure's three
+	// titles taken out of it. One of those titles is "The `Release` workflow
+	// itself passed." — the document's words for a check a person makes — and
+	// quoting it is not the driver claiming it. Everything left after they are
+	// removed is this file talking about what it did.
+	own := report
+	for _, check := range gateDriverHumanChecks {
+		own = strings.ReplaceAll(own, check.Title(), "")
+	}
+	for _, forbidden := range gateDriverHandoffMustNotSay {
+		if strings.Contains(own, forbidden.word) {
+			t.Errorf("the handoff says %q about the release it published. %s.\n"+
+				"Handed off is the claim and checked is never the claim: this driver read nothing after the push, so any word in its own prose asserting an examination is a check that did not happen reading as one that did — which is the one thing CLAUDE.md forbids by name.\nThe report reads:\n%s",
+				forbidden.word, forbidden.why, report)
+		}
+	}
+
+	// AND THE RECORD, because the terminal output belongs to whoever was at the
+	// keyboard and the record is what the release is audited from later. It is
+	// read as TEXT — this file decodes nothing, by clause 1 — which is enough:
+	// the question is whether the words reached the file.
+	gateDriverWriteRecord(t, plan.Record, run)
+	blob, err := os.ReadFile(plan.Record)
+	if err != nil {
+		t.Fatalf("read the run record the release wrote: %v", err)
+	}
+	record := string(blob)
+	for _, want := range []struct{ fragment, why string }{
+		{`"handoff"`, "the ending is a field of the record and not only a paragraph inside its report, so a reader can ask the file what state the release ended in"},
+		{gateDriverHandoffNotChecked, "the sentence has to survive into the file; a record listing `completed: [D0 … D9]` reads like nine things that went right"},
+	} {
+		if !strings.Contains(record, want.fragment) {
+			t.Errorf("the run record does not carry %q. %s.\nIt reads:\n%s", want.fragment, want.why, record)
+		}
+	}
+	for _, check := range gateDriverHumanChecks {
+		if !strings.Contains(record, check.Title()) {
+			t.Errorf("the run record does not name the check %q. Weeks later this file is the only account of which checks were outstanding when the driver let go.\nIt reads:\n%s", check.Title(), record)
+		}
+	}
+	if strings.Contains(record, `"failed_at"`) {
+		t.Errorf("the record of a completed release carries a failed_at. The handoff is a different ending from a failure, and a record carrying both is one that will be read as either.\nIt reads:\n%s", record)
+	}
+}
+
+// gateDriverHandoffMustNotSay are the words the handoff may not use about the
+// release it just published, and the list is a RULE rather than a memory of
+// phrasings that went wrong.
+//
+// Every one of them asserts that something was examined. Nothing was: after D8
+// this driver reads no workflow run, no release page and no byte of the live
+// site, and the three checks below the handoff are exactly the examinations that
+// have not happened. So a handoff carrying one of these words is the failure the
+// whole gate is written against — a check nobody made reading as a check that
+// passed — arrived at through the report rather than through a verdict, which is
+// the one route left now that D9 asks nothing.
+//
+// The denylist is applied to the driver's own prose, never to the record: the
+// record embeds the receipt, whose surfaces really do carry PASS, and those are
+// verdicts about documents in this tree that thirteen agents read. The deployed
+// release is not one of those documents. That distinction is the reason the two
+// are separated here rather than the reason to weaken the rule.
+var gateDriverHandoffMustNotSay = []struct{ word, why string }{
+	{"PASS", "PASS is the receipt's verdict over a surface of this TREE. Nothing about a deployed release is fingerprintable here, so the word carried into a handoff extends a verdict to a forge, a workflow and a CDN that no agent looked at"},
+	{"passed", "the same claim in prose. `Release` passing is the first of the three checks and it is a person's to make"},
+	{"verified", "D7's word, and D7 earned it by downloading archives and hashing them. Nothing between D8 and this report did anything"},
+	{"confirmed", "a release is confirmed by somebody opening the run and the live site; this driver closed its last connection at the push"},
+	{"checked", "the word the ending must never be readable as. Handed off is the claim"},
+	{"clean", "'it came back clean' is the sentence an operator wants to see at 2am and the one thing nothing here can say"},
+	{"green", "green is the gate's word for a tree it read. The published release is not a tree"},
+	{"✓", "a tick is a verdict with no sentence attached, so nobody can even say which claim they are disagreeing with"},
+}
+
+// TestTheHandoffIsUnreachableWithoutTheLastIrreversibleAct asks the reachability
+// question directly, over runs assembled by hand.
+//
+// It is asked here rather than only through the sequence because the sequence
+// cannot construct these two shapes — which is the point. The guard's job is not
+// to catch gateDriverExecute, which reaches D9 only by having pushed main; it is
+// to make the terminal state unbuildable from anywhere else, including from the
+// step somebody adds after D8 next year. A handoff that could be constructed by
+// a run that published nothing is a driver that can tell an operator to go and
+// read a site no release put there.
+func TestTheHandoffIsUnreachableWithoutTheLastIrreversibleAct(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		run  *gateDriverRun
+		says string
+		why  string
+	}{
+		{
+			name: "everything but the push of main",
+			run: &gateDriverRun{
+				Plan: gateDriverPlan{Version: "v9.9.9"},
+				Done: []string{"D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7"},
+			},
+			says: "has not completed D8",
+			why:  "the tag is published, the archives are verified and main is not out. The release the handoff would announce does not exist, and the three checks it hands over are checks on a deploy that never fired",
+		},
+		{
+			name: "past the last push and then stopped",
+			run: &gateDriverRun{
+				Plan:   gateDriverPlan{Version: "v9.9.9"},
+				Done:   []string{"D0", "D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"},
+				Failed: "D10",
+				Err:    errors.New("a step added after the pushes could not run"),
+			},
+			says: "ended as a failure",
+			why: "this is the shape the sequence will have the day a step is added after D8. A handoff keyed only to 'main is out' would report that release as finished, " +
+				"at the one moment an operator most needs to be told it is not",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handoff, err := tc.run.handoff()
+			if err == nil {
+				t.Fatalf("this run was handed off: %+v.\n%s", handoff, tc.why)
+			}
+			if !strings.Contains(err.Error(), tc.says) {
+				t.Errorf("the refusal does not say %q, so a reader cannot tell which of the two conditions it failed.\nIt reads:\n%v", tc.says, err)
+			}
+			gateDriverAssertNoHandoff(t, tc.run.report(), tc.name)
+		})
+	}
+}
+
+// gateDriverAssertNoHandoff is the negative half, in one place because both the
+// halfway-failure test and the reachability rows below need it: a report that is
+// not a handoff must carry nothing OF a handoff.
+// Asserting only that `handoff()` refused would leave the failure that matters
+// untouched — the operator does not call a Go method, they read the text, and a
+// report naming the three checks is a handoff whatever built it.
+func gateDriverAssertNoHandoff(t *testing.T, report, what string) {
+	t.Helper()
+	if strings.Contains(report, gateDriverHandoffNotChecked) {
+		t.Errorf("%s printed the handoff's sentence. That sentence says a release is published and unread; over a run that did not publish one it is simply false.\nThe report reads:\n%s", what, report)
+	}
+	for _, check := range gateDriverHumanChecks {
+		if strings.Contains(report, check.Title()) {
+			t.Errorf("%s named the human check %q. These three begin when a release is public; handing them to somebody whose release is not is how a half-published release gets closed as done.\nThe report reads:\n%s", what, check.Title(), report)
+		}
+	}
+}
+
+// gateDriverHumanCheckSectionRE isolates docs/RELEASING.md's post-publish
+// section, from its heading to the next one at any level. Scoped to the section
+// for gateLdflagsItemRE's reason: the document discusses the site, the workflow
+// and the deployed bundle in several places, and the question here is what the
+// SECTION a maintainer is handed at D9 actually contains.
+var gateDriverHumanCheckSectionRE = regexp.MustCompile(`(?s)### ` + regexp.QuoteMeta(gateDriverHumanCheckSection) + `.*?\n## `)
+
+// TestTheHandoffNamesEveryCheckTheProcedureKeepsAPersons keeps the ending and
+// the procedure equal, and it is the whole reason the handoff may hold its own
+// copy of the three checks.
+//
+// The driver composes that list after the last irreversible act, so it reads
+// nothing off disk to do it — a report that could fail to be produced is the
+// report an operator has nothing to read INSTEAD of, and the moment it would
+// fail is the moment after main is public. The cost of that decision is a second
+// copy of somebody else's list, and the copy that drifts is always the one no
+// test drives. This is that test, and it fails at lane-landing time, where a
+// disagreement costs a red run rather than a release.
+//
+// The count is asserted, not only the contents. Three items named and a fourth
+// added to the procedure is the failure this catches: the handoff would hand
+// over three of four checks and read exactly as complete as it does now.
+func TestTheHandoffNamesEveryCheckTheProcedureKeepsAPersons(t *testing.T) {
+	procedure := gateReadRepoFile(t, surfaceRepoRoot(t), filepath.FromSlash(gateDriverProcedureFile))
+
+	section := gateDriverHumanCheckSectionRE.FindString(procedure)
+	if section == "" {
+		t.Fatalf("%s no longer carries a %q section. That section is what D9 hands a person, and the driver names it in the report of every published release; without it the handoff sends the reader to a heading that is not there",
+			gateDriverProcedureFile, gateDriverHumanCheckSection)
+	}
+
+	if got, want := strings.Count(section, gateDriverHumanCheckPrefix), len(gateDriverHumanChecks); got != want {
+		t.Errorf("%s's %q section holds %d item(s) marked %q and this driver hands over %d.\n"+
+			"The handoff is the last thing a release prints, so a check the procedure keeps and the driver does not name is one nobody is told about at the only moment they would act on it — and the report reads just as complete without it.\nThe section reads:\n%s",
+			gateDriverProcedureFile, gateDriverHumanCheckSection, got, gateDriverHumanCheckPrefix, want, section)
+	}
+
+	for _, check := range gateDriverHumanChecks {
+		if !strings.Contains(section, check.Item) {
+			t.Errorf("%s's %q section carries no item spelled %q.\n"+
+				"The handoff prints that title and sends the reader to this section to act on it; a title the section does not carry sends them looking for a check that, as far as the document is concerned, does not exist.\nThe section reads:\n%s",
+				gateDriverProcedureFile, gateDriverHumanCheckSection, check.Item, section)
+		}
+	}
+}
+
 // TestTheDriverTagsTheMergeItHandshakedAndNeverHEAD is failure 4, reproduced.
 //
 // `git tag -a vX.Y.Z -m …` with no ref tags HEAD, which is right only when
@@ -1627,7 +2125,16 @@ func TestTheDriverNamesWhatIsAlreadyPublishedWhenItStopsHalfway(t *testing.T) {
 		t.Errorf("origin's %s moved to %s after a failure at D7; nothing downstream of a failed step may execute", repo.Base, now)
 	}
 
+	// AND IT IS A FAILURE, not the terminal handoff. This is the state D9 used to
+	// leave on every release before the handoff existed — tag public, main not —
+	// so it is the one an ending keyed to anything looser than "D8 completed"
+	// would hand over as a finished release with three checks remaining.
+	if _, handoffErr := run.handoff(); handoffErr == nil {
+		t.Error("a run that never pushed main can be handed off. The handoff says a release is out and that three checks are all that is left; this one left a tag on the forge with main behind it, which is what the per-step report below exists to describe")
+	}
+
 	report := run.report()
+	gateDriverAssertNoHandoff(t, report, "a run that stopped at D7")
 	for _, want := range []struct{ fragment, why string }{
 		{"ALREADY PUBLISHED", "the operator's first question after a failed release is what is already on the forge, and a bare non-zero exit sends them in blind"},
 		{"D6 push the tag", "the step that published must be named, not implied"},
