@@ -98,6 +98,142 @@ checklist for that half.
         commit with nothing to report reads as a commit with nothing wrong. The
         command above reports that as a failure; confirm you agree with what it
         found rather than assuming a clean exit means a run was there.
+- [ ] **The stage-2 reading gate has been run for this tree, and it is green.**
+      Everything above checks that the code does what it is supposed to. This is
+      the item that checks whether the PROSE is still true: thirteen agents read
+      the thirteen surfaces `surfaces.yaml` declares — the README, the CHANGELOG,
+      this file, the skills, the site, the merge-gate template, the rest — and
+      report what this release has made false about them. It is also the item the
+      release driver's D1 refuses without, so a release that skips it does not
+      reach the tag; it stops at a refusal naming a `gate/fanout.json` nobody
+      produced.
+
+      Every command below is keyed to ONE tree and ONE resolved baseline. Fix
+      both first and pass them everywhere:
+
+          ROOT=$(git rev-parse --show-toplevel)
+          TREE=$(git rev-parse "HEAD^{tree}")
+          PREV=${DOSSIERX_PREV_RELEASE_TAG:-$(git describe --tags --abbrev=0)}
+          PREV_COMMIT=$(git rev-parse "$PREV^{commit}")
+
+      Both are full 40-digit object names and every step refuses anything else. A
+      tag NAME is a mutable pointer that `git tag -f` re-points, and an
+      abbreviation is a prefix that means a different object in a different
+      clone; either is an answer that stops being true later, and which release
+      the comparison was against is the whole value of this gate.
+
+      **1. Stage the run's evidence — each artifact by its producer, never by
+      hand.** Six files under `gate/` are what the thirteen bundles are assembled
+      from. None of them has a committed form (`gate/.gitignore` ignores every
+      one), so whatever happens to be at those paths on the day of the run is
+      what the agents read — and a hand-written `gate/delta.json` hashes into all
+      thirteen keys exactly as cleanly as a real one. Produce them:
+
+          # the rendered site text, extracted from a real build in a real browser
+          DOSSIERX_SITE_TEXT_OUT="$ROOT/gate/site-text.json" \
+          DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
+          DOSSIERX_TEST_BROWSER=/path/to/chrome \
+          make viewer-test
+
+          # the cross-release render diff, read by two surfaces
+          go test ./tests -run TestRenderDiffCapture_G1Capture -args \
+            -render-diff-out="$ROOT/gate/render-diff.json" \
+            -render-diff-baseline-commit="$PREV_COMMIT" \
+            -render-diff-tree="$TREE"
+
+          # what `dossierx skills export` actually writes into a project
+          go test ./tests -run TestCaptureSkillsExport_G1Capture -args \
+            -skills-export-capture-out="$ROOT/gate/export-output.json"
+
+          # GoReleaser's release notes as this tree predicts them
+          go test ./tests -run TestPredictReleaseNotesForRange_G1Capture -args \
+            -release-notes-range="$PREV..HEAD" \
+            -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
+
+          # the resolved baseline inventory, and the surface delta over it
+          scripts/gate-stage2/run.sh delta --tree "$TREE" \
+            --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
+            --baseline-file "$ROOT/surface.baseline.json"
+
+          # the run manifest: this tree, this baseline, these exact bytes
+          scripts/gate-stage2/run.sh record --tree "$TREE" \
+            --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
+            gate/baseline.json gate/delta.json gate/export-output.json \
+            gate/release-notes-prediction.json gate/render-diff.json \
+            gate/site-text.json
+
+      **The output paths are absolute on purpose.** `go test` runs each test
+      binary with its own package directory as the working directory, so a
+      relative `gate/…` lands under `tests/` and the gate then looks for an
+      artifact nobody produced.
+
+      **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
+      the previous release.** That release shipped before the surface emitter
+      existed and carries no `surface.json` of its own, which is the only reason
+      `surface.baseline.json` is in this tree. Every later release carries its
+      own, and the baseline is then read out of the tag —
+      `git show "$PREV:surface.json" > "$ROOT/gate/baseline-input.json"`, and
+      that path is what `--baseline-file` gets. Falling back on the committed
+      bootstrap because a tag could not be read is the one move never to make: in
+      a shallow clone that failure reads character for character like an absent
+      tag, and the delta would then span two releases — full, plausible, and
+      handed to thirteen agents as the truth about the past.
+
+      Skipping any of this does not produce a smaller gate, it produces a failed
+      one. The freshness check refuses with "it was found on disk rather than
+      produced, and found on disk is not produced", and `record` refuses outright
+      to name an artifact that says on its own face it was computed over another
+      tree or against another baseline.
+
+      **2. Produce the fan-out.**
+
+          DOSSIERX_GATE_AGENT=<the agent runner> \
+          scripts/gate-stage2/run.sh fanout --tree "$TREE"
+
+      That mints this run's identifier; refuses to start while a previous run's
+      answers are still sitting in `gate/answers/`, and tells you to delete them,
+      because they would otherwise sit beside a fresh identifier looking like
+      answers somebody gave THIS release; assembles one bundle per declared
+      surface into `gate/bundles/<surface>.md`; writes `gate/fanout.json` LAST,
+      so a record naming bundles that were never written cannot exist; and prints
+      one invocation per surface on stdout. A surface whose bundle cannot be
+      assembled fails the whole production — the fan-out is a refusal or it is
+      whole, and it never shrinks to twelve. There is exactly one implementation
+      of it, `TestGateFanoutProduce` in `cmd/dossierx/gate_fanout_test.go`; the
+      shell wraps that and re-implements nothing.
+
+      **3. Run the thirteen agents.** Run exactly the invocations `fanout`
+      printed, one per surface, and change nothing about them. They are
+      read-only: `gate/method.yaml` grants `SurfaceFinding` and `SurfaceVerdict`
+      and nothing else, and the harness passes that as an exclusive allow-list —
+      the assembled bundle is the whole evidence set, which is the property every
+      key in this gate rests on. Each agent leaves one answer at
+      `gate/answers/<surface>.json` naming this run's identifier and its own
+      surface. An answer that is missing, unparseable, or attributed to a
+      different run is a FAILED gate; it is never a gate over twelve surfaces.
+
+      **4. Then loop, and expect to.** Any finding at all makes the receipt
+      FAILED — there is no severity threshold, and nothing waves a finding
+      through. The gate surfaces and never fixes, so the fixes are yours, and a
+      fix moves the tree. Every artifact above is keyed to a tree, so NOTHING
+      staged for the old one is reusable: CI, `make ci-evidence` for the new
+      merge commit, and the whole of this item are produced again against the new
+      `$TREE`. Repeat until no surface reports a finding.
+
+      **5. Read the findings yourself before you authorize anything.** Nothing is
+      filtered, deduplicated away or dropped on the way to you. Each finding
+      carries a severity, but that word is the reporting agent's own about its own
+      work — no verdict, filter or threshold in the gate consults it — so the
+      ruling is yours, not the agent's. There is also no override field on the
+      receipt: a finding you judge non-blocking is cleared by fixing the tree and
+      by nothing else.
+
+      **This does not stand in for the driver's own check, and is not meant to.**
+      D1 recomputes all of it inside its own process — it re-reads the fan-out
+      record produced for the tree it is about to release, collects one answer per
+      declared surface, recomputes the verdict, and requires the CI-run evidence —
+      and it refuses when any of that is absent or is about a different tree. This
+      item is what makes that recomputation possible.
 - [ ] **CHANGELOG.md has an entry** for the new version, dated, following
       [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). GoReleaser's
       generated notes are commit subjects; they are not a substitute for this.
