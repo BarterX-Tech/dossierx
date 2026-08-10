@@ -208,6 +208,12 @@ type ReleaseNotesConfig struct {
 	Sort    string              `yaml:"sort"`
 	Groups  []ReleaseNotesGroup `yaml:"groups"`
 	Filters ReleaseNotesFilters `yaml:"filters"`
+	// Footer is release.footer, NOT a changelog: key — it is carried here
+	// because it changes the published BODY, which is what this predictor
+	// answers about. LoadReleaseNotesConfig admits it only when it contains no
+	// template, so PredictReleaseNotes can append it byte for byte; see that
+	// function's refusal for what a templated one would cost.
+	Footer string `yaml:"-"`
 }
 
 // ReleaseNotesFilters is changelog.filters — only its Exclude half, see
@@ -452,8 +458,30 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 	switch {
 	case rel.Header != "":
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.header is set to %q; this predictor's Body does not account for a release-level header (see PublishedBodyMatches's tolerance for a hand-written prefix — that is a DIFFERENT thing: an untracked human edit, not a templated value this config controls)", goreleaserPath, rel.Header)
-	case rel.Footer != "":
-		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.footer is set to %q; this predictor's Body does not account for a release-level footer", goreleaserPath, rel.Footer)
+	// A FOOTER IS MODELLED, BUT ONLY A LITERAL ONE, and the distinction is the
+	// whole reason this stays a refusal rather than becoming a passthrough.
+	//
+	// goreleaser applies its template engine to the body it composes, so a
+	// footer containing `{{ ... }}` publishes something other than the bytes in
+	// this file — and PredictReleaseNotes has no template engine, so its
+	// prediction would be the unrendered source. The two would differ on every
+	// release, and the difference would be reported as a release-notes mismatch
+	// against a config that is perfectly fine. Worse in the other direction: a
+	// footer template naming a field that does not exist is caught by NOTHING
+	// before publish. Measured with the pinned v2.17.1 — `goreleaser check`
+	// validates it, `goreleaser release --skip=publish` exits 0 over it, and it
+	// never reaches dist/CHANGELOG.md, because header and footer are composed
+	// into the RELEASE BODY and that file is the changelog. The first render of
+	// a footer template is the published page, after the tag is on the forge.
+	//
+	// So the contract is: a footer with nothing to resolve, which this predictor
+	// can then reproduce byte for byte.
+	case strings.Contains(rel.Footer, "{{"):
+		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.footer contains a Go template (%q).\n"+
+			"This predictor reproduces the footer verbatim and has no template engine, so it would predict the unrendered source and report a mismatch on every release.\n"+
+			"And nothing catches a BROKEN template before publish: `goreleaser check` validates one naming a field that does not exist, `goreleaser release --skip=publish` exits 0 over it, and it never appears in dist/CHANGELOG.md — header and footer are composed into the release BODY at publish time, and that file is the changelog. The first render would be the published page, after the tag is public.\n"+
+			"Use a literal. The CHANGELOG is cumulative, so a link to it on main carries this release's entry and every later one, which is what a reader deciding whether to upgrade needs — a tag-pinned URL buys nothing and costs the only unverifiable moving part",
+			goreleaserPath, rel.Footer)
 	case !disableIsDefault(rel.Disable):
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.disable is set to %v; this predictor always assumes GoReleaser actually publishes a release", goreleaserPath, rel.Disable)
 	case rel.Mode != "" && rel.Mode != "keep-existing":
@@ -464,6 +492,7 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		Sort:    full.Sort,
 		Groups:  full.Groups,
 		Filters: ReleaseNotesFilters{Exclude: full.Filters.Exclude},
+		Footer:  rel.Footer,
 	}, nil
 }
 
@@ -844,6 +873,26 @@ func PredictReleaseNotes(rawLines []string, cfg ReleaseNotesConfig) (ReleaseNote
 		}
 	}
 	body := strings.Join(lines, "\n") + "\n"
+
+	// --- then the release-level footer, exactly as describeBody does ---
+	//
+	// goreleaser's internal/pipe/release/body.go wraps the generated notes in
+	//   {{ with .Header }}{{ . }}\n{{ end }}{{ .ReleaseNotes }}{{ with .Footer }}\n{{ . }}{{ end }}
+	// so a non-empty footer is appended after the changelog with exactly one
+	// newline in front of it. That is what is reproduced here, and it is the
+	// whole of the footer's effect on the published body: it does not change
+	// grouping, ordering or which commits survive, so Groups and Dropped are
+	// untouched.
+	//
+	// This lands in Body rather than beside it because PublishedBodyMatches
+	// compares from the "## Changelog" anchor TO THE END of the published body.
+	// A footer modelled anywhere else would leave that comparison reporting a
+	// mismatch on every release, for a difference the predictor knew about —
+	// which is a false finding, and this file exists to prevent those rather
+	// than manufacture them.
+	if cfg.Footer != "" {
+		body += "\n" + cfg.Footer
+	}
 
 	return ReleaseNotesPrediction{Body: body, Groups: rendered, Dropped: dropped}, nil
 }

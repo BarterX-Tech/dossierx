@@ -1034,6 +1034,87 @@ func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests(t *testing
 	}
 }
 
+// TestTheReleasePageHasAFooterPointingAtTheChangelog holds the deliverable of
+// issue #33: every published release page carries a pointer to the document
+// where breaking changes are actually explained.
+//
+// WHY THE PAGE NEEDS ONE. Everything a release page shows is generated — grouped
+// commit subjects, with `^docs:`, `^chore:` and `^Merge` filtered out. That
+// presentation cannot distinguish a breaking change from any other feature.
+// v0.5.0's appeared there as the ordinary Features bullet "feat(lint): detect
+// cycles that alternate rests_on and governed_by", with no BREAKING framing, no
+// statement that a previously-passing corpus now exits 1, and no pointer to the
+// recovery. The audience most likely to read only the release page got the least
+// warning. This is about REACH, not correctness: the hand-written CHANGELOG entry
+// is substantive and is not being replaced by generated notes.
+//
+// WHAT THIS TEST DOES NOT CHECK, and deliberately. It does not assert the
+// footer's prose, which is editorial. And it does not assert that the footer
+// resolves no template — LoadReleaseNotesConfig in release_notes_predict_lib_test.go
+// owns that, because a templated footer is a defect in the release-notes
+// PREDICTION first (that predictor has no template engine, so it would predict
+// unrendered source and report a mismatch on every release) and its refusal
+// carries the measurements. One invariant, one owner.
+func TestTheReleasePageHasAFooterPointingAtTheChangelog(t *testing.T) {
+	const configPath = ".goreleaser.yaml"
+	path := filepath.Join(ciRepoRoot(t), configPath)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v\nThis check is about what the published release page renders; without the file there is nothing to check and nothing has been checked", configPath, err)
+	}
+
+	// Comment lines are dropped for the reason the sibling test gives: the block
+	// above the footer has to NAME a template in order to explain why there is
+	// not one, and a raw scan would fail on that explanation.
+	var live []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		live = append(live, line)
+	}
+
+	// The footer is a YAML block scalar, so it runs from `footer: |` to the next
+	// line indented no further than the key. Reading it as a block rather than
+	// scanning the whole file is what keeps this test about the footer: the
+	// ldflags and the archive name_template are full of `{{ }}` and are supposed
+	// to be, since both resolve during the BUILD, where a failure is a red run
+	// and not a published page.
+	var footer []string
+	inFooter := false
+	for _, line := range live {
+		trimmed := strings.TrimSpace(line)
+		if !inFooter {
+			if trimmed == "footer: |" {
+				inFooter = true
+			}
+			continue
+		}
+		if trimmed != "" && !strings.HasPrefix(line, "    ") {
+			break
+		}
+		footer = append(footer, line)
+	}
+
+	if !inFooter {
+		t.Fatalf("%s declares no `footer: |` under its `release:` block.\n\n"+
+			"That footer is the only thing on a published release page that points at the CHANGELOG. Without it the page carries grouped commit subjects and nothing else, and a breaking change reads as an ordinary Features bullet — which is the whole of issue #33.\n\n"+
+			"If the footer moved to a different form (`footer:` on one line, or a `body:`), move this test with it: the property being held is that the published page resolves no template, and that property does not depend on the spelling.",
+			configPath)
+	}
+
+	body := strings.Join(footer, "\n")
+	if strings.TrimSpace(body) == "" {
+		t.Fatalf("%s's `footer: |` block is empty, so the published release page gains nothing. An empty footer passes `goreleaser check` and renders as nothing at all", configPath)
+	}
+
+	if !strings.Contains(body, "CHANGELOG.md") {
+		t.Fatalf("%s's release footer no longer names CHANGELOG.md, so a published release page points at nothing.\n\n"+
+			"The generated notes above it are grouped commit subjects, and a `feat` line reads exactly the same whether or not it breaks a consumer's build — v0.5.0's breaking change appeared there as an ordinary Features bullet. The footer is the one line telling a reader where that is explained.\n\n"+
+			"The footer reads:\n%s", configPath, body)
+	}
+}
+
 // TestTheReleaseGateDoesNotAskTheForgeForOriginMain pins the shape of the forge's
 // own precondition, because nothing else in this repository did.
 //
