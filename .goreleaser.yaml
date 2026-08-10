@@ -35,8 +35,12 @@ archives:
     name_template: >-
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
+      # `formats` (plural), not the deprecated `format`: GoReleaser's own
+      # `check` fails a configuration that uses the singular spelling, and the
+      # release gate reads that check's exit status. See
+      # https://goreleaser.com/deprecations#archivesformat_overridesformat
       - goos: windows
-        format: zip
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"

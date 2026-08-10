@@ -168,7 +168,7 @@ var (
 func gateStage3ReadVocabulary(root string) ([]gateStage3Subject, error) {
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateBundleFrameFile)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v. The vocabulary is declared in the frame because that is the only file all thirteen agents are handed; with no frame there is no shared vocabulary and the join can only produce singletons",
+		return nil, fmt.Errorf("%w: %s: %w. The vocabulary is declared in the frame because that is the only file all thirteen agents are handed; with no frame there is no shared vocabulary and the join can only produce singletons",
 			errGateUncheckable, gateBundleFrameFile, err)
 	}
 	text := string(raw)
@@ -281,7 +281,7 @@ type gateStage3Answer struct {
 func gateStage3MintRun() (string, error) {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("%w: a run identifier could not be minted, so no answer this run collects could be distinguished from one left on disk by the last: %v", errGateUncheckable, err)
+		return "", fmt.Errorf("%w: a run identifier could not be minted, so no answer this run collects could be distinguished from one left on disk by the last: %w", errGateUncheckable, err)
 	}
 	return hex.EncodeToString(b[:]), nil
 }
@@ -295,12 +295,12 @@ func gateStage3LoadAnswer(root, surface string) (gateStage3Answer, error) {
 	rel := gateStage3AnswerFile(surface)
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 	if err != nil {
-		return gateStage3Answer{}, fmt.Errorf("%w: surface %q was fanned out and %s does not exist: %v. The agent errored, the write failed, or the harness never wrote it; none of those is a surface that passed",
+		return gateStage3Answer{}, fmt.Errorf("%w: surface %q was fanned out and %s does not exist: %w. The agent errored, the write failed, or the harness never wrote it; none of those is a surface that passed",
 			errGateUncheckable, surface, rel, err)
 	}
 	var a gateStage3Answer
 	if err := json.Unmarshal(raw, &a); err != nil {
-		return gateStage3Answer{}, fmt.Errorf("%w: %s does not parse, so whatever is at that path is not an answer: %v", errGateUncheckable, rel, err)
+		return gateStage3Answer{}, fmt.Errorf("%w: %s does not parse, so whatever is at that path is not an answer: %w", errGateUncheckable, rel, err)
 	}
 	return a, nil
 }
@@ -896,7 +896,7 @@ func gateStage3Vocab(t *testing.T) []gateStage3Subject {
 	t.Helper()
 	return []gateStage3Subject{
 		{ID: "cli-operator", Match: regexp.MustCompile(`^(?:agent|human|either)$`)},
-		{ID: "go-toolchain-floor", Match: regexp.MustCompile(`^[0-9]+\.[0-9]+$`)},
+		{ID: "go-toolchain-floor", Match: regexp.MustCompile(`^\d+\.\d+$`)},
 	}
 }
 
@@ -986,7 +986,7 @@ func TestGateStage3TheFrameDeclaresAClosedSubjectVocabulary(t *testing.T) {
 // A vocabulary parsed out of prose has to refuse the ways prose goes wrong, or
 // an edit to the frame silently shrinks what the join compares.
 func TestGateStage3RefusesAnUnusableVocabulary(t *testing.T) {
-	real := gateReadRepoFile(t, surfaceRepoRoot(t), gateBundleFrameFile)
+	realFrame := gateReadRepoFile(t, surfaceRepoRoot(t), gateBundleFrameFile)
 
 	cases := []struct {
 		name  string
@@ -995,7 +995,7 @@ func TestGateStage3RefusesAnUnusableVocabulary(t *testing.T) {
 	}{
 		{
 			name:  "no section at all",
-			frame: strings.Replace(real, gateStage3SubjectsHeading, "## Something else entirely", 1),
+			frame: strings.Replace(realFrame, gateStage3SubjectsHeading, "## Something else entirely", 1),
 			want:  "carries no",
 		},
 		{

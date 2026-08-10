@@ -610,7 +610,7 @@ func ciStepDirectory(step ciStep) string {
 // sibling check in cmd/dossierx did briefly read as an invocation of the release
 // tool; and the assignments are RETURNED rather than discarded because a prefix
 // is not always harmless — the caller above refuses them on a `go test`.
-func ciCommandName(argv []string) (name string, args []string, assigns []string, ok bool) {
+func ciCommandName(argv []string) (name string, args, assigns []string, ok bool) {
 	for i, arg := range argv {
 		if eq := strings.IndexByte(arg, '='); eq > 0 && ciIsIdentifier(arg[:eq]) {
 			assigns = append(assigns, arg)

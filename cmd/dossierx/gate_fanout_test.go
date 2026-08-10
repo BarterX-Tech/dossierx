@@ -190,7 +190,7 @@ func gateFanoutProduce(root, tree, checkoutTree string, tracked []string) (gateF
 	// is not an attempt to produce a fan-out here, and it must not cost a run
 	// somebody already paid thirteen agents for.
 	if err := os.Remove(filepath.Join(root, filepath.FromSlash(gateFanoutFile))); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return gateFanout{}, fmt.Errorf("the previous run's record at %s could not be removed, so a refusal below would leave a record naming a fan-out this production did not perform: %v", gateFanoutFile, err)
+		return gateFanout{}, fmt.Errorf("the previous run's record at %s could not be removed, so a refusal below would leave a record naming a fan-out this production did not perform: %w", gateFanoutFile, err)
 	}
 
 	// THE FAN-OUT AND THE STAGE-2 EVIDENCE MUST COVER ONE TREE. gate/run.json is
@@ -245,7 +245,7 @@ func gateFanoutProduce(root, tree, checkoutTree string, tracked []string) (gateF
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(gateFanoutBundleDir)), 0o755); err != nil {
-		return gateFanout{}, fmt.Errorf("the bundle directory %s could not be created: %v", gateFanoutBundleDir, err)
+		return gateFanout{}, fmt.Errorf("the bundle directory %s could not be created: %w", gateFanoutBundleDir, err)
 	}
 	for _, surface := range declared {
 		spec, specErr := gateStage2BundleSpec(surface, documents[surface])
@@ -269,7 +269,7 @@ func gateFanoutProduce(root, tree, checkoutTree string, tracked []string) (gateF
 		// strength of a name pattern would be one manifest typo away from deleting
 		// this run's own work.
 		if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(rel)), bundle, 0o644); err != nil {
-			return gateFanout{}, fmt.Errorf("surface %q assembled and %s could not be written, so the harness would exec an agent against a path holding nothing or holding an earlier run's question: %v", surface, rel, err)
+			return gateFanout{}, fmt.Errorf("surface %q assembled and %s could not be written, so the harness would exec an agent against a path holding nothing or holding an earlier run's question: %w", surface, rel, err)
 		}
 	}
 
@@ -294,12 +294,12 @@ func gateFanoutProduce(root, tree, checkoutTree string, tracked []string) (gateF
 func gateFanoutReadRun(root string) (gateStage2Run, error) {
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateStage2RunFile)))
 	if err != nil {
-		return gateStage2Run{}, fmt.Errorf("%s is not there, so this run has produced no evidence it can name: the delta, the baseline and the captures that go into every bundle would be whatever is at those paths, hand-written or left from the last release. Run `run.sh delta` and `run.sh record` for this tree first: %v",
+		return gateStage2Run{}, fmt.Errorf("%s is not there, so this run has produced no evidence it can name: the delta, the baseline and the captures that go into every bundle would be whatever is at those paths, hand-written or left from the last release. Run `run.sh delta` and `run.sh record` for this tree first: %w",
 			gateStage2RunFile, err)
 	}
 	var run gateStage2Run
 	if err := json.Unmarshal(raw, &run); err != nil {
-		return gateStage2Run{}, fmt.Errorf("%s does not parse, so whatever is at that path is not a run manifest and nothing attaches this fan-out to a tree: %v", gateStage2RunFile, err)
+		return gateStage2Run{}, fmt.Errorf("%s does not parse, so whatever is at that path is not a run manifest and nothing attaches this fan-out to a tree: %w", gateStage2RunFile, err)
 	}
 	return run, nil
 }
@@ -319,7 +319,7 @@ func gateFanoutStrayAnswers(root string) ([]string, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("%s exists and cannot be read, so nothing can say whether this run is about to mint an identifier over a previous run's answers: %v", gateStage3AnswerDir, err)
+		return nil, fmt.Errorf("%s exists and cannot be read, so nothing can say whether this run is about to mint an identifier over a previous run's answers: %w", gateStage3AnswerDir, err)
 	}
 	var out []string
 	for _, entry := range entries {
@@ -335,34 +335,34 @@ func gateFanoutWriteRecord(root string, doc gateFanout) error {
 	dest := filepath.Join(root, filepath.FromSlash(gateFanoutFile))
 	dir := filepath.Dir(dest)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create the directory for %s: %v", gateFanoutFile, err)
+		return fmt.Errorf("create the directory for %s: %w", gateFanoutFile, err)
 	}
 	data, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal %s: %v", gateFanoutFile, err)
+		return fmt.Errorf("marshal %s: %w", gateFanoutFile, err)
 	}
 	data = append(data, '\n')
 
 	f, err := os.CreateTemp(dir, ".fanout-*.json")
 	if err != nil {
-		return fmt.Errorf("create a temporary file beside %s: %v", gateFanoutFile, err)
+		return fmt.Errorf("create a temporary file beside %s: %w", gateFanoutFile, err)
 	}
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	if _, err := f.Write(data); err != nil {
 		f.Close()
-		return fmt.Errorf("write %s: %v", tmp, err)
+		return fmt.Errorf("write %s: %w", tmp, err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("close %s: %v", tmp, err)
+		return fmt.Errorf("close %s: %w", tmp, err)
 	}
 	// CreateTemp makes the file 0600; the record is read by the harness that
 	// collects the answers, which may not be this process's user.
 	if err := os.Chmod(tmp, 0o644); err != nil {
-		return fmt.Errorf("chmod %s: %v", tmp, err)
+		return fmt.Errorf("chmod %s: %w", tmp, err)
 	}
 	if err := os.Rename(tmp, dest); err != nil {
-		return fmt.Errorf("rename %s to %s: %v", tmp, gateFanoutFile, err)
+		return fmt.Errorf("rename %s to %s: %w", tmp, gateFanoutFile, err)
 	}
 	return nil
 }
@@ -396,12 +396,12 @@ func gateFanoutQuote(s string) string {
 func gateReadFanout(root, tree string) (gateFanout, error) {
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateFanoutFile)))
 	if err != nil {
-		return gateFanout{}, fmt.Errorf("%w: %s is not there, so no fan-out was recorded for tree %s. Any answer under %s was produced by something nobody can name — a previous release's run, an interrupted one, or a hand-written file — and there is no reading of them that says an agent answered this release: %v",
+		return gateFanout{}, fmt.Errorf("%w: %s is not there, so no fan-out was recorded for tree %s. Any answer under %s was produced by something nobody can name — a previous release's run, an interrupted one, or a hand-written file — and there is no reading of them that says an agent answered this release: %w",
 			errGateStage2NotProduced, gateFanoutFile, gateFanoutQuote(tree), gateStage3AnswerDir, err)
 	}
 	var doc gateFanout
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return gateFanout{}, fmt.Errorf("%w: %s does not parse, so whatever is at that path is not a fan-out record and this run has no identifier to hold its answers to: %v",
+		return gateFanout{}, fmt.Errorf("%w: %s does not parse, so whatever is at that path is not a fan-out record and this run has no identifier to hold its answers to: %w",
 			errGateStage2NotProduced, gateFanoutFile, err)
 	}
 	// THE IDENTIFIER IS CHECKED FOR SHAPE, not merely for presence. An empty or
@@ -790,16 +790,16 @@ func TestGateFanoutRefusesEveryRunItCannotStandBehind(t *testing.T) {
 // matched nothing is a row that runs against an untouched manifest and passes
 // because the producer refused for some other reason, or fails for none. The
 // fixture's manifest is a copy, so nothing here reaches the real tree.
-func gateFanoutEditManifest(t *testing.T, root, old, new string) {
+func gateFanoutEditManifest(t *testing.T, root, before, after string) {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(root, gateManifestFile))
 	if err != nil {
 		t.Fatalf("read the fixture's %s: %v", gateManifestFile, err)
 	}
-	if got := strings.Count(string(raw), old); got != 1 {
+	if got := strings.Count(string(raw), before); got != 1 {
 		t.Fatalf("%s holds %d occurrence(s) of the text this row edits; the row would be about a manifest nobody changed", gateManifestFile, got)
 	}
-	gateWrite(t, root, gateManifestFile, strings.Replace(string(raw), old, new, 1))
+	gateWrite(t, root, gateManifestFile, strings.Replace(string(raw), before, after, 1))
 }
 
 // gateFanoutReplacePromptsWithout swaps the fixture's symlinked prompt directory

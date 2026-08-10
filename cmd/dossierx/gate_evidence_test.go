@@ -91,8 +91,8 @@ var _ gateDriverEvidence = gateDriverWired{}
 // computations: the day one of them starts resolving tracked files differently,
 // or reading a different tree, evaluate() compares a run's answers against a
 // map somebody else filled and reports green over the disagreement.
-func (w gateDriverWired) Current(tree string) ([]string, map[string]string, error) {
-	declared, err := gateDeclaredSurfaces(w.Root)
+func (w gateDriverWired) Current(tree string) (declared []string, current map[string]string, err error) {
+	declared, err = gateDeclaredSurfaces(w.Root)
 	if err != nil {
 		// WRAPPED IN THE SENTINEL, because the manifest reader does not carry
 		// one and this is a caller that classifies. gateDriverRun.precondition
@@ -114,7 +114,7 @@ func (w gateDriverWired) Current(tree string) ([]string, map[string]string, erro
 	// gateStage2Plan is freshness, then the delta's own state, then the
 	// agreement between them, then a key per declared surface — in that order
 	// and by that one call, because it is the only path those checks are on.
-	current, err := gateStage2Plan(w.Root, tree, tracked)
+	current, err = gateStage2Plan(w.Root, tree, tracked)
 	if err != nil {
 		return nil, nil, err
 	}

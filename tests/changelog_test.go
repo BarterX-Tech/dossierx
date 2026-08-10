@@ -170,12 +170,8 @@ type clogEntry struct {
 // file and every fixture below go through exactly this code. A rule that is
 // only exercised against the one document that satisfies it has never been seen
 // to fail, which is indistinguishable from a rule that cannot.
-func clogParse(doc string) ([]clogEntry, []string) {
-	var (
-		entries  []clogEntry
-		problems []string
-		cur      = -1
-	)
+func clogParse(doc string) (entries []clogEntry, problems []string) {
+	cur := -1
 
 	for i, line := range strings.Split(doc, "\n") {
 		if !strings.HasPrefix(line, "## ") {
@@ -211,9 +207,37 @@ func clogParse(doc string) ([]clogEntry, []string) {
 			continue
 		}
 
-		major, _ := strconv.Atoi(m[1])
-		minor, _ := strconv.Atoi(m[2])
-		patch, _ := strconv.Atoi(m[3])
+		// The three components are read as numbers because every ordering rule
+		// below compares them as numbers — 0.10.0 is newer than 0.9.0 and no
+		// string comparison says so.
+		//
+		// The regex has already established each one is a run of decimal
+		// digits, so the only way this fails is a run too long to be an int.
+		// That is still a heading this file cannot read, and it is refused for
+		// the same reason the date above is: discarding the error would set the
+		// component to Atoi's zero, and a heading silently read as 0.0.0 does
+		// not fail anything — it sorts to the bottom, so the ordering rule and
+		// the newest-entry rules would all quietly be about a different entry
+		// than the reader is looking at.
+		var (
+			number = [3]int{}
+			unread []string
+		)
+		for k, part := range []struct{ name, text string }{{"major", m[1]}, {"minor", m[2]}, {"patch", m[3]}} {
+			n, err := strconv.Atoi(part.text)
+			if err != nil {
+				unread = append(unread, fmt.Sprintf("%s %q (%v)", part.name, part.text, err))
+				continue
+			}
+			number[k] = n
+		}
+		if len(unread) > 0 {
+			problems = append(problems, fmt.Sprintf("line %d numbers a release with a component this file cannot read as a number — %s:\n\t%s\nAn entry heading's three components are compared AS NUMBERS: that is what makes 0.10.0 newer than 0.9.0, and what every ordering and newest-entry rule below is built on. A component this file cannot turn into a number is a heading it cannot place in that order at all",
+				i+1, strings.Join(unread, ", "), line))
+			continue
+		}
+
+		major, minor, patch := number[0], number[1], number[2]
 		entries = append(entries, clogEntry{
 			version:   m[1] + "." + m[2] + "." + m[3],
 			major:     major,
@@ -668,7 +692,7 @@ this release exits 1 after it, with no edit on your side.
 
 // TestChangelogRulesRefuseTheDocumentsTheyExistFor is the four failures the
 // release procedure's CHANGELOG items are about, each constructed and each
-// watched being refused — plus the three ways the parser has to stay strict for
+// watched being refused — plus the four ways the parser has to stay strict for
 // those four to be reachable at all.
 //
 // The `want` strings are what the maintainer reading the failure has to be told:
@@ -723,6 +747,18 @@ func TestChangelogRulesRefuseTheDocumentsTheyExistFor(t *testing.T) {
 			doc:  strings.Replace(clogGood, "## [0.6.0] -", "## [v0.6.0] -", 1),
 			site: clogFixtureSite,
 			want: []string{"A LEADING `v`"},
+		},
+		{
+			// The heading matches the grammar — three runs of digits and a real
+			// date — and one of the runs is longer than an int. Reading it as
+			// Atoi's zero would file this release below every other entry in
+			// the document, so the order rule and the newest-entry rules would
+			// pass while describing a different release than the top of the
+			// file shows.
+			name: "a version component no number can hold",
+			doc:  strings.Replace(clogGood, "## [0.6.0] - 2026-08-09", "## [99999999999999999999.0.0] - 2026-08-09", 1),
+			site: clogFixtureSite,
+			want: []string{"cannot read as a number", "major \"99999999999999999999\""},
 		},
 		{
 			name: "a date no calendar has",

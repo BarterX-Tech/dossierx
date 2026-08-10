@@ -239,7 +239,7 @@ func gateArchivesRepoRoot() (string, error) {
 		return "", fmt.Errorf("the repository root could not be resolved from this package's directory: %w", err)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
-		return "", fmt.Errorf("%s does not look like a git repository (%v), so `git show <commit>:%s` there would read some other tree's release configuration or nothing at all",
+		return "", fmt.Errorf("%s does not look like a git repository (%w), so `git show <commit>:%s` there would read some other tree's release configuration or nothing at all",
 			root, err, gateGoreleaserFile)
 	}
 	return root, nil
@@ -997,7 +997,7 @@ func gateArchivesVerify(version, commit string) error {
 				want.Name, want.GOOS, want.GOARCH, version, gateGoreleaserFile))
 			continue
 		case err != nil:
-			return fmt.Errorf("%w: %s was downloaded and cannot be read (%v), so its sha256 cannot be compared with the claim %s makes about it",
+			return fmt.Errorf("%w: %s was downloaded and cannot be read (%w), so its sha256 cannot be compared with the claim %s makes about it",
 				errGateUncheckable, want.Name, err, release.Checksums)
 		case info.IsDir():
 			return fmt.Errorf("%w: %s is a directory in the downloaded assets, not an archive", errGateUncheckable, want.Name)
@@ -1006,7 +1006,7 @@ func gateArchivesVerify(version, commit string) error {
 
 		sum, err := gateArchivesSHA256(asset)
 		if err != nil {
-			return fmt.Errorf("%w: %s could not be digested (%v), so nothing can be said about whether it is the file %s claims",
+			return fmt.Errorf("%w: %s could not be digested (%w), so nothing can be said about whether it is the file %s claims",
 				errGateUncheckable, want.Name, err, release.Checksums)
 		}
 		declared, listed := sums[want.Name]
@@ -1079,7 +1079,7 @@ func gateArchivesVerifyHostBinary(dir string, release gateArchivesRelease, versi
 
 	entries, err := gateArchivesEntries(archivePath, host.Format)
 	if err != nil {
-		return fmt.Errorf("%w: %s could not be opened as a %s archive (%v), so the binary a downloader on this platform gets cannot be looked at",
+		return fmt.Errorf("%w: %s could not be opened as a %s archive (%w), so the binary a downloader on this platform gets cannot be looked at",
 			errGateUncheckable, host.Name, host.Format, err)
 	}
 	if !gateArchivesHolds(entries, binary) {
@@ -1089,7 +1089,7 @@ func gateArchivesVerifyHostBinary(dir string, release gateArchivesRelease, versi
 
 	work, err := os.MkdirTemp("", "dossierx-d7-extract-")
 	if err != nil {
-		return fmt.Errorf("%w: a directory to unpack %s into could not be created: %v", errGateUncheckable, host.Name, err)
+		return fmt.Errorf("%w: a directory to unpack %s into could not be created: %w", errGateUncheckable, host.Name, err)
 	}
 	// This directory is this function's own, unlike the downloaded assets, so it
 	// is cleaned up here.
@@ -1097,7 +1097,7 @@ func gateArchivesVerifyHostBinary(dir string, release gateArchivesRelease, versi
 
 	extracted, err := gateArchivesExtract(archivePath, host.Format, binary, work)
 	if err != nil {
-		return fmt.Errorf("%w: %s could not be unpacked out of %s: %v", errGateUncheckable, binary, host.Name, err)
+		return fmt.Errorf("%w: %s could not be unpacked out of %s: %w", errGateUncheckable, binary, host.Name, err)
 	}
 
 	stamp, err := gateArchivesStampOf(extracted)

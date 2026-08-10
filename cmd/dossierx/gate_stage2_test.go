@@ -371,6 +371,27 @@ func gateStage2Inputs(root, surface string, documents []string) (gateSurfaceInpu
 	if err != nil {
 		return gateSurfaceInputs{}, err
 	}
+	// The captures are checked HERE, ahead of the assembler, because this is the
+	// layer that knows their names. gateStage2Artifacts spells every capture
+	// repo-relative with forward slashes — the spelling gate/run.json records
+	// them under, the spelling the harness writes them from, the only spelling a
+	// driver has to search for. The assembler refuses a missing capture too, but
+	// it refuses through the OS's own error, whose text is an ABSOLUTE path in
+	// the platform's separator: on Windows that refusal read
+	// "lstat C:\...\gate\export-output.json: The system cannot find the file
+	// specified" and contained the string "gate/export-output.json" nowhere at
+	// all, so the one file the driver has to go produce was named in a spelling
+	// nothing else in this gate uses.
+	//
+	// Naming it is the whole job of this refusal. A capture is missing when the
+	// driver skipped the step that writes it, and "some file could not be
+	// opened" leaves the human to work out which of the four it was.
+	for _, rel := range spec.Artifacts {
+		if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); statErr != nil {
+			return gateSurfaceInputs{}, fmt.Errorf("%w: surface %q reads the capture %s and it is not on disk (%w). That capture is written by a flag-driven step of the run; absent, it means the step did not happen, and keying this surface without it would put a verdict over evidence the run never produced",
+				errGateBundleIncomplete, surface, rel, statErr)
+		}
+	}
 	bundle, err := gateBundleAssemble(root, spec)
 	if err != nil {
 		return gateSurfaceInputs{}, err
@@ -503,11 +524,11 @@ func gateStage2CheckFreshness(root, tree string, declared []string) (gateStage2R
 
 	raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateStage2RunFile)))
 	if err != nil {
-		return run, fmt.Errorf("%w: %s: %v. Every artifact the keys cover is a per-run file with no committed form, so with no manifest there is nothing to distinguish this release's evidence from a copy left behind by the last one",
+		return run, fmt.Errorf("%w: %s: %w. Every artifact the keys cover is a per-run file with no committed form, so with no manifest there is nothing to distinguish this release's evidence from a copy left behind by the last one",
 			errGateStage2NotProduced, gateStage2RunFile, err)
 	}
 	if err := json.Unmarshal(raw, &run); err != nil {
-		return gateStage2Run{}, fmt.Errorf("%w: %s does not parse: %v", errGateStage2NotProduced, gateStage2RunFile, err)
+		return gateStage2Run{}, fmt.Errorf("%w: %s does not parse: %w", errGateStage2NotProduced, gateStage2RunFile, err)
 	}
 
 	if run.Tree != tree {

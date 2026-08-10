@@ -140,7 +140,7 @@ func gateBundleAssemble(root string, spec gateBundleSpec) ([]byte, error) {
 
 	frame, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateBundleFrameFile)))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s: %v", errGateBundleIncomplete, gateBundleFrameFile, err)
+		return nil, fmt.Errorf("%w: %s: %w", errGateBundleIncomplete, gateBundleFrameFile, err)
 	}
 	for _, marker := range []string{gateBundleSurfaceMarker, gateBundlePartsMarker} {
 		if !bytes.Contains(frame, []byte(marker)) {
@@ -160,7 +160,7 @@ func gateBundleAssemble(root string, spec gateBundleSpec) ([]byte, error) {
 	add := func(title, rel string) error {
 		body, readErr := gateBundleReadDocument(root, rel)
 		if readErr != nil {
-			return fmt.Errorf("%w: surface %q: %s: %v", errGateBundleIncomplete, spec.Surface, title, readErr)
+			return fmt.Errorf("%w: surface %q: %s: %w", errGateBundleIncomplete, spec.Surface, title, readErr)
 		}
 		if len(bytes.TrimSpace(body)) == 0 {
 			return fmt.Errorf("%w: surface %q: %s (%s) is empty; a section with nothing in it is a section the agent cannot read and a bundle that still hashes", errGateBundleIncomplete, spec.Surface, title, rel)

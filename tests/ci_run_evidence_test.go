@@ -409,13 +409,12 @@ func ciEvAdjudicate(where, log string) (ciEvAccount, []ciEvFinding) {
 
 	type tkey struct{ pkg, test string }
 	var (
-		openPkg   = map[string]bool{}
-		donePkg   = map[string]string{} // package -> terminal action
-		openTest  = map[tkey]bool{}
-		doneTest  = map[tkey]bool{}
-		pkgTests  = map[string]int{}
-		failures  []string
-		pkgsOrder []string
+		openPkg  = map[string]bool{}
+		donePkg  = map[string]string{} // package -> terminal action
+		openTest = map[tkey]bool{}
+		doneTest = map[tkey]bool{}
+		pkgTests = map[string]int{}
+		failures []string
 	)
 
 	for i, e := range events {
@@ -436,7 +435,6 @@ func ciEvAdjudicate(where, log string) (ciEvAccount, []ciEvFinding) {
 				continue
 			}
 			openPkg[e.Package] = true
-			pkgsOrder = append(pkgsOrder, e.Package)
 			continue
 		}
 		if !openPkg[e.Package] {
@@ -1432,11 +1430,11 @@ func TestTheRunIsChosenByShaAndByWorkflowPath(t *testing.T) {
 		return page.WorkflowRuns
 	}
 
-	real := load("runs-by-sha.json")
-	if len(real) < 2 {
-		t.Fatalf("the recorded listing holds %d run(s). It is meant to hold several workflows' runs for one commit — that is what makes choosing one a choice", len(real))
+	recorded := load("runs-by-sha.json")
+	if len(recorded) < 2 {
+		t.Fatalf("the recorded listing holds %d run(s). It is meant to hold several workflows' runs for one commit — that is what makes choosing one a choice", len(recorded))
 	}
-	run, findings := ciEvSelectRun("3217a48b", real)
+	run, findings := ciEvSelectRun("3217a48b", recorded)
 	if len(findings) != 0 {
 		t.Fatalf("the recorded listing for a real merge commit did not yield a run: %v", findings)
 	}
@@ -1447,7 +1445,7 @@ func TestTheRunIsChosenByShaAndByWorkflowPath(t *testing.T) {
 	if _, f := ciEvSelectRun("3217a48b", load("runs-none.json")); !ciEvHasCode(f, ciEvNoRun) {
 		t.Fatalf("a commit with no runs at all produced %v rather than %q. A commit with nothing to report is the easiest thing in this whole file to mistake for a commit with nothing wrong", ciEvCodes(f), ciEvNoRun)
 	}
-	if _, f := ciEvSelectRun("3217a48b", append(append([]ciEvRun{}, real...), real...)); !ciEvHasCode(f, ciEvAmbiguousRun) {
+	if _, f := ciEvSelectRun("3217a48b", append(append([]ciEvRun{}, recorded...), recorded...)); !ciEvHasCode(f, ciEvAmbiguousRun) {
 		t.Fatalf("two CI runs for one commit produced %v rather than %q. Re-runs and a push racing a pull_request both make this reachable, and picking one would be an answer nobody decided", ciEvCodes(f), ciEvAmbiguousRun)
 	}
 }
@@ -2098,7 +2096,7 @@ const (
 	ciEvGateRefuse
 )
 
-func ciEvGateMode(sha, out string) (ciEvGateDecision, string) {
+func ciEvGateMode(sha, out string) (decision ciEvGateDecision, why string) {
 	switch {
 	case sha == "" && out == "":
 		return ciEvGateSkip, fmt.Sprintf("%s is unset, so there is no commit to fetch an account for. This is the right answer on a developer's laptop and the WRONG one at release time: `make %s` supplies both %s and %s and refuses to exit 0 unless a verdict record was written",
@@ -2515,7 +2513,7 @@ func ciEvMetaStrings(src string) ([]string, error) {
 
 // ciEvReadJSString reads the quoted literal beginning at src[start] and returns
 // its decoded content and the index of its closing quote.
-func ciEvReadJSString(src string, start int) (string, int, error) {
+func ciEvReadJSString(src string, start int) (value string, closingQuote int, err error) {
 	quote := src[start]
 	var b strings.Builder
 	for p := start + 1; p < len(src); p++ {

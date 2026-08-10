@@ -1152,12 +1152,21 @@ type gateGoreleaserConfig struct {
 		Ldflags []string `yaml:"ldflags"`
 	} `yaml:"builds"`
 	Archives []struct {
-		ID              string   `yaml:"id"`
-		IDs             []string `yaml:"ids"`
-		NameTemplate    string   `yaml:"name_template"`
+		ID           string   `yaml:"id"`
+		IDs          []string `yaml:"ids"`
+		NameTemplate string   `yaml:"name_template"`
+		// Both spellings, because GoReleaser v2 accepts both and the two say
+		// the same thing: `format:` is the singular this file was written
+		// against and `formats:` is the plural that replaced it (the singular
+		// is deprecated and fails `goreleaser check` on the pinned v2.17.1).
+		// A model that reads only one of them reports the OTHER one as an
+		// override to the empty string — a configuration that is correct and
+		// a gate that says it is wrong, which is the failure mode this whole
+		// file exists to avoid in the other direction.
 		FormatOverrides []struct {
-			GOOS   string `yaml:"goos"`
-			Format string `yaml:"format"`
+			GOOS    string   `yaml:"goos"`
+			Format  string   `yaml:"format"`
+			Formats []string `yaml:"formats"`
 		} `yaml:"format_overrides"`
 	} `yaml:"archives"`
 	Checksum struct {
@@ -1368,9 +1377,23 @@ func gateRequireArchiveNaming(t *testing.T, config gateGoreleaserConfig) {
 		t.Fatalf("%s declares %d archive format overrides, not 1. Exactly one platform is packaged differently from the rest — %s as a %s — and every extra override renames a download the procedure spells out",
 			gateGoreleaserFile, len(archive.FormatOverrides), gateWindowsGOOS, gateWindowsFormat)
 	}
-	if override := archive.FormatOverrides[0]; override.GOOS != gateWindowsGOOS || override.Format != gateWindowsFormat {
+	//
+	// The format itself is resolved through gateArchivesOneFormat rather than
+	// read off one field, so that the two legal spellings collapse to the one
+	// value this tree models and an ambiguous or absent one is REFUSED instead
+	// of silently compared as the empty string. There is no fallback: an
+	// override that names no format at all overrides nothing, which is the
+	// missing-override case one line above wearing a different shape.
+	override := archive.FormatOverrides[0]
+	format, err := gateArchivesOneFormat(fmt.Sprintf("the goos %q archive format override", override.GOOS), override.Format, override.Formats, "")
+	if err != nil {
+		t.Errorf("%s does not state one archive format for its goos %q override, so what this tree models — goos %q packaged as a %s — has nothing to be compared against: %v. The override decides an extension, so a config this check cannot read publishes a real archive under a name nothing asks for",
+			gateGoreleaserFile, override.GOOS, gateWindowsGOOS, gateWindowsFormat, err)
+		return
+	}
+	if override.GOOS != gateWindowsGOOS || format != gateWindowsFormat {
 		t.Errorf("%s overrides the archive format for goos %q to %q, where this tree models goos %q to %q. The override decides an extension, so getting it wrong publishes a real archive under a name nothing asks for",
-			gateGoreleaserFile, override.GOOS, override.Format, gateWindowsGOOS, gateWindowsFormat)
+			gateGoreleaserFile, override.GOOS, format, gateWindowsGOOS, gateWindowsFormat)
 	}
 }
 

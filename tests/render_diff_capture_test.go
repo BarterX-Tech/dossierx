@@ -688,10 +688,19 @@ func TestRenderDiffCaptureRecordsWorkingTreeDrift(t *testing.T) {
 	}
 
 	repo := t.TempDir()
-	artifact := filepath.Join(renderDiffCaptureScope, "fixture-basic", "viewer", "index.html")
+	// REPO-RELATIVE, FORWARD SLASHES, ON EVERY PLATFORM — which is the one
+	// spelling this document is written in. `git status --porcelain` names paths
+	// that way on Windows as much as anywhere else, and the drift list the
+	// capture records is that output verbatim, so this is the spelling the
+	// recorded artifact carries and therefore the spelling to assert against.
+	// Building it with filepath.Join instead made the expectation
+	// `testdata\fixture-basic\viewer\index.html` on Windows and the assertion
+	// below fail against a capture that was entirely correct.
+	artifact := renderDiffCaptureScope + "/fixture-basic/viewer/index.html"
 	write := func(rel, body string) {
 		t.Helper()
-		full := filepath.Join(repo, rel)
+		// The one place the name is allowed to change shape: touching the disk.
+		full := filepath.Join(repo, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatalf("create the directory for %s: %v", rel, err)
 		}

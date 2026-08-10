@@ -354,7 +354,7 @@ const (
 //   - NO RECORD PATH: refuse. The irreversible steps would happen and leave no
 //     readable account of which of them completed, which is the single thing an
 //     operator needs when a release stops halfway.
-func gateDriverMode(p gateDriverPlan) (gateDriverDecision, string) {
+func gateDriverMode(p gateDriverPlan) (decision gateDriverDecision, why string) {
 	switch {
 	case p.Version == "" && p.Authorize == "":
 		return gateDriverInert, fmt.Sprintf(
@@ -593,7 +593,7 @@ func (gateDriverUnwired) Verdicts(string) ([]gateSurfaceVerdict, []gateFinding, 
 		"The driver will not invent them: a receipt measured over verdicts nobody produced is a receipt about nothing, and it would evaluate PASS", errGateUncheckable)
 }
 
-func (gateDriverUnwired) Current(string) ([]string, map[string]string, error) {
+func (gateDriverUnwired) Current(string) (declared []string, current map[string]string, err error) {
 	return nil, nil, fmt.Errorf("%w: the driver has no wired path to this tree's per-surface fingerprints. "+
 		"gateDeclaredSurfaces and gateStage2Plan compute them, and until the harness invocation that feeds them is wired to this driver, recomputing green here would be reading a map nobody filled", errGateUncheckable)
 }
@@ -1027,11 +1027,11 @@ var errGateVersionMismatch = errors.New("the version being published is not the 
 // document's newest release is its FIRST such heading — the format is
 // newest-first, which is the opposite of the site's array, and getting the two
 // backwards is the failure this pair of regexps has to not have.
-var gateDriverChangelogHeadingRE = regexp.MustCompile(`(?m)^## \[v?([0-9]+\.[0-9]+\.[0-9]+)\]`)
+var gateDriverChangelogHeadingRE = regexp.MustCompile(`(?m)^## \[v?(\d+\.\d+\.\d+)\]`)
 
 // gateDriverSiteVersionRE is one entry's version field in the site's releases
 // array.
-var gateDriverSiteVersionRE = regexp.MustCompile(`(?m)^\s*version:\s*"v?([0-9]+\.[0-9]+\.[0-9]+)"`)
+var gateDriverSiteVersionRE = regexp.MustCompile(`(?m)^\s*version:\s*"v?(\d+\.\d+\.\d+)"`)
 
 // gateDriverNormalizeVersion strips the leading v, because the two documents
 // spell the same release differently on purpose — the changelog heading is
@@ -1187,7 +1187,7 @@ func (r *gateDriverRun) requireCIRunEvidence() error {
 			"An absent record is a FAILED check and never a skipped one: `go test` exits 0 for a suite that ran nothing, which is the exact failure that stage exists to catch, and not running the stage at all is that failure with no one watching. %s",
 			errGateUncheckable, path, err, recovery)
 	}
-	if len(strings.TrimSpace(string(blob))) == 0 {
+	if strings.TrimSpace(string(blob)) == "" {
 		return fmt.Errorf("%w: the CI-run evidence record at %s is empty. An empty file is what a stage that died mid-write leaves, and it says nothing about any commit. %s",
 			errGateUncheckable, path, recovery)
 	}
@@ -1454,7 +1454,7 @@ func (e gateDriverFixtureEvidence) Verdicts(string) ([]gateSurfaceVerdict, []gat
 	return e.verdicts, e.findings, nil
 }
 
-func (e gateDriverFixtureEvidence) Current(string) ([]string, map[string]string, error) {
+func (e gateDriverFixtureEvidence) Current(string) (declared []string, current map[string]string, err error) {
 	return e.declared, e.current, nil
 }
 

@@ -303,10 +303,9 @@ func gateBaselineReadableFault(root string, src gateBaselineSource) string {
 // struct surface.json is emitted from. Decoding is strict: an unknown key is an
 // error, because a document that is not a surface document cannot be diffed
 // against one.
-func gateBaselineDocument(t *testing.T, root string) (surfaceDoc, []byte) {
+func gateBaselineDocument(t *testing.T, root string) (doc surfaceDoc, raw []byte) {
 	t.Helper()
-	raw := []byte(gateReadRepoFile(t, root, gateBaselineBootstrapFile))
-	var doc surfaceDoc
+	raw = []byte(gateReadRepoFile(t, root, gateBaselineBootstrapFile))
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&doc); err != nil {
@@ -357,7 +356,15 @@ func gateBaselineCheckout(t *testing.T) string {
 	_, extractErr := gateBaselineExtractTar(dir, stdout)
 	// The stream is drained whatever happened: a reader that stops early leaves
 	// `git archive` blocked on a full pipe, and Wait would never return.
-	_, _ = io.Copy(io.Discard, stdout)
+	//
+	// Its error is kept rather than discarded. Draining fails when the pipe broke
+	// mid-archive, and an extraction that returned no error over a stream that
+	// ended early is an extraction of PART of the baseline tree — every file that
+	// never arrived is a file this run then finds nothing to compare, which is the
+	// pass-over-nothing this function's header refuses. It is reported last
+	// because a broken pipe is usually the symptom of the command's own failure,
+	// and that failure is the more useful sentence.
+	_, drainErr := io.Copy(io.Discard, stdout)
 
 	// The archive command's own failure is reported FIRST and the extraction's
 	// second, because a command that never produced a stream produces an empty
@@ -375,6 +382,11 @@ func gateBaselineCheckout(t *testing.T) string {
 		t.Fatalf("the %s tree could not be reproduced from its archive: %v\n\n"+
 			"Nothing was compared against the frozen baseline, and this is a failure rather than a skip.",
 			gateBaselineRelease, extractErr)
+	}
+	if drainErr != nil {
+		t.Fatalf("the %s archive stream could not be read to its end: %v\n\n"+
+			"`git archive` exited cleanly and the extraction reported no error, so what was unpacked is whatever arrived before the stream broke — a PART of the baseline tree. Every file that never arrived is one this run would find nothing to compare, which reads as green.",
+			gateBaselineRelease, drainErr)
 	}
 	return dir
 }
