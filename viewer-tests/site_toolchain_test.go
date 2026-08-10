@@ -792,6 +792,10 @@ var goreleaserCandidates = []string{
 // contract says it must be.
 var reGoreleaserConfigPath = regexp.MustCompile(`(?m)^.*\bchecking\b.*\bpath=(\S+)\s*$`)
 
+// reANSIEscape matches the CSI escape sequences GoReleaser's logger emits when
+// it decides its output is being rendered — which on a CI runner it is.
+var reANSIEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
 // requireGoreleaserLoadsThisConfig proves that goreleaserConfigFile is the file a
 // release would open, and fails saying so when it is not.
 //
@@ -834,18 +838,19 @@ func requireGoreleaserLoadsThisConfig(t *testing.T, tool, root string) {
 	// model of the tool.
 	check := exec.Command(tool, "check")
 	check.Dir = root
-	// NO_COLOR, because the answer is parsed. GoReleaser colours its output on
-	// CI runners (its TTY heuristics differ from a local `go test`), and the
-	// escape codes land between `path` and `=` — so the regex below found the
-	// line locally and missed the identical line on the forge, which is this
-	// module's own "the model held on one machine" failure wearing ANSI dress.
-	check.Env = append(os.Environ(), "NO_COLOR=1")
 	// The exit status is captured and reported rather than asserted on: a
 	// configuration that is invalid for some other reason is a different finding,
 	// made by the dry run below, and failing here would report it twice under the
 	// wrong name. What is read is the path the tool says it resolved.
 	out, checkErr := check.CombinedOutput()
-	match := reGoreleaserConfigPath.FindStringSubmatch(string(out))
+	// The answer is parsed with the colours stripped, not asked for uncoloured.
+	// GoReleaser decorates this line on CI runners and leaves it plain under a
+	// local `go test`, and it does NOT honour NO_COLOR when it has decided the
+	// environment renders ANSI (a CI run is exactly that environment) — the
+	// escape codes land between `path` and `=`, so the regex found the line on
+	// one machine and missed the identical line on the other. Asking the tool
+	// nicely is a model of its TTY heuristics; deleting the codes is not.
+	match := reGoreleaserConfigPath.FindStringSubmatch(reANSIEscape.ReplaceAllString(string(out), ""))
 	if match == nil {
 		t.Fatalf("`goreleaser check`, run from the repository root with no `--config`, did not report which configuration path it resolved (exit: %v), so the search order above is a model with nothing holding it. Its output was:\n%s", checkErr, out)
 	}
