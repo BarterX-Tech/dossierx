@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2] - 2026-08-10
+## [0.5.2] - 2026-08-11
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
 Re-run `dossierx skills export` after upgrading.** Those bundles are written into a project as
@@ -121,6 +121,15 @@ to the wrong surface.
   nothing.
 - **The `cli-operator` subject vocabulary had no value for a CI check**, forcing a hand override at
   every release. It gains `ci`.
+- **A serve test raced the server it started, and only Windows noticed.** The watcher re-walks the
+  claims tree with `filepath.WalkDir` twice a second, which holds a directory handle. POSIX unlinks
+  a directory out from under one; Windows refuses with "The process cannot access the file because
+  it is being used by another process", so `TestClaimAsset_SymlinkedDirectoryIsRefused` reddened the
+  `windows-latest` leg and, through it, CI on `main` — which is a refused release, since
+  `make ci-evidence` fails on any failed test. The removal now retries inside a bounded window and
+  then **fails**: giving up quietly would leave the fixture directory standing, the symlink never
+  created, and the assertion passing against an ordinary missing file. Mutation-checked — with the
+  removal silently skipped, the test reports SKIP and the package prints `ok`.
 
 ### Closed without a change
 
