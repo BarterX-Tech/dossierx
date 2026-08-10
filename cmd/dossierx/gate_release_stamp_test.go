@@ -464,14 +464,17 @@ var gateSiteDeclarations = []gateSiteDeclaration{
 		want:     `const latestIndex = releases.length - 1;`,
 		why:      "The timeline and content.ts must agree on which release is current. When they do not, the page badges one entry \"latest\" while every derived string on it names another — a page that contradicts itself, with each half correct about the wrong entry",
 	},
-	{
-		rel:      filepath.Join("site", "src", "content.ts"),
-		landmark: "const releases: Release[] = [",
-		head:     regexp.MustCompile(`(?:export\s+)?const\s+latestBinaryVersion\s*:[^;]*;`),
-		want:     `export const latestBinaryVersion: string = latestRelease.version.replace(/^v/, "");`,
-		why: "This test resolves the transcript's `${latestBinaryVersion}` by applying that derivation itself. A site that derives it some other way makes the resolution stale — the guard would go on resolving the transcript to a string the page does not produce — " +
-			"and a site that stops stripping the leading `v` puts `dossierx version v<x.y.z>` back on the page, which is the single defect this whole file was opened for",
-	},
+	// A THIRD DECLARATION USED TO BE HELD HERE and is now REFUSED instead, by
+	// TestSiteDeclaresNoSecondVersionSpelling below. It was
+	//
+	//   export const latestBinaryVersion: string = latestRelease.version.replace(/^v/, "");
+	//
+	// and it existed because the two install paths disagreed: the archive stamped
+	// `{{.Version}}` and printed `0.5.1`, while `go install …@v0.5.1` took the tag
+	// verbatim from the module proxy and printed `v0.5.1`. The site needed both
+	// spellings to depict either honestly. v0.5.2 moved the stamp to `{{.Tag}}`,
+	// so there is one spelling and a second constant would be a copy that can go
+	// stale on its own.
 }
 
 // TestSiteSelectsTheReleaseThisTreeModels is the three declarations, held.
@@ -493,6 +496,51 @@ var gateSiteDeclarations = []gateSiteDeclaration{
 // No read of the transcript can see that, so it is asserted here.
 func TestSiteSelectsTheReleaseThisTreeModels(t *testing.T) {
 	gateRequireSiteDeclarations(t, surfaceRepoRoot(t))
+}
+
+// TestSiteDeclaresNoSecondVersionSpelling refuses the constant that v0.5.2
+// deleted, because deleting it is only half the fix.
+//
+// WHAT IT WAS. `latestBinaryVersion` was `latestVersion` with the leading `v`
+// stripped, and it was CORRECT while it existed: `.goreleaser.yaml` stamped
+// `-X main.version={{.Version}}`, so the published archive printed
+// `dossierx version 0.5.1`, while `go install …@v0.5.1` applies no ldflags at
+// all and falls back to `debug.ReadBuildInfo`, which the module proxy fills with
+// the tag verbatim — `v0.5.1`. One release answered the question two ways
+// depending on how it was installed, and the site kept two constants so it could
+// depict whichever the reader would see.
+//
+// Issue #38 fixed the cause: the stamp is `{{.Tag}}` and both paths print the
+// tag as tagged. The second constant is therefore not merely redundant, it is a
+// derivation of a spelling nothing produces — and reintroducing one would put
+// `dossierx version <x.y.z>` back into a transcript no install path matches,
+// which is the defect this whole file was opened for, arrived at from the other
+// direction.
+//
+// It is refused BY NAME rather than by scanning for a stripped literal, because
+// the literal check already exists elsewhere and answers a different question:
+// viewer-tests/site_source_test.go hunts a hand-typed bare version anywhere in
+// the source, and this one refuses the reintroduction of the derivation that
+// would generate one on every release without a literal ever being typed.
+func TestSiteDeclaresNoSecondVersionSpelling(t *testing.T) {
+	const rel = "site/src/content.ts"
+	code := gateStripTSComments(gateReadRepoFile(t, surfaceRepoRoot(t), filepath.FromSlash(rel)))
+
+	// Comments are stripped for the reason gateRequireSiteDeclarations strips
+	// them, plus one specific to this test: content.ts now carries a block
+	// comment explaining why the constant is gone, and that explanation has to be
+	// able to NAME it.
+	if !strings.Contains(code, "const releases: Release[] = [") {
+		t.Fatalf("stripping comments from %s removed the releases array, which is not a comment. The lexer has mis-read the source — an unclosed literal, most likely — so the search below would run over a truncated file and pass over nothing", rel)
+	}
+
+	stripped := regexp.MustCompile(`(?:export\s+)?const\s+\w+\s*:[^;]*\.replace\(\s*/\^v/`)
+	if found := stripped.FindAllString(code, -1); len(found) > 0 {
+		t.Fatalf("%s declares a version constant derived by stripping the leading `v`:\n\t%s\n\n"+
+			"There is one version spelling in this project and it is the tag as tagged. Since v0.5.2 `.goreleaser.yaml` stamps `-X main.version={{.Tag}}`, and `go install` takes the same string verbatim from the module proxy, so BOTH install paths print `v<x.y.z>` — a stripped derivation depicts output neither one produces.\n\n"+
+			"This constant existed until v0.5.2 and was correct then, because the archive really did print the stripped form while `go install` printed the tag. If a release ever needs two spellings again, the cause is in .goreleaser.yaml, not here: fix it there, and gateRequireReleaseTransform will tell you which template moved.",
+			rel, strings.Join(found, "\n\t"))
+	}
 }
 
 // gateRequireSiteDeclarations holds every one of them.
@@ -1076,7 +1124,7 @@ func TestReleaseBuildLoadsTheConfigurationThisGateReads(t *testing.T) {
 
 // gateVersionLdflag is the stamping line gateReleaseBinaryVersion models, quoted
 // verbatim, for failure messages that can say what the file should have said.
-const gateVersionLdflag = `-X main.version={{.Version}}`
+const gateVersionLdflag = `-X main.version={{.Tag}}`
 
 // gateVersionSymbol is the linker symbol that stamping must target.
 //
@@ -1088,13 +1136,28 @@ const gateVersionLdflag = `-X main.version={{.Version}}`
 const gateVersionSymbol = "main.version"
 
 // gateVersionTemplate is the value that symbol must be stamped with, and
-// gateTagTemplate is the other spelling — named so a refusal can say which one
-// it found rather than only that the expected one is missing. `{{.Version}}` is
-// the tag with the leading `v` stripped; `{{.Tag}}` keeps it, and swapping the
-// two is a one-word edit that inverts every spelling this file compares.
+// gateStrippedTemplate is the other spelling — named so a refusal can say which
+// one it found rather than only that the expected one is missing. `{{.Tag}}`
+// keeps the leading `v`; `{{.Version}}` strips it, and swapping the two is a
+// one-word edit that inverts every spelling this file compares.
+//
+// THE PAIR WAS THE OTHER WAY ROUND UNTIL v0.5.2, and the reason it turned over
+// is issue #38. The archive stamped `{{.Version}}` and printed `0.5.1`, while
+// `go install …@v0.5.1` took its version from the module proxy, which hands
+// `debug.ReadBuildInfo` the tag verbatim and printed `v0.5.1`. The same release
+// reported two different versions depending on how it was installed, and the
+// hazard was never cosmetic: a scripted
+// `dossierx version --format json | jq -r .data.version` compared against a
+// `vX.Y.Z` tag succeeded via one install path and failed via the other.
+//
+// `{{.Tag}}` is canonical because it is the form everything else already uses —
+// the git tag, `go install`'s argument, the CHANGELOG heading, and every version
+// string the site renders. Nothing in cmd/dossierx changed to achieve it:
+// resolveVersionInfo's no-ldflags fallback already produced the tag verbatim, so
+// the two paths now converge rather than being reconciled.
 const (
-	gateVersionTemplate = `{{.Version}}`
-	gateTagTemplate     = `{{.Tag}}`
+	gateVersionTemplate  = `{{.Tag}}`
+	gateStrippedTemplate = `{{.Version}}`
 )
 
 // gateReleaseStamps is EVERY symbol the release build stamps, with the template
@@ -1119,7 +1182,7 @@ const (
 // rather than the build's — each is a one-word edit that makes a sentence in the
 // procedure false while the binary goes on reporting something well-formed.
 var gateReleaseStamps = []struct{ symbol, template, stands string }{
-	{"main.version", gateVersionTemplate, "the tag with its leading `v` stripped, which is what the site's `latestBinaryVersion` derives and what every comparison in this file rests on"},
+	{"main.version", gateVersionTemplate, "the tag EXACTLY AS TAGGED, leading `v` included — the one form the archive, `go install`, the site and the CHANGELOG heading all agree on, and what every comparison in this file rests on"},
 	{"main.commit", "{{.Commit}}", "the full forty-character sha — the width docs/RELEASING.md contrasts with the seven the deleted site field carried"},
 	{"main.date", "{{.Date}}", "the BUILD's RFC 3339 timestamp, which is why the site's transcript may not depict a `date:` line beside a calendar day"},
 }
@@ -1292,11 +1355,12 @@ func gateRequireReleaseTransform(t *testing.T, root string) {
 		if values[0] == stamp.template {
 			continue
 		}
-		if stamp.symbol == gateVersionSymbol && values[0] == gateTagTemplate {
-			t.Fatalf("%s no longer stamps %q, and it names %s — the template that KEEPS the leading `v`. "+
-				"gateReleaseBinaryVersion strips one, and site/src/content.ts derives `latestBinaryVersion` by stripping one, so both sides of every comparison in this file are now wrong in the same direction and cannot disagree. "+
-				"The published binary would print `dossierx version v<x.y.z>` while the site depicts `<x.y.z>`. Update this file's model and the site's derivation together, or put the template back",
-				gateGoreleaserFile, gateVersionLdflag, gateTagTemplate)
+		if stamp.symbol == gateVersionSymbol && values[0] == gateStrippedTemplate {
+			t.Fatalf("%s no longer stamps %q, and it names %s — the template that STRIPS the leading `v`. "+
+				"That is the v0.5.2 fix run backwards, and it re-opens issue #38: the published archive would print `dossierx version <x.y.z>` while `go install …@v<x.y.z>` prints `v<x.y.z>`, because the module proxy hands debug.ReadBuildInfo the tag verbatim and no ldflags reach that path at all. "+
+				"The same release then reports two different versions depending on how it was installed, and a scripted `dossierx version --format json | jq -r .data.version` compared against the tag succeeds one way and fails the other. "+
+				"Nothing in cmd/dossierx can reconcile them: resolveVersionInfo's fallback IS the proxy's value. Put %s back, or move the site, gateReleaseBinaryVersion and this file's model together and accept the stripped form everywhere",
+				gateGoreleaserFile, gateVersionLdflag, gateStrippedTemplate, gateVersionTemplate)
 		}
 		t.Fatalf("%s stamps `-X %s=%s`, where this file models %s. That symbol must carry %s; a third template makes it a guess, and every comparison here links its own binary with the guess",
 			gateGoreleaserFile, stamp.symbol, values[0], stamp.template, stamp.stands)

@@ -522,10 +522,10 @@ func checkNoHardCodedVersions(ra releasesArray, declared []historyLiteral) (vers
 		// THE OTHER SPELLING, and it is the one the rule above is shaped to miss.
 		//
 		// reVersionLit requires a leading `v`, so it reads the RELEASE's name and
-		// is blind to the BINARY's: `.goreleaser.yaml` stamps
-		// `-X main.version={{.Version}}`, which is the tag with that `v` stripped,
-		// and the site's `dossierx version` transcript therefore depicts `0.5.0`
-		// where every other version string on the page reads `v0.5.0`.
+		// is blind to the bare one. Until v0.5.2 `.goreleaser.yaml` stamped
+		// `-X main.version={{.Version}}`, the tag with that `v` stripped, so the
+		// site's `dossierx version` transcript depicted `0.5.0` where every other
+		// version string on the page read `v0.5.0`.
 		//
 		// That gap was not theoretical. Replacing the transcript's interpolation
 		// with the literal it renders today left this rule, the root suite and the
@@ -535,10 +535,16 @@ func checkNoHardCodedVersions(ra releasesArray, declared []historyLiteral) (vers
 		// derived one render the same bytes on the day they are written. Only the
 		// source can, and only if it is looking for the right spelling.
 		//
+		// SINCE v0.5.2 THE STAMP IS `{{.Tag}}` AND NOTHING PRINTS THE BARE FORM,
+		// which makes this rule stricter rather than obsolete. A bare literal used
+		// to be the right characters in the wrong place — the binary's spelling,
+		// hand-typed. Now it is a string no install path produces at all, so there
+		// is no reading of the page on which it is correct.
+		//
 		// It is not exempted inside the releases array. That array declares tags,
 		// and every one of them carries its `v`; a bare current version inside it is
 		// a copy that happens to live in the same brackets.
-		for _, loc := range binaryVersionLocs(body, binaryOf(current)) {
+		for _, loc := range binaryVersionLocs(body, strippedOf(current)) {
 			if comments[loc[0]] {
 				continue
 			}
@@ -548,9 +554,10 @@ func checkNoHardCodedVersions(ra releasesArray, declared []historyLiteral) (vers
 			}
 			scan.offenders = append(scan.offenders, fmt.Sprintf("%s:%d (%s) — %s", rel,
 				1+strings.Count(body[:loc[0]], "\n"), body[loc[0]:loc[1]],
-				"the current release as the BINARY spells it — what `dossierx version` prints. "+
-					"Correct today and false at the next tag, and carrying no leading `v`, it is the one "+
-					"spelling nothing else in this repository looks for; derive it from latestBinaryVersion"))
+				"the current release with its leading `v` stripped — a spelling NO install path prints. "+
+					"Since v0.5.2 the archive stamps the tag as tagged and `go install` takes it verbatim from the "+
+					"module proxy, so both print `v<x.y.z>`; a bare literal depicts output that does not exist, and "+
+					"goes stale at the next tag on top of that. Derive it from latestVersion"))
 		}
 		return nil
 	})
@@ -568,13 +575,29 @@ func checkNoHardCodedVersions(ra releasesArray, declared []historyLiteral) (vers
 	return scan, nil
 }
 
-// binaryOf is the release transform: the version a release build stamps into the
-// binary, given the tag. `.goreleaser.yaml` stamps `{{.Version}}`, which is the
-// tag with its leading `v` stripped; that template is held against the file by
-// gateRequireReleaseTransform in the root module, which parses it — this module's
+// strippedOf is the tag with its leading `v` removed — THE SPELLING NOTHING IN
+// THIS PROJECT PRODUCES, which is why the scan above hunts for it.
+//
+// It used to be named binaryOf, and it used to be the release transform: the
+// version a release build stamped into the binary. `.goreleaser.yaml` stamped
+// `{{.Version}}`, the tag with its `v` stripped, so the archive printed `0.5.1`
+// while `go install …@v0.5.1` printed `v0.5.1` — the module proxy hands
+// debug.ReadBuildInfo the tag verbatim and no ldflags reach that path at all.
+// One release, two version strings, depending on how it was installed. That is
+// issue #38, and v0.5.2 fixed it by moving the stamp to `{{.Tag}}`.
+//
+// So the transform is gone and the function survives with the opposite meaning:
+// after the fix, a bare `0.5.2` in the site's source is not the binary's
+// spelling of the current release, it is a spelling NO install path prints. It
+// is still worth finding — a hand-typed one is still a literal that goes stale
+// at the next tag — but the finding says something different now, and the
+// offender message says it.
+//
+// The template that decides this is held in the root module by
+// gateRequireReleaseTransform, which parses .goreleaser.yaml. This module's
 // go.mod is chromedp and nothing else, so it cannot read YAML and does not
 // pretend to.
-func binaryOf(tag string) string { return strings.TrimPrefix(tag, "v") }
+func strippedOf(tag string) string { return strings.TrimPrefix(tag, "v") }
 
 // binaryVersionLocs finds every occurrence of a bare version literal that is not
 // part of a longer number and not the tail of the `v`-prefixed spelling.

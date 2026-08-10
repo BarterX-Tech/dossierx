@@ -24,7 +24,7 @@ builds:
       # path form silently no-ops for a main package, leaving the binary to
       # fall back to its debug.ReadBuildInfo default.
       - -s -w
-      - -X main.version={{.Version}}
+      - -X main.version={{.Tag}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
 

@@ -421,11 +421,26 @@ them, and the three post-publish checks that leave this repository entirely.
       Do not reintroduce a hand-typed copy; each of those four had one, and
       three of them went stale.
 
-      **The `dossierx version` example reads `latestBinaryVersion`, not
-      `latestVersion`, and the difference is a leading `v`.** GoReleaser's
-      `{{.Version}}` strips it, so the archive published for `v0.5.0` prints
-      `dossierx version 0.5.0`. `v0.5.0` is right everywhere the site names the
-      RELEASE and wrong in a block depicting what a command prints.
+      **There is one version spelling, and it is the tag as tagged.** The
+      archive, `go install`, the git tag, this file's own commands and every
+      string on the site all read `vX.Y.Z`. Nothing derives a second form, and
+      the `dossierx version` example reads `latestVersion` like the rest.
+
+      That is new in v0.5.2 and it was a real defect, not a tidy-up. The build
+      stamped `-X main.version={{.Version}}`, which is the tag with its leading
+      `v` stripped, so the published archive printed `dossierx version 0.5.1` —
+      while `go install …@v0.5.1` applies no ldflags at all, falls back to
+      `debug.ReadBuildInfo`, and gets the tag verbatim from the module proxy:
+      `v0.5.1`. One release answered the question two ways depending on how it
+      was installed, and a scripted
+      `dossierx version --format json | jq -r .data.version` compared against the
+      tag succeeded one way and failed the other. The site carried a second
+      constant, `latestBinaryVersion`, purely so the page could depict whichever
+      form the reader would actually see.
+
+      The stamp is `{{.Tag}}` now and both paths agree. If you find a stripped
+      derivation anywhere, the cause is `.goreleaser.yaml`, not the site —
+      `gateRequireReleaseTransform` names which template moved.
 - [ ] **The three committed sample viewers are regenerated.** This is the last
       item deliberately: regeneration has to reflect the branch's finished
       renderer, lint and CSS state, so it runs after everything above.
