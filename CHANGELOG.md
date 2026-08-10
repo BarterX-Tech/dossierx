@@ -19,16 +19,47 @@ path and a stale account of when `dossierx claim flag` is refused.
 `internal/` is untouched end to end and there is nothing to re-render. What moved outside the
 release machinery is the four install pins, now `v0.5.1` — one of them inside
 `skills/dossierx/SKILL.md`, which is the byte that makes the exported bundle a different bundle —
-and four user-facing strings that were wrong. Two are refusal hints that named invocations the
-binary rejects: the retired `implink` stub's replacement command, which omitted `--module` and
-`--claim` and passed the id positionally at a command declared `cobra.NoArgs`, and the
-missing-`--reason` refusal, which printed the verb without the id or `--module` the verb also
-requires. The third is the link the spliced `AGENTS.md` section gives for the exported agent guide,
-which named `docs/dossierx-agent-guide.md` while the export invocation this project prescribes
-writes it beside the skills. The fourth is the code-links skill's account of `dossierx claim flag`,
-which still stated v0.4.0's layout rule after v0.4.1 made the refusal key on content. Three non-test
-Go files move for those — `cmd/dossierx/retired.go`, `cmd/dossierx/output.go` and
-`cmd/dossierx/skills_embed.go` — and all three change printed text only.
+and seven wrong strings in what a consumer's own tooling prints or ships: three from the binary,
+two carried by the exported skill bundles, and two from the pre-commit hook installer and the hook
+it writes.
+
+The three the binary printed each named an invocation it rejects. The retired `implink` stub's
+replacement command omitted `--module` and `--claim` and passed the id positionally at a command
+declared `cobra.NoArgs`. The missing-`--reason` refusal printed the verb without the id or
+`--module` the verb also requires. And `dossierx claim show`'s next action for a drifted
+implementation link offered a bare `dossierx claim flag <id>` at a verb that requires
+`--claim-says`, `--now-does` and `--reason`, all three, before it does anything at all. All three
+now print the whole invocation; `claim show`'s is the one whose own doc comment already promised
+"the advice can never disagree with what the command would do", which the other two are only held
+to by `internal/cliout`'s definition of a hint.
+
+The two in the bundles: the cross-references between bundles were written as `[[wikilink]]`, which
+the two derived export forms rewrote into an anchor and the `SKILL.md` tree — the form Claude Code
+actually loads — shipped to a client's agent as the literal characters `[[` and `]]`. Each is now
+an ordinary relative link to the sibling bundle, which resolves as written in the exported tree and
+is still retargeted to an anchor in the guide and in the `AGENTS.md` section. And the code-links
+bundle's account of `dossierx claim flag` still stated v0.4.0's layout rule after v0.4.1 made the
+refusal key on content.
+
+The two in the hook: the installer's note used to open "this repository sets
+core.hooksPath", when the value is read with a plain `git config --get`, which resolves across every
+scope: a `git config --global core.hooksPath ~/.githooks` is an ordinary setup, and that reader was
+being sent to look for the setting in a `.git/config` that never mentions it. The note now states
+the value, says the setting may be the repository's or the global one, and hands over
+`git config --show-origin --get core.hooksPath`, which answers it. Separately, the hook body's
+"remove the hook" recovery — printed on two different refusal paths — named
+`scripts/install-git-hook.sh --uninstall`, a path that exists in this repository and in no
+consumer's: the installer is deliberately one file with the hook embedded so it can be fetched into
+a project that has the binary and not this repository, which is the ordinary case and precisely the
+reader being refused. It now names the hook where git will actually look for it, resolved by git at
+the moment the line is run, so it is right under `core.hooksPath` and in a linked worktree too. The
+hook body's version marker moves to v7 with it: re-running the installer replaces an installed v6
+rather than reporting it current.
+
+Four non-test Go files move for the binary's three and the bundles' two —
+`cmd/dossierx/retired.go`, `cmd/dossierx/output.go`, `cmd/dossierx/claim.go` and
+`cmd/dossierx/skills_embed.go` — and none of them changes anything but the text a reader is handed.
+The hook's two are shell, in `scripts/install-git-hook.sh`.
 
 What this release is otherwise is the machinery that publishes the next one. Everything that has ever
 gone wrong with a DossierX release has been in the half a maintainer performs by hand — a version

@@ -135,11 +135,15 @@ them, and the three post-publish checks that leave this repository entirely.
       the comparison was against is the whole value of this gate.
 
       **1. Stage the run's evidence — each artifact by its producer, never by
-      hand.** Six files under `gate/` are what the thirteen bundles are assembled
-      from. None of them has a committed form (`gate/.gitignore` ignores every
-      one), so whatever happens to be at those paths on the day of the run is
-      what the agents read — and a hand-written `gate/delta.json` hashes into all
-      thirteen keys exactly as cleanly as a real one. Produce them:
+      hand.** A bundle is assembled from four things: the surface's question
+      (`gate/prompts/<surface>.md`), the surface's own files read out of the tree,
+      the committed inventory `surface.json`, and the six uncommitted artifacts
+      under `gate/` produced below. Only those six are staged here, and the
+      difference is worth knowing rather than discovering: none of the six has a
+      committed form (`gate/.gitignore` ignores every one), so whatever happens to
+      be at those paths on the day of the run is what the agents read — and a
+      hand-written `gate/delta.json` hashes into all thirteen keys exactly as
+      cleanly as a real one. Produce them:
 
           # the rendered site text, extracted from a real build in a real browser
           DOSSIERX_SITE_TEXT_OUT="$ROOT/gate/site-text.json" \
@@ -178,6 +182,33 @@ them, and the three post-publish checks that leave this repository entirely.
       binary with its own package directory as the working directory, so a
       relative `gate/…` lands under `tests/` and the gate then looks for an
       artifact nobody produced.
+
+      **`surface.json` reaches all thirteen agents and is deliberately not on
+      that manifest.** It is the mechanical inventory every surface's prose is
+      judged against — commands, flags, lint rules, error codes, the envelope,
+      the counts, the four version pins — so leaving it unmentioned here is how a
+      maintainer comes to believe the evidence set is closed at six. It is not
+      staged because staging it would attest less than what already holds:
+      `cmd/dossierx/surface_test.go` is both halves of one contract, writing the
+      file under `-regenerate-goldens` and, on every ordinary run, failing when
+      the committed copy is not what the current tree emits. A `record` entry
+      would attest the bytes this run read; the test attests that those bytes are
+      this tree's, which is the question. So the staging step for it is
+      `go test ./cmd/dossierx` being green on the commit being gated —
+      regenerate it and commit the result if it is not:
+
+          go test ./cmd/dossierx -run TestGenerateSurfaceJSON -regenerate-goldens
+
+      The `gate/prompts/<surface>.md` files reach the agents too, and are
+      likewise unstaged: they are tracked and reviewed (`gate/.gitignore` ignores
+      only what a run produces), and they are the QUESTION rather than the
+      evidence. Neither is thereby unwatched. Both are hashed into the surface
+      key: `surface.json` is one of the four SHARED evidence files every
+      surface's fingerprint covers — beside `gate/baseline.json`,
+      `gate/delta.json` and `gate/site-text.json` — and the prompt sources are
+      hashed into `method_version`, which the same fingerprint hashes in beside
+      them. Change a byte of either and every surface is re-read rather than
+      carried forward.
 
       **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
       the previous release.** That release shipped before the surface emitter
