@@ -834,6 +834,12 @@ func requireGoreleaserLoadsThisConfig(t *testing.T, tool, root string) {
 	// model of the tool.
 	check := exec.Command(tool, "check")
 	check.Dir = root
+	// NO_COLOR, because the answer is parsed. GoReleaser colours its output on
+	// CI runners (its TTY heuristics differ from a local `go test`), and the
+	// escape codes land between `path` and `=` — so the regex below found the
+	// line locally and missed the identical line on the forge, which is this
+	// module's own "the model held on one machine" failure wearing ANSI dress.
+	check.Env = append(os.Environ(), "NO_COLOR=1")
 	// The exit status is captured and reported rather than asserted on: a
 	// configuration that is invalid for some other reason is a different finding,
 	// made by the dry run below, and failing here would report it twice under the
