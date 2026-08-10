@@ -350,6 +350,19 @@ type ciEvEvent struct {
 func ciEvParseEvents(log string) (events []ciEvEvent, complete bool) {
 	complete = strings.HasSuffix(log, "\n")
 	for _, line := range strings.Split(log, "\n") {
+		// The byte-order mark is the download's framing, not the line's content.
+		// The Actions backend stores a job log in segments and a fetched log is
+		// their concatenation, so a U+FEFF appears at each internal segment
+		// boundary — in the middle of the file, prefixing an ordinary line.
+		// TrimSpace does not remove it (it is not whitespace), so without this
+		// strip the stamp regexp fails to anchor and the line is silently
+		// dropped: on the v0.5.1 release's first evidence run that dropped line
+		// was a test's `run` event, and the account then reported the test's own
+		// pass as "finishing without the stream ever starting it" — a transport
+		// artifact wearing the shape of a truncated account, on every attempt,
+		// with the anomaly moving between instantiations as the segment boundary
+		// moved.
+		line = strings.TrimPrefix(line, "\ufeff")
 		line = ciEvRunnerStamp.ReplaceAllString(line, "")
 		line = strings.TrimSpace(line)
 		if !strings.HasPrefix(line, "{") || !strings.HasSuffix(line, "}") {
@@ -362,6 +375,36 @@ func ciEvParseEvents(log string) (events []ciEvEvent, complete bool) {
 		events = append(events, e)
 	}
 	return events, complete
+}
+
+// TestTheLogParserSurvivesTheDownloadsOwnFraming pins the two pieces of
+// transport framing a fetched job log carries that its lines do not: the
+// runner's timestamp prefix, and the byte-order mark the backend leaves at each
+// internal segment boundary. Both are stripped; an echoed timestamp inside a
+// step's own output is deliberately NOT (one strip only), because the runner's
+// prefix is the one thing on a log line a step cannot write.
+//
+// The BOM case is the v0.5.1 finding: a `run` event whose line carried the mark
+// was silently dropped, and every event after it for that test was reported as
+// an anomaly of the account rather than of the download.
+func TestTheLogParserSurvivesTheDownloadsOwnFraming(t *testing.T) {
+	log := "2026-08-10T02:36:30.1Z {\"Action\":\"start\",\"Package\":\"p\"}\n" +
+		"\ufeff2026-08-10T02:36:30.2Z {\"Action\":\"run\",\"Package\":\"p\",\"Test\":\"T\"}\n" +
+		"2026-08-10T02:36:30.3Z {\"Action\":\"pass\",\"Package\":\"p\",\"Test\":\"T\"}\n" +
+		"2026-08-10T02:36:30.4Z 2026-08-10T02:36:30.4Z {\"Action\":\"echoed\",\"Package\":\"p\"}\n"
+	events, complete := ciEvParseEvents(log)
+	if !complete {
+		t.Fatal("a log ending in a newline was reported incomplete")
+	}
+	var actions []string
+	for _, e := range events {
+		actions = append(actions, e.Action)
+	}
+	if got, want := strings.Join(actions, " "), "start run pass"; got != want {
+		t.Fatalf("ciEvParseEvents read %q, want %q.\n"+
+			"If `run` is missing, the segment-boundary BOM is being treated as line content again, and every well-formed event after it for that test will be reported as an account anomaly — the exact shape of the v0.5.1 evidence refusals, which recurred on every attempt because the boundary does not move for a re-fetch of the same log.\n"+
+			"If `echoed` is present, more than one timestamp was stripped, and a step echoing a stamped line can now forge an event", got, want)
+	}
 }
 
 // ciEvAccount is what one instantiation accounted for.
