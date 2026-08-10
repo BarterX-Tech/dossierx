@@ -33,9 +33,10 @@
 // place rather than being copied into each gate stage.
 //
 // GROUND TRUTH IS GORELEASER v2, NOT v1. .goreleaser.yaml:1 pins the config
-// SCHEMA to "version: 2", and release.yml's goreleaser-action pulls
-// "version: latest", which as of any GoReleaser v2.x release refuses a
-// version:2 config entirely under v1. The only GoReleaser module cached
+// SCHEMA to "version: 2", and release.yml's goreleaser-action pins the tool
+// to the same v2 version ci.yml tests under (the two pins are held equal by
+// tests/ci_workflow_test.go); any v2 release refuses a version:2 config
+// entirely under v1. The only GoReleaser module cached
 // locally ($GOPATH/pkg/mod/github.com/goreleaser/goreleaser@v1.26.2) is v1
 // and is NOT what runs at release time — a predictor mirrored against it
 // silently drifts from what actually publishes (see the abbrev-commit note

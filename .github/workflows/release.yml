@@ -166,11 +166,35 @@ jobs:
           go-version: '1.26.x'
           cache: true
 
+      # PINNED, AND PINNED TO THE VERSION THE GATE ACTUALLY TESTED. This said
+      # `version: latest`, and that is the one-version-tests-another-version-ships
+      # gap this repository refuses everywhere else, sitting on the publish path
+      # itself. Two suites model this tool's behaviour against a NAMED version —
+      # viewer-tests/site_toolchain_test.go dry-runs the release build and reads
+      # the six archives out of it, and tests/release_notes_predict_test.go
+      # reimplements its changelog rules, citing goreleaser/goreleaser/v2@v2.17.1's
+      # own changelog.go by line — and the version those suites run under is the
+      # one ci.yml installs. With `latest` here, every archive and changelog claim
+      # the gate makes was measured against one binary and every archive a
+      # consumer downloads is produced by whichever binary GoReleaser had shipped
+      # by tag day. Nothing goes red when the two diverge. The archives are simply
+      # built by a tool nothing in this repository has ever run, and the gate goes
+      # on reporting on the tool it did run.
+      #
+      # THE SIBLING PIN is ci.yml's `DOSSIERX_GORELEASER_VERSION`, in that file's
+      # top-level `env:` block, and there are deliberately exactly two spellings
+      # of this version in the repository rather than one: a workflow cannot read
+      # another workflow's `env:`, so the alternative to a second literal is an
+      # expression resolved at run time, which no test can read before the job
+      # starts. The two are held EQUAL by
+      # TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests in
+      # tests/ci_workflow_test.go, so moving one alone is a red run rather than a
+      # silent drift — and moving both together is the whole of the recovery.
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
-          version: latest
+          version: v2.17.1
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

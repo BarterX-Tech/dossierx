@@ -420,7 +420,7 @@ type gateDriverStep struct {
 // goes first, the archives are verified, and main goes last.
 var gateDriverSequence = []gateDriverStep{
 	{ID: "D0", What: "authorize — a human named this release, twice, on the named target"},
-	{ID: "D1", What: "precondition — refuse a partly-published release, derive the version from the tree and refuse a tag that disagrees with it, record the receipt IN THIS PROCESS, recompute the verdict against the tree about to be released, and require the CI-run evidence for that tree"},
+	{ID: "D1", What: "precondition — refuse an environment D2 cannot run in, refuse a partly-published release, derive the version from the tree and refuse a tag that disagrees with it, record the receipt IN THIS PROCESS, recompute the verdict against the tree about to be released, and require the CI-run evidence for that tree"},
 	{ID: "D2", What: "merge the release branch into main with --no-ff, capturing the merge commit by value"},
 	{ID: "D3", What: "handshake — the named merge commit's tree is the tree the receipt records"},
 	{ID: "D4", What: "tag the named merge commit, never HEAD"},
@@ -929,15 +929,31 @@ func gateDriverExecute(r *gateDriverRun, ev gateDriverEvidence) *gateDriverRun {
 	return r
 }
 
-// precondition is D1, and it is six questions rather than one.
+// precondition is D1, and it is eight questions rather than one: two about the
+// ENVIRONMENT this driver was invoked in, then six about the release.
+//
+// THE TWO ENVIRONMENT QUESTIONS ARE ASKED FIRST BECAUSE THEY ARE FREE. Neither
+// needs the network, the evidence or a receipt — one is a string comparison, the
+// other is a single git command — and neither can be changed by anything read
+// below it. A refusal that was always going to happen belongs before the
+// expensive half of the precondition, not after it, and one of these two belongs
+// before D2 for a stronger reason than cost: D2 is a WRITE, and it is the last
+// step whose failure is still free.
 func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
-	// The base ref this driver re-asserts against is gateBaseRef, which is
+	// (i) The base ref this driver re-asserts against is gateBaseRef, which is
 	// origin/main and deliberately not "main". A repository whose remote and base
 	// branch spell something else would have the ancestry question asked about a
 	// ref nobody named, so it is refused rather than answered.
 	if base := r.Repo.Remote + "/" + r.Repo.Base; base != gateBaseRef {
 		return fmt.Errorf("%w: this driver re-asserts the ancestry precondition against %s, and it was pointed at %s. "+
 			"Answering from a differently-named base would make every check below about a ref the receipt does not record", errGateUncheckable, gateBaseRef, base)
+	}
+
+	// (ii) And whether the base branch can be checked out here at all, which is
+	// the one thing D2 needs from this machine that no amount of correct content
+	// supplies.
+	if err := r.requireTheBaseIsNotCheckedOutElsewhere(); err != nil {
+		return err
 	}
 
 	// (a) Re-entry. A release that already published something is not resumed and
@@ -1007,6 +1023,110 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 	// nothing else in the sequence would notice that `make ci-evidence` was never
 	// run — which is a check that did not happen reading as a check that passed.
 	return r.requireCIRunEvidence()
+}
+
+// ---------------------------------------------------------------------
+// the environment D2 needs, asked for before anything is read
+// ---------------------------------------------------------------------
+
+// The two lines of `git worktree list --porcelain` this driver reads. Each record
+// opens with the worktree's path and states what it holds; a worktree with no
+// branch says `detached` or `bare` and carries no `branch` line at all — which is
+// precisely the state the recovery below puts one into.
+const (
+	gateDriverWorktreePathLine   = "worktree "
+	gateDriverWorktreeBranchLine = "branch refs/heads/"
+)
+
+// gateDriverWorktreesHolding is every worktree of dir's repository that has
+// branch checked out.
+//
+// The listing is PARSED — record by record, on the line that declares the branch
+// — rather than searched for the branch's name. A worktree living under a path
+// that contains `refs/heads/main`, or simply the word `main`, would otherwise
+// answer this question by accident, and the branch this is asked about is `main`
+// in every release this repository will ever cut.
+func gateDriverWorktreesHolding(dir, branch string) ([]string, error) {
+	listing, err := gateGit(dir, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, err
+	}
+	var (
+		holders []string
+		path    string
+	)
+	for _, line := range strings.Split(listing, "\n") {
+		switch {
+		case strings.HasPrefix(line, gateDriverWorktreePathLine):
+			path = strings.TrimPrefix(line, gateDriverWorktreePathLine)
+		case line == gateDriverWorktreeBranchLine+branch:
+			holders = append(holders, path)
+		}
+	}
+	return holders, nil
+}
+
+// requireTheBaseIsNotCheckedOutElsewhere refuses an invocation whose D2 git would
+// refuse, and refuses it in this driver's voice instead of git's.
+//
+// THE FAILURE IT MOVES. D2 opens with `git checkout main` in the invoking
+// checkout. Git allows a branch to be checked out in exactly one worktree at a
+// time, so in a linked-worktree layout — a release cut on a branch in a worktree
+// while `main` sits in the primary checkout, which is the layout this repository's
+// own releases are prepared in — git refuses that checkout with `fatal: 'main' is
+// already used by worktree at '<path>'`.
+//
+// WHAT IS AND IS NOT WRONG WITH THAT. Nothing is published: D2 is before the first
+// irreversible act, so the release stops with the forge untouched, and the
+// fail-closed sequence does exactly what it is built to do. Two things are wrong
+// anyway. It is LATE — it arrives after a whole green gate run, whose cost is the
+// expensive part of a release — and it is not this driver SPEAKING: git's sentence
+// names a worktree and a branch, says nothing about the release, and offers no
+// recovery, so the operator meets an unexplained fatal at the one moment the
+// pipeline was supposed to be telling them what to do next.
+//
+// So the question is asked here, where it costs two git commands and no network,
+// and the refusal carries the recovery. It is not a new precondition on the
+// release; it is the same precondition D2 already had, moved to where it can be
+// answered usefully.
+func (r *gateDriverRun) requireTheBaseIsNotCheckedOutElsewhere() error {
+	// The one state in which no other worktree can be in the way: this checkout
+	// already holds the base branch, so D2's checkout is a no-op that git
+	// performs happily. It is asked FIRST because the listing below names this
+	// worktree too, and reading its own entry as an obstacle would refuse a
+	// release for the crime of already standing where D2 wants to be.
+	head, err := gateGit(r.Repo.Dir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return fmt.Errorf("%w: the branch checked out in %s could not be read, so whether D2 can check %s out there is unknown: %w",
+			errGateUncheckable, r.Repo.Dir, r.Repo.Base, err)
+	}
+	if head == r.Repo.Base {
+		return nil
+	}
+
+	holders, err := gateDriverWorktreesHolding(r.Repo.Dir, r.Repo.Base)
+	if err != nil {
+		return fmt.Errorf("%w: this repository's worktrees could not be listed, so it is not known whether %s is checked out somewhere else. "+
+			"That is a failed check and not an absent one — the answer decides whether D2 can run at all, and a driver that assumed it could would be assuming its way past the last step whose failure is still free: %w",
+			errGateUncheckable, r.Repo.Base, err)
+	}
+	if len(holders) == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("%w: %s is checked out in another worktree of this repository, so D2 cannot check it out here.\n"+
+		"  this driver was invoked in %s, which is on %s\n"+
+		"  %s is checked out in %s\n"+
+		"Git allows a branch to be checked out in one worktree at a time, so D2's `git checkout %s` would be refused by git itself — with a sentence about worktrees that names no release and no way forward. Refusing there publishes nothing, because D2 is before the first irreversible act; it just costs the whole gate run that came before it and tells the operator nothing.\n"+
+		"THE RECOVERY is one command, and one to undo it afterwards:\n"+
+		"\tgit -C %s switch --detach\n"+
+		"Re-run this target, and switch that worktree back to %s once the release is published. Nothing about the release itself changes — the tree, the receipt and the version are all still exactly what they were",
+		errGateUncheckable, r.Repo.Base,
+		r.Repo.Dir, head,
+		r.Repo.Base, strings.Join(holders, ", "),
+		r.Repo.Base,
+		holders[0],
+		r.Repo.Base)
 }
 
 // ---------------------------------------------------------------------
@@ -2536,6 +2656,105 @@ func TestTheDriverLooksForTheCIEvidenceRecordWhereTheRecipeWritesIt(t *testing.T
 	if want := gateDriverCIEvidenceEnv + `="$(` + gateDriverCIEvidenceEnv + `)"`; !strings.Contains(makefile, want) {
 		t.Errorf("the `%s` recipe no longer hands %q to the stage that writes the record. Make does not export its own variables to a recipe's environment, so without that line the stage writes wherever ITS default points and this driver looks somewhere else",
 			gateDriverCIEvidenceTarget, want)
+	}
+}
+
+// gateDriverWorktreeHolding checks branch out in a SECOND worktree of the
+// fixture's repository — the linked-worktree layout this repository's own
+// releases are prepared in — and returns the path git records for it.
+//
+// It returns GIT'S spelling of the path rather than the one it was handed. A
+// t.TempDir() under /var on macOS is /private/var once git has resolved it, and
+// the refusal below is required to NAME the worktree; a test comparing the two
+// spellings would go red over a symlink and tell whoever met it that the driver
+// was broken.
+func gateDriverWorktreeHolding(t *testing.T, repo gateDriverRepo, branch string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "the-other-checkout")
+	gateTestGit(t, repo.Dir, "worktree", "add", "-q", path, branch)
+	return gateTestGit(t, path, "rev-parse", "--show-toplevel")
+}
+
+// TestTheDriverRefusesWhenTheBaseBranchIsCheckedOutInAnotherWorktree is the
+// environment question, and the release it is about is this one.
+//
+// THE FAILURE WITHOUT IT IS SAFE, LATE AND MUTE, and all three words matter. D2
+// runs `git checkout main`, git allows a branch in one worktree at a time, and in
+// the layout a release is actually prepared in — the branch in a worktree, `main`
+// in the primary checkout — git refuses. Nothing is published, because D2 is
+// before the first irreversible act. But the refusal arrives after a whole green
+// gate run has been paid for, and what the operator reads is `fatal: 'main' is
+// already used by worktree at …`, which names no release, no step and no way
+// forward. Asked in D1 it costs two git commands, and the sentence it produces is
+// this driver's.
+//
+// The second half is what stops the check from being a wall. Detach the worktree
+// that holds the branch — the recovery the refusal prints, verbatim — and the
+// identical invocation goes on to publish. A precondition that refuses and then
+// refuses the fixed state too is a precondition nobody can satisfy.
+func TestTheDriverRefusesWhenTheBaseBranchIsCheckedOutInAnotherWorktree(t *testing.T) {
+	const version = "v9.9.9"
+	repo := gateDriverFixture(t, version)
+	mainWas := gateDriverRemoteHead(t, repo, repo.Base)
+	elsewhere := gateDriverWorktreeHolding(t, repo, repo.Base)
+
+	run := gateDriverPublish(gateDriverAuthorized(t, repo, version), repo, gateDriverGreenEvidence())
+
+	if run.Err == nil {
+		t.Fatal("the driver ran to completion in a layout where D2's `git checkout` cannot succeed")
+	}
+	if run.Failed != "D1" {
+		t.Errorf("the run stopped at %s. This question is asked in the precondition, before the evidence is gathered and before the merge: it needs nothing but git, and every step between here and D2 is work that was always going to be thrown away", run.Failed)
+	}
+	if !errors.Is(run.Err, errGateUncheckable) {
+		t.Errorf("an environment D2 cannot run in must be reported as a check that could not be made; got %v", run.Err)
+	}
+	for _, want := range []struct{ fragment, why string }{
+		{elsewhere, "the operator cannot act on this without being told WHICH checkout is holding the branch, and in a repository with a dozen worktrees they are not going to guess"},
+		{"git -C " + elsewhere + " switch --detach", "the recovery has to be the command, ready to run against that path. A refusal that describes a fix in prose is one the operator has to translate at the worst moment"},
+		{"switch that worktree back", "detaching is half a recovery; the other half is putting the worktree back afterwards, and nothing else will remind them"},
+	} {
+		if !strings.Contains(run.Err.Error(), want.fragment) {
+			t.Errorf("the refusal does not carry %q. %s.\nIt reads:\n%v", want.fragment, want.why, run.Err)
+		}
+	}
+	gateDriverAssertNothingPublished(t, repo, version, mainWas)
+
+	// The recovery, performed exactly as the refusal spells it — and then the
+	// same release, with nothing else changed.
+	gateTestGit(t, elsewhere, "switch", "--detach")
+
+	second := gateDriverPublish(gateDriverAuthorized(t, repo, version), repo, gateDriverGreenEvidence())
+	if second.Err != nil {
+		t.Fatalf("the recovery the refusal printed did not clear it, so this precondition cannot be satisfied by doing what it says:\n%s", second.report())
+	}
+	if !second.completed("D2") {
+		t.Errorf("the run cleared D1 and never reached D2 (%v). The whole subject of this check is whether D2's checkout can run", second.Done)
+	}
+}
+
+// TestTheWorktreeCheckIgnoresTheCheckoutItIsRunningIn is the false refusal the
+// check would otherwise produce, and it is not a hypothetical shape: `git
+// worktree list` names the invoking checkout alongside every other one, so a
+// version of this question that only looked for the branch in the listing would
+// find it in THIS worktree and refuse a release that was about to work perfectly.
+//
+// A maintainer who keeps `main` checked out and cuts the release branch elsewhere
+// is in exactly that state. D2's `git checkout main` is then a no-op git performs
+// without complaint, which is why the driver asks what this checkout holds before
+// it asks what anything else does.
+func TestTheWorktreeCheckIgnoresTheCheckoutItIsRunningIn(t *testing.T) {
+	const version = "v9.9.9"
+	repo := gateDriverFixture(t, version)
+
+	// The invoking checkout now holds the base branch itself. The release branch
+	// is unchanged and still carries the release; only where HEAD points moved.
+	gateTestGit(t, repo.Dir, "checkout", "-q", repo.Base)
+
+	run := gateDriverPublish(gateDriverAuthorized(t, repo, version), repo, gateDriverGreenEvidence())
+	if run.Err != nil {
+		t.Fatalf("a release was refused because the checkout it is running in holds %s — which is the one worktree whose holding it can never be an obstacle, since D2's checkout there is a no-op:\n%s",
+			repo.Base, run.report())
 	}
 }
 

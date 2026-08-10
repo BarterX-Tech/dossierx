@@ -499,6 +499,22 @@ them, and the three post-publish checks that leave this repository entirely.
       run record — default to paths outside the repository so that neither of
       them is what dirties it.
 
+      **And `main` must not be checked out in another worktree.** D2's first act
+      is `git checkout main` in the checkout you invoke from, and git allows a
+      branch to be checked out in one worktree at a time — so in the layout a
+      release is usually prepared in, with the branch in a linked worktree and
+      `main` sitting in the primary checkout, that checkout is refused. D1 asks
+      this before anything is read and refuses by name, printing the path of the
+      worktree that holds the branch and the one command that clears it:
+
+      git -C <that worktree> switch --detach
+
+      Switch it back once the release is published. Nothing about the release
+      itself changes — this is a fact about your desk, not about the tree — and
+      the passage is here only so the refusal is not a surprise. Left to D2 the
+      same layout stops the release anyway, after the whole gate run, with git's
+      own `fatal:` and no mention of a release or a recovery.
+
 - [ ] **Tag and push, in the driver's order.**
 
       make release-publish DOSSIERX_RELEASE_VERSION=vX.Y.Z \

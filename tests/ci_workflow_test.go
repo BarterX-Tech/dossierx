@@ -1,12 +1,13 @@
 // WHAT THIS FILE ESTABLISHES, AND WHAT IT CANNOT. Read this before adding an
 // assertion to it, because the boundary is the point of the file.
 //
-// IT ESTABLISHES FACTS ABOUT TWO DOCUMENTS: .github/workflows/ci.yml and
-// .github/workflows/deploy-site.yml, unmarshalled as YAML and read from a
-// package that is not part of either. Every assertion here has the form "this
-// workflow DECLARES x", every one of them names the declaration it reads, and
-// every one of them goes red when that declaration is deleted or changed. Four
-// declarations are read and nothing else:
+// IT ESTABLISHES FACTS ABOUT THREE DOCUMENTS: .github/workflows/ci.yml,
+// .github/workflows/deploy-site.yml and .github/workflows/release.yml,
+// unmarshalled as YAML and read from a package that is not part of any of them.
+// Every assertion here has the form "this workflow DECLARES x", every one of
+// them names the declaration it reads, and every one of them goes red when that
+// declaration is deleted or changed. Five declarations are read and nothing
+// else:
 //
 //   - exactly one job declares a step that enters viewer-tests/ and runs
 //     `go test ./...` there — as the body's ONE command, with every argument
@@ -15,7 +16,12 @@
 //   - every actions/setup-node step in THAT job pins the same node-version;
 //   - that pin equals the one deploy-site.yml publishes the site with;
 //   - that job's steps declare DOSSIERX_TEST_BROWSER, as an `env:` key or as an
-//     assignment token in a parsed command.
+//     assignment token in a parsed command;
+//   - the GoReleaser version release.yml builds the published archives with
+//     equals the one ci.yml declares for the suites that model this tool's
+//     behaviour. Two toolchain pins, held equal, for the same reason the two
+//     Node pins are: evidence gathered under one build of a tool is evidence
+//     about the artifacts of that build and no other.
 //
 // IT CANNOT ESTABLISH THAT CI RAN THE SUITE, and nothing that reads a file can.
 // This is not a gap to be closed by reading more keys. That was tried: an
@@ -158,12 +164,18 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// The two workflows, repo-relative. deploy-site.yml is the source of truth for
+// The three workflows, repo-relative. deploy-site.yml is the source of truth for
 // the Node major: it is the build a visitor's page is actually produced by, and
 // everything else is matched to it.
+//
+// release.yml is here for the OTHER toolchain, and its role is the mirror image:
+// it is the build a consumer's binary is actually produced by, and it is matched
+// to ci.yml rather than the other way round, because ci.yml's pin is the one the
+// suites that model GoReleaser's behaviour are written against.
 const (
-	ciWorkflowPath     = ".github/workflows/ci.yml"
-	deployWorkflowPath = ".github/workflows/deploy-site.yml"
+	ciWorkflowPath      = ".github/workflows/ci.yml"
+	deployWorkflowPath  = ".github/workflows/deploy-site.yml"
+	releaseWorkflowPath = ".github/workflows/release.yml"
 )
 
 // ciViewerModule is the nested module whose suite reads the built site as
@@ -185,6 +197,22 @@ const setupNodeAction = "actions/setup-node@"
 
 // nodeVersionKey is the `with:` key that carries the pin.
 const nodeVersionKey = "node-version"
+
+// goreleaserAction is the action that installs and runs GoReleaser, and
+// goreleaserVersionKey is the `with:` key carrying the version it installs.
+// Matched as a `uses:` VALUE on a parsed step, for the reason setupNodeAction is:
+// the prose in release.yml that explains this pin at length names the action
+// several times, and a comment is not a step.
+const (
+	goreleaserAction     = "goreleaser/goreleaser-action@"
+	goreleaserVersionKey = "version"
+)
+
+// goreleaserVersionEnv is the variable ci.yml declares the tested GoReleaser
+// version in, and it is a constant because two things in this file read it: the
+// closed suite-environment vocabulary below, which permits the name, and the
+// cross-workflow comparison at the bottom, which reads its value.
+const goreleaserVersionEnv = "DOSSIERX_GORELEASER_VERSION"
 
 // ciStep is one step of one job. Only the keys this file reasons about are
 // declared; `with` and `env` are `any`-valued because a workflow's scalars are a
@@ -243,9 +271,9 @@ type ciEnvScope struct {
 // GOFLAGS, GOOS, GOARCH or CGO_ENABLED, stop — those select, and the whole point
 // of the list is that adding them is not something you can do by accident.
 var ciAllowedSuiteEnv = map[string]bool{
-	"DOSSIERX_TEST_BROWSER":       true,
-	"DOSSIERX_TEST_GORELEASER":    true,
-	"DOSSIERX_GORELEASER_VERSION": true,
+	"DOSSIERX_TEST_BROWSER":    true,
+	"DOSSIERX_TEST_GORELEASER": true,
+	goreleaserVersionEnv:       true,
 }
 
 // ciSuiteEnvRefusals lists every declared variable outside that vocabulary, each
@@ -831,4 +859,177 @@ func TestTheViewerJobDeclaresTheBrowserVariable(t *testing.T) {
 		"The body is parsed rather than searched, so the name appearing in a comment inside a `run:` block satisfies nothing — that is a mention, and a mention declares no variable.\n"+
 		"It is required IN THIS JOB rather than anywhere in %s: a mention in another job is prose as far as this runner is concerned, and a whole-file version of this check stayed green while this job did not exist.",
 		ciWorkflowPath, jobKey, ciViewerModule, browserPathVariable, assignment, ciWorkflowPath)
+}
+
+// ciGoReleaserPins returns every GoReleaser version pinned by a step in the
+// given list, alongside how many goreleaser-action steps were seen at all.
+//
+// The two numbers are separate for the reason ciNodePins keeps them separate,
+// and here the distinction is sharper: a goreleaser-action step that declares no
+// `version` is not a step with no pin, it is a step pinned to `latest` — that is
+// the input's documented default — so reporting it as "no pin found" would name
+// the wrong defect AND send a maintainer looking for a step that is right there.
+func ciGoReleaserPins(steps []ciStep) (pins []string, actions int) {
+	for _, step := range steps {
+		if !strings.Contains(step.Uses, goreleaserAction) {
+			continue
+		}
+		actions++
+		if pin := ciScalar(step.With[goreleaserVersionKey]); pin != "" {
+			pins = append(pins, pin)
+		}
+	}
+	return pins, actions
+}
+
+// ciOneGoReleaserPin collapses a step list's GoReleaser pins to the single
+// version it names, or explains which of the four ways it failed to.
+//
+// THERE IS NO LIST OF FLOATING SPELLINGS HERE, and its absence is the same
+// inversion the argument vocabulary above is built on. `latest`, `nightly` and a
+// `~> v2` range all name a build that is chosen on tag day; refusing them BY NAME
+// would refuse the three somebody thought of today and pass the fourth. What
+// refuses all of them is the equality this helper feeds: an exact version is the
+// only thing that can equal another exact version, so every floating spelling
+// fails as a disagreement and says so with both values printed.
+func ciOneGoReleaserPin(steps []ciStep, where string) (string, error) {
+	pins, actions := ciGoReleaserPins(steps)
+	switch {
+	case actions == 0:
+		return "", fmt.Errorf("%s declares no %s step, so nothing in it builds the release with a version this file can read", where, strings.TrimSuffix(goreleaserAction, "@"))
+	case len(pins) == 0:
+		return "", fmt.Errorf("%s declares %d %s step(s), none of which sets `%s`. That input DEFAULTS to the latest release, so an unset one is not an absent pin — it is a floating pin, and the archives a consumer downloads are then built by whatever binary GoReleaser had shipped on tag day",
+			where, actions, strings.TrimSuffix(goreleaserAction, "@"), goreleaserVersionKey)
+	}
+	for _, pin := range pins[1:] {
+		if pin != pins[0] {
+			return "", fmt.Errorf("%s pins more than one GoReleaser version (%v). Which build produces the published archives is then a question about step order rather than about the workflow, and this file cannot say which of them the suites were written against",
+				where, pins)
+		}
+	}
+	if strings.Contains(pins[0], "${{") {
+		return "", fmt.Errorf("%s pins GoReleaser to the expression %q, which resolves at run time. A pin nothing can read before the job starts is not a pin this check can hold the publish build to — and holding the publish build to a readable one is the entire point of the comparison below",
+			where, pins[0])
+	}
+	return pins[0], nil
+}
+
+// ciDeclaredEnv collects every declaration of one variable NAME in a workflow —
+// the top-level mapping, each job's, and each step's — as the values declared
+// and a phrase naming where each was declared.
+//
+// All three scopes are read rather than only the top-level one, for the reason
+// ciSuiteJobsFor reads all three: they are three doors onto the same variable,
+// GitHub merges them in that order, and a check that read one of them would go on
+// reporting on a declaration a maintainer had moved one line up or down.
+func ciDeclaredEnv(wf ciWorkflow, name string) (values, where []string) {
+	take := func(env map[string]any, at string) {
+		if v, ok := env[name]; ok {
+			values = append(values, ciScalar(v))
+			where = append(where, at)
+		}
+	}
+	take(wf.Env, "the workflow's top-level `env:`")
+	for _, job := range ciJobNames(wf) {
+		take(wf.Jobs[job].Env, fmt.Sprintf("job `%s`'s `env:`", job))
+		for _, step := range wf.Jobs[job].Steps {
+			take(step.Env, fmt.Sprintf("job `%s`, step %q, its own `env:`", job, step.Name))
+		}
+	}
+	return values, where
+}
+
+// ciOneDeclaredEnv is the single value a workflow declares for one variable, or
+// the reason there is not one.
+//
+// A DUPLICATE IS A FAILURE AND NOT A FIRST MATCH, which is the same rule the Node
+// pins are collected under. A second declaration of this name lower down does not
+// replace the first for every reader — it replaces it for the steps underneath it
+// — so "the version this workflow tests against" would stop being one value while
+// this file went on printing whichever one it happened to see first.
+func ciOneDeclaredEnv(wf ciWorkflow, rel, name string) (string, error) {
+	values, where := ciDeclaredEnv(wf, name)
+	switch {
+	case len(values) == 0:
+		return "", fmt.Errorf("%s declares `%s` nowhere — not at the top level, not in a job's `env:`, and not on a step's. That variable is where this repository writes down the one GoReleaser version its suites are written against, and without it there is nothing for the publish build to be held to",
+			rel, name)
+	case values[0] == "":
+		return "", fmt.Errorf("%s declares `%s` in %s with an empty value, which pins nothing", rel, name, where[0])
+	}
+	for i, v := range values[1:] {
+		if v != values[0] {
+			return "", fmt.Errorf("%s declares `%s` more than once and the declarations disagree: %s says %q and %s says %q. A later mapping overrides an earlier one only for the steps beneath it, so there is no single version this workflow tests against",
+				rel, name, where[0], values[0], where[i+1], v)
+		}
+	}
+	if strings.Contains(values[0], "${{") {
+		return "", fmt.Errorf("%s declares `%s` as the expression %q, which resolves at run time. Nothing can read it before the job starts, so it cannot be compared with the version the publish build is pinned to",
+			rel, name, values[0])
+	}
+	return values[0], nil
+}
+
+// TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests is a claim
+// about two documents, and is named for exactly that.
+//
+// WHAT IT IS FOR. Two suites in this repository model GoReleaser's behaviour
+// rather than observing it — viewer-tests/site_toolchain_test.go dry-runs the
+// release build and asserts over the six archives, the checksum file and the
+// ldflags stamp, and tests/release_notes_predict_test.go reimplements the
+// changelog rules, citing goreleaser/goreleaser/v2@v2.17.1's own changelog.go by
+// line. Both run under the version ci.yml declares. release.yml carried
+// `version: latest`, so the archives the gate reasoned about were built by one
+// binary and the archives a consumer downloads by whichever binary GoReleaser had
+// shipped by tag day. That is the one-version-tests-another-version-ships gap,
+// and its whole character is that nothing fails when it opens: the release builds
+// perfectly, the suites stay green, and the only thing that is not true any more
+// is the sentence "the gate checked this build".
+//
+// IT DOES NOT CLAIM THE PUBLISHED ARCHIVES WERE BUILT BY THAT VERSION, and the
+// boundary is this file's usual one. A workflow that declares a pin is not a
+// workflow that ran, an action can be swapped for a `run:` body that installs
+// something else, and either is a fact about a run. What is established is that
+// the two documents name the SAME version — which goes red the moment either pin
+// moves, which is how this drift actually arrives.
+//
+// WHY THE COMPARISON RUNS IN THIS DIRECTION. ci.yml is the source of truth and
+// release.yml is matched to it, the opposite of the Node comparison above, and the
+// asymmetry is not an oversight in either. The Node pin's truth lives in the
+// workflow that builds the page a visitor is served; the GoReleaser pin's truth
+// lives in the workflow whose suites were written against a named version, because
+// that is the pin that has citations hanging off it.
+func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests(t *testing.T) {
+	ci := ciLoadWorkflow(t, ciWorkflowPath)
+	release := ciLoadWorkflow(t, releaseWorkflowPath)
+
+	tested, err := ciOneDeclaredEnv(ci, ciWorkflowPath, goreleaserVersionEnv)
+	if err != nil {
+		t.Fatalf("%v.\nThat declaration is the version the toolchain suites run under, so it is the source of truth here: until it names one version there is nothing for the publish build to be matched against", err)
+	}
+
+	// Read across the WHOLE release workflow rather than out of a named job.
+	// Naming the job would reintroduce the defeat the header describes at
+	// length: rename it, or move the publish step into a differently-named one,
+	// and a name-keyed lookup either fails for the wrong reason or reads
+	// somebody else's job. Every goreleaser-action step in this workflow is on
+	// the publish path, so they must agree.
+	var releaseSteps []ciStep
+	for _, name := range ciJobNames(release) {
+		releaseSteps = append(releaseSteps, release.Jobs[name].Steps...)
+	}
+	published, err := ciOneGoReleaserPin(releaseSteps, releaseWorkflowPath)
+	if err != nil {
+		t.Fatalf("%v.\nThat workflow builds the archives a consumer downloads, and `%s` in %s is the version every claim this repository makes about those archives was measured under. The two are held equal here; a publish build this file cannot read a version out of cannot be held to anything",
+			err, goreleaserVersionEnv, ciWorkflowPath)
+	}
+
+	if published != tested {
+		t.Fatalf("the two GoReleaser pins disagree — one of these files moved and the other did not:\n"+
+			"  %s builds the published archives with %s\n\t(the `%s:` input of its %s step)\n"+
+			"  %s runs the suites that model this tool under %s\n\t(`%s` in its top-level `env:`)\n"+
+			"The suites that dry-run the release build and reimplement the changelog rules run under the second version; the archives a consumer installs are produced by the first. While they differ, every archive assertion this repository makes is evidence about a build nobody publishes, and it stays green — that is the failure, not a red one.\n"+
+			"THE RECOVERY IS TO MOVE THEM TOGETHER: set both to the version you intend to ship, in the same change, and re-run the suites so the citations are re-checked against it. Neither pin may be left floating (`latest`, `nightly`, a `~>` range): a version chosen on tag day is a version no run in this repository has ever exercised.",
+			releaseWorkflowPath, published, goreleaserVersionKey, strings.TrimSuffix(goreleaserAction, "@"),
+			ciWorkflowPath, tested, goreleaserVersionEnv)
+	}
 }
