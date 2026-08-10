@@ -543,6 +543,32 @@ them, and the three post-publish checks that leave this repository entirely.
       which fires only on a tag push, has not built a single archive. Pushing
       `main` first therefore announces a release nobody can download.
 
+      **That order is also why the forge does not check `origin/main`, and this
+      is the one thing to read before changing either side.** `Release`'s gate
+      job used to require that the tagged commit be reachable from
+      `origin/main`. Both guards were right alone and together they deadlocked:
+      the gate job fires at the tag push, which is D6, and asks for a branch the
+      driver does not push until D8 — so it refused, so no archives were built,
+      so D7 waited for archives that could never exist, so D8 was never reached
+      and `origin/main` never moved. It is not a race that a longer timeout
+      resolves; nothing in the ring can move first. **Measured in v0.5.1:** D7
+      polled for twenty minutes, the gate refused every run, and the driver
+      stopped with the tag public and nothing else done. That release was
+      finished by hand, following the driver's own printed recovery.
+
+      What the forge checks instead is that the tagged commit **is a merge** —
+      a fact about the commit alone, so it holds at D6 with no branch to read.
+      That still refuses the ordinary mistake the old check was written for,
+      tagging the release branch instead of the merge. It does not refuse a
+      merge commit that was created locally and never pushed, and the release
+      stamp does not either, since a branch ready to merge already carries this
+      release's stamp. That residual is recorded in
+      `.github/workflows/release.yml`'s header, along with why the gate receipt
+      cannot close it: the receipt is never committed, on purpose.
+
+      **Do not restore the `origin/main` check without moving the driver
+      first.** On its own it re-creates the deadlock exactly.
+
       **Name the merge commit explicitly.** `git tag -a vX.Y.Z` with no ref tags
       HEAD, which is only right when nothing has landed since the merge; the
       driver carries the merge commit by value from the merge to the tag and
