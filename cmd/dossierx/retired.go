@@ -108,10 +108,27 @@ func retiredCommentVerbs() []*cobra.Command {
 // "if you remember an older command" table, in the same words, so the binary and
 // the skill cannot drift into disagreeing about where a caller should go next.
 //
-// lock/unlock/flag/reaudit are deliberately NOT here: they moved UNDER a noun
-// that has the same name they had, so `dossierx lock <id>` is already answered
-// by the root with a hint listing the seven nouns, and a stub would only add a
-// second, less specific answer.
+// lock/unlock/flag/reaudit are NOT here, and the reason recorded until v0.5.2
+// was wrong. It said they moved under a noun of the same name, so the root
+// "already" answers `dossierx lock <id>` with a hint listing the seven nouns.
+// It does not. This file's own package doc states why: cobra's legacyArgs
+// rejects an unknown command during Execute, so the root's RunE — the only
+// hint-bearing branch — is never reached. Measured on v0.5.2:
+//
+//	dossierx lock some.claim.id  -> {"command":"","error":{"code":"usage",
+//	                                 "message":"unknown command \"lock\" for
+//	                                 \"dossierx\""}}   no hint, empty command
+//	dossierx lint                -> {"command":"lint","error":{"code":"usage",
+//	                                 "message":"lint: removed in v0.3.0; ...",
+//	                                 "hint":"run: dossierx check ..."}}
+//
+// So those four verbs get exactly the bare answer this file exists to remove,
+// and they are the four most likely to be typed from pre-v0.3.0 memory. Adding
+// them is a CLI-surface change — four new commands in the inventory, and every
+// skill and doc that counts nouns and leaves — so it is deferred rather than
+// smuggled into a patch release; ROADMAP.md carries it. What is fixed here is
+// the false justification, because a wrong reason is what kept anybody from
+// noticing the gap.
 func retiredTopLevelCmds() []*cobra.Command {
 	checkHint := `run: dossierx check (add --validate for a read-only pass that writes nothing)`
 	return []*cobra.Command{

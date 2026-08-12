@@ -179,6 +179,14 @@ surfaces:
       # The first command a contributor types, under "Running the CLI locally".
       # A renamed fixture makes it fail on a clean tree.
       - testdata/fixture-basic/project.config.yaml
+      # "fails the build if a nested module is ever added without a CI job AND a
+      # Makefile target" — whether that is a conjunction or a disjunction is a
+      # claim about this test and settleable only from it.
+      - tests/nested_module_coverage_test.go
+      # "Patterns to follow" names this file and the symbol attachEdgesOverride
+      # inside it. Nothing in surface.json is a file or symbol inventory, so a
+      # renamed helper would leave a contributor chasing something gone.
+      - internal/render/depended_by_view.go
 
   - name: release-procedure
     what: The one description of how this project releases, including its own
@@ -195,6 +203,20 @@ surfaces:
       # order, and what a refusal means — and since v0.5.2 also why the
       # reachability check is gone and must not come back.
       - .github/workflows/release.yml
+      # Most command lines in this document are NOT `dossierx` invocations, so
+      # surface.json cannot answer for them: the three make targets and their
+      # required variables live here, and the three gate-stage2 subcommands and
+      # their flags live in the shell script. Without both, the item asking
+      # whether every command still takes the flags shown could be answered for
+      # a minority of the commands and no more.
+      - Makefile
+      - scripts/gate-stage2/run.sh
+      # The procedure asserts these three are tracked GENERATED artifacts whose
+      # first line carries a do-not-edit banner, and counts the generation
+      # timestamps inside them.
+      - testdata/fixture-basic/viewer/index.html
+      - testdata/fixture-portability/viewer/index.html
+      - testdata/fixture-graph-demo/viewer/index.html
 
   - name: agent-skills
     what: The SKILL.md bundles, plus the embed directive and reading order that

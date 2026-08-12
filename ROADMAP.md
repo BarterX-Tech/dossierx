@@ -96,3 +96,25 @@ The trade accepted is the ragged right edge; column alignment is unaffected, bec
 shared table-wide. FORMAT.md documents the shipped behaviour as the rule. Nothing here reopens
 A9's padding clause: this is a formal deferral, not a scheduled item, and no release currently
 commits to restoring it.
+
+## Deferred: four remembered verbs get a bare "unknown command" instead of a stub
+
+`cmd/dossierx/retired.go` gives every verb v0.3.0 folded into a noun a stub that names its
+replacement — `dossierx lint` answers with the `check` recovery, and so on. Four are missing:
+`lock`, `unlock`, `flag` and `reaudit`. Until v0.5.2 the file recorded a reason for that which was
+false: it claimed the root already answers them with a hint listing the seven nouns. It does not.
+Cobra's `legacyArgs` rejects an unknown command during `Execute`, so the root's `RunE` — the only
+hint-bearing branch — is never reached, and the caller gets:
+
+    dossierx lock some.claim.id
+    {"command":"","error":{"code":"usage","message":"unknown command \"lock\" for \"dossierx\""}}
+
+No hint, no replacement named, and an empty `command` field: exactly the answer `retired.go` exists
+to remove, on the four verbs most likely to be typed from pre-v0.3.0 memory, since each of them
+still exists at `dossierx claim <verb>`.
+
+Not fixed in v0.5.2 because it is a CLI-surface change, not a comment fix: four new commands enter
+`surface.json`, and every skill and document that states the noun and leaf counts would move with
+them. That is a minor release's work, and this is a patch. The false justification has been replaced
+with the measurement, so the next reader meets the gap rather than a reason not to look. This is a
+formal deferral, not a scheduled item: no release currently commits to it.

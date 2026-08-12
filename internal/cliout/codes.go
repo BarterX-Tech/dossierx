@@ -146,9 +146,23 @@ const (
 	// CodeNotLocked is an operation that requires a locked claim, applied to
 	// one that is still draft (flagging, linking code to it).
 	CodeNotLocked Code = "not_locked"
-	// CodeAlreadyLocked is a lock applied to something already locked and not
-	// stale — there is nothing to do, which is a refusal rather than a silent
-	// success so the caller learns its model of the world was wrong.
+	// CodeAlreadyLocked covers TWO states, and they do not share a recovery, so
+	// read the hint rather than the code.
+	//
+	//  1. A lock applied to something already locked and not stale — there is
+	//     nothing to do, which is a refusal rather than a silent success so the
+	//     caller learns its model of the world was wrong.
+	//  2. A claim whose FILE says `status: draft` while an unreleased approval
+	//     still stands in the lock ledger. Here "there is nothing to do" is not
+	//     merely incomplete, it is wrong in the damaging direction: content
+	//     changed outside the approval path, and an agent that walks away leaves
+	//     a tampered locked claim standing. The hint carries the real recovery —
+	//     restore the file from version control FIRST, because unlocking now
+	//     accepts the edit that caused it, then unlock, edit and lock again.
+	//
+	// Do not reuse this code for a third state without checking that sense (1)
+	// is not what a reader will apply. internal/buildorder's unbacked-flag case
+	// deliberately did not reuse it for exactly that reason.
 	CodeAlreadyLocked Code = "already_locked"
 	// CodePreLedgerUnadopted is an approval-recording command — claim lock, claim
 	// reaudit --confirm, build-order lock — refused because this project's lock

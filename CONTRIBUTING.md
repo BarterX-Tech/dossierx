@@ -50,10 +50,13 @@ which is missing. You need:
 | Chrome/Chromium | `DOSSIERX_TEST_BROWSER=/path/to/chrome` | the viewer suite and the site's rendered DOM. The viewer suite still falls back to the usual install locations and only skips when nothing is found; the site extraction **requires** the variable and fails without it |
 | `node` | on `PATH` | building the site the way the publish workflow builds it |
 | `npm` | on `PATH`, with network access | same — the build runs `npm ci`, which reaches the registry |
-| `goreleaser` | `DOSSIERX_TEST_GORELEASER=/path/to/goreleaser` | the release dry run. `go install github.com/goreleaser/goreleaser/v2@latest` puts one in `$(go env GOPATH)/bin`; nothing here downloads it for you, on purpose |
+| `goreleaser` | `DOSSIERX_TEST_GORELEASER=/path/to/goreleaser` | the release dry run. **Install the PINNED version, not `@latest`:** `go install github.com/goreleaser/goreleaser/v2@v2.17.1` puts one in `$(go env GOPATH)/bin`. `.github/workflows/ci.yml` holds that version in one place, `DOSSIERX_GORELEASER_VERSION`, and says why: two suites reimplement this tool's changelog and archive behaviour against that named version, one of them citing its `changelog.go` by line. On `@latest` you get a red `make viewer-test` that has nothing to do with your change. Nothing here downloads it for you, on purpose |
 
-CI supplies all four as pinned job dependencies. Locally, the shape of an invocation that runs
-everything is:
+CI supplies three of the four as pinned job dependencies — Node via `actions/setup-node`,
+`goreleaser` via the `DOSSIERX_GORELEASER_VERSION` pin, and `npm` with the Node setup. **The browser
+is not pinned:** the viewer job probes the runner image for a preinstalled Chrome and fails if it
+finds none, so its version moves with the image and nobody reviews that move. Locally, the shape of
+an invocation that runs everything is:
 
 ```sh
 DOSSIERX_TEST_BROWSER="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
@@ -88,8 +91,10 @@ means the suite cannot run locally at all, and a suite nobody can run is worse t
 evidence needs a caveat. `DOSSIERX_TEST_BROWSER` is how you remove the caveat: it pins which
 browser is driven, and turns "no browser found" from a skip into a failure.
 
-`tests/nested_module_coverage_test.go` fails the build if a nested module is ever added
-without a CI job *and* a Makefile target, so this list cannot quietly go stale.
+`tests/nested_module_coverage_test.go` keeps this list from quietly going stale: it fails the
+build when a nested module is reached by **neither** a CI step **nor** a Makefile target. It is a
+disjunction, not a conjunction — deleting the CI lint step alone leaves it green while
+`make viewer-lint` survives, and deleting both is what reds it.
 
 ### Adding a file is two steps: `surfaces.yaml` has to claim it
 
@@ -195,6 +200,9 @@ The rules:
 - **`model` and `config` are dependency-free leaves.** Neither may import any other package
   under `internal/`. Everything else in the engine depends on the claim/config shapes these
   two packages define, so they must not depend back on anything.
+- **`graph` audits claims, not code.** `internal/graph` may not import `internal/implink`,
+  `internal/lint` or `internal/render` — the last as a prefix, so `internal/render/components`
+  is denied with it. That is `.golangci.yml`'s `graph-audits-claims-not-code` rule.
 - **`render` is a top-of-stack sink for everything upstream of it.** It may import other
   `internal/` packages, and the five that sit upstream in the pipeline may not import it back:
   `lint`, `catalog`, `lock`, `loader` and `implink`. That is the exact set `.golangci.yml`'s
@@ -204,15 +212,24 @@ The rules:
   render → ledger → scan as its five stages, and `serve` renders the viewer from memory on each
   request. The rule to keep in your head is direction, not a blanket ban: nothing that produces
   input for the renderer may depend on how output gets drawn.
-- **`lint` must never import `lock`.** The dependency runs the other way: `lock` imports
-  `lint`, because locking a claim is gated on that claim passing a clean lint run. A `lint`
-  package that imported `lock` back would create a cycle and would also be backwards from
-  what the lock operation actually needs — it needs lint's answer, not the other way around.
+- **`lint` must never import `lock` — nor `render`, `reaudit` or `buildorder`.** The `lock`
+  dependency runs the other way: `lock` imports `lint`, because locking a claim is gated on that
+  claim passing a clean lint run. A `lint` package that imported `lock` back would create a cycle
+  and would also be backwards from what the lock operation actually needs — it needs lint's
+  answer, not the other way around. The other three are denied by the same
+  `lint-must-not-import-lock-and-friends` rule for a simpler reason: lint has no business
+  depending on any of them.
 
-If you're adding a new package, place it according to which of these three groups it
+If you're adding a new package, place it according to which of these four groups it
 logically extends (or ask in the PR description if it's genuinely new territory), and run
 `golangci-lint run` before pushing — the depguard rules will fail the build on a violation
 rather than let it land silently.
+
+**Wrap every propagated external error with `%w`.** `.golangci.yml` keeps `wrapcheck` disabled and
+cites this document as where the convention lives, so it is a convention a reader enforces rather
+than a linter: an error crossing out of this codebase's own packages carries `%w` and a sentence
+saying what was being attempted, so `errors.Is` still works at the top of the stack and the message
+names the operation rather than only its cause.
 
 ### Why loosely coupled
 

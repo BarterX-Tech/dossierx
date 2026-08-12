@@ -88,14 +88,21 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `missing_flag` | 1 | a required `--reason`/`--as`/`--module` was omitted. `--reason` carries the human's approving words; do not invent them. |
 | `unknown_module` / `unsupported_format` / `usage` | 1 | fix your own invocation. |
 | `write_failed` | 1 | a write did not land: a permission, a missing directory, a full disk — or, from `skills export`, "no directory given and no `project.config.yaml` found", which is your invocation and not the filesystem. Give the export an explicit directory (`dossierx skills export .claude/skills`). Show the human anything else; retrying an unwritable path just fails again. |
-| `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, nobody is holding it: a process died inside the critical section and left the sentinel file behind, and no timeout clears it — the acquire timeout only makes each failure arrive faster. The message names the file (`.dossierx-claims.lock`, or the `.lock` sitting beside whichever store it names); delete that file and retry. Do not loop on it. |
+| `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, **read the message before you delete anything — as of v0.5.2 there are two of these and they do not share a recovery.** (a) *"another docs process may be holding it; remove the file manually if it was left behind by a crash"* — nobody is holding it: a process died inside the critical section and left the sentinel behind, and no timeout clears it. The message names the file (`.dossierx-claims.lock`, or the `.lock` beside whichever store it names); delete that file and retry. (b) *"every attempt failed with … rather than 'already exists' … check the directory's permissions"* — the path could not be opened at all for the whole window. **Do not delete anything**: there may be no sentinel to delete, and if a live process IS inside the critical section, deleting its lock is the one action that corrupts what the lock protects. This is a permissions or scanner problem on the directory — report it to the human with the path, and stop. Do not loop on either. |
 | `claim_file_changed` | 1 | someone wrote while you were deciding. Re-read the claim and redo the decision — do **not** retry blindly. |
 | `banner_claim` / `empty_body` / `unsafe_body` | 1 | the comment you tried to write cannot be stored. Fix the body (`unsafe_body` is now narrow: a first content line led by a TAB. Space-indented first lines store fine as of v0.4.0); `claim_not_serializable` instead means the claim **on disk** is already broken. |
 
 ## --dry-run: "blocked" is a successful answer
 
-Every mutating verb takes `--dry-run`. It writes nothing and **always exits 0 with `ok: true`**,
-even when the real run would refuse — including when you forgot a required flag.
+Every verb that changes a claim's lifecycle takes `--dry-run` — the `claim`, `comment` and
+`build-order` leaves. It writes nothing and **always exits 0 with `ok: true`**, even when the real
+run would refuse, including when you forgot a required flag.
+
+**Two commands write and do NOT take it**, so do not reach for a preview that is not there:
+`dossierx check` (its `--validate` flag is the read-only mode — plain `check` writes claim files,
+the lock store, `.catalog.json` and the viewer) and `dossierx skills export` (which writes the
+bundle tree into the target directory; run it where you mean it). Passing `--dry-run` to either is
+a `usage` failure, not a preview — and `skills export` is the one you meet first, at bootstrap.
 
 ```json
 {"ok": true, "command": "claim lock", "data": {"would": "lock claim widget.contract.retry-policy",

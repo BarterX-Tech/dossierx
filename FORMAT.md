@@ -17,7 +17,7 @@ would be silently clobbered). Split multiple claims into separate files.
 
 ```yaml
 id: module.facet.slug          # e.g. widget.contract.overview
-facet: string                  # must be in project.config.yaml's facets[]
+facet: string                  # in project.config.yaml's facets[], or the reserved `overview`
 module: string                 # must be in project.config.yaml's modules[]
 status: draft | locked
 layout: card | table | list | steps | tree | banner | mockup  # optional
@@ -62,9 +62,21 @@ comments:                       # optional, engine-managed review threads — au
 `id` is three dot-separated segments: `module.facet.slug`.
 
 - `module` — one of the project's configured `modules[]`.
-- `facet` — one of the project's configured `facets[]`.
-- `slug` — a free-form, kebab-case identifier unique within that
-  `module.facet` pair.
+- `facet` — one of the project's configured `facets[]`, **or the reserved
+  `overview` facet, which every module gets automatically and which a project
+  does NOT list.** Adding `overview` to `facets[]` is not required and is
+  usually wrong: it gives that facet its own viewer tab instead of the injected
+  orientation-note behaviour the reserved name exists for.
+- `slug` — kebab-case, enforced as `^[a-z0-9]+(-[a-z0-9]+)*$` and unique within
+  that `module.facet` pair. Lowercase alphanumerics separated by single hyphens:
+  no uppercase, no underscores, no leading, trailing or doubled hyphen.
+
+The `module` and `facet` segments must also AGREE with the claim's own `module:`
+and `facet:` fields — a disagreement is its own finding, not a silent rename.
+
+All of the above is the `id-shape` lint. Its findings are error severity, so a
+violation fails `dossierx check` and refuses `dossierx claim lock` with
+`error.code` `lint_failed`, exit 1.
 
 ### Content is required
 
@@ -212,7 +224,23 @@ constructs below; the only thing that differs between them is images (see
 - Hard line breaks — a trailing backslash, or two trailing spaces, becomes
   a `<br>`. Both spellings are captured before the line is trimmed and
   carried through the paragraph join, so the inline pass still runs once
-  per paragraph.
+  per paragraph. **A trailing DOUBLE backslash is not a break** — it renders
+  literally, and the line does not wrap (`hard-break-double-backslash-literal`).
+  Inside a pipe table a double backslash splits the cell instead
+  (`table-double-backslash-splits`), which sits directly against the `\|`
+  escape called out as the single documented exception below.
+- Headings accept a **closing** run of hashes — `### Title ###` renders the same
+  as `### Title`; the trailing run is stripped, not treated as text
+  (`heading-closing-sequence`).
+- A **tab** counts as one indent level in a list, so pressing Tab nests rather
+  than continuing the item (`list-tab-indent`), and an ordered list may use
+  lettered sub-items — `a.`, `b.` — beneath its numbered parents
+  (`ordered-list-lettered-subitems`).
+
+  **`surface.json`'s `markdown_constructs` is the exhaustive list, not this
+  section.** What is written here is the account a reader needs; the corpus is
+  what the renderer is actually pinned against, and it is the one to check when
+  the two disagree.
 - GFM pipe tables — a header row, a **required** delimiter row that sets
   each column's alignment, and zero or more body rows, become a real
   `<table class="md-table">`. Three rules an author will otherwise hit by

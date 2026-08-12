@@ -271,7 +271,7 @@ const releases: Release[] = [
         },
         {
           version: "v0.5.2",
-          date: "2026-08-11",
+          date: "2026-08-12",
           title: "The release that can release itself",
           tag: "Latest release",
           highlights: [

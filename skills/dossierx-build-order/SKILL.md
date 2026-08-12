@@ -39,6 +39,7 @@ so it follows the same rule as `claim lock`: preview, show the human, get a yes,
 | a module claim has an open thread | `build_order_refused` | reply; the human resolves in the viewer |
 | a locked claim has no `build_role` | `build_order_refused` | set it, then re-propose |
 | a same-phase `rests_on` cycle | `build_order_refused` | fix the edges — this is a real modelling error, never silently dropped |
+| a `rests_on` edge pointing at a LATER phase in the same module | `build_order_refused` | a phase-order violation, refused by name. No sequence is produced at all — this is not a wrong order you can read and correct, it is a refusal. Re-role the claims so the edge points backwards through the phase sequence, or drop the edge |
 | the artifact was edited by hand | `build_order_hand_edited` | the claims are fine and the artifact is not — re-`propose` to discard the edit, then `lock` what the engine derived |
 | nothing proposed yet | `not_proposed` | run `propose` |
 | the locked order is stale | `build_order_stale` | re-`propose`, then re-`lock` |
@@ -73,9 +74,12 @@ implementation `rests_on` the declaration, because changing the signature makes 
 claim false.
 
 Give the declaration `build_role: api` and every one of those edges points the wrong way through
-the phases: `behavior` builds before `api`, so the sequence tells you to build the implementation
-first and then the contract it was written against. In one audited module that single cause
-produced 35 of 70 forward references.
+the phases: `behavior` builds before `api`, so each edge rests an earlier phase on a later one.
+**You do not get a badly ordered sequence out of that — you get no sequence at all.** A `rests_on`
+edge pointing at a later phase in the same module is a phase-order violation, and `propose` refuses
+it by name with `build_order_refused`. So the symptom you actually meet after re-roling declarations
+is a refusal on a corpus you did not otherwise change, not a reading-order oddity you can spot and
+correct. In one audited module this single cause accounted for 35 of 70 such edges.
 
 Give it `schema` and the order is right, because `schema` means "build first; everything below
 assumes these exist" — which is what a declaration is.

@@ -61,9 +61,16 @@
 #                   with its own bundled sh, so no exec bit and no
 #                   interpreter on PATH is required. This installer runs under
 #                   Git Bash or WSL; install-git-hook.ps1 is a thin wrapper
-#                   for PowerShell users who do not have bash on PATH. Both
-#                   paths are exercised by scripts/hook-smoke-test.sh, which
-#                   CI runs on windows-latest.
+#                   for PowerShell users who do not have bash on PATH.
+#                   scripts/hook-smoke-test.sh exercises THIS script, and CI
+#                   runs it on windows-latest under Git Bash — so the shell
+#                   path is covered on Windows. The .ps1 wrapper is NOT
+#                   covered: that script invokes `sh` throughout and never
+#                   mentions PowerShell, and nothing else drives it either.
+#                   Stated rather than implied, because the previous wording
+#                   here said "both paths are exercised" and a reader shown
+#                   this file before running it was being told a Windows path
+#                   had test coverage that does not exist.
 #   idempotence     Re-running is a no-op with a one-line report. An existing
 #                   hook that dossierx did not write is NEVER replaced without
 #                   --force, and --force backs it up and says where.
@@ -438,7 +445,13 @@ usage() {
 # So: name the invocation the reader actually used when we can see it, and fall
 # back to the pinned URL when we cannot, which is exactly the piped-from-stdin
 # case above.
-if [ -r "$0" ]; then
+# DOSSIERX_HOOK_INVOCATION is set by install-git-hook.ps1, which is a thin
+# wrapper for PowerShell users who may have no bash on PATH — for them a `sh ...`
+# recovery is an instruction that does not run, so the wrapper names itself and
+# we print that back instead.
+if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+	self_invocation="$DOSSIERX_HOOK_INVOCATION"
+elif [ -r "$0" ]; then
 	self_invocation="sh \"$0\""
 else
 	self_invocation="curl -fsSL https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.2/scripts/install-git-hook.sh | sh -s --"
@@ -553,9 +566,27 @@ if [ -n "$configured_hooks_path" ]; then
 	# hooks path is an ordinary single-machine setup and repointing it would be
 	# worse — but it must be stated rather than inferred, which is a maintainer's
 	# ruling of 11 Aug 2026 on a v0.5.2 gate finding.
-	hooks_path_origin=$(git ${repo_dir:+-C "$repo_dir"} config --show-origin --get core.hooksPath 2>/dev/null | cut -f1)
+	# NO -C HERE. The script already did `cd "$repo_dir"` above, so passing it
+	# again asks git for repo_dir/repo_dir, which fails into a discarded stderr
+	# and leaves this empty — silently skipping the warning below on exactly the
+	# invocation (`--repo`) most likely to be scripted. The unquoted expansion
+	# that did it also word-split any path containing a space. The line that
+	# reads the VALUE, a screen up, has always had this right; this one is the
+	# same question and takes the same form.
+	hooks_path_origin=$(git config --show-origin --get core.hooksPath 2>/dev/null | cut -f1)
+	# WHICH ORIGINS MEAN "NOT THIS REPOSITORY". User-global and XDG are the
+	# obvious two. The system gitconfig is the one a narrow pattern misses: its
+	# path follows git's install prefix, so it is /etc/gitconfig on a distro
+	# build, /opt/homebrew/etc/gitconfig under Homebrew, /usr/local/etc/gitconfig
+	# on a source build, and C:/Program Files/Git/etc/gitconfig on Git for
+	# Windows — which is the platform this warning matters most on, since it is
+	# the one install-git-hook.ps1 exists for. So the test is inverted: anything
+	# that is NOT this repository's own config is machine-wide.
 	case "$hooks_path_origin" in
-	file:*/.gitconfig | file:*/.config/git/config | file:/etc/*)
+	"" | file:.git/config | file:*/.git/config)
+		# This repository's own config, or unreadable. Nothing to add.
+		;;
+	*)
 		printf '%s\n' \
 			"      THAT SETTING IS NOT THIS REPOSITORY'S. It comes from" \
 			"      ${hooks_path_origin#file:}, so this hook will run for EVERY git" \

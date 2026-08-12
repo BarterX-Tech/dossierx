@@ -61,7 +61,7 @@ them, and the three post-publish checks that leave this repository entirely.
       it. It **fails rather than skips** when either tool is unnamed, so supply
       both:
 
-          go install github.com/goreleaser/goreleaser/v2@latest
+          go install github.com/goreleaser/goreleaser/v2@v2.17.1
           DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
           DOSSIERX_TEST_BROWSER=/path/to/chrome \
           make viewer-test
@@ -162,8 +162,18 @@ them, and the three post-publish checks that leave this repository entirely.
       (`gate/prompts/<surface>.md`), the surface's own files read out of the tree,
       the documents the surface DECLARES IN `reads:` but does not own — read out of
       the tree the same way and handed over marked as another surface's — the
-      committed inventory `surface.json`, and the six uncommitted artifacts
-      under `gate/` produced below. Only those six are staged here, and the
+      committed inventory `surface.json`, and **whichever of the six uncommitted
+      artifacts below that surface's question actually needs**.
+
+      **That last clause is the one to read twice: the six are the run's evidence
+      POOL, not a bundle's contents.** Four of them are shared and reach every
+      surface — `surface.json`, `gate/baseline.json`, `gate/delta.json` and
+      `gate/site-text.json` — and the other three are targeted: the render diff
+      goes to two surfaces, the skills-export capture to the skills surfaces, the
+      release-notes prediction to the release-notes surface. So a bundle carrying
+      three artifacts rather than six is the design working, not a fan-out that
+      lost half its evidence. All six are staged here regardless of who reads
+      them, and the
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
       be at those paths on the day of the run is what the agents read — and a
@@ -215,7 +225,7 @@ them, and the three post-publish checks that leave this repository entirely.
       **`surface.json` reaches all thirteen agents and is deliberately not on
       that manifest.** It is the mechanical inventory every surface's prose is
       judged against — commands, flags, lint rules, error codes, the envelope,
-      the counts, the four version pins — so leaving it unmentioned here is how a
+      the counts, the version pins — so leaving it unmentioned here is how a
       maintainer comes to believe the evidence set is closed at six. It is not
       staged because staging it would attest less than what already holds:
       `cmd/dossierx/surface_test.go` is both halves of one contract, writing the
@@ -282,11 +292,34 @@ them, and the three post-publish checks that leave this repository entirely.
       shell wraps that and re-implements nothing.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
-      printed, one per surface, and change nothing about them. They are
-      read-only: `gate/method.yaml` grants `SurfaceFinding` and `SurfaceVerdict`
-      and nothing else, and the harness passes that as an exclusive allow-list —
-      the assembled bundle is the whole evidence set, which is the property every
-      key in this gate rests on. What comes back from each agent is its own three
+      printed, one per surface, and change nothing about them. `gate/method.yaml`
+      names the whole grant — `SurfaceFinding` and `SurfaceVerdict`, nothing else
+      — and `run.sh` requests it as an exclusive allow-list.
+
+      **What this repository can promise about that, and what it cannot.** It can
+      promise the REQUEST: `cmd/dossierx/gate_stage2_test.go` pins the grant
+      against a literal, and `run.sh` passes it as `--allowed-tools` with no deny
+      list. It cannot promise the GRANT. The entity that actually withholds tools
+      is the agent harness, which lives outside this repository and outside every
+      test in it — `gate/method.yaml` says so in its own words, and the same
+      boundary is stated about the workflow file in `tests/ci_workflow_test.go`.
+      So "the assembled bundle is the whole evidence set" is the property every
+      key in this gate rests on, and it is a property of the RUNTIME, not of this
+      tree.
+
+      **Check it, per run, and treat a miss as a failed gate.** Before you read a
+      single finding, confirm the harness you used actually withheld everything
+      else. It is not a formality: in the v0.5.2 gate the agents were run under a
+      general-purpose harness that had file, shell and network tools, held inside
+      their bundles by nothing but an instruction in the prompt — and one of them
+      noticed and reported it against itself, having read its own bundle through
+      `grep`. Two full rounds were adjudicated that way. Nothing in those rounds
+      is known to be wrong, and that is exactly the problem: an unenforced
+      allow-list produces a receipt indistinguishable from an enforced one. If
+      your harness cannot withhold tools, say so on the record rather than
+      letting the receipt imply otherwise.
+
+      What comes back from each agent is its own three
       facts and nothing else, in one file:
 
           {"verdict": "PASS"|"FAILED", "findings": [...], "subjects": {...}}
@@ -402,11 +435,22 @@ them, and the three post-publish checks that leave this repository entirely.
       is the exact thing this item exists to avoid. `git grep` needs no filter
       list to keep current.
 
-      As of v0.5.0 that is `README.md` (the `go install` line and the
-      `install-git-hook.sh` raw URL), `skills/dossierx/SKILL.md` (the same raw
-      URL), and `scripts/ci/dossierx-check.yml` (the `go install` line — this
-      one is a template users copy into their own repository, so a stale pin
-      there ships a stale binary into someone else's merge gate). It went stale
+      As of v0.5.2 that is FIVE pins across FOUR files: `README.md` (the
+      `go install` line and the `install-git-hook.sh` raw URL),
+      `skills/dossierx/SKILL.md` (the same raw URL),
+      `scripts/ci/dossierx-check.yml` (the `go install` line — this one is a
+      template users copy into their own repository, so a stale pin there ships
+      a stale binary into someone else's merge gate), and, new in v0.5.2,
+      `scripts/install-git-hook.sh` (the raw URL it prints back to a reader who
+      piped it from stdin and has no `$0` to name).
+
+      **Do not work from that list — work from the sweep, and treat the list as
+      a cross-check.** It is a cache of what the sweep found last time, and it
+      has now gone stale twice: through v0.3.0 and v0.3.1, and again in v0.5.2,
+      when the fifth pin site was created by the same release that failed to
+      add it here. `surface.json`'s `version_pins` is the mechanical answer and
+      is regenerated from the tree; if it and this paragraph disagree, this
+      paragraph is the wrong one. It went stale
       through v0.3.0 and v0.3.1 and was found by a sweep, not by memory.
 - [ ] **The embedded skills still describe this engine.** `skills/*/SKILL.md` is
       `go:embed`-ed into the binary and installed into *other people's*

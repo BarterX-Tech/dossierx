@@ -45,7 +45,10 @@ it out.
   by hand walks past the lint gate, the doctrine gate and the open-thread gate as though all three
   had passed, and the lock ledger will report it as `integrity_failed` on the next check.
 - `body` (prose) and/or `rows` (a table; every cell must be an authored **string**, so quote
-  numbers and booleans). A claim needs at least one. `body` gets the wider **block** ceiling —
+  numbers and booleans). **A claim needs at least one CONTENT-BEARING field, and there are four of
+  them, not two: `body`, `rows`, `steps` or `raw_html`.** A `steps`-only claim is valid, and so is
+  a `raw_html`-only one — `raw_html` counts even beside an empty `body`. `body` gets the wider
+  **block** ceiling —
   paragraphs, fenced code (with a language class from the fence's info string), backslash
   escapes, code spans, `**bold**`/`*italic*`/`_italic_` (CommonMark flanking — intraword
   underscores never italicize, so `snake_case` tokens are safe), `~~strikethrough~~`, links,
@@ -143,13 +146,24 @@ The window between the two ends is not a steady state. If any source file carrie
 and `claim is not locked (status "draft")` — the tag is fine, the claim is mid-edit. Finish the
 relock; never touch the tag or leave the claim unlocked to silence it.
 
-`dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
-the findings), `unresolved_comments` (reply, and let the human click Resolve),
-`dependency_not_locked` (a doctrine dependency is still draft), and `already_locked` — a claim
-that is *already* `locked` is not re-locked. That last one matters most when a gate has just
-complained: re-locking a drifted or flagged claim would sign whatever the file now says, clear
-`review_pending` with no diff shown, and strand the human's flag where `reaudit` can no longer
-reach it. `unlock` → fix → `lock`, or restore the file from git.
+`dossierx claim lock` refuses on four gates about the claim you are locking, each with its own
+`error.code`: `lint_failed` (fix the findings), `unresolved_comments` (reply, and let the human
+click Resolve), `dependency_not_locked` (a doctrine dependency is still draft), and
+`already_locked` — a claim that is *already* `locked` is not re-locked. That last one matters most
+when a gate has just complained: re-locking a drifted or flagged claim would sign whatever the file
+now says, clear `review_pending` with no diff shown, and strand the human's flag where `reaudit` can
+no longer reach it. `unlock` → fix → `lock`, or restore the file from git.
+
+**Those four are not the whole refusal set, and the rest fire on a corpus you did not touch.** Two
+more codes reach you as a failed `claim lock`, both from the project's integrity state rather than
+from your claim: `pre_ledger_unadopted` (this project's lock store predates the lock ledger — the
+router carries the one-time crossing, and it is a human's keyboard, not yours) and
+`integrity_failed` (a `lock-ledger-deleted` or `comment-digest-unrecorded` finding, which are
+refusals on the write path and not only on `check`). A third, `already_locked`, now covers a second
+state as well: a claim whose file says `status: draft` while an unreleased approval still stands.
+Read the hint — for that state "there is nothing to do" is exactly wrong, and the recovery is to
+restore the file from version control BEFORE unlocking, because unlocking first accepts the edit
+that caused it. If you branch on a closed list of four, all of these arrive unmapped.
 
 ## `review_pending` — and why `reaudit` is not the edit tool
 

@@ -77,5 +77,14 @@ installer from WSL:
     exit 1
 }
 
+# TELL THE SHELL SCRIPT HOW THE READER GOT HERE, so the recoveries it prints are
+# ones this reader can actually type. Every instruction install-git-hook.sh
+# offers — chaining a foreign hook, uninstalling a machine-wide install — is a
+# POSIX command line built from its own $0. A reader who reached it through this
+# wrapper is standing in PowerShell and, by this wrapper's whole premise, may
+# have no bash on PATH at all, so `sh "/c/.../install-git-hook.sh" --uninstall`
+# is an instruction that does not run for them. This names the wrapper instead.
+$env:DOSSIERX_HOOK_INVOCATION = "powershell -File `"$PSCommandPath`""
+
 & $bash $sh @args
 exit $LASTEXITCODE

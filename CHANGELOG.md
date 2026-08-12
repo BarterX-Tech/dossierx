@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.2] - 2026-08-11
+## [0.5.2] - 2026-08-12
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
 Re-run `dossierx skills export` after upgrading.** Those bundles are written into a project as
@@ -29,12 +29,17 @@ the site already used. **If your tooling compares that field against a bare `X.Y
 release where it changes.** Nothing in `cmd/dossierx` moved to achieve it — `resolveVersionInfo`
 already produced the tag verbatim, so the two paths converge rather than being reconciled.
 
-**Nothing else a consumer runs behaves differently.** No new or changed command, flag,
-`error.code`, lint rule or schema field, and no engine behaviour moves. The engine changes in this
-release are five doc comments naming a verb this CLI has not had since the noun surface landed —
-`dossierx flag`, where the verb is `dossierx claim flag` — and one that described the `mockup_modules`
-allowlist as gating `layout: mockup` when v0.4.1 widened it to gate any claim carrying `raw_html`,
-on any layout.
+**No new or changed command, flag, `error.code`, lint rule or schema field.** Two engine behaviours
+do move, and both are above: the version string, and the Windows claims file lock, which stops
+refusing the contended case it exists for. If you are on Windows and two `dossierx` invocations can
+touch one project at once, read that entry — it is a fix, not a nicety.
+
+Beyond those two, nothing a consumer runs behaves differently. The remaining engine changes are
+comment-only: five doc comments naming a verb this CLI has not had since the noun surface landed —
+`dossierx flag`, where the verb is `dossierx claim flag` — one that described the `mockup_modules`
+allowlist as gating `layout: mockup` when v0.4.1 widened it to gate any claim carrying `raw_html` on
+any layout, and one in `retired.go` that gave a false reason for four verbs having no stub (see
+ROADMAP.md; the gap is real and deferred, the reason was wrong).
 
 ### The release pipeline can complete unattended
 

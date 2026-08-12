@@ -62,9 +62,15 @@
 # than one commit. "dossierx check" evaluates ONE tree — which is
 # precisely what a checkout is — and runs every rule that survives: the whole
 # lint gate, lock-content-drift, lock-ledger-missing / -deleted / -released /
-# -orphan / -abandoned / -absent / -pre-ledger / -downgraded,
-# comment-ledger-drift, comment-digest-unrecorded, comment-digest-absent, and
-# the build-order rules.
+# -orphan / -abandoned / -absent / -pre-ledger / -downgraded / -unreadable,
+# comment-ledger-drift, comment-digest-unrecorded / -absent / -missing /
+# -abandoned, and the build-order rules (-content-drift, -ledger-missing,
+# -ledger-orphan, -ledger-abandoned, -unreadable).
+#
+# That list is written out rather than summarised because a client reads it to
+# know what their own gate refuses, and a short list reads as a complete one.
+# FORMAT.md's "The findings" table is the canonical statement; if the two ever
+# disagree, that table is right and this comment is stale.
 #
 # WHAT THAT COSTS, stated as the principle rather than as a count. Earlier
 # revisions of this comment put a number on it — one, then two, then three —
@@ -118,11 +124,22 @@
 # nothing to compare the claims against and this workflow is theatre.
 #
 # One generated file joins them the moment you approve it: a LOCKED
-# .build-order.<module>.json. While it is locked:false it is ordinary output that
-# `build-order propose` rewrites in full, but a locked one is the sequence a
-# human approved and the artifact an implementing agent builds from, so this
-# workflow compares it against its record (build-order-content-drift,
-# build-order-ledger-missing) — and can only do that if it was committed.
+# .build-order.<module>.json. A locked one is the sequence a human approved and
+# the artifact an implementing agent builds from, so this workflow compares it
+# against its record (build-order-content-drift, build-order-ledger-missing) —
+# and can only do that if it was committed.
+#
+# `locked: false` DOES NOT MEAN UNWATCHED, and this is the reading to correct.
+# `build-order propose` rewrites the artifact in full and RELEASES the module's
+# record as it does so, which is what makes an honest re-propose invisible to
+# the audit. Clearing the flag by hand does not: an artifact saying
+# `locked: false` under a record that still STANDS is build-order-ledger-orphan,
+# a rule that exists precisely because writing `false` would otherwise remove
+# the file from every rule's evidence at once. Deleting the artifact, or dropping
+# its module from `modules:`, under an unreleased record is
+# build-order-ledger-abandoned; an artifact present but undecodable is
+# build-order-unreadable. So the honest window is opened by the release, not by
+# the flag.
 #
 # WHAT THE ABSENT-LEDGER ERROR DOES AND DOES NOT COVER
 #
@@ -150,9 +167,19 @@
 #                                                # behind; the first lock in a project
 #                                                # holding nothing locked is what
 #                                                # crosses the store onto the ledger
+#   dossierx build-order propose --module <m>    # THEN THE BUILD ORDERS AGAIN, because
+#   dossierx build-order lock --module <m> \      # the unlock/lock pass above released
+#       --reason "..."                           # every record the first propose made
+#
+# DO NOT STOP AT THE THIRD COMMAND. `build-order propose` releases the module's
+# record as it overwrites the artifact, so a crossing that ends at the re-lock
+# leaves every previously-approved build order unlocked and released — the
+# sequence an implementing agent builds from is simply gone, and nothing fails
+# to tell you. Re-propose and re-lock each module, in that order.
 #
 # then COMMIT the .dossierx-lock-store.json and .dossierx-comment-digest.json it
-# writes. Until that commit lands, every run here checks out the old-format store
+# writes, and the rewritten .build-order.<module>.json for every module you
+# re-locked. Until that commit lands, every run here checks out the old-format store
 # and refuses; after it lands, every record in the ledger CI reads is an approval
 # a human actually gave.
 
