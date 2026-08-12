@@ -175,7 +175,7 @@ func newRootCmd() *cobra.Command {
 	// The count is a design constraint, not a coincidence. Every verb here is
 	// something an AGENT does, because the agent is this CLI's operator; the
 	// human's entire surface is "dossierx serve" plus the viewer it opens. The
-	// ten verbs v0.3.0 removed (lint, catalog, render, deps, stale, coverage,
+	// verbs v0.3.0 removed (lint, catalog, render, deps, stale, coverage,
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.

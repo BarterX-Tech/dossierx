@@ -127,6 +127,9 @@ surfaces:
       # "is one `dossierx check` step and pins no `fetch-depth`" — a claim about
       # a file this release moved, since its version pin changed.
       - scripts/ci/dossierx-check.yml
+      # The `comments:` block documents replies, resolved_by/at and
+      # reopened_by/at. model.Comment is where those fields live or do not.
+      - internal/model/comment.go
 
   - name: roadmap
     what: The deferred and unverified register. Falsification here is inverted —
@@ -242,6 +245,10 @@ surfaces:
       # thing that can close the gap between "the hash moved" and "the recovery
       # is still right".
       - CHANGELOG.md
+      # dossierx-code-links tells an agent that a hook AND a CI run stay green
+      # over an unlocked claim mid-relock. The hook runs `check --staged`; what
+      # CI runs is decided by this template, and the two answers differ.
+      - scripts/ci/dossierx-check.yml
 
   - name: exported-skills
     what: The skills export output, checked in as symlinks so this repository's
@@ -316,6 +323,14 @@ surfaces:
       described in CHANGELOG.md.
     paths:
       - .goreleaser.yaml
+    reads:
+      # This surface's first question is "does every user-visible change in the
+      # release appear somewhere in the predicted body". That needs the
+      # authoritative list of this release's user-visible changes, and
+      # .goreleaser.yaml's own footer names the document that carries it. Without
+      # it the check can only be made against the site's rendering of the same
+      # facts, which is another document rather than the source.
+      - CHANGELOG.md
 
   - name: binary-and-viewer
     what: The engine itself, and every string compiled into it — cobra Short and

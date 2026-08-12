@@ -1042,8 +1042,8 @@ enforces.**
 
   ```diff
   -      "hash": "ba4835bc…",
-  +      "hash": "e9bdf091…",
-         "at": "2026-07-28T13:51:55.599082Z",
+  +      "hash": "fa0c1529…",
+         "at": "2026-07-28T13:41:17.384943Z",
          "actor": "nitinkhanna",
          "reason": "Reviewed on the 2026-07-20 call; Nitin approved the wording.",
   ```

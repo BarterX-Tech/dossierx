@@ -689,10 +689,20 @@ func TestLoadReleaseNotesConfig_RejectsUnmodeledReleaseKeys(t *testing.T) {
 		name         string
 		releaseLines string
 	}{
-		// release.header lands BEFORE "## Changelog" in the published body —
-		// see this test's own doc comment for why an un-caught regression
-		// here is worse than the other four, not merely equivalent to them.
-		{"header", baseRelease + "  header: 'Upgrade notes go here.'\n"},
+		// A TEMPLATED release.header, on the footer's terms exactly. A LITERAL
+		// header is modelled as of v0.5.2 — the config sets one — and is
+		// accepted; a templated one is refused, because header and footer are
+		// both composed into the release BODY at publish time and a template in
+		// either first renders after the tag is public.
+		//
+		// The header carries an extra residual the footer does not, and it is
+		// why this case matters more than its four neighbours: release.header
+		// lands BEFORE "## Changelog", and PublishedBodyMatches ignores
+		// everything ahead of that anchor as an expected hand-written prefix. So
+		// a header is never compared against the published page. Refusing the
+		// templated form is therefore the ONLY thing standing between this
+		// config and un-predicted prose on a release page.
+		{"templated header", baseRelease + "  header: 'Upgrade notes for {{ .Tag }}.'\n"},
 		// A TEMPLATED release.footer. A LITERAL one is modelled — Body appends
 		// it exactly as goreleaser's describeBody does — but a templated one is
 		// refused, because this predictor has no template engine and would

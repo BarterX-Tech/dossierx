@@ -227,16 +227,14 @@
    =========================================================================
 
    From here down, every colour is a var(--token) read from the base
-   stylesheet's fixed allowlist, with exactly two exceptions, both of which
-   the base stylesheet itself already makes for the same reasons: the backdrop
-   dim and the panel drop shadow are rgba() blacks, because "how dark is the
-   thing behind this overlay" and "how deep is this shadow" are not colours a
-   project themes — they are the same value at every accent.
+   stylesheet's fixed allowlist, with no exceptions: this section holds no rgba()
+   literal. The pane is opaque (var(--paper)), has no box-shadow, and has no
+   backdrop element at all — see "no scrim, no inset, no drop shadow" below.
 
    Z-INDEX. The existing stack is hand-assigned with explicit reasoning: nav
    overlay 20/30, nav toggle 40, status strip 45, comments overlay 50,
    comments rail 60, toast 70. The graph pane is a full-viewport overlay and
-   takes the band ABOVE all of them — backdrop 80, surface 81 — and the base
+   takes the band ABOVE all of them — pane root 80, surface 81 — and the base
    stylesheet's z-index ledger comment records that band, because that comment
    is the single place this stack is reasoned about.
 

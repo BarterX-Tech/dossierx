@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.2] - 2026-08-12
 
+**SILENT: your viewer's bytes change on the next `dossierx check`, with no claim edit.** Three
+maintainer comments inside the viewer's inlined stylesheet were factually wrong — `graph.css`
+described a backdrop dim and a drop shadow the pane has never had, and both z-index ledgers called
+the opaque pane root a "backdrop". Correcting them changes the generated `index.html` for every
+project, because that CSS is inlined and its comments ship with it. Nothing renders differently to a
+reader: no rule, no colour and no layout moved, and the cross-release report classifies all three as
+silent precisely because the inputs are byte-identical. If you diff your committed viewer after
+upgrading, this is what you are looking at.
+
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
 Re-run `dossierx skills export` after upgrading.** Those bundles are written into a project as
 committed artifacts, and nothing in `dossierx check` compares an exported copy against the
@@ -24,13 +33,14 @@ applies no ldflags at all, falls back to `debug.ReadBuildInfo`, and gets the tag
 module proxy — so that binary printed `v0.5.1`. The practical hazard was never cosmetic: a scripted
 `dossierx version --format json | jq -r .data.version` compared against a `vX.Y.Z` tag succeeded via
 one install path and failed via the other. The stamp is now `{{.Tag}}`, both paths print the tag
-exactly as tagged, and that is the form the git tag, this file's own headings and every string on
-the site already used. **If your tooling compares that field against a bare `X.Y.Z`, this is the
+exactly as tagged, and that is the form the git tag and this file's own headings already used. The
+site's `dossierx version` transcript DID move with it: v0.5.1 deliberately rendered the v-stripped
+form, and it now renders the tag verbatim like everything else. **If your tooling compares that field against a bare `X.Y.Z`, this is the
 release where it changes.** Nothing in `cmd/dossierx` moved to achieve it — `resolveVersionInfo`
 already produced the tag verbatim, so the two paths converge rather than being reconciled.
 
 **No new or changed command, flag, `error.code`, lint rule or schema field.** Two engine behaviours
-do move, and both are above: the version string, and the Windows claims file lock, which stops
+do move: the version string above, and the Windows claims file lock described under **Fixed** below, which stops
 refusing the contended case it exists for. If you are on Windows and two `dossierx` invocations can
 touch one project at once, read that entry — it is a fix, not a nicety.
 
@@ -470,6 +480,12 @@ the tag with its leading `v` stripped, so the release spelling and the transcrip
 different strings for good reasons; the transcript now derives from the release entry with the `v`
 removed, and it is checked against a binary linked the way a release links one, read out of the
 **rendered page** rather than out of the source.
+
+> **SUPERSEDED BY 0.5.2.** Both halves of that first sentence stopped being true. The stamp is now
+> `{{.Tag}}`, so the release spelling and the transcript spelling are the SAME string, and the
+> transcript no longer strips anything — it renders the tag verbatim. The two-spellings-for-good-
+> reasons framing is what 0.5.2 removed; see its entry. Left as written because it is the record of
+> what 0.5.1 shipped.
 
 The `commit` field is deleted from every release entry, along with the step that wrote it, the
 fallback that rendered it and its type declaration. It could not converge — writing the sha is

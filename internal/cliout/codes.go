@@ -204,8 +204,12 @@ const (
 	// a dependency in the doctrine facet is still draft.
 	CodeDependencyNotLocked Code = "dependency_not_locked"
 	// CodeStructuredLayout is a body-only operation refused on a claim whose
-	// rendered content lives outside body — a table's rows, a steps list, a
-	// raw-HTML mockup. "dossierx claim flag" raises it because a flag-sourced reaudit
+	// rendered content lives outside body. The test is on CONTENT, not on the
+	// layout name, and that is v0.4.1's widening rather than a detail: any claim
+	// carrying `raw_html` is refused whatever its layout, so `layout: card`,
+	// `banner`, `list` and `tree` all reach this code once one is attached — as
+	// do a table's `rows` and a steps list. An agent branching on the layout name
+	// alone will not expect it from a card. "dossierx claim flag" raises it because a flag-sourced reaudit
 	// rewrites body and nothing else, so accepting the flag would clear
 	// review_pending while leaving the actually-rendered content stale.
 	CodeStructuredLayout Code = "structured_layout"

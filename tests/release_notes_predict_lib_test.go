@@ -213,6 +213,9 @@ type ReleaseNotesConfig struct {
 	// answers about. LoadReleaseNotesConfig admits it only when it contains no
 	// template, so PredictReleaseNotes can append it byte for byte; see that
 	// function's refusal for what a templated one would cost.
+	Header string `yaml:"-"`
+
+	// Footer is release.footer, NOT a changelog: key.
 	Footer string `yaml:"-"`
 }
 
@@ -456,8 +459,17 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: release: has a key this predictor does not recognize (%w) — teach LoadReleaseNotesConfig about it before trusting a prediction against this config", goreleaserPath, err)
 	}
 	switch {
-	case rel.Header != "":
-		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.header is set to %q; this predictor's Body does not account for a release-level header (see PublishedBodyMatches's tolerance for a hand-written prefix — that is a DIFFERENT thing: an untracked human edit, not a templated value this config controls)", goreleaserPath, rel.Header)
+	// A HEADER IS MODELLED ON EXACTLY THE FOOTER'S TERMS, and for the same
+	// reason: goreleaser composes header and footer into the release BODY at
+	// publish time, so a template in either first renders on the publish path,
+	// where this project has no undo. Literal only. This used to be a flat
+	// refusal of any header at all, which was right while the config set none —
+	// v0.5.2 sets one, so the refusal narrows to the part that is actually
+	// unsafe rather than blocking the field.
+	case strings.Contains(rel.Header, "{{"):
+		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.header contains a Go template (%q).\n"+
+			"Same contract as the footer: this predictor reproduces it verbatim and has no template engine, and nothing catches a broken template before publish — `goreleaser check` validates one naming a field that does not exist, `goreleaser release --skip=publish` exits 0 over it, and it never reaches dist/CHANGELOG.md because header and footer are composed into the release BODY. Use a literal",
+			goreleaserPath, rel.Header)
 	// A FOOTER IS MODELLED, BUT ONLY A LITERAL ONE, and the distinction is the
 	// whole reason this stays a refusal rather than becoming a passthrough.
 	//
@@ -492,6 +504,7 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		Sort:    full.Sort,
 		Groups:  full.Groups,
 		Filters: ReleaseNotesFilters{Exclude: full.Filters.Exclude},
+		Header:  rel.Header,
 		Footer:  rel.Footer,
 	}, nil
 }
@@ -890,6 +903,25 @@ func PredictReleaseNotes(rawLines []string, cfg ReleaseNotesConfig) (ReleaseNote
 	// mismatch on every release, for a difference the predictor knew about —
 	// which is a false finding, and this file exists to prevent those rather
 	// than manufacture them.
+	// THE HEADER IS DELIBERATELY NOT PREPENDED HERE, and the asymmetry with the
+	// footer is a property of what G3 can check rather than an oversight.
+	//
+	// goreleaser renders release.header BEFORE the "## Changelog" anchor and the
+	// footer after it. PublishedBodyMatches finds that anchor in the published
+	// body and compares from there onward against Body, ignoring everything
+	// ahead of it as an expected hand-written prefix. So a footer inside Body IS
+	// verified against the real published page; a header inside Body would make
+	// that comparison fail on every release, because Body would no longer start
+	// at the anchor.
+	//
+	// The residual, stated rather than implied: the header's bytes are never
+	// compared against the published page. What stands behind them is that a
+	// templated header is refused at load (the case above), so what publishes is
+	// the literal in .goreleaser.yaml, which is tracked and reviewed like any
+	// other line in it. That is weaker than the footer's guarantee and it is the
+	// most this check can honestly offer, since the anchor tolerance ahead of it
+	// exists for a real reason — this project hand-writes prose above the
+	// generated section on a breaking release.
 	if cfg.Footer != "" {
 		body += "\n" + cfg.Footer
 	}

@@ -654,6 +654,22 @@ outdated)
 	;;
 foreign)
 	if [ "$force" -ne 1 ]; then
+		# THE CHAIN-IT LINES ARE PER-SHELL, because this recovery is the only
+		# thing offered to a reader whose hook was refused and it has to actually
+		# run for them. The POSIX form uses a trailing backslash continuation and
+		# chmod; PowerShell accepts neither — it continues with a backtick, and
+		# Windows has no chmod (which the install path already argues is a no-op
+		# there, since git for Windows does not consult the exec bit). A reader
+		# who arrived through install-git-hook.ps1 is, by that wrapper's own
+		# premise, someone who may have no bash on PATH at all.
+		if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+			chain_it_lines="                 $self_invocation --print-hook |
+                     Set-Content \"$hooks_dir/dossierx-pre-commit\""
+		else
+			chain_it_lines="                 $self_invocation --print-hook > \\
+                     \"$hooks_dir/dossierx-pre-commit\"
+                 chmod +x \"$hooks_dir/dossierx-pre-commit\""
+		fi
 		printf '%s\n' \
 			"refusing to touch $target: there is already a pre-commit hook there that dossierx did not write." \
 			"" \

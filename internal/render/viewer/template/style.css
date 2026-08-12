@@ -1252,8 +1252,8 @@ th {
      50  comments overlay
      60  comments rail
      70  toast
-     80  graph pane backdrop  \  claims graph, added in v0.5.0
-     81  graph pane surface   /
+     80  graph pane root      \  claims graph, added in v0.5.0 (opaque, not a
+     81  graph pane surface   /  backdrop — the pane dims nothing behind it)
 
    The graph pane takes the band ABOVE all of them because it is the only
    full-viewport overlay here: it is not a rail beside the document or a

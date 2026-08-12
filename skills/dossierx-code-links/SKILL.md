@@ -50,9 +50,12 @@ The everyday case, and the only thing most implementation work needs.
    edit it — `claim unlock` … fix … `claim lock` — its already-correct tags name a `draft` claim,
    so every `dossierx check` in between fails with `claim is not locked (status "draft")`. That is
    the unlock you asked for, mid-flight: finish the relock and the same `check` goes green. Never
-   delete or retarget a tag to clear it, and never leave the claim unlocked to keep `check` quiet —
-   `check --validate` and `check --staged` scan no source, so a hook and a CI run stay green while
-   the viewer rebuild you actually need is the thing failing.
+   delete or retarget a tag to clear it, and never leave the claim unlocked to keep `check` quiet.
+   `check --validate` and `check --staged` scan no source, so the PRE-COMMIT HOOK — which runs
+   `check --staged` — stays green over an unlocked claim while the viewer rebuild you actually need
+   is the thing failing. **CI does not.** The shipped merge-gate template runs plain `dossierx
+   check`, which does scan source, so it exits non-zero at `stopped_at: scan`. Leaving the claim
+   unlocked therefore buys you a quiet hook and a red merge gate, which is the worst of both.
 4. Symbol capture (the `#function_name` a reader sees later) is a best-effort text heuristic over
    common declaration shapes below the tag line, not a real parser. File-level linking is reliable
    regardless.
