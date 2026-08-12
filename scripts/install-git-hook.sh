@@ -682,9 +682,7 @@ foreign)
 			"               script with --print-hook; if you piped it in and have" \
 			"               no copy on disk, fetch it again from the same URL:" \
 			"" \
-			"                 $self_invocation --print-hook > \\" \
-			"                     \"$hooks_dir/dossierx-pre-commit\"" \
-			"                 chmod +x \"$hooks_dir/dossierx-pre-commit\"" \
+			"$chain_it_lines" \
 			"" \
 			"               then add this to your own pre-commit, wherever you want" \
 			"               the claim gate to run:" \

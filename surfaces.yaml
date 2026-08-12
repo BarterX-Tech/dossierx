@@ -100,6 +100,12 @@ surfaces:
       # without this the one thing consumers are told to check before upgrading
       # is unanswerable.
       - .goreleaser.yaml
+      # An entry that says a verb's stub was added, or deferred, is a claim about
+      # this file — and `retired` is one of the arrays the delta reports moving,
+      # so the changelog has to be able to say which direction it moved.
+      - cmd/dossierx/retired.go
+      # The same entry cites the roadmap as the record of what was deferred.
+      - ROADMAP.md
 
   - name: claim-format-spec
     what: The claim format — the schema, the id grammar, the layouts, and what

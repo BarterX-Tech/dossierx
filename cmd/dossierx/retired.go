@@ -140,7 +140,7 @@ func retiredTopLevelCmds() []*cobra.Command {
 			`run: dossierx claim unlock <id> --reason "..."`),
 		retiredCmd("flag",
 			`flag: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
-			`run: dossierx claim flag <id> --reason "..."`),
+			`run: dossierx claim flag <id> --claim-says "<what the claim asserts>" --now-does "<what the code does>" --reason "<their words>"`),
 		retiredCmd("reaudit",
 			`reaudit: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
 			`run: dossierx claim reaudit <id> (add --confirm to accept the proposal)`),

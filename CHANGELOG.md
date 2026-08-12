@@ -39,8 +39,10 @@ form, and it now renders the tag verbatim like everything else. **If your toolin
 release where it changes.** Nothing in `cmd/dossierx` moved to achieve it — `resolveVersionInfo`
 already produced the tag verbatim, so the two paths converge rather than being reconciled.
 
-**No new or changed command, flag, `error.code`, lint rule or schema field.** Two engine behaviours
-do move: the version string above, and the Windows claims file lock described under **Fixed** below, which stops
+**No new or changed command, flag, `error.code`, lint rule or schema field**, and the noun and leaf
+counts are where they were — nineteen under seven. What did move is the RETIRED spelling set, from
+twelve to sixteen, so four invocations the binary used to reject blankly now answer properly; see
+below. Two engine behaviours also move: the version string above, and the Windows claims file lock described under **Fixed** below, which stops
 refusing the contended case it exists for. If you are on Windows and two `dossierx` invocations can
 touch one project at once, read that entry — it is a fix, not a nicety.
 
@@ -48,8 +50,8 @@ Beyond those two, nothing a consumer runs behaves differently. The remaining eng
 comment-only: five doc comments naming a verb this CLI has not had since the noun surface landed —
 `dossierx flag`, where the verb is `dossierx claim flag` — one that described the `mockup_modules`
 allowlist as gating `layout: mockup` when v0.4.1 widened it to gate any claim carrying `raw_html` on
-any layout, and one in `retired.go` that gave a false reason for four verbs having no stub (see
-ROADMAP.md; the gap is real and deferred, the reason was wrong).
+any layout, and and one in `retired.go` that gave a false reason for four verbs having no stub — see below, where
+the stubs are.
 
 ### The release pipeline can complete unattended
 
@@ -134,6 +136,15 @@ to the wrong surface.
   `make ci-evidence` had already written a fan-out record, all five refusal rows of the fanout
   flag-contract test failed, each claiming a run had written `gate/fanout.json` when it had written
   nothing.
+- **`dossierx lock`, `unlock`, `flag` and `reaudit` answered with nothing useful.** Each moved under
+  the `claim` noun in v0.3.0, and `retired.go` — the file whose whole job is to answer a remembered
+  invocation with its replacement — left all four out, on the recorded grounds that the root already
+  answered them with a hint. It does not: cobra rejects an unknown command before the hint-bearing
+  branch runs, so what a caller got was `{"ok":false,"command":"","error":{"code":"usage","message":
+  "unknown command \"lock\" for \"dossierx\""}}` — no hint, no replacement named, empty command
+  field. All four are now stubs naming `dossierx claim <verb>`. The retired set goes from twelve
+  spellings to sixteen; `counts` is untouched, because a retired stub enters `retired` and never
+  `commands`, which is also why this is a patch and not a minor.
 - **The `cli-operator` subject vocabulary had no value for a CI check**, forcing a hand override at
   every release. It gains `ci`.
 - **A serve test raced the server it started, and only Windows noticed.** The watcher re-walks the

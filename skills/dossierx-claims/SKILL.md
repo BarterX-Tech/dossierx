@@ -43,7 +43,7 @@ it out.
   a project does NOT list — adding `overview` to `facets[]` is not required and is usually wrong,
   because it gives that facet its own viewer tab instead of the injected orientation-note
   behaviour the reserved name exists for; `slug` must be kebab-case
-  (lowercase alphanumerics, single hyphens). The viewer's card title is derived from the slug, so
+  (lowercase alphanumerics, single hyphens). The card title is derived from the slug, so
   `retry-policy` renders as "Retry Policy" — you never write a title.
 - `status: draft | locked` — **only** `dossierx claim lock` / `unlock` may change this. Editing it
   by hand walks past the lint gate, the doctrine gate and the open-thread gate as though all three
@@ -66,8 +66,7 @@ it out.
   neutralized. The full construct-by-surface account is FORMAT.md's "`body` and the markdown
   ceiling" section, which is **not in your repository** — this bundle was exported into it and
   FORMAT.md was not. Read it at
-  https://github.com/BarterX-Tech/dossierx/blob/v0.5.2/FORMAT.md — do not reach past either
-  ceiling.
+  https://github.com/BarterX-Tech/dossierx/blob/v0.5.2/FORMAT.md — do not reach past either ceiling.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
 - `build_role: orientation | schema | behavior | api | verification | out-of-scope` — **required
@@ -215,7 +214,9 @@ engine.
 **Branch on `rule` inside `data.ledger_findings`, not on the code** — one is not tampering.
 `lock-ledger-pre-ledger` means the project's lock store predates the ledger and it still holds
 something locked: the fix is the ordered crossing — re-propose every locked build order, unlock
-every locked claim, then re-lock what the human stands behind (see **[`dossierx`](../dossierx/SKILL.md)**). There is no
+every locked claim, re-lock what the human stands behind, then re-propose AND re-lock every module's
+build order — step one released each record, so stopping earlier discards them all silently (see
+**[`dossierx`](../dossierx/SKILL.md)**). There is no
 migration command. Do not confuse it with `lock-ledger-absent`, which means the ledger file is
 **gone** while locked claims remain — the two are told apart by the store itself, not by history.
 To move `claims_dir` legitimately, move the claims and the stores in the **same** commit, claim

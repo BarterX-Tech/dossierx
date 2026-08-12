@@ -126,7 +126,7 @@ Upgrading from v0.2.x? Twelve commands were removed and four moved in v0.3.0, an
 
 `error.code` is a stable snake_case token — `lint_failed`, `claim_not_found`, `rights_denied`, `integrity_failed`, `unresolved_comments`, `pre_ledger_unadopted`, and so on. Branch on it. `message` and `hint` are prose and will be reworded; `code` is the promise. Successful runs carry their payload in `data`, non-blocking findings in `warnings`, and `check` reports how far it got in `stopped_at`.
 
-Mutating commands take `--dry-run`, which reports what *would* change and writes nothing. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`).
+The ten claim, comment and build-order lifecycle verbs take `--dry-run`, which reports what *would* change and writes nothing. Two commands write and take no `--dry-run`: `check`, whose read-only form is `--validate`, and `skills export`, which has none. A dry run fails only when it cannot compute the preview: a refusal — including a missing required flag — is a *successful* blocked report (exit 0, `ok: true`, `data.blocked: true`).
 
 `--reason` is required on `claim lock`, `claim unlock`, `claim reaudit --confirm`, `claim flag`, and `build-order lock`. Under the two-role split the human never types these, so `--reason` is where their approving words enter the record.
 
