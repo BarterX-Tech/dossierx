@@ -583,8 +583,14 @@ if [ -n "$configured_hooks_path" ]; then
 	# the one install-git-hook.ps1 exists for. So the test is inverted: anything
 	# that is NOT this repository's own config is machine-wide.
 	case "$hooks_path_origin" in
-	"" | file:.git/config | file:*/.git/config)
-		# This repository's own config, or unreadable. Nothing to add.
+	"" | file:.git/config | file:*/.git/config \
+	   | file:*/config.worktree | file:*/.git/config.worktree)
+		# This repository's own config — including a worktree-scoped setting
+		# under extensions.worktreeConfig, which reports .git/config.worktree or
+		# .git/worktrees/<id>/config.worktree and is narrower than the repository
+		# rather than wider. Or unreadable. Nothing to add: saying "EVERY git
+		# repository on this machine" over a one-worktree setting is the same
+		# defect as staying silent over a global one, pointing the other way.
 		;;
 	*)
 		printf '%s\n' \
@@ -728,10 +734,10 @@ fi
 printf '%s\n' "" \
 	"Two things this hook does NOT do:" \
 	"  · it does not fire on clean merges, rebases, cherry-picks or reverts —" \
-	"    git simply does not run pre-commit for those. Add the CI workflow;" \
-	"    CI is the authority. It is not in your repository yet — copy it from" \
+	"    git simply does not run pre-commit for those. CI is the authority. If" \
+	"    you have not added the workflow yet, it is at" \
 	"    https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.2/scripts/ci/dossierx-check.yml" \
-	"    into .github/workflows/." \
+	"    and belongs in .github/workflows/." \
 	"  · it does not check anything you did not stage. --staged reads the index." \
 	"" \
 	"Three project-root files are TRACKED ARTIFACTS. Commit them; never" \

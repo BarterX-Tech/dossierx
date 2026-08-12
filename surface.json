@@ -215,11 +215,15 @@
     "comment resolve",
     "coverage",
     "deps",
+    "flag",
     "implink",
     "lint",
+    "lock",
     "migrate",
+    "reaudit",
     "render",
-    "stale"
+    "stale",
+    "unlock"
   ],
   "lint_rules": [
     "ambiguous",
@@ -454,7 +458,7 @@
   ],
   "render_fingerprint": "sha256:141a8df5e3b9f11aa598170d34844caf47c6c13aa501723506d722f48402005f",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:7a6c4d358d93c9e9e73f51a0e4f53d051a4e96ba772fd1e974d9b39aa1085559",
+    "cmd/dossierx": "sha256:64badecbf2aeeab296b8f420bf3fe2f47d4b2aa48b1d1ee3c7c3e0330821abe3",
     "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
     "internal/catalog": "sha256:88601d14728e83723460b5bd7bdfa8aadbd3fba3c81d5230b67bcf7529fbe569",
     "internal/check": "sha256:202896d4373112a54cb8e14542d70101a11ca5f2c1d989bf83039228a881a3d6",
@@ -475,7 +479,7 @@
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
     "internal/serve": "sha256:bfa5e4e6c5bac0180b547e2ac7a6e6deaecce37570014a6f5d49dcee591ce989",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:0ad42c5249611610a90f831ffa71b51d444e182f1a78b27c87a45caa71fc0c34"
+    "skills": "sha256:367dc250bd93c1eacf47418a685c7dbff3c6931781452e1db6f67daa94eb50cc"
   },
   "envelope": {
     "keys": [

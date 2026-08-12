@@ -37,8 +37,12 @@ the five rules are there and are not repeated here.
 One YAML document per file. A second `---` document in the same file is a hard load error — split
 it out.
 
-- `id: module.FACET.slug` — **exactly three** non-empty dot-separated segments. `module` and
-  `FACET` must be ones the project declares in `project.config.yaml`; `slug` must be kebab-case
+- `id: module.FACET.slug` — **exactly three** non-empty dot-separated segments. `module` must be
+  one the project declares in `project.config.yaml`, and `FACET` must be one of its declared
+  `facets[]` **or the reserved `overview` facet**, which every module gets automatically and which
+  a project does NOT list — adding `overview` to `facets[]` is not required and is usually wrong,
+  because it gives that facet its own viewer tab instead of the injected orientation-note
+  behaviour the reserved name exists for; `slug` must be kebab-case
   (lowercase alphanumerics, single hyphens). The viewer's card title is derived from the slug, so
   `retry-policy` renders as "Retry Policy" — you never write a title.
 - `status: draft | locked` — **only** `dossierx claim lock` / `unlock` may change this. Editing it

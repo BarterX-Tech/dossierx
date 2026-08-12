@@ -108,30 +108,42 @@ func retiredCommentVerbs() []*cobra.Command {
 // "if you remember an older command" table, in the same words, so the binary and
 // the skill cannot drift into disagreeing about where a caller should go next.
 //
-// lock/unlock/flag/reaudit are NOT here, and the reason recorded until v0.5.2
-// was wrong. It said they moved under a noun of the same name, so the root
-// "already" answers `dossierx lock <id>` with a hint listing the seven nouns.
-// It does not. This file's own package doc states why: cobra's legacyArgs
-// rejects an unknown command during Execute, so the root's RunE — the only
-// hint-bearing branch — is never reached. Measured on v0.5.2:
+// lock/unlock/flag/reaudit ARE here as of v0.5.2, and the reason they were not
+// is worth keeping because it was wrong in an instructive way. It said they
+// moved under a noun of the same name, so the root "already" answers
+// `dossierx lock <id>` with a hint listing the seven nouns. It does not. This
+// file's own package doc states why: cobra's legacyArgs rejects an unknown
+// command during Execute, so the root's RunE — the only hint-bearing branch —
+// is never reached. Measured before the fix:
 //
-//	dossierx lock some.claim.id  -> {"command":"","error":{"code":"usage",
-//	                                 "message":"unknown command \"lock\" for
-//	                                 \"dossierx\""}}   no hint, empty command
-//	dossierx lint                -> {"command":"lint","error":{"code":"usage",
-//	                                 "message":"lint: removed in v0.3.0; ...",
-//	                                 "hint":"run: dossierx check ..."}}
+//	dossierx lock some.claim.id  -> {"ok":false,"command":"","error":{
+//	                                 "code":"usage","message":"unknown command
+//	                                 \"lock\" for \"dossierx\""}}
 //
-// So those four verbs get exactly the bare answer this file exists to remove,
-// and they are the four most likely to be typed from pre-v0.3.0 memory. Adding
-// them is a CLI-surface change — four new commands in the inventory, and every
-// skill and doc that counts nouns and leaves — so it is deferred rather than
-// smuggled into a patch release; ROADMAP.md carries it. What is fixed here is
-// the false justification, because a wrong reason is what kept anybody from
-// noticing the gap.
+// No hint, no replacement named, empty command field: exactly the answer this
+// file exists to remove, on the four verbs most likely to be typed from
+// pre-v0.3.0 memory, since each still exists at `dossierx claim <verb>`.
+//
+// A second false reason nearly kept them out — that four new commands would move
+// the noun and leaf counts every skill and document states. A retired stub does
+// not enter `commands` in surface.json; it enters `retired`, and `counts` reads
+// 19 commands under 7 nouns either way. The twelve stubs already here prove it.
+
 func retiredTopLevelCmds() []*cobra.Command {
 	checkHint := `run: dossierx check (add --validate for a read-only pass that writes nothing)`
 	return []*cobra.Command{
+		retiredCmd("lock",
+			`lock: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
+			`run: dossierx claim lock <id> --reason "..."`),
+		retiredCmd("unlock",
+			`unlock: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
+			`run: dossierx claim unlock <id> --reason "..."`),
+		retiredCmd("flag",
+			`flag: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
+			`run: dossierx claim flag <id> --reason "..."`),
+		retiredCmd("reaudit",
+			`reaudit: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
+			`run: dossierx claim reaudit <id> (add --confirm to accept the proposal)`),
 		retiredCmd("lint",
 			`lint: removed in v0.3.0; linting is a stage of check, not a verb — findings are data.lint_findings on check's envelope`,
 			checkHint),

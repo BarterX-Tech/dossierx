@@ -437,7 +437,7 @@ export const contentSpec: ContentSpec = {
               "Edit or delete any comment — that surface is the viewer's",
             ],
             footnote:
-              "Every mutating verb takes --dry-run, so the agent can show you the transition, the preconditions and the blast radius before it writes anything.",
+              "Every claim, comment and build-order verb that writes takes --dry-run, so the agent can show you the transition, the preconditions and the blast radius before it writes anything. (check and skills export write too and take no --dry-run; check --validate is its read-only mode.)",
           },
         ],
         boundary: {
@@ -935,7 +935,7 @@ export const contentSpec: ContentSpec = {
           },
           {
             title: "Nothing writes unpreviewed",
-            body: "Every mutating verb takes --dry-run and reports the transition, the preconditions, the side effects and what is missing. claim lock / unlock / reaudit --confirm and build-order lock additionally require --reason: your approval, in your words, written to the ledger. Comment verbs require --as human|agent — never defaulted, so a human's terminal action can never file as the agent.",
+            body: "Every lifecycle verb takes --dry-run and reports the transition, the preconditions, the side effects and what is missing. The ten are claim lock / unlock / flag / reaudit / new / link, comment add / reply, and build-order propose / lock. Two commands write without one: check, whose read-only mode is --validate, and skills export. claim lock / unlock / reaudit --confirm and build-order lock additionally require --reason: your approval, in your words, written to the ledger. Comment verbs require --as human|agent — never defaulted, so a human's terminal action can never file as the agent.",
           },
         ],
         errorCodes: [

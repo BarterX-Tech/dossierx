@@ -143,7 +143,7 @@ entry point a surface goes through, plus **one further split within the
 wider ceiling**: whether images are permitted at all.
 
 **The BLOCK ceiling** covers every claim-authored prose surface — `body` on
-every layout that renders it (card, banner, list, steps, table, mockup) and
+every layout that renders it (all seven: card, table, list, steps, tree, banner, mockup) and
 every `steps` entry — and, separately, **comment bodies** (both the root of
 a thread and every reply). Both routes recognize the identical set of
 constructs below; the only thing that differs between them is images (see

@@ -82,7 +82,7 @@ Comet when no Chrome or Chromium is installed, and since v0.5.0 the suite logs w
 actually drove — read that line before quoting a result. The difference is not hypothetical: Comet
 serves its own `chrome://` UI and posts telemetry through a path containing `/api/`, and
 `graph_offline_test.go` was reading that traffic as the page's own — 119 request events on the tab,
-118 of them the browser's. v0.5.0 fixed that specific misread by attributing requests via CDP's
+118 of them the browser's. the misread was fixed by attributing requests via CDP's
 `DocumentURL`, but the class remains: a fork is a different browser, and the suite cannot tell you
 what Chrome would have done.
 
@@ -91,10 +91,12 @@ means the suite cannot run locally at all, and a suite nobody can run is worse t
 evidence needs a caveat. `DOSSIERX_TEST_BROWSER` is how you remove the caveat: it pins which
 browser is driven, and turns "no browser found" from a skip into a failure.
 
-`tests/nested_module_coverage_test.go` keeps this list from quietly going stale: it fails the
-build when a nested module is reached by **neither** a CI step **nor** a Makefile target. It is a
-disjunction, not a conjunction — deleting the CI lint step alone leaves it green while
-`make viewer-lint` survives, and deleting both is what reds it.
+`tests/nested_module_coverage_test.go` keeps this list from quietly going stale, and it treats
+RUNNING a module and LINTING it differently. For running the suite it is a **conjunction**: the
+module needs a CI step with `working-directory: <mod>` AND a Makefile line carrying both
+`cd <mod>` and `go test`, so deleting either one alone reds the build. Only the lint check is a
+**disjunction** — a CI lint step or a Makefile lint target satisfies it, and deleting both is what
+reds it.
 
 ### Adding a file is two steps: `surfaces.yaml` has to claim it
 

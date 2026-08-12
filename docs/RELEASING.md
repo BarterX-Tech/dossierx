@@ -166,14 +166,17 @@ them, and the three post-publish checks that leave this repository entirely.
       artifacts below that surface's question actually needs**.
 
       **That last clause is the one to read twice: the six are the run's evidence
-      POOL, not a bundle's contents.** Four of them are shared and reach every
-      surface — `surface.json`, `gate/baseline.json`, `gate/delta.json` and
-      `gate/site-text.json` — and the other three are targeted: the render diff
-      goes to two surfaces, the skills-export capture to the skills surfaces, the
-      release-notes prediction to the release-notes surface. So a bundle carrying
-      three artifacts rather than six is the design working, not a fan-out that
-      lost half its evidence. All six are staged here regardless of who reads
-      them, and the
+      POOL, not a bundle's contents.** THREE of the six are shared and reach every
+      surface — `gate/baseline.json`, `gate/delta.json` and `gate/site-text.json`
+      — and the other three are targeted: the render diff goes to two surfaces,
+      the skills-export capture to the skills surfaces, the release-notes
+      prediction to the release-notes surface. `surface.json` is a fourth shared
+      file and is deliberately NOT one of the six: it is committed, so it is
+      neither staged here nor on the `record` manifest, for the reason set out
+      below. So an ordinary bundle carries `surface.json` plus three `gate/`
+      artifacts, and a bundle holding three rather than six is the design
+      working, not a fan-out that lost half its evidence. All six are staged here
+      regardless of who reads them, and the
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
       be at those paths on the day of the run is what the agents read — and a
