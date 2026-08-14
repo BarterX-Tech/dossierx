@@ -6,7 +6,9 @@ worth keeping. It is not a description of the tree. Where the two disagree, the 
 each disagreement found by the fix-wave reading of the implementation is corrected in place below
 with a note rather than silently rewritten — a design record that quietly matches its
 implementation records nothing about the decisions made along the way.
-**For what shipped, read `docs/RELEASING.md` and the three test files it names.**
+**For what shipped, read `docs/RELEASING.md` and these three files:
+`cmd/dossierx/gate_subject_test.go` (lane B), `cmd/dossierx/gate_wave_test.go` (lane A) and
+`tests/derived_facts_test.go` (lane C).**
 **Applies to:** v0.5.2, in flight — branch `release/v0.5.2` at `f38ace0`, gate paused after round four.
 **Scope ruled by the maintainer:** lanes A, B and C. The override record is deferred; see below.
 **This is not a release procedure.** `docs/RELEASING.md` is the only one, and stays so. This file is
@@ -141,10 +143,11 @@ A coverage gap found mid-release is recorded as a finding **against the next rel
 silently. If the maintainer rules a specific gap blocking, they edit `gate/subject.json` with a
 non-empty `thaw_reason` and the new digest. **This originally said every key changes when `surfaces.yaml` does, so a thaw re-reads every
 surface. That is false**, and the fix-wave reading of the implementation caught it in five places.
-No stage-2 key hashes the manifest: a key covers a surface's own documents plus `surface.json`,
-`gate/baseline.json`, `gate/delta.json` and `gate/site-text.json`. A thaw re-reads the surfaces
-whose document sets the edit moved, plus `contributing`, which declares the manifest in its
-`reads:`. The freeze's value is that the widening is visible, dated and reasoned — not that it is
+The correction was then wrong in the other direction — "no stage-2 key hashes the manifest" — and a
+second fix-wave reading caught that too. What holds: a key hashes five things, including the
+ASSEMBLED BUNDLE, and `contributing` declares the manifest in its `reads:`, so the manifest reaches
+that surface's bundle and its key moves whenever the manifest does. A thaw moves `contributing`'s
+key always, plus every surface whose documents or `reads:` list the edit changed. The freeze's value is that the widening is visible, dated and reasoned — not that it is
 expensive.
 
 ### Freezing is not narrowing
@@ -214,7 +217,7 @@ written last, from the diff, and read by lane A before round five sees it.
 | Lane | How it is proven |
 |------|------------------|
 | A | A test that the wave mode writes nothing under `gate/answers/` and that no wave output reaches a receipt. A usage test pinning the mode's grant to the same exclusive two-tool list. |
-| B | Shipped as seven tests, not three: the four planned plus a later round not erasing a recorded thaw, the fan-out verifying before it mints, and the two unreasoned re-openings pinned OPEN — deleting the record, and moving its version. That last one is a correction: this spec implied a thaw always costs a reason, and only an edit to `surfaces_sha256` does. |
+| B | Shipped as seven test functions. The four planned assertions ship as three of them (refusing a changed digest and accepting a matching one are one test), plus: a later round not erasing a recorded thaw; the fan-out verifying before it mints; a freeze naming no run being refused without writing anything; and the unreasoned re-openings pinned OPEN. That last is a correction — this spec implied a thaw always costs a reason, and only an edit to `surfaces_sha256` does. |
 | C | Mutation both ways — remove a row from the site table, and change the pin-count sentence; each must red the build. |
 
 ## Order of work

@@ -265,16 +265,27 @@ json_scalar() {
 # new digest into surfaces_sha256, and their reason into thaw_reason. frozen_sha256
 # is never edited, so the two fields disagreeing is the machine-readable fact that
 # this release re-opened its subject — and a re-opening with an empty reason is
-# refused. WHAT A THAW ACTUALLY COSTS, stated accurately because the first
-# version of this comment was not. A stage-2 key hashes a surface's OWN
-# documents plus four shared artifacts — surface.json, gate/baseline.json,
-# gate/delta.json, gate/site-text.json — and surfaces.yaml is in neither list.
-# So a thaw does NOT re-read all thirteen: it re-reads the surfaces whose
-# resolved document set the edit moved, plus `contributing`, which declares the
-# manifest in its `reads:`. A widening that only ADDS a surface leaves the other
-# twelve keys byte-identical and they carry forward. The maintainer thawing is
-# therefore the one who decides what else needs re-reading; the freeze makes the
-# widening visible and dated, and that is what it is for.
+# refused.
+#
+# WHAT A THAW ACTUALLY COSTS. This comment has been wrong twice, in opposite
+# directions, and the second time was itself a correction — which is why the
+# components are enumerated here rather than summarised. A stage-2 key hashes
+# FIVE things (gateSurfaceFingerprint): the surface's name, its own documents,
+# the four shared evidence files, THE ASSEMBLED BUNDLE, and method_version.
+#
+# surfaces.yaml is owned by no surface — release-gate-artifacts claims it
+# out_of_scope — and it is not one of the four shared files. The first version of
+# this comment concluded from that that a thaw re-reads all thirteen; the second
+# concluded that no key hashes the manifest at all. Both skipped the bundle.
+# `contributing` declares surfaces.yaml in its `reads:`, so the manifest's bytes
+# are assembled into that surface's bundle and its key moves whenever the
+# manifest does.
+#
+# So a thaw moves `contributing`'s key always, plus the key of every surface
+# whose resolved documents or whose own `reads:` list the edit changed. Every
+# other key is byte-identical and carries forward. The maintainer thawing decides
+# what else needs re-reading; what the freeze guarantees is that the widening is
+# visible, dated and reasoned.
 # ---------------------------------------------------------------------------
 
 # release_version reads the newest version heading out of the CHANGELOG, which is
@@ -337,7 +348,7 @@ subject_verify() {
   The manifest is the QUESTION this release's rounds are counted over, and a question that grows between rounds makes the finding curve unreadable — a smaller round may mean a better tree or a narrower ask, and nothing on the record says which.
   Two ways forward, both deliberate:
     revert $MANIFEST_FILE and record the coverage gap as a finding against the NEXT release, which is where its round one will read it; or
-    rule it blocking, set surfaces_sha256 to $_actual and write thaw_reason in $SUBJECT_FILE. That re-reads the surfaces whose documents this edit moved, plus contributing, which reads the manifest — not all thirteen: no stage-2 key hashes surfaces.yaml itself." 6
+    rule it blocking, set surfaces_sha256 to $_actual and write thaw_reason in $SUBJECT_FILE. That re-reads contributing, which declares this manifest in its reads: and so carries it inside its bundle, plus every surface whose own documents or reads: list your edit changed. The rest carry forward." 6
   fi
 }
 
@@ -525,11 +536,11 @@ case "$MODE" in
       sed "s|<<RANGE>>|$RANGE|g" "$ROOT/$WAVE_PROMPT_FILE"
       printf '\n## The files this wave changed\n\n'
       printf '%s\n' "$_changed" | sed 's/^/- /'
-      # SEVEN BACKTICKS, not three. Every markdown file in this repository
-      # contains fenced blocks of its own, so a three-backtick wrapper is closed
-      # by the first fence inside the file and the rest of that file arrives as
-      # prose in a reader's view of the bundle. Nothing goes missing either way —
-      # this is about the frame the reader is handed, not the bytes.
+      # SEVEN TILDES, not three backticks. A fence is closed only by a fence of
+      # the SAME character, so a ~~~~~~~ wrapper survives every ``` block inside
+      # the files it wraps — and every markdown file in this repository has them.
+      # The protection is the character, not the length. Nothing goes missing
+      # either way: this is about the frame the reader is handed, not the bytes.
       printf '\n## The diff\n\n~~~~~~~diff\n'
       git -C "$ROOT" diff "$RANGE" --
       printf '~~~~~~~\n'

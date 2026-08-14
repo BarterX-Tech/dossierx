@@ -294,7 +294,7 @@ type historyLiteral struct {
 }
 
 // declaredHistoryLiterals is every renderable version literal that lives in
-// content.ts outside the releases array. Eight sentences today, each naming what
+// content.ts outside the releases array. Nine sentences today, each naming what
 // some past release did.
 //
 // WHY EACH ONE IS WRITTEN DOWN, rather than exempted by a rule.

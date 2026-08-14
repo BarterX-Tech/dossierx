@@ -16,15 +16,21 @@
 //	IT REFUSES A MOVED MANIFEST — the whole point, and it names the frozen digest
 //	    AND the one on disk, so a human sees what moved and what it moved to
 //	    rather than being told that something did.
-//	A THAW RECORDED IN surfaces_sha256 MUST CARRY A REASON. That is one of three
-//	    ways to re-open a subject, and the only one this file can refuse. The
-//	    other two are DELETING gate/subject.json and CHANGING its `version`, both
-//	    of which mint a fresh freeze with no reason and are pinned OPEN below —
-//	    the version path deliberately, because that is how the next release
-//	    starts. What stands behind those two is not this test: it is that the
-//	    file is tracked, so either edit is a line in a reviewed diff. Saying the
-//	    reason requirement covers every re-opening would be the overclaim this
-//	    gate exists to catch.
+//	A THAW RECORDED IN surfaces_sha256 MUST CARRY A REASON — and that is the ONLY
+//	    re-opening this file can refuse. There are three others, none of which
+//	    costs a reason:
+//	      · DELETING gate/subject.json — verify passes on a missing file and the
+//	        next fan-out mints a fresh freeze;
+//	      · CHANGING its `version` — verify returns on any version mismatch,
+//	        deliberately, because that is how the NEXT release starts;
+//	      · REWRITING BOTH DIGESTS to the moved value — the thaw check fires only
+//	        when the two disagree, so making them agree again forges the record
+//	        rather than re-opening it.
+//	    The first two are pinned OPEN below so a reader meets the real shape. What
+//	    stands behind all three is not this test: it is that the file is tracked,
+//	    so every one of them is a line in a reviewed diff. Saying the reason
+//	    requirement covers every re-opening would be the overclaim this gate is
+//	    built to catch — an earlier version of this header said exactly that.
 //	A NEW RELEASE IS NOT BOUND BY ITS PREDECESSOR'S FREEZE — inheriting the
 //	    previous release's subject would be the same stale-evidence failure the
 //	    rest of the gate refuses everywhere else.
@@ -310,13 +316,20 @@ func TestGateSubjectTheTwoUnreasonedReopeningsArePinnedOpen(t *testing.T) {
 		}
 	})
 
-	t.Run("moving the version mints a fresh freeze with no reason", func(t *testing.T) {
+	t.Run("moving the version accepts, then mints a fresh freeze with no reason", func(t *testing.T) {
 		overlay, _ := gateStage2Overlay(t)
 		frozen := gateSubjectFreeze(t, overlay, "round-one")
 		gateSubjectMoveManifest(t, overlay)
 		gateSubjectWrite(t, overlay, "v9.9.9", frozen, frozen, "")
 		if _, err := gateStage2Harness(t, "subject", "--root", overlay); err != nil {
 			t.Fatalf("a freeze naming another release bound this one, which is what TestGateSubjectDoesNotBindTheNextRelease says it must not: %v", err)
+		}
+		// The MINT half, which the first version of this subtest named and did not
+		// check: accepting is only half the path, and a freeze that accepted but
+		// never re-minted would leave this release running under a record naming
+		// another one.
+		if got, want := gateSubjectFreeze(t, overlay, "round-two"), gateSubjectMovedDigest(t, overlay); got != want {
+			t.Errorf("after a version change the freeze covers %s; the manifest on disk digests to %s", got, want)
 		}
 	})
 }

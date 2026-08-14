@@ -446,10 +446,13 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 
 	// --- release: stanza — see goreleaserReleaseFull's doc comment for what each
 	// of header/footer/disable/mode has to be. Header and footer are SET in the
-	// committed file and required to be literal rather than templated; disable and
-	// mode are required to be absent. An earlier version of this comment said all
-	// four had to be at their defaults, which stopped being true when v0.5.2 set
-	// the first two. ---
+	// committed file and required to be LITERAL rather than templated; disable and
+	// mode are required to be at their DEFAULTS, which is not the same as absent —
+	// disableIsDefault accepts nil, false and "false", and an explicit
+	// `mode: keep-existing` is accepted too. An earlier version of this comment
+	// said all four had to be at their defaults, which stopped being true when
+	// v0.5.2 set the first two; the version after that said disable and mode had
+	// to be absent, which was never true. ---
 	relNode, ok := topLevelNode(&root, "release")
 	if !ok {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: no top-level \"release:\" key found; either the file changed shape or the path is wrong", goreleaserPath)
@@ -588,8 +591,10 @@ type ReleaseNotesPrediction struct {
 	// that anchor.
 	//
 	// It is here because of what the v0.5.2 gate reported about v0.5.2 itself:
-	// the header is the only client-facing line THIS release adds, and it
-	// appeared in NO artifact any reading agent is handed. The
+	// the header is the only client-facing line this release adds that reached NO
+	// artifact any reading agent is handed. The footer is client-facing too and
+	// was already covered — it lands inside Body, which the release-notes surface
+	// reads — and so are the four retired stubs, which reach surface.json. The
 	// prediction is what the release-notes surface reads, so a header absent
 	// from it is a line that ships to every consumer with nobody having read it.
 	// Carrying it does not verify it against the published page — nothing here

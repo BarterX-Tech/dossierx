@@ -309,6 +309,15 @@ them, and the three post-publish checks that leave this repository entirely.
       round may mean a better tree or a narrower question, and nothing on the
       record says which.
 
+      **Commit `gate/subject.json` the moment this mints it, and know what that
+      costs.** It is tracked, so leaving it untracked fails the clean-tree
+      precondition the driver checks later. But committing moves `HEAD`, and
+      `$TREE` is `HEAD^{tree}` — so the fan-out you just produced is keyed to a
+      tree the branch no longer carries, and this step has to be run again
+      against the new one. On a looping release the next round absorbs that; on a
+      round that comes back clean it does not, so commit the freeze FIRST and
+      produce the fan-out you intend to act on SECOND.
+
       Coverage is not reduced by this and never has been: it stays exactly where
       round one set it, nothing is sampled or dropped, and a gap found in a later
       round is **written down as a finding against the next release**, where that
@@ -318,15 +327,21 @@ them, and the three post-publish checks that leave this repository entirely.
       what says this release re-opened its subject — and a thaw with an empty
       reason is refused.
 
-      **A thaw does not re-read all thirteen surfaces**, and the first version of
-      this paragraph said it did. No stage-2 key hashes `surfaces.yaml`: a key
-      covers a surface's own documents plus `surface.json`, `gate/baseline.json`,
-      `gate/delta.json` and `gate/site-text.json`. What re-reads is every surface
-      whose resolved document set your edit moved, plus `contributing`, which
-      declares the manifest in its `reads:`. Deciding what else needs re-reading
-      is yours. What the freeze guarantees is narrower and still worth having:
-      the widening is visible, dated and reasoned rather than absorbed into the
-      next round's count.
+      **What a thaw actually re-reads.** A stage-2 key hashes five things: the
+      surface's name, its own documents, the four shared evidence files, the
+      ASSEMBLED BUNDLE, and `method_version`. `surfaces.yaml` is owned by no
+      surface and is not one of the four shared files — but `contributing`
+      declares it in `reads:`, so the manifest's bytes are assembled into that
+      surface's bundle and its key moves whenever the manifest does.
+
+      So a thaw moves `contributing`'s key always, plus the key of every surface
+      whose resolved documents or whose own `reads:` list your edit changed.
+      Everything else carries forward. Two earlier versions of this paragraph got
+      this wrong in opposite directions — one said every key moves, one said none
+      does — and both were caught by a fix-wave reading; the enumeration is here
+      so a third guess is not needed. Deciding what else needs re-reading is
+      yours. What the freeze guarantees is that the widening is visible, dated
+      and reasoned rather than absorbed into the next round's count.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. `gate/method.yaml`
@@ -678,13 +693,12 @@ them, and the three post-publish checks that leave this repository entirely.
 
       **Either way, start from a clean tree**: `git status --porcelain` empty and
       local `main` in sync with `origin/main`. Anything modified or untracked at
-      this point is content no gate read and the merge carries it in. TWO of the
-      three records this procedure writes — the ci-evidence record and the
-      driver's own run record — default to paths outside the repository so that
-      neither of them is what dirties it. The third is `gate/subject.json`, which
-      is tracked on purpose, so **commit it as soon as the first fan-out of a
-      release mints it**. Leaving it untracked is what would fail this check —
-      and a subject freeze nobody committed is one the next round cannot read.
+      this point is content no gate read and the merge carries it in. The
+      ci-evidence record and the driver's own run record default to paths outside
+      the repository so that neither of them is what dirties it; everything else a
+      run writes lands under `gate/` and is ignored — with one exception,
+      `gate/subject.json`, which is tracked on purpose and which step 2 of
+      **Before tagging** tells you to commit at the moment it is minted.
 
       **And `main` must not be checked out in another worktree.** D2's first act
       is `git checkout main` in the checkout you invoke from, and git allows a

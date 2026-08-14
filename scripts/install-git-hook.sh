@@ -647,14 +647,22 @@ if [ -n "$configured_hooks_path" ]; then
 	# which matches nothing, and a purely local `core.hooksPath` was announced as
 	# running for every repository on the machine.
 	hooks_origin_top=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
+	# TWO ANCHORS, BECAUSE GIT USES TWO. --show-origin and --git-dir are relative
+	# to the work-tree TOP; --git-common-dir's relative form is relative to $PWD
+	# ("../../.git" from two levels down). Joining that one to the toplevel builds
+	# <top>/../../.git, which matches nothing. No false positive is reachable
+	# through it today — in the main work tree --git-dir is absolute from a
+	# subdirectory and matches first, and in a linked work tree both values are
+	# absolute — but a relative --git-common-dir resolved against the wrong anchor
+	# is a trap for the next edit, so it is resolved against its own.
 	absolutise_repo_path() {
 		case "$1" in
 		"" | /* | ?:[/\\]*) printf '%s' "$1" ;;
-		*) printf '%s/%s' "${hooks_origin_top:-$PWD}" "$1" ;;
+		*) printf '%s/%s' "${2:-${hooks_origin_top:-$PWD}}" "$1" ;;
 		esac
 	}
 	hooks_origin_git_dir=$(absolutise_repo_path "$hooks_origin_git_dir")
-	hooks_origin_common_dir=$(absolutise_repo_path "$hooks_origin_common_dir")
+	hooks_origin_common_dir=$(absolutise_repo_path "$hooks_origin_common_dir" "$PWD")
 	hooks_path_origin_abs=$(absolutise_repo_path "$hooks_path_origin")
 
 	hooks_origin_scope=machine-wide
