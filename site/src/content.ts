@@ -366,7 +366,7 @@ export const contentSpec: ContentSpec = {
         // envelope's `stopped_at`, which is exactly why they still matter to an
         // agent: "stopped at lint" and "stopped at scan" call for different
         // next moves.
-        pipeline: ["lint", "catalog", "render", "ledger", "scan"],
+        pipeline: ["lint", "catalog", "render", "scan", "ledger"],
         roles: [
           {
             id: "agent",
@@ -998,7 +998,7 @@ export const contentSpec: ContentSpec = {
                 summary:
                   "The whole pipeline in one shot — the CI entry point, and the agent's routine command.",
                 detail:
-                  "1) DetectStale flips drifted locked claims to review_pending and persists the flag. 2) lint → catalog → render, stopping at the first failure. 3) The lock-ledger gate: every locked claim's hash must match a ledger record. 4) Scans source_dirs for dossierx-claim tags (an unknown or unlocked tag is a HARD failure). 5) Prints orientation-note counts, impl-link drift, and a next-steps block. --validate lints in memory and writes NOTHING — no claim files, no lock store, no .catalog.json, no viewer — which is what makes the per-claim authoring loop safe. --staged judges the GIT INDEX rather than the working tree, reading content from git show, and is what the pre-commit hook runs.",
+                  "1) DetectStale flips drifted locked claims to review_pending and persists the flag. 2) lint → catalog → render, stopping at the first failure. 3) Scans source_dirs for dossierx-claim tags (an unknown or unlocked tag is a HARD failure). 4) The lock-ledger gate — LAST, so reaching it means the catalog and the viewer were regenerated and the scan passed: every locked claim's hash must match a ledger record. 5) Prints orientation-note counts, impl-link drift, and a next-steps block. --validate lints in memory and writes NOTHING — no claim files, no lock store, no .catalog.json, no viewer — which is what makes the per-claim authoring loop safe. --staged judges the GIT INDEX rather than the working tree, reading content from git show, and is what the pre-commit hook runs.",
                 example:
                   '$ dossierx check --format text\nimpl-links: scanned 214 file(s), found 37 tag(s), reconciled 37 link(s) (0 error(s))\ncheck: OK\nnext steps:\n  4 claim(s) still draft -> ask the human, then lock them one at a time\n  module "logger" is fully locked with no build order yet -> dossierx build-order propose --module logger',
               },
@@ -1346,7 +1346,7 @@ export const contentSpec: ContentSpec = {
         globalFlags: [
           {
             name: "--format json|text",
-            desc: "json is the DEFAULT — one envelope per invocation. text returns the human prose; for every command that existed in v0.2.0 it is byte-for-byte what it was then, which is what the golden parity fixtures pin. The four commands v0.3.0 added — `claim show`, `claim list`, `claim new`, `comment inbox` — have no v0.2.0 output to be identical to.",
+            desc: "json is the DEFAULT — one envelope per invocation. text returns the human prose, pinned against golden fixtures so it cannot drift by accident. It is not frozen at v0.2.0: `check`'s next-step line was reworded when the verbs moved under the claim noun, and the four commands v0.3.0 added — `claim show`, `claim list`, `claim new`, `comment inbox` — had no v0.2.0 output to be identical to in the first place.",
           },
           {
             name: "--config string",

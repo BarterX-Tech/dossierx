@@ -690,6 +690,8 @@ case "$MODE" in
 
   record)
     [ -n "$TREE" ] || die "record: --tree is required" 1
+    resolved_object_name "$TREE" \
+      || die "record: --tree is \"$TREE\", which is not a full 40-digit object name. The manifest this writes is what every later step compares against; a tag or an abbreviation recorded here is an identity that can mean a different tree in another clone." 1
     resolved_object_name "$BASELINE_COMMIT" \
       || die "record: the baseline could not be resolved — --baseline-commit is ${BASELINE_COMMIT:-empty} and must be a full 40-digit object name. A run manifest that cannot name the release it was compared against covers nothing." 3
     [ -n "$BASELINE_REF" ] || die "record: --baseline-ref is required" 1

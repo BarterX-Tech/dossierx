@@ -34,17 +34,18 @@ What follows from it:
   refused, not assumed.
 - **Every finding reaches the human, and the human's ruling is the classification.** Nothing is
   filtered, deduplicated away or dropped on its way to the report, and a receipt carrying any
-  finding at all evaluates to FAILED. A finding does carry a severity, but that word is free text
+  finding the human has not ruled on evaluates to FAILED. A finding does carry a severity, but that word is free text
   the reporting agent wrote about its own work — nothing derives it from the evidence behind the
   finding, and nothing in the gate acts on it: one sort comparator orders the record by it so that
   a re-run over an unchanged tree produces the identical document, and no verdict, filter or
   threshold consults it. So an agent never presents its own severity as a verdict: it reports, the
-  human rules. Two consequences to know before you meet them — there is no override field on the
-  receipt, so a finding the human has judged non-blocking can be cleared only by fixing the tree or
-  by deleting the finding from the record by hand, and deleting it leaves an adjudicated finding
-  indistinguishable from one nobody raised. Why neither the evidence-derived classifier nor the
-  override record was built, and what each would need first, is recorded at
-  `cmd/dossierx/gate_stage3_test.go:42-57`.
+  human rules. A finding the human has judged non-blocking is cleared by fixing the tree
+  or by recording a ruling in `gate/overrides.json` — tracked, naming the release, the finding's
+  digest, who ruled and why, refused when it is stale or inherited or unreasoned, and carried on the
+  receipt beside the finding it clears, which stays. Deleting a finding by hand is still possible and
+  is still the thing not to do: it leaves an adjudicated finding indistinguishable from one nobody
+  raised. The override record was built in v0.5.2. Why the evidence-derived classifier was NOT built,
+  and what it would need first, is recorded in `cmd/dossierx/gate_stage3_test.go`'s residues note.
 - **Verify the thing the user sees, not the thing you edited.** The site is read as rendered DOM
   from a real build, the binary is checked from the published archive, and the tag's tree is checked
   against the tree that was actually approved. This covers output; it does not cover invariants about

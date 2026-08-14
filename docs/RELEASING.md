@@ -89,14 +89,14 @@ them, and the three post-publish checks that leave this repository entirely.
       that carries that tree: `origin/main` is already an ancestor, so the merge the
       driver makes at D2 is content-identical. An earlier version of this item said
       "not on the branch, on the merge commit" and gave the `content.ts` sha stamp as
-      the reason. That stamp was deleted in this release, and the instruction could not
+      the reason. That stamp was deleted in v0.5.1, and the instruction could not
       be followed anyway — at this point in the procedure THIS release has no merge
       commit, because making it is the driver's own D2. Naming `main`'s newest merge
       names the PREVIOUS release.
 
-      That fetches the CI run **for that exact sha** — never HEAD, because on a
-      release branch HEAD is not a merge commit at all, and this record is keyed to
-      the merge — derives from `.github/workflows/ci.yml` which suites exist and in
+      That fetches the CI run **for that exact sha** — a sha you resolved
+      yourself, never "whatever run is newest on main", which is about a tree that
+      is not being released — derives from `.github/workflows/ci.yml` which suites exist and in
       how many matrix instantiations, fetches each instantiation's log, and reads
       the `go test -json` account the suite step emits. It fails, rather than
       passing quietly, when a declared instantiation produced no account, when a
@@ -107,8 +107,8 @@ them, and the three post-publish checks that leave this repository entirely.
       (`/tmp/dossierx-ci-run-evidence.json` by default) and refuses to exit 0
       without one, because `go test` exits 0 for a skip and for a selector that
       matches nothing — so a *silent* pass here would be indistinguishable from a
-      gate that examined nothing. **Read the record and confirm it names the sha
-      you are about to tag** and the instantiations you expect.
+      gate that examined nothing. **Read the record and confirm it names the sha whose
+      TREE you are about to tag** and the instantiations you expect.
 
       GitHub's log retention is finite, so this will FAIL rather than pass when
       re-run against an older release. That is intended.
@@ -483,7 +483,7 @@ them, and the three post-publish checks that leave this repository entirely.
             "reason":  "why this does not block THIS release"
           }]}
 
-      Four things it refuses, each because the alternative is a waiver wearing a
+      Seven things it refuses, each because the alternative is a waiver wearing a
       ruling's clothes: an entry with no `reason` or no `ruled_by`; two entries for
       one finding; an entry naming a finding this run did not raise — which is what
       a ruling becomes the moment the defect is fixed or its wording moves, so an
@@ -496,15 +496,17 @@ them, and the three post-publish checks that leave this repository entirely.
       filtered, deduplicated away or dropped on the way to you. Each finding
       carries a severity, but that word is the reporting agent's own about its own
       work — no verdict, filter or threshold in the gate consults it — so the
-      ruling is yours, not the agent's. There is also no override field on the
-      receipt, so a finding you judge non-blocking has exactly two ways off it:
-      fix the tree, or delete the finding from `gate/answers/<surface>.json` by
-      hand. Know what the second one costs before you reach for it — a deleted
-      finding leaves no trace, so an adjudicated finding becomes indistinguishable
-      from one nobody ever raised, and the next reader of that record cannot tell
-      that you looked. Why the classifier that would derive a finding's weight
-      from its evidence was not built, and why no override record was added in its
-      place, is recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
+      ruling is yours, not the agent's. A finding you judge non-blocking has two
+      honest ways off the receipt, and deleting it from
+      `gate/answers/<surface>.json` is not one of them: fix the tree, or record a
+      ruling in `gate/overrides.json` as the item above describes. Deletion leaves
+      no trace, so an adjudicated finding becomes indistinguishable from one nobody
+      ever raised and the next reader cannot tell that you looked — which is the
+      whole reason the override record exists. It was built in v0.5.2; until then
+      deletion was the only route, and this paragraph said so. Why the classifier
+      that would derive a finding's weight from its evidence was NOT built, and
+      what it would need first, is recorded at `cmd/dossierx/gate_stage3_test.go`
+      in the residues note.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out
@@ -542,7 +544,7 @@ them, and the three post-publish checks that leave this repository entirely.
 - [ ] **The version pins are moved.** Sweep for them rather than recalling
       where they are:
 
-      git grep -nE "dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v" \
+      git grep -nE "dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v|github\.com/[^ ]*dossierx/blob/v" \
         -- . ':!CHANGELOG.md' ':!docs/RELEASING.md' ':!surface.baseline.json'
 
       `surface.baseline.json` is excluded for CHANGELOG.md's reason: it is the
@@ -571,7 +573,7 @@ them, and the three post-publish checks that leave this repository entirely.
       `skills/dossierx-comments/SKILL.md`, which link FORMAT.md at the tag because
       that file does not ship with an exported bundle.
 
-      **Three of those seven were invisible to the sweep until v0.5.2**, and the
+      **Two of those seven — three occurrences, since the claims bundle carries it twice — were invisible to the sweep until v0.5.2**, and the
       v0.5.2 gate found them rather than the sweep: the expression knew `@vX.Y.Z`
       and the raw.githubusercontent form and not the ordinary
       `github.com/<org>/<repo>/blob/vX.Y.Z/` link the two skill bundles use. They

@@ -1198,7 +1198,13 @@ func jsonFieldNames(rt reflect.Type) []string {
 // 11. version pins
 // ---------------------------------------------------------------------
 
-// surfacePinSweep is docs/RELEASING.md's own sweep expression, verbatim. It is
+// surfacePinSweep is docs/RELEASING.md's own sweep expression, verbatim — and
+// TestTheDocumentedPinSweepIsTheOneTheCodeRuns in tests/derived_facts_test.go is
+// what makes that word true rather than hopeful. It was NOT true for one commit
+// of v0.5.2: this constant gained the blob/ alternative and the printed command
+// did not, so a maintainer following the instruction swept for two shapes while
+// the inventory knew three — which is exactly the drift the instruction exists to
+// prevent. It is
 // run through `git grep` and NEVER a plain `grep -r`: grep resolves to ugrep on
 // some machines, whose -r skips dot-directories, so .github/ is never searched
 // and a pin in a workflow file is invisible.

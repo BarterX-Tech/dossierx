@@ -329,8 +329,12 @@ func gateReachableFiles(dir string) ([]string, error) {
 // (Documents) is what makes a stale ANSWER impossible, because every projection
 // into a bundle is lossy and the loss is where the defeat lives: `site` resolves
 // to 47 files of TSX/TS source and the agent is handed the rendered DOM text,
-// and the DOM extractor captures no href at all, so re-pointing a link in
-// site/src/content.ts leaves every byte the agent reads byte-identical.
+// and the extract is lossy in ways the agent cannot see past: it holds the text a
+// reader sees, not the 47 files that produced it, so a rewrite that renders the
+// same words leaves every byte the agent reads byte-identical. (Until v0.5.2 the
+// example here was re-pointing a link, which the capture could not see. It can:
+// anchors are captured with their destinations. The principle is unchanged and
+// the example was replaced rather than the sentence deleted.)
 type gateSurfaceInputs struct {
 	// Surface is the name declared in surfaces.yaml.
 	Surface string

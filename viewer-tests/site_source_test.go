@@ -375,7 +375,7 @@ var declaredHistoryLiterals = []historyLiteral{
 	},
 	{
 		version: "v0.2.0",
-		phrase:  "for every command that existed in v0.2.0 it is byte-for-byte what it was then",
+		phrase:  "It is not frozen at v0.2.0",
 		why: "the --format note, naming the release whose text output the golden fixtures pin. " +
 			"It read \"byte-for-byte identical to v0.2.0's output\" until v0.5.2, which covered " +
 			"all nineteen commands — and four of them (claim show, claim list, claim new, " +
@@ -385,12 +385,12 @@ var declaredHistoryLiterals = []historyLiteral{
 	},
 	{
 		version: "v0.2.0",
-		phrase:  "have no v0.2.0 output to be identical to",
+		phrase:  "had no v0.2.0 output to be identical to in the first place",
 		why:     "the same --format note's second half, which names the release the four v0.3.0 commands post-date",
 	},
 	{
 		version: "v0.3.0",
-		phrase:  "The four commands v0.3.0 added",
+		phrase:  "the four commands v0.3.0 added",
 		why:     "the same note again, naming the release that introduced claim show, claim list, claim new and comment inbox — the four with no v0.2.0 text output behind them",
 	},
 }

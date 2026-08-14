@@ -256,3 +256,40 @@ func pinParagraph(t *testing.T, releasing string) string {
 	t.Fatalf("the pin paragraph in docs/RELEASING.md is no longer followed by %q, so this test cannot tell where the list ends and would read the rest of the document as if it were the list", endMarker)
 	return ""
 }
+
+// ---------------------------------------------------------------------------
+// C3 — the sweep the document prints against the sweep the code runs
+// ---------------------------------------------------------------------------
+
+// TestTheDocumentedPinSweepIsTheOneTheCodeRuns closes a gap the v0.5.2 gate found
+// one commit after lane C shipped: `surfacePinSweep` in cmd/dossierx/surface_test.go
+// calls itself "docs/RELEASING.md's own sweep expression, verbatim", and for one
+// commit it was not. The constant gained a third URL shape and the command printed
+// in the procedure did not, so a maintainer following the written instruction swept
+// for two shapes while the inventory knew three — and the three pins the item was
+// rewritten to stop losing were invisible to the person doing the sweeping.
+//
+// This is the same class as C1 and C2, one level up: not prose restating a derived
+// number, but prose restating a derived REGEXP. It is checked the same way.
+func TestTheDocumentedPinSweepIsTheOneTheCodeRuns(t *testing.T) {
+	const sweepConst = "surfacePinSweep = `"
+
+	source := readRepoFile(t, "cmd/dossierx/surface_test.go")
+	i := strings.Index(source, sweepConst)
+	if i < 0 {
+		t.Fatal("cmd/dossierx/surface_test.go no longer declares surfacePinSweep, so the expression the inventory is built from cannot be read and this check has lost one of its two sides")
+	}
+	rest := source[i+len(sweepConst):]
+	j := strings.Index(rest, "`")
+	if j < 0 {
+		t.Fatal("surfacePinSweep's raw string literal is unterminated")
+	}
+	code := rest[:j]
+
+	releasing := readRepoFile(t, "docs/RELEASING.md")
+	if !strings.Contains(releasing, code) {
+		t.Errorf("docs/RELEASING.md does not print the expression the inventory is actually built from.\n"+
+			"  the code sweeps: %s\n\n"+
+			"The item tells a maintainer to work from the sweep rather than from the list beside it, so a printed command that is narrower than the code's is worse than no command: it produces a short answer that looks like a complete one. Paste the constant into the `git grep` the item prints.", code)
+	}
+}

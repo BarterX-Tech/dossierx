@@ -187,7 +187,7 @@ The gate names each disagreement:
 | `build-order-ledger-abandoned` | a locked build order's **artifact is gone** while its approval record still stands — the `.build-order.<module>.json` was deleted, or the module was dropped from `modules:` so nothing audits it any more. The rules above all start from the file, so deleting it was quieter than editing it. Release the build order first, then remove it |
 | `build-order-unreadable` | a `.build-order.<module>.json` that **is there and will not decode** — truncated or corrupted rather than deleted. It counted as neither present nor absent, so the rules above and the deletion sweep both skipped it and `check` exited 0 over a destroyed sequence. Restore the file from version control; do **not** re-propose, which would record the order the claims imply *now* as the approved one |
 
-The gate runs after the catalog and viewer have been written, and it is not the last step — `check` then scans `source_dirs` for `dossierx-claim:` tags, where an unknown or unlocked tag is a hard failure of its own: a tampered project still regenerates its documentation, it just does not exit 0. It is deliberately not a lint — one tampered claim must not be able to freeze locking project-wide.
+The gate runs as the **last** step of `check`, after the catalog and the viewer have been written and after the `dossierx-claim:` source scan has passed: a tampered project still regenerates its documentation, it just does not exit 0. It is deliberately not a lint — one tampered claim must not be able to freeze locking project-wide.
 
 ### Where the gate runs
 

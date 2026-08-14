@@ -19,9 +19,12 @@
 //
 //	HARDER TO WRITE THAN A FIX. An override names a DIGEST over the finding's own
 //	    text. Change the finding — or fix the defect so the wording moves — and
-//	    the override matches nothing and is REFUSED as stale. It cannot be written
-//	    ahead of time, cannot be copied between findings, and cannot survive the
-//	    thing it excuses being reworded.
+//	    the override matches nothing and is REFUSED as stale. It cannot be copied
+//	    between findings and cannot survive the thing it excuses being reworded.
+//	    What it does NOT do is make a pre-written ruling impossible — anyone can
+//	    compute a digest over text they predict — but a prediction that is not
+//	    word-for-word right matches nothing in the run and fails the gate, which is
+//	    the property that matters.
 //	VISIBLE ON THE RECEIPT'S FACE. Applied overrides are recorded ON the receipt,
 //	    with who ruled and why. A receipt cleared by override is not a clean
 //	    receipt wearing the same clothes: it says so, in the document the driver
@@ -90,6 +93,9 @@ type gateOverride struct {
 // nothing else. Severity is excluded on purpose: it is the reporting agent's own
 // word about its own work, and an override that survived a severity edit while
 // dying on a wording edit would be keyed to the wrong half of the finding.
+// It is also why the Digest field on gateFinding is excluded from its own input:
+// the receipt stamps that field from this function, so hashing it would make the
+// value depend on itself and no two runs would agree.
 func gateFindingDigest(f gateFinding) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "dossierx-gate-finding\x00v1\x00%s\x00%s\x00%s", f.Surface, f.Rule, f.Detail)
@@ -288,7 +294,7 @@ func TestGateOverrideClearsOnlyTheFindingItNames(t *testing.T) {
 		t.Errorf("the surface whose only finding was ruled on reads %q, want %s", got["contributing"], gateVerdictPass)
 	}
 	if got["readme"] == gateVerdictPass {
-		t.Error("a surface holding an unruled finding was cleared; an override clears one finding, never a surface")
+		t.Error("a surface holding an unruled finding was cleared; an override clears findings, and a surface reads PASS only when none of its findings is left unruled")
 	}
 	for _, v := range receipt.Surfaces {
 		if v.Verdict != gateVerdictFailed {
@@ -427,5 +433,100 @@ func TestGateOverrideReachesTheVerdictAndSaysSoOnTheReceipt(t *testing.T) {
 	receipt.Overrides = []gateOverride{gateOverrideFor(f, func(o *gateOverride) { o.Reason = "" })}
 	if verdict, err := receipt.evaluate(declared, current); verdict != gateVerdictFailed || !strings.Contains(err.Error(), "carries no reason") {
 		t.Fatalf("an unreasoned override did not fail the evaluation with its own reason: %s %v", verdict, err)
+	}
+}
+
+// TestGateOverrideRecordIsActuallyLoadedByTheRunThatMeasuresTheReceipt is the
+// finding this file shipped without: the type, the refusals and every property
+// test existed one commit before anything on the release path read the file, so
+// gateLoadOverrides had exactly one caller — its own test — and a maintainer who
+// wrote gate/overrides.json exactly as documented changed nothing at all.
+//
+// A mechanism nothing calls is the defect this whole gate is built to catch, and
+// it reached the tree inside the mechanism built to record human judgement. This
+// test is the wire, so it cannot come loose in silence.
+func TestGateOverrideRecordIsActuallyLoadedByTheRunThatMeasuresTheReceipt(t *testing.T) {
+	work := gateFixtureRepo(t)
+	f := gateFinding{Surface: "readme", Rule: "some-rule", Severity: "low", Detail: "a sentence that is not true"}
+	surfaces := []gateSurfaceVerdict{{Surface: "readme", Verdict: gateVerdictFailed, Fingerprint: "sha256:readme"}}
+
+	// No record: the receipt carries no rulings, which is the ordinary case.
+	receipt, err := gateRecordReceipt(work, "v0.5.2", "release", surfaces, []gateFinding{f})
+	if err != nil {
+		t.Fatalf("record a receipt with no override record: %v", err)
+	}
+	if len(receipt.Overrides) != 0 {
+		t.Fatalf("a run with no override record produced %d ruling(s)", len(receipt.Overrides))
+	}
+
+	// A record on disk reaches the receipt the driver measures.
+	body, marshalErr := json.Marshal(struct {
+		Overrides []gateOverride `json:"overrides"`
+	}{[]gateOverride{gateOverrideFor(f, nil)}})
+	if marshalErr != nil {
+		t.Fatalf("marshal the record: %v", marshalErr)
+	}
+	gateWrite(t, work, gateOverrideFile, string(body))
+
+	receipt, err = gateRecordReceipt(work, "v0.5.2", "release", surfaces, []gateFinding{f})
+	if err != nil {
+		t.Fatalf("record a receipt with an override record present: %v", err)
+	}
+	if len(receipt.Overrides) != 1 {
+		t.Fatalf("the record on disk did not reach the receipt: %d ruling(s) carried", len(receipt.Overrides))
+	}
+	if verdict, evalErr := receipt.evaluate([]string{"readme"}, map[string]string{"readme": "sha256:readme"}); verdict != gateVerdictPass {
+		t.Fatalf("a ruling on disk did not reach the verdict: %s %v", verdict, evalErr)
+	}
+
+	// And a record that cannot be parsed refuses the recording outright, rather
+	// than producing a receipt that silently carries no rulings.
+	gateWrite(t, work, gateOverrideFile, "{ not json")
+	if _, err := gateRecordReceipt(work, "v0.5.2", "release", surfaces, []gateFinding{f}); err == nil {
+		t.Fatal("a malformed override record produced a receipt anyway; the run would then report no rulings and the human would be told their file did nothing, with no reason given")
+	}
+}
+
+// TestGateOverrideDigestIsCopyableFromTheReceipt closes the second half of the
+// same defect: the record was documented as naming `"finding": "sha256:…"` while
+// nothing in the tree emitted that value, so writing a ruling meant hand-computing
+// a sha256 over a NUL-delimited string. A mechanism only a person who wrote it can
+// operate is not an escape hatch.
+func TestGateOverrideDigestIsCopyableFromTheReceipt(t *testing.T) {
+	work := gateFixtureRepo(t)
+	f := gateFinding{Surface: "readme", Rule: "some-rule", Severity: "low", Detail: "a sentence that is not true"}
+
+	receipt, err := gateRecordReceipt(work, "v0.5.2", "release",
+		[]gateSurfaceVerdict{{Surface: "readme", Verdict: gateVerdictFailed, Fingerprint: "sha256:readme"}},
+		[]gateFinding{f})
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	if len(receipt.Findings) != 1 || receipt.Findings[0].Digest == "" {
+		t.Fatal("the receipt carries no digest for its finding, so an override cannot be written against it without recomputing one by hand")
+	}
+
+	// The value on the receipt is the value the matcher uses — copy it verbatim
+	// into a ruling and the ruling applies.
+	ruling := gateOverride{
+		Version: "v0.5.2",
+		Finding: receipt.Findings[0].Digest,
+		Surface: f.Surface,
+		Rule:    f.Rule,
+		RuledBy: "a maintainer",
+		Reason:  "copied the digest off the receipt, which is the whole point",
+	}
+	remaining, applied, err := gateApplyOverrides(receipt, []gateOverride{ruling})
+	if err != nil || len(applied) != 1 || len(remaining) != 0 {
+		t.Fatalf("a ruling carrying the receipt's own digest did not apply: applied=%d remaining=%d err=%v", len(applied), len(remaining), err)
+	}
+
+	// And the field is DERIVED, never trusted: a digest edited by hand on the
+	// receipt does not change which finding a ruling matches.
+	tampered := receipt
+	tampered.Findings = append([]gateFinding(nil), receipt.Findings...)
+	tampered.Findings[0].Digest = "sha256:" + strings.Repeat("0", 64)
+	if _, applied, err := gateApplyOverrides(tampered, []gateOverride{ruling}); err != nil || len(applied) != 1 {
+		t.Fatalf("editing the digest field on the receipt changed which finding the ruling matched; the value has to be recomputed from the finding's own text: applied=%d err=%v", len(applied), err)
 	}
 }

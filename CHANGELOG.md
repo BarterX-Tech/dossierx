@@ -8,11 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.5.2] - 2026-08-14
 
 **SILENT: your viewer's bytes change on the next `dossierx check`, with no claim edit.** Five
-maintainer comments inside the viewer's inlined stylesheet were factually wrong. Three were about
+maintainer comments in the viewer templates were factually wrong, and four of them ship. Three were about
 what the pane does: `graph.css` described a backdrop dim and a drop shadow the pane has never had,
 and both z-index ledgers called the opaque pane root a "backdrop". Two more were stale cross
 references into `style.css` itself — one naming a line number that had drifted to point at a
-comment, one in `tree.html` off by 28 lines — and those matter here rather than in a code review
+comment, one in `tree.html` off by 28 lines, which is a Go-template comment and never reaches a consumer — and the style.css one matters here rather than in a code review
 because `style.css` ships inlined into every consumer's `index.html`, so a wrong pointer is
 delivered to them. The cross-release report classifies all five as silent — the inputs are
 byte-identical — and the three sample viewers now each move by 8 added and 10 removed lines, all of
@@ -43,7 +43,7 @@ form, and it now renders the tag verbatim like everything else. **If your toolin
 release where it changes.** Nothing in `cmd/dossierx` moved to achieve it — `resolveVersionInfo`
 already produced the tag verbatim, so the two paths converge rather than being reconciled.
 
-**The install pins a consumer copies now read `v0.5.2`**, and there are five of them across four files: `README.md` twice, `skills/dossierx/SKILL.md`, `scripts/ci/dossierx-check.yml`, and — new in this release — `scripts/install-git-hook.sh`, which prints a pinned raw URL back to a reader who piped it from stdin.
+**The install pins a consumer copies now read `v0.5.2`**, and there are seven of them across six files: `README.md` twice, `skills/dossierx/SKILL.md`, `scripts/ci/dossierx-check.yml`, `scripts/install-git-hook.sh`, which prints a pinned raw URL back to a reader who piped it from stdin, and the two skill bundles that link `FORMAT.md` at the tag because it does not ship with an export.
 
 **No new or changed command, flag, `error.code`, lint rule or schema field**, and the noun and leaf
 counts are where they were — nineteen under seven. What did move is the RETIRED spelling set, from
@@ -115,7 +115,7 @@ to the wrong surface.
 
 ### The gate stopped needing four rounds to say the same thing
 
-This release's own gate ran four reading rounds and returned 39, 31, 24 and 18 findings — decaying
+This release's own gate has run five reading rounds and returned 39, 31, 24, 18 and 58 findings — decaying
 and not converging. Three mechanisms address the three reasons, and none of them relaxes a refusal:
 coverage is not reduced, a check that cannot run still fails, every finding still reaches the human
 unfiltered, and the receipt still evaluates FAILED on any finding at all.
@@ -149,7 +149,7 @@ of absorbed into the next round's count.
 naming bytes they were not handed — and every one was a `reads:` line, which the freeze had closed.
 They were ruled blocking rather than deferred, because they sat on the release's own claims about
 itself: the site could not read the CHANGELOG it must agree with, the release procedure could not
-check the surface count it states nine times, and the changelog surface could not check the SILENT
+check the surface count it states seven times, and the changelog surface could not check the SILENT
 item every consumer must act on. `gate/subject.json` carries the new digest and the reason.
 
 **A fix wave is read before a full round pays to discover what it broke.** Every round of this
@@ -292,7 +292,7 @@ ones a consumer can observe:
   card there fails `orientation-note-shape`. The behaviour was correct and the help text described the
   behaviour it replaced.
 - **`mailto:` was the one allowlisted link scheme nothing pinned.** `FORMAT.md` promised it twice and
-  the construct corpus had no case for it — the corpus pins `link-http`, `link-https`, `link-data-rejected`, `link-javascript-rejected` and `link-network-path-rejected`, so `mailto:` was the allowed scheme with no case of its own. It
+  the construct corpus had no case for it — the corpus pins `link-http`, `link-fragment`, `link-relative`, `link-data-rejected`, `link-javascript-rejected` and `link-network-path-rejected`, so `mailto:` was the allowed scheme with no case of its own. It
   renders correctly; it is now pinned as `link-mailto`, so the promise cannot quietly stop being true.
 - **`FORMAT.md` stated an absolute about tables that its own corpus contradicts.** "A well-formed
   table is always rendered as a table" is true of size and shape but not of position: a table indented
@@ -451,7 +451,10 @@ produces an identical document, and no verdict, filter or threshold consults it 
 ### Added — `make release-publish`, the only thing in this repository that tags
 
 The irreversible half of a release is now a nine-step driver rather than a sequence of commands a
-person types. It is authorized by the version typed twice —
+person types. (**Counted as D1–D8 plus the handoff.** v0.5.2's own documentation counts the same
+sequence as ten, D0 through D9, because it counts the authorization step and the handoff separately.
+Nothing about the driver changed; the two entries count the same steps differently, and this one is
+left as v0.5.1 wrote it.) It is authorized by the version typed twice —
 `make release-publish DOSSIERX_RELEASE_VERSION=vX.Y.Z DOSSIERX_RELEASE_AUTHORIZE=vX.Y.Z` — and
 deliberately not by a boolean, because a `=1` left in a shell profile or a CI secret authorizes
 every release forever, including the next one somebody triggers by accident.

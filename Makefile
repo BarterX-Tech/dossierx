@@ -91,8 +91,10 @@ hook-test:
 # object whose TREE is the tree being released and that is the commit carrying it —
 # origin/main is already an ancestor, so the driver's D2 merge is content-identical.
 # This used to say the merge commit on main, justified by the content.ts sha stamp
-# landing there after a merge; that stamp was deleted in v0.5.2, and at the moment
+# landing there after a merge; that stamp was deleted in v0.5.1, and at the moment
 # this recipe runs THIS release has no merge commit at all, since making it is D2.
+# (The stamp was deleted in v0.5.1, not v0.5.2 — corrected after the round-six wave
+# reading found the wrong release named here and in docs/RELEASING.md.)
 #
 # WHY THE SHA IS DEMANDED RATHER THAN DEFAULTED, and this reason is inherited
 # rather than invented here: it is the one the encoded release checklist retired
@@ -119,10 +121,11 @@ DOSSIERX_GATE_CI_EVIDENCE_OUT ?= /tmp/dossierx-ci-run-evidence.json
 
 ci-evidence:
 	@test -n "$(DOSSIERX_GATE_CI_SHA)" || { \
-	  echo "DOSSIERX_GATE_CI_SHA is unset. This gate is keyed to the MERGE COMMIT, never to"     >&2; \
-	  echo "HEAD or to the newest run on main: the content.ts sha stamp lands on main after the" >&2; \
-	  echo "merge as a matter of routine, so a run fetched any other way is evidence about a"    >&2; \
-	  echo "tree that is not the one being tagged. Run:"                                          >&2; \
+	  echo "DOSSIERX_GATE_CI_SHA is unset. This gate is keyed to the commit whose TREE is the"   >&2; \
+	  echo "one being released — the release branch's head, since origin/main is already an"     >&2; \
+	  echo "ancestor and the merge the driver makes at D2 is content-identical. Never main's"    >&2; \
+	  echo "newest run, which is about the PREVIOUS release: this one has no merge commit yet,"  >&2; \
+	  echo "because making it is D2. Run:"                                                        >&2; \
 	  echo "    make ci-evidence DOSSIERX_GATE_CI_SHA=\$$(git rev-parse HEAD)   # on the release branch" >&2; \
 	  exit 1; }
 	@rm -f "$(DOSSIERX_GATE_CI_EVIDENCE_OUT)"

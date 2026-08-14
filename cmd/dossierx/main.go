@@ -605,7 +605,7 @@ func prepareStore(cfg *config.Config, store *lock.Store, claims []model.Claim) (
 // stub's own hint (see retired.go). One string rather than three restatements is
 // what keeps the binary and the skill from drifting into disagreeing about where
 // a caller should go next.
-const preLedgerCrossingHint = `re-propose any locked build order (dossierx build-order propose --module <m>), unlock every locked claim (dossierx claim unlock <id> --reason "..."), then lock only what you still stand behind — the first lock in a project with nothing locked crosses the store onto the ledger`
+const preLedgerCrossingHint = `four steps, in this order, and do not stop at the third: (1) re-propose every locked build order (dossierx build-order propose --module <m>) FIRST, because propose needs the module's claims still locked; (2) unlock every locked claim (dossierx claim unlock <id> --reason "..."); (3) lock only what you still stand behind — that first lock crosses the store onto the ledger; (4) re-propose AND re-lock every module's build order, because step 1 released each record and stopping before this discards them all silently`
 
 // crossPreLedger is the write-path half of the pre-ledger gate, shared by the
 // three commands that record an approval: claim lock, claim reaudit --confirm,

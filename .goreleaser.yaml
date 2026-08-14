@@ -83,8 +83,9 @@ release:
   # describes: a SILENT change, one their own gate cannot detect for them. v0.5.2
   # is the worked example — the embedded agent skills changed and every consumer has
   # to re-run `dossierx skills export`, and no commit subject in the range says so.
-  # (Two subjects do carry a `skills` scope, which is not the same thing: a reader
-  # scanning bullets for "what must I do" finds nothing.)
+  # (Some subjects do carry a `skills` scope, which is not the same thing: a reader
+  # scanning bullets for "what must I do" finds nothing. No count is given here —
+  # it moves with every commit in the range, including the ones that fix this file.)
   #
   # The alternative considered and rejected was writing release commit subjects
   # to steer this page. That makes commit hygiene load-bearing for a client-facing
@@ -97,7 +98,7 @@ release:
   # on the publish path, after the tag is public. `goreleaser check` and
   # `--skip=publish` both pass over a template naming a field that does not exist.
   header: |
-    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md)** — if it is not there yet, this release is still publishing and it lands within a few minutes.
+    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md)** — if it is not there yet, this release is still publishing: the entry lands when the driver pushes `main`, which it does after verifying the archives.
     The bullets below are commit subjects. Any change your own tooling cannot
     detect for you — a re-export you must run, a string your scripts compare
     against — is called out at the TOP of that entry, and only there.

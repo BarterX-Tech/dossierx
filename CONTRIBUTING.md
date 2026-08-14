@@ -144,6 +144,21 @@ claimed exactly once — and the failure names a surface you may have had no rea
 by updating the `reads:` entry, not by widening it to a pattern: patterns are refused, precisely
 so a borrowed set cannot grow without someone deciding.
 
+**During an open release cycle, `surfaces.yaml` is frozen, and this is the part that will surprise
+you.** From v0.5.2 the release gate records the manifest's digest in a tracked `gate/subject.json`
+at its first reading round, and every later round of that release refuses — exit 6 — if the file
+moved. The reason is a measurement rather than a preference: the manifest grew during three of
+v0.5.2's own rounds, and a finding count measured over a question that grows underneath it cannot be
+read, because a smaller round might mean a better tree or a narrower ask.
+
+So an edit that is correct here — adding a file, adding the entry that claims it, seeing a green
+`go test ./...` — can still break the next round of a release that is already in flight, and the
+refusal will name a file you were told to edit. If a release is open, say so in the pull request;
+the maintainer either lands your change after the tag or thaws deliberately, which is a recorded act
+with a written reason in `gate/subject.json` and costs a re-read of every surface whose material
+your edit moved. `docs/RELEASING.md` carries the thaw procedure. Nothing here is a reason not to
+make the change — it is a reason for it not to arrive as a surprise.
+
 ## Linting
 
 ```sh

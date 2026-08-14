@@ -78,7 +78,7 @@ rest can. This is a formal deferral, not a scheduled item: no release currently 
 
 ## Deferred: a short table row renders short, which contradicts spec amendment A9
 
-The v0.3.1 plan (`docs/decisions/v0.3.1-renderer.md`) section 10 is authoritative, and amendment A9 says a body row whose cell count
+The v0.3.1 plan (`docs/decisions/v0.3.1-renderer-plan.html`) section 10 is authoritative, and amendment A9 says a body row whose cell count
 differs from the header's "is padded with empty `<td>` or truncated — never emitted ragged".
 Half of that shipped: a longer row does have its extra cells dropped. A **short** row does not
 get padded — it emits exactly the cells it has, leaving a ragged right edge where GFM would

@@ -167,6 +167,15 @@ type gateFinding struct {
 	Rule     string `json:"rule"`
 	Severity string `json:"severity"`
 	Detail   string `json:"detail"`
+	// Digest is what an override names, emitted here so a human can copy it.
+	// It is DERIVED, never read: gateFindingDigest recomputes it from the three
+	// fields above every time the record is matched, so a digest edited by hand
+	// matches nothing and the override that carries it is refused as stale. It is
+	// on the finding because the alternative — documented in docs/RELEASING.md as
+	// `"finding": "sha256:…"` with no way to obtain the value — asked a maintainer
+	// to hand-compute a sha256 over a NUL-delimited string, which is a recipe for
+	// a ruling that silently rules on nothing.
+	Digest string `json:"digest,omitempty"`
 }
 
 // ---------------------------------------------------------------------
@@ -353,6 +362,23 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 	if _, err := gateIndexVerdicts(surfaces); err != nil {
 		return gateReceipt{}, fmt.Errorf("gate receipt: %w", err)
 	}
+	// THE HUMAN'S RULINGS ARE READ HERE, in the same process that measures the
+	// receipt, because a record nothing loads is a record that decides nothing.
+	// The override record shipped one commit before this line existed: the type,
+	// the refusals and every property test were in place, and gateLoadOverrides
+	// had exactly one caller — its own test. So a maintainer who wrote
+	// gate/overrides.json exactly as docs/RELEASING.md described changed nothing,
+	// while three documents said otherwise. Both fix-wave readers found it, and it
+	// is the defect this whole gate exists to catch, reached inside the mechanism
+	// built to record human judgement.
+	//
+	// A record that cannot be PARSED fails here rather than downstream: evaluate()
+	// refuses a record that decides nothing, and this refuses one nobody can read.
+	// Absent is the ordinary case and yields none.
+	overrides, err := gateLoadOverrides(dir)
+	if err != nil {
+		return gateReceipt{}, fmt.Errorf("gate receipt: %w", err)
+	}
 	head, err := gateResolve(dir, branch)
 	if err != nil {
 		return gateReceipt{}, err
@@ -377,6 +403,9 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 	sorted := append([]gateSurfaceVerdict(nil), surfaces...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Surface < sorted[j].Surface })
 	found := append([]gateFinding(nil), findings...)
+	for i := range found {
+		found[i].Digest = gateFindingDigest(found[i])
+	}
 	sort.SliceStable(found, func(i, j int) bool {
 		if found[i].Surface != found[j].Surface {
 			return found[i].Surface < found[j].Surface
@@ -393,6 +422,7 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 	return gateReceipt{
 		Gate:       "G1",
 		Version:    version,
+		Overrides:  overrides,
 		Branch:     branch,
 		BaseRef:    gateBaseRef,
 		HeadCommit: head,

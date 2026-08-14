@@ -226,8 +226,9 @@ func gateStage2Artifacts(surface string) []string {
 // the fields prose is judged against.
 //
 // THE EXTRACT IS LOSSY AND THAT IS WHERE THE DEFEAT LIVES. The DOM extractor
-// captures text, labels, states and head metadata and captures no href at all,
-// so re-pointing a link in site/src/content.ts leaves every byte the agent reads
+// captures text, labels, states, head metadata and — since v0.5.2 — each anchor's
+// destination; what it cannot carry is the 47 files that produced any of it, so a
+// component rewritten to render the same words leaves every byte the agent reads
 // byte-identical. That is why the withheld documents are still hashed into the
 // surface's key, and why the bundle names them without carrying them.
 //

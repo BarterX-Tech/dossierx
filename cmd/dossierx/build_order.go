@@ -630,7 +630,7 @@ func newBuildOrderLockCmd() *cobra.Command {
 			// exist, which lock.Store.LedgerDowngraded reads — correctly, by its
 			// own rules — as tampering from then on.
 			//
-			// The sentinel this function takes over the lock store — the AcquireFileLock below — is the ONLY one this call needs, and
+			// The sentinel this function takes over the lock store — the AcquireFileLock above — is the ONLY one this call needs, and
 			// that is load-bearing: lock.CrossPreLedger takes the comment digest
 			// store's lock as a leaf and never the claims sentinel, so the
 			// acquisition order stated above is unchanged. Do not add one here.
