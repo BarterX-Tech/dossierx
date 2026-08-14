@@ -2189,9 +2189,20 @@ func TestTheStageRefusesToBeInvokedHalfway(t *testing.T) {
 // target line and every tab-indented line under it.
 var ciEvMakeTargetRE = regexp.MustCompile(`(?m)^` + regexp.QuoteMeta(ciEvMakeTarget) + `:[^\n]*\n(?:\t[^\n]*\n?)+`)
 
-// ciEvProcedureItemRE isolates docs/RELEASING.md's "CI is green on `main`" item,
+// ciEvProcedureItemRE isolates docs/RELEASING.md's "CI is green on the commit
+// whose TREE is the one being released" item.
+//
+// IT SAID "CI is green on `main`" UNTIL v0.5.2, and the title moved because the
+// instruction under it was wrong rather than because anyone wanted a better
+// heading. D1 requires the evidence record to name an object whose TREE is the
+// tree being released; that object is the release BRANCH's head, since
+// origin/main is already an ancestor and the driver's D2 merge is
+// content-identical. The old item sent a maintainer to `git log --merges -1 main`,
+// which at that point in the procedure names the PREVIOUS release — this
+// release's merge does not exist yet, because making it is D2. The v0.5.2 gate
+// reported it against the release-procedure surface.
 // from its bolded title to the next item at the same level.
-var ciEvProcedureItemRE = regexp.MustCompile("(?s)- \\[ \\] \\*\\*CI is green on `main`\\*\\*.*?\\n- \\[ \\] ")
+var ciEvProcedureItemRE = regexp.MustCompile("(?s)- \\[ \\] \\*\\*CI is green on the commit whose TREE is the one being released\\*\\*.*?\\n- \\[ \\] ")
 
 // ciEvProcedureHumanHalf marks where the written item stops describing what the
 // machine does and starts telling a person what to look at themselves. C33
@@ -2292,12 +2303,12 @@ func TestTheReleaseTimeInvocationNamesThisStage(t *testing.T) {
 	procedure := wiringReadFile(t, ciEvProcedureFile)
 	item := ciEvProcedureItemRE.FindString(procedure)
 	if item == "" {
-		t.Fatalf("%s no longer carries an item titled **CI is green on `main`**. That item is where the written procedure sends a person to look at the RUN, and it is one side of the drift this test exists to catch — the other three sides can all agree while the document a maintainer actually reads says something else",
+		t.Fatalf("%s no longer carries an item titled **CI is green on the commit whose TREE is the one being released**. That item is where the written procedure sends a person to look at the RUN, and it is one side of the drift this test exists to catch — the other three sides can all agree while the document a maintainer actually reads says something else",
 			ciEvProcedureFile)
 	}
 	for _, want := range []struct{ fragment, why string }{
 		{"make " + ciEvMakeTarget, "the written procedure must name the command a maintainer actually runs. It is the only description of this gate a person reads, so a procedure that names something else is not a second opinion, it is the instruction"},
-		{ciEvShaEnv, "it must tell a maintainer to key the run to the merge commit"},
+		{ciEvShaEnv, "it must tell a maintainer to key the run to a specific commit rather than to whatever is newest"},
 		{ciEvOutEnv, "it must tell a maintainer where the record they are asked to read lands"},
 	} {
 		if !strings.Contains(item, want.fragment) {

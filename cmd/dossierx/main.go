@@ -2693,8 +2693,13 @@ func newReauditCmd() *cobra.Command {
 			// from current content — see lock.MigrateLegacyStore. Persisted here
 			// (not only on the --confirm path below) so a mere propose still
 			// restores drift detection for the project's already-locked claims.
-			// PrepareStore also grandfathers already-locked claims into the
-			// lock ledger the first time a pre-ledger store is opened.
+			// PrepareStore grandfathers NOTHING. No path in this build writes a
+			// grandfathered ledger record — v0.4.0 removed the one that did — and
+			// the only adoption left in it is the comment-digest coverage sweep
+			// plus the legacy per-dependent baseline re-arm, which is what
+			// prepareStore's own doc says. This comment claimed the opposite until
+			// v0.5.2, and read literally it told a maintainer an ordinary reaudit
+			// can bless content nobody approved: the exact property v0.4.0 removed.
 			changedStore, adopted := prepareStore(cfg, store, claims)
 			if changedStore {
 				if err := store.Save(); err != nil {

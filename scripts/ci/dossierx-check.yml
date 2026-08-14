@@ -69,6 +69,14 @@
 #
 # That list is written out rather than summarised because a client reads it to
 # know what their own gate refuses, and a short list reads as a complete one.
+#
+# IT IS THE LINT AND LEDGER FINDINGS, AND NOT THE WHOLE OF WHAT THIS JOB CAN REFUSE.
+# `dossierx check` is five stages, and the fourth scans `source_dirs` for `dossierx-claim:`
+# tags where an unknown or unlocked tag is a HARD failure — so a project that sets
+# `source_dirs` can have this job refuse a merge over a code link, which no finding name
+# above describes. `source_dirs` unset or empty means no scan at all. Written here because
+# the sentence above promises completeness, and a reader who trusts it meets a refusal they
+# were told did not exist.
 # FORMAT.md's "The findings" table is the canonical statement; if the two ever
 # disagree, that table is right and this comment is stale.
 #
@@ -224,7 +232,7 @@ jobs:
       - name: Install dossierx
         run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.2
 
-      # The full pipeline: lint, catalog, render, and the lock-ledger gate.
+      # The full pipeline: lint, catalog, render, the lock-ledger gate, and the source scan for `dossierx-claim:` tags.
       # --format text because the audience here is a human reading a failed
       # job log; drop it if you post-process the output, in which case the JSON
       # envelope's error.code is the thing to branch on.

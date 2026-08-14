@@ -35,7 +35,7 @@ never-pushed-merge residual above is closed by the same forge-side rule and by
 nothing in here.
 
 You do not push that tag by hand either. The irreversible half of a release is
-`make release-publish`, a nine-step driver whose preconditions include the gate
+`make release-publish`, a ten-step driver — D0 through D9 — whose preconditions include the gate
 below; the commands it runs are the driver's and you type none of them. What this
 document is for is the half a program cannot do: reading the findings, ruling on
 them, and the three post-publish checks that leave this repository entirely.
@@ -72,8 +72,8 @@ them, and the three post-publish checks that leave this repository entirely.
       **Verifying** section tells you to download, that `checksums.txt` lists all
       six, and that the snapshot binary reports the same version, commit and date
       that its own recorded `-ldflags` line names.
-- [ ] **CI is green on `main`** — not on the branch, on the merge commit, and
-      not on the strength of a conclusion.
+- [ ] **CI is green on the commit whose TREE is the one being released** — the
+      release branch's head — and not on the strength of a conclusion.
 
       **A green badge is not the check, and neither is a green check run.** Every
       layer above the test binary reports a *conclusion*, and a conclusion is
@@ -82,21 +82,21 @@ them, and the three post-publish checks that leave this repository entirely.
       step, the job and the check run all conclude success over it. So run the
       machine half first:
 
-          make ci-evidence DOSSIERX_GATE_CI_SHA=$(git log --merges -1 --format=%H main)
+          make ci-evidence DOSSIERX_GATE_CI_SHA=$(git rev-parse HEAD)   # on the release branch
 
-      **`git fetch` first — that command reads your local `main`.** The commit
-      you name has to be an object this clone actually has, because the driver's
-      D1 later resolves it locally to compare its tree against the tree being
-      released; on a stale clone the pipe silently yields an older merge commit,
-      and a sha pasted from the forge is not present at all. Either way the
-      record is about the wrong commit and D1 refuses the release with "the
-      CI-run evidence record … names no object carrying the tree being released
-      … or a commit this clone has never fetched" — the refusal names this
-      mistake, so read it as this mistake rather than as a broken gate.
+      **Name the release branch's head, not a merge commit.** D1 requires the record to
+      name an object whose TREE is the tree being released, and it is the branch head
+      that carries that tree: `origin/main` is already an ancestor, so the merge the
+      driver makes at D2 is content-identical. An earlier version of this item said
+      "not on the branch, on the merge commit" and gave the `content.ts` sha stamp as
+      the reason. That stamp was deleted in this release, and the instruction could not
+      be followed anyway — at this point in the procedure THIS release has no merge
+      commit, because making it is the driver's own D2. Naming `main`'s newest merge
+      names the PREVIOUS release.
 
-      That fetches the CI run **for that exact sha** — never HEAD, because the
-      `content.ts` commit stamp lands on `main` after the merge as a matter of
-      routine — derives from `.github/workflows/ci.yml` which suites exist and in
+      That fetches the CI run **for that exact sha** — never HEAD, because on a
+      release branch HEAD is not a merge commit at all, and this record is keyed to
+      the merge — derives from `.github/workflows/ci.yml` which suites exist and in
       how many matrix instantiations, fetches each instantiation's log, and reads
       the `go test -json` account the suite step emits. It fails, rather than
       passing quietly, when a declared instantiation produced no account, when a
@@ -128,6 +128,20 @@ them, and the three post-publish checks that leave this repository entirely.
         command above reports that as a failure; confirm you agree with what it
         found rather than assuming a clean exit means a run was there.
 - [ ] **The stage-2 reading gate has been run for this tree, and it is green.**
+
+      **Write this release's CHANGELOG entry and its `releases[]` entry BEFORE the
+      first fan-out, even though both have items of their own further down this
+      list.** Two things here read the CHANGELOG's newest heading, and both go
+      wrong if it still names the previous release. The subject freeze
+      (`gate/subject.json`) is keyed to that version, so a first fan-out run too
+      early freezes the manifest under the PREVIOUS release's name — and when the
+      entry finally lands, `subject_verify` returns early on the version mismatch
+      and `subject_freeze` silently re-mints, discarding the freeze the earlier
+      rounds ran under. The `changelog` surface also has nothing to read but a
+      stale entry, so its round is spent on the wrong document. The items below
+      are where the CONTENT of both entries is checked; this is where they have to
+      exist.
+
       Everything above checks that the code does what it is supposed to. This is
       the item that checks whether the PROSE is still true: thirteen agents read
       the thirteen surfaces `surfaces.yaml` declares — the README, the CHANGELOG,
@@ -151,7 +165,10 @@ them, and the three post-publish checks that leave this repository entirely.
       would otherwise resolve it by git's search order, silently, and this
       baseline is the thing every comparison below is made against.
 
-      Both are full 40-digit object names and every step refuses anything else. A
+      Both are full 40-digit object names. `--baseline-commit` is refused on the spot if
+      it is anything else; `--tree` is checked at `record`, which compares it against the
+      tree the artifacts themselves name — so a mistyped `--tree` is caught one step later
+      rather than at the step that took it. A
       tag NAME is a mutable pointer that `git tag -f` re-points, and an
       abbreviation is a prefix that means a different object in a different
       clone; either is an answer that stops being true later, and which release
@@ -201,14 +218,14 @@ them, and the three post-publish checks that leave this repository entirely.
 
           # GoReleaser's release notes as this tree predicts them
           go test ./tests -run TestPredictReleaseNotesForRange_G1Capture -args \
-            -release-notes-range="$PREV..HEAD" \
+            -release-notes-range="refs/tags/$PREV..HEAD" \
             -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
 
           # the resolved baseline inventory, and the surface delta over it.
           # The baseline is read OUT OF THE TAG. See the note below for the one
           # release where it is not, and why pasting that case by mistake is the
           # worst move available here.
-          git show "$PREV:surface.json" > "$ROOT/gate/baseline-input.json"
+          git show "refs/tags/$PREV:surface.json" > "$ROOT/gate/baseline-input.json"
           scripts/gate-stage2/run.sh delta --tree "$TREE" \
             --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
             --baseline-file "$ROOT/gate/baseline-input.json"
@@ -242,9 +259,14 @@ them, and the three post-publish checks that leave this repository entirely.
           go test ./cmd/dossierx -run TestGenerateSurfaceJSON -regenerate-goldens
 
       The `gate/prompts/<surface>.md` files reach the agents too, and are
-      likewise unstaged: they are tracked and reviewed (`gate/.gitignore` ignores
-      only what a run produces), and they are the QUESTION rather than the
-      evidence. Neither is thereby unwatched. Both are hashed into the surface
+      likewise unstaged: they are tracked and reviewed, and they are the QUESTION
+      rather than the evidence. (`gate/.gitignore` works the other way round from
+      how that used to read here — it ignores everything it does not NAME, so the
+      prompts and `method.yaml` are visible because they are named, and every
+      run-produced artifact is invisible by default. That includes
+      `gate/baseline-input.json`, which step 1 writes and the `record` manifest
+      does not carry. The one run-written file on the tracked side is
+      `gate/subject.json`, named there on purpose.) Neither is thereby unwatched. Both are hashed into the surface
       key: `surface.json` is one of the four SHARED evidence files every
       surface's fingerprint covers — beside `gate/baseline.json`,
       `gate/delta.json` and `gate/site-text.json` — and the prompt sources are

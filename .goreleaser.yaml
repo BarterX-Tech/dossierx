@@ -81,10 +81,10 @@ release:
   # carry a change only if somebody happened to title a commit after it, and the
   # changes most dangerous to a consumer are exactly the ones no subject
   # describes: a SILENT change, one their own gate cannot detect for them. v0.5.2
-  # is the worked example — the embedded agent skills changed, every consumer has
-  # to re-run `dossierx skills export`, and the two commits carrying it are
-  # titled about a docs sweep and a build-order rule. Nothing on the generated
-  # page said so.
+  # is the worked example — the embedded agent skills changed and every consumer has
+  # to re-run `dossierx skills export`, and no commit subject in the range says so.
+  # (Two subjects do carry a `skills` scope, which is not the same thing: a reader
+  # scanning bullets for "what must I do" finds nothing.)
   #
   # The alternative considered and rejected was writing release commit subjects
   # to steer this page. That makes commit hygiene load-bearing for a client-facing
@@ -97,13 +97,15 @@ release:
   # on the publish path, after the tag is public. `goreleaser check` and
   # `--skip=publish` both pass over a template naming a field that does not exist.
   header: |
-    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md).**
+    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md)** — if it is not there yet, this release is still publishing and it lands within a few minutes.
     The bullets below are commit subjects. Any change your own tooling cannot
     detect for you — a re-export you must run, a string your scripts compare
     against — is called out at the TOP of that entry, and only there.
-  # WHAT THIS FOOTER IS FOR. Everything above it on a published release page is
+  # WHAT THIS FOOTER IS FOR. Everything BETWEEN the header above and this footer is
   # generated: grouped commit subjects, with `^docs:`, `^chore:` and `^Merge`
-  # filtered out. That presentation cannot distinguish a breaking change from any
+  # filtered out. (It said "everything above it" until v0.5.2, which was true until
+  # this file gained a header — goreleaser composes both into the release BODY, so
+  # the topmost block on every page from here on is hand-written literal text.) That presentation cannot distinguish a breaking change from any
   # other feature — v0.5.0's appeared as the ordinary Features bullet
   # "feat(lint): detect cycles that alternate rests_on and governed_by", with no
   # BREAKING framing, no statement that a previously-passing corpus now exits 1,

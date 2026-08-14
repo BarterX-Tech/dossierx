@@ -85,7 +85,14 @@ hook-test:
 # the same identifiers, so no one side of it can move alone. The record is a gate
 # because something reads it; a record nobody reads is a filing habit.
 #
-#     make ci-evidence DOSSIERX_GATE_CI_SHA=<the merge commit's full sha>
+#     make ci-evidence DOSSIERX_GATE_CI_SHA=<the release branch head's full sha>
+#
+# WHICH SHA. The release BRANCH's head, because D1 requires the record to name an
+# object whose TREE is the tree being released and that is the commit carrying it —
+# origin/main is already an ancestor, so the driver's D2 merge is content-identical.
+# This used to say the merge commit on main, justified by the content.ts sha stamp
+# landing there after a merge; that stamp was deleted in v0.5.2, and at the moment
+# this recipe runs THIS release has no merge commit at all, since making it is D2.
 #
 # WHY THE SHA IS DEMANDED RATHER THAN DEFAULTED, and this reason is inherited
 # rather than invented here: it is the one the encoded release checklist retired
@@ -116,7 +123,7 @@ ci-evidence:
 	  echo "HEAD or to the newest run on main: the content.ts sha stamp lands on main after the" >&2; \
 	  echo "merge as a matter of routine, so a run fetched any other way is evidence about a"    >&2; \
 	  echo "tree that is not the one being tagged. Run:"                                          >&2; \
-	  echo "    make ci-evidence DOSSIERX_GATE_CI_SHA=\$$(git log --merges -1 --format=%H main)" >&2; \
+	  echo "    make ci-evidence DOSSIERX_GATE_CI_SHA=\$$(git rev-parse HEAD)   # on the release branch" >&2; \
 	  exit 1; }
 	@rm -f "$(DOSSIERX_GATE_CI_EVIDENCE_OUT)"
 	DOSSIERX_GATE_CI_SHA="$(DOSSIERX_GATE_CI_SHA)" \

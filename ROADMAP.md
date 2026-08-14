@@ -78,7 +78,7 @@ rest can. This is a formal deferral, not a scheduled item: no release currently 
 
 ## Deferred: a short table row renders short, which contradicts spec amendment A9
 
-The v0.3.1 plan's section 10 is authoritative, and amendment A9 says a body row whose cell count
+The v0.3.1 plan (`docs/decisions/v0.3.1-renderer.md`) section 10 is authoritative, and amendment A9 says a body row whose cell count
 differs from the header's "is padded with empty `<td>` or truncated — never emitted ragged".
 Half of that shipped: a longer row does have its extra cells dropped. A **short** row does not
 get padded — it emits exactly the cells it has, leaving a ragged right edge where GFM would
@@ -96,3 +96,18 @@ The trade accepted is the ragged right edge; column alignment is unaffected, bec
 shared table-wide. FORMAT.md documents the shipped behaviour as the rule. Nothing here reopens
 A9's padding clause: this is a formal deferral, not a scheduled item, and no release currently
 commits to restoring it.
+
+## Deferred: `write_conflict` has two states and one code
+
+`claim`'s and `check`'s file-lock refusal reports two different situations under one
+`error.code` with nothing under `data` to tell them apart: a sentinel left behind by a
+crashed process, whose recovery is to delete that file, and a path that could not be opened
+at all for the whole window, whose recovery is explicitly to delete NOTHING. The router
+bundle currently instructs an agent to read the message text to choose, which contradicts
+the same bundle's own rule that `error.code` is a promise and prose is not.
+
+The v0.5.2 gate reported this against `agent-skills`. It is not fixed here because giving
+the two states machine-readable evidence — a second `error.code`, or a field under
+`error.details` naming the cause — changes the error surface, which is not patch-release
+work. Until it lands the bundle names the prose branch as a known defect rather than as an
+exception to the rule.

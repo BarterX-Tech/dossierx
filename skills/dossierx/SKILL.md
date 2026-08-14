@@ -88,14 +88,13 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `missing_flag` | 1 | a required `--reason`/`--as`/`--module` was omitted. `--reason` carries the human's approving words; do not invent them. |
 | `unknown_module` / `unsupported_format` / `usage` | 1 | fix your own invocation. |
 | `write_failed` | 1 | a write did not land: a permission, a missing directory, a full disk — or, from `skills export`, "no directory given and no `project.config.yaml` found", which is your invocation and not the filesystem. Give the export an explicit directory (`dossierx skills export .claude/skills`). Show the human anything else; retrying an unwritable path just fails again. |
-| `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, **read the message before you delete anything — as of v0.5.2 there are two of these and they do not share a recovery.** (a) *"another docs process may be holding it; remove the file manually if it was left behind by a crash"* — nobody is holding it: a process died inside the critical section and left the sentinel behind, and no timeout clears it. The message names the file (`.dossierx-claims.lock`, or the `.lock` beside whichever store it names); delete that file and retry. (b) *"every attempt failed with … rather than 'already exists' … check the directory's permissions"* — the path could not be opened at all for the whole window. **Do not delete anything**: there may be no sentinel to delete, and if a live process IS inside the critical section, deleting its lock is the one action that corrupts what the lock protects. This is a permissions or scanner problem on the directory — report it to the human with the path, and stop. Do not loop on either. |
+| `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, **read the message before you delete anything — as of v0.5.2 there are two of these and they do not share a recovery. This is the ONE place this bundle asks you to branch on prose, and it is a known defect, not an exception to rule 3: both states share one `error.code` with nothing under `data` to tell them apart. Fixing that changes the error surface and is deferred (ROADMAP). Read the message here and nowhere else.** (a) *"another docs process may be holding it; remove the file manually if it was left behind by a crash"* — nobody is holding it: a process died inside the critical section and left the sentinel behind, and no timeout clears it. The message names the file (`.dossierx-claims.lock`, or the `.lock` beside whichever store it names); delete that file and retry. (b) *"every attempt failed with … rather than 'already exists' … check the directory's permissions"* — the path could not be opened at all for the whole window. **Do not delete anything**: there may be no sentinel to delete, and if a live process IS inside the critical section, deleting its lock is the one action that corrupts what the lock protects. This is a permissions or scanner problem on the directory — report it to the human with the path, and stop. Do not loop on either. |
 | `claim_file_changed` | 1 | someone wrote while you were deciding. Re-read the claim and redo the decision — do **not** retry blindly. |
 | `banner_claim` / `empty_body` / `unsafe_body` | 1 | the comment you tried to write cannot be stored. Fix the body (`unsafe_body` is now narrow: a first content line led by a TAB. Space-indented first lines store fine as of v0.4.0); `claim_not_serializable` instead means the claim **on disk** is already broken. |
 
 ## --dry-run: "blocked" is a successful answer
 
-Every verb that changes a claim's lifecycle takes `--dry-run` — the `claim`, `comment` and
-`build-order` leaves. It writes nothing and **always exits 0 with `ok: true`**, even when the real
+Ten verbs take `--dry-run`: `claim` lock/unlock/flag/reaudit/new/link, `comment` add/reply, `build-order` propose/lock. The read-only leaves do not, and passing it there is a `usage` failure. It writes nothing and **always exits 0 with `ok: true`**, even when the real
 run would refuse, including when you forgot a required flag.
 
 **Two commands write and do NOT take it**, so do not reach for a preview that is not there:
@@ -126,8 +125,9 @@ action would be refused. `side_effects` is the part a human cannot infer — alw
    contract" is not an id. `dossierx claim list --match "retry"` ranks candidates with a `score`;
    name the winner and its title to the human and wait.
 4. **Preview, then ask, then act.** Every lifecycle action (`claim lock`, `unlock`, `flag`,
-   `reaudit --confirm`, `claim link`, `build-order lock`) gets a `--dry-run`
-   first, shown to the human, and a real yes. `--reason` carries *their* words.
+   `reaudit --confirm`, `build-order lock`) gets a `--dry-run` first, shown to the human, and a
+   real yes. `--reason` carries *their* words. `claim link` is deliberately NOT in that list — it
+   records a fact rather than changing what is approved, takes no `--reason`, and is fully yours.
 5. **You reply; you never resolve a human's thread.** Their Resolve click is the approval that
    unblocks locking. Advisory rights are **enforced for the CLI actor** — `--as` is required and
    `--as agent` on a human's thread fails with `rights_denied` — but **not on `dossierx serve`'s
@@ -252,4 +252,4 @@ confirmed `claim reaudit` clears the human's flag having changed nothing — sil
 | `implink set` | `dossierx claim link` |
 | `lock`, `unlock`, `flag`, `reaudit` | `dossierx claim lock` / `unlock` / `flag` / `reaudit` |
 | `comment resolve`, `reopen`, `edit`, `delete` | viewer only — the human does these |
-| `migrate --adopt` | there is no migration command and no automatic adoption — re-propose any locked build order (`dossierx build-order propose --module <m>`), unlock every locked claim (`dossierx claim unlock <id> --reason "…"`), then lock only what you still stand behind — the first lock in a project with nothing locked crosses the store onto the ledger |
+| `migrate --adopt` | there is no migration command and no automatic adoption. **Four steps, in this order — do not stop at the third:** (1) `dossierx build-order propose --module <m>` for every locked build order, FIRST, because propose needs the module's claims still locked; (2) `dossierx claim unlock <id> --reason "…"` for every locked claim; (3) lock only what the human still stands behind — that first lock crosses the store onto the ledger; (4) re-propose AND re-lock every module's build order, because step 1 released each record and stopping before this discards them all silently. Same sequence as the `pre_ledger_unadopted` row above, which is where the full reasoning lives. It discards every standing approval, so it is the human's call |

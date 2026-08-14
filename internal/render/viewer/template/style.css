@@ -177,8 +177,8 @@ code {
    deliberately excluded everywhere below — RenderInline never emits any
    of this, so a bare selector here would be dead weight at best and,
    for table/hr/blockquote, would collide with existing chrome (a
-   layout: table claim's own table element, style.css:173's bare table/td/th
-   rules) at worst. */
+   layout: table claim's own table element, this file's own bare table, td/th and th
+   rules further down) at worst. */
 
 .claim-body hr,
 .claim-list-items hr,

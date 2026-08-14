@@ -45,8 +45,8 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/viewer/index.html  (+6 -8)
-    size            9951 lines / 348496 bytes -> 9949 lines / 348424 bytes
+testdata/fixture-basic/viewer/index.html  (+8 -10)
+    size            9951 lines / 348496 bytes -> 9949 lines / 348445 bytes
 @@ -237,16 +237,14 @@
     =========================================================================
  
@@ -68,6 +68,17 @@ testdata/fixture-basic/viewer/index.html  (+6 -8)
     stylesheet's z-index ledger comment records that band, because that comment
     is the single place this stack is reasoned about.
  
+@@ -1283,8 +1281,8 @@
+    deliberately excluded everywhere below — RenderInline never emits any
+    of this, so a bare selector here would be dead weight at best and,
+    for table/hr/blockquote, would collide with existing chrome (a
+-   layout: table claim's own table element, style.css:173's bare table/td/th
+-   rules) at worst. */
++   layout: table claim's own table element, this file's own bare table, td/th and th
++   rules further down) at worst. */
+ 
+ .claim-body hr,
+ .claim-list-items hr,
 @@ -2358,8 +2356,8 @@
       50  comments overlay
       60  comments rail
@@ -80,8 +91,8 @@ testdata/fixture-basic/viewer/index.html  (+6 -8)
     The graph pane takes the band ABOVE all of them because it is the only
     full-viewport overlay here: it is not a rail beside the document or a
 
-testdata/fixture-graph-demo/viewer/index.html  (+6 -8)
-    size            10695 lines / 475538 bytes -> 10693 lines / 475466 bytes
+testdata/fixture-graph-demo/viewer/index.html  (+8 -10)
+    size            10695 lines / 475538 bytes -> 10693 lines / 475487 bytes
 @@ -237,16 +237,14 @@
     =========================================================================
  
@@ -103,6 +114,17 @@ testdata/fixture-graph-demo/viewer/index.html  (+6 -8)
     stylesheet's z-index ledger comment records that band, because that comment
     is the single place this stack is reasoned about.
  
+@@ -1283,8 +1281,8 @@
+    deliberately excluded everywhere below — RenderInline never emits any
+    of this, so a bare selector here would be dead weight at best and,
+    for table/hr/blockquote, would collide with existing chrome (a
+-   layout: table claim's own table element, style.css:173's bare table/td/th
+-   rules) at worst. */
++   layout: table claim's own table element, this file's own bare table, td/th and th
++   rules further down) at worst. */
+ 
+ .claim-body hr,
+ .claim-list-items hr,
 @@ -2358,8 +2356,8 @@
       50  comments overlay
       60  comments rail
@@ -115,8 +137,8 @@ testdata/fixture-graph-demo/viewer/index.html  (+6 -8)
     The graph pane takes the band ABOVE all of them because it is the only
     full-viewport overlay here: it is not a rail beside the document or a
 
-testdata/fixture-portability/viewer/index.html  (+6 -8)
-    size            9942 lines / 350175 bytes -> 9940 lines / 350103 bytes
+testdata/fixture-portability/viewer/index.html  (+8 -10)
+    size            9942 lines / 350175 bytes -> 9940 lines / 350124 bytes
 @@ -237,16 +237,14 @@
     =========================================================================
  
@@ -138,6 +160,17 @@ testdata/fixture-portability/viewer/index.html  (+6 -8)
     stylesheet's z-index ledger comment records that band, because that comment
     is the single place this stack is reasoned about.
  
+@@ -1283,8 +1281,8 @@
+    deliberately excluded everywhere below — RenderInline never emits any
+    of this, so a bare selector here would be dead weight at best and,
+    for table/hr/blockquote, would collide with existing chrome (a
+-   layout: table claim's own table element, style.css:173's bare table/td/th
+-   rules) at worst. */
++   layout: table claim's own table element, this file's own bare table, td/th and th
++   rules further down) at worst. */
+ 
+ .claim-body hr,
+ .claim-list-items hr,
 @@ -2358,8 +2356,8 @@
       50  comments overlay
       60  comments rail

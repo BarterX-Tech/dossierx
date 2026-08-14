@@ -7,13 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.5.2] - 2026-08-14
 
-**SILENT: your viewer's bytes change on the next `dossierx check`, with no claim edit.** Three
-maintainer comments inside the viewer's inlined stylesheet were factually wrong — `graph.css`
-described a backdrop dim and a drop shadow the pane has never had, and both z-index ledgers called
-the opaque pane root a "backdrop". Correcting them changes the generated `index.html` for every
-project, because that CSS is inlined and its comments ship with it. Nothing renders differently to a
-reader: no rule, no colour and no layout moved, and the cross-release report classifies all three as
-silent precisely because the inputs are byte-identical. If you diff your committed viewer after
+**SILENT: your viewer's bytes change on the next `dossierx check`, with no claim edit.** Five
+maintainer comments inside the viewer's inlined stylesheet were factually wrong. Three were about
+what the pane does: `graph.css` described a backdrop dim and a drop shadow the pane has never had,
+and both z-index ledgers called the opaque pane root a "backdrop". Two more were stale cross
+references into `style.css` itself — one naming a line number that had drifted to point at a
+comment, one in `tree.html` off by 28 lines — and those matter here rather than in a code review
+because `style.css` ships inlined into every consumer's `index.html`, so a wrong pointer is
+delivered to them. The cross-release report classifies all five as silent — the inputs are
+byte-identical — and the three sample viewers now each move by 8 added and 10 removed lines, all of
+it comment text. Nothing renders differently to a reader: no rule, no colour and no layout moved. Correcting them changes the generated `index.html` for every
+project, because that CSS is inlined and its comments ship with it. If you diff your committed viewer after
 upgrading, this is what you are looking at.
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
@@ -39,6 +43,8 @@ form, and it now renders the tag verbatim like everything else. **If your toolin
 release where it changes.** Nothing in `cmd/dossierx` moved to achieve it — `resolveVersionInfo`
 already produced the tag verbatim, so the two paths converge rather than being reconciled.
 
+**The install pins a consumer copies now read `v0.5.2`**, and there are five of them across four files: `README.md` twice, `skills/dossierx/SKILL.md`, `scripts/ci/dossierx-check.yml`, and — new in this release — `scripts/install-git-hook.sh`, which prints a pinned raw URL back to a reader who piped it from stdin.
+
 **No new or changed command, flag, `error.code`, lint rule or schema field**, and the noun and leaf
 counts are where they were — nineteen under seven. What did move is the RETIRED spelling set, from
 twelve to sixteen, so four invocations the binary used to reject blankly now answer properly; see
@@ -50,7 +56,7 @@ Beyond those two, nothing a consumer runs behaves differently. The remaining eng
 comment-only: five doc comments naming a verb this CLI has not had since the noun surface landed —
 `dossierx flag`, where the verb is `dossierx claim flag` — one that described the `mockup_modules`
 allowlist as gating `layout: mockup` when v0.4.1 widened it to gate any claim carrying `raw_html` on
-any layout, and and one in `retired.go` that gave a false reason for four verbs having no stub — see below, where
+any layout, and one in `retired.go` that gave a false reason for four verbs having no stub — see below, where
 the stubs are.
 
 ### The release pipeline can complete unattended
@@ -254,7 +260,7 @@ ones a consumer can observe:
   card there fails `orientation-note-shape`. The behaviour was correct and the help text described the
   behaviour it replaced.
 - **`mailto:` was the one allowlisted link scheme nothing pinned.** `FORMAT.md` promised it twice and
-  the construct corpus had no case for it — every other allowed scheme and every rejected one did. It
+  the construct corpus had no case for it — the corpus pins `link-http`, `link-https`, `link-data-rejected`, `link-javascript-rejected` and `link-network-path-rejected`, so `mailto:` was the allowed scheme with no case of its own. It
   renders correctly; it is now pinned as `link-mailto`, so the promise cannot quietly stop being true.
 - **`FORMAT.md` stated an absolute about tables that its own corpus contradicts.** "A well-formed
   table is always rendered as a table" is true of size and shape but not of position: a table indented
@@ -479,6 +485,11 @@ to look at and are adjudicated by nothing. The record is required to exist and t
 being released: a release nobody ran this for is refused, not assumed.
 
 ### Added — `surface.json`, and v0.5.0's inventory frozen as the baseline
+
+> **SUPERSEDED IN PART BY 0.5.2.** Two of the counts below moved with that release and are left as
+> written, because this entry records what v0.5.1 shipped: `retired` went from 12 spellings to 16,
+> and `markdown_constructs` from 129 to 130. Read them as v0.5.1's inventory, not as the shipped
+> tree's.
 
 `surface.json` is the machine-readable inventory of what this tree exposes — 19 commands under 7
 nouns, 3 root flags, 12 retired spellings, 28 lint rules, 44 error codes, 5 skills, 14 HTTP routes,
