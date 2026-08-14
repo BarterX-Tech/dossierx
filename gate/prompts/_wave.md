@@ -37,7 +37,7 @@ that paragraph.
 - **Not whether the wave fixed what it set out to fix.** It may have repaired the
   finding perfectly and broken a neighbouring sentence doing it; that is exactly
   what you are here for.
-- **Not to weigh severity.** Report what you find. A human rules.
+- **Not to weigh priority.** Report what you find. A human rules.
 
 ## What your answer means
 

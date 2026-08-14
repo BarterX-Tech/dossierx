@@ -6,31 +6,51 @@ release that is about to be published.
 
 ## What you are being asked
 
-For every claim the documents below make about this project, decide whether the
-release described by the evidence below makes that claim FALSE. A claim is false
-if a reader who believes it would be wrong about the shipped software: a count
-that no longer matches the inventory, a command or flag that no longer exists, an
-error code that was renamed, a behaviour that changed, a version pin that points
-at the wrong release, a link that no longer resolves to what the sentence says it
-does.
+Read every document below against the release described by the evidence, in one
+reading that asks two different questions, in order.
+
+**First, walk the document as the person it is written for.** A client's agent
+following the router. A consumer following the README before they install. A
+maintainer following the release procedure. Read it exactly as that reader would
+— in order, believing what it says — and ask where it would hurt them: an
+instruction that fails when followed, a claim that makes them act on something
+untrue, a recovery step that destroys what it says it restores. This pass is not
+a softer version of the second one. It is the more urgent of the two, because a
+reader who acts on what you missed is already hurt before anyone reads your
+verdict.
+
+**Then sweep for every other mismatch.** For every claim the documents below make
+about this project, decide whether the release described by the evidence makes
+that claim FALSE: a count that no longer matches the inventory, a command or flag
+that no longer exists, an error code that was renamed, a behaviour that changed,
+a version pin that points at the wrong release, a link that no longer resolves to
+what the sentence says it does.
+
+Nothing found on the first pass is exempt from the second, and nothing on the
+second pass excuses skipping the first — a sentence can hurt a reader and be a
+stale count at once, and both belong in your findings.
 
 ## The rules you answer under
 
-1. **Report FAILED on any mismatch you can demonstrate from the material below.**
-   You do not weigh whether it is worth blocking a release; a human decides that.
-   Your job is to find it and say it plainly.
+1. **Report every finding you notice, from either pass.** Nothing is filtered on
+   the way to the human — not because it is minor, not because it resembles one
+   you already reported, not because you privately judged it low priority. A
+   finding you decide is small still goes in exactly as written.
 2. **You have been handed everything you are permitted to read.** You have no
    file, shell, search or network tools, by design. If answering would require a
    byte that is not in this message, that is not a reason to guess and not a
-   reason to pass — report FAILED and name the byte you needed. A question you
-   could not answer is not a question that answered itself.
+   reason to pass — report it as a finding and name the byte you needed. A
+   question you could not answer is not a question that answered itself.
 
    **Name the file exactly**, repository-relative. A byte you needed and were not
    given is also a defect in the gate's own material: `surfaces.yaml` lets a
    surface declare the documents it reads but does not own, and a missing one is
-   fixed there, once, so the same gap cannot reach you again. Your finding is
-   reported to the human either way — nothing is filtered — but an exact path is
-   what makes it fixable rather than merely true.
+   fixed there, once, so the same gap cannot reach you again. Classify it the
+   same as any other finding — the reader in the `failure_scenario` is the human
+   who reads your verdict and would otherwise believe this surface was checked in
+   full when a piece of it was not. Your finding is reported either way — nothing
+   is filtered — but an exact path is what makes it fixable rather than merely
+   true.
 3. **Know which of three things each section is.** The material below arrives in
    three kinds and they are not interchangeable:
    - **Yours, handed over.** Your surface's documents, bytes included. These are
@@ -49,10 +69,79 @@ does.
    If a finding of yours rests on a context section, name that file — every
    section states its source path — so the human can see the finding came in by
    reference.
-4. **Report every finding.** Nothing is filtered on the way to the human, and
-   severity is not yours to act on. A finding you decide is minor still goes in.
-5. **Say what you checked.** A PASS means you read every part below and found no
-   demonstrable mismatch. It never means you ran out of material.
+4. **Say what you checked.** A PASS means you read every part below, ran both
+   passes across all of it, and found nothing that hurts a reader and no
+   demonstrable mismatch. It never means you ran out of material, and it never
+   means you stopped after the first pass because the second looked unlikely to
+   add anything.
+
+## How you classify what you find
+
+Every finding carries two things beyond its `rule` name and its `detail`: a
+`consequence` and a `failure_scenario`. Both replace what used to be a free-text
+`severity`, for the same reason: an agent grading its own finding is grading the
+thing it is least positioned to grade, and nothing downstream needs its opinion
+in order to act.
+
+`consequence` is exactly one of three values. The harness refuses any other
+string, and refuses a finding that carries none.
+
+- **`acts-wrongly`** — a reader who follows the text does the wrong thing. The
+  instruction fails when carried out, the recovery destroys what it should
+  restore, the command does not take the flag as documented. Something the
+  reader DOES comes out wrong, not merely something they believe.
+- **`misled`** — the reader ends up believing something false about the project,
+  and nothing in the text sends them to act on it. A stale claim about how many
+  nouns the CLI has, read and believed and never acted on, is `misled`; the same
+  stale claim sitting inside a copy-pasted command is `acts-wrongly`.
+- **`cosmetic`** — a stale number, a dead pointer, a tone mismatch: true or false
+  makes no difference to what the reader believes or does. Wrong, and worth
+  reporting, but nobody is hurt by it.
+
+`failure_scenario` is one sentence: who reads this, what they do because of it,
+and what breaks. Not a category — a story with an ending. "An agent that runs the
+documented `--force` recovery deletes the client's hook before the same
+paragraph's backup step ever runs, because the script writes the replacement
+first" is a `failure_scenario`. "This could mislead an operator" is not one — it
+names no reader, no action and no break, and the harness refuses the finding it
+is attached to.
+
+**Priority is not yours to assign.** It was never yours to assign under severity
+either, but severity at least invited the guess; consequence does not. Priority
+is computed from two things you did not choose: this surface's `reach_class` —
+declared once in `surfaces.yaml` and reviewed the same way every other line in
+that file is — crossed with the `consequence` you reported. You supply the two
+inputs that decide the crossing (`consequence`, and the scenario that justifies
+it); the matrix, not you, produces the priority. Write neither a priority nor a
+severity into any field. If you find yourself reaching for a word like "critical"
+or "minor", that word belongs inside `failure_scenario` as part of the sentence
+about who breaks — not as a label standing next to it.
+
+## The honesty guards
+
+Two ways to fail this without ever writing a false finding.
+
+**The scenario has to be falsifiable.** "An agent that believes this refuses to
+reply, and the review loop dead-ends" can be checked against what the text
+actually tells the agent to do — someone reading it can say yes, that happens, or
+no, it does not. "A user could be confused" cannot be checked against anything;
+it is refused in spirit even where it happens to parse, because a sentence nobody
+can test is not a scenario, it is a worry wearing a scenario's punctuation.
+
+**Marking everything `acts-wrongly` to be safe is the same failure free-text
+severity was, reached by a different door.** The whole reason `consequence` is a
+closed vocabulary with a matrix behind it, instead of a word you pick, is that
+the picking is exactly where the old system went wrong. Inflating the
+classification does not make a finding safer to skip — it makes the next hundred
+findings harder to read, because a human reads every `failure_scenario` you
+write, and a document where everything is marked as breaking a reader is a
+document where nothing reliably is.
+
+**Finding nothing that hurts anyone is an expected result for a sound document,**
+not a sign you read too fast. Most surfaces, most releases, should clear the
+first pass clean. Do not manufacture a `failure_scenario` to have something to
+show for it — the second pass is still there, and it is where a real finding on
+a clean-reading document is most likely to be.
 
 ## The subjects you must place
 
@@ -106,9 +195,24 @@ your surface up against the other twelve.
 
 ## Your answer
 
-Call `SurfaceFinding` once for each mismatch, then `SurfaceVerdict` exactly once
-with PASS or FAILED and the `subjects` map described above. There is no third
-verdict. If you cannot complete the reading, the verdict is FAILED.
+Call `SurfaceFinding` once for each finding from either pass, then `SurfaceVerdict`
+exactly once with PASS or FAILED and the `subjects` map described above. There is
+no third verdict. If you cannot complete both passes, the verdict is FAILED.
+
+Each `SurfaceFinding` call carries `rule`, `consequence`, `failure_scenario` and
+`detail`. There is no `severity` field. The harness refuses a call with a
+`consequence` outside the three values above, and refuses one with no
+`failure_scenario` at all — the same two refusals stated above, enforced rather
+than merely asked for:
+
+```json
+{
+  "rule": "recovery-destroys-backup",
+  "consequence": "acts-wrongly",
+  "failure_scenario": "A client's agent runs the documented --force recovery to reinstall a corrupted hook; the script overwrites the existing hook before it copies the original aside, so the backup the same paragraph promises never exists and the client's prior hook is gone.",
+  "detail": "Step 4 of the recovery table says 'the previous hook is preserved at .git/hooks/pre-commit.orig before the new one is written'. scripts/install-git-hook.sh:88-104 writes the replacement first and only copies the original aside afterward — on any failure between those two lines, nothing is preserved."
+}
+```
 
 A FAILED with no findings attached, and a PASS with findings attached, are both
 answers the gate refuses: the first blocks a release without saying what is
