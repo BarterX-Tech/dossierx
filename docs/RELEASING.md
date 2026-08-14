@@ -269,8 +269,9 @@ them, and the three post-publish checks that leave this repository entirely.
       `gate/baseline-input.json`, which step 1 writes and the `record` manifest
       does not carry. Two run-written files sit on the tracked side —
       `gate/subject.json` and `gate/deferred.json`, item 4 below — both named
-      there on purpose.) Neither `surface.json` nor the prompt sources is
-      thereby unwatched for having no committed form of its own: both are
+      there on purpose.) Both `surface.json` and the prompts ARE tracked —
+      that is not in question. Neither is thereby unwatched for sitting
+      outside the `record` manifest: both are
       hashed into the surface key: `surface.json` is one of the four SHARED evidence files every
       surface's fingerprint covers — beside `gate/baseline.json`,
       `gate/delta.json` and `gate/site-text.json` — and the prompt sources are
@@ -483,12 +484,18 @@ them, and the three post-publish checks that leave this repository entirely.
       either fixed or ruled in `gate/overrides.json` — and that is a necessary
       condition, not a sufficient description of what blocks. A finding the
       recorder could not rank at all — a missing or out-of-vocabulary
-      `consequence`, an `about` that failed to resolve — is refused rather than
-      defaulted into a cell, and a refused finding blocks on its own terms, no
-      priority computed or needed. The per-surface verdict and fingerprint
-      conditions from step 3 still apply on top of this: priority decides which
-      FIXED findings a passing receipt can carry, not whether a receipt exists
-      at all. **P0 is not overridable:** a `client-shipped` surface that leaves
+      `consequence`, an `about` that failed to resolve — refuses the WHOLE
+      ANSWER at record time, before anything reaches the receipt: nothing is
+      defaulted into a cell, and the surface has to be re-read to produce an
+      answer that is accepted. Separately, a finding that reaches the receipt
+      anyway carrying no computed priority at all — the shape a producer bug
+      would leave behind, not a path this recorder is meant to take — blocks
+      on its own terms: an override cannot clear or promote it, because there
+      is no band for a ruling to act on. The per-surface verdict and
+      fingerprint conditions from step 3 still apply on top of this: priority
+      decides which UNFIXED findings a passing receipt can carry, not whether
+      a receipt exists at all. **P0 is not overridable:** a `client-shipped`
+      surface that leaves
       a reader acting wrongly is exactly the failure this gate exists to catch,
       so no signature waives it — the only way off a P0 is fixing the tree.
 
@@ -504,10 +511,12 @@ them, and the three post-publish checks that leave this repository entirely.
       once the projector writes it** — tracked the same way as
       `gate/subject.json`, and committing it moves the tree the same way
       committing the freeze does, so do it before producing anything keyed to
-      the new `$TREE`. The driver's own D1 does not trust the committed file on
-      faith: it re-projects the same comparator over the round it is about to
-      release, so what D1 checks and what this step wrote agree by
-      construction. The NEXT release's round one reads the committed ledger as
+      the new `$TREE`. The driver's own D1 does not read the committed file at
+      all: recording the receipt re-writes `gate/deferred.json` fresh from the
+      same round's answers, through the same comparator the projector used, so
+      what D1 writes and what this step wrote agree by construction —
+      `TestGateDeferredProjectWritesTheBytesTheReceiptWould` pins the two byte
+      for byte. The NEXT release's round one reads the committed ledger as
       input rather than starting from nothing. The gate surfaces and never
       fixes, so the fixes for P0 and unruled P1 are yours, and a fix moves the
       tree. Every artifact above is keyed to a tree, so NOTHING staged for the
@@ -584,9 +593,10 @@ them, and the three post-publish checks that leave this repository entirely.
       to whoever reads the file; an entry ruled for another release, because a
       decision about v0.5.2 is not evidence about v0.5.3; and a CLEARING entry
       naming a P0 finding, because P0 is not a priority a ruling downgrades. A
-      PROMOTING entry is different: it may name any finding, including one
-      already at P0, and it raises rather than clears — an entry naming a
-      priority at or below what the matrix already computed is refused, the
+      PROMOTING entry is different: it raises rather than clears. It is
+      refused for a finding already at P0 — there is no priority above P0 to
+      promote into — and, for every other finding, refused only if the named
+      priority is at or below what the matrix already computed; otherwise the
       finding it names stays exactly as findable as before, and nothing about
       it is cleared. The finding STAYS in the receipt, with the ruling recorded
       beside it, so a receipt cleared or promoted by a ruling never reads as one

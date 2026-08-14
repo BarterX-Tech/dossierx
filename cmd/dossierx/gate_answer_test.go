@@ -143,9 +143,9 @@ var gateAnswerPayloadKeys = []string{"findings", "subjects", "verdict"}
 // consequence of breaking it, the failure scenario that consequence stands for,
 // the detail, and — optionally — the path the finding is ABOUT when that is not a
 // document this surface owns. The fifth is the only one that is a fact rather than
-// a judgement, and it is the only one an agent may state that moves the rank; it
-// can move it in one direction, upwards, which is what makes it safe to hand over.
-// See gateAnswerRank.
+// a judgement, and it is the only one an agent may state that moves the rank
+// without going through the matrix's own axes; it can move it in one direction,
+// upwards, which is what makes it safe to hand over. See gateAnswerRank.
 //
 // Everything else on gateFinding is the harness's:
 //

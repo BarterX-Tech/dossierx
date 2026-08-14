@@ -48,14 +48,20 @@
 // which is the same argument gate/subject.json's freeze rests on. A gate whose
 // escape hatch is invisible to git is a gate with no escape hatch worth having.
 //
-// WHAT AN OVERRIDE IS NOT. It is not a priority threshold. The matrix decides
-// which findings the gate stops for; an override is a named person's decision
-// about ONE specific finding, recorded in their words, and it is asked for only
-// after the matrix has already said this one is worth stopping for. The two must
-// not be confused, which is why this file refuses an override that carries no
-// reason: a rule that fires automatically is a threshold with extra steps. The
-// one place they meet is the P0 refusal, and that is the matrix removing a cell
-// from this record's reach rather than this record acting on a rank.
+// WHAT AN OVERRIDE IS NOT. A CLEARING entry is not a priority threshold: the
+// matrix decides which findings the gate stops for, and a clearance is a named
+// person's decision about ONE specific finding, recorded in their words, asked
+// for only after the matrix has already said this one is worth stopping for. A
+// PROMOTING entry is the exception to both halves of that sentence, and
+// deliberately so: it is asked for exactly where the matrix did NOT say stop,
+// and it DOES act on a rank — reading the finding's own computed Priority and
+// raising it — because raising what the matrix computed is the one thing this
+// record is allowed to do to a rank. The two still must not be confused, which
+// is why this file refuses an override that carries no reason, in either
+// direction: a rule that fires automatically is a threshold with extra steps.
+// The one place a CLEARANCE meets the matrix is the P0 refusal, where the
+// matrix removes a cell from this record's reach entirely; a promotion meets no
+// such removal — P0 is exactly where a promotion is allowed to land.
 //
 // Same shape as the rest of the gate: test code, not a cobra command, not
 // compiled into the shipped binary, outside surface.json's behaviour_fingerprint.
@@ -174,10 +180,16 @@ func gateLoadOverrides(root string) ([]gateOverride, error) {
 // refusal lives, because two callers want two different things. evaluate() wants
 // the refusals; gateRecordReceipt wants only to project the deferred ledger at the
 // bands the human raised, and it runs BEFORE any verdict is computed. A record
-// whose promotion is malformed — a band outside the four, a digest matching
-// nothing — promotes nothing here and is refused by evaluate() a moment later, so
-// the two orderings cannot combine into a quiet pass: the run fails, and the
-// ledger it wrote is overwritten by the next recording either way.
+// whose promotion names a band outside the four is NOT caught here: this function
+// copies `PromoteTo` into the map verbatim, and gatePromoted below applies it
+// exactly as written, stamping the unrecognised string onto the finding's
+// Priority — it is the priority partition, downstream, that then reads an
+// unrecognised band as UNRANKED and therefore blocking. A digest matching no
+// finding in this run has no effect either way, because gatePromoted only stamps
+// findings whose digest appears in the map. Either way, evaluate() refuses the
+// malformed record a moment later, so the two orderings cannot combine into a
+// quiet pass: the run fails, and the ledger it wrote is overwritten by the next
+// recording either way.
 func gateFindingPromotions(overrides []gateOverride) map[string]string {
 	out := map[string]string{}
 	for _, o := range overrides {
@@ -275,7 +287,7 @@ func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remainin
 		}
 		if o.Surface != f.Surface || o.Rule != f.Rule {
 			problems = append(problems, fmt.Sprintf(
-				"the override for %s says it rules on %s/%s; that digest is %s/%s. The digest is what matches, so this record would clear one finding while describing another to whoever reads it",
+				"the override for %s says it rules on %s/%s; that digest is %s/%s. The digest is what matches, so this record would act on one finding while describing another to whoever reads it",
 				o.Finding, o.Surface, o.Rule, f.Surface, f.Rule))
 			continue
 		}
@@ -543,7 +555,7 @@ func TestGateOverrideRefusesEveryRecordThatDecidesNothing(t *testing.T) {
 		{"no reason", "carries no reason", func(o *gateOverride) { o.Reason = "  " }},
 		{"nobody ruled it", "names nobody", func(o *gateOverride) { o.RuledBy = "" }},
 		{"no finding named", "names no finding digest", func(o *gateOverride) { o.Finding = "" }},
-		{"describes another finding", "would clear one finding while describing another", func(o *gateOverride) { o.Rule = "some-other-rule" }},
+		{"describes another finding", "would act on one finding while describing another", func(o *gateOverride) { o.Rule = "some-other-rule" }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, _, err := gateApplyOverrides(receipt, []gateOverride{gateOverrideFor(f, tc.mutate)})
@@ -644,7 +656,7 @@ func TestGateOverridePromotesOnlyUpwardsAndOnlyWithEverythingElseInPlace(t *test
 		{"a promotion nobody signed", "names nobody", func(o *gateOverride) { o.RuledBy = "" }},
 		{"a promotion with no reason", "carries no reason", func(o *gateOverride) { o.Reason = "  " }},
 		{"a promotion naming no finding", "names no finding digest", func(o *gateOverride) { o.Finding = "" }},
-		{"a promotion describing another finding", "would clear one finding while describing another", func(o *gateOverride) { o.Rule = "some-other-rule" }},
+		{"a promotion describing another finding", "would act on one finding while describing another", func(o *gateOverride) { o.Rule = "some-other-rule" }},
 		{"a promotion ruled for another release", "never inherited", func(o *gateOverride) { o.Version = "v0.5.3" }},
 		{"a stale promotion", "matches no finding", func(o *gateOverride) { o.Finding = "sha256:" + strings.Repeat("0", 64) }},
 	} {

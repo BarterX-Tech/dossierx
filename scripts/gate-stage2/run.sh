@@ -389,8 +389,12 @@ subject_freeze() {
   printf 'gate-stage2: froze the subject for %s at %s (run %s)\n' "$_version" "$_actual" "$_run" >&2
 }
 
-# deferred_notice tells a maintainer, once, that a PREVIOUS release left findings
-# behind — never twice, and never for a ledger that is this release's own.
+# deferred_notice tells a maintainer that a PREVIOUS release left findings
+# behind. It is not a once-only notice: nothing suppresses a repeat, and it
+# prints on EVERY fan-out of this release for as long as the ledger on disk
+# names some other release — silent only once the ledger is deleted or
+# re-projected under this release's own version. It never fires for a ledger
+# that is this release's own.
 #
 # WHY IT RUNS INSIDE fanout AND NOT AS ITS OWN MODE. The claim four documents
 # already make — gate/.gitignore, CHANGELOG.md, docs/RELEASING.md, the priority
@@ -402,11 +406,12 @@ subject_freeze() {
 # WHY VERSION IS THE WHOLE TEST. $DEFERRED_FILE is overwritten, never appended
 # to (gateWriteDeferred's own doc comment), so at any moment it holds exactly
 # one release's projection. A version matching THIS release's is that
-# projection — this run's own `record` wrote it, or an earlier round of the
-# same release did — and printing a notice about it would tell the maintainer
-# to triage findings this release already knows about, from a file it is about
-# to overwrite again. Only a version that names some OTHER release is a ledger
-# this release has not yet been shown.
+# projection — the PROJECTOR wrote it for this round, or an earlier round of
+# the same release did — and printing a notice about it would tell the
+# maintainer to triage findings this release already knows about, from a file
+# the projector will overwrite again once this round's answers are complete.
+# Only a version that names some OTHER release is a ledger this release has
+# not yet been shown.
 #
 # WHY A DIE AND NOT A SKIP ON A FILE THAT WON'T READ. CLAUDE.md's rule for this
 # gate: a check that cannot run is a failure, not a pass. A ledger this function
@@ -435,7 +440,7 @@ deferred_notice() {
   # function was told not to trust, a hand-edited or crash-truncated file.
   _dnotice_last="$(awk 'NF { last = $0 } END { print last }' "$ROOT/$DEFERRED_FILE")"
   if [ -z "$_dnotice_version" ] || [ "$_dnotice_last" != "}" ]; then
-    die "fanout: $DEFERRED_FILE exists and cannot be read as the ledger it claims to be — its version field is unreadable, or the document does not end where a complete one does. An unreadable ledger is not an empty one: repair it by hand, or delete it and let the next \`record\` mint a fresh one." 2
+    die "fanout: $DEFERRED_FILE exists and cannot be read as the ledger it claims to be — its version field is unreadable, or the document does not end where a complete one does. An unreadable ledger is not an empty one: repair it by hand, or delete it and let the next PROJECTOR run (go test ./cmd/dossierx -run '^TestGateDeferredProject\$' -count=1 -args -deferred-project) mint a fresh one." 2
   fi
 
   _dnotice_current="$(release_version)"

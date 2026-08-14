@@ -170,9 +170,9 @@ catch a misfiling; and promotion is a one-line ruling, not a rebuild — **built
 | Mechanism | How it is proven |
 |---|---|
 | 1 | Every surface in `surfaces.yaml` declares a `reach_class` from the closed four-value set; no reading agent's output can set or change one. |
-| 2 | An answer with an empty `failure_scenario` or an out-of-vocabulary `consequence` is refused, not recorded. Historical `Severity` strings are untouched. |
+| 2 | An answer with an empty `failure_scenario` or an out-of-vocabulary `consequence` is refused, not recorded. |
 | 3 | Table-driven test over all twelve cells asserting the Priority each pair produces; a missing or out-of-vocabulary input is refused, not defaulted. |
-| 4 | A P0 anywhere fails `evaluate()` regardless of `overrides.json`. A cleared P1 passes; an uncleared one fails. P2/P3 never affect `evaluate()` but appear in `gate/deferred.json` and the receipt. |
+| 4 | A P0 anywhere fails `evaluate()` regardless of `overrides.json`. A cleared P1 passes; an uncleared one fails. P2/P3 never affect `evaluate()` unless a ruling promoted one; otherwise they appear in `gate/deferred.json` and the receipt without blocking. |
 | 5 | `_frame.md` orders the reader-harm question before the sweep question, and the report-every-finding instruction is still present, restated to cover both passes. |
 
 ## Risks
@@ -206,7 +206,11 @@ promising; it now has a field.
 concerns — set when the defect lives in a file the agent read as borrowed context rather than in its
 own surface's document. The recorder resolves the path to its owning surface and ranks the finding
 at the HIGHER of the reading surface's `reach_class` and the owner's; an `about` that resolves to no
-declared surface is refused. This closes the case Mechanism 1's "What it does not fix" left open: a
+declared surface — including every OUT-OF-SCOPE file, which carries no `reach_class` at all — is
+refused, and a finding resting on one of those has no lever and still ranks at the reading surface's
+own class. This is the mitigation `gate_answer_test.go`'s surface-attribution comment names — not the
+gap Mechanism 1's "What it does not fix" left open, which is about a finding's consequence varying
+WITHIN one surface and is untouched by this field. The defect `about` addresses is different: a
 `maintainer` surface reporting an `acts-wrongly` defect that actually lives in a `client-shipped`
 file it only borrows used to rank at the maintainer's own P2 ceiling; it now ranks at the
 client-shipped P0 the defect actually costs.

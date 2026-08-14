@@ -1613,9 +1613,10 @@ func TestGateUnrankedFindingBlocksAndSaysWhy(t *testing.T) {
 }
 
 // TestGatePromotedFindingBlocksAndCannotBeRuledAway is the other direction of the
-// override record, and the one the CHANGELOG has claimed since this design landed:
-// "the matrix is a default, never a ceiling — a human ruling can still promote any
-// finding past what it computed, P0 included."
+// override record, and the one the CHANGELOG describes as: "The matrix is a
+// default, never a ceiling: `gate/overrides.json` entries may carry `promote_to`,
+// which raises a finding's priority — P2 to P0, for instance — and is refused if
+// it names anything at or below what the matrix already computed."
 //
 // It is here rather than in gate_override_test.go for that file's own stated
 // reason: every fixture there is P1, so that its refusals fire on a finding a

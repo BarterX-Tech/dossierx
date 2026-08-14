@@ -45,8 +45,11 @@ What follows from it:
   at the moment it is recorded; editing a surface's `reach_class` afterward re-ranks nothing already
   on the receipt, only what gets recorded from then on. A receipt carrying any P0 finding,
   or any P1 finding the human has not ruled on, evaluates to FAILED; P2 and P3 findings stay on the
-  receipt, never block, and are written into THIS release's own `gate/deferred.json` ledger, which
-  the next release's round one reads before its own first fan-out overwrites it. A P1 finding the
+  receipt, never block, and are written into THIS release's own `gate/deferred.json` ledger by the
+  PROJECTOR, run once a round's answers are complete (and re-written the same way by the driver's D1
+  at publish time) — no fan-out writes it; a fan-out only prints a notice, and prints it on every fan-out for
+  as long as a ledger on disk names a different release. The next release's round one reads the ledger before that
+  release's own first projector run overwrites it. A P1 finding the
   human has judged non-blocking is cleared by fixing the tree or by
   recording a ruling in `gate/overrides.json` — tracked, naming the release, the finding's digest,
   who ruled and why, refused when it is stale or inherited or unreasoned, and carried on the receipt

@@ -116,10 +116,11 @@ to the wrong surface.
 
 ### The gate stopped needing four rounds to say the same thing
 
-This release's own gate has run six reading rounds and returned 219 findings across them — decaying
-and not converging. Three mechanisms address the three reasons, and none of them relaxes a refusal:
-coverage is not reduced, a check that cannot run still fails, and every finding still reaches the
-receipt; what changed is which ones stop the release — see below.
+This release's own gate has run six reading rounds and returned 219 findings across them — never
+converging, and rising again at round five. Three mechanisms address the three reasons. None of them
+narrows coverage or turns a check that cannot run into a pass — coverage is not reduced, a check that
+cannot run still fails, and every finding still reaches the receipt. What a finding costs did change,
+and that is which ones stop the release — see below.
 
 **Prose that restates a number the tree already derives is now checked by a test, not by an agent.**
 Two such sentences had already gone wrong inside this one release. The site's "26 → 19: what was
@@ -185,10 +186,11 @@ made for another release, because a decision about this release is not evidence
 about the next; and a CLEARING ruling naming a P0 finding, because P0 has no path off
 through this file at all. The one thing it does not refuse in that direction is a
 PROMOTING entry: an override may instead carry `promote_to`, which raises a finding's
-priority rather than clearing it — accepted for any finding, including one already
-at P0, and refused only if the target is at or below what the matrix already
-computed. Nothing in it reads `severity`: an override is a named person's
-call on one finding, not a threshold with extra steps.
+priority rather than clearing it. It is refused for a finding already at P0 — there is
+no priority above P0 to promote into — and, for every other finding, refused only if
+the target is at or below what the matrix already computed. Nothing in it reads
+`severity`: an override is a named person's call on one finding, not a threshold with
+extra steps.
 
 None of this is in the shipped binary. It changes how this project decides a release
 is done, not what a consumer runs.
@@ -229,7 +231,9 @@ that actually lives in a `client-shipped` file it only borrows. An `about` that 
 to no tracked surface is refused, and the lever only ever raises.
 
 The receipt now PASSES when no P0 finding exists and every P1 is fixed or ruled in
-`gate/overrides.json` — P0 has no path through that file: a client-shipped defect that
+`gate/overrides.json` — necessary, not sufficient: an unranked finding, a declared surface
+holding no PASS, or a PASS fingerprinted against another tree all still block regardless.
+P0 has no path through that file: a client-shipped defect that
 leaves a reader acting wrongly is exactly the failure this gate exists to catch, and no
 ruling waives it. P2 and P3 findings stay on the receipt and never block, and they are
 no longer read once and forgotten: the PROJECTOR, run by the maintainer once a round's

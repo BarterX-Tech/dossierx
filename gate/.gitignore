@@ -1,7 +1,8 @@
-# gate/ holds three different kinds of thing, and the tracked side of it is not
-# one file — it is three: the gate's own reviewed material, plus the two ledgers
-# a run writes (subject.json, deferred.json) and the one a human writes
-# (overrides.json).
+# gate/ holds three different kinds of thing — the gate's own reviewed
+# material, the evidence a run produces, and the ledgers that record a ruling
+# — and two of those three kinds are tracked. Beside the reviewed material,
+# the tracked side is three FILES: subject.json and deferred.json, both
+# run-written, and overrides.json, human-written.
 #
 # TRACKED: the gate's own working material — the question it asks (prompts/) and
 # the declaration of how it asks it (method.yaml). Those are reviewed.

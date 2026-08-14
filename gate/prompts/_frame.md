@@ -62,9 +62,15 @@ stale count at once, and both belong in your findings.
    - **Context from another surface, handed over.** Marked
      "NOT yours to report on". These are files your surface does not own,
      included because a claim of YOURS turns on them. Use them to judge your own
-     documents. Do **not** review them: another agent has that surface, and a
-     finding filed here about a file you do not own arrives under the wrong
-     surface's name and is reported twice.
+     documents: a finding here is still a finding about YOUR document — a claim
+     your own material makes that these bytes turn out to make true or false —
+     and it is filed under YOUR surface's name. If the defect actually lives in
+     the borrowed file rather than in a claim of yours, set `about` to that
+     file's path (see below) so it ranks at whichever of the two surfaces'
+     `reach_class` is higher. What you must not do is review the borrowed file
+     on its own terms — a defect in what IT says, unconnected to any claim of
+     yours: that finding belongs to the surface that owns it, and filing it
+     here reports it twice, once under each surface's name.
 
    If a finding of yours rests on a context section, name that file — every
    section states its source path — so the human can see the finding came in by
@@ -106,10 +112,11 @@ documented `--force` recovery deletes the client's hook before the same
 paragraph's backup step ever runs, because the script writes the replacement
 first" is a `failure_scenario`. "This could mislead an operator" is not one — it
 names no reader, no action and no break. Nothing mechanical refuses it at write
-time, though: only an EMPTY `failure_scenario` is refused there. A vague one
-like this parses cleanly and is caught by the honesty guard below, not by
-anything enforced as you write it — refused in spirit, in the words that guard
-uses, rather than refused on the wire.
+time. Only an EMPTY `failure_scenario` is refused at all, and — same as
+`consequence` above — not call by call: the recorder refuses the WHOLE ANSWER
+once the run finishes. A vague one like this parses cleanly and is caught by
+the honesty guard below, not by anything enforced as you write it — refused in
+spirit, in the words that guard uses, rather than refused on the wire.
 
 **Priority is not yours to assign.** It was never yours to assign under severity
 either, but severity at least invited the guess; consequence does not. Priority
@@ -122,13 +129,31 @@ severity into any field. If you find yourself reaching for a word like "critical
 or "minor", that word belongs inside `failure_scenario` as part of the sentence
 about who breaks — not as a label standing next to it.
 
-**`about`, when a finding rests on a borrowed document.** If what makes your
-finding true is not your own surface's document but a file handed to you as
-context — marked "NOT yours to report on" in the material below — set `about`
-to that file's repo-relative path. The recorder resolves it to the surface that
-owns it and ranks the finding at the HIGHER of your surface's `reach_class` and
-the owner's, so a defect that actually lives in a `client-shipped` file is not
+**`about`, when the bytes that make your finding true belong to another
+surface.** Set `about` to a repo-relative path only when the file whose bytes
+make your finding true is OWNED by a declared surface — one with a
+`reach_class` in `surfaces.yaml`. The recorder resolves the path to that
+surface and ranks your finding at the HIGHER of your own `reach_class` and the
+owner's, so a defect that actually lives in a `client-shipped` file is not
 under-ranked just because you read it while reviewing a `maintainer` surface.
+
+Many of the files you are handed as context are deliberately OUT OF SCOPE —
+`Makefile`, the workflow files, the scripts this gate runs itself, every
+`*_test.go` — and carry no `reach_class` at all, because nobody reviews them
+as prose. There is no cell for `about` to raise a finding to there, and naming
+one is refused. If your finding turns on one of those, leave `about` unset and
+say in your `detail` which file it was; the finding still ranks at your own
+surface's class. You may name an owned path even when it was not handed to you
+as context — resolution is about who owns the file, not about how you came to
+read it.
+
+**A worked example that actually resolves.** The `changelog` surface reads
+`scripts/install-git-hook.sh` and `skills/dossierx/SKILL.md` as context; both
+are owned by `client-shipped` surfaces. An `acts-wrongly` finding the
+`changelog` agent files about either one, with `about` naming it, raises from
+the P1 that `consumer-docs` × `acts-wrongly` would give it to the P0
+`client-shipped` × `acts-wrongly` the defect actually costs.
+
 The lever only ever raises what the matrix would otherwise compute, and an
 `about` that does not resolve to a path a declared surface owns is refused.
 
