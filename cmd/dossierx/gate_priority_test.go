@@ -611,7 +611,7 @@ func TestGateDeferredProject(t *testing.T) {
 // that type does not model — `what:`, `reach:`, the comments — and a fixture that
 // quietly rewrites the document it is meant to vary is a fixture whose failures
 // are about itself.
-var gatePriorityNameLine = regexp.MustCompile(`^  - name: (\S+)\s*$`)
+var gatePriorityNameLine = regexp.MustCompile(`^ {2}- name: (\S+)\s*$`)
 
 // gatePriorityManifestClasses rewrites root's copy of surfaces.yaml so that each
 // named surface carries exactly the given reach_class — or none at all, for the
@@ -1023,10 +1023,18 @@ func TestGatePriorityMatrixIsActuallyConsultedByTheRecordingPath(t *testing.T) {
 		t.Fatalf("the same finding ranked %s on a client-shipped surface and %s on a maintainer one. The recorder is not reading %s: a table nothing consults ranks nothing, which is the defect this gate shipped an override loader with one release ago",
 			shipped.Priority, maintainer.Priority, gateManifestFile)
 	}
-	if want, _ := gatePriorityFor(gateReachClientShipped, gateConsequenceActsWrongly); shipped.Priority != want {
+	want, wantErr := gatePriorityFor(gateReachClientShipped, gateConsequenceActsWrongly)
+	if wantErr != nil {
+		t.Fatalf("the matrix could not rank the client-shipped/acts-wrongly pair, so this test has no expectation to compare against: %v", wantErr)
+	}
+	if shipped.Priority != want {
 		t.Errorf("a client-shipped acts-wrongly finding recorded as %s; the matrix says %s", shipped.Priority, want)
 	}
-	if want, _ := gatePriorityFor(gateReachMaintainer, gateConsequenceActsWrongly); maintainer.Priority != want {
+	wantMaintainer, wantMaintainerErr := gatePriorityFor(gateReachMaintainer, gateConsequenceActsWrongly)
+	if wantMaintainerErr != nil {
+		t.Fatalf("the matrix could not rank the maintainer/acts-wrongly pair: %v", wantMaintainerErr)
+	}
+	if maintainer.Priority != wantMaintainer {
 		t.Errorf("a maintainer acts-wrongly finding recorded as %s; the matrix says %s", maintainer.Priority, want)
 	}
 
@@ -1274,8 +1282,8 @@ func TestGateP1BlocksUntilAHumanRulesOnIt(t *testing.T) {
 	// keeps P1 from becoming a permanent waiver.
 	next := receipt
 	next.Version = "v0.5.3"
-	if verdict, _ := next.evaluate(gatePriorityDeclared, gatePriorityCurrent); verdict != gateVerdictFailed {
-		t.Error("a v0.5.2 ruling cleared the same P1 in v0.5.3; an override is never inherited")
+	if verdict, err := next.evaluate(gatePriorityDeclared, gatePriorityCurrent); verdict != gateVerdictFailed {
+		t.Errorf("a v0.5.2 ruling cleared the same P1 in v0.5.3; an override is never inherited (evaluate said: %v)", err)
 	}
 }
 
@@ -1332,8 +1340,8 @@ func TestGateDeferredFindingsDoNotBlockAndAreStillOnTheReceipt(t *testing.T) {
 		gatePriorityFinding("readme", "install-command-is-wrong", gateConsequenceActsWrongly, gatePriorityP0),
 		gatePriorityFinding("readme", "stale-count", gateConsequenceCosmetic, gatePriorityP2),
 	)
-	if verdict, _ := blocking.evaluate(gatePriorityDeclared, gatePriorityCurrent); verdict != gateVerdictFailed {
-		t.Error("a receipt holding a P0 beside two deferred findings passed")
+	if verdict, err := blocking.evaluate(gatePriorityDeclared, gatePriorityCurrent); verdict != gateVerdictFailed {
+		t.Errorf("a receipt holding a P0 beside two deferred findings passed (evaluate said: %v)", err)
 	}
 	ledger, _, err = gateReadDeferred(work)
 	if err != nil {
@@ -1401,7 +1409,7 @@ func TestGateDeferredLedgerIsAProjectionAndNotAnAppendLog(t *testing.T) {
 // class in the matrix — so the ledger this produces is non-empty whatever classes
 // the fixture's manifest ended up with, and a row that wanted a blocking finding
 // asks for one explicitly.
-func gatePriorityProjectRound(t *testing.T, root string, tracked []string, declared []string, skip map[string]bool, extra map[string]map[string]any) {
+func gatePriorityProjectRound(t *testing.T, root string, tracked, declared []string, skip map[string]bool, extra map[string]map[string]any) {
 	t.Helper()
 	for _, surface := range declared {
 		if skip[surface] {

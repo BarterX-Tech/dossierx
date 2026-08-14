@@ -64,7 +64,7 @@ import (
 // rather than assumed, so a fixture that claims "this release's version" is
 // actually checked against the CHANGELOG rather than against a guess that goes
 // stale the day the heading moves.
-var gateDeferredWireVersionHeading = regexp.MustCompile(`(?m)^## \[([0-9]+\.[0-9]+\.[0-9]+)\]`)
+var gateDeferredWireVersionHeading = regexp.MustCompile(`(?m)^## \[(\d+\.\d+\.\d+)\]`)
 
 // gateDeferredWireCurrentVersion is the version the script will actually compute
 // for this checkout, so that a test asserting "this release's own ledger" and one
