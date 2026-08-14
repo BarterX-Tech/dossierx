@@ -1,0 +1,239 @@
+{
+  "version": "v0.5.2",
+  "findings": [
+    {
+      "surface": "binary-and-viewer",
+      "rule": "escaped-newline-inside-a-doc-comment",
+      "consequence": "cosmetic",
+      "failure_scenario": "A maintainer reading reconcileReviewPending's doc comment in cmd/dossierx/main.go to learn which command surfaces the claims it flagged reads the invocation as `dossierx claim list\\n// --review-pending`, and has to reconstruct the intended `dossierx claim list --review-pending` from a mangled string before they can run it.",
+      "detail": "cmd/dossierx/main.go, in reconcileReviewPending's doc comment, contains the literal characters `\\n// ` inside a quoted command: `... and shows up in \"dossierx claim list\\n// --review-pending\". It` — a two-line comment wrap that was joined with an escape sequence instead of a real line break. The command named is correct; only its rendering in the comment is broken.",
+      "digest": "sha256:9533d53f783264b85073c10d3d11c10106a8780e61dfe899e379de75469269a3",
+      "priority": "P2"
+    },
+    {
+      "surface": "changelog",
+      "rule": "cross-release-report-classified-three-artifacts-not-five-comments",
+      "consequence": "cosmetic",
+      "failure_scenario": "A maintainer who opens `gate/render-diff.json` after reading \"The cross-release report classifies all five as silent\" finds three classified entries — the three sample viewers — and no classification of any comment at all, least of all the `tree.html` one the same sentence says never reaches a consumer; they spend time reconciling the two numbers and nothing about the release changes.",
+      "detail": "In the first SILENT paragraph of the 0.5.2 entry: \"The cross-release report classifies all five as silent — the inputs are byte-identical\". `gate/render-diff.json` classifies rendered ARTIFACTS, not comments: `coverage.silent` is 3 and `artifacts` holds exactly the three sample viewers (`testdata/fixture-basic`, `testdata/fixture-graph-demo`, `testdata/fixture-portability`). Four of the five comments appear inside those diffs; the fifth, in `tree.html`, is a Go-template comment that by this paragraph's own words never reaches a consumer, so it can appear in no rendered artifact and the report cannot have classified it. The paragraph's substance — inputs byte-identical, nothing renders differently, 8 added and 10 removed lines per viewer — is correct and matches the capture exactly.",
+      "digest": "sha256:2b80d11833dc2fa1a5a0c7eb3e2be987b7d03ba06b99788fd5dda1a43b2c7bbf",
+      "priority": "P3"
+    },
+    {
+      "surface": "changelog",
+      "rule": "moved-behaviour-fingerprints-are-not-checkable-from-this-bundle",
+      "consequence": "misled",
+      "failure_scenario": "A human reading this surface's verdict believes the changelog was checked against everything that moved in this release, when the sentence covering five of the ten packages whose `behaviour_fingerprint` changed was recorded as unchecked rather than as checked — so a behaviour change in one of them that altered no command, flag, error code, route, envelope key or rendered byte would have passed this surface unexamined.",
+      "detail": "`gate/delta.json` names `behaviour_fingerprint` as changed, and comparing `surface.json` against `gate/baseline.json` shows ten packages moved: cmd/dossierx, internal/cliout, internal/comments, internal/config, internal/lock, internal/reaudit, internal/render, internal/render/components, internal/serve and skills. This entry accounts for cmd/dossierx (the four retired stubs and the `claim new --help` text), internal/lock (the Windows sentinel fix), internal/render and internal/render/components (the viewer-template comments) and skills (the re-export notice) by name; the remaining five — internal/cliout, internal/comments, internal/config, internal/reaudit, internal/serve — are covered only by the aggregate sentence \"The remaining engine changes are comment-only\". Those five reach this bundle as sha256 values and nothing else, so that sentence can be neither confirmed nor refuted here. What is checkable was checked and agrees: commands, flags, root flags, error codes and their exit codes, lint rules, HTTP routes, skills, envelope keys and every payload key list are byte-identical between `surface.json` and `gate/baseline.json`, and `render_fingerprint` is accounted for by `gate/render-diff.json`. What that leaves unexaminable is a behaviour change inside one of the five that moves none of those. Closing it needs a per-package change capture for every moved `behaviour_fingerprint`, staged for this surface the way `gate/render-diff.json` already is; no `reads:` entry on a single tracked document would reach it.",
+      "digest": "sha256:e1fd22968f7da3ebec290414d8f06a6b353338dad5aac45b8b00f7339dcaf304",
+      "priority": "P2"
+    },
+    {
+      "surface": "changelog",
+      "rule": "section-heading-carries-a-round-count-its-own-first-sentence-corrects",
+      "consequence": "cosmetic",
+      "failure_scenario": "A maintainer skimming the 0.5.2 entry's section headings reads \"The gate stopped needing four rounds to say the same thing\", takes four to be this release's round count, then reads the first sentence under it and is given six; they lose a moment reconciling the two and nothing about the release or what they do is different.",
+      "detail": "The heading \"### The gate stopped needing four rounds to say the same thing\" sits directly above \"This release's own gate has run six reading rounds and returned 219 findings across them — never converging, and rising again at round five.\" Four is the figure the site's stale entry still carries (see the related finding), so the heading reads as a leftover from the round at which it was written rather than as a description of what this release did.",
+      "digest": "sha256:21d37dac64d34281acdbe512fb56b671b43908c98388aaecd4cac3ba138caf44",
+      "priority": "P3"
+    },
+    {
+      "surface": "changelog",
+      "rule": "silent-skills-entry-understates-what-a-stale-export-keeps",
+      "consequence": "misled",
+      "failure_scenario": "A maintainer upgrading to v0.5.2 reads the SILENT skills paragraph, sees that the only two consequences of skipping `dossierx skills export` are a hook-install URL they never used and a build-order rule for a two-level module they do not have, concludes the re-export does not matter for their project, and their agent keeps following v0.5.1's router — which tells it to delete the `.lock` file whenever a `write_conflict` retry fails identically, the exact case v0.5.2 split in two and for which the new guidance is to delete nothing.",
+      "detail": "The 0.5.2 preamble states the stakes of skipping the re-export as a closed list: \"A project that skips the re-export keeps v0.5.1's guidance: an install line fetching `scripts/install-git-hook.sh` from the v0.5.1 raw path, and a build-order rule with no answer for a declared contract.\" (The 0.5.1 entry's equivalent paragraph said \"including\", leaving its list open; this one does not.) But this same release changed a third thing inside the shipped router bundle, and it is the only one of the three that can destroy something. This entry's own \"Fixed — the claims file lock could refuse the one case it exists for, on Windows\" section records that \"the two contended timeouts now report apart\", and `skills/dossierx/SKILL.md` — handed to me as context — carries the matching new `write_conflict` row: \"as of v0.5.2 there are two of these and they do not share a recovery\", where state (b) says \"Do not delete anything: there may be no sentinel to delete, and if a live process IS inside the critical section, deleting its lock is the one action that corrupts what the lock protects.\" A project still holding the v0.5.1 bundle has only the unconditional \"delete the .lock file the message names\" form (the shape the site's CLI-contract card still shows). That consequence of a stale export is named nowhere in the 0.5.2 entry.",
+      "digest": "sha256:0289efee933a9443b4ee17860c4a1a2441c8e153f656a8d54b03774224f5e1df",
+      "priority": "P2"
+    },
+    {
+      "surface": "changelog",
+      "rule": "site-release-entry-contradicts-this-release-entry",
+      "consequence": "misled",
+      "failure_scenario": "A reader deciding whether to upgrade opens this release's entry on the project's own release page rather than in CHANGELOG.md and is told that the gate still fails on any finding at all, that three viewer comments were wrong rather than five, and that this release's gate ran four rounds returning 39/31/24/18 findings — so which of the two accounts they happen to read decides what they believe about the release.",
+      "detail": "The rendered site (`gate/site-text.json`, identical text on `index.html` and `releases.html`, sourced from `site/src/content.ts`) carries a v0.5.2 entry that disagrees with this file in three places, and the evidence in the bundle supports this file in each case. (1) The site says \"any finding at all still fails the verdict\"; this entry says \"The receipt now PASSES when no P0 finding exists and every P1 is fixed or ruled\" and \"P2 and P3 findings stay on the receipt and never block\" — and this file's own 0.5.1 entry carries a SUPERSEDED BY 0.5.2 note added for exactly that sentence. This is the serious one: it describes a behaviour this release changed, on the page a reader is most likely to reach first. (2) The site says \"Three maintainer comments inside the inlined stylesheet were factually wrong\"; this entry says five, of which four ship, and `gate/render-diff.json` shows four distinct corrections in the shipped `index.html` (the graph.css pane description, the graph.css z-index line, the style.css z-index ledger, and the stale `style.css:173` cross-reference). (3) The site says \"39, 31, 24 and 18 findings across four reading rounds — decaying without converging\"; this entry says \"six reading rounds and returned 219 findings across them — never converging, and rising again at round five\". `.goreleaser.yaml`'s release footer, also in this bundle, tells every reader that \"The full account of this release is its `CHANGELOG.md` entry\", which is what makes the divergence matter rather than being two harmless phrasings.",
+      "digest": "sha256:fb8f742b6c3304a32030058a3423abf371ee99ed9c2b38ef0eee61451d82ae70",
+      "priority": "P2"
+    },
+    {
+      "surface": "contributing",
+      "rule": "check-pipeline-stage-order-reversed",
+      "consequence": "misled",
+      "failure_scenario": "A contributor reading \"Package boundaries\" to learn why `check` is allowed to import `render` comes away believing `dossierx check`'s stages end with the source scan and that the lock-ledger gate has already passed by the time any code is scanned; reasoning about the pipeline on that order — for instance concluding that a ledger failure means the scan never ran, or placing a new stage after the ledger to get the scan's results — inverts the one ordering the design deliberately chose, since the ledger gate runs LAST precisely so that reaching it proves the catalog, the viewer and the scan all succeeded.",
+      "detail": "CONTRIBUTING.md's \"Package boundaries\" section, inside the `render-is-top-of-stack` bullet, says: \"`check` runs lint -\u003e catalog -\u003e render -\u003e ledger -\u003e scan as its five stages\". The last two are the wrong way round. The rendered site (gate/site-text.json) states the pipeline twice and both times puts the ledger last: the hero diagram reads \"Inside dossierx check: lint -\u003e catalog -\u003e render -\u003e scan -\u003e ledger\", and the CLI-contract entry for `dossierx check [--validate] [--staged]` reads \"3) Scans source_dirs for dossierx-claim tags (an unknown or unlocked tag is a HARD failure). 4) The lock-ledger gate — LAST, so reaching it means the catalog and the viewer were regenerated and the scan passed\".",
+      "digest": "sha256:eb8ab6ee6163e38a8aad166f4552961fcb6f5dbfc166b37fd270486b62e7aa81",
+      "priority": "P3"
+    },
+    {
+      "surface": "contributing",
+      "rule": "cli-example-rewrites-tracked-fixtures",
+      "consequence": "misled",
+      "failure_scenario": "A contributor tries the CLI with the exact command under \"Running the CLI locally\", then runs `git status` and finds testdata/fixture-basic/viewer/index.html modified with a generation timestamp they never edited; committing with `git commit -a` carries that regenerated fixture into their pull request as unrelated churn a reviewer then has to account for.",
+      "detail": "CONTRIBUTING.md's \"Running the CLI locally\" offers `go run ./cmd/dossierx check --config testdata/fixture-basic/project.config.yaml` as a way to try the CLI \"against one of the fixtures under `testdata/`\", with nothing said about it writing. It is the writing form of check: the rendered site's CLI-contract entry (gate/site-text.json) says only `--validate` \"lints in memory and writes NOTHING — no claim files, no lock store, no .catalog.json, no viewer\", and docs/RELEASING.md's last pre-tag item runs this exact command on this exact fixture in order to regenerate testdata/fixture-basic/viewer/index.html and then \"commit the diff\", describing those three fixture viewers as tracked, generated artifacts. The section names no read-only form.",
+      "digest": "sha256:c3a8ac61a75414398ff315f435c1c7fdaf81423a2ce7afef85010b4c224d3288",
+      "priority": "P3"
+    },
+    {
+      "surface": "contributing",
+      "rule": "new-surface-entry-omits-reach-class",
+      "consequence": "acts-wrongly",
+      "failure_scenario": "A contributor adds a client-facing file, follows the third bullet of \"Adding a file is two steps\" and writes a surfaces.yaml surface entry carrying name, paths, what and reach; `go test ./...` then goes red in tests/surfaces_manifest_test.go with \"surface \u003cname\u003e carries no reach_class\", so the green tree this same section promises the contributor in the same commit does not happen, and they have to work the closed vocabulary out of a test file the document never names.",
+      "detail": "CONTRIBUTING.md, section \"Adding a file is two steps: `surfaces.yaml` has to claim it\", third bullet: \"**It is a surface nobody has declared yet.** Write a new entry with `what` and `reach` filled in. Those two fields are read by a human at release time...\". It names exactly two fields and never mentions `reach_class`. Every one of the twelve surface entries in surfaces.yaml carries one (readme: client-shipped, contributing: maintainer, roadmap: consumer-docs, ...), and tests/surfaces_manifest_test.go's TestSurfacesDeclareAValidReachClass errors on any `surfaces:` entry whose reach_class is empty or outside the closed set {client-shipped, consumer-docs, maintainer, process}. `reach_class` is new in this release: it is the left-hand side of the priority matrix (reach_class x consequence -\u003e P0-P3) that replaced free-text severity, so a surface without it also has nothing for the gate to rank a finding against. The bullet is a v0.5.1-era instruction that this release's own change did not update. The same paragraph's phrase \"Those two fields\" is what makes it read as complete rather than as a partial list.",
+      "digest": "sha256:d948dd2e5b9c6122f488fc978dd6829941aa73a85419b9e4b601555457efbade",
+      "priority": "P2"
+    },
+    {
+      "surface": "contributing",
+      "rule": "sentence-begins-lowercase",
+      "consequence": "cosmetic",
+      "failure_scenario": "A contributor reading the Chromium-fork caveat reaches \"...118 of them the browser's. the misread was fixed...\", reads the lowercase opening as a continuation of the previous clause rather than a new sentence, and re-reads the paragraph to recover the sense; nothing they do afterwards is wrong.",
+      "detail": "CONTRIBUTING.md, under \"Two places a local green proves less than it looks like\", in the paragraph beginning \"**A green against a Chromium fork is not a green against Chrome.**\": the sentence \"the misread was fixed by attributing requests via CDP's `DocumentURL`, but the class remains...\" begins with a lowercase \"the\" immediately after a full stop. The two counts it follows (119 request events, 118 of them the browser's) are correct against viewer-tests/graph_offline_test.go, which records \"119 request events on the tab, 118 of them the browser's own chrome:// UI, exactly 1 attributed to this document\".",
+      "digest": "sha256:d411e0714f3dbd779112181b53c21a9acc71b9dfef2d68ac09d4926d5220f687",
+      "priority": "P3"
+    },
+    {
+      "surface": "install-scripts",
+      "rule": "core-hooksPath-note-announces-an-install-on-runs-that-install-nothing",
+      "consequence": "cosmetic",
+      "failure_scenario": "An operator running \"install-git-hook.sh --uninstall\" in a repository with core.hooksPath set is first told \"that is where git looks for hooks and that is where this installs\" and then offered \"Uninstall with ... --uninstall\" - advice for the command they are already running - before the next line correctly reports that the hook is being removed.",
+      "detail": "scripts/install-git-hook.sh: the core.hooksPath note block sits after the hooks-dir resolution and before both the --uninstall branch and the state=current short-circuit, so it is emitted on every run that gets that far, including uninstalls and already-current no-ops. Two statements in it are false on those runs: \"that is where this installs\", and (on an uninstall) the offer of the uninstall command. It also breaks the header's own promise under \"idempotence\": \"Re-running is a no-op with a one-line report\" - in a core.hooksPath repository a re-run prints the six-line note, plus five more when the setting is machine-wide, before that one line. Moving the block below the uninstall branch and the already-current exit, or wording it for the action actually being taken, fixes both.",
+      "digest": "sha256:fcd1aaae855132f82671905733f5154820ded594d11a5aab2759348e47564037",
+      "priority": "P2"
+    },
+    {
+      "surface": "release-notes",
+      "rule": "exclude-filters-miss-scoped-docs-and-chore",
+      "consequence": "cosmetic",
+      "failure_scenario": "A consumer opening the v0.5.2 release page to see what shipped reads twelve bullets naming this project's own internal planning and process work — docs(plan): implementation plan for v0.5.2, docs(spec): design v0.5.2, the release that can release itself, chore(gate): freeze v0.5.2's subject at the manifest round five reads — presented as changes in the release, and has to read past them to reach the four fix lines that share the same \"Other changes\" section.",
+      "detail": ".goreleaser.yaml's changelog.filters.exclude is ['^chore:', '^docs:', '^Merge ']. All three are anchored at '^' with no scope, so they match only an unscoped subject. Every docs and chore commit in this release's range carries a Conventional Commit scope, so gate/release-notes-prediction.json's \"dropped\" list holds exactly one entry — 'chore: ignore the per-tool config October generates' — while 9 docs(...) and 3 chore(...) subjects survive into the published \"Other changes\" group. The same root cause as the grouping finding above (patterns written without allowing a scope), with the opposite effect: the filters keep nothing off the page rather than dropping something from it. Nothing user-visible is lost this release, which is why this is noise rather than a hazard, but it means the safety property surfaces.yaml attributes to these filters — that a user-visible change under a docs: or chore: subject is dropped and invisible on the release page — is currently exercised by one unscoped commit and would not fire on a scoped one either. The file's own footer comment states the behaviour precisely ('with `^docs:`, `^chore:` and `^Merge` filtered out'), so nothing in it is false; what the reader sees is the twelve surviving bullets.",
+      "digest": "sha256:4a3ba6c30e03db69b0a75b60cfaa5e8c78434e86659d1853f5337355555d4a8b",
+      "priority": "P3"
+    },
+    {
+      "surface": "release-notes",
+      "rule": "group-regexp-rejects-multi-scope-subjects",
+      "consequence": "misled",
+      "failure_scenario": "A consumer opening the v0.5.2 release page to see what was fixed reads the ten bullets under \"Bug fixes\", concludes that is the release's fix list, and never learns that the hook installer's truncated --help and mangled Windows path, the two shipped skill bundles that cited a file that never ships with them, and the four retired-command stubs also landed, because those commits carry multi-scope subjects (fix(installer,docs):, fix(skills,docs,site):, fix(site,tests):) that cannot match the group regexp and fall into the catch-all \"Other changes\" section below nine docs and three chore bullets.",
+      "detail": ".goreleaser.yaml's changelog.groups regexps are '^.*?feat(\\([[:word:]]+\\))??!?:.+$' and '^.*?fix(\\([[:word:]]+\\))??!?:.+$'. [[:word:]] is [0-9A-Za-z_], so the scope group matches a single-word scope only — a comma (or a hyphen) inside the parentheses makes the group fail, and with the group empty the following ':' must then match '(' , which also fails. The prediction in gate/release-notes-prediction.json shows the result for this exact range: \"Bug fixes\" holds 10 of the range's 23 fix commits and \"Features\" holds 9 of its 10 feat commits, while the remaining 14 (13 fix, 1 feat) sit in the order-999 catch-all \"Other changes\" — fix(docs,gate), fix(gate,docs) x4, fix(gate,site) x2, fix(installer,docs), fix(release,docs), fix(site,tests), fix(skills,docs,site), fix(skills,gate), fix(skills,scripts) and feat(gate),docs. Every other deliberate decision in this file carries a comment justifying it (formats plural, the '^Merge ' exclude, the literal header and footer, the main-not-tag link); this narrowing carries none, and the '^.*?' prefix on both patterns shows the opposite, permissive intent. Widening the scope group (for example to '\\([^)]+\\)') would put all 23 fix commits under \"Bug fixes\".",
+      "digest": "sha256:94e54f7b700bc4b44a63d8d732bc0362dc1deb470e2f0f21e92920846b848cbd",
+      "priority": "P2"
+    },
+    {
+      "surface": "release-procedure",
+      "rule": "ci-evidence-re-run-names-a-merge-commit-this-release-does-not-have",
+      "consequence": "acts-wrongly",
+      "failure_scenario": "A maintainer whose gate round found a blocking finding fixes the tree and, following item 4's closing sentence, re-runs `make ci-evidence` 'for the new merge commit' — but this release has no merge commit until the driver's own D2, so they either stall or resolve DOSSIERX_GATE_CI_SHA to main's newest merge, which belongs to the PREVIOUS release, and the driver's D1 then refuses at publish time because the evidence record names a tree that is not the one being released.",
+      "detail": "docs/RELEASING.md, item 4 ('Then loop, and expect to'): 'Every artifact above is keyed to a tree, so NOTHING staged for the old one is reusable: CI, `make ci-evidence` for the new merge commit, and the whole of this item are produced again against the new `$TREE`.' That contradicts the same document's own CI item above it — 'Name the release branch's head, not a merge commit ... at this point in the procedure THIS release has no merge commit, because making it is the driver's own D2. Naming `main`'s newest merge names the PREVIOUS release.' — and it contradicts the Makefile (handed as context), whose ci-evidence recipe prints on an unset variable: 'Never main's newest run, which is about the PREVIOUS release: this one has no merge commit yet, because making it is D2.' The phrase reads as a residue of exactly the correction the item above records; it should name the new release-branch head.",
+      "digest": "sha256:70be1370512a0ff2d21ef25d35368163f3909694a1d2864ff4172c4b49aa997c",
+      "priority": "P2"
+    },
+    {
+      "surface": "release-procedure",
+      "rule": "duplicated-pin-staleness-history-understates-itself",
+      "consequence": "cosmetic",
+      "failure_scenario": "A maintainer reading the version-pin item's closing line takes the list's staleness history to be v0.3.0 and v0.3.1 only, three sentences after the same paragraph told them it also went stale in v0.5.2; nothing they do changes, because the item's operative instruction is to work from the sweep rather than from the list.",
+      "detail": "docs/RELEASING.md, 'The version pins are moved' item: 'It is a cache of what the sweep found last time, and it has now gone stale twice: through v0.3.0 and v0.3.1, and again in v0.5.2, when the fifth pin site was created by the same release that failed to add it here.' The same paragraph then closes: 'It went stale through v0.3.0 and v0.3.1 and was found by a sweep, not by memory.' That trailing sentence is a leftover from the pre-v0.5.2 wording — it repeats the first and drops the v0.5.2 episode from the count. (The item's substantive numbers are correct: 'SEVEN pins across SIX files' and the six files it names match surface.json's `version_pins` exactly, and the git grep expression does cover the `github.com/\u003corg\u003e/\u003crepo\u003e/blob/vX.Y.Z` form the two skill bundles use.)",
+      "digest": "sha256:bd3310ae257e4e8b934c90c32cedacdd374a598547252fd3a6be5411afd81881",
+      "priority": "P3"
+    },
+    {
+      "surface": "release-procedure",
+      "rule": "the-gate-gitignore-claims-cannot-be-checked-from-this-bundle",
+      "consequence": "misled",
+      "failure_scenario": "A human reading this verdict believes the procedure's account of which `gate/` files are tracked has been checked, when the file that decides it was not handed — so if it stopped naming `gate/deferred.json`, a maintainer following the clean-tree item would find the projector's ledger untracked and uncommittable and the driver would refuse on a dirty tree at the moment of publication, with this reading having said nothing about it.",
+      "detail": "docs/RELEASING.md asserts that `gate/.gitignore` 'ignores everything it does not NAME', that the prompts and `gate/method.yaml` are visible because they are named, that `gate/baseline-input.json` is invisible by default, and that `gate/subject.json` and `gate/deferred.json` are the two run-written files on the tracked side — the last of which the 'start from a clean tree' precondition in the Tagging section depends on. The parenthesis carrying it says in its own words that this passage previously read the opposite way round, so it is a claim already known to have been wrong once. The byte I needed is `gate/.gitignore`. It is in neither this surface's `paths:` nor its `reads:`; the only corroboration in the bundle is prose inside `scripts/gate-stage2/run.sh` ('gate/.gitignore names it'), and prose agreeing with prose is what this gate exists to distrust.",
+      "digest": "sha256:e5016dfa3bb82ed79c4353a9f40f006290cb87c1a6927dbd94af591cefb95136",
+      "priority": "P3"
+    },
+    {
+      "surface": "release-procedure",
+      "rule": "the-second-unreached-suite-has-no-command-anywhere-in-this-procedure",
+      "consequence": "misled",
+      "failure_scenario": "A maintainer works the first two Before-tagging items, runs `go test ./...` and then `make viewer-test`, and ticks the item that says the two suites `go test ./...` does not reach have passed — but the second of those suites is the pre-commit-hook smoke test (`make hook-test` / scripts/hook-smoke-test.sh), no command anywhere in this document runs it, and the CI item further down states that the `hooks` job 'emits no countable account of anything', so the client-shipped hook installers reach the tag with nothing in the release procedure having adjudicated their only suite.",
+      "detail": "docs/RELEASING.md, first Before-tagging item: the checkbox names 'the two suites it does not reach on its own' and links CONTRIBUTING.md, but the next two sentences narrow to a DIFFERENT pair — 'The two checks with an external prerequisite — a browser and a `goreleaser` binary — live in `viewer-tests/`, which `go test ./...` does not descend into; the next item runs them.' The Makefile (handed as context) declares two targets for what `go test ./...` cannot reach: `viewer-test` (cd viewer-tests) and `hook-test` (bash scripts/hook-smoke-test.sh), whose comment reads 'The pre-commit gate is shell driving a real binary against a real git repository, so no Go test can cover it; scripts/hook-smoke-test.sh is its suite'. `make hook-test` appears nowhere in docs/RELEASING.md. Two adjacent 'two's with different referents is what makes the omission invisible to a reader who does not open the CONTRIBUTING anchor.",
+      "digest": "sha256:31381a9b453ef4d109d7779dc7d024360949a02fd406f244e8eed2d35bc82426",
+      "priority": "P3"
+    },
+    {
+      "surface": "release-procedure",
+      "rule": "the-tagging-section-rests-on-a-file-this-surface-was-not-handed",
+      "consequence": "misled",
+      "failure_scenario": "A human reading this surface's verdict takes the whole Tagging section as checked, when the ten-step D0-D9 count, D1's stated preconditions (the other-worktree refusal, the fan-out record, the CI evidence), D2's `--no-ff` merge and D9's 'not a check' handoff were judged against nothing — the file that decides them was not in the bundle — so a driver that has since gained, lost or renumbered a step would have passed this reading unremarked and the human would not know it.",
+      "detail": "docs/RELEASING.md names `TestReleaseDriverPublishes` in `cmd/dossierx/gate_driver_test.go` as the driver and then makes roughly a dozen falsifiable claims about it. The bundle's Makefile confirms only the target, the `-run '^TestReleaseDriverPublishes$'` selector, `-count=1`, `-timeout 90m` and the two authorization variables; `.github/workflows/release.yml` corroborates D2, D4, D6, D7 and D8 in its own prose. Nothing handed can settle D0, D1, D3, D5 or D9, nor the count 'a ten-step driver — D0 through D9'. The byte I needed is `cmd/dossierx/gate_driver_test.go`. surfaces.yaml already declares `cmd/dossierx/gate_answer_test.go` in this surface's `reads:` for exactly this class of claim, and its own header says an out_of_scope path is legal there, so one line beside it closes this permanently.",
+      "digest": "sha256:4ced5c4358f4eb0091463917014a5c0cfc8fcb67bc1d6b2c7eed3febb6cd3c2c",
+      "priority": "P3"
+    },
+    {
+      "surface": "release-procedure",
+      "rule": "zsh-bad-substitution-in-the-baseline-extraction",
+      "consequence": "acts-wrongly",
+      "failure_scenario": "A maintainer on macOS pastes step 1's evidence block into zsh, the default shell and the one this release was driven from; `git show \"refs/tags/$PREV:surface.json\"` dies with `bad substitution` before it runs, so gate/baseline-input.json is never written for this release, and the very next command — `run.sh delta --baseline-file \"$ROOT/gate/baseline-input.json\"` — either refuses outright or silently copies a previous release's leftover extract into gate/baseline.json, which is then hashed into all thirteen surface keys as this release's baseline.",
+      "detail": "docs/RELEASING.md, the item 'The stage-2 reading gate has been run for this tree', step 1's producer block: `git show \"refs/tags/$PREV:surface.json\" \u003e \"$ROOT/gate/baseline-input.json\"`. zsh applies history-style modifiers to an UNBRACED parameter expansion, so `$PREV:s...` is parsed as the `:s` substitution modifier rather than as `$PREV` followed by a literal colon; double quotes do not suppress it. Observed failing in this run. `${PREV}` fixes it, and the same block already brackets its neighbour correctly: `PREV_COMMIT=$(git rev-parse \"refs/tags/${PREV}^{commit}\")`. I swept every command line in the document for the same unbraced-parameter-then-colon shape and this is the ONLY occurrence — the other expansions are `$ROOT/...`, `$TREE`, `$PREV_COMMIT`, and `refs/tags/$PREV..HEAD` (a dot, which is not a modifier introducer). The context copy of .github/workflows/release.yml uses the braced form throughout (`${COMMIT}:${STAMP_FILE}` at both `git cat-file -e` and `git show`), so nothing there shares the defect.",
+      "digest": "sha256:b316f6c064a9b2d76042d14b672b12cb2e1a4d11302baaf48abfac76d88fca70",
+      "priority": "P2"
+    },
+    {
+      "surface": "roadmap",
+      "rule": "preamble-describes-a-file-this-is-not",
+      "consequence": "misled",
+      "failure_scenario": "A lead evaluating whether to depend on DossierX reads ROADMAP.md's opening sentence, which states that everything listed below is implemented and tested and merely unproven in the field, then reads the six \"Deferred:\" sections as shipped-but-unproven capabilities and plans on an engine that can already report every disjoint cycle in one run (Tarjan SCC) and expose markdown diagnostics through a `markdown.Diagnose` entry point — neither of which exists in any released binary, as those very sections say two paragraphs later.",
+      "detail": "ROADMAP.md's preamble defines the whole file: \"This file tracks known-unverified or in-progress items — things that are implemented and tested but not yet proven against a real, external, end-to-end use case.\" That description fits exactly one of the seven sections, \"Unverified: Code Links end-to-end\". The other six are formal deferrals of work that was never built, and each says so in its own body: \"Deferred: Tarjan SCC cycle reporting\" says such a pass \"would let the engine report every disjoint cycle in one run\" (subjunctive — it does not exist); \"Deferred: `markdown.Diagnose` was never built\" says it in the heading; \"Deferred: a short table row renders short\" describes padding that was deliberately not shipped; \"Deferred: `write_conflict` has two states and one code\" says \"It is not fixed here\"; and each of the six carries the sentence \"This is a formal deferral, not a scheduled item: no release currently commits to it.\" A deferral of unbuilt work is neither \"known-unverified\" in the sense the preamble defines nor \"in-progress\". Nothing in the release delta caused this — the preamble and the entries disagree in the tree as it stands — and the preamble is the first thing a reader of this file reads, so it frames all six.",
+      "digest": "sha256:c751dba1cae1686acf0910682b716a2005b04e2b68a7246d9db05c8f1086c0f6",
+      "priority": "P2"
+    },
+    {
+      "surface": "roadmap",
+      "rule": "roadmap-asserts-content-of-a-file-not-handed-over",
+      "consequence": "misled",
+      "failure_scenario": "The human reading this gate's verdict for v0.5.2 sees the roadmap surface reported as read in full and concludes that ROADMAP.md's promise — that the agent-facing router bundle currently labels the `write_conflict` prose branch as a known defect — was checked against the bundle it describes, when the reviewing agent was never handed `skills/dossierx/SKILL.md` and could not check it; if that label is in fact absent, a client's agent hits `write_conflict`, branches on message prose exactly as the router tells it to, and nothing anywhere warns it that this contradicts the router's own \"branch on error.code, never on prose\" rule.",
+      "detail": "ROADMAP.md's last section, \"Deferred: `write_conflict` has two states and one code\", makes two present-tense assertions about another file's current bytes: \"The router bundle currently instructs an agent to read the message text to choose\" and \"Until it lands the bundle names the prose branch as a known defect rather than as an exception to the rule.\" The file that would settle both is `skills/dossierx/SKILL.md`. It was not handed to me — the bundle contains the prompt, `surface.json`, `gate/baseline.json`, `gate/delta.json`, `gate/site-text.json`, ROADMAP.md and FORMAT.md as context, and there is no \"not handed over\" section at all — and it is not something I can infer, because the `skills` behaviour fingerprint is one of the entries `gate/delta.json` lists as CHANGED in this release (baseline sha256:67264427… → surface sha256:6c1bd38f…), so the bundle whose content ROADMAP.md describes is precisely a bundle that moved in the release under review. The rest of the entry does check out and is NOT overtaken: `error_codes` is byte-identical between baseline and surface (44 codes, `write_conflict` still the only one for either state, no new field), so the entry's \"it is not fixed here\" holds. The gap is only the cross-file claim. The fix is one line in `surfaces.yaml`: give the `roadmap` surface a `reads:` entry for `skills/dossierx/SKILL.md`, which is exactly the mechanism this release added, so the same gap cannot reach the next reader of this surface.",
+      "digest": "sha256:8a3f5b9b3b0f292b40d1836e344d74ce4648577d6043cdc77e90f29043b13417",
+      "priority": "P2"
+    },
+    {
+      "surface": "site",
+      "rule": "release-entry-claims-any-finding-still-fails-the-verdict",
+      "consequence": "misled",
+      "failure_scenario": "A contributor reading the v0.5.2 entry believes its closing promise that 'any finding at all still fails the verdict', so when they later see a gate receipt that PASSES while carrying findings they conclude the gate has been weakened or bypassed and go hunting for a defect that does not exist — the same release changed the receipt so that only a P0, or a P1 nobody has ruled on, fails it.",
+      "detail": "The rendered v0.5.2 entry on both pages ends: 'None of it relaxes a refusal: coverage is not reduced, a check that cannot run still fails, every finding still reaches the human, and any finding at all still fails the verdict.' CHANGELOG.md's [0.5.2] section 'The gate now weighs findings instead of counting them' states the opposite for this same release: 'The receipt now PASSES when no P0 finding exists and every P1 is fixed or ruled in gate/overrides.json ... P2 and P3 findings stay on the receipt and never block.' The [0.5.1] entry in the same file carries an explicit 'SUPERSEDED BY 0.5.2' note reading 'A receipt carrying a finding no longer evaluates to FAILED by itself — P2 and P3 findings stay on the receipt and never block, and only a P0, or a P1 nobody has ruled on, fails it.' Nothing elsewhere on the site corrects the sentence: the rendered text of both pages never mentions the priority matrix, consequence/failure_scenario, reach_class, gate/overrides.json or gate/deferred.json at all, so this release's largest change to how the gate decides is represented on the site only by a sentence asserting the rule it replaced. Authored in site/src/content.ts, which was not handed over.",
+      "digest": "sha256:9d5f05b798679215f6d2e1a32dc5b08d8668e3020c078db5660baa6e2ab7d7bc",
+      "priority": "P2"
+    },
+    {
+      "surface": "site",
+      "rule": "release-entry-gate-round-count-contradicts-changelog",
+      "consequence": "misled",
+      "failure_scenario": "A reader deciding whether to depend on DossierX reads the v0.5.2 entry on the site's release page, takes '39, 31, 24 and 18 findings across four reading rounds — decaying without converging' as this release's verification record, and repeats that curve as evidence of the project's release discipline, but CHANGELOG.md for the same release records six reading rounds and 219 findings that rose again at round five, so the figure the reader quotes never happened.",
+      "detail": "The rendered v0.5.2 entry on BOTH index.html and releases.html reads: 'The gate itself stopped needing four rounds to say the same thing. This release's own gate returned 39, 31, 24 and 18 findings across four reading rounds — decaying without converging — and three mechanisms now address the three reasons.' CHANGELOG.md's [0.5.2] section 'The gate stopped needing four rounds to say the same thing' reads: 'This release's own gate has run six reading rounds and returned 219 findings across them — never converging, and rising again at round five.' The two disagree on the number of rounds (four vs six), on the total (39+31+24+18 = 112 vs 219), and on the shape of the curve (decaying vs rising at round five). The CHANGELOG's own later section confirms 39 was round one alone: 'Thirteen agents read the thirteen declared surfaces against this tree and returned 39 findings.' The site's release copy is authored in site/src/content.ts, which is part of this surface and was not handed over; the mismatch is established from the rendered DOM in gate/site-text.json against CHANGELOG.md, handed as context from another surface.",
+      "digest": "sha256:7bc1ffee610b867241a0e6310146bd7e9b9b8367f8540b4bab2f65c50b010b51",
+      "priority": "P2"
+    },
+    {
+      "surface": "site",
+      "rule": "release-entry-points-at-a-migration-table-that-is-not-below-it",
+      "consequence": "cosmetic",
+      "failure_scenario": "A reader on the release-history page follows the v0.5.2 entry's 'the migration table below is complete' to check for themselves that lock, unlock, reaudit and flag are now listed, scrolls to the end of that page and finds no migration table at all, because the only such table on the site is on index.html and there it sits above the release ledger rather than below it.",
+      "detail": "The rendered v0.5.2 entry, which appears verbatim on both pages, reads: 'The one change on this page a reader can see from that work: the migration table below is complete. `lock`, `unlock`, `reaudit` and `flag` were top-level commands until v0.3.0 folded them under the claim noun ... and this table listed none of them.' In releases.html's captured rendered text there is no '26 -\u003e 19' heading and no retired-command rows anywhere on the page, so on that page 'this page ... below' names nothing. On index.html the table exists, headed '26 → 19: what was cut, and where it went', but it renders inside the CLI-contract section, BEFORE the 'Release ledger' section that carries this sentence, so 'below' is wrong there too. The completeness claim itself is true: the table's first row 'lock · unlock · reaudit · flag' -\u003e 'claim lock · claim unlock · claim reaudit · claim flag' brings the table's coverage to all sixteen spellings in surface.json's `retired` list. Only the pointer is wrong. Authored in site/src/content.ts, which was not handed over.",
+      "digest": "sha256:d527823ec79c7b713eee1f2ca862caafcf91c6e97ea0b2eb2a34071365fd4529",
+      "priority": "P3"
+    },
+    {
+      "surface": "site",
+      "rule": "release-entry-undercounts-the-corrected-viewer-comments",
+      "consequence": "misled",
+      "failure_scenario": "A consumer who upgrades and then diffs their regenerated viewer/index.html, which is exactly what this entry tells them to do, finds four corrected maintainer comments where the entry accounts for three, and cannot tell whether the fourth is part of this release's documented silent change or an undocumented edit to the file they ship.",
+      "detail": "The rendered v0.5.2 entry on both pages reads: 'SILENT: your committed viewer's bytes change on the next `dossierx check`, with no claim edit and nothing rendering differently. Three maintainer comments inside the inlined stylesheet were factually wrong — `graph.css` described a backdrop dim and a drop shadow the pane has never had — and correcting them changes the generated `index.html` for every project ... The cross-release report classifies all three as silent ... If you diff your committed viewer after upgrading, this is what you are looking at.' CHANGELOG.md's [0.5.2] entry opens with the same item and counts it differently: 'Five maintainer comments in the viewer templates were factually wrong, and four of them ship. Three were about what the pane does: `graph.css` described a backdrop dim and a drop shadow the pane has never had, and both z-index ledgers called the opaque pane root a \"backdrop\". Two more were stale cross references into `style.css` itself — one naming a line number that had drifted to point at a comment, one in `tree.html` off by 28 lines, which is a Go-template comment and never reaches a consumer ... The cross-release report classifies all five as silent ... and the three sample viewers now each move by 8 added and 10 removed lines, all of it comment text.' So four wrong comments ship inlined into every consumer's index.html, not three, and the cross-release report classifies five as silent, not three. The site's number is the one a consumer reads before diffing. Authored in site/src/content.ts, which was not handed over.",
+      "digest": "sha256:59e1b1053934c6b2cb110ab4d357caff07f521905435a86f9fd64d094a6405f6",
+      "priority": "P2"
+    },
+    {
+      "surface": "site",
+      "rule": "releases-page-footer-nav-points-at-anchors-that-page-lacks",
+      "consequence": "cosmetic",
+      "failure_scenario": "A visitor who arrives on the release-history page from a shared link clicks 'CLI contract' in that page's footer to reach the machine-contract section; the link resolves to /releases.html#cli, an anchor that page does not contain, so the browser stays where it is and the section cannot be reached from there.",
+      "detail": "gate/site-text.json's `links` list for the releases.html entry carries four footer links whose destinations are same-page fragments: 'Overview' -\u003e /releases.html#hero, 'Who runs what' -\u003e /releases.html#roles, 'Review loop' -\u003e /releases.html#comments, 'CLI contract' -\u003e /releases.html#cli. The identical four labels in index.html's footer resolve to /#hero, /#roles, /#comments and /#cli, which are real sections on that page (the section nav at the top of index.html uses the same four ids). releases.html's captured rendered text contains only the page header, the '← Back to home' link, the release ledger, and the footer — none of the Overview, Who-runs-what, Review-loop or CLI-contract section content renders on that page, so those four fragments have nothing to scroll to. The capture records link text and destinations but not element ids, so this conclusion rests on the page rendering none of those four sections' content. The footer lives in site/src/sections/Footer.tsx, part of this surface and not handed over; a fix there would point the four at index.html#\u003cid\u003e when the page is not index.html.",
+      "digest": "sha256:837249a294210ec9a533ffb9dffe639876f43cf0f5ceaa2516d3877e0ecdcdb9",
+      "priority": "P3"
+    }
+  ]
+}
