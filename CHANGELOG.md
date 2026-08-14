@@ -162,6 +162,31 @@ means "no regression found in this diff" and never "this surface passes".
 
 None of this is in the shipped binary. It changes how this project is released, not what you run.
 
+### The gate can now be told a finding does not block, without losing it
+
+Until this release the receipt failed on any finding at all and had no field for a
+human's ruling, so the only way past a finding somebody had judged harmless was to
+delete it from the record — which left it byte-identical to a finding nobody ever
+raised. `cmd/dossierx/gate_stage3_test.go` had carried that argument, and the cost
+of not fixing it, since the join was written.
+
+`gate/overrides.json` is that field, tracked beside the subject freeze so every
+ruling is a line in a reviewed diff. An entry names the release, the finding's
+DIGEST, who ruled and why. The finding stays in the receipt and the ruling is
+recorded next to it, so a receipt cleared by a decision never reads as one that had
+nothing to clear.
+
+It refuses four things, each because the alternative is a waiver wearing a ruling's
+clothes: no reason or no name; two rulings on one finding; a ruling for a finding
+this run did not raise — which is what one becomes the moment the defect is fixed or
+its wording moves, so an override cannot outlive the text it excuses; and a ruling
+made for another release, because a decision about this release is not evidence
+about the next. Nothing in it reads `severity`: an override is a named person's
+call on one finding, not a threshold with extra steps.
+
+None of this is in the shipped binary. It changes how this project decides a release
+is done, not what a consumer runs.
+
 ### Fixed
 
 - **The release page never showed the BREAKING notice.** A published release page carried grouped

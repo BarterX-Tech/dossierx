@@ -48,19 +48,19 @@
 //     span" is unsatisfiable by construction and every finding would classify
 //     UNSUPPORTED. That is a decision about a closed design point, not an
 //     implementation gap, and it is left open rather than guessed at.
-//   - THE OVERRIDE RECORD. gateReceipt has no field for a human waving a finding
-//     through with a rationale, and evaluate() returns FAILED whenever any
-//     finding is present, so today the only way to ship past a finding the human
-//     has judged non-blocking is to delete it from the record. Adding the field
-//     is an edit to gate_receipt_test.go, which is in no lane's write set this
-//     wave. Until it exists, an adjudicated finding and a finding nobody raised
-//     are indistinguishable to the next release. THIS NOW HAS A ROUTINE CALLER:
-//     a subject no surface claims is a legitimate state of a tree and is raised
-//     as a finding (gateStage3JoinFindings), so the first release with a quiet
-//     subject blocks until a human either answers the subject, removes it from
-//     the frame's vocabulary, or has somewhere to record the override. That is
-//     the honest ordering — the human is asked — but it is a real cost and it is
-//     the strongest argument for the field.
+//   - THE OVERRIDE RECORD — BUILT IN v0.5.2, and this entry is kept as the record
+//     of why it was not built earlier. It said: gateReceipt has no field for a
+//     human waving a finding through, evaluate() returns FAILED whenever any
+//     finding is present, so the only way past a finding judged non-blocking was
+//     to delete it — leaving an adjudicated finding and a finding nobody raised
+//     indistinguishable to the next release. The argument that finally paid for
+//     it is the one this entry predicted ("THIS NOW HAS A ROUTINE CALLER"), plus
+//     one it did not: two of round five's findings are the reading agents
+//     reporting that the harness could not withhold the tools this design grants
+//     them, which no edit to this tree can fix and which therefore recurs for
+//     ever. See gate_override_test.go for the three properties the field had to
+//     have — harder to write than a fix, visible on the receipt's face, never
+//     inherited — and for what it refuses.
 //   - A PRODUCER. Nothing in this repository writes gate/answers/<surface>.json
 //     yet; scripts/gate-stage2/run.sh has nine modes and none of them reads an
 //     agent's answer back. (It said six until v0.5.2, which was wrong at seven

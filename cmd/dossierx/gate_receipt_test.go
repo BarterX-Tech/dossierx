@@ -146,6 +146,13 @@ type gateReceipt struct {
 
 	Surfaces []gateSurfaceVerdict `json:"surfaces"`
 	Findings []gateFinding        `json:"findings"`
+	// Overrides are the findings a human ruled non-blocking, recorded ON the
+	// receipt so that a receipt cleared by a ruling can never be mistaken for one
+	// that had nothing to clear. Findings above is untouched by them: what the
+	// agents reported and what the human decided are different questions and both
+	// stay readable. See gate_override_test.go for the three properties an
+	// override has to have before it is worth the field.
+	Overrides []gateOverride `json:"overrides,omitempty"`
 }
 
 // gateFinding is one thing the gate found.
@@ -480,10 +487,24 @@ func gateAssertMergeMatchesReceipt(r gateReceipt, mergeTree string) error {
 // only "FAILED" sends the reader back to re-derive what the gate already knew.
 func (r gateReceipt) evaluate(declared []string, current map[string]string) (string, error) {
 	var reasons []string
-	if len(r.Findings) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d finding(s) reached the report; a human confirms what blocks the release, so the gate does not clear itself", len(r.Findings)))
+
+	// The human's rulings are applied FIRST, and a record that decides nothing —
+	// stale, unattributed, unreasoned, inherited from another release — is a
+	// refusal in its own right rather than a quietly ignored file. Everything the
+	// rulings do not cover still fails, exactly as before.
+	remaining, applied, err := gateApplyOverrides(r, r.Overrides)
+	if err != nil {
+		reasons = append(reasons, err.Error())
+		remaining = r.Findings
 	}
-	if err := gateIsGreen(declared, r.Surfaces, current); err != nil {
+	if len(remaining) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d finding(s) reached the report and were not ruled on; a human confirms what blocks the release, so the gate does not clear itself", len(remaining)))
+	}
+	surfaces := r.Surfaces
+	if err == nil && len(applied) > 0 {
+		surfaces = gateVerdictsAfterOverrides(r, remaining)
+	}
+	if err := gateIsGreen(declared, surfaces, current); err != nil {
 		reasons = append(reasons, err.Error())
 	}
 	if len(reasons) == 0 {

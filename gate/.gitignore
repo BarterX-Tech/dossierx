@@ -32,3 +32,10 @@
 # cannot see is one no human reviews; both are why it sits on this side of the
 # line while every other artifact a run produces sits on the other.
 !subject.json
+# overrides.json is TRACKED for subject.json's reason, and one of its own: an
+# override is a named human's ruling that a finding does not block this release,
+# and a ruling nobody can see in a diff is a waiver rather than a decision. The
+# file is refused when it is malformed, when a ruling names no reason or nobody,
+# when it names a finding this run did not raise, or when it was ruled for another
+# release — so an abandoned record is a failing gate rather than a quiet one.
+!overrides.json

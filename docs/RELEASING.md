@@ -469,6 +469,29 @@ them, and the three post-publish checks that leave this repository entirely.
       verdict and blocks nothing, and the cost of skipping it is the round you are
       about to spend.
 
+      **Ruling a finding non-blocking is a written act, not a deletion.** Until
+      v0.5.2 the only way past a finding you judged harmless was to delete it from
+      the record, which left it indistinguishable from a finding nobody raised.
+      Now it is `gate/overrides.json`, tracked beside the subject freeze:
+
+          {"overrides": [{
+            "version": "v0.5.2",
+            "finding": "sha256:…",            <- the digest the receipt carries
+            "surface": "contributing",
+            "rule":    "harness-did-not-withhold-tools",
+            "ruled_by": "your name",
+            "reason":  "why this does not block THIS release"
+          }]}
+
+      Four things it refuses, each because the alternative is a waiver wearing a
+      ruling's clothes: an entry with no `reason` or no `ruled_by`; two entries for
+      one finding; an entry naming a finding this run did not raise — which is what
+      a ruling becomes the moment the defect is fixed or its wording moves, so an
+      override cannot outlive the text it excuses; and an entry ruled for another
+      release, because a decision about v0.5.2 is not evidence about v0.5.3. The
+      finding STAYS in the receipt, with the ruling recorded beside it, so a
+      receipt cleared by a ruling never reads as one that had nothing to clear.
+
       **5. Read the findings yourself before you authorize anything.** Nothing is
       filtered, deduplicated away or dropped on the way to you. Each finding
       carries a severity, but that word is the reporting agent's own about its own
