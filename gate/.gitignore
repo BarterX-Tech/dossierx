@@ -21,3 +21,10 @@
 !method.yaml
 !prompts/
 !prompts/*.md
+# subject.json is TRACKED, and it is the one per-run-written file that is. It
+# records what this release froze its question to — the digest of surfaces.yaml
+# at the first fan-out — so that a later round cannot widen the manifest without
+# saying so. A freeze a run could regenerate is not a freeze, and a freeze git
+# cannot see is one no human reviews; both are why it sits on this side of the
+# line while every other artifact a run produces sits on the other.
+!subject.json

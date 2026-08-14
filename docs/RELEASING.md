@@ -294,6 +294,31 @@ them, and the three post-publish checks that leave this repository entirely.
       of it, `TestGateFanoutProduce` in `cmd/dossierx/gate_fanout_test.go`; the
       shell wraps that and re-implements nothing.
 
+      **The subject is frozen here, and it is not narrowing.** Before minting
+      anything, `fanout` digests `surfaces.yaml` and compares it against
+      `gate/subject.json` — the one file under `gate/` that is tracked. The first
+      fan-out of a release writes that record; every later round of the same
+      release refuses, with exit 6, if the manifest moved. A new version in the
+      CHANGELOG starts a fresh freeze on its own.
+
+      The reason is a measurement, not a preference: `surfaces.yaml` grew during
+      rounds 1, 2 AND 4 of the v0.5.2 gate, and round four's own fix wave records
+      that the widening "is what let round four adjudicate the retired-set
+      question at all". Real coverage, arriving mid-count. A finding curve
+      measured over a subject that grows underneath it cannot be read — a smaller
+      round may mean a better tree or a narrower question, and nothing on the
+      record says which.
+
+      Coverage is not reduced by this and never has been: it stays exactly where
+      round one set it, nothing is sampled or dropped, and a gap found in a later
+      round is **written down as a finding against the next release**, where that
+      release's round one reads it. If you rule a specific gap blocking, thaw
+      deliberately: put the new digest in `surfaces_sha256` and your reason in
+      `thaw_reason`. `frozen_sha256` is never edited, so the two disagreeing is
+      what says this release re-opened its subject — and a thaw with an empty
+      reason is refused. A thaw re-reads every surface, because every stage-2 key
+      hashes this manifest. That cost is the point.
+
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. `gate/method.yaml`
       names the whole grant — `SurfaceFinding` and `SurfaceVerdict`, nothing else

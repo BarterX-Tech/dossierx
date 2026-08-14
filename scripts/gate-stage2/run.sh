@@ -41,6 +41,8 @@
 #   4  an artifact the run is supposed to have produced is missing
 #   5  the fan-out could not be produced — no run was minted, so there is no
 #      identifier any answer on disk can be attributed to
+#   6  the SUBJECT MOVED mid-release — surfaces.yaml no longer matches the digest
+#      this release froze, or it was re-opened with nothing on record saying why
 
 set -eu
 
@@ -55,6 +57,15 @@ METHOD_FILE="gate/method.yaml"
 # about an unknown package.
 PRODUCER_FILE="cmd/dossierx/gate_fanout_test.go"
 PRODUCER_TEST="^TestGateFanoutProduce$"
+# THE SUBJECT FREEZE. Tracked, unlike everything else this script writes under
+# gate/ — a freeze that a run could regenerate is not a freeze, and a human has
+# to be able to read what their release committed to. gate/.gitignore names it.
+SUBJECT_FILE="gate/subject.json"
+# The document the release version is derived from. It is one of the two sources
+# the driver's D1 derives from (the other is the site's newest releases[] entry);
+# a disagreement between them is D1's refusal to make, not this script's, and
+# reading one here is enough to tell one RELEASE from the next.
+VERSION_FILE="CHANGELOG.md"
 
 # ---------------------------------------------------------------------------
 # sha256, from whichever of the two spellings this machine has. A missing hasher
@@ -225,6 +236,125 @@ json_scalar() {
   ' "$1"
 }
 
+# ---------------------------------------------------------------------------
+# THE SUBJECT FREEZE — why a release may not grow its own question list.
+#
+# The v0.5.2 gate ran four reading rounds returning 39, 31, 24 and 18 findings,
+# and surfaces.yaml gained paths during rounds 1, 2 AND 4. Round four's own fix
+# wave records that the widening "is what let round four adjudicate the
+# retired-set question at all" — real coverage, arriving mid-count. A curve
+# measured over a subject that grows underneath it cannot converge, and worse, it
+# cannot be READ: a round returning fewer findings might mean a better tree or a
+# narrower question, and nothing on the record says which.
+#
+# So the manifest is frozen at the first fan-out of a release, and every later
+# fan-out for that same release refuses if it moved.
+#
+# THIS IS NOT NARROWING, and the distinction is load-bearing against CLAUDE.md's
+# rule that the gate never narrows coverage silently. Coverage stays exactly
+# where round one set it — nothing is sampled, truncated or dropped. What is
+# refused is GROWING it mid-release, and the refusal names the deferral rather
+# than hiding it: a gap found in round three is recorded as a finding against the
+# next release, where the next release's round one will read it.
+#
+# THE THAW. A maintainer who rules a gap blocking edits gate/subject.json: the
+# new digest into surfaces_sha256, and their reason into thaw_reason. frozen_sha256
+# is never edited, so the two fields disagreeing is the machine-readable fact that
+# this release re-opened its subject — and a re-opening with an empty reason is
+# refused. It costs a full re-read of every surface, because every key in stage 2
+# hashes the manifest; that cost is the point rather than a side effect.
+# ---------------------------------------------------------------------------
+
+# release_version reads the newest version heading out of the CHANGELOG, which is
+# what tells one release's freeze from the next one's. Keep-a-Changelog's own
+# shape: `## [0.5.2] - 2026-08-12`, newest first.
+release_version() {
+  awk '
+    /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
+      line = $0
+      sub(/^## \[/, "", line)
+      sub(/\].*$/, "", line)
+      print "v" line
+      exit
+    }
+  ' "$ROOT/$VERSION_FILE"
+}
+
+# subject_verify refuses a run whose manifest has moved since this release froze
+# it. Silence is the pass. It reads and never writes: a mode that repaired the
+# freeze on its way past would be a freeze that a run can rewrite, which is no
+# freeze at all.
+subject_verify() {
+  _version="$(release_version)"
+  [ -n "$_version" ] || die "subject: $VERSION_FILE carries no \`## [X.Y.Z]\` heading, so this run cannot say WHICH release it belongs to and cannot tell its own freeze from another release's. A gate that cannot name its release is not a smaller gate." 2
+
+  # No freeze yet — the first fan-out of this release is what mints it, and that
+  # happens after the producer has minted a run to name.
+  [ -f "$ROOT/$SUBJECT_FILE" ] || return 0
+
+  _recorded_version="$(json_scalar "$ROOT/$SUBJECT_FILE" version)"
+  [ -n "$_recorded_version" ] || die "subject: $SUBJECT_FILE names no version, so nothing can say which release froze it. Delete it and let the next fan-out mint a fresh freeze, or repair the field by hand." 2
+
+  # A different release: this file belongs to the previous one and the freeze is
+  # re-minted below, not compared against. A release inheriting its predecessor's
+  # subject would be exactly the stale-evidence failure the rest of this gate
+  # refuses everywhere else.
+  [ "$_recorded_version" = "$_version" ] || return 0
+
+  _frozen="$(json_scalar "$ROOT/$SUBJECT_FILE" frozen_sha256)"
+  _current="$(json_scalar "$ROOT/$SUBJECT_FILE" surfaces_sha256)"
+  _reason="$(json_scalar "$ROOT/$SUBJECT_FILE" thaw_reason)"
+  [ -n "$_frozen" ] && [ -n "$_current" ] || die "subject: $SUBJECT_FILE is missing frozen_sha256 or surfaces_sha256, so it records no subject and cannot be compared against one" 2
+
+  if [ "$_current" != "$_frozen" ] && [ -z "$_reason" ]; then
+    die "subject: $SUBJECT_FILE records a THAW with no reason — surfaces_sha256 ($_current) differs from frozen_sha256 ($_frozen) and thaw_reason is empty.
+  A release that re-opened its subject and did not say why leaves the next reader unable to tell a deliberate widening from a hand-edit. Fill thaw_reason, or restore surfaces_sha256 to the frozen digest and revert $MANIFEST_FILE." 6
+  fi
+
+  _actual="$(sha256_of "$ROOT/$MANIFEST_FILE")"
+  if [ "$_actual" != "$_current" ]; then
+    die "subject: $MANIFEST_FILE moved during release $_version.
+  frozen at:  $_frozen
+  accepted:   $_current
+  on disk:    $_actual
+  The manifest is the QUESTION this release's rounds are counted over, and a question that grows between rounds makes the finding curve unreadable — a smaller round may mean a better tree or a narrower ask, and nothing on the record says which.
+  Two ways forward, both deliberate:
+    revert $MANIFEST_FILE and record the coverage gap as a finding against the NEXT release, which is where its round one will read it; or
+    rule it blocking, set surfaces_sha256 to $_actual and write thaw_reason in $SUBJECT_FILE. That re-reads every surface, because every stage-2 key hashes this manifest." 6
+  fi
+}
+
+# subject_freeze mints the freeze for this release, or leaves an existing one
+# alone. It is called AFTER the producer has minted a run, so the record can name
+# the run that first asked this release's question.
+subject_freeze() {
+  _run="$1"
+  [ -n "$_run" ] || die "subject: --run is required to freeze; a freeze that names no run cannot say which fan-out first asked this release's question" 1
+
+  _version="$(release_version)"
+  [ -n "$_version" ] || die "subject: $VERSION_FILE carries no \`## [X.Y.Z]\` heading, so a freeze would name no release" 2
+
+  if [ -f "$ROOT/$SUBJECT_FILE" ]; then
+    _recorded_version="$(json_scalar "$ROOT/$SUBJECT_FILE" version)"
+    # Same release: subject_verify has already agreed the manifest has not moved,
+    # so there is nothing to write. Rewriting here would reset a thaw's reason.
+    [ "$_recorded_version" = "$_version" ] && return 0
+  fi
+
+  _actual="$(sha256_of "$ROOT/$MANIFEST_FILE")"
+  mkdir -p "$ROOT/gate"
+  {
+    printf '{\n'
+    printf '  "version": "%s",\n' "$_version"
+    printf '  "frozen_sha256": "%s",\n' "$_actual"
+    printf '  "surfaces_sha256": "%s",\n' "$_actual"
+    printf '  "frozen_at_run": "%s",\n' "$_run"
+    printf '  "thaw_reason": ""\n'
+    printf '}\n'
+  } > "$ROOT/$SUBJECT_FILE"
+  printf 'gate-stage2: froze the subject for %s at %s (run %s)\n' "$_version" "$_actual" "$_run" >&2
+}
+
 json_string_array() {
   # reads lines on stdin, writes a JSON array of strings
   awk '
@@ -259,6 +389,9 @@ usage: run.sh <mode> [options]
                                  and gate/delta.json
   record  --tree T --baseline-ref R --baseline-commit C <artifact>...
                                  write gate/run.json over exactly these artifacts
+  subject [--freeze --run ID]    verify that surfaces.yaml still matches the
+                                 digest this release froze; --freeze mints that
+                                 record. `fanout` runs both and never skips them
 
   --root DIR  operate on another checkout (default: this script's repository)
 USAGE
@@ -269,10 +402,13 @@ USAGE
 MODE="$1"; shift
 
 TREE=""; BASELINE_REF=""; BASELINE_COMMIT=""; BASELINE_FILE=""; SURFACE=""; BUNDLE=""
+RUN_ID=""; FREEZE=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --root)             ROOT="$(cd "$2" && pwd)"; shift 2 ;;
+    --run)              RUN_ID="$2"; shift 2 ;;
+    --freeze)           FREEZE="yes"; shift ;;
     --tree)             TREE="$2"; shift 2 ;;
     --baseline-ref)     BASELINE_REF="$2"; shift 2 ;;
     --baseline-commit)  BASELINE_COMMIT="$2"; shift 2 ;;
@@ -343,8 +479,23 @@ case "$MODE" in
   # producer's own message, and it prints one line per DECLARED surface by calling
   # `command` — never by re-deriving the model, the grant or the fan-out.
   # -------------------------------------------------------------------------
+  subject)
+    if [ -n "$FREEZE" ]; then
+      subject_freeze "$RUN_ID"
+    else
+      subject_verify
+    fi
+    ;;
+
   fanout)
     [ -n "$TREE" ] || die "fanout: --tree is required. A fan-out mints an identifier that every one of its answers must name, and an identifier minted over no tree attaches those answers to no release at all." 1
+
+    # THE SUBJECT IS VERIFIED BEFORE ANYTHING IS MINTED, so a manifest that moved
+    # mid-release costs one digest rather than thirteen agents — and so the
+    # refusal cannot be read as a fan-out that half happened. subject_verify
+    # writes nothing and exits 6 on a moved subject, which propagates through
+    # `set -e`.
+    subject_verify
 
     # THE PRODUCER IS THE CHECKOUT'S OWN. It assembles the bundles from the files
     # under --root and its assembler must be that tree's assembler, because the
@@ -362,6 +513,12 @@ case "$MODE" in
     # stderr, so stdout carries the invocations and nothing else.
     ( cd "$ROOT" && go test ./cmd/dossierx -run "$PRODUCER_TEST" -count=1 -v -fanout-out -fanout-tree="$TREE" ) >&2 \
       || die "fanout: the producer refused this run (its reason is above). No run was minted and gate/fanout.json was not written, so nothing downstream can attribute an answer to this release; fix what it named and run \`fanout\` again." 5
+
+    # The freeze is minted AFTER the run exists, so the record can name the
+    # fan-out that first asked this release's question. On every later round of
+    # the same release this is a no-op — subject_verify above has already agreed
+    # the manifest has not moved, and rewriting here would erase a thaw's reason.
+    subject_freeze "$(json_scalar "$ROOT/gate/fanout.json" run)"
 
     # ONE LINE PER SURFACE THE MANIFEST DECLARES, and the fan-out is read from the
     # manifest here for the same reason it is read from the manifest inside the
