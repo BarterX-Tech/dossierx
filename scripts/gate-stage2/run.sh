@@ -265,13 +265,21 @@ json_scalar() {
 # new digest into surfaces_sha256, and their reason into thaw_reason. frozen_sha256
 # is never edited, so the two fields disagreeing is the machine-readable fact that
 # this release re-opened its subject — and a re-opening with an empty reason is
-# refused. It costs a full re-read of every surface, because every key in stage 2
-# hashes the manifest; that cost is the point rather than a side effect.
+# refused. WHAT A THAW ACTUALLY COSTS, stated accurately because the first
+# version of this comment was not. A stage-2 key hashes a surface's OWN
+# documents plus four shared artifacts — surface.json, gate/baseline.json,
+# gate/delta.json, gate/site-text.json — and surfaces.yaml is in neither list.
+# So a thaw does NOT re-read all thirteen: it re-reads the surfaces whose
+# resolved document set the edit moved, plus `contributing`, which declares the
+# manifest in its `reads:`. A widening that only ADDS a surface leaves the other
+# twelve keys byte-identical and they carry forward. The maintainer thawing is
+# therefore the one who decides what else needs re-reading; the freeze makes the
+# widening visible and dated, and that is what it is for.
 # ---------------------------------------------------------------------------
 
 # release_version reads the newest version heading out of the CHANGELOG, which is
 # what tells one release's freeze from the next one's. Keep-a-Changelog's own
-# shape: `## [0.5.2] - 2026-08-12`, newest first.
+# shape: `## [X.Y.Z] - YYYY-MM-DD`, newest first.
 release_version() {
   # A missing CHANGELOG is a refusal with a reason rather than awk's own error on
   # stderr. The difference matters where this is called from: `fanout`'s other
@@ -329,7 +337,7 @@ subject_verify() {
   The manifest is the QUESTION this release's rounds are counted over, and a question that grows between rounds makes the finding curve unreadable — a smaller round may mean a better tree or a narrower ask, and nothing on the record says which.
   Two ways forward, both deliberate:
     revert $MANIFEST_FILE and record the coverage gap as a finding against the NEXT release, which is where its round one will read it; or
-    rule it blocking, set surfaces_sha256 to $_actual and write thaw_reason in $SUBJECT_FILE. That re-reads every surface, because every stage-2 key hashes this manifest." 6
+    rule it blocking, set surfaces_sha256 to $_actual and write thaw_reason in $SUBJECT_FILE. That re-reads the surfaces whose documents this edit moved, plus contributing, which reads the manifest — not all thirteen: no stage-2 key hashes surfaces.yaml itself." 6
   fi
 }
 
@@ -476,22 +484,6 @@ case "$MODE" in
     ;;
 
   # -------------------------------------------------------------------------
-  # fanout — mint this run, write every surface's bundle, then say what to exec.
-  #
-  # A THIN WRAPPER OVER THE GO PRODUCER, and thin is the whole design. Every rule
-  # a fan-out obeys already lives in cmd/dossierx: the fan-out is surfaces.yaml's
-  # (gateDeclaredSurfaces), a surface's documents are `git ls-files` resolved
-  # against the manifest's patterns, what is handed over and what is only named is
-  # gateStage2BundleSpec's answer, and the exact bytes are gateBundleAssemble's —
-  # the same bytes every surface key is a digest of. An awk re-implementation of
-  # any of that here would be a second answer to "what is this agent being asked",
-  # and the two would diverge in silence, because only the Go one is under test.
-  #
-  # SO THIS MODE DOES EXACTLY THREE THINGS: it refuses what it can refuse before
-  # spending a toolchain invocation, it runs the producer and dies with the
-  # producer's own message, and it prints one line per DECLARED surface by calling
-  # `command` — never by re-deriving the model, the grant or the fan-out.
-  # -------------------------------------------------------------------------
   # -------------------------------------------------------------------------
   # wave — THE SNAG CHECK. Two agents read a fix wave's own diff before a full
   # round pays thirteen agents to discover what that wave broke.
@@ -533,17 +525,22 @@ case "$MODE" in
       sed "s|<<RANGE>>|$RANGE|g" "$ROOT/$WAVE_PROMPT_FILE"
       printf '\n## The files this wave changed\n\n'
       printf '%s\n' "$_changed" | sed 's/^/- /'
-      printf '\n## The diff\n\n```diff\n'
+      # SEVEN BACKTICKS, not three. Every markdown file in this repository
+      # contains fenced blocks of its own, so a three-backtick wrapper is closed
+      # by the first fence inside the file and the rest of that file arrives as
+      # prose in a reader's view of the bundle. Nothing goes missing either way —
+      # this is about the frame the reader is handed, not the bytes.
+      printf '\n## The diff\n\n~~~~~~~diff\n'
       git -C "$ROOT" diff "$RANGE" --
-      printf '```\n'
-      printf '\n## Each changed file, in full, as it stands after the wave\n\n'
+      printf '~~~~~~~\n'
+      printf '\n## Each changed file, in full, as it stands in this checkout\n\n'
       printf '%s\n' "$_changed" | while IFS= read -r _file; do
         [ -n "$_file" ] || continue
         printf '### %s\n\n' "$_file"
         if [ -f "$ROOT/$_file" ]; then
-          printf '```\n'
+          printf '~~~~~~~\n'
           cat "$ROOT/$_file"
-          printf '```\n\n'
+          printf '~~~~~~~\n\n'
         else
           # A deleted file has no "after", and saying so is not the same as
           # handing over an empty block — one is a fact about the wave, the other
@@ -577,6 +574,22 @@ case "$MODE" in
     fi
     ;;
 
+  # fanout — mint this run, write every surface's bundle, then say what to exec.
+  #
+  # A THIN WRAPPER OVER THE GO PRODUCER, and thin is the whole design. Every rule
+  # a fan-out obeys already lives in cmd/dossierx: the fan-out is surfaces.yaml's
+  # (gateDeclaredSurfaces), a surface's documents are `git ls-files` resolved
+  # against the manifest's patterns, what is handed over and what is only named is
+  # gateStage2BundleSpec's answer, and the exact bytes are gateBundleAssemble's —
+  # the same bytes every surface key is a digest of. An awk re-implementation of
+  # any of that here would be a second answer to "what is this agent being asked",
+  # and the two would diverge in silence, because only the Go one is under test.
+  #
+  # SO THIS MODE DOES EXACTLY THREE THINGS: it refuses what it can refuse before
+  # spending a toolchain invocation, it runs the producer and dies with the
+  # producer's own message, and it prints one line per DECLARED surface by calling
+  # `command` — never by re-deriving the model, the grant or the fan-out.
+  # -------------------------------------------------------------------------
   fanout)
     [ -n "$TREE" ] || die "fanout: --tree is required. A fan-out mints an identifier that every one of its answers must name, and an identifier minted over no tree attaches those answers to no release at all." 1
 

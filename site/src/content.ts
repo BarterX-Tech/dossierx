@@ -1250,7 +1250,7 @@ export const contentSpec: ContentSpec = {
             {
               cut: "lock · unlock · reaudit · flag",
               now: "claim lock · claim unlock · claim reaudit · claim flag",
-              why: "The four verbs that act on one claim moved under the noun they act on — every one of them was a top-level command through v0.3.0 and each still exists, one word further in. The binary answers the old spelling with the new one, but that answer is a line in a terminal: this table is where a reader who has not installed anything yet finds out.",
+              why: "The four verbs that act on one claim moved under the noun they act on — all four were top-level commands as late as v0.2.0, and each still exists one word further in. The binary answers the old spelling with the new one, but that answer is a line in a terminal: this table is where a reader who has not installed anything yet finds out.",
             },
             {
               cut: "lint · catalog · render",

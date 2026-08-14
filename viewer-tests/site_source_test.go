@@ -360,12 +360,13 @@ var declaredHistoryLiterals = []historyLiteral{
 		why:     "the build-order section, dating when --reason became mandatory on a lock",
 	},
 	{
-		version: "v0.3.0",
-		phrase:  "a top-level command through v0.3.0",
-		why: "the migration table's row for lock/unlock/reaudit/flag, dating the release that " +
-			"folded them under the claim noun. The row exists because the binary retires sixteen " +
-			"commands and this table listed twelve; the literal is what makes it a statement about " +
-			"history rather than about the current CLI, where all four are claim leaves",
+		version: "v0.2.0",
+		phrase:  "top-level commands as late as v0.2.0",
+		why: "the migration table's row for lock/unlock/reaudit/flag, naming the last release that " +
+			"carried them at the root. It says v0.2.0 rather than v0.3.0 deliberately: v0.3.0 is the " +
+			"release that FOLDED them, and its own main.go registers none of the four, so `through " +
+			"v0.3.0` — the first wording — was false. The row exists because the binary retires " +
+			"sixteen commands and this table listed twelve",
 	},
 	{
 		version: "v0.4.0",

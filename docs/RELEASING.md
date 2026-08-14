@@ -296,7 +296,7 @@ them, and the three post-publish checks that leave this repository entirely.
 
       **The subject is frozen here, and it is not narrowing.** Before minting
       anything, `fanout` digests `surfaces.yaml` and compares it against
-      `gate/subject.json` — the one file under `gate/` that is tracked. The first
+      `gate/subject.json` — the one file a run WRITES that is tracked (`gate/.gitignore`, `gate/method.yaml` and the prompts are tracked too; no run writes them). The first
       fan-out of a release writes that record; every later round of the same
       release refuses, with exit 6, if the manifest moved. A new version in the
       CHANGELOG starts a fresh freeze on its own.
@@ -316,8 +316,17 @@ them, and the three post-publish checks that leave this repository entirely.
       deliberately: put the new digest in `surfaces_sha256` and your reason in
       `thaw_reason`. `frozen_sha256` is never edited, so the two disagreeing is
       what says this release re-opened its subject — and a thaw with an empty
-      reason is refused. A thaw re-reads every surface, because every stage-2 key
-      hashes this manifest. That cost is the point.
+      reason is refused.
+
+      **A thaw does not re-read all thirteen surfaces**, and the first version of
+      this paragraph said it did. No stage-2 key hashes `surfaces.yaml`: a key
+      covers a surface's own documents plus `surface.json`, `gate/baseline.json`,
+      `gate/delta.json` and `gate/site-text.json`. What re-reads is every surface
+      whose resolved document set your edit moved, plus `contributing`, which
+      declares the manifest in its `reads:`. Deciding what else needs re-reading
+      is yours. What the freeze guarantees is narrower and still worth having:
+      the widening is visible, dated and reasoned rather than absorbed into the
+      next round's count.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. `gate/method.yaml`
@@ -669,10 +678,13 @@ them, and the three post-publish checks that leave this repository entirely.
 
       **Either way, start from a clean tree**: `git status --porcelain` empty and
       local `main` in sync with `origin/main`. Anything modified or untracked at
-      this point is content no gate read and the merge carries it in. Both
-      records this procedure writes — the ci-evidence record and the driver's own
-      run record — default to paths outside the repository so that neither of
-      them is what dirties it.
+      this point is content no gate read and the merge carries it in. TWO of the
+      three records this procedure writes — the ci-evidence record and the
+      driver's own run record — default to paths outside the repository so that
+      neither of them is what dirties it. The third is `gate/subject.json`, which
+      is tracked on purpose, so **commit it as soon as the first fan-out of a
+      release mints it**. Leaving it untracked is what would fail this check —
+      and a subject freeze nobody committed is one the next round cannot read.
 
       **And `main` must not be checked out in another worktree.** D2's first act
       is `git checkout main` in the checkout you invoke from, and git allows a

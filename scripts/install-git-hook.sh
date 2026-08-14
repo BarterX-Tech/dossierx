@@ -635,12 +635,22 @@ if [ -n "$configured_hooks_path" ]; then
 	case "$hooks_origin_common_dir" in
 	"" | --*) hooks_origin_common_dir="$hooks_origin_git_dir" ;;
 	esac
-	# git answers relatively when the shell is already at the top of the work
-	# tree, and the origin path is absolute; compare like with like.
+	# BOTH SIDES ARE ANCHORED AT THE WORK-TREE TOP, WHICH IS NOT $PWD.
+	#
+	# The first version of this anchored on $PWD and was wrong in a way that only
+	# appears from a subdirectory — reproduced, and it produced exactly the false
+	# positive this rewrite was meant to remove. `git config --show-origin` prints
+	# the origin relative to the top of the work tree NO MATTER where it is run
+	# from (`file:.git/config`), while `git rev-parse --git-dir` prints relative
+	# only at the top and ABSOLUTE from anywhere below it. Joining the origin to
+	# $PWD inside a subdirectory therefore produced `<repo>/sub/.git/config`,
+	# which matches nothing, and a purely local `core.hooksPath` was announced as
+	# running for every repository on the machine.
+	hooks_origin_top=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
 	absolutise_repo_path() {
 		case "$1" in
 		"" | /* | ?:[/\\]*) printf '%s' "$1" ;;
-		*) printf '%s/%s' "$PWD" "$1" ;;
+		*) printf '%s/%s' "${hooks_origin_top:-$PWD}" "$1" ;;
 		esac
 	}
 	hooks_origin_git_dir=$(absolutise_repo_path "$hooks_origin_git_dir")

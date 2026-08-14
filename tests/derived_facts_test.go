@@ -101,9 +101,12 @@ func surfacePinsAndRetired(t *testing.T) (retired []string, pins []struct{ File,
 const siteAddedMarker = "— added —"
 
 // siteCutRe extracts the `cut:` cell of every row in site/src/content.ts's
-// migration table. All eight occurrences of `cut:` in that file belong to that
-// table; if a second table ever adopts the key, this test's own count assertion
-// below is what notices.
+// migration table. Every occurrence of `cut:` in that file belongs to that table
+// — deliberately not written as a number, in a file whose whole subject is
+// hand-typed counts going stale: the first draft said "all eight", and the same
+// commit added a ninth row. If a second table ever adopts the key, what notices
+// is the unknown-token error below, which fires on any cell naming something
+// `surface.json` does not retire.
 var siteCutRe = regexp.MustCompile(`cut: "([^"]*)"`)
 
 func TestTheSiteAccountsForEveryRetiredCommand(t *testing.T) {

@@ -13,11 +13,18 @@
 // WHAT IS PINNED HERE, and each of these is a way the freeze could be worth
 // nothing:
 //
-//	IT REFUSES A MOVED MANIFEST — the whole point, and it names both digests so
-//	    a human can see what moved rather than being told that something did.
-//	A THAW MUST CARRY A REASON — the escape hatch exists (a maintainer may rule a
-//	    gap blocking), and an escape hatch nobody has to justify is not an escape
-//	    hatch, it is the default path under time pressure.
+//	IT REFUSES A MOVED MANIFEST — the whole point, and it names the frozen digest
+//	    AND the one on disk, so a human sees what moved and what it moved to
+//	    rather than being told that something did.
+//	A THAW RECORDED IN surfaces_sha256 MUST CARRY A REASON. That is one of three
+//	    ways to re-open a subject, and the only one this file can refuse. The
+//	    other two are DELETING gate/subject.json and CHANGING its `version`, both
+//	    of which mint a fresh freeze with no reason and are pinned OPEN below —
+//	    the version path deliberately, because that is how the next release
+//	    starts. What stands behind those two is not this test: it is that the
+//	    file is tracked, so either edit is a line in a reviewed diff. Saying the
+//	    reason requirement covers every re-opening would be the overclaim this
+//	    gate exists to catch.
 //	A NEW RELEASE IS NOT BOUND BY ITS PREDECESSOR'S FREEZE — inheriting the
 //	    previous release's subject would be the same stale-evidence failure the
 //	    rest of the gate refuses everywhere else.
@@ -154,6 +161,17 @@ func TestGateSubjectRefusesAManifestThatMovedMidRelease(t *testing.T) {
 	if !strings.Contains(stderr, frozen) {
 		t.Errorf("the refusal does not name the digest the release froze (%s), so a human is told that something moved and not what:\n%s", frozen, stderr)
 	}
+	// BOTH digests, not one. At mint frozen_sha256 == surfaces_sha256, so a
+	// single assertion on the frozen value is satisfied by either field — delete
+	// the `on disk:` line from the refusal and a one-sided test stays green while
+	// the human loses the half that says what the manifest moved TO.
+	// The LABELLED line, not just the digest: the recovery sentence further down
+	// also carries the new digest ("set surfaces_sha256 to <x>"), so an assertion
+	// on the bare string stays green when the three-line comparison a human reads
+	// is deleted. Measured — that is what the first version of this did.
+	if moved := gateSubjectMovedDigest(t, overlay); !strings.Contains(stderr, "on disk:    "+moved) {
+		t.Errorf("the refusal no longer shows `on disk:    %s` beside the frozen digest, so it says the manifest moved without showing what it moved to:\n%s", moved, stderr)
+	}
 	for _, want := range []string{"revert", "thaw_reason"} {
 		if !strings.Contains(stderr, want) {
 			t.Errorf("the refusal does not mention %q, so it names a problem with no way forward:\n%s", want, stderr)
@@ -253,9 +271,54 @@ func TestGateSubjectFanoutVerifiesBeforeItMintsAnything(t *testing.T) {
 	if code != gateSubjectExitCode {
 		t.Errorf("fanout over a moved subject exited %d, want %d:\n%s", code, gateSubjectExitCode, stderr)
 	}
+	// The status alone would pass against ANY exit-6 refusal, including one
+	// raised for a reason that has nothing to do with the subject — which is
+	// exactly the status-only test this file's own header warns about.
+	if !strings.Contains(stderr, "moved during release") {
+		t.Errorf("fanout exited %d but its reason is not the moved subject, so this test would pass against an unrelated refusal carrying the same code:\n%s", code, stderr)
+	}
 	if _, err := os.Stat(filepath.Join(overlay, "gate", "fanout.json")); !os.IsNotExist(err) {
 		t.Error("the fan-out minted a run before verifying the subject. A refusal that arrives after an identifier exists is indistinguishable on disk from a fan-out that half happened, and the answers filed under it would be answers to a question this release never agreed to ask")
 	}
+}
+
+// TestGateSubjectTheTwoUnreasonedReopeningsArePinnedOpen states, as an
+// assertion rather than as a sentence in a comment, that two ways of re-opening
+// a subject carry no reason and are refused by nothing here.
+//
+// It exists because the header used to claim a thaw always costs a reason. It
+// does not: only an edit to surfaces_sha256 does. Deleting the record or moving
+// its version mints a fresh freeze silently. Both are legitimate — the version
+// path is how the NEXT release starts, and the delete path is how a maintainer
+// abandons a freeze — and both are visible in a reviewed diff because the file
+// is tracked. Pinning them open means a future reader meets the real shape
+// rather than the flattering one, and a change that closes either has to change
+// this test on purpose.
+func TestGateSubjectTheTwoUnreasonedReopeningsArePinnedOpen(t *testing.T) {
+	t.Run("deleting the record mints a fresh freeze with no reason", func(t *testing.T) {
+		overlay, _ := gateStage2Overlay(t)
+		gateSubjectFreeze(t, overlay, "round-one")
+		gateSubjectMoveManifest(t, overlay)
+		if err := os.Remove(filepath.Join(overlay, filepath.FromSlash(gateSubjectFile))); err != nil {
+			t.Fatalf("remove the freeze: %v", err)
+		}
+		if _, err := gateStage2Harness(t, "subject", "--root", overlay); err != nil {
+			t.Fatalf("a deleted freeze was refused; if that is now the intent, this test is the record of the change: %v", err)
+		}
+		if got := gateSubjectFreeze(t, overlay, "round-two"); got != gateSubjectMovedDigest(t, overlay) {
+			t.Errorf("the re-minted freeze does not cover the manifest as it now stands (%s)", got)
+		}
+	})
+
+	t.Run("moving the version mints a fresh freeze with no reason", func(t *testing.T) {
+		overlay, _ := gateStage2Overlay(t)
+		frozen := gateSubjectFreeze(t, overlay, "round-one")
+		gateSubjectMoveManifest(t, overlay)
+		gateSubjectWrite(t, overlay, "v9.9.9", frozen, frozen, "")
+		if _, err := gateStage2Harness(t, "subject", "--root", overlay); err != nil {
+			t.Fatalf("a freeze naming another release bound this one, which is what TestGateSubjectDoesNotBindTheNextRelease says it must not: %v", err)
+		}
+	})
 }
 
 func TestGateSubjectRefusesAFreezeThatNamesNoRun(t *testing.T) {

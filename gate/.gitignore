@@ -1,10 +1,14 @@
-# gate/ holds two different kinds of thing, and only one of them is tracked.
+# gate/ holds three different kinds of thing, and two of them are tracked.
 #
 # TRACKED: the gate's own working material — the question it asks (prompts/) and
 # the declaration of how it asks it (method.yaml). Those are reviewed.
 #
-# IGNORED: everything a RUN produces — the resolved baseline, the release delta,
-# the rendered site text, the per-surface captures, the run manifest. Those are
+# TRACKED, THOUGH A RUN WRITES IT: subject.json, the freeze — see the block at
+# the bottom of this file for why it sits on this side of the line.
+#
+# IGNORED: every other thing a RUN produces — the resolved baseline, the release
+# delta, the rendered site text, the per-surface captures, the run manifest,
+# the wave bundle. Those are
 # evidence for one release and are re-produced from scratch every time; a copy of
 # one left in the tree is precisely the "found on disk" input the freshness check
 # exists to refuse, and committing one would make it look authoritative.

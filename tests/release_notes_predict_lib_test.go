@@ -277,7 +277,9 @@ type goreleaserChangelogFull struct {
 //   - GitHub, Draft, Prerelease: the fields this project's committed file
 //     actually sets today. KnownFields(true) needs them named or the base
 //     fixture itself would fail to decode.
-//   - Header, Footer, Disable, Mode: fields the committed file does NOT set,
+//   - Header, Footer: fields the committed file sets, as literals, which this
+//     predictor reproduces verbatim — Header beside the body and Footer inside
+//     it. Disable, Mode: fields the committed file does NOT set,
 //     but which change what gets PUBLISHED in a way this predictor's
 //     algorithm does not implement, so they must be recognized (not folded
 //     into "unknown key" rejection) and then explicitly checked against
@@ -442,8 +444,12 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: changelog.groups is empty; either the file changed shape or the path is wrong", goreleaserPath)
 	}
 
-	// --- release: stanza — see goreleaserReleaseFull's doc comment for why
-	// header/footer/disable/mode specifically must be at their defaults. ---
+	// --- release: stanza — see goreleaserReleaseFull's doc comment for what each
+	// of header/footer/disable/mode has to be. Header and footer are SET in the
+	// committed file and required to be literal rather than templated; disable and
+	// mode are required to be absent. An earlier version of this comment said all
+	// four had to be at their defaults, which stopped being true when v0.5.2 set
+	// the first two. ---
 	relNode, ok := topLevelNode(&root, "release")
 	if !ok {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: no top-level \"release:\" key found; either the file changed shape or the path is wrong", goreleaserPath)
@@ -581,9 +587,9 @@ type ReleaseNotesPrediction struct {
 	// compares from the "## Changelog" anchor onward, and a header sits ahead of
 	// that anchor.
 	//
-	// It is here because of what the v0.5.2 gate reported about the release
-	// before this one: the header is the only client-facing line that release
-	// added, and it appeared in NO artifact any reading agent is handed. The
+	// It is here because of what the v0.5.2 gate reported about v0.5.2 itself:
+	// the header is the only client-facing line THIS release adds, and it
+	// appeared in NO artifact any reading agent is handed. The
 	// prediction is what the release-notes surface reads, so a header absent
 	// from it is a line that ships to every consumer with nobody having read it.
 	// Carrying it does not verify it against the published page — nothing here

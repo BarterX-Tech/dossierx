@@ -1,6 +1,12 @@
 # Cutting release-gate cycles — three changes, inside v0.5.2
 
-**Status:** design, approved 14 Aug 2026. Awaiting an implementation plan.
+**Status:** design, approved 14 Aug 2026 — **SUPERSEDED IN PART BY WHAT SHIPPED, 14 Aug 2026.**
+This is a design record and is kept as one: it says what was intended and why, which is the part
+worth keeping. It is not a description of the tree. Where the two disagree, the tree is right, and
+each disagreement found by the fix-wave reading of the implementation is corrected in place below
+with a note rather than silently rewritten — a design record that quietly matches its
+implementation records nothing about the decisions made along the way.
+**For what shipped, read `docs/RELEASING.md` and the three test files it names.**
 **Applies to:** v0.5.2, in flight — branch `release/v0.5.2` at `f38ace0`, gate paused after round four.
 **Scope ruled by the maintainer:** lanes A, B and C. The override record is deferred; see below.
 **This is not a release procedure.** `docs/RELEASING.md` is the only one, and stays so. This file is
@@ -54,17 +60,23 @@ of these would be worse than the cycles it saves.
 
 ### The mechanism
 
-An eighth mode in `scripts/gate-stage2/run.sh` — its `usage()` and its `case` both carry seven today:
-`surfaces`, `grant`, `model`, `command`, `fanout`, `delta`, `record` — invoked with the range a fix
-wave produced:
+A new mode in `scripts/gate-stage2/run.sh`, which carried seven when this was written —
+`surfaces`, `grant`, `model`, `command`, `fanout`, `delta`, `record` — and carries nine now that
+`subject` and `wave` have both landed. Invoked with the range a fix wave produced:
 
 ```
-run.sh wave <base>..<head>
+run.sh wave --range <base>..<head>
 ```
 
-It maps the range's changed paths onto surfaces using the same `surfaces.yaml` `paths` mapping the
-fan-out uses, then hands **two** report-only agents one wave bundle: the full text of every changed
-file, the diff for the range, and `gate/prompts/_wave.md`.
+*(Shipped with `--range` rather than a positional argument. The spelling above originally omitted
+it, which would have failed as a usage error for anyone who typed it.)*
+
+It hands **two** report-only agents one wave bundle: the full text of every changed file, the diff
+for the range, and `gate/prompts/_wave.md`.
+
+*(This paragraph originally said the mode maps changed paths onto declared surfaces. It deliberately
+does not, and the shipped code says so in capitals: `surfaces.yaml`'s path matching has exactly one
+implementation, in the Go producer, and a second one in shell would be free to disagree with it.)*
 
 The wave prompt asks a narrower question than a surface prompt does — *did this wave introduce a
 statement that is false about the tree it just changed?* — because that is the only question a diff
@@ -104,15 +116,20 @@ A tracked file, `gate/subject.json`:
 ```json
 {
   "version": "v0.5.2",
-  "surfaces_sha256": "<sha256 of surfaces.yaml>",
+  "frozen_sha256": "<sha256 of surfaces.yaml at the first fan-out — never edited>",
+  "surfaces_sha256": "<the digest currently accepted; a thaw moves this one>",
   "frozen_at_run": "<run id of round one>",
   "thaw_reason": ""
 }
 ```
 
+*(`frozen_sha256` was missing from this sketch. It is the field the whole thaw rule is defined on —
+the two digests disagreeing is what says a release re-opened its subject.)*
+
 The first fan-out of a release writes it. Every later fan-out for that version recomputes
-`surfaces.yaml`'s digest and **refuses** on a mismatch, naming both digests and the file. A new
-version — derived from the tree the same way `D1` derives it — starts a new freeze automatically, so
+`surfaces.yaml`'s digest and **refuses** on a mismatch, naming both digests and the file. A new version — read from
+`CHANGELOG.md`'s newest heading, which is one of the two sources `D1` derives from, and enough to
+tell one release from the next — starts a new freeze automatically, so
 nothing has to be reset by hand between releases.
 
 `gate/.gitignore` ignores everything it does not name, so this file must be added to its allow-list
@@ -122,8 +139,13 @@ or it will be invisible to git, which is the wrong property for something a huma
 
 A coverage gap found mid-release is recorded as a finding **against the next release**, not acted on
 silently. If the maintainer rules a specific gap blocking, they edit `gate/subject.json` with a
-non-empty `thaw_reason` and the new digest. Every key changes when `surfaces.yaml` changes, so a thaw
-re-reads every surface — which is correct, and is also why it should be a deliberate act.
+non-empty `thaw_reason` and the new digest. **This originally said every key changes when `surfaces.yaml` does, so a thaw re-reads every
+surface. That is false**, and the fix-wave reading of the implementation caught it in five places.
+No stage-2 key hashes the manifest: a key covers a surface's own documents plus `surface.json`,
+`gate/baseline.json`, `gate/delta.json` and `gate/site-text.json`. A thaw re-reads the surfaces
+whose document sets the edit moved, plus `contributing`, which declares the manifest in its
+`reads:`. The freeze's value is that the widening is visible, dated and reasoned — not that it is
+expensive.
 
 ### Freezing is not narrowing
 
@@ -150,8 +172,9 @@ what it already carries, and both have failed inside this release.
 confirms the first three were real top-level commands that were genuinely cut.
 
 The check asserts set equality in both directions — an entry on the site that the binary does not
-retire is as wrong as a retired command the site omits. Home: `tests/docs_site_audit_test.go`, which
-already exists for exactly this shape of defect.
+retire is as wrong as a retired command the site omits. Home: it shipped in a new file, `tests/derived_facts_test.go`, rather than in
+`tests/docs_site_audit_test.go` as planned here — the reasoning about why prose that restates a
+derived number is its own class wanted a header of its own.
 
 ### C2 — the pin-count prose against `version_pins`
 
@@ -191,7 +214,7 @@ written last, from the diff, and read by lane A before round five sees it.
 | Lane | How it is proven |
 |------|------------------|
 | A | A test that the wave mode writes nothing under `gate/answers/` and that no wave output reaches a receipt. A usage test pinning the mode's grant to the same exclusive two-tool list. |
-| B | Three tests: refuses on a changed digest, accepts on a matching one, and a new version starts a fresh freeze. One mutation test: a thaw with an empty reason is refused. |
+| B | Shipped as seven tests, not three: the four planned plus a later round not erasing a recorded thaw, the fan-out verifying before it mints, and the two unreasoned re-openings pinned OPEN — deleting the record, and moving its version. That last one is a correction: this spec implied a thaw always costs a reason, and only an edit to `surfaces_sha256` does. |
 | C | Mutation both ways — remove a row from the site table, and change the pin-count sentence; each must red the build. |
 
 ## Order of work
@@ -216,8 +239,7 @@ written last, from the diff, and read by lane A before round five sees it.
 
 ## One finding found while writing this
 
-`cmd/dossierx/gate_stage3_test.go:64-69` states that `scripts/gate-stage2/run.sh` "has six modes".
-It has seven. The sentence is otherwise correct — none of them reads an agent's answer back — but the
-count is stale, and it is the same class lane C exists for, without being derivable from
-`surface.json`. It should be fixed in the lane-A commit, which is the one that changes that file's
-mode list anyway.
+`cmd/dossierx/gate_stage3_test.go:64-69` stated that `scripts/gate-stage2/run.sh` "has six modes".
+It had seven. Fixed in the lane-A commit, and the count is no longer recalled: a test now reads the
+number out of that comment and checks it against the script, and checks the script's two lists —
+what `usage` advertises and what `case` dispatches — against each other.
