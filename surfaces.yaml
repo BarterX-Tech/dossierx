@@ -106,6 +106,16 @@ surfaces:
       - cmd/dossierx/retired.go
       # The same entry cites the roadmap as the record of what was deferred.
       - ROADMAP.md
+      # Two consumer-facing bullets of the [0.5.2] entry are claims about this file — a table absolute its own corpus contradicts, and slug uniqueness credited to the wrong rule.
+      - FORMAT.md
+      # Five bullets describe this script's behaviour, and surface.json attributes one of the release's version pins to it.
+      - scripts/install-git-hook.sh
+      # The entry's headline SILENT item is that the embedded skills changed and every consumer must re-export. A fingerprint says they moved; it cannot say what moved.
+      - skills/dossierx/SKILL.md
+      # Three sections assert what this file now contains — the merge-ness swap, the pin sentence, the subject freeze.
+      - docs/RELEASING.md
+      # The same sections assert what the forge gate now asks for.
+      - .github/workflows/release.yml
 
   - name: claim-format-spec
     what: The claim format — the schema, the id grammar, the layouts, and what
@@ -144,6 +154,10 @@ surfaces:
     reach: Sets expectations for anyone deciding to depend on this.
     paths:
       - ROADMAP.md
+    reads:
+      # Declared after the v0.5.2 gate reported this surface could not check its own last entry.
+      # The last entry says "FORMAT.md documents the shipped behaviour as the rule". Judging that sentence without the file is judging a claim about a document against nothing.
+      - FORMAT.md
 
   - name: contributing
     what: How to build and test, including the two suites `go test ./...` does
@@ -196,6 +210,12 @@ surfaces:
       # inside it. Nothing in surface.json is a file or symbol inventory, so a
       # renamed helper would leave a contributor chasing something gone.
       - internal/render/depended_by_view.go
+      # CONTRIBUTING rests its surfaces.yaml section on four stated behaviours of gateSurfaceReferences in this file.
+      - cmd/dossierx/gate_fingerprint_test.go
+      # And on this one requiring every tracked file to be claimed exactly once.
+      - tests/surfaces_manifest_test.go
+      # It restates a pair of numbers derived from this test — 119 request events, 118 of them the browser's.
+      - viewer-tests/graph_offline_test.go
 
   - name: release-procedure
     what: The one description of how this project releases, including its own
@@ -226,6 +246,18 @@ surfaces:
       - testdata/fixture-basic/viewer/index.html
       - testdata/fixture-portability/viewer/index.html
       - testdata/fixture-graph-demo/viewer/index.html
+      # The document hard-codes the surface count nine times, and the manifest is the only thing that can settle it.
+      - surfaces.yaml
+      # It prints the -answer-record invocation an operator types once per agent; nothing else says whether those flags exist.
+      - cmd/dossierx/gate_answer_test.go
+      # One of the three G1 captures whose flags the procedure spells out.
+      - tests/render_diff_capture_test.go
+      # The second.
+      - tests/skills_export_capture_test.go
+      # The third.
+      - tests/release_notes_predict_test.go
+      # The procedure states the whole tool grant — SurfaceFinding and SurfaceVerdict, nothing else — and this file is where that is declared.
+      - gate/method.yaml
 
   - name: agent-skills
     what: The SKILL.md bundles, plus the embed directive and reading order that
@@ -255,6 +287,8 @@ surfaces:
       # over an unlocked claim mid-relock. The hook runs `check --staged`; what
       # CI runs is decided by this template, and the two answers differ.
       - scripts/ci/dossierx-check.yml
+      # The router quotes two write_conflict message strings verbatim, internal/lock's fingerprint moved this release, and the CHANGELOG says that is where the two contended timeouts began reporting apart.
+      - internal/lock/filelock.go
 
   - name: exported-skills
     what: The skills export output, checked in as symlinks so this repository's
@@ -263,6 +297,14 @@ surfaces:
       export is producing something other than the source.
     paths:
       - .claude/skills/
+    reads:
+      # Declared after the v0.5.2 gate: three claims this surface makes about files it was not handed.
+      # Bootstrap step 4 tells a client to fetch this script and run it with --yes, and two bundles assert the hook it installs runs `dossierx check --staged`. Both are claims about this file.
+      - scripts/install-git-hook.sh
+      # The code-links bundle argues from what the shipped merge-gate template runs: plain `check`, which scans source. If that ever became --validate the bundle would advise the opposite of the truth.
+      - scripts/ci/dossierx-check.yml
+      # Two bundles send the reader here for the markdown ceiling and the in-repo-ledger principle, and summarise both. A summary drifts from what it summarises.
+      - FORMAT.md
 
   - name: site
     what: The marketing and documentation site, sources and entry points. The
@@ -272,6 +314,10 @@ surfaces:
       project is, and the one whose counts have gone stale live.
     paths:
       - site/
+    reads:
+      # Declared after the v0.5.2 gate.
+      # The release ledger's newest entry must agree with the CHANGELOG's newest heading — the driver refuses to publish when they disagree — and until v0.5.2 the site agent could not read the other half of the one agreement the release rests on.
+      - CHANGELOG.md
 
   - name: ci-merge-gate-template
     what: The merge-gate workflow clients copy into their own repository.
@@ -337,6 +383,10 @@ surfaces:
       # it the check can only be made against the site's rendering of the same
       # facts, which is another document rather than the source.
       - CHANGELOG.md
+      # The config's comments name this file as what refuses a templated header or footer — the only stated guarantee that what publishes is the literal that was reviewed.
+      - tests/release_notes_predict_lib_test.go
+      # And this one as what requires the footer to exist and to name CHANGELOG.md.
+      - tests/ci_workflow_test.go
 
   - name: binary-and-viewer
     what: The engine itself, and every string compiled into it — cobra Short and
@@ -352,8 +402,16 @@ surfaces:
     not:
       - "**/*_test.go"
       - internal/render/markdown/generate-goldens/
+    reads:
+      # Declared after the v0.5.2 gate.
+      # retired.go and main.go both assert their hints are the SAME WORDS as
+      # skills/dossierx/SKILL.md's "if you remember an older command" table. Four
+      # of those stubs are new in v0.5.2 and the skills fingerprint moved with
+      # them, so both sides of that claim changed in this release.
+      - skills/dossierx/SKILL.md
 
 out_of_scope:
+
   - name: tests-and-fixtures
     reason: Tests, fixture corpora and the golden-file generator are how the
       surfaces above are held true; they are not themselves observable by a

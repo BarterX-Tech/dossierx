@@ -145,6 +145,13 @@ carries it inside its bundle, plus every surface whose own documents or `reads:`
 changed — not all thirteen. What it buys is that the widening is visible, dated and reasoned instead
 of absorbed into the next round's count.
 
+**The freeze was thawed once, on the record.** Round five reported fifteen coverage gaps — agents
+naming bytes they were not handed — and every one was a `reads:` line, which the freeze had closed.
+They were ruled blocking rather than deferred, because they sat on the release's own claims about
+itself: the site could not read the CHANGELOG it must agree with, the release procedure could not
+check the surface count it states nine times, and the changelog surface could not check the SILENT
+item every consumer must act on. `gate/subject.json` carries the new digest and the reason.
+
 **A fix wave is read before a full round pays to discover what it broke.** Every round of this
 release after the first opened by repairing the round before it; round four's three highest-severity
 findings were all introduced by round three's fixes. `run.sh wave --range A..B` hands two agents the
@@ -290,7 +297,7 @@ And the ones only a maintainer sees, each of which is this release being wrong a
 - A second fan-out test carried the same defect this release fixed in its sibling — asserting no
   record was written while a real one sat on disk — and reported a false finding during this release's
   own gate run. The stash is now one shared helper rather than two copies of which one was fixed.
-- Nine surfaces now declare, in `surfaces.yaml`, the documents they read but do not own. Twenty of
+- All thirteen surfaces now declare, in `surfaces.yaml`, the documents they read but do not own. Twenty of
   the 39 findings were an agent naming a byte it needed and was not handed; `reads:` is the mechanism
   this release shipped to close exactly that, and it was under-applied at the moment it landed.
 

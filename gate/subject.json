@@ -1,7 +1,7 @@
 {
   "version": "v0.5.2",
   "frozen_sha256": "48d2919ffe5ee072e20aa2d8369d725910444d39cb44fb2a131732394d49991b",
-  "surfaces_sha256": "48d2919ffe5ee072e20aa2d8369d725910444d39cb44fb2a131732394d49991b",
+  "surfaces_sha256": "fcc920fb93dafd310c27401c0f0d254ebbd2fc39879a6bca564d8a9fdc3a18ea",
   "frozen_at_run": "587888fd50cebe6f32a93f0268725fee",
-  "thaw_reason": ""
+  "thaw_reason": "Round five returned 15 coverage gaps \u2014 agents naming bytes they were not handed \u2014 across nine surfaces, and every one of them is a reads: line. Ruled blocking rather than deferred to v0.5.3: the gaps sit on the release's own claims about itself (the site could not read the CHANGELOG it must agree with; release-procedure could not check the surface count it states nine times; the changelog surface could not check the SILENT item every consumer must act on), so deferring them means shipping a release whose central claims went unadjudicated. Thawed once, for all nine surfaces together, rather than nine times."
 }
