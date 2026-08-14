@@ -1210,8 +1210,11 @@ func jsonFieldNames(rt reflect.Type) []string {
 // skills/dossierx-claims/SKILL.md carries twice and skills/dossierx-comments/SKILL.md
 // once. Those three were correct at v0.5.2 and invisible to the inventory, so the
 // release procedure's pin check — which compares its prose against THIS list —
-// would have passed at v0.5.3 over three pins left behind, inside bundles that are
-// go:embed-ed and installed into other people's repositories.
+// would have passed at v0.5.3 over three pins left behind, inside bundles that
+// are embedded into the binary and installed into other people's repositories.
+// (Written that way rather than with the go:embed spelling on its own line:
+// staticcheck reads `// go:embed` at the start of a comment line as an
+// ineffectual compiler directive, and CI is right to.)
 const surfacePinSweep = `dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v|github\.com/[^ ]*dossierx/blob/v`
 
 // surfacePinRE extracts the pin token out of a swept line. Every hit MUST yield
