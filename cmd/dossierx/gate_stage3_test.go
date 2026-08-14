@@ -1951,12 +1951,12 @@ func gateStage3HarnessModes(t *testing.T, script string) (advertised, dispatched
 			// A mode line opens at exactly two spaces with a lower-case word;
 			// continuation lines are indented far further, and `--root` is an
 			// option rather than a mode.
-			if m := regexp.MustCompile(`^  ([a-z][a-z-]*)\s`).FindStringSubmatch(line); m != nil {
+			if m := regexp.MustCompile(`^ {2}([a-z][a-z-]*)\s`).FindStringSubmatch(line); m != nil {
 				advertised[m[1]] = true
 			}
 		}
 		if inCase {
-			if m := regexp.MustCompile(`^  ([a-z][a-z-]*)\)`).FindStringSubmatch(line); m != nil {
+			if m := regexp.MustCompile(`^ {2}([a-z][a-z-]*)\)`).FindStringSubmatch(line); m != nil {
 				dispatched[m[1]] = true
 			}
 		}

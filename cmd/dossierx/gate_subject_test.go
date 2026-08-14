@@ -62,7 +62,7 @@ const (
 // checks the status AND the sentence, because a script that exits 6 for the wrong
 // reason passes a status-only test while telling the human nothing they can act
 // on.
-func gateSubjectRefusal(t *testing.T, args ...string) (int, string) {
+func gateSubjectRefusal(t *testing.T, args ...string) (code int, stderr string) {
 	t.Helper()
 	script := filepath.Join(surfaceRepoRoot(t), filepath.FromSlash(gateStage2HarnessFile))
 	cmd := exec.Command("bash", append([]string{script}, args...)...)

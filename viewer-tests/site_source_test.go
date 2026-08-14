@@ -360,6 +360,14 @@ var declaredHistoryLiterals = []historyLiteral{
 		why:     "the build-order section, dating when --reason became mandatory on a lock",
 	},
 	{
+		version: "v0.3.0",
+		phrase:  "a top-level command through v0.3.0",
+		why: "the migration table's row for lock/unlock/reaudit/flag, dating the release that " +
+			"folded them under the claim noun. The row exists because the binary retires sixteen " +
+			"commands and this table listed twelve; the literal is what makes it a statement about " +
+			"history rather than about the current CLI, where all four are claim leaves",
+	},
+	{
 		version: "v0.4.0",
 		phrase:  "Removed outright in v0.4.0.",
 		why:     "the removed-commands table, naming the release that deleted `migrate`",
