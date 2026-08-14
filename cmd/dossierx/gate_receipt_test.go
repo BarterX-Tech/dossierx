@@ -181,6 +181,15 @@ type gateReceipt struct {
 type gateFinding struct {
 	Surface string `json:"surface"`
 	Rule    string `json:"rule"`
+	// About is the repo-relative path whose contents this finding's SUBSTANCE is
+	// about, for the case where that file is not one the READING surface owns —
+	// release-procedure reporting a defect in a document binary-and-viewer owns, to
+	// take the case that produced the field. It is the agent's, it is optional, and
+	// it can only RAISE the rank: gateAnswerRank ranks such a finding at whichever
+	// of the two surfaces' reach classes gives the HIGHER priority, never the
+	// lower. See that function for why a lever an agent can only pull upwards is
+	// one the split in this file's own header survives.
+	About string `json:"about,omitempty"`
 	// Consequence is one of gateConsequences, and it is closed. An open field
 	// here would put the matrix's row lookup at the mercy of whichever synonym an
 	// agent reached for, and a consequence nothing can look up is a finding
@@ -430,14 +439,72 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 	// value is being reproducible: a re-run over an unchanged tree has to produce
 	// the identical document, and a comparator that leaves ties — two findings
 	// against the same surface and rule, which is an ordinary thing for one agent
-	// to report — leaves their order to the sort algorithm. sort.SliceStable then
-	// pins even the ties this cannot see, such as two findings equal in every
-	// recorded field.
+	// to report — leaves their order to the sort algorithm.
 	//
 	// Surfaces need no tiebreaker beyond the name: the check above has already
-	// established the names are unique.
+	// established the names are unique. The findings' comparator is
+	// gateOrderFindings, which is a named function because a second document is
+	// written from the same order — see its comment.
 	sorted := append([]gateSurfaceVerdict(nil), surfaces...)
 	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].Surface < sorted[j].Surface })
+	found := gateOrderFindings(findings)
+
+	// THE DEFERRED LEDGER IS WRITTEN HERE, LAST, and only once every refusal above
+	// has passed. It is the price of P2/P3 not failing the verdict: a finding that
+	// does not stop the release has to land somewhere a human can find it later,
+	// or "it did not block" becomes "nobody ever wrote it down" one release after
+	// the decision to stop blocking on it. See gate_priority_test.go for the file's
+	// contract; the ordering it inherits is the sort immediately above, so a re-run
+	// over an unchanged tree reproduces it byte for byte along with the receipt.
+	//
+	// A projection that cannot be written is a failed recording rather than a
+	// receipt with a silent hole beside it.
+	//
+	// IT IS PROJECTED OVER THE PROMOTED PRIORITIES AND OVER ALL THE FINDINGS. A
+	// ruling that raises a P2 to P1 has said that finding is not deferred, and a
+	// ledger listing it anyway would tell the next release's round one to triage a
+	// finding this release is stopping for. The other half of gateApplyOverrides —
+	// the CLEARING half — deliberately does not reach here: a cleared finding is one
+	// a human ruled non-blocking, and projecting over what a ruling removed would
+	// let a P2 be ruled out of the ledger as well as out of the verdict, which is
+	// the filter CLAUDE.md forbids. So promotions apply and clearances do not.
+	if err := gateWriteDeferred(dir, version, gatePromoted(found, gateFindingPromotions(overrides))); err != nil {
+		return gateReceipt{}, fmt.Errorf("gate receipt: %w", err)
+	}
+
+	return gateReceipt{
+		Gate:       "G1",
+		Version:    version,
+		Overrides:  overrides,
+		Branch:     branch,
+		BaseRef:    gateBaseRef,
+		HeadCommit: head,
+		Tree:       tree,
+		Surfaces:   sorted,
+		Findings:   found,
+	}, nil
+}
+
+// gateOrderFindings stamps every finding's digest and returns them in the ONE
+// order this gate has for findings.
+//
+// IT IS A NAMED FUNCTION BECAUSE TWO DOCUMENTS ARE WRITTEN FROM IT. The receipt
+// is one; gate/deferred.json is the other, and gate_priority_test.go's projector
+// writes that one BETWEEN rounds, with no receipt anywhere and no merge in
+// prospect. A second copy of this comparator would be a second answer to "which of
+// these two findings came first", and the day somebody edited one the ledger would
+// stop being a re-projection of the receipt while both files still looked right.
+//
+// The comparator is a TOTAL order over the fields a finding records, so the output
+// is a function of the SET it was handed and not of the order the fan-out returned
+// in — which is what makes a re-run over an unchanged tree reproduce both
+// documents byte for byte. sort.SliceStable pins the one tie it cannot see, two
+// findings equal in every recorded field.
+//
+// The digest is stamped BEFORE the sort and is not sorted on: it is derived from
+// surface, rule and detail, all of which the comparator already reads, so ordering
+// by it would order by the same three fields through a hash.
+func gateOrderFindings(findings []gateFinding) []gateFinding {
 	found := append([]gateFinding(nil), findings...)
 	for i := range found {
 		found[i].Digest = gateFindingDigest(found[i])
@@ -455,34 +522,12 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 		if found[i].FailureScenario != found[j].FailureScenario {
 			return found[i].FailureScenario < found[j].FailureScenario
 		}
-		return found[i].Detail < found[j].Detail
+		if found[i].Detail != found[j].Detail {
+			return found[i].Detail < found[j].Detail
+		}
+		return found[i].About < found[j].About
 	})
-
-	// THE DEFERRED LEDGER IS WRITTEN HERE, LAST, and only once every refusal above
-	// has passed. It is the price of P2/P3 not failing the verdict: a finding that
-	// does not stop the release has to land somewhere a human can find it later,
-	// or "it did not block" becomes "nobody ever wrote it down" one release after
-	// the decision to stop blocking on it. See gate_priority_test.go for the file's
-	// contract; the ordering it inherits is the sort immediately above, so a re-run
-	// over an unchanged tree reproduces it byte for byte along with the receipt.
-	//
-	// A projection that cannot be written is a failed recording rather than a
-	// receipt with a silent hole beside it.
-	if err := gateWriteDeferred(dir, version, found); err != nil {
-		return gateReceipt{}, fmt.Errorf("gate receipt: %w", err)
-	}
-
-	return gateReceipt{
-		Gate:       "G1",
-		Version:    version,
-		Overrides:  overrides,
-		Branch:     branch,
-		BaseRef:    gateBaseRef,
-		HeadCommit: head,
-		Tree:       tree,
-		Surfaces:   sorted,
-		Findings:   found,
-	}, nil
+	return found
 }
 
 // gatePreMergePrecondition is the second assertion, made immediately before the
@@ -564,16 +609,28 @@ func gateAssertMergeMatchesReceipt(r gateReceipt, mergeTree string) error {
 // evaluate is the receipt's verdict, recomputed from its own contents plus the
 // surfaces the manifest declares and the fingerprints this tree produces.
 //
-// PASS requires all three: no BLOCKING finding left unruled, and every declared
-// surface holding a PASS, and every one of those PASSes fingerprinted against
-// THIS tree. Anything else is FAILED with an error naming every reason, because a
-// verdict that says only "FAILED" sends the reader back to re-derive what the
-// gate already knew.
+// EVERY REASON BELOW MUST BE ABSENT, and the list below this comment is the
+// authority on what they are rather than any sentence here: an override record
+// that decides nothing, a BLOCKING finding left unruled, a finding nothing could
+// rank, and anything gateIsGreen refuses about the surface verdicts (a declared
+// surface not holding a PASS, or a PASS fingerprinted against another tree).
+// Anything else is FAILED with an error naming every reason, because a verdict
+// that says only "FAILED" sends the reader back to re-derive what the gate already
+// knew.
+//
+// That enumeration is written as "these all have to be absent" and never as "these
+// are what PASS means", deliberately. Two of the four arrived after the first
+// version of this comment was written, and a comment stating a complete sufficient
+// condition is one a later reader trusts INSTEAD of the code — which is how a
+// blocking class stops being read while the paragraph describing the exit rule
+// still looks correct.
 //
 // BLOCKING IS P0 AND P1. P0 — a client-shipped surface that makes the reader ACT
 // wrongly — cannot be cleared by a ruling at all; gateApplyOverrides refuses the
 // record that tries. P1 blocks until a named human rules on it. P2 and P3 are
-// recorded, projected into gate/deferred.json, and do not stop the release.
+// recorded, projected into gate/deferred.json, and do not stop the release —
+// unless a ruling PROMOTED one, in which case the priority partitioned on here is
+// the one the human raised it to and not the one the matrix computed.
 //
 // A FINDING WITH NO PRIORITY BLOCKS, and it is reported separately from the
 // unruled ones. Nothing in this file can rank it — the ranking is the recorder's,

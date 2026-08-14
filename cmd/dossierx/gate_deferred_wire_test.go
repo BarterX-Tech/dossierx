@@ -6,7 +6,8 @@
 // path acts on is exactly the defect class CLAUDE.md's override-record story
 // warns about: this repository shipped one of those earlier this release.
 //
-// WHAT round.sh's `fanout` mode now does about it, and what is pinned here:
+// WHAT scripts/gate-stage2/run.sh's `fanout` mode now does about it, and what is
+// pinned here:
 //
 //	A LEDGER NAMING A PREVIOUS RELEASE PRINTS A NOTICE — to stderr, naming the
 //	    version that deferred and how many findings, so a maintainer starting
@@ -19,6 +20,19 @@
 //	    CLAUDE.md's rule for this gate: a check that cannot run is a failure,
 //	    not a pass, and a truncated or hand-broken ledger might carry findings
 //	    nobody has triaged yet.
+//	A PREVIOUS RELEASE'S LEDGER OF ZERO FINDINGS GETS ONE LINE, NOT THE NOTICE
+//	    — there is nothing in it for round one to triage, and the triage
+//	    instruction would print on every fan-out of every round until somebody
+//	    deleted the file. The line says which release deferred nothing and to
+//	    delete it, which is the whole of the action available.
+//
+// AND THE OTHER HALF OF THE SAME DEFECT, fixed in gate_priority_test.go rather
+// than here: the notice used to end "leave it — the next recording overwrites it
+// in full", and the only thing that recorded was the driver's D1, which does not
+// run until the release is being published. So the recovery it offered at round
+// one was to wait for something that happens after every round is over, and the
+// notice fired again on every fan-out in between. TestGateDeferredProject now
+// projects the ledger per round, and the notice names that invocation.
 //
 // THESE ROWS RUN AGAINST THE REAL REPOSITORY ROOT, not an overlay, and that is
 // deliberate rather than a shortcut: TestGateFanoutProduce (gate_fanout_test.go)
@@ -52,22 +66,23 @@ import (
 // stale the day the heading moves.
 var gateDeferredWireVersionHeading = regexp.MustCompile(`(?m)^## \[([0-9]+\.[0-9]+\.[0-9]+)\]`)
 
-// gateDeferredWireCurrentVersion reads CHANGELOG.md the same way run.sh's
-// release_version does, so a test asserting "this release's own ledger" and one
-// asserting "a previous release's ledger" are both built against the version
-// the script will actually compute rather than a literal that drifts the day
-// somebody cuts the next release.
+// gateDeferredWireCurrentVersion is the version the script will actually compute
+// for this checkout, so that a test asserting "this release's own ledger" and one
+// asserting "a previous release's ledger" are both built against it rather than
+// against a literal that drifts the day somebody cuts the next release.
+//
+// It goes through gateDeferredVersion, which is the function the PROJECTOR writes
+// the ledger's version with (gate_priority_test.go). That is deliberate: the
+// notice these rows are about fires exactly when the ledger's version differs from
+// release_version's answer, so a test that computed the version its own third way
+// could pass while the projector and the script disagreed.
 func gateDeferredWireCurrentVersion(t *testing.T, root string) string {
 	t.Helper()
-	data, err := os.ReadFile(filepath.Join(root, "CHANGELOG.md"))
+	version, err := gateDeferredVersion(root)
 	if err != nil {
-		t.Fatalf("read CHANGELOG.md: %v", err)
+		t.Fatalf("this checkout cannot name its own release, so release_version would read no version either: %v", err)
 	}
-	m := gateDeferredWireVersionHeading.FindSubmatch(data)
-	if m == nil {
-		t.Fatalf("CHANGELOG.md carries no `## [X.Y.Z]` heading; release_version would read no version either")
-	}
-	return "v" + string(m[1])
+	return version
 }
 
 // gateDeferredWireStash moves the real checkout's gate/deferred.json aside for
@@ -158,6 +173,47 @@ func TestGateDeferredWireFanoutNoticesAPreviousReleasesLedger(t *testing.T) {
 	}
 	if !strings.Contains(out, "round-one") {
 		t.Errorf("the notice does not say these findings are round one's input:\n%s", out)
+	}
+}
+
+// TestGateDeferredWireFanoutSaysThereIsNothingToTriage is the empty-ledger case,
+// which is a previous release that deferred nothing — `"findings": []`, the
+// deliberate shape gateWriteDeferred emits so that "deferred nothing" and "never
+// wrote the file" are different bytes.
+//
+// It gets ONE LINE and not the notice. There is nothing in the file for round one
+// to triage, so printing the triage instruction would send a maintainer to read an
+// empty list on every fan-out of every round until somebody deleted it — and a
+// notice that is wrong most of the times it fires is one people learn to scroll
+// past, which costs the notice its whole value on the round where it is right. The
+// line still names the release and the file, because a stale tracked artifact is
+// worth one sentence and deleting it is the only action available.
+func TestGateDeferredWireFanoutSaysThereIsNothingToTriage(t *testing.T) {
+	root := surfaceRepoRoot(t)
+	gateFanoutStashRecord(t, root)
+	gateDeferredWireStash(t, root)
+
+	previous := gateDeferredWireCurrentVersion(t, root) + "-a-previous-release"
+	path := filepath.Join(root, filepath.FromSlash(gateDeferredFile))
+	if err := os.WriteFile(path, []byte(gateDeferredWireLedger(previous, 0)), 0o644); err != nil {
+		t.Fatalf("write the fixture ledger: %v", err)
+	}
+
+	out, code := gateFanoutRunHarness(t, "", "fanout", "--root", root, "--tree", strings.Repeat("a", 40))
+
+	if code != 5 {
+		t.Fatalf("fanout exited %d, want 5 (the producer's own refusal on an object name that names nothing):\n%s", code, out)
+	}
+	if !strings.Contains(out, "deferred nothing") {
+		t.Errorf("fanout did not say that the ledger it found defers nothing, so a maintainer either reads a triage instruction over an empty list or hears nothing about a stale tracked file:\n%s", out)
+	}
+	for _, want := range []string{previous, gateDeferredFile} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the line does not name %q, so it cannot be acted on:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "round-one") {
+		t.Errorf("fanout printed the triage instruction over a ledger with nothing in it; there is no finding to hand to any surface:\n%s", out)
 	}
 }
 

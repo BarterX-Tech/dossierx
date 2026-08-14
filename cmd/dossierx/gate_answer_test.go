@@ -139,26 +139,46 @@ var gateAnswerPayloadKeys = []string{"findings", "subjects", "verdict"}
 // gateAnswerFindingKeys is the same rule one level down: the closed set of keys
 // ONE FINDING may carry, sorted for the same reason.
 //
-// WHAT AN AGENT OWNS ABOUT A FINDING IS FOUR THINGS. The rule it broke, the
+// WHAT AN AGENT OWNS ABOUT A FINDING IS FIVE THINGS. The rule it broke, the
 // consequence of breaking it, the failure scenario that consequence stands for,
-// and the detail. Everything else on gateFinding is the harness's:
+// the detail, and — optionally — the path the finding is ABOUT when that is not a
+// document this surface owns. The fifth is the only one that is a fact rather than
+// a judgement, and it is the only one an agent may state that moves the rank; it
+// can move it in one direction, upwards, which is what makes it safe to hand over.
+// See gateAnswerRank.
+//
+// Everything else on gateFinding is the harness's:
 //
 //	surface   — supplied from -answer-surface. It used to be the agent's, and the
 //	            recorder deliberately did not restamp it so that a finding filed
 //	            under the wrong surface stayed visible. That argument was about a
 //	            field the agent had to write anyway; now that the harness knows the
 //	            surface at filing time and refuses a payload that names one, there
-//	            is no wrong value left to preserve — the failure it protected
-//	            against cannot be expressed.
+//	            is no wrong VALUE left to preserve.
+//
+//	            WHAT IS LEFT, AND THIS COMMENT USED TO DENY IT. The sentence here
+//	            said the failure it protected against "cannot be expressed", and
+//	            that was wrong. An agent reading one surface can perfectly well
+//	            report a defect whose substance is about ANOTHER surface's document
+//	            — release-procedure reading docs/RELEASING.md and finding that it
+//	            describes a command the shipped binary does not have. That finding
+//	            files under the surface that READ it, which is correct and is what
+//	            makes it attributable; what it used to do next was rank at that
+//	            surface's reach_class, so a client-shipped defect reported by a
+//	            maintainer-class reader ranked P2 and was deferred, with nothing
+//	            anywhere naming the document it was about. `about` is the mitigation
+//	            and not a cure: an agent that names the path gets the finding ranked
+//	            at the higher of the two classes, and an agent that names nothing
+//	            leaves the residue exactly where it was.
 //	digest    — derived from the finding's own text, and hashing an agent-supplied
 //	            one would let a payload choose which ruling it matches.
-//	priority  — derived from the surface's reach_class and the consequence below.
-//	            An agent that could write it would be choosing whether its own
-//	            finding stops the release.
+//	priority  — derived from the surface's reach_class, the consequence below, and
+//	            the reach_class of whatever `about` names. An agent that could write
+//	            it would be choosing whether its own finding stops the release.
 //	severity  — GONE. It is named in the refusal rather than silently unknown,
 //	            because a runner ported from the previous schema writes it, and
 //	            "unknown key" is a worse message than "that field was replaced".
-var gateAnswerFindingKeys = []string{"consequence", "detail", "failure_scenario", "rule"}
+var gateAnswerFindingKeys = []string{"about", "consequence", "detail", "failure_scenario", "rule"}
 
 // gateAnswerFindingProblems refuses every key in one finding the agent does not
 // own, naming them all rather than the first.
@@ -283,6 +303,32 @@ func gateAnswerReadPayload(surface, path string) (gateAnswerPayload, error) {
 // was filed under, and the priority the matrix gives for that surface's
 // reach_class crossed with the agent's own consequence.
 //
+// AND THE BORROWED-DOCUMENT CASE, which is what `about` is for. A finding ranks at
+// the READING surface's reach_class, and that is wrong whenever the defect's
+// substance is about a document some other surface owns: release-procedure is
+// maintainer-class, so an acts-wrongly defect it reports in a file owned by
+// binary-and-viewer — client-shipped — ranked P2 and was deferred, when the same
+// defect reported by the surface that owns the file is a P0. An agent may name the
+// path in `about`, and the finding then ranks at whichever of the two reach classes
+// gives the HIGHER priority.
+//
+// WHY A LEVER AN AGENT PULLS IS SAFE HERE, when the whole point of this design is
+// that the agent does not choose its own rank. Because it only ever RAISES. The
+// crossing is a max over two classes, both of them read out of the reviewed
+// manifest, so the worst an agent can do with `about` — by naming the wrong file,
+// by naming a file it happens to have read, by naming nothing at all — is stop the
+// release over something that was going to be deferred. It cannot lower a rank,
+// cannot reach a class the manifest does not declare, and cannot invent one: an
+// `about` that resolves to no surface is REFUSED, because a path nobody owns is
+// either a typo or a file that moved, and both are the agent's to fix before this
+// answer lands.
+//
+// An `about` whose owner would rank LOWER is ignored, silently and by design. The
+// reading surface's class is a fact about where the finding was filed, not a claim
+// anybody made, and there is nothing for a refusal to tell the agent to do about it
+// — "you named a document that matters less than the one you were reading" is not a
+// defect in the answer. Refusing it would only teach agents to leave the key off.
+//
 // IT REFUSES RATHER THAN RANKS ANYTHING IT CANNOT LOOK UP, and the three ways
 // that happens are kept as three separate messages because they are three
 // different people's work. A consequence outside the closed set and an empty
@@ -303,13 +349,31 @@ func gateAnswerReadPayload(surface, path string) (gateAnswerPayload, error) {
 // about the producer that gateStage3ValidateAnswer reports in its own words, and
 // a rank step that turned it into an empty list would answer that refusal before
 // it could be made.
-func gateAnswerRank(root, surface string, findings *[]gateFinding) (*[]gateFinding, error) {
+func gateAnswerRank(root, surface string, findings *[]gateFinding, tracked []string) (*[]gateFinding, error) {
 	if findings == nil {
 		return nil, nil
 	}
 	classes, err := gateSurfaceReachClasses(root)
 	if err != nil {
 		return nil, fmt.Errorf("the reach class of surface %q could not be read, so no finding in this answer can be ranked: %w", surface, err)
+	}
+
+	// THE OWNERSHIP MAP IS BUILT ONLY IF SOMETHING ASKS FOR IT. It reads the
+	// manifest and walks the tracked set, and gateSurfaceDocuments refuses a
+	// manifest whose surface owns no tracked file — a refusal that is right where it
+	// lives and would be gratuitous here, over an answer whose findings name no
+	// document at all. So an answer with no `about` in it ranks exactly as it did
+	// before this key existed, including on a tree where that resolution would fail.
+	var owners map[string]string
+	for _, f := range *findings {
+		if strings.TrimSpace(f.About) == "" {
+			continue
+		}
+		owners, err = gateDocumentOwners(root, tracked)
+		if err != nil {
+			return nil, fmt.Errorf("a finding in the answer for surface %q names the document it is about, and which surface owns that document could not be resolved, so the finding cannot be ranked: %w", surface, err)
+		}
+		break
 	}
 
 	ranked := make([]gateFinding, 0, len(*findings))
@@ -347,6 +411,36 @@ func gateAnswerRank(root, surface string, findings *[]gateFinding) (*[]gateFindi
 			ranked = append(ranked, f)
 			continue
 		}
+
+		// THE MAX, and it is a max rather than an override: whichever of the two
+		// classes ranks this consequence higher wins. See the function comment for
+		// why that direction is the whole safety argument.
+		if about := strings.TrimSpace(f.About); about != "" {
+			owner, owned := owners[about]
+			if !owned {
+				problems = append(problems, fmt.Sprintf("finding %d is about %q, and no surface in %s owns that path. An about that resolves to nothing ranks nothing — name the tracked file, or drop the key. A path that has moved, a path outside the repository and a typo all arrive here identically, and ranking the finding as though the key were absent would silently discard the one thing that raises it",
+					i, about, gateManifestFile))
+				ranked = append(ranked, f)
+				continue
+			}
+			ownerClass, declared := classes[owner]
+			if !declared {
+				problems = append(problems, fmt.Sprintf("finding %d is about %q, which surface %q owns, and %s declares no reach_class for that surface — so the half of the priority that says how far the defect travels cannot be read. Add one of %s to that surface's entry",
+					i, about, owner, gateManifestFile, strings.Join(gateReachClasses, ", ")))
+				ranked = append(ranked, f)
+				continue
+			}
+			ownerPriority, ownerErr := gatePriorityFor(ownerClass, f.Consequence)
+			if ownerErr != nil {
+				problems = append(problems, fmt.Sprintf("finding %d is about %q, owned by surface %q, and could not be ranked against that surface: %v", i, about, owner, ownerErr))
+				ranked = append(ranked, f)
+				continue
+			}
+			if gatePriorityRank[ownerPriority] < gatePriorityRank[priority] {
+				priority = ownerPriority
+			}
+		}
+
 		f.Priority = priority
 		ranked = append(ranked, f)
 	}
@@ -424,7 +518,7 @@ func gateAnswerRecord(root, surface, payloadPath, checkoutTree string, tracked [
 	// is computed; the reach_class lookup is the tree's state and is asked here
 	// too, because a finding nobody can prioritize is not a smaller finding and
 	// the operator should hear about the manifest before they hear about the run.
-	ranked, err := gateAnswerRank(root, surface, payload.Findings)
+	ranked, err := gateAnswerRank(root, surface, payload.Findings, tracked)
 	if err != nil {
 		return gateStage3Answer{}, err
 	}

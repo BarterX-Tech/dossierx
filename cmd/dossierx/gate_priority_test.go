@@ -4,9 +4,14 @@
 //
 // WHY IT EXISTS. The gate's rule was that every finding blocks and a named human
 // clears the ones that should not. That is the right rule for a record and the
-// wrong rule for a release: the v0.5.2 rounds produced fifty-eight findings, and
-// a cosmetic line in a maintainer-only document stopped the release exactly as
-// hard as a wrong install command in the README. The two moves left were to fix
+// wrong rule for a release: by round six the v0.5.2 gate had accumulated 219
+// findings — 39, 31, 24, 18 and 58 over the first five rounds — while the band that
+// actually reaches a user, a client-shipped surface where the defect makes a reader
+// ACT wrongly, sat flat at four to six of them every round, buried in the same
+// undifferentiated pile. A cosmetic line in a maintainer-only document stopped the
+// release exactly as hard as a wrong install command in the README, and a
+// maintainer scanning for what mattered was doing by eye what the record should
+// have been doing for them. The two moves left were to fix
 // everything or to spend a human's ruling on everything, and the second one is how
 // an override record turns into a rubber stamp — the third property
 // gate_override_test.go names ("harder to write than a fix") survives only while
@@ -30,8 +35,10 @@
 // The split is the whole defence. A single agent-written word — the old
 // `severity` — is a release-blocking decision made by the party whose work is
 // under review, in free text nothing could check. Crossing a closed agent choice
-// with a reviewed declaration means an agent can move a finding one row and never
-// one column, and moving the column is a diff somebody reviews.
+// with a reviewed declaration means an agent can move a finding one COLUMN and
+// never one ROW — the columns are the consequence, which is the agent's, and the
+// rows are the reach classes, which are the manifest's — and moving a finding to
+// another row takes an edit to surfaces.yaml, which is a diff somebody reviews.
 //
 // WHAT THE MATRIX SAYS, and it is a judgement rather than an arithmetic:
 //
@@ -60,6 +67,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -85,8 +93,17 @@ const (
 
 // The reach classes surfaces.yaml may declare. `process` is reserved for surfaces
 // internal to the gate itself and no surface carries it today; it is in the set
-// because the manifest's own header declares it, and a vocabulary the manifest
-// states and the code does not accept would refuse the first surface to use it.
+// because the manifest states it, and a vocabulary the manifest states and the
+// code does not accept would refuse the first surface to use it.
+//
+// WHERE THE MANIFEST STATES IT, precisely, because this comment said "its own
+// header" and that is not true: the four values and the sentence reserving
+// `process` are an INLINE comment on the `readme` entry — the first surface in the
+// file — and not part of the file's header at all. A vocabulary declared beside one
+// entry reads as a note about that entry, and the day `readme` is renamed or moved
+// the declaration for all thirteen surfaces goes with it. It belongs in the header,
+// beside the pattern grammar; moving it is an edit to surfaces.yaml and that file
+// is not this lane's, so it is written down here instead of done.
 const (
 	gateReachClientShipped = "client-shipped"
 	gateReachConsumerDocs  = "consumer-docs"
@@ -104,6 +121,28 @@ const (
 	gatePriorityP2 = "P2"
 	gatePriorityP3 = "P3"
 )
+
+// gatePriorities is the closed set, in rank order rather than sorted — for these
+// four the two happen to coincide, and the order that means something is this one.
+var gatePriorities = []string{gatePriorityP0, gatePriorityP1, gatePriorityP2, gatePriorityP3}
+
+// gatePriorityRank orders the four: the LOWER the number, the higher the priority
+// and the more a release cares.
+//
+// It exists for exactly one comparison — a ruling that promotes a finding may only
+// RAISE its rank, never lower it (gateApplyOverrides) — and it is a table rather
+// than the string comparison `"P0" < "P1"` that happens to give the identical
+// answer today. That arithmetic is an accident of how the bands are spelled: a
+// band renamed, or a "P1b" inserted between two of them, leaves a lexical
+// comparison still answering and answering wrongly, with nothing red. A value the
+// table has no key for is not ranked at all, which is the same distinction
+// gatePriorityFor refuses on rather than defaults through.
+var gatePriorityRank = map[string]int{
+	gatePriorityP0: 0,
+	gatePriorityP1: 1,
+	gatePriorityP2: 2,
+	gatePriorityP3: 3,
+}
 
 // gateConsequences is the closed set, sorted so that a refusal naming it reads
 // the same on every run.
@@ -211,6 +250,52 @@ func gateSurfaceReachClasses(root string) (map[string]string, error) {
 			gateManifestFile, strings.Join(gateReachClasses, ", "), strings.Join(problems, "; "))
 	}
 	return out, nil
+}
+
+// ---------------------------------------------------------------------
+// the borrowed document: which surface owns the file a finding is about
+// ---------------------------------------------------------------------
+
+// gateDocumentOwners inverts gateSurfaceDocuments: every tracked file, mapped to
+// the one declared surface that owns it.
+//
+// IT REUSES THE GATE'S OWN RESOLUTION and does not re-implement the manifest's
+// pattern grammar. gateSurfaceDocuments is the one surface-to-files function in
+// this tree, and a second matcher — in Go, in awk, anywhere — would be a second
+// answer to "who owns this file", which is the two-procedures defect CLAUDE.md
+// names. It costs one manifest read and one pass over the tracked set, and it is
+// asked once per answer rather than once per finding.
+//
+// A FILE CLAIMED BY TWO SURFACES IS A REFUSAL. surfaces.yaml's exactly-one rule is
+// held by tests/surfaces_manifest_test.go and nothing in gateSurfaceDocuments
+// restates it, so an inverted map built by assignment would resolve a double claim
+// by whichever surface Go's map iteration reached last — a rank that is a function
+// of nothing about the tree. Both claimants are named, in sorted order, so the
+// message is the same on every run.
+func gateDocumentOwners(root string, tracked []string) (map[string]string, error) {
+	documents, err := gateSurfaceDocuments(root, tracked)
+	if err != nil {
+		return nil, err
+	}
+	owners := make(map[string]string, len(tracked))
+	var problems []string
+	for surface, files := range documents {
+		for _, file := range files {
+			if other, taken := owners[file]; taken {
+				pair := []string{surface, other}
+				sort.Strings(pair)
+				problems = append(problems, fmt.Sprintf("%s is claimed by both %s and %s", file, pair[0], pair[1]))
+				continue
+			}
+			owners[file] = surface
+		}
+	}
+	if len(problems) > 0 {
+		sort.Strings(problems)
+		return nil, fmt.Errorf("%s claims a file for more than one surface, so the surface a finding is about cannot be resolved: %s. The exactly-one rule is what makes ownership answerable at all; resolving it by whichever entry was read last would rank a finding against a surface nobody chose",
+			gateManifestFile, strings.Join(problems, "; "))
+	}
+	return owners, nil
 }
 
 // ---------------------------------------------------------------------
@@ -346,6 +431,177 @@ func gateReadDeferred(root string) (gateDeferredLedger, []byte, error) {
 }
 
 // ---------------------------------------------------------------------
+// the projector: who actually writes the ledger, and when
+// ---------------------------------------------------------------------
+
+// PRESENCE IS THE SWITCH, for TestGateAnswerRecord's reason: a driver expanding an
+// unset shell variable gives a flag EMPTY, and a value check cannot tell that from
+// the flag never having been passed — under which this projector writes nothing,
+// `go test` exits 0, and the operator believes the round was projected.
+var gateDeferredProjectOut = flag.Bool("deferred-project", false, "project this run's recorded answers into gate/deferred.json. See TestGateDeferredProject")
+
+// gateDeferredProject writes the ledger for the round whose answers are on disk,
+// or refuses and writes nothing.
+//
+// WHY IT EXISTS, WHEN gateRecordReceipt ALREADY WRITES THE FILE. Because that call
+// is the DRIVER's, in D1, and the driver runs once, at the end, under a human's
+// authorization to publish. Four documents describe the ledger as this release's
+// per-round record and the next release's round-one input, and both fix-wave
+// readers found the same two consequences of it having only that one writer: the
+// notice in scripts/gate-stage2/run.sh fires on every fan-out of every round
+// because nothing between rounds ever refreshes the file, and the recovery it
+// prints — "leave it, the next recording overwrites it" — names a recording that
+// does not happen until the release is already being published. So the ledger is
+// projected here, per round, and D1's write becomes a RE-PROJECTION of the same
+// answers through the same comparator (gateOrderFindings) rather than the only one.
+//
+// IT COVERS A WHOLE ROUND OR NONE OF IT. It goes through gateStage3Collect, which
+// asks the manifest what the run was supposed to cover and refuses a record with a
+// hole in it, naming every surface that has not answered. That refusal is inherited
+// on purpose and is not a cost to be worked around: a projection over eight of
+// thirteen surfaces is not a smaller projection, it is a file that states what this
+// release deferred while five surfaces have not said anything yet — and it would be
+// read, by the next release's round one, as the whole of it.
+//
+// IT IS READ-ONLY ABOUT EVERYTHING EXCEPT THE LEDGER. It resolves nothing, judges
+// nothing and clears nothing; the human's rulings reach it only as PROMOTIONS, for
+// gateRecordReceipt's reason — a finding raised out of P2/P3 is not deferred, and a
+// finding a ruling CLEARED is still deferred, because clearing decides the verdict
+// and not the ledger.
+func gateDeferredProject(root, checkoutTree string, tracked []string) (gateDeferredLedger, error) {
+	// THE RUN FIRST. Everything below is about answers, and an answer that cannot
+	// name the fan-out that produced it was found on disk rather than produced —
+	// gateReadFanout's four refusals, all of which mean "fan out again for this
+	// tree" and none of which this function should restate.
+	fanout, err := gateReadFanout(root, checkoutTree)
+	if err != nil {
+		return gateDeferredLedger{}, err
+	}
+	declared, err := gateDeclaredSurfaces(root)
+	if err != nil {
+		return gateDeferredLedger{}, fmt.Errorf("the declared surfaces could not be read from %s, so nothing can say what this round was supposed to cover: %w", gateManifestFile, err)
+	}
+	keys, err := gateStage2Plan(root, fanout.Tree, tracked)
+	if err != nil {
+		return gateDeferredLedger{}, fmt.Errorf("the keys for tree %s could not be computed, so no answer on disk can be held to the tree it was given about: %w", fanout.Tree, err)
+	}
+	vocabulary, err := gateStage3ReadVocabulary(root)
+	if err != nil {
+		return gateDeferredLedger{}, err
+	}
+
+	// THE COLLECTOR'S OWN PATH, not a directory walk of gate/answers. A projector
+	// that read whatever files were there would project a previous round's answers
+	// whenever this round had not finished, which is the exact substitution
+	// gateStage3StrayAnswers exists to catch — and it would do it into a tracked
+	// file the next release reads as fact.
+	collected, err := gateStage3Collect(gateStage3Inputs{
+		Root:       root,
+		Run:        fanout.Run,
+		Declared:   declared,
+		Current:    keys,
+		Plan:       gateRerunPlan{Rerun: declared},
+		Vocabulary: vocabulary,
+	})
+	if err != nil {
+		return gateDeferredLedger{}, fmt.Errorf("%s is projected over a whole round or not at all: a ledger built from the surfaces that happen to have answered states what this release deferred while the rest have said nothing, and the next release's round one reads it as the whole of it. Record the missing answers and project again:\n%w",
+			gateDeferredFile, err)
+	}
+
+	var findings []gateFinding
+	for _, a := range collected {
+		if a.Findings == nil {
+			// Unreachable: gateStage3ValidateAnswer refuses an answer with no
+			// findings key, inside the collection above. It is written down because
+			// a nil dereference here would be a panic in place of that refusal.
+			return gateDeferredLedger{}, fmt.Errorf("%w: surface %q's collected answer carries no findings list, which gateStage3ValidateAnswer should already have refused", errGateUncheckable, a.Surface)
+		}
+		findings = append(findings, (*a.Findings)...)
+	}
+
+	// THE HUMAN'S RULINGS, for the promotions only. An unreadable record is a
+	// refusal and never an empty one, exactly as at recording time.
+	overrides, err := gateLoadOverrides(root)
+	if err != nil {
+		return gateDeferredLedger{}, err
+	}
+
+	version, err := gateDeferredVersion(root)
+	if err != nil {
+		return gateDeferredLedger{}, err
+	}
+	ordered := gatePromoted(gateOrderFindings(findings), gateFindingPromotions(overrides))
+	if err := gateWriteDeferred(root, version, ordered); err != nil {
+		return gateDeferredLedger{}, err
+	}
+	return gateDeferredLedger{Version: version, Findings: gateDeferredFindings(ordered)}, nil
+}
+
+// gateDeferredVersion is the release this tree says it is, read the way
+// scripts/gate-stage2/run.sh's release_version reads it: the newest `## [X.Y.Z]`
+// heading in CHANGELOG.md, with the `v` the ledger spells it with.
+//
+// IT MUST AGREE WITH THAT SHELL FUNCTION or the notice this projector exists to
+// quieten never goes quiet: deferred_notice speaks exactly when the ledger's
+// version differs from release_version's answer, so a projector writing the version
+// some other way would leave every round's fan-out announcing its own ledger back
+// at it.
+func gateDeferredVersion(root string) (string, error) {
+	path := filepath.Join(root, gateDriverChangelogFile)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("%s could not be read, so this tree cannot say which release the ledger would be a projection of: %w", gateDriverChangelogFile, err)
+	}
+	m := gateDeferredWireVersionHeading.FindSubmatch(raw)
+	if m == nil {
+		return "", fmt.Errorf("%s declares no `## [X.Y.Z]` release heading, so neither this projection nor release_version can name the release these findings were deferred by. A ledger with no version cannot be told from a previous release's in a diff", gateDriverChangelogFile)
+	}
+	return "v" + string(m[1]), nil
+}
+
+// TestGateDeferredProject is how a round projects its answers into the ledger:
+//
+//	go test ./cmd/dossierx -run '^TestGateDeferredProject$' -count=1 -args -deferred-project
+//
+// With the flag absent it projects nothing and asserts nothing, and it RETURNS
+// rather than skipping — a SKIP line in a job log is what a maintainer reads as
+// "checked", and there is nothing here to check. -count=1 is part of the
+// invocation for the reason gate_answer_test.go's header measures and records: it
+// is defence in depth against a caching rule that widens later, not the thing
+// holding the door today.
+func TestGateDeferredProject(t *testing.T) {
+	var given bool
+	flag.CommandLine.Visit(func(f *flag.Flag) {
+		if f.Name == "deferred-project" {
+			given = true
+		}
+	})
+	if !given {
+		t.Logf("no -deferred-project given; this test is the gate's deferred-ledger projector, not a correctness check (the tests in this file are that, and they have already run)")
+		return
+	}
+	if !*gateDeferredProjectOut {
+		t.Fatalf("-deferred-project was given as false. This flag is the switch that writes the projection, so a caller that passed it meant to write one; %s would be left holding whatever the last round put there while `go test` exited 0", gateDeferredFile)
+	}
+
+	root := surfaceRepoRoot(t)
+	// The checkout's own tree, resolved here and compared inside gateReadFanout. A
+	// git that cannot answer is fatal rather than an empty string: an empty answer
+	// compares unequal to every recorded tree, and the refusal would read as a
+	// stale fan-out rather than as a check that could not run.
+	checkoutTree, err := gateTreeSHA(root, "HEAD")
+	if err != nil {
+		t.Fatalf("the tree of the checkout under %s could not be resolved, so nothing can say whether the answers on disk belong to this release's run: %v", root, err)
+	}
+
+	ledger, err := gateDeferredProject(root, checkoutTree, surfaceTrackedFiles(t, root))
+	if err != nil {
+		t.Fatalf("refusing to project this round: %v", err)
+	}
+	t.Logf("projected %s for %s: %d deferred finding(s)", gateDeferredFile, ledger.Version, len(ledger.Findings))
+}
+
+// ---------------------------------------------------------------------
 // fixtures
 // ---------------------------------------------------------------------
 
@@ -411,8 +667,9 @@ func gatePriorityManifestClasses(t *testing.T, root string, classes map[string]s
 // WHY A FIXTURE FILLS AT ALL. surfaces.yaml is another lane's file, and a test
 // that only passes once that lane has classified all thirteen surfaces is a test
 // that reds for somebody else's reason. Filling makes every recording fixture
-// self-contained. The value it fills with is `process`, which the manifest's own
-// header says no surface carries yet — so a class that came from this fixture is
+// self-contained. The value it fills with is `process`, which the manifest says no
+// surface carries yet (in the inline note on its `readme` entry — see
+// gateReachProcess) — so a class that came from this fixture is
 // visibly the fixture's, and a test that meant to assert a real one cannot pass by
 // accident. Every row that cares about the priority sets the class explicitly.
 func gatePriorityFillManifest(t *testing.T, root string) map[string]string {
@@ -782,6 +1039,159 @@ func TestGatePriorityMatrixIsActuallyConsultedByTheRecordingPath(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
+// the borrowed document
+// ---------------------------------------------------------------------
+
+// gatePriorityAboutSurfaces are the two real surfaces the rows below cross, named
+// as constants so that a manifest edit which retires one of them reds here with
+// the reason rather than silently making every row about a surface that ranks the
+// same both ways.
+const (
+	// docs/RELEASING.md's surface: maintainer, so an acts-wrongly finding on it is
+	// P2 and does not stop the release.
+	gatePriorityAboutReader = "release-procedure"
+	// cmd/dossierx/ and internal/: client-shipped, where the same consequence is P0.
+	gatePriorityAboutOwner = "binary-and-viewer"
+	// A file the owning surface really claims, so the resolution under test is the
+	// manifest's own pattern grammar and not a literal this test agreed with itself
+	// about.
+	gatePriorityAboutFile = "cmd/dossierx/main.go"
+	// A file the READING surface owns, for the row where `about` would lower.
+	gatePriorityAboutReaderFile = "docs/RELEASING.md"
+)
+
+// TestGateAnswerRankRanksAtTheHigherOfTheTwoSurfaces is the shopping hole, closed.
+//
+// THE DEFECT IT IS ABOUT. A finding ranks at the reach class of the surface whose
+// agent READ it, and that surface is not always the one whose document the finding
+// is really about. release-procedure is maintainer-class; when its agent finds that
+// docs/RELEASING.md documents a command the shipped binary does not have, the
+// defect is in the binary — a client-shipped surface — and the finding ranked P2
+// and was deferred. The same defect found by binary-and-viewer's own agent is a P0.
+// A rank that depends on which agent happened to notice is not a rank.
+//
+// WHY THE ROWS BELOW ARE THE WHOLE PROPERTY. `about` may only raise, so there are
+// exactly four things it can do: raise, do nothing because it is absent, do nothing
+// because the surface it names ranks lower, or fail to resolve. The third is
+// SILENT and the fourth is a REFUSAL, and that asymmetry is the design — the
+// reading surface's class is a fact about where the finding was filed, so there is
+// nothing to tell an agent about it, while a path that resolves to nothing is a
+// typo or a moved file and is the agent's to fix.
+func TestGateAnswerRankRanksAtTheHigherOfTheTwoSurfaces(t *testing.T) {
+	// The two classes the rows rest on, asserted against the REAL manifest so that
+	// reclassifying either surface reds here rather than quietly turning every row
+	// into a no-op.
+	repo := surfaceRepoRoot(t)
+	classes, err := gateSurfaceReachClasses(repo)
+	if err != nil {
+		t.Fatalf("%s declares a reach class the matrix cannot use: %v", gateManifestFile, err)
+	}
+	if classes[gatePriorityAboutReader] != gateReachMaintainer || classes[gatePriorityAboutOwner] != gateReachClientShipped {
+		t.Fatalf("this test crosses %s (%s, expected %s) with %s (%s, expected %s); with both on the same class the rows below assert nothing",
+			gatePriorityAboutReader, classes[gatePriorityAboutReader], gateReachMaintainer,
+			gatePriorityAboutOwner, classes[gatePriorityAboutOwner], gateReachClientShipped)
+	}
+
+	rank := func(t *testing.T, about string) (gateFinding, error) {
+		t.Helper()
+		root, tracked, _ := gatePriorityFixture(t, map[string]string{
+			gatePriorityAboutReader: gateReachMaintainer,
+			gatePriorityAboutOwner:  gateReachClientShipped,
+		})
+		payload := gateAnswerHonestPayload(t, root)
+		payload["verdict"] = gateVerdictFailed
+		payload["findings"] = []any{gateAnswerFindingPayload(func(f map[string]any) {
+			f["consequence"] = gateConsequenceActsWrongly
+			if about != "" {
+				f["about"] = about
+			}
+		})}
+		written, err := gateAnswerRecord(root, gatePriorityAboutReader, gateAnswerWritePayload(t, payload), gateStage2FixtureTree, tracked)
+		if err != nil {
+			return gateFinding{}, err
+		}
+		return (*written.Findings)[0], nil
+	}
+
+	t.Run("an about naming a client-shipped document raises a maintainer reading", func(t *testing.T) {
+		got, err := rank(t, gatePriorityAboutFile)
+		if err != nil {
+			t.Fatalf("the recorder refused a finding naming a tracked file: %v", err)
+		}
+		if got.Priority != gatePriorityP0 {
+			t.Fatalf("an acts-wrongly finding read on a %s surface and about %s — owned by %s, which is %s — ranked %s. The matrix says %s for that owner, and the difference is whether a defect in the shipped binary stops this release or is deferred because a maintainer-class agent is the one who noticed it",
+				gateReachMaintainer, gatePriorityAboutFile, gatePriorityAboutOwner, gateReachClientShipped, got.Priority, gatePriorityP0)
+		}
+		// The path survives onto the record. A rank raised by a document nobody can
+		// name afterwards is a rank a reader cannot check.
+		if got.About != gatePriorityAboutFile {
+			t.Errorf("the recorded finding names %q as the document it is about; the payload said %q, and without it a human reading the receipt cannot tell why this one ranks above its surface's class", got.About, gatePriorityAboutFile)
+		}
+	})
+
+	t.Run("no about at all ranks exactly as before", func(t *testing.T) {
+		got, err := rank(t, "")
+		if err != nil {
+			t.Fatalf("the recorder refused a finding that names no document: %v", err)
+		}
+		if got.Priority != gatePriorityP2 {
+			t.Errorf("an acts-wrongly finding on a %s surface with no `about` ranked %s; the matrix says %s, and a key that changes the rank when it is ABSENT would re-rank every finding this gate has ever recorded",
+				gateReachMaintainer, got.Priority, gatePriorityP2)
+		}
+		if got.About != "" {
+			t.Errorf("the recorder invented an `about` of %q for a payload that named none", got.About)
+		}
+	})
+
+	t.Run("an about that would lower is ignored in favour of the reading surface", func(t *testing.T) {
+		// The reverse crossing: a client-shipped agent naming a maintainer-class
+		// document. Read on `readme`, about docs/RELEASING.md.
+		root, tracked, _ := gatePriorityFixture(t, map[string]string{
+			"readme":                gateReachClientShipped,
+			gatePriorityAboutReader: gateReachMaintainer,
+		})
+		payload := gateAnswerHonestPayload(t, root)
+		payload["verdict"] = gateVerdictFailed
+		payload["findings"] = []any{gateAnswerFindingPayload(func(f map[string]any) {
+			f["consequence"] = gateConsequenceActsWrongly
+			f["about"] = gatePriorityAboutReaderFile
+		})}
+		written, err := gateAnswerRecord(root, "readme", gateAnswerWritePayload(t, payload), gateStage2FixtureTree, tracked)
+		if err != nil {
+			t.Fatalf("the recorder refused a finding whose `about` names a lower-ranking surface; that is not a defect in the answer, it is a document that matters less than the one being read: %v", err)
+		}
+		if got := (*written.Findings)[0]; got.Priority != gatePriorityP0 {
+			t.Fatalf("a finding read on a client-shipped surface ranked %s once it named a %s document. `about` is a max and never an assignment: if it could lower, an agent could defer its own client-shipped finding by naming any maintainer file it had read",
+				got.Priority, gateReachMaintainer)
+		}
+	})
+
+	t.Run("an about that resolves to nothing is refused", func(t *testing.T) {
+		for _, about := range []string{
+			// A path no surface claims because nothing is there.
+			"docs/a-document-that-was-never-written.md",
+			// And the sharper one: a tracked file that IS in the tree and is
+			// declared OUT OF SCOPE, so no reviewing surface owns it. The rank has
+			// no reach class to come from, and defaulting it to the reading
+			// surface's would silently discard the one thing the key does.
+			"Makefile",
+		} {
+			t.Run(about, func(t *testing.T) {
+				_, err := rank(t, about)
+				if err == nil {
+					t.Fatalf("a finding about %q was recorded. A path that has moved, a path outside the manifest and a typo all arrive identically, and ranking as though the key were absent discards the raise the agent was reaching for", about)
+				}
+				for _, want := range []string{"An about that resolves to nothing ranks nothing", about} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("the refusal does not say %q:\n%v", want, err)
+					}
+				}
+			})
+		}
+	})
+}
+
+// ---------------------------------------------------------------------
 // what blocks, what defers, and what a ruling can reach
 // ---------------------------------------------------------------------
 
@@ -941,8 +1351,10 @@ func TestGateDeferredFindingsDoNotBlockAndAreStillOnTheReceipt(t *testing.T) {
 // Byte-stability is not tidiness. The receipt's whole argument is that a re-run
 // over an unchanged tree reproduces the identical document — that is why a
 // diverged branch wedges and why the merge is the only way out. A ledger written
-// beside it whose bytes moved on every run would make every gate re-run a dirty
-// tree, and the landing script's stray check refuses on exactly that.
+// beside it whose bytes moved on every run would leave every gate re-run holding a
+// modified tracked file, and the release's pre-tag phase requires `git status
+// --porcelain` to be empty — so a ledger that churned would refuse the publish it
+// is supposed to be a footnote to.
 func TestGateDeferredLedgerIsAProjectionAndNotAnAppendLog(t *testing.T) {
 	work := gateFixtureRepo(t)
 	deferred := []gateFinding{
@@ -981,6 +1393,155 @@ func TestGateDeferredLedgerIsAProjectionAndNotAnAppendLog(t *testing.T) {
 	}
 }
 
+// gatePriorityProjectRound records one answer for every declared surface except
+// the ones named, so that the projector's "a whole round or none of it" refusal has
+// a half-finished round to refuse.
+//
+// Every answer carries one COSMETIC finding, which ranks P2 or P3 on every reach
+// class in the matrix — so the ledger this produces is non-empty whatever classes
+// the fixture's manifest ended up with, and a row that wanted a blocking finding
+// asks for one explicitly.
+func gatePriorityProjectRound(t *testing.T, root string, tracked []string, declared []string, skip map[string]bool, extra map[string]map[string]any) {
+	t.Helper()
+	for _, surface := range declared {
+		if skip[surface] {
+			continue
+		}
+		findings := []any{gateAnswerFindingPayload(func(f map[string]any) {
+			f["rule"] = "wording-drift-in-" + surface
+			f["consequence"] = gateConsequenceCosmetic
+		})}
+		if more, ok := extra[surface]; ok {
+			findings = append(findings, more)
+		}
+		payload := gateAnswerHonestPayload(t, root)
+		payload["verdict"] = gateVerdictFailed
+		payload["findings"] = findings
+		if _, err := gateAnswerRecord(root, surface, gateAnswerWritePayload(t, payload), gateStage2FixtureTree, tracked); err != nil {
+			t.Fatalf("surface %q's answer was refused, so this round is incomplete for a reason no assertion below is about:\n%v", surface, err)
+		}
+	}
+}
+
+// TestGateDeferredProjectWritesTheBytesTheReceiptWould is the projector's whole
+// contract in one assertion: the ledger a ROUND projects and the ledger the
+// DRIVER's D1 records from the same findings are byte-identical.
+//
+// WHY THAT IS THE ASSERTION and not "the projector writes a plausible ledger".
+// gate/deferred.json is tracked, and the release's pre-tag phase requires
+// `git status --porcelain` to be empty. Two writers that disagree by one byte —
+// a different order, a different digest, a `null` where the other writes `[]` —
+// mean the driver's own recording dirties the tree at the last step of the
+// release, and the failure surfaces at the worst possible moment with nothing
+// naming its cause. One comparator, gateOrderFindings, is what rules that out, and
+// this is the test that would notice a second one appearing.
+func TestGateDeferredProjectWritesTheBytesTheReceiptWould(t *testing.T) {
+	root, tracked, _ := gateAnswerFixture(t)
+	declared, err := gateDeclaredSurfaces(root)
+	if err != nil {
+		t.Fatalf("declared surfaces: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(gateDeferredFile))); !os.IsNotExist(statErr) {
+		t.Fatalf("the fixture already holds a %s, so this test would compare a projection against a file it did not write", gateDeferredFile)
+	}
+
+	// readme is client-shipped in the real manifest, so an acts-wrongly finding on
+	// it is a P0 — which must be on the receipt and NOT in the ledger. Without it
+	// this test would pass over a projector that deferred everything it was handed.
+	gatePriorityProjectRound(t, root, tracked, declared, nil, map[string]map[string]any{
+		"readme": gateAnswerFindingPayload(func(f map[string]any) {
+			f["rule"] = "install-command-is-wrong"
+			f["consequence"] = gateConsequenceActsWrongly
+		}),
+	})
+
+	ledger, err := gateDeferredProject(root, gateStage2FixtureTree, tracked)
+	if err != nil {
+		t.Fatalf("the projector refused a complete round: %v", err)
+	}
+	version, err := gateDeferredVersion(root)
+	if err != nil {
+		t.Fatalf("this checkout cannot name its own release: %v", err)
+	}
+	if ledger.Version != version {
+		t.Errorf("the projection names release %q and this tree declares %q; deferred_notice compares exactly those two strings, so a projector that spells the version its own way leaves every round's fan-out announcing its own ledger back at it", ledger.Version, version)
+	}
+	if want := len(declared); len(ledger.Findings) != want {
+		t.Fatalf("the projection holds %d finding(s) over a round of %d surfaces each reporting one cosmetic finding plus one P0. Exactly the %d cosmetic ones are deferred:\n%+v", len(ledger.Findings), want, want, ledger.Findings)
+	}
+	for _, f := range ledger.Findings {
+		if f.Priority != gatePriorityP2 && f.Priority != gatePriorityP3 {
+			t.Errorf("%s carries a %s finding for %s/%s; a blocking finding filed in the ledger reads as one this release decided to live with", gateDeferredFile, f.Priority, f.Surface, f.Rule)
+		}
+	}
+	// NOW THE SAME FINDINGS THROUGH THE DRIVER'S PATH. They are read back off the
+	// answers rather than rebuilt, so "identical inputs" is a fact about this test
+	// rather than a claim it makes about two constructions it wrote separately.
+	var findings []gateFinding
+	verdicts := make([]gateSurfaceVerdict, 0, len(declared))
+	for _, surface := range declared {
+		a, loadErr := gateStage3LoadAnswer(root, surface)
+		if loadErr != nil {
+			t.Fatalf("read surface %q's answer back: %v", surface, loadErr)
+		}
+		findings = append(findings, (*a.Findings)...)
+		verdicts = append(verdicts, gateSurfaceVerdict{Surface: surface, Verdict: gateVerdictFailed, Fingerprint: "sha256:" + surface})
+	}
+
+	work := gateFixtureRepo(t)
+	if _, err := gateRecordReceipt(work, version, "release", verdicts, findings); err != nil {
+		t.Fatalf("record the receipt the driver would record from these answers: %v", err)
+	}
+
+	_, byProjector, err := gateReadDeferred(root)
+	if err != nil {
+		t.Fatalf("read the projected ledger: %v", err)
+	}
+	_, byReceipt, err := gateReadDeferred(work)
+	if err != nil {
+		t.Fatalf("read the recorded ledger: %v", err)
+	}
+	if string(byProjector) != string(byReceipt) {
+		t.Errorf("the round's projection and the driver's recording disagree about the same findings, so D1 rewrites a tracked file at the last step of the release:\nprojected:\n%s\nrecorded:\n%s", byProjector, byReceipt)
+	}
+}
+
+// TestGateDeferredProjectRefusesARoundThatHasNotFinished is the refusal the
+// projector inherits from gateStage3Collect, asserted here because the temptation
+// to relax it is specific and strong: a maintainer half way through a round wants
+// the ledger for the surfaces that have answered.
+//
+// They must not have it. gate/deferred.json is what the NEXT release's round one
+// reads as the whole of what this release deferred, and a projection over eight of
+// thirteen surfaces states that with nothing on its face to say five surfaces had
+// not spoken. A projection over half a round is not a smaller projection.
+func TestGateDeferredProjectRefusesARoundThatHasNotFinished(t *testing.T) {
+	root, tracked, _ := gateAnswerFixture(t)
+	declared, err := gateDeclaredSurfaces(root)
+	if err != nil {
+		t.Fatalf("declared surfaces: %v", err)
+	}
+	if len(declared) < 2 {
+		t.Fatalf("%s declares %d surface(s); leaving one unanswered would leave a round of nothing", gateManifestFile, len(declared))
+	}
+	missing := declared[len(declared)-1]
+	gatePriorityProjectRound(t, root, tracked, declared, map[string]bool{missing: true}, nil)
+
+	_, err = gateDeferredProject(root, gateStage2FixtureTree, tracked)
+	if err == nil {
+		t.Fatalf("a round with surface %q unanswered was projected. The file states what this release deferred, and the next release's round one reads it as the whole of it", missing)
+	}
+	if !strings.Contains(err.Error(), missing) {
+		t.Errorf("the refusal does not name the surface that has not answered, so the recovery is a search rather than a command:\n%v", err)
+	}
+	if !strings.Contains(err.Error(), "whole round") {
+		t.Errorf("the refusal does not say that a projection is whole-round or nothing, so it reads as a transient failure to retry:\n%v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(gateDeferredFile))); !os.IsNotExist(statErr) {
+		t.Errorf("a refused projection left a %s behind; a partial ledger on disk is exactly what the refusal exists to prevent", gateDeferredFile)
+	}
+}
+
 // TestGateUnrankedFindingBlocksAndSaysWhy pins the direction the exit rule errs
 // in for a finding no priority reached.
 //
@@ -1009,5 +1570,118 @@ func TestGateUnrankedFindingBlocksAndSaysWhy(t *testing.T) {
 	}
 	if len(ledger.Findings) != 0 {
 		t.Errorf("a finding nothing ranked was written to %s as deferred: %+v", gateDeferredFile, ledger.Findings)
+	}
+
+	// AND NO RULING REACHES IT EITHER, which is the hole this row closes. Three
+	// comments in this gate said an unranked finding always blocks, and an override
+	// naming one CLEARED it: the receipt above evaluated PASS with a named human's
+	// signature standing in for a classification nobody made. Neither direction is
+	// available — there is no band to clear and none to raise — so the record is
+	// refused and the producer stays visible.
+	t.Run("a ruling on an unranked finding is refused rather than applied", func(t *testing.T) {
+		for _, tc := range []struct {
+			name   string
+			mutate func(*gateOverride)
+		}{
+			{"a clearance", nil},
+			{"a promotion", func(o *gateOverride) { o.PromoteTo = gatePriorityP0 }},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ruled := receipt
+				ruled.Overrides = []gateOverride{gateOverrideFor(receipt.Findings[0], tc.mutate)}
+
+				verdict, err := ruled.evaluate(gatePriorityDeclared, gatePriorityCurrent)
+				if verdict != gateVerdictFailed {
+					t.Fatalf("a finding nothing ranked was %s by a ruling and the release passed. A signature is not a classification: nothing said this defect was small, and the producer that filed it unranked is now invisible", tc.name)
+				}
+				for _, want := range []string{"carries no priority", "producer to fix"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("the refusal does not say %q, so whoever wrote the ruling is told their entry did nothing without being told why:\n%v", want, err)
+					}
+				}
+			})
+		}
+	})
+}
+
+// TestGatePromotedFindingBlocksAndCannotBeRuledAway is the other direction of the
+// override record, and the one the CHANGELOG has claimed since this design landed:
+// "the matrix is a default, never a ceiling — a human ruling can still promote any
+// finding past what it computed, P0 included."
+//
+// It is here rather than in gate_override_test.go for that file's own stated
+// reason: every fixture there is P1, so that its refusals fire on a finding a
+// ruling is otherwise allowed to clear. This one is about the cells — a P2 that a
+// human has judged to be a P0 — so it lives with the matrix.
+//
+// The second half is what makes a promotion worth having. A promoted P0 lands in
+// the one cell no ruling reaches, so it cannot then be cleared: the ruling that
+// raised it is the last word until the tree is fixed.
+func TestGatePromotedFindingBlocksAndCannotBeRuledAway(t *testing.T) {
+	work := gateFixtureRepo(t)
+	f := gatePriorityFinding("readme", "stale-command-count", gateConsequenceCosmetic, gatePriorityP2)
+	receipt := gatePriorityReceipt(t, work, "v0.5.2", f)
+
+	// Unpromoted, it is deferred and the release goes out.
+	if verdict, err := receipt.evaluate(gatePriorityDeclared, gatePriorityCurrent); verdict != gateVerdictPass {
+		t.Fatalf("the P2 this test promotes did not pass unpromoted, so the promotion below would prove nothing: %s %v", verdict, err)
+	}
+
+	promotion := gateOverrideFor(receipt.Findings[0], func(o *gateOverride) {
+		o.PromoteTo = gatePriorityP0
+		o.Reason = "the count is quoted by the install script, so a reader who trusts it runs the wrong command"
+	})
+	promoted := receipt
+	promoted.Overrides = []gateOverride{promotion}
+
+	verdict, err := promoted.evaluate(gatePriorityDeclared, gatePriorityCurrent)
+	if verdict != gateVerdictFailed {
+		t.Fatalf("a P2 promoted to %s did not stop the release; a ruling that raises a rank and changes no outcome is a line in a file", gatePriorityP0)
+	}
+	if !strings.Contains(err.Error(), "P0/P1 finding(s) reached the report") || !strings.Contains(err.Error(), "stale-command-count") {
+		t.Errorf("the FAILED does not report the promoted finding as one of the blocking ones:\n%v", err)
+	}
+
+	// The finding is still on the receipt at the band the MATRIX gave it. What the
+	// agents reported and the matrix computed, and what the human then decided, are
+	// different questions and both stay readable.
+	if receipt.Findings[0].Priority != gatePriorityP2 {
+		t.Errorf("the promotion rewrote the receipt's own record of the finding to %q; the matrix computed %s, and a receipt that no longer says so cannot be read against the ruling that moved it", receipt.Findings[0].Priority, gatePriorityP2)
+	}
+
+	// And it is out of the ledger: a finding this release is stopping for is not a
+	// finding this release deferred.
+	if _, err := gateRecordReceipt(work, "v0.5.2", "release", []gateSurfaceVerdict{{Surface: "readme", Verdict: gateVerdictFailed, Fingerprint: "sha256:readme"}}, []gateFinding{f}); err != nil {
+		t.Fatalf("re-record the receipt with no override record on disk: %v", err)
+	}
+	if ledger, _, readErr := gateReadDeferred(work); readErr != nil || len(ledger.Findings) != 1 {
+		t.Fatalf("the unpromoted P2 is not in the ledger, so the assertion below would pass over a projection that defers nothing: %+v %v", ledger.Findings, readErr)
+	}
+	body, marshalErr := json.Marshal(struct {
+		Overrides []gateOverride `json:"overrides"`
+	}{[]gateOverride{promotion}})
+	if marshalErr != nil {
+		t.Fatalf("marshal the record: %v", marshalErr)
+	}
+	gateWrite(t, work, gateOverrideFile, string(body))
+	if _, err := gateRecordReceipt(work, "v0.5.2", "release", []gateSurfaceVerdict{{Surface: "readme", Verdict: gateVerdictFailed, Fingerprint: "sha256:readme"}}, []gateFinding{f}); err != nil {
+		t.Fatalf("record the receipt with the promotion on disk: %v", err)
+	}
+	ledger, _, err := gateReadDeferred(work)
+	if err != nil {
+		t.Fatalf("read the ledger: %v", err)
+	}
+	if len(ledger.Findings) != 0 {
+		t.Errorf("%s still lists the promoted finding, so the next release's round one is told to triage a finding THIS release stopped for: %+v", gateDeferredFile, ledger.Findings)
+	}
+
+	// THE PROMOTION IS THE LAST WORD. A second entry clearing the same finding is
+	// refused as two rulings on one finding, and an entry that tried to promote and
+	// clear at once is a promotion — the P0 it lands in is the cell no signature
+	// reaches.
+	both := receipt
+	both.Overrides = []gateOverride{promotion, gateOverrideFor(receipt.Findings[0], nil)}
+	if verdict, err := both.evaluate(gatePriorityDeclared, gatePriorityCurrent); verdict != gateVerdictFailed || !strings.Contains(err.Error(), "ruled on twice") {
+		t.Fatalf("a finding was promoted and then cleared by a second entry: %s %v", verdict, err)
 	}
 }

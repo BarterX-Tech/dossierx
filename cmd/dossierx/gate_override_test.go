@@ -96,6 +96,23 @@ type gateOverride struct {
 	// Reason is their words. Refused when empty, because an override nobody had
 	// to justify is the default path under time pressure.
 	Reason string `json:"reason"`
+	// PromoteTo turns this entry from a clearance into a PROMOTION: the finding
+	// stays, nothing is cleared, and it is partitioned — by evaluate(), and by the
+	// deferred projection — at this band rather than at the one the matrix computed.
+	//
+	// IT ONLY EVER RAISES. gateApplyOverrides refuses a band equal to or below the
+	// matrix's, and the sentence to remember is that the matrix is the FLOOR a
+	// ruling can raise and never a ceiling it lowers. A record that could lower a
+	// rank would hand the party whose work is under review a way to decide their own
+	// finding does not stop the release — which is precisely the free-text severity
+	// this whole design replaced, wearing a signature.
+	//
+	// AN ENTRY IS ONE THING OR THE OTHER. A non-empty PromoteTo means promote, and
+	// the clearance below never runs for it; one finding may still carry only one
+	// entry, so a promoted finding cannot also be cleared by a second. That is what
+	// makes "promote a P2 to P0" stick: P0 is the cell no ruling reaches, so the
+	// promotion is the last word on that finding until the tree is fixed.
+	PromoteTo string `json:"promote_to,omitempty"`
 }
 
 // gateFindingDigest is the identity an override names.
@@ -150,16 +167,70 @@ func gateLoadOverrides(root string) ([]gateOverride, error) {
 	return doc.Overrides, nil
 }
 
+// gateFindingPromotions is the digest-to-band map of every entry that PROMOTES,
+// read off the record with no judgement made about it.
+//
+// It is deliberately separate from gateApplyOverrides, which is where every
+// refusal lives, because two callers want two different things. evaluate() wants
+// the refusals; gateRecordReceipt wants only to project the deferred ledger at the
+// bands the human raised, and it runs BEFORE any verdict is computed. A record
+// whose promotion is malformed — a band outside the four, a digest matching
+// nothing — promotes nothing here and is refused by evaluate() a moment later, so
+// the two orderings cannot combine into a quiet pass: the run fails, and the
+// ledger it wrote is overwritten by the next recording either way.
+func gateFindingPromotions(overrides []gateOverride) map[string]string {
+	out := map[string]string{}
+	for _, o := range overrides {
+		if to := strings.TrimSpace(o.PromoteTo); to != "" {
+			out[o.Finding] = to
+		}
+	}
+	return out
+}
+
+// gatePromoted returns a copy of findings in which every finding a promotion names
+// carries the band it was promoted to.
+//
+// It is a COPY. What the matrix computed stays on the receipt's own findings, for
+// gateVerdictsAfterOverrides's reason one field along: what the agents reported and
+// the matrix ranked, and what a human then decided, are different questions, and a
+// record that answers the first with the second leaves nobody able to see that a
+// ruling moved anything.
+//
+// A promotion naming a band outside the four is applied here as written, and that
+// is safe rather than sloppy: the only two consumers are the priority partition,
+// where an unrecognised band is UNRANKED and therefore blocking, and the deferred
+// projection, where it is not P2/P3 and therefore not deferred. Both directions
+// fail towards the release stopping, and gateApplyOverrides refuses the record by
+// name in the same run.
+func gatePromoted(findings []gateFinding, promotions map[string]string) []gateFinding {
+	if len(promotions) == 0 {
+		return findings
+	}
+	out := append([]gateFinding(nil), findings...)
+	for i := range out {
+		if to, ok := promotions[gateFindingDigest(out[i])]; ok {
+			out[i].Priority = to
+		}
+	}
+	return out
+}
+
 // gateApplyOverrides matches a receipt's findings against the human's rulings.
 //
-// It returns the findings that remain — the ones nobody ruled on, which still
-// fail the gate — and the overrides that were actually applied. EVERY other
-// outcome is an error, and that is the point: a stale override, an override for
-// another release, one with no reason, one naming a finding that is not there,
+// It returns the findings that remain — the ones nobody cleared, at the band each
+// one is to be judged at — and the overrides that were actually applied. EVERY
+// other outcome is an error, and that is the point: a stale override, an override
+// for another release, one with no reason, one naming a finding that is not there,
 // two rulings on the same finding. None of those is a no-op. Each one means the
 // record and the run disagree about what was decided, and a gate that shrugged
 // at that would be carrying a document nobody can trust into the one decision it
 // exists to inform.
+//
+// THE REMAINING FINDINGS CARRY THE PROMOTED BAND, not the computed one. A ruling
+// that raises a P2 to P0 has to reach the partition evaluate() makes, or the
+// promotion is a line in a file that changes nothing — which is the defect this
+// gate met inside this very record one commit before the loader was wired up.
 func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remaining []gateFinding, applied []gateOverride, err error) {
 	byDigest := make(map[string]gateFinding, len(receipt.Findings))
 	for _, f := range receipt.Findings {
@@ -169,6 +240,7 @@ func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remainin
 	var problems []string
 	seen := map[string]bool{}
 	cleared := map[string]bool{}
+	promoted := map[string]string{}
 
 	for _, o := range overrides {
 		switch {
@@ -207,6 +279,49 @@ func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remainin
 				o.Finding, o.Surface, o.Rule, f.Surface, f.Rule))
 			continue
 		}
+		// A FINDING NOTHING RANKED IS NOT A FINDING TO RULE ON, in either direction.
+		// gatePartitionByPriority treats an empty priority — and any band the matrix
+		// does not know — as UNRANKED and blocking, precisely because such a finding
+		// reached the receipt by a path that skipped the ranking. There is nothing for
+		// a human to weigh: the matrix never crossed this one, so a clearance would be
+		// waving through a defect nobody classified, and a promotion would be raising
+		// a rank that does not exist.
+		//
+		// It is refused rather than silently unapplied for the P0 refusal's reason,
+		// and there is a measured hole behind it: before this refusal existed, an
+		// entry naming an unranked finding CLEARED it, and a receipt whose only
+		// finding was unranked evaluated PASS — while three comments in this gate said
+		// an unranked finding always blocks.
+		if _, ranked := gatePriorityRank[strings.TrimSpace(f.Priority)]; !ranked {
+			problems = append(problems, fmt.Sprintf(
+				"the override for %s rules on %s/%s, which carries no priority: it came by a path that skipped the ranking, which is a producer to fix and not a finding to rule on. A finding is ranked where it is filed, from the surface's reach_class crossed with its own consequence; until this one is, there is no band for a ruling to clear or to raise. Delete this entry and fix the producer",
+				o.Finding, f.Surface, f.Rule))
+			continue
+		}
+
+		// A PROMOTING ENTRY IS NOT A CLEARANCE, and it is handled before the P0
+		// refusal below because that refusal is about clearing: promoting TO P0 is
+		// the opposite move and is exactly what a human is allowed to do. The matrix
+		// is a floor, so the one thing checked here is that the ruling raises.
+		if to := strings.TrimSpace(o.PromoteTo); to != "" {
+			rank, known := gatePriorityRank[to]
+			if !known {
+				problems = append(problems, fmt.Sprintf(
+					"the override for %s promotes to %q, which is not one of %s. `promote_to` names the band this finding is to be judged in, and a band nothing can look up is judged as unranked — which blocks the release while saying a producer is broken, rather than saying what the human decided",
+					o.Finding, to, strings.Join(gatePriorities, ", ")))
+				continue
+			}
+			if rank >= gatePriorityRank[f.Priority] {
+				problems = append(problems, fmt.Sprintf(
+					"the override for %s promotes %s/%s from %s to %s, which is not a promotion: the matrix is the floor a ruling can raise, never a ceiling it lowers. A record that could lower a rank hands the party whose work is under review a way to decide their own finding does not stop the release, which is the free-text severity this design replaced. Name a band above %s, or delete this entry",
+					o.Finding, f.Surface, f.Rule, f.Priority, to, f.Priority))
+				continue
+			}
+			promoted[o.Finding] = to
+			applied = append(applied, o)
+			continue
+		}
+
 		// THE ONE CELL NO RULING REACHES. A P0 is a client-shipped surface that
 		// makes its reader ACT wrongly — an install line that installs the wrong
 		// thing, a documented flag that does not exist — and a signature does not
@@ -228,7 +343,10 @@ func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remainin
 		applied = append(applied, o)
 	}
 
-	for _, f := range receipt.Findings {
+	// What is left is everything nobody cleared, at the band it is to be judged at:
+	// gatePromoted stamps the raised ones and leaves the rest as the matrix computed
+	// them.
+	for _, f := range gatePromoted(receipt.Findings, promoted) {
 		if !cleared[gateFindingDigest(f)] {
 			remaining = append(remaining, f)
 		}
@@ -444,6 +562,113 @@ func TestGateOverrideRefusesEveryRecordThatDecidesNothing(t *testing.T) {
 		_, _, err := gateApplyOverrides(receipt, []gateOverride{o, second})
 		if err == nil || !strings.Contains(err.Error(), "ruled on twice") {
 			t.Fatalf("two rulings on one finding were accepted, so the record answers \"what was decided\" two ways: %v", err)
+		}
+	})
+}
+
+// TestGateOverridePromotesOnlyUpwardsAndOnlyWithEverythingElseInPlace is the
+// promoting half of this record, held to the identical bar as the clearing half.
+//
+// THE ONE NEW REFUSAL is direction: the matrix is the floor a ruling can raise and
+// never a ceiling it lowers. Everything else below is an EXISTING refusal asserted
+// against a promoting entry, and those rows are not duplication — they are what
+// holds the new branch inside the old checks. A promotion is written by the same
+// person under the same time pressure as a clearance, and an entry that can raise a
+// rank with nobody's name on it, with no reason, against a stale digest or for last
+// release is the same unaccountable document with the sign flipped.
+//
+// The fixture is P2 here rather than the file's usual P1, because a promotion needs
+// somewhere to raise TO — see gateOverrideFinding's comment for why every other
+// fixture in this file is P1.
+func TestGateOverridePromotesOnlyUpwardsAndOnlyWithEverythingElseInPlace(t *testing.T) {
+	f := gateOverrideFinding("readme", "stale-command-count", "the table says nineteen and the binary has twenty")
+	f.Consequence = gateConsequenceCosmetic
+	f.Priority = gatePriorityP2
+	receipt := gateOverrideReceipt(f)
+
+	promote := func(mutate func(*gateOverride)) gateOverride {
+		return gateOverrideFor(f, func(o *gateOverride) {
+			o.PromoteTo = gatePriorityP1
+			if mutate != nil {
+				mutate(o)
+			}
+		})
+	}
+
+	// The positive control: the finding STAYS, at the band it was raised to, and
+	// nothing is cleared.
+	remaining, applied, err := gateApplyOverrides(receipt, []gateOverride{promote(nil)})
+	if err != nil {
+		t.Fatalf("an honest promotion was refused, so every refusal below would pass over a check that fires unconditionally: %v", err)
+	}
+	if len(applied) != 1 {
+		t.Fatalf("the promotion is not reported as applied (%d), so a receipt cleared by nothing and one raised by a named human read identically", len(applied))
+	}
+	if len(remaining) != 1 {
+		t.Fatalf("a promotion removed the finding it promoted; promoting is the opposite of clearing, and a finding raised out of the record cannot block anything")
+	}
+	if remaining[0].Priority != gatePriorityP1 {
+		t.Errorf("the promoted finding is judged at %q; the ruling raised it to %s, and a promotion the partition never sees is a line in a file", remaining[0].Priority, gatePriorityP1)
+	}
+	if receipt.Findings[0].Priority != gatePriorityP2 {
+		t.Errorf("the promotion rewrote the receipt's own record of the finding to %q; what the matrix computed has to stay readable beside what the human decided", receipt.Findings[0].Priority)
+	}
+
+	for _, tc := range []struct {
+		name, want string
+		mutate     func(*gateOverride)
+	}{
+		{
+			// THE ONE THAT IS NEW. Equal is not a promotion either: an entry that
+			// restates the matrix's own answer changes nothing while reading, to
+			// whoever finds it in the record, as a decision somebody made.
+			name:   "promoting to the band the matrix already gave",
+			want:   "the matrix is the floor a ruling can raise",
+			mutate: func(o *gateOverride) { o.PromoteTo = gatePriorityP2 },
+		},
+		{
+			name:   "promoting downwards",
+			want:   "the matrix is the floor a ruling can raise",
+			mutate: func(o *gateOverride) { o.PromoteTo = gatePriorityP3 },
+		},
+		{
+			name:   "a band outside the four",
+			want:   "which is not one of",
+			mutate: func(o *gateOverride) { o.PromoteTo = "critical" },
+		},
+		{
+			name:   "the old severity vocabulary",
+			want:   "which is not one of",
+			mutate: func(o *gateOverride) { o.PromoteTo = "blocking" },
+		},
+		{"a promotion nobody signed", "names nobody", func(o *gateOverride) { o.RuledBy = "" }},
+		{"a promotion with no reason", "carries no reason", func(o *gateOverride) { o.Reason = "  " }},
+		{"a promotion naming no finding", "names no finding digest", func(o *gateOverride) { o.Finding = "" }},
+		{"a promotion describing another finding", "would clear one finding while describing another", func(o *gateOverride) { o.Rule = "some-other-rule" }},
+		{"a promotion ruled for another release", "never inherited", func(o *gateOverride) { o.Version = "v0.5.3" }},
+		{"a stale promotion", "matches no finding", func(o *gateOverride) { o.Finding = "sha256:" + strings.Repeat("0", 64) }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, applied, err := gateApplyOverrides(receipt, []gateOverride{promote(tc.mutate)})
+			if err == nil {
+				t.Fatalf("a promotion with %s was accepted; it raised a rank with %d entry applied", tc.name, len(applied))
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("the refusal does not say %q:\n%v", tc.want, err)
+			}
+		})
+	}
+
+	// AN ENTRY IS ONE THING OR THE OTHER, and `promote_to` decides which. There is
+	// no shape that raises a rank and clears the finding at the same time: the
+	// finding is still there afterwards, and it is still judged.
+	t.Run("promote_to present means promote, never clear", func(t *testing.T) {
+		remaining, _, err := gateApplyOverrides(receipt, []gateOverride{promote(nil)})
+		if err != nil {
+			t.Fatalf("the promotion was refused: %v", err)
+		}
+		if len(remaining) != 1 {
+			t.Fatalf("an entry carrying both a promotion and the shape of a clearance cleared the finding; a record that does both at once answers \"what was decided\" two ways")
 		}
 	})
 }

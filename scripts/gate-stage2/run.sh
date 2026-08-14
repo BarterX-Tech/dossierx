@@ -413,6 +413,15 @@ subject_freeze() {
 # cannot make sense of might carry findings nobody has triaged, and reading it
 # as "nothing deferred" would drop them exactly as silently as never having
 # written the file at all.
+#
+# WHY A LEDGER OF ZERO FINDINGS GETS ONE LINE AND NOT THE NOTICE. A previous
+# release that deferred nothing wrote `"findings": []` — a fact, and the
+# deliberate shape gateWriteDeferred emits rather than an absent key. There is
+# nothing in it for round one to triage, so printing the triage instruction
+# would send a maintainer to read an empty list on every fan-out of every round
+# until somebody deleted the file. It is still not SILENT: the file is there,
+# tracked, naming another release, and a maintainer who has just been told the
+# tree carries a stale artifact can delete it in one move.
 deferred_notice() {
   [ -f "$ROOT/$DEFERRED_FILE" ] || return 0
 
@@ -440,10 +449,25 @@ deferred_notice() {
   # is not a JSON parser and the one field it counts is enough to say how many.
   _dnotice_count="$(awk '/"surface":/ { n++ } END { print n + 0 }' "$ROOT/$DEFERRED_FILE")"
 
+  if [ "$_dnotice_count" = "0" ]; then
+    printf 'gate-stage2: %s deferred nothing into %s; delete the file.\n' \
+      "$_dnotice_version" "$DEFERRED_FILE" >&2
+    return 0
+  fi
+
+  # THE RECOVERY NAMES THE PROJECTOR AND NOT "the next recording". The only
+  # writer of this file used to be the driver's D1, which does not run until
+  # the release is being published — so "leave it, the next recording
+  # overwrites it" told a maintainer at round one to wait for something that
+  # happens after every round is over, and the notice below fired again on
+  # every fan-out in between. TestGateDeferredProject writes the file per
+  # round from the answers this run recorded; D1 then re-projects the same
+  # answers through the same comparator.
   printf 'gate-stage2: %s deferred %s finding(s) into %s.
   They are this release'"'"'s round-one input: hand each to the surface it
-  names for reading, or fix it outright. Then delete %s, or leave it — the
-  next recording overwrites it in full.\n' \
+  names for reading, or fix it outright. Then delete %s, or project this
+  round over it once every surface has answered:
+    go test ./cmd/dossierx -run '"'"'^TestGateDeferredProject$'"'"' -count=1 -args -deferred-project\n' \
     "$_dnotice_version" "$_dnotice_count" "$DEFERRED_FILE" "$DEFERRED_FILE" >&2
 }
 
