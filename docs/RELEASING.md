@@ -395,6 +395,32 @@ them, and the three post-publish checks that leave this repository entirely.
       merge commit, and the whole of this item are produced again against the new
       `$TREE`. Repeat until no surface reports a finding.
 
+      **Read the fix wave before you spend a round on it.** After the fixes land
+      and before the next fan-out:
+
+          DOSSIERX_GATE_AGENT=<the agent runner> \
+          scripts/gate-stage2/run.sh wave --range <before-the-wave>..<after>
+
+      That assembles `gate/wave/bundle.md` — the diff plus the full text of every
+      file the wave touched, because a sentence is false or true against the
+      paragraph around it and a hunk hides that paragraph — and prints two
+      invocations. Their findings go back into the wave; then the round runs.
+
+      It is cheap for a reason that is measured rather than assumed: every round
+      of the v0.5.2 gate after the first opened by repairing the round before it,
+      and round four's three highest-severity findings were all introduced by
+      round three's fixes. Two agents on a diff is the cheapest place to catch
+      that; thirteen agents on full bundles is the most expensive.
+
+      **A wave reading is never a surface reading, and the difference is not a
+      convention.** It answers about a RANGE. A surface answer is keyed to a tree,
+      a run identifier and a surface fingerprint, none of which a wave has — so a
+      wave answer dropped into `gate/answers/` is refused by stage 3 on its face.
+      A clean wave read means "no regression found in this diff" and never "this
+      surface passes". Skipping the wave read is not a failed gate: it produces no
+      verdict and blocks nothing, and the cost of skipping it is the round you are
+      about to spend.
+
       **5. Read the findings yourself before you authorize anything.** Nothing is
       filtered, deduplicated away or dropped on the way to you. Each finding
       carries a severity, but that word is the reporting agent's own about its own

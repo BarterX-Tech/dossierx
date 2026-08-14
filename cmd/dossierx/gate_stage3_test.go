@@ -62,8 +62,11 @@
 //     the honest ordering — the human is asked — but it is a real cost and it is
 //     the strongest argument for the field.
 //   - A PRODUCER. Nothing in this repository writes gate/answers/<surface>.json
-//     yet; scripts/gate-stage2/run.sh has six modes and none of them reads an
-//     agent's answer back. This file pins the SCHEMA and refuses everything
+//     yet; scripts/gate-stage2/run.sh has nine modes and none of them reads an
+//     agent's answer back. (It said six until v0.5.2, which was wrong at seven
+//     and is the reason the count is now checked rather than recalled — see
+//     TestGateStage3ModeCountIsCountedAndNotRemembered below.) This file pins the
+//     SCHEMA and refuses everything
 //     malformed, which is the same position the receipt is in and is defensible
 //     — but it means the first real run's harness has a contract to satisfy
 //     rather than a contract to invent.
@@ -1860,4 +1863,103 @@ func TestGateStage3TheJoinRefusesWhatItCannotJoin(t *testing.T) {
 	if _, err := gateStage3Collect(gateStage3Inputs{Root: t.TempDir(), Run: "0123456789abcdef", Declared: []string{"readme"}}); err == nil {
 		t.Errorf("a run collected against an empty vocabulary was accepted; every answer would validate and the join would compare nothing")
 	}
+}
+
+// ---------------------------------------------------------------------
+// the mode count, counted rather than recalled
+// ---------------------------------------------------------------------
+
+// TestGateStage3ModeCountIsCountedAndNotRemembered closes a defect this file
+// carried for two releases: the comment above said the harness "has six modes"
+// when it had seven, and nothing noticed because nothing counted.
+//
+// It is the same failure shape the v0.5.2 gate spent four rounds on — prose
+// restating a number the tree already knows — and the same answer: derive it. The
+// comment states a number, so the number is checked, and the two independent
+// lists inside the harness (what `usage` advertises, and what the `case` actually
+// dispatches) are checked against each other. A mode that dispatches without
+// being advertised is a mode nobody can find; one advertised without dispatching
+// is an instruction that fails when followed.
+func TestGateStage3ModeCountIsCountedAndNotRemembered(t *testing.T) {
+	root := surfaceRepoRoot(t)
+
+	script, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("scripts/gate-stage2/run.sh")))
+	if err != nil {
+		t.Fatalf("read the stage-2 harness: %v", err)
+	}
+	advertised, dispatched := gateStage3HarnessModes(t, string(script))
+
+	if len(advertised) == 0 || len(dispatched) == 0 {
+		t.Fatalf("read %d advertised and %d dispatched modes out of the harness; a comparison over an empty list is a pass over zero assertions", len(advertised), len(dispatched))
+	}
+	for mode := range dispatched {
+		if !advertised[mode] {
+			t.Errorf("`%s` is dispatched by the harness and absent from its usage text, so it is a mode nobody reading the script can find", mode)
+		}
+	}
+	for mode := range advertised {
+		if !dispatched[mode] {
+			t.Errorf("`%s` is advertised by the harness's usage text and dispatched nowhere, so following the instruction fails", mode)
+		}
+	}
+
+	self, err := os.ReadFile(filepath.Join(root, filepath.FromSlash("cmd/dossierx/gate_stage3_test.go")))
+	if err != nil {
+		t.Fatalf("read this file to check the number it states: %v", err)
+	}
+	stated := regexp.MustCompile(`run\.sh has ([a-z]+) modes`).FindStringSubmatch(string(self))
+	if stated == nil {
+		t.Fatal("the comment at the top of this file no longer states a mode count in the form `run.sh has <word> modes`, so there is nothing to check it against")
+	}
+	words := map[string]int{
+		"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+		"seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12,
+	}
+	want, ok := words[stated[1]]
+	if !ok {
+		t.Fatalf("the comment spells its mode count %q, which is not a number word this test reads", stated[1])
+	}
+	if want != len(dispatched) {
+		t.Errorf("the comment at the top of this file says the harness has %s modes; it dispatches %d. "+
+			"This is the defect the test was written for, arriving again.", stated[1], len(dispatched))
+	}
+}
+
+// gateStage3HarnessModes returns the modes run.sh advertises in `usage` and the
+// modes its `case` dispatches, read separately so the two can be compared.
+func gateStage3HarnessModes(t *testing.T, script string) (advertised, dispatched map[string]bool) {
+	t.Helper()
+	advertised, dispatched = map[string]bool{}, map[string]bool{}
+
+	inUsage := false
+	inCase := false
+	for _, line := range strings.Split(script, "\n") {
+		switch {
+		case strings.Contains(line, "<<'USAGE'"):
+			inUsage = true
+			continue
+		case strings.HasPrefix(line, "USAGE"):
+			inUsage = false
+		case strings.HasPrefix(line, `case "$MODE" in`):
+			inCase = true
+			continue
+		case inCase && strings.HasPrefix(line, "esac"):
+			inCase = false
+		}
+
+		if inUsage {
+			// A mode line opens at exactly two spaces with a lower-case word;
+			// continuation lines are indented far further, and `--root` is an
+			// option rather than a mode.
+			if m := regexp.MustCompile(`^  ([a-z][a-z-]*)\s`).FindStringSubmatch(line); m != nil {
+				advertised[m[1]] = true
+			}
+		}
+		if inCase {
+			if m := regexp.MustCompile(`^  ([a-z][a-z-]*)\)`).FindStringSubmatch(line); m != nil {
+				dispatched[m[1]] = true
+			}
+		}
+	}
+	return advertised, dispatched
 }

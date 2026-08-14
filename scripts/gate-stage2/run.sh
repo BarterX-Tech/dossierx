@@ -66,6 +66,10 @@ SUBJECT_FILE="gate/subject.json"
 # a disagreement between them is D1's refusal to make, not this script's, and
 # reading one here is enough to tell one RELEASE from the next.
 VERSION_FILE="CHANGELOG.md"
+# The snag check's question. It is a prompt file rather than a string in this
+# script for the reason every other prompt is: what an agent is asked is reviewed
+# material, and material nobody can diff is material nobody reviews.
+WAVE_PROMPT_FILE="gate/prompts/_wave.md"
 
 # ---------------------------------------------------------------------------
 # sha256, from whichever of the two spellings this machine has. A missing hasher
@@ -269,6 +273,11 @@ json_scalar() {
 # what tells one release's freeze from the next one's. Keep-a-Changelog's own
 # shape: `## [0.5.2] - 2026-08-12`, newest first.
 release_version() {
+  # A missing CHANGELOG is a refusal with a reason rather than awk's own error on
+  # stderr. The difference matters where this is called from: `fanout`'s other
+  # refusals name exactly what the checkout is missing, and awk noise arriving
+  # first buries them.
+  [ -f "$ROOT/$VERSION_FILE" ] || die "subject: $ROOT carries no $VERSION_FILE, so no release version can be derived and this run cannot tell its own freeze from another release's" 2
   awk '
     /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
       line = $0
@@ -392,6 +401,9 @@ usage: run.sh <mode> [options]
   subject [--freeze --run ID]    verify that surfaces.yaml still matches the
                                  digest this release froze; --freeze mints that
                                  record. `fanout` runs both and never skips them
+  wave    --range A..B           assemble gate/wave/bundle.md over a fix wave's
+                                 own diff and print two invocations. ADVISORY:
+                                 it answers about a RANGE, never about a surface
 
   --root DIR  operate on another checkout (default: this script's repository)
 USAGE
@@ -402,13 +414,14 @@ USAGE
 MODE="$1"; shift
 
 TREE=""; BASELINE_REF=""; BASELINE_COMMIT=""; BASELINE_FILE=""; SURFACE=""; BUNDLE=""
-RUN_ID=""; FREEZE=""
+RUN_ID=""; FREEZE=""; RANGE=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --root)             ROOT="$(cd "$2" && pwd)"; shift 2 ;;
     --run)              RUN_ID="$2"; shift 2 ;;
     --freeze)           FREEZE="yes"; shift ;;
+    --range)            RANGE="$2"; shift 2 ;;
     --tree)             TREE="$2"; shift 2 ;;
     --baseline-ref)     BASELINE_REF="$2"; shift 2 ;;
     --baseline-commit)  BASELINE_COMMIT="$2"; shift 2 ;;
@@ -479,6 +492,83 @@ case "$MODE" in
   # producer's own message, and it prints one line per DECLARED surface by calling
   # `command` — never by re-deriving the model, the grant or the fan-out.
   # -------------------------------------------------------------------------
+  # -------------------------------------------------------------------------
+  # wave — THE SNAG CHECK. Two agents read a fix wave's own diff before a full
+  # round pays thirteen agents to discover what that wave broke.
+  #
+  # WHY. Every round of the v0.5.2 gate since the second opened by repairing the
+  # round before it. Round two: "Four were regressions introduced by round one's
+  # fixes". Round three carries a section titled "MINE, FROM ROUND TWO". Round
+  # four: "three of these are high severity and all three are mine". The fix wave
+  # is written by an agent and nothing reads it until the next full round does.
+  #
+  # THE PROPERTY THE WHOLE THING RESTS ON: A WAVE ANSWER IS NEVER A SURFACE
+  # ANSWER. This mode writes its bundle under gate/wave/, never under
+  # gate/answers/, and mints nothing. Its answer is keyed to a RANGE; a surface
+  # answer is keyed to a tree, a run identifier and a surface fingerprint, none of
+  # which exist here. So a wave answer copied into gate/answers/ is refused by
+  # stage 3 on its face rather than by anyone remembering the difference. A clean
+  # wave read means "no regression found in this diff" and NEVER "this surface
+  # passes" — anything looser would let a narrow read stand where a full bundle
+  # read is required, which is the skipped check that reads as a pass.
+  #
+  # WHAT IT DELIBERATELY DOES NOT DO: map changed paths onto declared surfaces.
+  # surfaces.yaml's path matching has exactly one implementation, in the Go
+  # producer, and a second one written in awk here would be free to disagree with
+  # it — a bundle assembled by the wrong matcher is a question nobody asked. The
+  # prompt says plainly that the reader is judging a change, not a surface.
+  # -------------------------------------------------------------------------
+  wave)
+    [ -n "$RANGE" ] || die "wave: --range is required, as A..B. This mode reads a fix wave's own diff, and a wave with no range is not a smaller reading — there is nothing to read." 1
+    [ -f "$ROOT/$WAVE_PROMPT_FILE" ] || die "wave: $ROOT carries no $WAVE_PROMPT_FILE, so there is no question to ask. A bundle assembled with no prompt is material nobody was asked about." 2
+    command -v git >/dev/null 2>&1 || die "wave: no git on PATH, so the wave's diff cannot be read. A check that cannot run is a failure, not a pass." 2
+
+    _changed="$(git -C "$ROOT" diff --name-only "$RANGE" --)" \
+      || die "wave: git could not read the range $RANGE (its reason is above). An unreadable range is a failed read, never an empty one." 2
+    [ -n "$_changed" ] || die "wave: $RANGE names no changed files. A wave that changed nothing needs no reading, and a range that resolves to nothing because it was mistyped must not read as one." 1
+
+    mkdir -p "$ROOT/gate/wave"
+    _bundle="gate/wave/bundle.md"
+    {
+      sed "s|<<RANGE>>|$RANGE|g" "$ROOT/$WAVE_PROMPT_FILE"
+      printf '\n## The files this wave changed\n\n'
+      printf '%s\n' "$_changed" | sed 's/^/- /'
+      printf '\n## The diff\n\n```diff\n'
+      git -C "$ROOT" diff "$RANGE" --
+      printf '```\n'
+      printf '\n## Each changed file, in full, as it stands after the wave\n\n'
+      printf '%s\n' "$_changed" | while IFS= read -r _file; do
+        [ -n "$_file" ] || continue
+        printf '### %s\n\n' "$_file"
+        if [ -f "$ROOT/$_file" ]; then
+          printf '```\n'
+          cat "$ROOT/$_file"
+          printf '```\n\n'
+        else
+          # A deleted file has no "after", and saying so is not the same as
+          # handing over an empty block — one is a fact about the wave, the other
+          # reads as a file that is now empty.
+          printf '_Deleted by this wave; there is no text after it._\n\n'
+        fi
+      done
+    } > "$ROOT/$_bundle"
+
+    # TWO READERS, NOT ONE. A single reader's silence is indistinguishable from a
+    # reader that lost the thread; two independent ones make a shared silence
+    # mean something. They are not thirteen, because this is a diff and not a
+    # release.
+    model="$("$0" model --root "$ROOT")"
+    tools="$("$0" grant --root "$ROOT" | paste -sd, -)"
+    _n=1
+    while [ "$_n" -le 2 ]; do
+      printf '%s --model %s --allowed-tools %s --bundle-file %s\n' \
+        "${DOSSIERX_GATE_AGENT:-<DOSSIERX_GATE_AGENT is unset>}" "$model" "$tools" "$_bundle"
+      _n=$((_n + 1))
+    done
+    printf 'gate-stage2: wrote %s over %s (%s changed file(s)); this reading is ADVISORY and files no answer\n' \
+      "$_bundle" "$RANGE" "$(printf '%s\n' "$_changed" | wc -l | tr -d ' ')" >&2
+    ;;
+
   subject)
     if [ -n "$FREEZE" ]; then
       subject_freeze "$RUN_ID"
@@ -490,12 +580,6 @@ case "$MODE" in
   fanout)
     [ -n "$TREE" ] || die "fanout: --tree is required. A fan-out mints an identifier that every one of its answers must name, and an identifier minted over no tree attaches those answers to no release at all." 1
 
-    # THE SUBJECT IS VERIFIED BEFORE ANYTHING IS MINTED, so a manifest that moved
-    # mid-release costs one digest rather than thirteen agents — and so the
-    # refusal cannot be read as a fan-out that half happened. subject_verify
-    # writes nothing and exits 6 on a moved subject, which propagates through
-    # `set -e`.
-    subject_verify
 
     # THE PRODUCER IS THE CHECKOUT'S OWN. It assembles the bundles from the files
     # under --root and its assembler must be that tree's assembler, because the
@@ -508,6 +592,14 @@ case "$MODE" in
     # printed thirteen invocations without minting a run would hand the harness
     # thirteen paths holding nothing and an answer set nobody can attribute.
     command -v go >/dev/null 2>&1 || die "fanout: no go toolchain on PATH, so the fan-out cannot be produced. A check that cannot run is a failure, not a pass." 2
+
+    # THE SUBJECT IS VERIFIED BEFORE ANYTHING IS MINTED — after the refusals that
+    # name a checkout this mode cannot run in at all, and before the producer that
+    # mints the run. So a manifest that moved mid-release costs one digest rather
+    # than thirteen agents, and no run identifier can exist beside the refusal,
+    # which on disk is indistinguishable from a fan-out that half happened.
+    # subject_verify writes nothing and exits 6, which propagates through `set -e`.
+    subject_verify
 
     # The producer's own output — the refusal, or the run it minted — goes to
     # stderr, so stdout carries the invocations and nothing else.
