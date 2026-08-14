@@ -1246,6 +1246,11 @@ export const contentSpec: ContentSpec = {
           title: "26 → 19: what was cut, and where it went",
           rows: [
             {
+              cut: "lock · unlock · reaudit · flag",
+              now: "claim lock · claim unlock · claim reaudit · claim flag",
+              why: "The four verbs that act on one claim moved under the noun they act on — every one of them was a top-level command through v0.3.0 and each still exists, one word further in. The binary answers the old spelling with the new one, but that answer is a line in a terminal: this table is where a reader who has not installed anything yet finds out.",
+            },
+            {
               cut: "lint · catalog · render",
               now: "check, and check --validate for a read-only run",
               why: "Stages of check wearing verbs. They existed because the extracted engine had no exported Go API, so every internal package needed a command — a packaging artifact, not a surface.",
