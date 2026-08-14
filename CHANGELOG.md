@@ -187,6 +187,50 @@ call on one finding, not a threshold with extra steps.
 None of this is in the shipped binary. It changes how this project decides a release
 is done, not what a consumer runs.
 
+### The gate now weighs findings instead of counting them
+
+By round six, this release's own gate had accumulated 219 findings, and the band that
+actually reaches a user — `client-shipped` surfaces where the defect makes a reader
+act wrongly — sat flat at four to six of them every round, buried inside the same
+"any finding fails" receipt as a stale command count. Round six's own record made the
+reason legible: free-text severity had drifted into nine different dialects across
+those findings, and nothing read any of them — not the gate, not the receipt, not a
+comparison across rounds. A maintainer scanning for what actually mattered was doing
+by eye what the record should have done for them.
+
+Every finding now answers two questions instead of writing one adjective. `consequence`
+is a closed choice — `acts-wrongly`, `misled`, or `cosmetic` — carrying a mandatory
+one-sentence `failure_scenario`; an agent that cannot state the scenario has not found
+a defect, it has found a feeling. The agent does not set the other axis: `reach_class`
+(`client-shipped`, `consumer-docs`, `maintainer`, or `process`) lives on the surface
+itself in `surfaces.yaml`, reviewed once when a surface is declared rather than argued
+fresh in every finding. The agent controls the half that needs a case made for it each
+time; the manifest controls the half that does not change finding to finding.
+
+The answer recorder crosses the two into a priority, computed rather than asserted:
+
+| reach_class    | acts-wrongly | misled | cosmetic |
+|----------------|--------------|--------|----------|
+| client-shipped | P0           | P1     | P2       |
+| consumer-docs  | P1           | P2     | P3       |
+| maintainer     | P2           | P3     | P3       |
+| process        | P2           | P3     | P3       |
+
+The receipt now PASSES when no P0 finding exists and every P1 is fixed or ruled in
+`gate/overrides.json` — P0 has no path through that file: a client-shipped defect that
+leaves a reader acting wrongly is exactly the failure this gate exists to catch, and no
+ruling waives it. P2 and P3 findings stay on the receipt and never block, and they are
+no longer read once and forgotten: `record` writes them whole into a tracked
+`gate/deferred.json`, overwritten (not appended to) on every recording, which the next
+release's round one reads as a starting point instead of a blank page. The matrix is a
+default, never a ceiling — a human ruling can still promote any finding past what it
+computed, P0 included.
+
+What does not change: nothing is filtered, deduplicated away, or dropped on the way to
+the human; every finding still reaches the receipt; and coverage is exactly what the
+freeze above already made it — this changes what a found finding costs, not what gets
+found.
+
 ### Fixed
 
 - **The release page never showed the BREAKING notice.** A published release page carried grouped

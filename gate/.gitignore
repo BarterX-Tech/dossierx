@@ -39,3 +39,9 @@
 # when it names a finding this run did not raise, or when it was ruled for another
 # release — so an abandoned record is a failing gate rather than a quiet one.
 !overrides.json
+# deferred.json is TRACKED for subject.json's reason, and one of its own: a
+# deferral nobody can see in a diff is a drop rather than a deferral, not a
+# decision recorded anywhere a later reader can check. It is also read, not
+# just written — the NEXT release's round one takes it as input — so it has
+# to survive past the run that wrote it, which nothing else ignored here does.
+!deferred.json

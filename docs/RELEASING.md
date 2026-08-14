@@ -267,8 +267,9 @@ them, and the three post-publish checks that leave this repository entirely.
       prompts and `method.yaml` are visible because they are named, and every
       run-produced artifact is invisible by default. That includes
       `gate/baseline-input.json`, which step 1 writes and the `record` manifest
-      does not carry. The one run-written file on the tracked side is
-      `gate/subject.json`, named there on purpose.) Neither is thereby unwatched. Both are hashed into the surface
+      does not carry. Two run-written files sit on the tracked side —
+      `gate/subject.json` and `gate/deferred.json`, item 4 below — both named
+      there on purpose.) Neither is thereby unwatched. Both are hashed into the surface
       key: `surface.json` is one of the four SHARED evidence files every
       surface's fingerprint covers — beside `gate/baseline.json`,
       `gate/delta.json` and `gate/site-text.json` — and the prompt sources are
@@ -320,7 +321,10 @@ them, and the three post-publish checks that leave this repository entirely.
 
       **The subject is frozen here, and it is not narrowing.** Before minting
       anything, `fanout` digests `surfaces.yaml` and compares it against
-      `gate/subject.json` — the one file a run WRITES that is tracked (`gate/.gitignore`, `gate/method.yaml` and the prompts are tracked too; no run writes them). The first
+      `gate/subject.json` — one of two files a run WRITES that are tracked, the
+      other being `gate/deferred.json` from item 4 below (`gate/.gitignore`,
+      `gate/method.yaml` and the prompts are tracked too; no run writes them).
+      The first
       fan-out of a release writes that record; every later round of the same
       release refuses, with exit 6, if the manifest moved. A new version in the
       CHANGELOG starts a fresh freeze on its own.
@@ -366,6 +370,14 @@ them, and the three post-publish checks that leave this repository entirely.
       so a third guess is not needed. Deciding what else needs re-reading is
       yours. What the freeze guarantees is that the widening is visible, dated
       and reasoned rather than absorbed into the next round's count.
+
+      **The previous release's deferrals surface here too, once.** If
+      `gate/deferred.json` names a version other than this one, `fanout` prints
+      a notice to stderr naming that version and how many findings it deferred,
+      right after the subject check and before any agent is spent. Those
+      findings are the first thing this round triages — fix each, rule it, or
+      re-defer it on the record — and then delete the file or leave it for this
+      release's own `record` to overwrite.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. `gate/method.yaml`
@@ -435,13 +447,44 @@ them, and the three post-publish checks that leave this repository entirely.
       An answer that is missing, unparseable, or attributed to a different run is
       a FAILED gate; it is never a gate over twelve surfaces.
 
-      **4. Then loop, and expect to.** Any finding at all makes the receipt
-      FAILED — there is no severity threshold, and nothing waves a finding
-      through. The gate surfaces and never fixes, so the fixes are yours, and a
-      fix moves the tree. Every artifact above is keyed to a tree, so NOTHING
-      staged for the old one is reusable: CI, `make ci-evidence` for the new
-      merge commit, and the whole of this item are produced again against the new
-      `$TREE`. Repeat until no surface reports a finding.
+      **4. Then loop, and expect to.** Every finding an agent returns now carries
+      a closed `consequence` — `acts-wrongly`, `misled`, or `cosmetic` — and a
+      mandatory one-sentence `failure_scenario` stating what actually goes wrong
+      for someone reading the surface. Free-text severity is gone from every new
+      answer; an agent no longer rates its own finding, it describes what breaks.
+      The answer recorder, not the agent, computes a priority from that
+      consequence crossed with the surface's `reach_class` in `surfaces.yaml`
+      (`client-shipped`, `consumer-docs`, `maintainer`, or `process`):
+
+          | reach_class    | acts-wrongly | misled | cosmetic |
+          |----------------|--------------|--------|----------|
+          | client-shipped | P0           | P1     | P2       |
+          | consumer-docs  | P1           | P2     | P3       |
+          | maintainer     | P2           | P3     | P3       |
+          | process        | P2           | P3     | P3       |
+
+      The receipt PASSES when no P0 finding exists and every P1 finding is
+      either fixed or ruled in `gate/overrides.json`. **P0 is not overridable:**
+      a `client-shipped` surface that leaves a reader acting wrongly is exactly
+      the failure this gate exists to catch, so no signature waives it — the
+      only way off a P0 is fixing the tree. P2 and P3 findings stay on the
+      receipt and never block, but they are not dropped: `record` writes them to
+      `gate/deferred.json` (tracked, committed the same way as
+      `gate/subject.json`, and overwritten in full — deterministic bytes, never
+      appended to — every time an answer is recorded), and the NEXT release's
+      round one reads that file as input rather than starting from nothing. The
+      gate surfaces and never fixes, so the fixes for P0 and unruled P1 are
+      yours, and a fix moves the tree. Every artifact above is keyed to a tree,
+      so NOTHING staged for the old one is reusable: CI, `make ci-evidence` for
+      the new merge commit, and the whole of this item are produced again
+      against the new `$TREE`. Repeat until no P0 exists and every P1 is fixed
+      or ruled.
+
+      **The matrix is a default, never a ceiling.** The ruling in item 5, below,
+      is the human's, and a human ruling can promote any finding past what the
+      matrix computed — including into P0 — when the matrix's `reach_class` ×
+      `consequence` read undersells what the finding actually costs. The matrix
+      picks where scrutiny starts, not where it stops.
 
       **Read the fix wave before you spend a round on it.** After the fixes land
       and before the next fan-out:
@@ -472,7 +515,10 @@ them, and the three post-publish checks that leave this repository entirely.
       **Ruling a finding non-blocking is a written act, not a deletion.** Until
       v0.5.2 the only way past a finding you judged harmless was to delete it from
       the record, which left it indistinguishable from a finding nobody raised.
-      Now it is `gate/overrides.json`, tracked beside the subject freeze:
+      Now it is `gate/overrides.json`, tracked beside the subject freeze. An
+      override applies to a P1 finding — P2 and P3 already do not block, so
+      there is nothing for a ruling to clear, and an entry matching a P0 finding
+      is refused on its face: P0 has no path through this file at all.
 
           {"overrides": [{
             "version": "v0.5.2",
@@ -483,30 +529,42 @@ them, and the three post-publish checks that leave this repository entirely.
             "reason":  "why this does not block THIS release"
           }]}
 
-      Seven things it refuses, each because the alternative is a waiver wearing a
-      ruling's clothes: an entry with no `reason` or no `ruled_by`; two entries for
-      one finding; an entry naming a finding this run did not raise — which is what
-      a ruling becomes the moment the defect is fixed or its wording moves, so an
-      override cannot outlive the text it excuses; and an entry ruled for another
-      release, because a decision about v0.5.2 is not evidence about v0.5.3. The
-      finding STAYS in the receipt, with the ruling recorded beside it, so a
+      What it refuses — the full list, deliberately without a count, because a
+      counted list in this document has gone stale twice and the number is not
+      the point: an entry naming no finding digest at all; an entry with no
+      `reason`; one with no `ruled_by`; two entries naming the same finding,
+      which is ruling on it twice rather than once; an entry naming a finding
+      this run did not raise — which is what a ruling becomes the moment the
+      defect is fixed or its wording moves, so an override cannot outlive the
+      text it excuses; an entry whose `surface`/`rule` disagree with the finding
+      its digest names, which would clear one finding while describing another
+      to whoever reads the file; an entry ruled for another release, because a
+      decision about v0.5.2 is not evidence about v0.5.3; and an entry naming a
+      P0 finding, because P0 is not a priority a ruling downgrades.
+      The finding STAYS in the receipt, with the ruling recorded beside it, so a
       receipt cleared by a ruling never reads as one that had nothing to clear.
 
       **5. Read the findings yourself before you authorize anything.** Nothing is
       filtered, deduplicated away or dropped on the way to you. Each finding
-      carries a severity, but that word is the reporting agent's own about its own
-      work — no verdict, filter or threshold in the gate consults it — so the
-      ruling is yours, not the agent's. A finding you judge non-blocking has two
-      honest ways off the receipt, and deleting it from
-      `gate/answers/<surface>.json` is not one of them: fix the tree, or record a
-      ruling in `gate/overrides.json` as the item above describes. Deletion leaves
-      no trace, so an adjudicated finding becomes indistinguishable from one nobody
+      carries a `consequence` and a one-sentence `failure_scenario` written by the
+      reporting agent about its own work, and a priority computed from those by
+      the answer recorder as item 4 describes — not chosen by the agent and not
+      adjustable by it — so the ruling on whether the computed priority is right
+      is yours, not the agent's. Nothing stops you from promoting a P2 or a P3
+      you judge worse than the matrix read it, up to and including into P0; a P1
+      you judge harmless has two honest ways off the receipt, and deleting it
+      from `gate/answers/<surface>.json` is not one of them: fix the tree, or
+      record a ruling in `gate/overrides.json` as the item above describes. A P0
+      has neither way off short of a fix, which is the point of calling it
+      non-overridable. Deletion leaves no trace, so an adjudicated finding
+      becomes indistinguishable from one nobody
       ever raised and the next reader cannot tell that you looked — which is the
       whole reason the override record exists. It was built in v0.5.2; until then
       deletion was the only route, and this paragraph said so. Why the classifier
-      that would derive a finding's weight from its evidence was NOT built, and
-      what it would need first, is recorded at `cmd/dossierx/gate_stage3_test.go`
-      in the residues note.
+      that would derive a finding's weight from its evidence — a file:line and the
+      contradicting prose span, not a manifest field and a closed vocabulary —
+      was NOT built, and what it would need first, is recorded at
+      `cmd/dossierx/gate_stage3_test.go` in the residues note.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out
@@ -755,9 +813,11 @@ them, and the three post-publish checks that leave this repository entirely.
       this point is content no gate read and the merge carries it in. The
       ci-evidence record and the driver's own run record default to paths outside
       the repository so that neither of them is what dirties it; everything else a
-      run writes lands under `gate/` and is ignored — with one exception,
-      `gate/subject.json`, which is tracked on purpose and which step 2 of
-      **Before tagging** tells you to commit at the moment it is minted.
+      run writes lands under `gate/` and is ignored — with two exceptions,
+      `gate/subject.json` and `gate/deferred.json`, both tracked on purpose.
+      Step 2 of **Before tagging** tells you to commit `gate/subject.json` at the
+      moment it is minted; `gate/deferred.json` is committed as part of the same
+      clean-tree precondition, rewritten each time an answer is recorded.
 
       **And `main` must not be checked out in another worktree.** D2's first act
       is `git checkout main` in the checkout you invoke from, and git allows a

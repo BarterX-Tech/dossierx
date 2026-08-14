@@ -66,6 +66,12 @@ SUBJECT_FILE="gate/subject.json"
 # a disagreement between them is D1's refusal to make, not this script's, and
 # reading one here is enough to tell one RELEASE from the next.
 VERSION_FILE="CHANGELOG.md"
+# THE DEFERRED LEDGER. Tracked, for gate/.gitignore's reason: a deferral nobody
+# can see in a diff is a drop rather than a decision. It is also READ, not just
+# written — `record` overwrites it with THIS run's P2/P3 findings, and it is
+# read back here, at the START of the NEXT release, before that release's own
+# rounds have found anything of their own to defer.
+DEFERRED_FILE="gate/deferred.json"
 # The snag check's question. It is a prompt file rather than a string in this
 # script for the reason every other prompt is: what an agent is asked is reviewed
 # material, and material nobody can diff is material nobody reviews.
@@ -383,6 +389,64 @@ subject_freeze() {
   printf 'gate-stage2: froze the subject for %s at %s (run %s)\n' "$_version" "$_actual" "$_run" >&2
 }
 
+# deferred_notice tells a maintainer, once, that a PREVIOUS release left findings
+# behind — never twice, and never for a ledger that is this release's own.
+#
+# WHY IT RUNS INSIDE fanout AND NOT AS ITS OWN MODE. The claim four documents
+# already make — gate/.gitignore, CHANGELOG.md, docs/RELEASING.md, the priority
+# design note — is that "the next release's round one reads gate/deferred.json
+# as input". Round one IS this mode: it is the first thing a maintainer runs
+# against a fresh release, and a notice nobody has to remember to ask for is the
+# only kind that reliably reaches round one.
+#
+# WHY VERSION IS THE WHOLE TEST. $DEFERRED_FILE is overwritten, never appended
+# to (gateWriteDeferred's own doc comment), so at any moment it holds exactly
+# one release's projection. A version matching THIS release's is that
+# projection — this run's own `record` wrote it, or an earlier round of the
+# same release did — and printing a notice about it would tell the maintainer
+# to triage findings this release already knows about, from a file it is about
+# to overwrite again. Only a version that names some OTHER release is a ledger
+# this release has not yet been shown.
+#
+# WHY A DIE AND NOT A SKIP ON A FILE THAT WON'T READ. CLAUDE.md's rule for this
+# gate: a check that cannot run is a failure, not a pass. A ledger this function
+# cannot make sense of might carry findings nobody has triaged, and reading it
+# as "nothing deferred" would drop them exactly as silently as never having
+# written the file at all.
+deferred_notice() {
+  [ -f "$ROOT/$DEFERRED_FILE" ] || return 0
+
+  _dnotice_version="$(json_scalar "$ROOT/$DEFERRED_FILE" version)"
+  # THE LAST NON-BLANK LINE, checked because json_scalar is a regex over lines
+  # and would happily report a version out of a file cut off mid-write — a
+  # truncated `findings` array reads, to a caller that never looks past
+  # `version`, exactly like a ledger with nothing left to say. gateWriteDeferred
+  # writes through a temp file and renames, so this should never fire against a
+  # ledger this repository's own tooling produced; it exists for the one this
+  # function was told not to trust, a hand-edited or crash-truncated file.
+  _dnotice_last="$(awk 'NF { last = $0 } END { print last }' "$ROOT/$DEFERRED_FILE")"
+  if [ -z "$_dnotice_version" ] || [ "$_dnotice_last" != "}" ]; then
+    die "fanout: $DEFERRED_FILE exists and cannot be read as the ledger it claims to be — its version field is unreadable, or the document does not end where a complete one does. An unreadable ledger is not an empty one: repair it by hand, or delete it and let the next \`record\` mint a fresh one." 2
+  fi
+
+  _dnotice_current="$(release_version)"
+  # Equal: this release's own projection, from this run or an earlier round of
+  # it. Silence is correct — see the WHY above.
+  [ "$_dnotice_version" = "$_dnotice_current" ] && return 0
+
+  # Counted by the one field every finding carries and the ledger's own top
+  # level never repeats (gateFinding.Surface, `"surface"` on the wire) — the
+  # same small-parser approach as json_scalar, and for the same reason: this
+  # is not a JSON parser and the one field it counts is enough to say how many.
+  _dnotice_count="$(awk '/"surface":/ { n++ } END { print n + 0 }' "$ROOT/$DEFERRED_FILE")"
+
+  printf 'gate-stage2: %s deferred %s finding(s) into %s.
+  They are this release'"'"'s round-one input: hand each to the surface it
+  names for reading, or fix it outright. Then delete %s, or leave it — the
+  next recording overwrites it in full.\n' \
+    "$_dnotice_version" "$_dnotice_count" "$DEFERRED_FILE" "$DEFERRED_FILE" >&2
+}
+
 json_string_array() {
   # reads lines on stdin, writes a JSON array of strings
   awk '
@@ -626,6 +690,14 @@ case "$MODE" in
     # which on disk is indistinguishable from a fan-out that half happened.
     # subject_verify writes nothing and exits 6, which propagates through `set -e`.
     subject_verify
+
+    # THE PREVIOUS RELEASE'S DEFERRALS ARE SURFACED HERE, after the subject is
+    # confirmed stable and before a toolchain invocation is spent — the same
+    # ordering reason subject_verify runs first: a maintainer should hear about
+    # them before round one spends anything, not after. deferred_notice writes
+    # nothing and dies on a ledger it cannot read, which propagates through
+    # `set -e` exactly like subject_verify's exit 6 does.
+    deferred_notice
 
     # The producer's own output — the refusal, or the run it minted — goes to
     # stderr, so stdout carries the invocations and nothing else.

@@ -32,20 +32,31 @@ What follows from it:
   (`CHANGELOG.md`'s newest heading and the site's newest `releases[]` entry), and the CI-run
   evidence record for that tree must exist — a release nobody ran `make ci-evidence` for is
   refused, not assumed.
-- **Every finding reaches the human, and the human's ruling is the classification.** Nothing is
-  filtered, deduplicated away or dropped on its way to the report, and a receipt carrying any
-  finding the human has not ruled on evaluates to FAILED. A finding does carry a severity, but that word is free text
-  the reporting agent wrote about its own work — nothing derives it from the evidence behind the
-  finding, and nothing in the gate acts on it: one sort comparator orders the record by it so that
-  a re-run over an unchanged tree produces the identical document, and no verdict, filter or
-  threshold consults it. So an agent never presents its own severity as a verdict: it reports, the
-  human rules. A finding the human has judged non-blocking is cleared by fixing the tree
-  or by recording a ruling in `gate/overrides.json` — tracked, naming the release, the finding's
-  digest, who ruled and why, refused when it is stale or inherited or unreasoned, and carried on the
-  receipt beside the finding it clears, which stays. Deleting a finding by hand is still possible and
-  is still the thing not to do: it leaves an adjudicated finding indistinguishable from one nobody
-  raised. The override record was built in v0.5.2. Why the evidence-derived classifier was NOT built,
-  and what it would need first, is recorded in `cmd/dossierx/gate_stage3_test.go`'s residues note.
+- **Every finding reaches the human, and priority is computed, not asserted.** Nothing is
+  filtered, deduplicated away or dropped on its way to the report. Every finding carries a closed
+  `consequence` — `acts-wrongly`, `misled`, or `cosmetic` — and a mandatory one-sentence
+  `failure_scenario` describing what actually goes wrong for whoever reaches the surface; free-text
+  severity was retired for this, deliberately, in the v0.5.2 priority design, because that word was
+  the reporting agent's own about its own work, nothing derived it from the finding's evidence, and
+  a single gate run had produced nine dialects of it that nothing downstream could compare. Priority
+  P0–P3 is computed from that consequence crossed with the surface's `reach_class` in
+  `surfaces.yaml` (`client-shipped`, `consumer-docs`, `maintainer`, `process`) — a reviewed matrix,
+  not a choice either the agent or the gate makes case by case. A receipt carrying any P0 finding,
+  or any P1 finding the human has not ruled on, evaluates to FAILED; P2 and P3 findings stay on the
+  receipt, never block, and are carried forward into the next release's `gate/deferred.json` rather
+  than dropped. A P1 finding the human has judged non-blocking is cleared by fixing the tree or by
+  recording a ruling in `gate/overrides.json` — tracked, naming the release, the finding's digest,
+  who ruled and why, refused when it is stale or inherited or unreasoned, and carried on the receipt
+  beside the finding it clears, which stays. The matrix is a default, never a ceiling: the human's
+  ruling can promote any finding, P0 included, when the matrix undersells it — but P0 itself admits
+  no ruling the other way, because a client-shipped defect that leaves a follower acting wrongly is
+  exactly what this gate exists to catch, and it is not waved through by a signature. Deleting a
+  finding by hand is still possible and is still the thing not to do: it leaves an adjudicated
+  finding indistinguishable from one nobody raised. The override record was built in v0.5.2. Why the
+  evidence-derived classifier — one that would derive a finding's weight from a file:line and the
+  contradicting prose span, rather than from a manifest field and a closed vocabulary — was NOT
+  built, and what it would need first, is recorded in `cmd/dossierx/gate_stage3_test.go`'s residues
+  note.
 - **Verify the thing the user sees, not the thing you edited.** The site is read as rendered DOM
   from a real build, the binary is checked from the published archive, and the tag's tree is checked
   against the tree that was actually approved. This covers output; it does not cover invariants about
