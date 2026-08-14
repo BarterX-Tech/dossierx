@@ -629,9 +629,21 @@ type gateManifest struct {
 }
 
 type gateManifestEntry struct {
-	Name  string   `yaml:"name"`
-	Paths []string `yaml:"paths"`
-	Not   []string `yaml:"not"`
+	Name string `yaml:"name"`
+	// ReachClass is how far this surface travels — one of gateReachClasses — and
+	// it is the half of a finding's priority that is NOT the reviewing agent's to
+	// choose (gate_priority_test.go crosses it with the agent's consequence). It
+	// lives here, in a reviewed and tracked file, for the reason the whole
+	// manifest does: a class the agent judging the surface could pick is a
+	// release-blocking decision made by the party under review.
+	//
+	// It takes no part in ownership or in fingerprinting beyond the manifest's own
+	// bytes, and an entry that declares none is not an error HERE — the refusal
+	// belongs where a finding on that surface is filed, which is the only place
+	// that can name what could not be ranked.
+	ReachClass string   `yaml:"reach_class"`
+	Paths      []string `yaml:"paths"`
+	Not        []string `yaml:"not"`
 	// Reads are documents this surface DOES NOT OWN but whose bytes its agent
 	// needs to judge its own. They are exact repo-relative paths, never
 	// patterns: a surface borrowing another's material has to name what it

@@ -39,19 +39,24 @@
 //
 // WHAT THIS FILE DELIBERATELY DOES NOT BUILD, and the residue that leaves:
 //
-//   - THE EVIDENCE-DERIVED CLASSIFIER. Findings are collected whole and ordered
-//     by nothing; gateFinding.Severity remains a string the agent writes about
-//     its own work, read only by gateRecordReceipt's sort comparator. Deriving a
-//     classification from evidence needs an evidence bar that the bundle W6
-//     landed can actually meet — surface.json carries no source path and no line
-//     number anywhere, so C4's "a file:line in code plus the contradicting prose
-//     span" is unsatisfiable by construction and every finding would classify
-//     UNSUPPORTED. That is a decision about a closed design point, not an
-//     implementation gap, and it is left open rather than guessed at.
+//   - THE EVIDENCE-DERIVED CLASSIFIER. Still not built, and the entry is narrower
+//     than it was. gateFinding.Severity is gone: what an agent writes now is a
+//     CONSEQUENCE from a closed set of three, crossed with the reach_class its
+//     surface declares in surfaces.yaml to give the priority that decides whether
+//     the release stops (gate_priority_test.go). That is a classification derived
+//     from a reviewed declaration and one bounded choice — it is not derived from
+//     EVIDENCE. Nothing checks the agent's consequence against what it found; the
+//     mandatory failure_scenario makes the reasoning visible to a human and
+//     checkable by one, and that is all it does. Deriving the consequence itself
+//     needs an evidence bar the bundle W6 landed can meet — surface.json carries
+//     no source path and no line number anywhere, so C4's "a file:line in code
+//     plus the contradicting prose span" is unsatisfiable by construction and
+//     every finding would classify UNSUPPORTED. Still a decision about a closed
+//     design point rather than an implementation gap, and still left open.
 //   - THE OVERRIDE RECORD — BUILT IN v0.5.2, and this entry is kept as the record
 //     of why it was not built earlier. It said: gateReceipt has no field for a
-//     human waving a finding through, evaluate() returns FAILED whenever any
-//     finding is present, so the only way past a finding judged non-blocking was
+//     human waving a finding through, evaluate() returned FAILED whenever any
+//     finding was present, so the only way past a finding judged non-blocking was
 //     to delete it — leaving an adjudicated finding and a finding nobody raised
 //     indistinguishable to the next release. The argument that finally paid for
 //     it is the one this entry predicted ("THIS NOW HAS A ROUTINE CALLER"), plus
@@ -644,6 +649,25 @@ func gateStage3Verdicts(answers []gateStage3Answer) []gateSurfaceVerdict {
 // into four things a human has to read and reconcile.
 const gateStage3JoinSurface = "cross-surface-join"
 
+// gateStage3JoinPriority is the rank every finding the join raises carries.
+//
+// IT IS SET BY HAND BECAUSE THERE IS NOTHING TO LOOK UP. Every other finding in
+// this gate is ranked by crossing the agent's consequence with the reach_class
+// its surface declares (gate_priority_test.go); the join's surface is declared
+// nowhere by construction, so half the crossing does not exist.
+//
+// P1 rather than P2 for the reason the join was built at all. Its two findings —
+// documents that disagree, and a subject nobody claims — are cases where every
+// per-surface agent PASSED and the disagreement exists only in the union. If they
+// deferred, the one reader capable of seeing them would report into a ledger, the
+// release would publish, and the next run would report the same thing to the same
+// ledger for ever: which is the state the join replaced. P1 and not P0 because
+// P0 is reserved for a client-shipped surface that makes its reader ACT wrongly,
+// and a collision does not say which of the disagreeing documents is the wrong
+// one — so it can be ruled on by a human who has decided which, while a P0
+// cannot.
+const gateStage3JoinPriority = gatePriorityP1
+
 // The two rules the join reports under. They are named constants because the
 // receipt sorts findings by rule and a human filters on it.
 const (
@@ -667,9 +691,17 @@ const (
 // A COLLISION IS A FINDING AND NOT A VERDICT. It does not overrule any surface's
 // answer — every one of them may be right about its own document — it says the
 // union is inconsistent and names who said what, which is the only form a human
-// can act on. That a finding blocks the release is gateReceipt.evaluate's rule
-// and CLAUDE.md's: every finding reaches the human, and the human confirms what
-// blocks.
+// can act on. Whether it blocks is gateReceipt.evaluate's rule: every finding
+// reaches the human, and the ones the matrix ranks P0 or P1 stop the release
+// until they are fixed or ruled on.
+//
+// AND THE JOIN'S OWN FINDINGS ARE RANKED HERE, BY HAND, which is the one place in
+// this gate that a priority is not read off the matrix. gateStage3JoinSurface is
+// deliberately not a declared surface — a disagreement belongs to no single one —
+// so surfaces.yaml has no reach_class to cross, and there is nothing to look up.
+// gateStage3JoinPriority is what that costs, and it is written as a constant with
+// this paragraph attached rather than defaulted, so that changing it is a decision
+// somebody makes rather than a value that drifts.
 //
 // AN UNCLAIMED SUBJECT IS A FINDING FOR THE SAME REASON A SKIPPED CHECK IS A
 // FAILURE. A subject every surface answers `not-claimed` is a subject the join
@@ -691,18 +723,24 @@ func gateStage3JoinFindings(answers []gateStage3Answer, vocabulary []gateStage3S
 			said = append(said, fmt.Sprintf("%s say %q", strings.Join(v.Surfaces, ", "), v.Value))
 		}
 		out = append(out, gateFinding{
-			Surface:  gateStage3JoinSurface,
-			Rule:     gateStage3RuleCollision,
-			Severity: "major",
+			Surface:     gateStage3JoinSurface,
+			Rule:        gateStage3RuleCollision,
+			Consequence: gateConsequenceMisled,
+			FailureScenario: fmt.Sprintf("a reader takes %s from whichever of these documents they happened to open, and at most one of them is right",
+				c.Subject),
+			Priority: gateStage3JoinPriority,
 			Detail: fmt.Sprintf("the surfaces do not agree about %s: %s. No per-surface agent can see this — each document is internally consistent and none of them was handed the others — so every one of these surfaces passed. Decide which value is right and correct the documents that state the other.",
 				c.Subject, strings.Join(said, "; ")),
 		})
 	}
 	for _, subject := range gateStage3UnclaimedSubjects(answers, vocabulary) {
 		out = append(out, gateFinding{
-			Surface:  gateStage3JoinSurface,
-			Rule:     gateStage3RuleUnclaimed,
-			Severity: "major",
+			Surface:     gateStage3JoinSurface,
+			Rule:        gateStage3RuleUnclaimed,
+			Consequence: gateConsequenceMisled,
+			FailureScenario: fmt.Sprintf("every future run reports agreement about %s, and a reader — including the next maintainer — takes that for a check that passed rather than one that cannot fire",
+				subject),
+			Priority: gateStage3JoinPriority,
 			Detail: fmt.Sprintf("not one surface stated a value for %s, so the cross-surface join cannot fire on it: it reports agreement on this tree and on every future one, and that reads exactly like %d surfaces agreeing. Either a surface stopped stating it, or the subject no longer describes anything this project publishes and belongs out of the vocabulary in %s.",
 				subject, len(answers), gateBundleFrameFile),
 		})
@@ -906,10 +944,12 @@ func gateStage3Vocab(t *testing.T) []gateStage3Subject {
 // gateStage3Findings builds a one-finding list attributed to surface.
 func gateStage3OneFinding(surface string) *[]gateFinding {
 	return &[]gateFinding{{
-		Surface:  surface,
-		Rule:     "counted-claim-mismatch",
-		Severity: "major",
-		Detail:   "the document says nineteen commands and the inventory holds twenty",
+		Surface:         surface,
+		Rule:            "counted-claim-mismatch",
+		Consequence:     gateConsequenceMisled,
+		FailureScenario: "a reader counts on nineteen commands being all of them and writes a script that misses one",
+		Detail:          "the document says nineteen commands and the inventory holds twenty",
+		Priority:        gatePriorityP1,
 	}}
 }
 
@@ -1540,7 +1580,14 @@ func TestGateStage3HandsTheReceiptEveryFindingItCollected(t *testing.T) {
 	var want int
 	for _, surface := range declared {
 		a := gateStage3Good(surface, run, current[surface], gateVerdictFailed)
-		extra := append(*a.Findings, gateFinding{Surface: surface, Rule: "stale-version-pin", Severity: "minor", Detail: "the install line pins the previous release"})
+		extra := append(*a.Findings, gateFinding{
+			Surface:         surface,
+			Rule:            "stale-version-pin",
+			Consequence:     gateConsequenceCosmetic,
+			FailureScenario: "a reader sees last release's number beside an install line that is otherwise correct",
+			Detail:          "the install line pins the previous release",
+			Priority:        gatePriorityP3,
+		})
 		a.Findings = &extra
 		want += len(extra)
 		gateStage3WriteAnswer(t, root, a)
@@ -1564,16 +1611,20 @@ func TestGateStage3HandsTheReceiptEveryFindingItCollected(t *testing.T) {
 	if got := len(projected); got != want {
 		t.Fatalf("%d of %d findings reached the record; a finding nobody can see is a run that did not happen", got, want)
 	}
-	// Including the ones an agent labelled minor: severity orders a report and
-	// decides nothing, because the human confirms what blocks a release.
-	var minor int
+	// INCLUDING THE DEFERRED ONES, which is the half worth asserting now that a
+	// P3 does not stop the release. "Does not block" is a rule about the verdict
+	// and never about the record: a collection that dropped what it had decided
+	// not to block on would be the filter this gate must not be, and the loss
+	// would be invisible — the run would read exactly like one where nobody found
+	// anything.
+	var deferred int
 	for _, f := range projected {
-		if f.Severity == "minor" {
-			minor++
+		if f.Priority == gatePriorityP3 {
+			deferred++
 		}
 	}
-	if minor != len(declared) {
-		t.Errorf("%d of %d self-labelled minor findings survived collection", minor, len(declared))
+	if deferred != len(declared) {
+		t.Errorf("%d of %d deferred findings survived collection; a finding that neither blocks nor reaches the record has been dropped", deferred, len(declared))
 	}
 }
 

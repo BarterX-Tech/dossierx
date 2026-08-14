@@ -157,25 +157,61 @@ type gateReceipt struct {
 
 // gateFinding is one thing the gate found.
 //
-// Severity is carried but is NOT what decides the verdict. CLAUDE.md's rule is
-// that every finding reaches the human and the HUMAN confirms what blocks a
-// release, so a receipt carrying any finding at all evaluates to FAILED and the
-// override is the human's to record. Filtering by severity here would be an
-// agent making that call alone.
+// WHAT REPLACED SEVERITY, AND WHY. The field an agent used to fill in was
+// `severity`: free text it wrote about its own work, which nothing derived from
+// evidence and nothing acted on. Two fields replace it, and the split is the
+// whole design. CONSEQUENCE is a question about the reader — does somebody ACT
+// wrongly because of this, is somebody MISLED by it, or is it COSMETIC — and it
+// is the only half a reading agent handed one surface is placed to answer. The
+// other half is how far the surface carrying it reaches, which is surfaces.yaml's
+// `reach_class:`, a reviewed line in a tracked file and never the agent's to
+// choose. gate_priority_test.go crosses the two into Priority, so the word that
+// decides whether a release stops is derived from a declaration plus one closed
+// choice rather than written free-hand by the agent whose work is being judged.
+//
+// AND THE VERDICT NOW READS IT. The old rule — every finding reaches the human,
+// so a receipt carrying any finding at all evaluates to FAILED — made the record
+// honest and made the gate unusable at the far end: a cosmetic line in a
+// maintainer-only document stopped the release exactly as hard as a wrong install
+// command, so the only moves were to fix it or to spend a human's ruling on it.
+// evaluate() now blocks on unruled P0 and P1 and lets P2/P3 through. Nothing is
+// filtered on the way to the report — every finding is still on the receipt, and
+// the deferred ones are additionally projected into gate/deferred.json so that
+// "did not block" cannot decay into "was never written down".
 type gateFinding struct {
-	Surface  string `json:"surface"`
-	Rule     string `json:"rule"`
-	Severity string `json:"severity"`
-	Detail   string `json:"detail"`
+	Surface string `json:"surface"`
+	Rule    string `json:"rule"`
+	// Consequence is one of gateConsequences, and it is closed. An open field
+	// here would put the matrix's row lookup at the mercy of whichever synonym an
+	// agent reached for, and a consequence nothing can look up is a finding
+	// nothing can prioritize.
+	Consequence string `json:"consequence"`
+	// FailureScenario is the sentence that says who gets hurt and how. It is
+	// MANDATORY and non-empty, because it is the only field that can be checked
+	// against the consequence by a human reading the record: an agent that writes
+	// "acts-wrongly" and then describes a typo has contradicted itself in the
+	// document, where the contradiction is visible. It is deliberately not in the
+	// digest — see gateFindingDigest.
+	FailureScenario string `json:"failure_scenario"`
+	Detail          string `json:"detail"`
 	// Digest is what an override names, emitted here so a human can copy it.
-	// It is DERIVED, never read: gateFindingDigest recomputes it from the three
-	// fields above every time the record is matched, so a digest edited by hand
-	// matches nothing and the override that carries it is refused as stale. It is
-	// on the finding because the alternative — documented in docs/RELEASING.md as
-	// `"finding": "sha256:…"` with no way to obtain the value — asked a maintainer
-	// to hand-compute a sha256 over a NUL-delimited string, which is a recipe for
-	// a ruling that silently rules on nothing.
+	// It is DERIVED, never read: gateFindingDigest recomputes it from the
+	// finding's substance every time the record is matched, so a digest edited by
+	// hand matches nothing and the override that carries it is refused as stale.
+	// It is on the finding because the alternative — documented in
+	// docs/RELEASING.md as `"finding": "sha256:…"` with no way to obtain the
+	// value — asked a maintainer to hand-compute a sha256 over a NUL-delimited
+	// string, which is a recipe for a ruling that silently rules on nothing.
 	Digest string `json:"digest,omitempty"`
+	// Priority is gatePriorityFor(reach_class, consequence), stamped by the
+	// recorder at filing time — see gate_priority_test.go.
+	//
+	// It carries NO omitempty, unlike Digest, and the difference is deliberate. A
+	// finding with no priority is not a tidier finding: it is one nothing could
+	// rank, which evaluate() treats as blocking. An absent key would present that
+	// hole as an ordinary record, and the reader of a receipt has to be able to
+	// see the empty string.
+	Priority string `json:"priority"`
 }
 
 // ---------------------------------------------------------------------
@@ -413,11 +449,28 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 		if found[i].Rule != found[j].Rule {
 			return found[i].Rule < found[j].Rule
 		}
-		if found[i].Severity != found[j].Severity {
-			return found[i].Severity < found[j].Severity
+		if found[i].Consequence != found[j].Consequence {
+			return found[i].Consequence < found[j].Consequence
+		}
+		if found[i].FailureScenario != found[j].FailureScenario {
+			return found[i].FailureScenario < found[j].FailureScenario
 		}
 		return found[i].Detail < found[j].Detail
 	})
+
+	// THE DEFERRED LEDGER IS WRITTEN HERE, LAST, and only once every refusal above
+	// has passed. It is the price of P2/P3 not failing the verdict: a finding that
+	// does not stop the release has to land somewhere a human can find it later,
+	// or "it did not block" becomes "nobody ever wrote it down" one release after
+	// the decision to stop blocking on it. See gate_priority_test.go for the file's
+	// contract; the ordering it inherits is the sort immediately above, so a re-run
+	// over an unchanged tree reproduces it byte for byte along with the receipt.
+	//
+	// A projection that cannot be written is a failed recording rather than a
+	// receipt with a silent hole beside it.
+	if err := gateWriteDeferred(dir, version, found); err != nil {
+		return gateReceipt{}, fmt.Errorf("gate receipt: %w", err)
+	}
 
 	return gateReceipt{
 		Gate:       "G1",
@@ -511,28 +564,59 @@ func gateAssertMergeMatchesReceipt(r gateReceipt, mergeTree string) error {
 // evaluate is the receipt's verdict, recomputed from its own contents plus the
 // surfaces the manifest declares and the fingerprints this tree produces.
 //
-// PASS requires all three: no findings, and every declared surface holding a
-// PASS, and every one of those PASSes fingerprinted against THIS tree. Anything
-// else is FAILED with an error naming every reason, because a verdict that says
-// only "FAILED" sends the reader back to re-derive what the gate already knew.
+// PASS requires all three: no BLOCKING finding left unruled, and every declared
+// surface holding a PASS, and every one of those PASSes fingerprinted against
+// THIS tree. Anything else is FAILED with an error naming every reason, because a
+// verdict that says only "FAILED" sends the reader back to re-derive what the
+// gate already knew.
+//
+// BLOCKING IS P0 AND P1. P0 — a client-shipped surface that makes the reader ACT
+// wrongly — cannot be cleared by a ruling at all; gateApplyOverrides refuses the
+// record that tries. P1 blocks until a named human rules on it. P2 and P3 are
+// recorded, projected into gate/deferred.json, and do not stop the release.
+//
+// A FINDING WITH NO PRIORITY BLOCKS, and it is reported separately from the
+// unruled ones. Nothing in this file can rank it — the ranking is the recorder's,
+// against the manifest — so the honest reading of a receipt carrying one is "a
+// finding arrived by a path that skipped the ranking", which is a broken producer
+// and not a small finding. Defaulting it to P3 would make every such path silent,
+// which is the shape that lets a whole surface's findings stop counting; treating
+// it as P0 would say a defect nobody classified is the worst kind, which is a
+// claim about evidence this function does not have. So it is its own reason,
+// blocking, named as unranked.
 func (r gateReceipt) evaluate(declared []string, current map[string]string) (string, error) {
 	var reasons []string
 
 	// The human's rulings are applied FIRST, and a record that decides nothing —
-	// stale, unattributed, unreasoned, inherited from another release — is a
-	// refusal in its own right rather than a quietly ignored file. Everything the
-	// rulings do not cover still fails, exactly as before.
-	remaining, applied, err := gateApplyOverrides(r, r.Overrides)
+	// stale, unattributed, unreasoned, inherited from another release, or aimed at
+	// a P0 — is a refusal in its own right rather than a quietly ignored file.
+	// Everything the rulings do not cover still fails, exactly as before.
+	remaining, _, err := gateApplyOverrides(r, r.Overrides)
 	if err != nil {
 		reasons = append(reasons, err.Error())
 		remaining = r.Findings
 	}
-	if len(remaining) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d finding(s) reached the report and were not ruled on; a human confirms what blocks the release, so the gate does not clear itself", len(remaining)))
+
+	blocking, _, unranked := gatePartitionByPriority(remaining)
+	if len(unranked) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d finding(s) reached the report carrying no priority the matrix recognises (%s). "+
+			"A finding is ranked where it is filed, from the surface's reach_class and its own consequence, so one that arrives unranked came by a path that skipped the ranking — which is a producer to fix, not a finding to wave through",
+			len(unranked), gateFindingList(unranked)))
 	}
+	if len(blocking) > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d P0/P1 finding(s) reached the report and were not ruled on (%s); a human confirms what blocks the release, so the gate does not clear itself",
+			len(blocking), gateFindingList(blocking)))
+	}
+
+	// The surface verdicts are recomputed against what is left BLOCKING rather
+	// than against what is left at all. A surface whose every finding was ruled on
+	// reads PASS — that is the override's half — and so does one whose findings are
+	// all deferred: the receipt says the agent reported FAILED, the ledger says
+	// what it reported, and the release is not stopped by a P3. What the agents
+	// reported is never rewritten; see gateVerdictsAfterOverrides.
 	surfaces := r.Surfaces
-	if err == nil && len(applied) > 0 {
-		surfaces = gateVerdictsAfterOverrides(r, remaining)
+	if err == nil {
+		surfaces = gateVerdictsAfterOverrides(r, append(append([]gateFinding(nil), blocking...), unranked...))
 	}
 	if err := gateIsGreen(declared, surfaces, current); err != nil {
 		reasons = append(reasons, err.Error())
@@ -543,9 +627,46 @@ func (r gateReceipt) evaluate(declared []string, current map[string]string) (str
 	return gateVerdictFailed, errors.New(strings.Join(reasons, "\n"))
 }
 
+// gateFindingList names findings in a refusal, so that "3 P0/P1 finding(s)"
+// is followed by which three. A count alone sends the reader back to the receipt
+// to diff it against their own reading of what was ruled on.
+func gateFindingList(findings []gateFinding) string {
+	out := make([]string, 0, len(findings))
+	for _, f := range findings {
+		priority := f.Priority
+		if priority == "" {
+			priority = "no priority"
+		}
+		out = append(out, fmt.Sprintf("%s/%s [%s]", f.Surface, f.Rule, priority))
+	}
+	sort.Strings(out)
+	return strings.Join(out, ", ")
+}
+
 // ---------------------------------------------------------------------
 // the tests
 // ---------------------------------------------------------------------
+
+// gateReceiptFinding is one finding in the shape the RECEIPT carries it: the
+// agent's four fields plus the priority the recorder would have stamped.
+//
+// The tests below build findings by hand rather than by recording an answer,
+// because what they are about is the receipt's own arithmetic — its ordering, its
+// exit rule, its handshake — and going through a fan-out fixture to reach it
+// would make every one of them fail for a fan-out's reasons. The priority is
+// therefore a PARAMETER here: which band a finding is in is exactly the variable,
+// and gate_priority_test.go is where the crossing that produces it is held to the
+// matrix.
+func gateReceiptFinding(surface, rule, detail, consequence, priority string) gateFinding {
+	return gateFinding{
+		Surface:         surface,
+		Rule:            rule,
+		Consequence:     consequence,
+		FailureScenario: "a reader of " + surface + " acts on " + rule + " and is worse off for it",
+		Detail:          detail,
+		Priority:        priority,
+	}
+}
 
 // gateTestGit runs one git command in a FIXTURE repository, with the
 // contributor's global and system configuration neutralized — the same
@@ -1093,9 +1214,9 @@ func TestGateReceiptRefusesToRecordASurfaceTwice(t *testing.T) {
 	// leaves to the sort.
 	surfaces := gatePassingSurfaces("changelog", "readme", "site")
 	findings := []gateFinding{
-		{Surface: "site", Rule: "stale-count", Severity: "minor", Detail: "says 27, the registry holds 28"},
-		{Surface: "site", Rule: "stale-count", Severity: "minor", Detail: "says 6 nouns, the contract lists 7"},
-		{Surface: "readme", Rule: "undocumented-flag", Severity: "major", Detail: "--strict is not described"},
+		gateReceiptFinding("site", "stale-count", "says 27, the registry holds 28", gateConsequenceCosmetic, gatePriorityP3),
+		gateReceiptFinding("site", "stale-count", "says 6 nouns, the contract lists 7", gateConsequenceCosmetic, gatePriorityP3),
+		gateReceiptFinding("readme", "undocumented-flag", "--strict is not described", gateConsequenceActsWrongly, gatePriorityP1),
 	}
 	first, err := gateRecordReceipt(work, "v9.9.9", "release", surfaces, findings)
 	if err != nil {
@@ -1250,7 +1371,10 @@ func TestGateReceiptVerdictIsDerivedNotStored(t *testing.T) {
 		name    string
 		receipt gateReceipt
 	}{
-		{"a finding reached the report", gateReceipt{Surfaces: green, Findings: []gateFinding{{Surface: "site", Rule: "stale-count", Severity: "minor", Detail: "says 27, the registry holds 28"}}}},
+		{"a blocking finding reached the report", gateReceipt{Surfaces: green, Findings: []gateFinding{
+			gateReceiptFinding("site", "stale-count", "says 27, the registry holds 28", gateConsequenceMisled, gatePriorityP1)}}},
+		{"a finding nothing ranked reached the report", gateReceipt{Surfaces: green, Findings: []gateFinding{
+			gateReceiptFinding("site", "stale-count", "says 27, the registry holds 28", gateConsequenceMisled, "")}}},
 		{"a declared surface holds no verdict", gateReceipt{Surfaces: green[:1]}},
 		{"a surface holds a FAIL", gateReceipt{Surfaces: []gateSurfaceVerdict{green[0], {Surface: "site", Verdict: gateVerdictFailed, Fingerprint: "sha256:bb"}}}},
 		{"a PASS was fingerprinted against another tree", gateReceipt{Surfaces: []gateSurfaceVerdict{green[0], {Surface: "site", Verdict: gateVerdictPass, Fingerprint: "sha256:stale"}}}},

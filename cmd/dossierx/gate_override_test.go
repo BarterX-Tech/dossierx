@@ -4,14 +4,23 @@
 // WHY IT EXISTS, and why it was deliberately absent until now.
 // gate_stage3_test.go has carried the argument since the join was written: the
 // receipt has no field for a human waving a finding through, and evaluate()
-// returns FAILED whenever any finding is present, so the only way past a finding
-// somebody has judged non-blocking was to delete it from the record — which
-// leaves an adjudicated finding and a finding nobody raised byte-identical to the
-// next release. That was defensible while nothing needed it. The v0.5.2 gate's
-// fifth round made it routine: 58 findings, two of which are the reading agents
-// reporting that the harness could not withhold the tools the design grants them
-// — a fact about the runtime that no edit to this tree can fix, and that
-// therefore recurs on every round for ever.
+// returned FAILED whenever any finding was present, so the only way past a
+// finding somebody has judged non-blocking was to delete it from the record —
+// which leaves an adjudicated finding and a finding nobody raised byte-identical
+// to the next release. That was defensible while nothing needed it. The v0.5.2
+// gate's fifth round made it routine: 58 findings, two of which are the reading
+// agents reporting that the harness could not withhold the tools the design
+// grants them — a fact about the runtime that no edit to this tree can fix, and
+// that therefore recurs on every round for ever.
+//
+// WHAT THE PRIORITY MATRIX LEFT FOR IT TO DO. gate_priority_test.go now decides
+// which findings block at all, and P2/P3 no longer need a ruling — which is what
+// keeps this record rare enough to stay meaningful. Two cells changed for this
+// file. P1 is the band an override still clears, unchanged and with every refusal
+// below in force. P0 — a client-shipped surface that makes its reader ACT wrongly
+// — cannot be cleared here at all: a signature does not make a wrong install
+// command work, and gateApplyOverrides refuses the record that tries rather than
+// the finding, so the file is visibly the thing that failed the evaluation.
 //
 // THE THREE PROPERTIES, which are the whole design. An override that lacks any
 // one of them is worse than no override at all, because it makes a green receipt
@@ -39,12 +48,14 @@
 // which is the same argument gate/subject.json's freeze rests on. A gate whose
 // escape hatch is invisible to git is a gate with no escape hatch worth having.
 //
-// WHAT AN OVERRIDE IS NOT. It is not a severity threshold, and nothing here reads
-// gateFinding.Severity. Severity is free text the reporting agent wrote about its
-// own work; an override is a named person's decision about one specific finding,
-// recorded in their words. The two must not be confused, which is why this file
-// refuses an override that carries no reason: a rule that fires automatically is
-// a threshold with extra steps.
+// WHAT AN OVERRIDE IS NOT. It is not a priority threshold. The matrix decides
+// which findings the gate stops for; an override is a named person's decision
+// about ONE specific finding, recorded in their words, and it is asked for only
+// after the matrix has already said this one is worth stopping for. The two must
+// not be confused, which is why this file refuses an override that carries no
+// reason: a rule that fires automatically is a threshold with extra steps. The
+// one place they meet is the P0 refusal, and that is the matrix removing a cell
+// from this record's reach rather than this record acting on a rank.
 //
 // Same shape as the rest of the gate: test code, not a cobra command, not
 // compiled into the shipped binary, outside surface.json's behaviour_fingerprint.
@@ -90,12 +101,24 @@ type gateOverride struct {
 // gateFindingDigest is the identity an override names.
 //
 // It covers the finding's SUBSTANCE — surface, rule and the detail text — and
-// nothing else. Severity is excluded on purpose: it is the reporting agent's own
-// word about its own work, and an override that survived a severity edit while
-// dying on a wording edit would be keyed to the wrong half of the finding.
+// nothing else, and the input is UNCHANGED by the schema that replaced severity
+// with a consequence, a failure scenario and a derived priority. That is
+// deliberate and it is the reason the version tag in the hashed preamble did not
+// move: an override is a ruling about a defect, and re-classifying that defect —
+// deciding the same wrong sentence misleads rather than makes a reader act wrongly
+// — must not orphan the ruling somebody already made about it. Fold the
+// consequence in and every ruling dies the day a reviewer changes one word that
+// says nothing new about the defect itself.
+//
+// The wording of the finding is a different matter and stays inside: a detail that
+// moved is a defect nobody is reading about any more, and the ruling has to be
+// made again. So the rule is exactly "the ruling survives a re-classification and
+// dies with a re-wording".
+//
 // It is also why the Digest field on gateFinding is excluded from its own input:
 // the receipt stamps that field from this function, so hashing it would make the
-// value depend on itself and no two runs would agree.
+// value depend on itself and no two runs would agree. Priority is excluded for
+// both reasons at once — it is derived, and it is a classification.
 func gateFindingDigest(f gateFinding) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "dossierx-gate-finding\x00v1\x00%s\x00%s\x00%s", f.Surface, f.Rule, f.Detail)
@@ -184,6 +207,23 @@ func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remainin
 				o.Finding, o.Surface, o.Rule, f.Surface, f.Rule))
 			continue
 		}
+		// THE ONE CELL NO RULING REACHES. A P0 is a client-shipped surface that
+		// makes its reader ACT wrongly — an install line that installs the wrong
+		// thing, a documented flag that does not exist — and a signature does not
+		// make the command work. Every other property of this record assumes a
+		// human is deciding between "this is worth stopping the release for" and
+		// "this is worth recording and shipping"; at P0 there is no second option
+		// to decide between, so offering one is offering the wrong choice.
+		//
+		// It is a REFUSAL of the record and not a silently unapplied ruling: the
+		// person who wrote it has to be told that this one is not theirs to rule
+		// on, and a record whose entry did nothing would tell them nothing.
+		if f.Priority == gatePriorityP0 {
+			problems = append(problems, fmt.Sprintf(
+				"the override for %s rules on %s/%s, which is %s: a client-shipped surface that makes its reader ACT wrongly. That cannot be waved through by signature — a ruling does not make a wrong command work — so it is fixed and the gate re-run. Delete this entry",
+				o.Finding, f.Surface, f.Rule, gatePriorityP0))
+			continue
+		}
 		cleared[o.Finding] = true
 		applied = append(applied, o)
 	}
@@ -209,12 +249,21 @@ func gateApplyOverrides(receipt gateReceipt, overrides []gateOverride) (remainin
 }
 
 // gateVerdictsAfterOverrides returns the surface verdicts as they stand once the
-// human's rulings are applied: a surface whose every finding was ruled on reads
-// PASS, and one holding a single unruled finding does not.
+// findings that still stop the release are known: a surface with none of them
+// left reads PASS, and one holding a single blocking finding does not.
+//
+// WHAT `remaining` MEANS HERE WIDENED, and the function did not. It used to be
+// "the findings no ruling covered"; evaluate() now passes "the findings that
+// BLOCK" — unruled P0/P1 plus anything nothing could rank — so a surface whose
+// only findings are deferred to gate/deferred.json reads PASS for the same reason
+// one whose findings were all ruled on does: nothing is left that stops the
+// release. The arithmetic is identical, which is why there is one function and not
+// two; a second one would be a second answer to "is this surface still failing".
 //
 // It builds a new slice rather than editing the receipt's, because the receipt
 // records what the AGENTS reported and that must stay readable next to what the
-// human decided. Two different questions, two different answers, both kept.
+// human decided and what the matrix deferred. Different questions, different
+// answers, all kept.
 func gateVerdictsAfterOverrides(receipt gateReceipt, remaining []gateFinding) []gateSurfaceVerdict {
 	stillFailing := map[string]bool{}
 	for _, f := range remaining {
@@ -238,6 +287,25 @@ func gateVerdictsAfterOverrides(receipt gateReceipt, remaining []gateFinding) []
 // ---------------------------------------------------------------------
 // the tests
 // ---------------------------------------------------------------------
+
+// gateOverrideFinding is one finding at P1 — the band a ruling can reach.
+//
+// EVERY FIXTURE IN THIS FILE IS P1 ON PURPOSE. The tests below are about the
+// record's own refusals — stale, unattributed, unreasoned, inherited, doubled —
+// and each of those has to fire on a finding an override is otherwise allowed to
+// clear, or the test would pass on the P0 refusal instead and prove nothing about
+// the property it names. The one test that wants a P0 is in
+// gate_priority_test.go, where the cell it is about lives.
+func gateOverrideFinding(surface, rule, detail string) gateFinding {
+	return gateFinding{
+		Surface:         surface,
+		Rule:            rule,
+		Consequence:     gateConsequenceMisled,
+		FailureScenario: "a reader of " + surface + " believes something about this release that is not true, and plans around it",
+		Detail:          detail,
+		Priority:        gatePriorityP1,
+	}
+}
 
 func gateOverrideReceipt(findings ...gateFinding) gateReceipt {
 	surfaces := map[string]bool{}
@@ -268,8 +336,8 @@ func gateOverrideFor(f gateFinding, mutate func(*gateOverride)) gateOverride {
 }
 
 func TestGateOverrideClearsOnlyTheFindingItNames(t *testing.T) {
-	ruled := gateFinding{Surface: "contributing", Rule: "harness-did-not-withhold-tools", Severity: "blocking", Detail: "the grant was not enforced"}
-	unruled := gateFinding{Surface: "readme", Rule: "one-envelope-claim", Severity: "minor", Detail: "serve is not one envelope"}
+	ruled := gateOverrideFinding("contributing", "harness-did-not-withhold-tools", "the grant was not enforced")
+	unruled := gateOverrideFinding("readme", "one-envelope-claim", "serve is not one envelope")
 	receipt := gateOverrideReceipt(ruled, unruled)
 
 	remaining, applied, err := gateApplyOverrides(receipt, []gateOverride{gateOverrideFor(ruled, nil)})
@@ -304,7 +372,7 @@ func TestGateOverrideClearsOnlyTheFindingItNames(t *testing.T) {
 }
 
 func TestGateOverrideIsHarderToWriteThanAFix(t *testing.T) {
-	f := gateFinding{Surface: "site", Rule: "text-parity-overclaim", Severity: "minor", Detail: "byte-for-byte identical to v0.2.0's output"}
+	f := gateOverrideFinding("site", "text-parity-overclaim", "byte-for-byte identical to v0.2.0's output")
 	receipt := gateOverrideReceipt(f)
 	override := gateOverrideFor(f, nil)
 
@@ -331,7 +399,7 @@ func TestGateOverrideIsHarderToWriteThanAFix(t *testing.T) {
 }
 
 func TestGateOverrideIsNeverInherited(t *testing.T) {
-	f := gateFinding{Surface: "release-procedure", Rule: "tool-grant-was-not-enforced", Severity: "high", Detail: "the harness held file and shell tools"}
+	f := gateOverrideFinding("release-procedure", "tool-grant-was-not-enforced", "the harness held file and shell tools")
 	next := gateOverrideReceipt(f)
 	next.Version = "v0.5.3"
 
@@ -347,7 +415,7 @@ func TestGateOverrideIsNeverInherited(t *testing.T) {
 }
 
 func TestGateOverrideRefusesEveryRecordThatDecidesNothing(t *testing.T) {
-	f := gateFinding{Surface: "readme", Rule: "stage-order", Severity: "moderate", Detail: "the gate is not the last step"}
+	f := gateOverrideFinding("readme", "stage-order", "the gate is not the last step")
 	receipt := gateOverrideReceipt(f)
 
 	for _, tc := range []struct {
@@ -399,7 +467,7 @@ func TestGateOverrideRecordIsRefusedRatherThanSkipped(t *testing.T) {
 // while the same receipt without the ruling does not — and the ruling is on the
 // receipt where a reader and the run record both meet it.
 func TestGateOverrideReachesTheVerdictAndSaysSoOnTheReceipt(t *testing.T) {
-	f := gateFinding{Surface: "contributing", Rule: "harness-did-not-withhold-tools", Severity: "blocking", Detail: "the grant was not enforced for this run"}
+	f := gateOverrideFinding("contributing", "harness-did-not-withhold-tools", "the grant was not enforced for this run")
 	receipt := gateOverrideReceipt(f)
 	declared := []string{"contributing"}
 	current := map[string]string{"contributing": "sha256:contributing"}
@@ -447,7 +515,7 @@ func TestGateOverrideReachesTheVerdictAndSaysSoOnTheReceipt(t *testing.T) {
 // test is the wire, so it cannot come loose in silence.
 func TestGateOverrideRecordIsActuallyLoadedByTheRunThatMeasuresTheReceipt(t *testing.T) {
 	work := gateFixtureRepo(t)
-	f := gateFinding{Surface: "readme", Rule: "some-rule", Severity: "low", Detail: "a sentence that is not true"}
+	f := gateOverrideFinding("readme", "some-rule", "a sentence that is not true")
 	surfaces := []gateSurfaceVerdict{{Surface: "readme", Verdict: gateVerdictFailed, Fingerprint: "sha256:readme"}}
 
 	// No record: the receipt carries no rulings, which is the ordinary case.
@@ -494,7 +562,7 @@ func TestGateOverrideRecordIsActuallyLoadedByTheRunThatMeasuresTheReceipt(t *tes
 // operate is not an escape hatch.
 func TestGateOverrideDigestIsCopyableFromTheReceipt(t *testing.T) {
 	work := gateFixtureRepo(t)
-	f := gateFinding{Surface: "readme", Rule: "some-rule", Severity: "low", Detail: "a sentence that is not true"}
+	f := gateOverrideFinding("readme", "some-rule", "a sentence that is not true")
 
 	receipt, err := gateRecordReceipt(work, "v0.5.2", "release",
 		[]gateSurfaceVerdict{{Surface: "readme", Verdict: gateVerdictFailed, Fingerprint: "sha256:readme"}},

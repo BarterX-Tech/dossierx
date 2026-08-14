@@ -2345,7 +2345,14 @@ func TestTheDriverRefusesAGateThatIsNotGreen(t *testing.T) {
 		why      string
 	}{
 		{"a finding reached the report", func(e gateDriverFixtureEvidence) gateDriverFixtureEvidence {
-			e.findings = []gateFinding{{Surface: "readme", Rule: "undocumented-flag", Severity: "minor", Detail: "--strict is not described"}}
+			e.findings = []gateFinding{{
+				Surface:         "readme",
+				Rule:            "undocumented-flag",
+				Consequence:     gateConsequenceActsWrongly,
+				FailureScenario: "a reader who never learns --strict exists runs the loose check in CI and merges what it would have caught",
+				Detail:          "--strict is not described",
+				Priority:        gatePriorityP1,
+			}}
 			return e
 		}, "a human confirms what blocks a release; the driver does not clear itself"},
 		{"a declared surface holds no verdict", func(e gateDriverFixtureEvidence) gateDriverFixtureEvidence {

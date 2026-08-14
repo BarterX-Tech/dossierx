@@ -136,6 +136,64 @@ type gateAnswerPayload struct {
 // that the refusal below reads the same on every run.
 var gateAnswerPayloadKeys = []string{"findings", "subjects", "verdict"}
 
+// gateAnswerFindingKeys is the same rule one level down: the closed set of keys
+// ONE FINDING may carry, sorted for the same reason.
+//
+// WHAT AN AGENT OWNS ABOUT A FINDING IS FOUR THINGS. The rule it broke, the
+// consequence of breaking it, the failure scenario that consequence stands for,
+// and the detail. Everything else on gateFinding is the harness's:
+//
+//	surface   — supplied from -answer-surface. It used to be the agent's, and the
+//	            recorder deliberately did not restamp it so that a finding filed
+//	            under the wrong surface stayed visible. That argument was about a
+//	            field the agent had to write anyway; now that the harness knows the
+//	            surface at filing time and refuses a payload that names one, there
+//	            is no wrong value left to preserve — the failure it protected
+//	            against cannot be expressed.
+//	digest    — derived from the finding's own text, and hashing an agent-supplied
+//	            one would let a payload choose which ruling it matches.
+//	priority  — derived from the surface's reach_class and the consequence below.
+//	            An agent that could write it would be choosing whether its own
+//	            finding stops the release.
+//	severity  — GONE. It is named in the refusal rather than silently unknown,
+//	            because a runner ported from the previous schema writes it, and
+//	            "unknown key" is a worse message than "that field was replaced".
+var gateAnswerFindingKeys = []string{"consequence", "detail", "failure_scenario", "rule"}
+
+// gateAnswerFindingProblems refuses every key in one finding the agent does not
+// own, naming them all rather than the first.
+//
+// It is a separate function from the payload's own key check because the message
+// is different: at the top level an unknown key is a runner writing something the
+// schema never had, and here the likeliest one by far is `severity`, from a
+// runner that predates the priority matrix.
+func gateAnswerFindingProblems(path string, index int, keys map[string]json.RawMessage) error {
+	var extra []string
+	for key := range keys {
+		known := false
+		for _, allowed := range gateAnswerFindingKeys {
+			if key == allowed {
+				known = true
+				break
+			}
+		}
+		if !known {
+			extra = append(extra, "`"+key+"`")
+		}
+	}
+	if len(extra) == 0 {
+		return nil
+	}
+	sort.Strings(extra)
+	hint := ""
+	if _, ported := keys["severity"]; ported {
+		hint = " `severity` is not part of this schema any more: what replaced it is `consequence` (one of " +
+			strings.Join(gateConsequences, ", ") + ") crossed with the surface's reach_class in " + gateManifestFile + " to give a priority the agent does not choose."
+	}
+	return fmt.Errorf("%s finding %d states %s, which the agent does not own. A finding carries exactly `%s`; the surface, the digest and the priority are the harness's to supply, and a key dropped in silence would file a finding stating something other than what was reported.%s",
+		path, index, strings.Join(extra, ", "), strings.Join(gateAnswerFindingKeys, "`, `"), hint)
+}
+
 // gateAnswerReadPayload reads the agent's file and refuses everything that is
 // not exactly those three facts.
 //
@@ -191,6 +249,25 @@ func gateAnswerReadPayload(surface, path string) (gateAnswerPayload, error) {
 			path)
 	}
 
+	// AND THE SAME QUESTION ASKED OF EVERY FINDING. The type cannot see a key
+	// gateFinding has no field for, and — worse — it CAN see three the agent must
+	// not set: a payload naming its own `surface`, `digest` or `priority` decodes
+	// perfectly and is then silently overwritten by the recorder, which is the
+	// same wrong the top-level check exists for, one level down and against the
+	// three fields that decide which ruling a finding matches and whether it stops
+	// the release.
+	if value, ok := keys["findings"]; ok {
+		var list []map[string]json.RawMessage
+		if err := json.Unmarshal(value, &list); err != nil {
+			return gateAnswerPayload{}, fmt.Errorf("%s states `findings` as something other than a list of findings, so what the agent reported cannot be read one finding at a time: %w", path, err)
+		}
+		for i, finding := range list {
+			if err := gateAnswerFindingProblems(path, i, finding); err != nil {
+				return gateAnswerPayload{}, err
+			}
+		}
+	}
+
 	var payload gateAnswerPayload
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return gateAnswerPayload{}, fmt.Errorf("%s parses as an object and not as an answer: %w", path, err)
@@ -201,6 +278,85 @@ func gateAnswerReadPayload(surface, path string) (gateAnswerPayload, error) {
 // ---------------------------------------------------------------------
 // recording one answer
 // ---------------------------------------------------------------------
+
+// gateAnswerRank stamps the harness's half onto every finding: the surface it
+// was filed under, and the priority the matrix gives for that surface's
+// reach_class crossed with the agent's own consequence.
+//
+// IT REFUSES RATHER THAN RANKS ANYTHING IT CANNOT LOOK UP, and the three ways
+// that happens are kept as three separate messages because they are three
+// different people's work. A consequence outside the closed set and an empty
+// failure scenario are the reading agent's, and the fix is to re-read the frame
+// and answer again. A surface with no reach_class is the manifest's, and the fix
+// is one reviewed line in surfaces.yaml — a fix the agent cannot make and must
+// not be sent to attempt.
+//
+// A finding that cannot be prioritized is NOT a smaller finding, so none of these
+// defaults to P3. The rank decides whether this release stops; inventing one for
+// an input nobody declared would be the gate answering its own question.
+//
+// It names every problem at once, for gateStage3ValidateAnswer's reason: the
+// reader is a human running thirteen agents, and a recorder that reveals one
+// problem per re-run is a recorder people stop running.
+//
+// A nil list is passed through UNTOUCHED. An absent `findings` key is a fact
+// about the producer that gateStage3ValidateAnswer reports in its own words, and
+// a rank step that turned it into an empty list would answer that refusal before
+// it could be made.
+func gateAnswerRank(root, surface string, findings *[]gateFinding) (*[]gateFinding, error) {
+	if findings == nil {
+		return nil, nil
+	}
+	classes, err := gateSurfaceReachClasses(root)
+	if err != nil {
+		return nil, fmt.Errorf("the reach class of surface %q could not be read, so no finding in this answer can be ranked: %w", surface, err)
+	}
+
+	ranked := make([]gateFinding, 0, len(*findings))
+	var problems []string
+	for i, f := range *findings {
+		f.Surface = surface
+
+		if strings.TrimSpace(f.FailureScenario) == "" {
+			problems = append(problems, fmt.Sprintf("finding %d names no `failure_scenario`. It is the sentence that says who is worse off and how, and it is the only thing a human reading the record can check the consequence against — a finding without one asserts a rank and shows nobody the reasoning behind it", i))
+		}
+		known := false
+		for _, c := range gateConsequences {
+			if f.Consequence == c {
+				known = true
+				break
+			}
+		}
+		if !known {
+			problems = append(problems, fmt.Sprintf("finding %d states consequence %q, which is not one of %s. The three are what an agent judging one surface is placed to answer — does a reader ACT wrongly, is a reader MISLED, or is it COSMETIC — and a fourth word is a rank nothing can look up",
+				i, f.Consequence, strings.Join(gateConsequences, ", ")))
+			ranked = append(ranked, f)
+			continue
+		}
+
+		class, ok := classes[surface]
+		if !ok {
+			problems = append(problems, fmt.Sprintf("%s declares no reach_class for surface %q, so finding %d cannot be ranked: half of every priority is how far the surface carrying the defect travels, and that half is the manifest's to declare. Add one of %s to that surface's entry",
+				gateManifestFile, surface, i, strings.Join(gateReachClasses, ", ")))
+			ranked = append(ranked, f)
+			continue
+		}
+		priority, err := gatePriorityFor(class, f.Consequence)
+		if err != nil {
+			problems = append(problems, fmt.Sprintf("finding %d could not be ranked: %v", i, err))
+			ranked = append(ranked, f)
+			continue
+		}
+		f.Priority = priority
+		ranked = append(ranked, f)
+	}
+
+	if len(problems) > 0 {
+		return nil, fmt.Errorf("the answer for surface %q carries findings this run cannot rank, and an unranked finding is not a smaller finding — it is one nothing can say blocks the release or does not:\n  %s",
+			surface, strings.Join(problems, "\n  "))
+	}
+	return &ranked, nil
+}
 
 // gateAnswerRecord assembles one surface's whole answer and writes it, or
 // refuses and writes nothing.
@@ -251,6 +407,24 @@ func gateAnswerRecord(root, surface, payloadPath, checkoutTree string, tracked [
 	// An unreadable or over-full payload is an answer that does not exist yet,
 	// whatever state the run is in.
 	payload, err := gateAnswerReadPayload(surface, payloadPath)
+	if err != nil {
+		return gateStage3Answer{}, err
+	}
+
+	// THE FINDINGS ARE RANKED HERE, at the one moment both halves of a priority
+	// are in the same room: the agent's consequence, just read, and the surface's
+	// reach_class, declared in the manifest read above. Nothing downstream can do
+	// it — the receipt is handed findings and never sees which surface's manifest
+	// entry they came from — and a finding that arrives at the receipt unranked
+	// blocks the release with a message about a broken producer.
+	//
+	// It sits between the caller's arguments and this checkout's expensive
+	// questions on purpose. A consequence outside the three and an empty failure
+	// scenario are the agent's to fix and are refused before a single fingerprint
+	// is computed; the reach_class lookup is the tree's state and is asked here
+	// too, because a finding nobody can prioritize is not a smaller finding and
+	// the operator should hear about the manifest before they hear about the run.
+	ranked, err := gateAnswerRank(root, surface, payload.Findings)
 	if err != nil {
 		return gateStage3Answer{}, err
 	}
@@ -313,17 +487,20 @@ func gateAnswerRecord(root, surface, payloadPath, checkoutTree string, tracked [
 		Surface:     surface,
 		Verdict:     payload.Verdict,
 		Fingerprint: keys[surface],
-		Findings:    payload.Findings,
+		Findings:    ranked,
 		Subjects:    payload.Subjects,
 	}
 
-	// THE FINDINGS ARE NOT RESTAMPED WITH THIS SURFACE, though the recorder knows
-	// it. gateStage3ValidateAnswer requires every finding to name the surface it
-	// was raised for, and an agent that filed one under another surface is telling
-	// the human something true about its own reading. A recorder that overwrote
-	// the field would erase that and file the finding under a surface that never
-	// raised it — which is the finding-the-human-cannot-trace case that check
-	// exists for.
+	// THE FINDINGS ARE STAMPED WITH THIS SURFACE, which is a reversal, and the
+	// reason it is safe is that the agent can no longer state one. The old
+	// argument was that gateStage3ValidateAnswer requires every finding to name
+	// the surface it was raised for, so a recorder that overwrote the field would
+	// erase an agent's true statement that it had filed one elsewhere. That
+	// depended on the agent writing the field at all: `surface` is now outside
+	// gateAnswerFindingKeys and a payload carrying one is refused by name, so
+	// there is no agent statement left to erase — only an empty field that would
+	// otherwise reach the receipt attributed to nobody. The check in the collector
+	// is untouched and still holds every answer read back from disk.
 
 	// THE COLLECTOR'S OWN VALIDATION, AT WRITE TIME. wantRun is this fan-out's
 	// identifier and Run was just set from it, so that one comparison cannot fire
@@ -467,6 +644,14 @@ func TestGateAnswerRecord(t *testing.T) {
 func gateAnswerFixture(t *testing.T) (root string, tracked []string, run string) {
 	t.Helper()
 	root, tracked = gateFanoutFixture(t)
+	// EVERY SURFACE CARRIES A REACH CLASS BEFORE THE FAN-OUT IS PRODUCED.
+	// surfaces.yaml is another lane's file, and a recorder fixture that only works
+	// once that lane has classified all thirteen surfaces is a fixture that reds
+	// for somebody else's reason — every row below would refuse over an unranked
+	// finding instead of over the thing it is about. gatePriorityFillManifest
+	// leaves the classes the manifest really declares alone; see its comment for
+	// why what it fills with is deliberately not a plausible value.
+	gatePriorityFillManifest(t, root)
 	doc, err := gateFanoutProduce(root, gateStage2FixtureTree, gateStage2FixtureTree, tracked)
 	if err != nil {
 		t.Fatalf("the fan-out this recorder records against could not be produced, so every assertion below would be about a run that does not exist: %v", err)
@@ -555,14 +740,25 @@ func gateAnswerWriteRawPayload(t *testing.T, body string) string {
 	return path
 }
 
-// gateAnswerFinding is one finding in the shape an agent reports it.
-func gateAnswerFinding(surface string) gateFinding {
-	return gateFinding{
-		Surface:  surface,
-		Rule:     "counted-claim-mismatch",
-		Severity: "major",
-		Detail:   "the document says nineteen commands and the inventory holds twenty",
+// gateAnswerFindingPayload is one finding in the shape an AGENT reports it: the
+// four keys it owns and nothing else.
+//
+// It is a map and not a gateFinding for the reason gateAnswerHonestPayload is:
+// marshalling the struct would emit `surface`, `priority` and — for anything the
+// recorder stamps — values the payload must not carry, so every row below would
+// be refused for the key check rather than for the thing it is about. mutate
+// breaks exactly one field; nil leaves an honest finding.
+func gateAnswerFindingPayload(mutate func(map[string]any)) map[string]any {
+	f := map[string]any{
+		"rule":             "counted-claim-mismatch",
+		"consequence":      gateConsequenceMisled,
+		"failure_scenario": "a reader counts on nineteen commands being all of them and writes a script that misses one",
+		"detail":           "the document says nineteen commands and the inventory holds twenty",
 	}
+	if mutate != nil {
+		mutate(f)
+	}
+	return f
 }
 
 // ---------------------------------------------------------------------
@@ -757,12 +953,8 @@ func TestGateAnswerRecordRefusesAPayloadItCannotStandBehind(t *testing.T) {
 		},
 		{
 			name: "a PASS that lists what it found",
-			mutate: func(_ *testing.T, root string, payload map[string]any) {
-				declared, err := gateDeclaredSurfaces(root)
-				if err != nil {
-					t.Fatalf("declared surfaces: %v", err)
-				}
-				payload["findings"] = []gateFinding{gateAnswerFinding(declared[0])}
+			mutate: func(_ *testing.T, _ string, payload map[string]any) {
+				payload["findings"] = []any{gateAnswerFindingPayload(nil)}
 			},
 			want: "holds a PASS and 1 finding(s)",
 		},
@@ -774,24 +966,53 @@ func TestGateAnswerRecordRefusesAPayloadItCannotStandBehind(t *testing.T) {
 			want: "holds a FAILED and no findings",
 		},
 		{
-			name: "a finding filed under another surface",
+			name: "a finding that files itself under another surface",
+			// The sharpest one at this level, and the reason `surface` left the
+			// agent's key set: a finding naming a surface would be silently
+			// restamped with the one the recorder was pointed at, so a payload
+			// stating something about its own reading would land saying something
+			// else. It is refused by name rather than dropped.
 			mutate: func(_ *testing.T, _ string, payload map[string]any) {
 				payload["verdict"] = gateVerdictFailed
-				payload["findings"] = []gateFinding{gateAnswerFinding("some-other-surface")}
+				payload["findings"] = []any{gateAnswerFindingPayload(func(f map[string]any) {
+					f["surface"] = "some-other-surface"
+				})}
 			},
-			want: "is attributed to surface",
+			want: "finding 0 states `surface`",
+		},
+		{
+			name: "a finding carrying its own priority",
+			// The rank decides whether this release stops, so an agent that could
+			// write it would be judging its own finding.
+			mutate: func(_ *testing.T, _ string, payload map[string]any) {
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []any{gateAnswerFindingPayload(func(f map[string]any) {
+					f["priority"] = gatePriorityP3
+				})}
+			},
+			want: "finding 0 states `priority`",
+		},
+		{
+			name: "a finding from a runner that predates the priority matrix",
+			// `severity` is refused with its own sentence rather than as an
+			// anonymous unknown key: a runner ported from the old schema writes it,
+			// and "that field was replaced, here is what by" is the difference
+			// between a five-minute fix and a hunt.
+			mutate: func(_ *testing.T, _ string, payload map[string]any) {
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []any{gateAnswerFindingPayload(func(f map[string]any) {
+					f["severity"] = "major"
+				})}
+			},
+			want: "`severity` is not part of this schema any more",
 		},
 		{
 			name: "a finding a human cannot act on",
-			mutate: func(_ *testing.T, root string, payload map[string]any) {
-				declared, err := gateDeclaredSurfaces(root)
-				if err != nil {
-					t.Fatalf("declared surfaces: %v", err)
-				}
-				f := gateAnswerFinding(declared[0])
-				f.Detail = "  "
+			mutate: func(_ *testing.T, _ string, payload map[string]any) {
 				payload["verdict"] = gateVerdictFailed
-				payload["findings"] = []gateFinding{f}
+				payload["findings"] = []any{gateAnswerFindingPayload(func(f map[string]any) {
+					f["detail"] = "  "
+				})}
 			},
 			want: "names no rule or carries no detail",
 		},
@@ -991,7 +1212,7 @@ func TestGateAnswerRecordKeepsTheFirstAnswerASurfaceGave(t *testing.T) {
 
 	failing := gateAnswerHonestPayload(t, root)
 	failing["verdict"] = gateVerdictFailed
-	failing["findings"] = []gateFinding{gateAnswerFinding(surface)}
+	failing["findings"] = []any{gateAnswerFindingPayload(nil)}
 	if _, err := gateAnswerRecord(root, surface, gateAnswerWritePayload(t, failing), gateStage2FixtureTree, tracked); err != nil {
 		t.Fatalf("the first answer was refused, so this test is not about a second one: %v", err)
 	}
