@@ -39,8 +39,17 @@ model: claude-opus-5
 # The exact tool grant. Both are report-only: they carry the agent's answer back
 # and can read nothing.
 #
-#   SurfaceFinding — report one mismatch (surface, rule, severity, detail)
+#   SurfaceFinding — report one mismatch (rule, consequence, failure_scenario,
+#                    detail; optionally about — a repo-relative path the
+#                    finding's substance concerns)
 #   SurfaceVerdict — report the surface's verdict, exactly once
+#
+# `surface` and `severity` are both refused by name now: the surface is already
+# known from the call site, and severity was replaced by the mandatory
+# consequence/failure_scenario pair the priority matrix computes from. This edit
+# to the schema line above moves method_version and re-reads every surface, same
+# as any other byte changed in this file — done knowingly, alongside the schema
+# change it describes.
 #
 # There is deliberately no file, shell, search, network or subagent tool here.
 # The bundle is the whole evidence set, and that is the property every key in the

@@ -41,14 +41,18 @@ What follows from it:
   a single gate run had produced nine dialects of it that nothing downstream could compare. Priority
   P0–P3 is computed from that consequence crossed with the surface's `reach_class` in
   `surfaces.yaml` (`client-shipped`, `consumer-docs`, `maintainer`, `process`) — a reviewed matrix,
-  not a choice either the agent or the gate makes case by case. A receipt carrying any P0 finding,
+  not a choice either the agent or the gate makes case by case. Priority is stamped onto a finding
+  at the moment it is recorded; editing a surface's `reach_class` afterward re-ranks nothing already
+  on the receipt, only what gets recorded from then on. A receipt carrying any P0 finding,
   or any P1 finding the human has not ruled on, evaluates to FAILED; P2 and P3 findings stay on the
-  receipt, never block, and are carried forward into the next release's `gate/deferred.json` rather
-  than dropped. A P1 finding the human has judged non-blocking is cleared by fixing the tree or by
+  receipt, never block, and are written into THIS release's own `gate/deferred.json` ledger, which
+  the next release's round one reads before its own first fan-out overwrites it. A P1 finding the
+  human has judged non-blocking is cleared by fixing the tree or by
   recording a ruling in `gate/overrides.json` — tracked, naming the release, the finding's digest,
   who ruled and why, refused when it is stale or inherited or unreasoned, and carried on the receipt
   beside the finding it clears, which stays. The matrix is a default, never a ceiling: the human's
-  ruling can promote any finding, P0 included, when the matrix undersells it — but P0 itself admits
+  ruling can promote any finding (recorded as `promote_to` on the override entry), P0 included, when
+  the matrix undersells it — but P0 itself admits
   no ruling the other way, because a client-shipped defect that leaves a follower acting wrongly is
   exactly what this gate exists to catch, and it is not waved through by a signature. Deleting a
   finding by hand is still possible and is still the thing not to do: it leaves an adjudicated

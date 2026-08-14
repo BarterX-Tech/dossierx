@@ -1,6 +1,9 @@
 # Giving findings a Priority — reach and consequence, not free-text severity
 
-**Status:** design, approved 15 Aug 2026 — written at build time, no corrections yet.
+**Status:** design, approved 15 Aug 2026 — **corrected in place, 15 Aug 2026,** against a fix-wave
+reading of the implementation, each disagreement noted rather than silently rewritten. Three
+mechanisms built after this design was approved are recorded as amendments at the end rather than
+worked back into the numbered mechanisms above.
 **Applies to:** v0.5.2, in flight — branch `release/v0.5.2`.
 **Predecessor:** `docs/superpowers/specs/2026-08-14-gate-cycle-reduction-design.md` (lanes A–C, cycle
 reduction). That design shortened the loop between a fix wave and the next round. This design does
@@ -69,7 +72,12 @@ the ceiling a surface's findings can reach, not where any one finding lands unde
 Every new finding carries `consequence` — `acts-wrongly`, `misled`, or `cosmetic` — plus a mandatory,
 falsifiable `failure_scenario`: a sentence naming who is reading or running the artifact and what
 goes wrong for them. Free-text `Severity` is retired for new answers; historical answers keep their
-existing string untouched. `failure_scenario` exists because `consequence` alone is exactly as
+existing string untouched. **This last clause overstates it: the field is gone from the schema, not
+merely retired for new writes, so an old answer read back today carries no `consequence` at all and
+blocks as unranked rather than keeping its `Severity` string — which is moot in practice, since the
+fan-out already refuses to start while a previous round's answers still sit in `gate/answers/`, so no
+historical answer actually survives to be read back this way.** `failure_scenario` exists because
+`consequence` alone is exactly as
 gameable as `Severity` was — three words drift as freely as nine unless something forces a checkable
 claim. A scenario naming a reader and a wrong outcome can be disputed; a bare label cannot.
 
@@ -115,7 +123,10 @@ round one reads as input — the predecessor design's "recorded as a finding aga
 shape, applied here to a finding whose Priority says it can wait.
 
 **What it does not fix:** the general override record the predecessor design left deferred.
-`overrides.json` here is narrower — it clears a P1 and nothing else. Whether a fuller mechanism is
+`overrides.json` here is narrower — it clears a P1 and nothing else. **That undersold what shipped:
+an entry naming a P0 finding or one that is unranked is refused outright, but a ruling on P1, P2 or
+P3 is accepted — a P2 or P3 ruling simply clears nothing that was blocking to begin with, since
+neither ever blocks `evaluate()`.** Whether a fuller mechanism is
 ever built remains the open question `gate_stage3_test.go` already recorded.
 
 ---
@@ -134,7 +145,8 @@ one agent, inside one round, looks for what it looks for.
 
 ## What was rejected, and why
 
-**The evidence-derived classifier**, recorded as deliberately unbuilt in `gate_stage3_test.go:42-57`.
+**The evidence-derived classifier**, recorded as deliberately unbuilt in `gate_stage3_test.go`'s
+residues note.
 It proposed classifying findings from evidence rather than self-report, and died on an unsatisfiable
 bar: file:line in code plus the contradicting prose span, when `surface.json` carries no source path
 and no line number anywhere — every finding would classify UNSUPPORTED by construction. This design
@@ -150,7 +162,8 @@ a default, never a ceiling: a human can promote any finding to any Priority, inc
 of what `reach_class` and `consequence` computed. The honest risk is a true P0 misfiled as P2 and
 shipping unnoticed, mitigated three ways: the unfiltered list puts it on the receipt either way; the
 mandatory scenario states in plain words what goes wrong and for whom, which is what lets a human
-catch a misfiling; and promotion is a one-line ruling, not a rebuild.
+catch a misfiling; and promotion is a one-line ruling, not a rebuild — **built as `promote_to` on a
+`gate/overrides.json` entry; see the Amendments below.**
 
 ## Verification
 
@@ -160,7 +173,7 @@ catch a misfiling; and promotion is a one-line ruling, not a rebuild.
 | 2 | An answer with an empty `failure_scenario` or an out-of-vocabulary `consequence` is refused, not recorded. Historical `Severity` strings are untouched. |
 | 3 | Table-driven test over all twelve cells asserting the Priority each pair produces; a missing or out-of-vocabulary input is refused, not defaulted. |
 | 4 | A P0 anywhere fails `evaluate()` regardless of `overrides.json`. A cleared P1 passes; an uncleared one fails. P2/P3 never affect `evaluate()` but appear in `gate/deferred.json` and the receipt. |
-| 5 | `_frame.md` orders the reader-harm question before the sweep question, and the report-every-finding instruction is still present verbatim. |
+| 5 | `_frame.md` orders the reader-harm question before the sweep question, and the report-every-finding instruction is still present, restated to cover both passes. |
 
 ## Risks
 
@@ -170,6 +183,37 @@ catch a misfiling; and promotion is a one-line ruling, not a rebuild.
   time — caught by a human reader, same as a wrong finding always was.
 - **`reach_class` drifts from what a surface actually is.** Set once, by a human, on the same manifest
   that already answers every other question about a surface — corrected the same way, by editing it.
+  An edit re-ranks nothing already recorded, though: only findings recorded after the edit see the
+  new class, so a drift caught late still leaves the earlier findings at their original Priority.
 - **Narrowing fix pressure before ship, even though nothing is filtered from the record.** A
   deliberate trade of immediate fix pressure for reading focus. If wrong for a release, the remedy is
   the same one-line promotion, not a change to the matrix.
+
+## Amendments — 15 Aug 2026
+
+Three mechanisms this design left as open questions or informal remedies are now being built. Each
+is briefly described here rather than folded back into the numbered mechanisms above, which record
+what was approved on 15 Aug, not what has shipped since.
+
+**PROMOTION.** `gate/overrides.json` entries may carry `promote_to`. A promoting entry raises a
+finding's effective Priority — P2 to P0, for instance — and is refused if it names anything at or
+below what the matrix already computed: promotion only ever goes up. It keeps the finding on the
+receipt and clears nothing, and a finding promoted to P0 blocks non-overridably, the same as any
+other P0. This is the mechanism the "matrix is a floor, not a ceiling" language above was already
+promising; it now has a field.
+
+**ABOUT.** A finding may carry `about`, a repo-relative path the finding's substance actually
+concerns — set when the defect lives in a file the agent read as borrowed context rather than in its
+own surface's document. The recorder resolves the path to its owning surface and ranks the finding
+at the HIGHER of the reading surface's `reach_class` and the owner's; an `about` that resolves to no
+declared surface is refused. This closes the case Mechanism 1's "What it does not fix" left open: a
+`maintainer` surface reporting an `acts-wrongly` defect that actually lives in a `client-shipped`
+file it only borrows used to rank at the maintainer's own P2 ceiling; it now ranks at the
+client-shipped P0 the defect actually costs.
+
+**PROJECTOR.** After a round's answers are recorded, the maintainer runs
+`go test ./cmd/dossierx -run '^TestGateDeferredProject$' -count=1 -args -deferred-project`, which
+reads the round's recorded answers and writes `gate/deferred.json` from them — refusing to run over
+an incomplete round. The driver's own D1 write is a re-projection of the same comparator, so what D1
+checks and what the maintainer committed agree by construction. The maintainer then commits the
+ledger, subject to `subject.json`'s own caveat that committing moves the tree.

@@ -269,8 +269,9 @@ them, and the three post-publish checks that leave this repository entirely.
       `gate/baseline-input.json`, which step 1 writes and the `record` manifest
       does not carry. Two run-written files sit on the tracked side —
       `gate/subject.json` and `gate/deferred.json`, item 4 below — both named
-      there on purpose.) Neither is thereby unwatched. Both are hashed into the surface
-      key: `surface.json` is one of the four SHARED evidence files every
+      there on purpose.) Neither `surface.json` nor the prompt sources is
+      thereby unwatched for having no committed form of its own: both are
+      hashed into the surface key: `surface.json` is one of the four SHARED evidence files every
       surface's fingerprint covers — beside `gate/baseline.json`,
       `gate/delta.json` and `gate/site-text.json` — and the prompt sources are
       hashed into `method_version`, which the same fingerprint hashes in beside
@@ -371,13 +372,16 @@ them, and the three post-publish checks that leave this repository entirely.
       yours. What the freeze guarantees is that the widening is visible, dated
       and reasoned rather than absorbed into the next round's count.
 
-      **The previous release's deferrals surface here too, once.** If
-      `gate/deferred.json` names a version other than this one, `fanout` prints
-      a notice to stderr naming that version and how many findings it deferred,
-      right after the subject check and before any agent is spent. Those
-      findings are the first thing this round triages — fix each, rule it, or
-      re-defer it on the record — and then delete the file or leave it for this
-      release's own `record` to overwrite.
+      **The previous release's deferrals surface here too, and the notice
+      repeats.** If `gate/deferred.json` names a version other than this one,
+      `fanout` prints a notice to stderr naming that version and how many
+      findings it deferred, right after the subject check and before any agent
+      is spent — and it fires on EVERY fan-out of this release, not once, until
+      the ledger is either deleted or re-projected under this release's own
+      version. Those findings are the first thing this round triages — fix
+      each, rule it, or re-defer it on the record — and then delete the file,
+      or leave it for the PROJECTOR (item 4 below) to overwrite once this
+      round's answers are recorded.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. `gate/method.yaml`
@@ -463,28 +467,65 @@ them, and the three post-publish checks that leave this repository entirely.
           | maintainer     | P2           | P3     | P3       |
           | process        | P2           | P3     | P3       |
 
+      **A finding may also name `about`, a repo-relative path.** When what makes
+      a finding true is not the agent's own surface but a file it was handed as
+      context — a `maintainer` surface reporting a defect that actually lives in
+      a `client-shipped` file it only reads — the agent sets `about` to that
+      file's path. The recorder resolves it to the surface that owns it and
+      ranks the finding at the HIGHER of the two surfaces' `reach_class`, which
+      is what closes the borrowed-document gap: a defect in a client-shipped
+      file no longer under-ranks to P2 just because the agent that spotted it
+      was reading a maintainer-only document. An `about` that resolves to no
+      declared surface's document is refused; the lever only ever raises what
+      the matrix would otherwise compute.
+
       The receipt PASSES when no P0 finding exists and every P1 finding is
-      either fixed or ruled in `gate/overrides.json`. **P0 is not overridable:**
-      a `client-shipped` surface that leaves a reader acting wrongly is exactly
-      the failure this gate exists to catch, so no signature waives it — the
-      only way off a P0 is fixing the tree. P2 and P3 findings stay on the
-      receipt and never block, but they are not dropped: `record` writes them to
-      `gate/deferred.json` (tracked, committed the same way as
-      `gate/subject.json`, and overwritten in full — deterministic bytes, never
-      appended to — every time an answer is recorded), and the NEXT release's
-      round one reads that file as input rather than starting from nothing. The
-      gate surfaces and never fixes, so the fixes for P0 and unruled P1 are
-      yours, and a fix moves the tree. Every artifact above is keyed to a tree,
-      so NOTHING staged for the old one is reusable: CI, `make ci-evidence` for
-      the new merge commit, and the whole of this item are produced again
-      against the new `$TREE`. Repeat until no P0 exists and every P1 is fixed
-      or ruled.
+      either fixed or ruled in `gate/overrides.json` — and that is a necessary
+      condition, not a sufficient description of what blocks. A finding the
+      recorder could not rank at all — a missing or out-of-vocabulary
+      `consequence`, an `about` that failed to resolve — is refused rather than
+      defaulted into a cell, and a refused finding blocks on its own terms, no
+      priority computed or needed. The per-surface verdict and fingerprint
+      conditions from step 3 still apply on top of this: priority decides which
+      FIXED findings a passing receipt can carry, not whether a receipt exists
+      at all. **P0 is not overridable:** a `client-shipped` surface that leaves
+      a reader acting wrongly is exactly the failure this gate exists to catch,
+      so no signature waives it — the only way off a P0 is fixing the tree.
+
+      P2 and P3 findings stay on the receipt and never block, but they are not
+      dropped. They are not written by `record` either: after this round's
+      answers are recorded, the maintainer runs the PROJECTOR —
+
+          go test ./cmd/dossierx -run '^TestGateDeferredProject$' -count=1 -args \
+            -deferred-project
+
+      — which reads the round's recorded answers and writes `gate/deferred.json`
+      from them, refusing to run over an incomplete round. **Commit the ledger
+      once the projector writes it** — tracked the same way as
+      `gate/subject.json`, and committing it moves the tree the same way
+      committing the freeze does, so do it before producing anything keyed to
+      the new `$TREE`. The driver's own D1 does not trust the committed file on
+      faith: it re-projects the same comparator over the round it is about to
+      release, so what D1 checks and what this step wrote agree by
+      construction. The NEXT release's round one reads the committed ledger as
+      input rather than starting from nothing. The gate surfaces and never
+      fixes, so the fixes for P0 and unruled P1 are yours, and a fix moves the
+      tree. Every artifact above is keyed to a tree, so NOTHING staged for the
+      old one is reusable: CI, `make ci-evidence` for the new merge commit, and
+      the whole of this item are produced again against the new `$TREE`. Repeat
+      until no P0 exists and every P1 is fixed or ruled.
 
       **The matrix is a default, never a ceiling.** The ruling in item 5, below,
-      is the human's, and a human ruling can promote any finding past what the
-      matrix computed — including into P0 — when the matrix's `reach_class` ×
-      `consequence` read undersells what the finding actually costs. The matrix
-      picks where scrutiny starts, not where it stops.
+      is the human's, and a human ruling can promote any finding — recorded as
+      `promote_to` on the `gate/overrides.json` entry — past what the matrix
+      computed, including into P0, when the matrix's `reach_class` ×
+      `consequence` read undersells what the finding actually costs. A
+      `promote_to` entry only ever raises: one naming a priority at or below
+      what the matrix already computed is refused. It does not clear the
+      finding either — the finding stays on the receipt, promoted, and a
+      finding promoted to P0 then blocks exactly like any other P0, with no
+      path back down through this same file. The matrix picks where scrutiny
+      starts, not where it stops.
 
       **Read the fix wave before you spend a round on it.** After the fixes land
       and before the next fan-out:
@@ -515,10 +556,12 @@ them, and the three post-publish checks that leave this repository entirely.
       **Ruling a finding non-blocking is a written act, not a deletion.** Until
       v0.5.2 the only way past a finding you judged harmless was to delete it from
       the record, which left it indistinguishable from a finding nobody raised.
-      Now it is `gate/overrides.json`, tracked beside the subject freeze. An
-      override applies to a P1 finding — P2 and P3 already do not block, so
-      there is nothing for a ruling to clear, and an entry matching a P0 finding
-      is refused on its face: P0 has no path through this file at all.
+      Now it is `gate/overrides.json`, tracked beside the subject freeze. A
+      CLEARING override applies to a P1 finding — P2 and P3 already do not
+      block, so there is nothing for a ruling to clear, and an entry that
+      clears a P0 finding is refused on its face: P0 has no path OFF through
+      this file at all. A PROMOTING entry runs the other direction and is not
+      held to that limit — see below.
 
           {"overrides": [{
             "version": "v0.5.2",
@@ -539,10 +582,15 @@ them, and the three post-publish checks that leave this repository entirely.
       text it excuses; an entry whose `surface`/`rule` disagree with the finding
       its digest names, which would clear one finding while describing another
       to whoever reads the file; an entry ruled for another release, because a
-      decision about v0.5.2 is not evidence about v0.5.3; and an entry naming a
-      P0 finding, because P0 is not a priority a ruling downgrades.
-      The finding STAYS in the receipt, with the ruling recorded beside it, so a
-      receipt cleared by a ruling never reads as one that had nothing to clear.
+      decision about v0.5.2 is not evidence about v0.5.3; and a CLEARING entry
+      naming a P0 finding, because P0 is not a priority a ruling downgrades. A
+      PROMOTING entry is different: it may name any finding, including one
+      already at P0, and it raises rather than clears — an entry naming a
+      priority at or below what the matrix already computed is refused, the
+      finding it names stays exactly as findable as before, and nothing about
+      it is cleared. The finding STAYS in the receipt, with the ruling recorded
+      beside it, so a receipt cleared or promoted by a ruling never reads as one
+      that nobody looked at.
 
       **5. Read the findings yourself before you authorize anything.** Nothing is
       filtered, deduplicated away or dropped on the way to you. Each finding
@@ -551,7 +599,8 @@ them, and the three post-publish checks that leave this repository entirely.
       the answer recorder as item 4 describes — not chosen by the agent and not
       adjustable by it — so the ruling on whether the computed priority is right
       is yours, not the agent's. Nothing stops you from promoting a P2 or a P3
-      you judge worse than the matrix read it, up to and including into P0; a P1
+      you judge worse than the matrix read it, up to and including into P0 —
+      via `promote_to` on the `gate/overrides.json` entry described above; a P1
       you judge harmless has two honest ways off the receipt, and deleting it
       from `gate/answers/<surface>.json` is not one of them: fix the tree, or
       record a ruling in `gate/overrides.json` as the item above describes. A P0
@@ -817,7 +866,10 @@ them, and the three post-publish checks that leave this repository entirely.
       `gate/subject.json` and `gate/deferred.json`, both tracked on purpose.
       Step 2 of **Before tagging** tells you to commit `gate/subject.json` at the
       moment it is minted; `gate/deferred.json` is committed as part of the same
-      clean-tree precondition, rewritten each time an answer is recorded.
+      clean-tree precondition, written not by `record` but by the PROJECTOR
+      (item 4 of that same step) once a round's answers are complete, and
+      re-written each time the projector runs over a new round — never on every
+      individual answer recorded.
 
       **And `main` must not be checked out in another worktree.** D2's first act
       is `git checkout main` in the checkout you invoke from, and git allows a

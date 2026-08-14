@@ -83,8 +83,10 @@ Every finding carries two things beyond its `rule` name and its `detail`: a
 thing it is least positioned to grade, and nothing downstream needs its opinion
 in order to act.
 
-`consequence` is exactly one of three values. The harness refuses any other
-string, and refuses a finding that carries none.
+`consequence` is exactly one of three values. An answer carrying any other
+string, or a finding with none, is refused — but not call by call as you make
+it: the recorder refuses the WHOLE ANSWER, after the run finishes, and the
+surface then has to be re-read to produce one that is accepted.
 
 - **`acts-wrongly`** — a reader who follows the text does the wrong thing. The
   instruction fails when carried out, the recovery destroys what it should
@@ -103,8 +105,11 @@ and what breaks. Not a category — a story with an ending. "An agent that runs 
 documented `--force` recovery deletes the client's hook before the same
 paragraph's backup step ever runs, because the script writes the replacement
 first" is a `failure_scenario`. "This could mislead an operator" is not one — it
-names no reader, no action and no break, and the harness refuses the finding it
-is attached to.
+names no reader, no action and no break. Nothing mechanical refuses it at write
+time, though: only an EMPTY `failure_scenario` is refused there. A vague one
+like this parses cleanly and is caught by the honesty guard below, not by
+anything enforced as you write it — refused in spirit, in the words that guard
+uses, rather than refused on the wire.
 
 **Priority is not yours to assign.** It was never yours to assign under severity
 either, but severity at least invited the guess; consequence does not. Priority
@@ -116,6 +121,16 @@ it); the matrix, not you, produces the priority. Write neither a priority nor a
 severity into any field. If you find yourself reaching for a word like "critical"
 or "minor", that word belongs inside `failure_scenario` as part of the sentence
 about who breaks — not as a label standing next to it.
+
+**`about`, when a finding rests on a borrowed document.** If what makes your
+finding true is not your own surface's document but a file handed to you as
+context — marked "NOT yours to report on" in the material below — set `about`
+to that file's repo-relative path. The recorder resolves it to the surface that
+owns it and ranks the finding at the HIGHER of your surface's `reach_class` and
+the owner's, so a defect that actually lives in a `client-shipped` file is not
+under-ranked just because you read it while reviewing a `maintainer` surface.
+The lever only ever raises what the matrix would otherwise compute, and an
+`about` that does not resolve to a path a declared surface owns is refused.
 
 ## The honesty guards
 
@@ -199,11 +214,13 @@ Call `SurfaceFinding` once for each finding from either pass, then `SurfaceVerdi
 exactly once with PASS or FAILED and the `subjects` map described above. There is
 no third verdict. If you cannot complete both passes, the verdict is FAILED.
 
-Each `SurfaceFinding` call carries `rule`, `consequence`, `failure_scenario` and
-`detail`. There is no `severity` field. The harness refuses a call with a
-`consequence` outside the three values above, and refuses one with no
-`failure_scenario` at all — the same two refusals stated above, enforced rather
-than merely asked for:
+Each `SurfaceFinding` call carries `rule`, `consequence`, `failure_scenario`,
+`detail`, and optionally `about`. There is no `severity` field. If any finding
+in your answer carries a `consequence` outside the three values above, or
+carries no `failure_scenario` at all, the recorder refuses the WHOLE ANSWER —
+not the one call — after the run has finished, and the surface has to be
+re-read from scratch to produce an answer that is accepted. The same two
+conditions stated above, enforced after the fact rather than as you write:
 
 ```json
 {

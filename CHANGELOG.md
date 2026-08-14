@@ -83,8 +83,9 @@ locally and never pushed. The release stamp does not cover that either: a branch
 already carries this release's stamp, which is exactly when it would be mistagged. And the gate
 receipt cannot close it from the forge, because the receipt is never committed — `gate/.gitignore`
 ignores every run-produced *evidence* artifact on purpose, so that a copy left on disk cannot look
-authoritative. (The subject freeze added later in this release is the one run-written file that is
-tracked, and it is evidence about the QUESTION rather than about the answer.) A forge-side tag protection rule on `v*` is what would close it, which is the same
+authoritative. (The subject freeze added later in this release is one of two run-written files that
+are tracked — `gate/deferred.json` is the other, added later still — and it is
+evidence about the QUESTION rather than about the answer.) A forge-side tag protection rule on `v*` is what would close it, which is the same
 accepted residual that file already recorded.
 
 Nothing pinned the forge's guard list, so deleting a guard was invisible to `go test ./...` and so
@@ -115,10 +116,10 @@ to the wrong surface.
 
 ### The gate stopped needing four rounds to say the same thing
 
-This release's own gate has run five reading rounds and returned 39, 31, 24, 18 and 58 findings — decaying
+This release's own gate has run six reading rounds and returned 219 findings across them — decaying
 and not converging. Three mechanisms address the three reasons, and none of them relaxes a refusal:
-coverage is not reduced, a check that cannot run still fails, every finding still reaches the human
-unfiltered, and the receipt still evaluates FAILED on any finding at all.
+coverage is not reduced, a check that cannot run still fails, and every finding still reaches the
+receipt; what changed is which ones stop the release — see below.
 
 **Prose that restates a number the tree already derives is now checked by a test, not by an agent.**
 Two such sentences had already gone wrong inside this one release. The site's "26 → 19: what was
@@ -176,12 +177,17 @@ DIGEST, who ruled and why. The finding stays in the receipt and the ruling is
 recorded next to it, so a receipt cleared by a decision never reads as one that had
 nothing to clear.
 
-It refuses four things, each because the alternative is a waiver wearing a ruling's
+It refuses several things, each because the alternative is a waiver wearing a ruling's
 clothes: no reason or no name; two rulings on one finding; a ruling for a finding
 this run did not raise — which is what one becomes the moment the defect is fixed or
-its wording moves, so an override cannot outlive the text it excuses; and a ruling
+its wording moves, so an override cannot outlive the text it excuses; a ruling
 made for another release, because a decision about this release is not evidence
-about the next. Nothing in it reads `severity`: an override is a named person's
+about the next; and a CLEARING ruling naming a P0 finding, because P0 has no path off
+through this file at all. The one thing it does not refuse in that direction is a
+PROMOTING entry: an override may instead carry `promote_to`, which raises a finding's
+priority rather than clearing it — accepted for any finding, including one already
+at P0, and refused only if the target is at or below what the matrix already
+computed. Nothing in it reads `severity`: an override is a named person's
 call on one finding, not a threshold with extra steps.
 
 None of this is in the shipped binary. It changes how this project decides a release
@@ -216,15 +222,26 @@ The answer recorder crosses the two into a priority, computed rather than assert
 | maintainer     | P2           | P3     | P3       |
 | process        | P2           | P3     | P3       |
 
+A finding may also carry `about`, a repo-relative path its substance concerns; the
+recorder ranks it at the HIGHER of the reading surface's `reach_class` and the path's
+owning surface's, which is what closes a `maintainer` surface under-ranking a defect
+that actually lives in a `client-shipped` file it only borrows. An `about` that resolves
+to no tracked surface is refused, and the lever only ever raises.
+
 The receipt now PASSES when no P0 finding exists and every P1 is fixed or ruled in
 `gate/overrides.json` — P0 has no path through that file: a client-shipped defect that
 leaves a reader acting wrongly is exactly the failure this gate exists to catch, and no
 ruling waives it. P2 and P3 findings stay on the receipt and never block, and they are
-no longer read once and forgotten: `record` writes them whole into a tracked
-`gate/deferred.json`, overwritten (not appended to) on every recording, which the next
-release's round one reads as a starting point instead of a blank page. The matrix is a
-default, never a ceiling — a human ruling can still promote any finding past what it
-computed, P0 included.
+no longer read once and forgotten: the PROJECTOR, run by the maintainer once a round's
+answers are complete, writes them whole into a tracked
+`gate/deferred.json`, overwritten (not appended to) each time it runs, which the next
+release's round one reads as a starting point instead of a blank page.
+
+The matrix is a default, never a ceiling: `gate/overrides.json` entries may carry
+`promote_to`, which raises a finding's priority — P2 to P0, for instance — and is
+refused if it names anything at or below what the matrix already computed. A promoted
+finding keeps its place on the receipt and clears nothing; one promoted to P0 blocks the
+same as any other P0, non-overridably.
 
 What does not change: nothing is filtered, deduplicated away, or dropped on the way to
 the human; every finding still reaches the receipt; and coverage is exactly what the
@@ -491,6 +508,14 @@ Findings are never filtered, deduplicated or ranked away on their route to the r
 carrying any finding at all evaluates to FAILED. A finding's `severity` is free text the reporting
 agent wrote about its own work: one sort comparator reads it so that a re-run over an unchanged tree
 produces an identical document, and no verdict, filter or threshold consults it anywhere.
+
+> **SUPERSEDED BY 0.5.2.** Both of that paragraph's claims stopped being true. A receipt carrying a
+> finding no longer evaluates to FAILED by itself — P2 and P3 findings stay on the receipt and never
+> block, and only a P0, or a P1 nobody has ruled on, fails it. And free-text `severity` is gone from
+> every new answer, replaced by a mandatory `consequence` and `failure_scenario` that a recorder
+> crosses with the surface's `reach_class` into a computed priority. See the "gate now weighs
+> findings instead of counting them" section of the 0.5.2 entry above for what replaced both. Left as
+> written because it is the record of what 0.5.1 shipped.
 
 ### Added — `make release-publish`, the only thing in this repository that tags
 

@@ -1,10 +1,14 @@
-# gate/ holds three different kinds of thing, and two of them are tracked.
+# gate/ holds three different kinds of thing, and the tracked side of it is not
+# one file — it is three: the gate's own reviewed material, plus the two ledgers
+# a run writes (subject.json, deferred.json) and the one a human writes
+# (overrides.json).
 #
 # TRACKED: the gate's own working material — the question it asks (prompts/) and
 # the declaration of how it asks it (method.yaml). Those are reviewed.
 #
-# TRACKED, THOUGH A RUN WRITES IT: subject.json, the freeze — see the block at
-# the bottom of this file for why it sits on this side of the line.
+# TRACKED, THOUGH A RUN OR A HUMAN WRITES THEM: subject.json and deferred.json,
+# both run-written, and overrides.json, human-written — see the blocks further
+# down this file for why each sits on this side of the line.
 #
 # IGNORED: every other thing a RUN produces — the resolved baseline, the release
 # delta, the rendered site text, the per-surface captures, the run manifest,
