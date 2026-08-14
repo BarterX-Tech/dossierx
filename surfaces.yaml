@@ -65,6 +65,14 @@ surfaces:
     what: The project's front door on GitHub — install, the two roles, the noun
       table, the exit-code table, the lock lifecycle.
     reach: Every visitor. Carries two of the four release-version pins.
+    # reach_class is the machine-readable twin of reach: above — one of
+    # client-shipped | consumer-docs | maintainer | process, a closed
+    # vocabulary consumed by the gate's priority matrix (reach_class ×
+    # consequence → P0-P3). The value is never chosen by the reviewing agent:
+    # it comes from this reviewed file, the same as every other line in a
+    # surface entry. `process` is reserved for surfaces internal to the gate
+    # itself; no surface below carries it yet.
+    reach_class: client-shipped
     paths:
       - README.md
     reads:
@@ -90,6 +98,7 @@ surfaces:
       silent-behaviour change can be announced to somebody deciding whether to
       upgrade.
     reach: Consumers deciding whether to upgrade.
+    reach_class: consumer-docs
     paths:
       - CHANGELOG.md
     reads:
@@ -122,6 +131,7 @@ surfaces:
       the claim-body renderer accepts.
     reach: Anyone authoring claims. surface.json's markdown_constructs is the
       corpus this document is a claim about.
+    reach_class: consumer-docs
     paths:
       - FORMAT.md
     reads:
@@ -152,6 +162,7 @@ surfaces:
       the question is whether this release SHIPPED something the entry still
       calls deferred.
     reach: Sets expectations for anyone deciding to depend on this.
+    reach_class: consumer-docs
     paths:
       - ROADMAP.md
     reads:
@@ -163,6 +174,7 @@ surfaces:
     what: How to build and test, including the two suites `go test ./...` does
       not reach.
     reach: Contributors.
+    reach_class: maintainer
     paths:
       - CONTRIBUTING.md
     reads:
@@ -221,6 +233,7 @@ surfaces:
     what: The one description of how this project releases, including its own
       pin-site list — prose that has gone stale twice and checks itself.
     reach: The maintainer, next release.
+    reach_class: maintainer
     paths:
       - docs/RELEASING.md
     reads:
@@ -267,6 +280,7 @@ surfaces:
       installed into OTHER people's repositories by `dossierx skills export`,
       where a stale rule teaches an agent the wrong recovery against a corpus
       nobody here will ever see. Carries one release-version pin.
+    reach_class: client-shipped
     paths:
       - skills/
     reads:
@@ -295,6 +309,7 @@ surfaces:
       own agents read exactly the bytes a client's agents would.
     reach: Every agent operating in this repository; a divergence here means the
       export is producing something other than the source.
+    reach_class: client-shipped
     paths:
       - .claude/skills/
     reads:
@@ -312,6 +327,7 @@ surfaces:
       the component source — but every file here decides what that DOM says.
     reach: Every prospective user. The only client-facing statement of what this
       project is, and the one whose counts have gone stale live.
+    reach_class: consumer-docs
     paths:
       - site/
     reads:
@@ -323,6 +339,7 @@ surfaces:
     what: The merge-gate workflow clients copy into their own repository.
     reach: Ships a stale binary into somebody else's CI. Carries one
       release-version pin, and it is the pin that matters most.
+    reach_class: client-shipped
     paths:
       - scripts/ci/dossierx-check.yml
     reads:
@@ -344,6 +361,7 @@ surfaces:
       contents before running it.
     reach: Ships a false engine statement into somebody else's repository, and
       is read aloud on the way in.
+    reach_class: client-shipped
     paths:
       - scripts/install-git-hook.sh
       - scripts/install-git-hook.ps1
@@ -373,6 +391,7 @@ surfaces:
       user-visible change landing under a `docs:` or `chore:` subject is dropped
       by the filters and is invisible on the release page while being fully
       described in CHANGELOG.md.
+    reach_class: consumer-docs
     paths:
       - .goreleaser.yaml
     reads:
@@ -396,6 +415,7 @@ surfaces:
     reach: Unfixable after the tag. This is the code surface.json's command,
       flag, error-code, lint-rule, route, render and behaviour fields are all
       extracted FROM, and prose is judged against.
+    reach_class: client-shipped
     paths:
       - cmd/dossierx/
       - internal/

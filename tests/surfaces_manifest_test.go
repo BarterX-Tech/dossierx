@@ -38,6 +38,21 @@ import (
 // root.
 const surfacesManifestFile = "surfaces.yaml"
 
+// validReachClasses is the closed vocabulary reach_class draws from. The
+// priority design derives a finding's priority from reach_class × consequence,
+// which only works as a formula if the left side cannot silently grow a fifth
+// value nobody wrote a row for. "process" is reserved for surfaces internal to
+// the gate itself — the mechanism, not the material it reviews — and no
+// surface in this repository carries it yet; it stays in the set so the day
+// one does, the value is already reviewed vocabulary rather than a new word an
+// agent invented on the spot.
+var validReachClasses = map[string]bool{
+	"client-shipped": true,
+	"consumer-docs":  true,
+	"maintainer":     true,
+	"process":        true,
+}
+
 // surfaceManifest is surfaces.yaml. The two halves are separate keys rather than
 // one list with an "in scope" boolean because they are read by different
 // people for different reasons: the surfaces are the gate's fan-out, and the
@@ -64,6 +79,13 @@ type surfaceEntry struct {
 	// surfaces.yaml's header for what the list is for and the rules it answers
 	// to.
 	Reads []string `yaml:"reads"`
+	// ReachClass is Reach's machine-readable twin: a closed-vocabulary label the
+	// gate's priority matrix combines with a finding's consequence to derive
+	// P0-P3, where Reach is free prose no formula can consume. It belongs only
+	// on a surface — an out_of_scope entry has no reviewing agent to hand a
+	// priority to, so a value there would be a claim nobody reads. See
+	// validReachClasses below for the vocabulary.
+	ReachClass string `yaml:"reach_class"`
 }
 
 // TestEveryTrackedFileIsDeclaredASurfaceOrExcluded is the whole point of the
@@ -348,4 +370,50 @@ func TestReadsEntriesAreExactTrackedPathsSomebodyElseOwns(t *testing.T) {
 			seen[rel] = true
 		}
 	}
+}
+
+// TestSurfacesDeclareAValidReachClass holds reach_class to the same standard
+// the rest of this file holds every other field to: present where it belongs,
+// absent where it does not, and drawn from a vocabulary this test owns rather
+// than one an agent invents while filling the field in.
+//
+// reach_class is Reach's machine-readable twin — the priority design derives a
+// finding's priority from reach_class × consequence, and a formula cannot
+// consume free prose. Three things follow, each a separate way the manifest
+// could quietly stop being that input: a surface missing the field would leave
+// the matrix nothing to key on for that surface; a value outside the closed
+// set would be a key the matrix has no row for; and an out_of_scope entry
+// carrying one would be a priority computed for a surface with no reviewing
+// agent to hand it to, since out_of_scope entries are excluded from the gate's
+// fan-out entirely.
+func TestSurfacesDeclareAValidReachClass(t *testing.T) {
+	root := repoRoot(t)
+	manifest := loadSurfaceManifest(t, root)
+
+	for _, entry := range manifest.Surfaces {
+		switch class := strings.TrimSpace(entry.ReachClass); {
+		case class == "":
+			t.Errorf("surface %q carries no reach_class; the priority matrix has nothing to key on for this surface until one of %s is added", entry.Name, sortedReachClasses())
+		case !validReachClasses[class]:
+			t.Errorf("surface %q has reach_class %q, which is not in the closed vocabulary %s; the value comes from the maintainer's ruling, not from a value invented while filling the field in", entry.Name, class, sortedReachClasses())
+		}
+	}
+
+	for _, entry := range manifest.OutOfScope {
+		if entry.ReachClass != "" {
+			t.Errorf("out_of_scope entry %q carries reach_class %q; an out_of_scope entry has no reviewing agent, so a reach_class there is a priority computed for nobody to consume", entry.Name, entry.ReachClass)
+		}
+	}
+}
+
+// sortedReachClasses renders validReachClasses as a stable, readable list for
+// test failure messages — map iteration order is not, and a flapping failure
+// message is its own small bug.
+func sortedReachClasses() []string {
+	classes := make([]string, 0, len(validReachClasses))
+	for class := range validReachClasses {
+		classes = append(classes, class)
+	}
+	sort.Strings(classes)
+	return classes
 }
