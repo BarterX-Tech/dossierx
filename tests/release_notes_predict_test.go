@@ -1793,6 +1793,16 @@ func TestPredictReleaseNotesForRange_G1Capture_MismatchFailsTheGate(t *testing.T
 	// its path — this is the "prediction G1 recorded" side of the comparison.
 	recordAs := func(t *testing.T, p ReleaseNotesPrediction) string {
 		t.Helper()
+		// The header gets the footer's treatment, for the footer's reason, one
+		// release later. Every case below varies Body or Dropped and says nothing
+		// about the header, so a hand-built prediction that omitted it would
+		// differ from the fresh one in a field none of these cases is about — and
+		// the positive control, whose whole job is to prove an identical
+		// prediction passes, would fail. Derived from the committed config so the
+		// fixture cannot disagree with the thing it is a fixture for.
+		if p.Header == "" {
+			p.Header = cfg.Header
+		}
 		path := filepath.Join(t.TempDir(), "g1-prediction.json")
 		data, err := json.MarshalIndent(p, "", "  ")
 		if err != nil {

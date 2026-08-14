@@ -540,11 +540,17 @@ type PredictedGroup struct {
 
 // ReleaseNotesPrediction is what PredictReleaseNotes returns: Body is the
 // exact markdown GoReleaser's "git" changeloger generates (see
-// internal/pipe/release/body.go in the goreleaser module — this project's
-// .goreleaser.yaml sets neither release.header nor release.footer, so
-// GoReleaser itself hands ctx.ReleaseNotes to the release pipe unmodified),
-// plus the Groups/Dropped breakdown a gate agent diffs and reasons over
-// without re-parsing the markdown.
+// internal/pipe/release/body.go in the goreleaser module), plus the
+// Groups/Dropped breakdown a gate agent diffs and reasons over without
+// re-parsing the markdown, and the header carried beside it.
+//
+// That parenthesis used to end "— this project's .goreleaser.yaml sets neither
+// release.header nor release.footer, so GoReleaser itself hands ctx.ReleaseNotes
+// to the release pipe unmodified". v0.5.2 set both, and the sentence stayed. It
+// is corrected here rather than deleted because it names the mechanism the
+// header and footer are modelled ON: goreleaser wraps the generated notes as
+// `{{ with .Header }}{{ . }}\n{{ end }}{{ .ReleaseNotes }}{{ with .Footer }}\n{{ . }}{{ end }}`,
+// which is why the footer lands inside Body and the header cannot.
 //
 // Body is NOT, in general, the entire published GitHub release body byte for
 // byte, and G3 must not compare it that way. docs/RELEASING.md's own
@@ -569,6 +575,21 @@ type ReleaseNotesPrediction struct {
 	Body    string           `json:"body"`
 	Groups  []PredictedGroup `json:"groups"`
 	Dropped []DroppedCommit  `json:"dropped"`
+
+	// Header is release.header verbatim, carried BESIDE Body rather than inside
+	// it. Inside it would fail G3 on every release — PublishedBodyMatches
+	// compares from the "## Changelog" anchor onward, and a header sits ahead of
+	// that anchor.
+	//
+	// It is here because of what the v0.5.2 gate reported about the release
+	// before this one: the header is the only client-facing line that release
+	// added, and it appeared in NO artifact any reading agent is handed. The
+	// prediction is what the release-notes surface reads, so a header absent
+	// from it is a line that ships to every consumer with nobody having read it.
+	// Carrying it does not verify it against the published page — nothing here
+	// can, for the anchor reason above — but it is the difference between a
+	// reviewed line and an unreviewed one.
+	Header string `json:"header"`
 }
 
 // mergeExcludePattern is exactly the "^Merge " changelog.filters.exclude
@@ -624,6 +645,12 @@ func withoutMergeDrops(dropped []DroppedCommit) []DroppedCommit {
 // through undetected.
 func (p ReleaseNotesPrediction) PublishedEqual(other ReleaseNotesPrediction) bool {
 	if p.Body != other.Body {
+		return false
+	}
+	// The header publishes with the body, so two predictions that disagree about
+	// it describe two different pages — even though nothing downstream compares
+	// it against what GitHub actually served.
+	if p.Header != other.Header {
 		return false
 	}
 	if len(p.Groups) != len(other.Groups) {
@@ -926,7 +953,7 @@ func PredictReleaseNotes(rawLines []string, cfg ReleaseNotesConfig) (ReleaseNote
 		body += "\n" + cfg.Footer
 	}
 
-	return ReleaseNotesPrediction{Body: body, Groups: rendered, Dropped: dropped}, nil
+	return ReleaseNotesPrediction{Body: body, Groups: rendered, Dropped: dropped, Header: cfg.Header}, nil
 }
 
 // gitLogOneline runs a NARROWED form of the invocation GoReleaser's

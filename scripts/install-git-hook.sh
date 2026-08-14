@@ -91,6 +91,7 @@
 #
 # Exit status: 0 installed / already current / dry run; 1 declined, refused,
 # or failed.
+# END USAGE
 
 set -eu
 
@@ -425,9 +426,39 @@ usage() {
 	# The header of this file IS the documentation; printing the flag list
 	# twice is how the two drift apart. Piped-from-stdin invocations have no
 	# readable $0, so fall back to the one line that matters.
+	#
+	# TWO DEFECTS THIS REPLACED, both reported by the v0.5.2 gate and both from
+	# doing text work with sed ranges and sed substitutions:
+	#
+	#   THE HELP STOPPED MID-SENTENCE. The range was
+	#   `/^# USAGE/,/^# Exit status/p`, and a sed range ends AT its closing match
+	#   — so the two-line exit-status paragraph printed its first line and lost
+	#   the second. Measured: the last line a reader saw was "1 declined,
+	#   refused," with the rest of the sentence gone. The block now closes on an
+	#   explicit `# END USAGE` sentinel, which is excluded rather than truncated.
+	#
+	#   A WINDOWS PATH CAME OUT MANGLED. The invocation was substituted with
+	#   `sed "s|...|  $self_invocation |"`, where the replacement is not literal
+	#   text: a backslash begins an escape, and `C:\Users\me\install-git-hook.sh`
+	#   lost or transformed characters on the way to the reader — on the platform
+	#   the .ps1 wrapper exists for, in the line whose whole job is to name a
+	#   command they can type. The replacement is now a literal prefix swap done
+	#   by index, and the value reaches awk through the environment rather than
+	#   -v, because -v processes escape sequences in exactly the same way.
 	if [ -r "$0" ]; then
-		sed -n '/^# USAGE/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//' \
-			| sed "s|^  scripts/install-git-hook\.sh |  $self_invocation |"
+		DOSSIERX_USAGE_INVOCATION="$self_invocation" awk '
+			/^# END USAGE/ { exit }
+			/^# USAGE/     { printing = 1 }
+			printing {
+				line = $0
+				sub(/^# ?/, "", line)
+				head = "  scripts/install-git-hook.sh "
+				if (index(line, head) == 1) {
+					line = "  " ENVIRON["DOSSIERX_USAGE_INVOCATION"] " " substr(line, length(head) + 1)
+				}
+				print line
+			}
+		' "$0"
 	else
 		printf '%s\n' "usage: $self_invocation [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]"
 	fi
@@ -574,28 +605,83 @@ if [ -n "$configured_hooks_path" ]; then
 	# reads the VALUE, a screen up, has always had this right; this one is the
 	# same question and takes the same form.
 	hooks_path_origin=$(git config --show-origin --get core.hooksPath 2>/dev/null | cut -f1)
-	# WHICH ORIGINS MEAN "NOT THIS REPOSITORY". User-global and XDG are the
-	# obvious two. The system gitconfig is the one a narrow pattern misses: its
-	# path follows git's install prefix, so it is /etc/gitconfig on a distro
-	# build, /opt/homebrew/etc/gitconfig under Homebrew, /usr/local/etc/gitconfig
-	# on a source build, and C:/Program Files/Git/etc/gitconfig on Git for
-	# Windows — which is the platform this warning matters most on, since it is
-	# the one install-git-hook.ps1 exists for. So the test is inverted: anything
-	# that is NOT this repository's own config is machine-wide.
-	case "$hooks_path_origin" in
-	"" | file:.git/config | file:*/.git/config \
-	   | file:*/config.worktree | file:*/.git/config.worktree)
-		# This repository's own config — including a worktree-scoped setting
-		# under extensions.worktreeConfig, which reports .git/config.worktree or
-		# .git/worktrees/<id>/config.worktree and is narrower than the repository
-		# rather than wider. Or unreadable. Nothing to add: saying "EVERY git
-		# repository on this machine" over a one-worktree setting is the same
-		# defect as staying silent over a global one, pointing the other way.
+	hooks_path_origin=${hooks_path_origin#file:}
+
+	# WHICH ORIGINS MEAN "NOT THIS REPOSITORY", asked of git rather than guessed
+	# from the shape of the path.
+	#
+	# This used to be a case pattern: anything not matching `file:*/.git/config`
+	# or a `config.worktree` was reported as machine-wide. That was wrong in both
+	# directions, and the v0.5.2 gate found all three ways:
+	#
+	#   A SUBMODULE has no .git DIRECTORY. Its config lives at
+	#   <superproject>/.git/modules/<name>/config, which matches no pattern above,
+	#   so a setting scoped to that one submodule was announced as running for
+	#   every repository on the machine.
+	#   `--separate-git-dir` does the same thing for the same reason: .git is a
+	#   file, the config is wherever the real git dir was put.
+	#   A GIT WITHOUT --show-origin (or any read that fails) returns EMPTY, and
+	#   empty was grouped with "this repository's own" — so the case the warning
+	#   exists for was silently skipped whenever the question could not be
+	#   answered. That is "we did not check" reading as "it is fine", which this
+	#   project refuses by name.
+	#
+	# git knows where its own config is, so it is asked. --git-common-dir is what
+	# makes a linked worktree resolve to the repository it belongs to; on a git
+	# too old to know the option it echoes the option back, and the fallback to
+	# --git-dir covers that.
+	hooks_origin_git_dir=$(git rev-parse --git-dir 2>/dev/null || printf '')
+	hooks_origin_common_dir=$(git rev-parse --git-common-dir 2>/dev/null || printf '')
+	case "$hooks_origin_common_dir" in
+	"" | --*) hooks_origin_common_dir="$hooks_origin_git_dir" ;;
+	esac
+	# git answers relatively when the shell is already at the top of the work
+	# tree, and the origin path is absolute; compare like with like.
+	absolutise_repo_path() {
+		case "$1" in
+		"" | /* | ?:[/\\]*) printf '%s' "$1" ;;
+		*) printf '%s/%s' "$PWD" "$1" ;;
+		esac
+	}
+	hooks_origin_git_dir=$(absolutise_repo_path "$hooks_origin_git_dir")
+	hooks_origin_common_dir=$(absolutise_repo_path "$hooks_origin_common_dir")
+	hooks_path_origin_abs=$(absolutise_repo_path "$hooks_path_origin")
+
+	hooks_origin_scope=machine-wide
+	if [ -z "$hooks_path_origin" ]; then
+		hooks_origin_scope=unknown
+	else
+		for candidate in \
+			"$hooks_origin_git_dir/config" \
+			"$hooks_origin_git_dir/config.worktree" \
+			"$hooks_origin_common_dir/config" \
+			"$hooks_origin_common_dir/config.worktree"; do
+			[ "$hooks_path_origin_abs" = "$candidate" ] || continue
+			# This repository's own config, including a worktree-scoped setting
+			# under extensions.worktreeConfig — narrower than the repository
+			# rather than wider. Saying "EVERY git repository on this machine"
+			# over one of those is the same defect as staying silent over a
+			# global one, pointing the other way.
+			hooks_origin_scope=this-repository
+			break
+		done
+	fi
+
+	case "$hooks_origin_scope" in
+	this-repository) ;;
+	unknown)
+		printf '%s\n' \
+			"      WHICH CONFIG THAT SETTING COMES FROM COULD NOT BE READ, so this" \
+			"      script cannot tell you whether the hook it is about to install runs" \
+			"      only here or for EVERY git repository on this machine. Check with" \
+			"      \"git config --show-origin --get core.hooksPath\" before you rely on" \
+			"      the narrower reading. Uninstall with" \
+			"      \"$self_invocation --uninstall\", which removes the same path." ""
 		;;
 	*)
 		printf '%s\n' \
 			"      THAT SETTING IS NOT THIS REPOSITORY'S. It comes from" \
-			"      ${hooks_path_origin#file:}, so this hook will run for EVERY git" \
+			"      $hooks_path_origin, so this hook will run for EVERY git" \
 			"      repository on this machine, not only this one. Uninstall with" \
 			"      \"$self_invocation --uninstall\", which removes the same path." ""
 		;;

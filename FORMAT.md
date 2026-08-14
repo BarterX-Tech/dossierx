@@ -67,9 +67,9 @@ comments:                       # optional, engine-managed review threads — au
   does NOT list.** Adding `overview` to `facets[]` is not required and is
   usually wrong: it gives that facet its own viewer tab instead of the injected
   orientation-note behaviour the reserved name exists for.
-- `slug` — kebab-case, enforced as `^[a-z0-9]+(-[a-z0-9]+)*$` and unique within
-  that `module.facet` pair. Lowercase alphanumerics separated by single hyphens:
-  no uppercase, no underscores, no leading, trailing or doubled hyphen.
+- `slug` — kebab-case, enforced as `^[a-z0-9]+(-[a-z0-9]+)*$`. Lowercase
+  alphanumerics separated by single hyphens: no uppercase, no underscores, no
+  leading, trailing or doubled hyphen.
 
 The `module` and `facet` segments must also AGREE with the claim's own `module:`
 and `facet:` fields — a disagreement is its own finding, not a silent rename.
@@ -77,6 +77,15 @@ and `facet:` fields — a disagreement is its own finding, not a silent rename.
 All of the above is the `id-shape` lint. Its findings are error severity, so a
 violation fails `dossierx check` and refuses `dossierx claim lock` with
 `error.code` `lint_failed`, exit 1.
+
+**Uniqueness is a different rule, and it has to be.** An id is unique across the
+corpus, and `id-shape` cannot tell you that: it reads one claim at a time and
+never compares two. The rule that does is `ambiguous`, which reports EVERY claim
+sharing an id — both of them, not the second one it happened to reach, because
+neither file is authoritative over the other and picking one would be inventing an
+answer. It is the same error severity, so a duplicate id fails `dossierx check`
+and refuses `claim lock` exactly as a malformed one does; what differs is which
+finding names it, and therefore what you go and look at.
 
 ### Content is required
 
