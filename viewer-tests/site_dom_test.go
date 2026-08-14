@@ -204,6 +204,16 @@ type siteSnapshot struct {
 	CLI         []string         `json:"cli"`
 	Head        []string         `json:"head"`
 	Transcripts []siteTranscript `json:"transcripts"`
+	Links       []siteLink       `json:"links"`
+}
+
+// siteLink is one anchor as rendered: what it says, and where it actually goes.
+// Both halves are needed — a sentence like "See the full release history" is a
+// claim about a destination, and until v0.5.2 this capture carried only the text,
+// so the gate's site agent had to report every such sentence as uncheckable.
+type siteLink struct {
+	Text string `json:"text"`
+	Href string `json:"href"`
 }
 
 // sitePass is one snapshot as it is RECORDED: the text and attributes are the
@@ -251,6 +261,9 @@ type sitePage struct {
 	// card renders its session only while it is expanded, so no single pass holds
 	// them all; the union is what the assertions read.
 	Transcripts []siteTranscript `json:"transcripts"`
+	// Links is the union across every pass: every anchor the page rendered at any
+	// point, with its resolved destination.
+	Links []siteLink `json:"links"`
 }
 
 // transcript returns the session depicted for one command, and whether the dump
@@ -460,6 +473,19 @@ const siteExtractorJS = `(function () {
       transcripts.push({ command: window.__dxTidy(nameEl.textContent), lines: tlines });
     }
 
+    // ANCHORS, TEXT AND DESTINATION TOGETHER. The v0.5.2 gate reported that
+    // several sentences on this surface are claims about where a link goes — "See
+    // the full release history", "View on GitHub", the in-page section nav — and
+    // that the capture carried no href at all, so a reading agent could not check
+    // one of them. href is read from the PROPERTY rather than the attribute, so it
+    // arrives resolved against the document rather than as written.
+    var links = [];
+    var as = document.querySelectorAll('a[href]');
+    for (var li = 0; li < as.length; li++) {
+      var label = window.__dxTidy(as[li].textContent || as[li].getAttribute('aria-label'));
+      if (label) { links.push({ text: label.slice(0, 90), href: as[li].href }); }
+    }
+
     var head = [];
     var title = window.__dxTidy(document.title);
     if (title) { head.push('title: ' + title); }
@@ -471,7 +497,8 @@ const siteExtractorJS = `(function () {
 
     return {
       text: text, attrs: attrs, details: details, summaries: document.querySelectorAll('summary').length,
-      expandable: expandable, codetabs: codetabs, cli: cli, head: head, transcripts: transcripts
+      expandable: expandable, codetabs: codetabs, cli: cli, head: head, transcripts: transcripts,
+      links: links
     };
   };
   return true;
@@ -700,6 +727,7 @@ func readSitePage(t *testing.T, browser, base string, e siteEntry) sitePage {
 	attrSeen := map[siteAttr]int{}
 	detailsSeen := map[siteDetails]int{}
 	seenTranscript := map[string]bool{}
+	seenLink := map[siteLink]bool{}
 
 	record := func(label, selector string, snap siteSnapshot) {
 		pass := sitePass{
@@ -756,6 +784,17 @@ func readSitePage(t *testing.T, browser, base string, e siteEntry) sitePage {
 			}
 			seenTranscript[tr.Command] = true
 			page.Transcripts = append(page.Transcripts, tr)
+		}
+		// Anchors union the same way text does: a link revealed only after a click
+		// is still a link this page renders, and the same one seen twice is one
+		// entry. Keyed on text AND href, so a label that points two different ways
+		// in two states is two entries rather than one silently kept.
+		for _, ln := range snap.Links {
+			if ln.Text == "" || seenLink[ln] {
+				continue
+			}
+			seenLink[ln] = true
+			page.Links = append(page.Links, ln)
 		}
 		page.Passes = append(page.Passes, pass)
 	}

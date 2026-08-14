@@ -603,6 +603,8 @@ case "$MODE" in
   # -------------------------------------------------------------------------
   fanout)
     [ -n "$TREE" ] || die "fanout: --tree is required. A fan-out mints an identifier that every one of its answers must name, and an identifier minted over no tree attaches those answers to no release at all." 1
+    resolved_object_name "$TREE" \
+      || die "fanout: --tree is \"$TREE\", which is not a full 40-digit object name. Every answer this run mints is filed against that value, so a tag or an abbreviation here attaches thirteen answers to something that can mean a different tree in another clone." 1
 
 
     # THE PRODUCER IS THE CHECKOUT'S OWN. It assembles the bundles from the files
@@ -648,6 +650,13 @@ case "$MODE" in
 
   delta)
     [ -n "$TREE" ] || die "delta: --tree is required; a delta that does not say which tree it covers cannot be checked for freshness" 1
+    # THE TREE IS AN IDENTITY HERE, not two steps later. `record` catches a bad
+    # --tree by comparing it against the tree the artifacts themselves name, which
+    # is a real check and arrives after this file has already been written with the
+    # wrong value in it. docs/RELEASING.md claimed every step refused anything but a
+    # 40-digit object name; the v0.5.2 gate found that only --baseline-commit did.
+    resolved_object_name "$TREE" \
+      || die "delta: --tree is \"$TREE\", which is not a full 40-digit object name. A tag is a mutable pointer and an abbreviation is a prefix that can mean a different object in another clone; every key in this gate rests on which tree the comparison was over." 1
     # THE BASELINE IS RESOLVED OR THE RUN FAILS. There is no branch here that
     # turns "I could not find the previous release" into an empty delta. An
     # empty delta is a legitimate and expected answer — this project's first

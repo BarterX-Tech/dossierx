@@ -1202,12 +1202,22 @@ func jsonFieldNames(rt reflect.Type) []string {
 // run through `git grep` and NEVER a plain `grep -r`: grep resolves to ugrep on
 // some machines, whose -r skips dot-directories, so .github/ is never searched
 // and a pin in a workflow file is invisible.
-const surfacePinSweep = `dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v`
+//
+// THE THIRD ALTERNATIVE IS NOT DECORATION. Until v0.5.2 this expression knew two
+// shapes — `@vX.Y.Z` and a raw.githubusercontent path — and missed a third that
+// two surfaces found independently at the v0.5.2 gate: the ordinary
+// `github.com/<org>/<repo>/blob/vX.Y.Z/<path>` link, which
+// skills/dossierx-claims/SKILL.md carries twice and skills/dossierx-comments/SKILL.md
+// once. Those three were correct at v0.5.2 and invisible to the inventory, so the
+// release procedure's pin check — which compares its prose against THIS list —
+// would have passed at v0.5.3 over three pins left behind, inside bundles that are
+// go:embed-ed and installed into other people's repositories.
+const surfacePinSweep = `dossierx(/cmd/dossierx)?@v|githubusercontent\.com/[^ ]*dossierx/v|github\.com/[^ ]*dossierx/blob/v`
 
 // surfacePinRE extracts the pin token out of a swept line. Every hit MUST yield
 // one: a line the sweep found and this cannot parse is an error, not a line to
 // drop, for the same reason an unresolvable route pattern is.
-var surfacePinRE = regexp.MustCompile(`(?:dossierx(?:/cmd/dossierx)?@|githubusercontent\.com/[^ ]*?dossierx/)v\d+\.\d+\.\d+`)
+var surfacePinRE = regexp.MustCompile(`(?:dossierx(?:/cmd/dossierx)?@|githubusercontent\.com/[^ ]*?dossierx/|github\.com/[^ ]*?dossierx/blob/)v\d+\.\d+\.\d+`)
 
 // surfacePinVersionRE pulls the version out of a pin token.
 var surfacePinVersionRE = regexp.MustCompile(`v\d+\.\d+\.\d+$`)

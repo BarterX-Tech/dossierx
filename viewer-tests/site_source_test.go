@@ -294,7 +294,7 @@ type historyLiteral struct {
 }
 
 // declaredHistoryLiterals is every renderable version literal that lives in
-// content.ts outside the releases array. Nine sentences today, each naming what
+// content.ts outside the releases array. Eleven sentences today, each naming what
 // some past release did.
 //
 // WHY EACH ONE IS WRITTEN DOWN, rather than exempted by a rule.
@@ -375,8 +375,23 @@ var declaredHistoryLiterals = []historyLiteral{
 	},
 	{
 		version: "v0.2.0",
-		phrase:  "byte-for-byte identical to v0.2.0's output",
-		why:     "the --format note, naming the release whose text output the golden fixtures pin",
+		phrase:  "for every command that existed in v0.2.0 it is byte-for-byte what it was then",
+		why: "the --format note, naming the release whose text output the golden fixtures pin. " +
+			"It read \"byte-for-byte identical to v0.2.0's output\" until v0.5.2, which covered " +
+			"all nineteen commands — and four of them (claim show, claim list, claim new, " +
+			"comment inbox) did not exist in v0.2.0 and have no output there to be identical to. " +
+			"The v0.5.2 gate reported the overclaim; the phrase moved with the sentence, which " +
+			"is what this list is for",
+	},
+	{
+		version: "v0.2.0",
+		phrase:  "have no v0.2.0 output to be identical to",
+		why:     "the same --format note's second half, which names the release the four v0.3.0 commands post-date",
+	},
+	{
+		version: "v0.3.0",
+		phrase:  "The four commands v0.3.0 added",
+		why:     "the same note again, naming the release that introduced claim show, claim list, claim new and comment inbox — the four with no v0.2.0 text output behind them",
 	},
 }
 

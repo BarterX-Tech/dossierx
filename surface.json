@@ -762,6 +762,16 @@
       "version": "v0.5.2"
     },
     {
+      "file": "skills/dossierx-claims/SKILL.md",
+      "pin": "github.com/BarterX-Tech/dossierx/blob/v0.5.2",
+      "version": "v0.5.2"
+    },
+    {
+      "file": "skills/dossierx-comments/SKILL.md",
+      "pin": "github.com/BarterX-Tech/dossierx/blob/v0.5.2",
+      "version": "v0.5.2"
+    },
+    {
       "file": "skills/dossierx/SKILL.md",
       "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.5.2",
       "version": "v0.5.2"

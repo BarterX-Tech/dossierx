@@ -165,10 +165,12 @@ them, and the three post-publish checks that leave this repository entirely.
       would otherwise resolve it by git's search order, silently, and this
       baseline is the thing every comparison below is made against.
 
-      Both are full 40-digit object names. `--baseline-commit` is refused on the spot if
-      it is anything else; `--tree` is checked at `record`, which compares it against the
-      tree the artifacts themselves name — so a mistyped `--tree` is caught one step later
-      rather than at the step that took it. A
+      Both are full 40-digit object names and every step that takes one refuses
+      anything else — `--baseline-commit` and `--tree` alike, at `delta`, at `fanout` and
+      at `record`. That was not true until v0.5.2: only `--baseline-commit` was checked,
+      so a tag or an abbreviation passed as `--tree` was written into `gate/delta.json`
+      and caught one step later, by `record`, comparing it against the tree the artifacts
+      themselves name. A
       tag NAME is a mutable pointer that `git tag -f` re-points, and an
       abbreviation is a prefix that means a different object in a different
       clone; either is an answer that stops being true later, and which release
@@ -535,14 +537,24 @@ them, and the three post-publish checks that leave this repository entirely.
       is the exact thing this item exists to avoid. `git grep` needs no filter
       list to keep current.
 
-      As of v0.5.2 that is FIVE pins across FOUR files: `README.md` (the
+      As of v0.5.2 that is SEVEN pins across SIX files: `README.md` (the
       `go install` line and the `install-git-hook.sh` raw URL),
       `skills/dossierx/SKILL.md` (the same raw URL),
       `scripts/ci/dossierx-check.yml` (the `go install` line — this one is a
       template users copy into their own repository, so a stale pin there ships
-      a stale binary into someone else's merge gate), and, new in v0.5.2,
-      `scripts/install-git-hook.sh` (the raw URL it prints back to a reader who
-      piped it from stdin and has no `$0` to name).
+      a stale binary into someone else's merge gate), `scripts/install-git-hook.sh`
+      (the raw URL it prints back to a reader who piped it from stdin and has no
+      `$0` to name), and `skills/dossierx-claims/SKILL.md` and
+      `skills/dossierx-comments/SKILL.md`, which link FORMAT.md at the tag because
+      that file does not ship with an exported bundle.
+
+      **Three of those seven were invisible to the sweep until v0.5.2**, and the
+      v0.5.2 gate found them rather than the sweep: the expression knew `@vX.Y.Z`
+      and the raw.githubusercontent form and not the ordinary
+      `github.com/<org>/<repo>/blob/vX.Y.Z/` link the two skill bundles use. They
+      were correct at v0.5.2 and would have been left behind at v0.5.3, inside
+      bundles that are `go:embed`-ed into other people's repositories where a
+      stale link is unfixable after the tag.
 
       **Do not work from that list — work from the sweep, and treat the list as
       a cross-check.** It is a cache of what the sweep found last time, and it
