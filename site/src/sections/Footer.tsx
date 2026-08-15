@@ -7,6 +7,20 @@ interface FooterData {
   note: string;
 }
 
+// The footer is shared by index.html and releases.html, but the four in-page
+// anchors it carries — #hero, #roles, #comments, #cli — are sections only
+// index.html renders. Emitted bare, they resolve against whatever page is
+// showing, so on releases.html all four were dead links to itself. They are
+// rewritten to index.html there and left bare on index, where a bare fragment
+// is a same-page scroll rather than a navigation.
+function resolveHref(href: string): string {
+  if (!href.startsWith("#")) return href;
+  const onIndex =
+    typeof window === "undefined" ||
+    !window.location.pathname.endsWith("releases.html");
+  return onIndex ? href : `index.html${href}`;
+}
+
 export function Footer() {
   const section = getSection("footer");
   const data = section.data as unknown as FooterData;
@@ -22,7 +36,7 @@ export function Footer() {
 
         <nav className="footer__links">
           {data.links.map((l) => (
-            <a key={l.href} href={l.href}>
+            <a key={l.href} href={resolveHref(l.href)}>
               {l.label}
             </a>
           ))}

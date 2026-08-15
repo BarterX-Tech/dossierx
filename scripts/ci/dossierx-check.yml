@@ -232,7 +232,7 @@ jobs:
       - name: Install dossierx
         run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.2
 
-      # The full pipeline: lint, catalog, render, the lock-ledger gate, and the source scan for `dossierx-claim:` tags.
+      # The full pipeline: lint, catalog, render, the source scan for `dossierx-claim:` tags, and the lock-ledger gate.
       # --format text because the audience here is a human reading a failed
       # job log; drop it if you post-process the output, in which case the JSON
       # envelope's error.code is the thing to branch on.
@@ -271,5 +271,35 @@ jobs:
       # catches hand-edited YAML that is valid but non-canonical — the kind of
       # edit that produces a noisy diff on everyone else's next run.
       #
+      # claims_dir IS NOT "claims" FOR EVERY PROJECT. It is a required field in
+      # project.config.yaml with no fixed value (internal/config carries it as
+      # ClaimsDir; see this file's own header above, "repoint claims_dir at an
+      # empty directory"). A step that hardcoded "claims" here would pass on
+      # every run for a project that set claims_dir to something else — diffing
+      # a directory dossierx never wrote to, while the real claim files it
+      # never looked at drift unnoticed. That is a green check that matches
+      # nothing. The step below reads claims_dir out of project.config.yaml at
+      # run time instead of hardcoding it, from the same current directory the
+      # "dossierx check" step above reads its config from — if your
+      # project.config.yaml lives somewhere other than the repository root,
+      # add a matching `working-directory:` to both steps.
+      #
+      # THE EXTRACTION IS A PLAIN-SCALAR READER, NOT A YAML PARSER, and it
+      # cannot be allowed to fail quietly — a step that resolves the wrong
+      # directory is the same vacuous green check the hardcoded version was.
+      # So it reads the value (`claims_dir: claims`, `claims_dir: docs/claims
+      # # comment`), strips one layer of surrounding quotes, and then REFUSES
+      # unless what it resolved is a directory that exists. Every way the read
+      # can go wrong — no project.config.yaml, no claims_dir line, a value
+      # shaped in some way this reader does not handle — lands on that refusal
+      # and fails the job out loud, rather than diffing a path git matches
+      # nothing against. A check that cannot run is a failure, not a pass.
+      #
       # - name: Claims are canonical
-      #   run: git diff --exit-code -- claims
+      #   run: |
+      #     dir=$(grep -E '^[[:space:]]*claims_dir:' project.config.yaml | head -n1 | cut -d: -f2- | sed -E 's/^[[:space:]]+//; s/[[:space:]]*(#.*)?$//; s/^"(.*)"$/\1/; s/^'"'"'(.*)'"'"'$/\1/')
+      #     if [ -z "$dir" ] || [ ! -d "$dir" ]; then
+      #       echo "could not resolve claims_dir from project.config.yaml (got: '$dir'). Set it by hand in this step rather than letting the check pass over nothing." >&2
+      #       exit 1
+      #     fi
+      #     git diff --exit-code -- "$dir"

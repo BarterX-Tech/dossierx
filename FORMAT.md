@@ -436,10 +436,11 @@ what the viewer drives. Resolve, reopen, edit and delete exist only on the
 second one.
 
 **That split is a rule, not a wall, and the two surfaces do not enforce it
-equally.** Advisory rights — an actor acts only on its own messages — are
-enforced in `internal/comments` against the actor it is handed, and on the CLI
-that actor is the required `--as`, so `dossierx comment reply --as agent`
-cannot close a human's thread and fails with `rights_denied`. The viewer's API
+equally.** Advisory rights — the human may act on anything; an agent may act
+only on a thread or reply an agent authored — are enforced in
+`internal/comments` against the actor it is handed, and on the CLI that actor
+is the required `--as`, so `dossierx comment reply --as agent` cannot close a
+human's thread and fails with `rights_denied`. The viewer's API
 takes the actor from the request body and treats a request that omits `as` as
 `human` (`internal/serve.actorFromString`), so **any local caller reaching
 `dossierx serve` has full human rights** and can resolve, reopen, edit or delete

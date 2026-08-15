@@ -266,7 +266,7 @@ func TestUIDeleteWholeThreadConfirmed(t *testing.T) {
 	)
 	pollTrue(t, ctx, `document.querySelectorAll('#commentsPanel .comment-thread').length === 0`)
 	// The last thread is gone, so the chip falls back to its zero state — but
-	// against a live serve it STAYS VISIBLE (v0.2.1): the claim can still be
+	// against a live serve it STAYS VISIBLE (v0.3.0): the claim can still be
 	// commented on, and hiding the chip here would strand the panel the user is
 	// currently looking at behind a control that no longer exists.
 	pollTrue(t, ctx, `(function(){var c=document.querySelector('.comment-chip');return !!c && c.classList.contains('comment-chip--empty') && !c.closest('.claim-comments-slot').hidden;})()`)

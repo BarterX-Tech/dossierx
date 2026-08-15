@@ -1,6 +1,6 @@
 package viewertests
 
-// v0.2.1 — the comment chip on a claim with NO threads. Before this, a card
+// v0.3.0 — the comment chip on a claim with NO threads. Before this, a card
 // only grew a 💬 chip once it already had a comment, which made the FIRST
 // comment on any card unreachable from the viewer — the human's only surface.
 //
@@ -30,7 +30,7 @@ import (
 // ---------------------------------------------------------------------
 
 // TestEmptyClaimChipOpensRailAndPostsFirstComment is the release gate for
-// v0.2.1: "first comment openable, and the chip survives the click".
+// v0.3.0: "first comment openable, and the chip survives the click".
 func TestEmptyClaimChipOpensRailAndPostsFirstComment(t *testing.T) {
 	p := newProject(t) // one claim, deliberately NOT seeded with any comment
 	ctx := newLiveTab(t, p)

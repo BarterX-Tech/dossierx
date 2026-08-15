@@ -66,14 +66,24 @@ function Find-Bash {
     return $null
 }
 
+# NAME $sh HERE, NOT A HARDCODED "scripts/install-git-hook.sh". That literal
+# is where the file lives in the DossierX repository and nowhere else — a
+# reader who fetched just these two files into their own project (README and
+# the router skill both hand out a pinned raw URL for exactly that) is not
+# standing in a directory with a scripts/ folder, and the hardcoded path is a
+# file-not-found for exactly the reader this message is for. install-git-
+# hook.sh had the same defect once, on the recoveries it prints for itself,
+# and DOSSIERX_HOOK_INVOCATION below exists to stop it coming back a second
+# time there. This message is a third place the same mistake could be
+# reintroduced, so: use the resolved path, not a literal.
 $bash = Find-Bash
 if (-not $bash) {
-    Write-Error @'
+    Write-Error @"
 No bash was found. Install Git for Windows (which bundles one) or run the
 installer from WSL:
 
-  bash scripts/install-git-hook.sh --yes
-'@
+  bash "$sh" --yes
+"@
     exit 1
 }
 

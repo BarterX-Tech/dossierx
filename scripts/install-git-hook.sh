@@ -52,7 +52,21 @@
 #                   installed into THAT directory. Pointing core.hooksPath at
 #                   a directory of our own would silently disable every other
 #                   hook the project runs, which is a hostile thing to do to
-#                   someone who said yes to "add a pre-commit check".
+#                   someone who said yes to "add a pre-commit check". THAT
+#                   DIRECTORY CAN BE OUTSIDE THIS REPOSITORY ENTIRELY: when
+#                   core.hooksPath came from the operator's GLOBAL (or system)
+#                   git config rather than a setting scoped to this repo, the
+#                   hook is written into a machine-wide directory and then
+#                   fires on every commit, in every repository, on the whole
+#                   machine — not just the one this install was run from. The
+#                   script warns about this at install time (see the
+#                   "configured_hooks_path" note below), but that warning is a
+#                   runtime message and a "--yes" run has no human reading
+#                   stdout at the time it prints; the router skill that drives
+#                   that path is told to read THIS HEADER aloud to the client
+#                   before running the script, so the global case is stated
+#                   here rather than left to a message that agent path skips
+#                   past entirely.
 #   worktrees       In a linked worktree .git is a FILE, not a directory, so
 #                   ".git/hooks" is simply wrong. git rev-parse --git-path
 #                   answers correctly in both layouts (and resolves to the
@@ -518,6 +532,21 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# CARRY THIS RUN'S OWN --repo INTO EVERY RECOVERY LINE BUILT FROM
+# self_invocation. Every printed "run it again" below this point (the
+# machine-wide core.hooksPath uninstall advice, in particular) re-invokes this
+# script — and re-invoking it with no --repo resolves against whatever
+# repository the operator happens to be standing in when they type it, not
+# the one THIS run targeted. Installed with "--repo ../other" and asked to
+# uninstall, the printed line without this fix would silently touch the
+# operator's current directory instead: removing the wrong repo's hook, or
+# failing outright if it is not a git repository at all. Appended here, once,
+# after parsing finishes and before any recovery text is built, so every
+# later use of $self_invocation already carries it.
+if [ -n "$repo_dir" ]; then
+	self_invocation="$self_invocation --repo \"$repo_dir\""
+fi
+
 command -v git >/dev/null 2>&1 || die "git was not found on PATH"
 
 if [ -n "$repo_dir" ]; then
@@ -604,8 +633,21 @@ if [ -n "$configured_hooks_path" ]; then
 	# that did it also word-split any path containing a space. The line that
 	# reads the VALUE, a screen up, has always had this right; this one is the
 	# same question and takes the same form.
-	hooks_path_origin=$(git config --show-origin --get core.hooksPath 2>/dev/null | cut -f1)
-	hooks_path_origin=${hooks_path_origin#file:}
+	# stderr is CAPTURED, not discarded, and the exit status decides which
+	# variable gets the result. A "not configured" failure cannot happen here
+	# — the plain `git config --get` above already succeeded, so we know the
+	# key is set — so a failure of the --show-origin form means something is
+	# actually wrong with running it (an old git, a wrapper that mishandles
+	# the flag, ...), and that reason is exactly what the "unknown" branch
+	# below needs to hand back instead of re-issuing the same read.
+	hooks_path_origin_stderr=
+	if hooks_path_origin_raw=$(git config --show-origin --get core.hooksPath 2>&1); then
+		hooks_path_origin=$(printf '%s\n' "$hooks_path_origin_raw" | cut -f1)
+		hooks_path_origin=${hooks_path_origin#file:}
+	else
+		hooks_path_origin=
+		hooks_path_origin_stderr=$hooks_path_origin_raw
+	fi
 
 	# WHICH ORIGINS MEAN "NOT THIS REPOSITORY", asked of git rather than guessed
 	# from the shape of the path.
@@ -688,12 +730,29 @@ if [ -n "$configured_hooks_path" ]; then
 	case "$hooks_origin_scope" in
 	this-repository) ;;
 	unknown)
+		# Telling the reader to run "git config --show-origin --get
+		# core.hooksPath" here would be handing back the exact read that just
+		# failed a screen up — it will fail again for the same reason and
+		# settle nothing. Advice that can actually settle it has to be a
+		# DIFFERENT read: the captured stderr from the failed attempt, if
+		# there was any, plus the two scope-specific queries that answer
+		# "global or system?" without needing --show-origin at all.
 		printf '%s\n' \
 			"      WHICH CONFIG THAT SETTING COMES FROM COULD NOT BE READ, so this" \
 			"      script cannot tell you whether the hook it is about to install runs" \
-			"      only here or for EVERY git repository on this machine. Check with" \
-			"      \"git config --show-origin --get core.hooksPath\" before you rely on" \
-			"      the narrower reading. Uninstall with" \
+			"      only here or for EVERY git repository on this machine." ""
+		if [ -n "$hooks_path_origin_stderr" ]; then
+			printf '%s\n' \
+				"      \"git config --show-origin --get core.hooksPath\" itself said:" \
+				"        $hooks_path_origin_stderr" ""
+		fi
+		printf '%s\n' \
+			"      Check instead:" \
+			"        git --version                              --show-origin needs 2.8+" \
+			"        git config --global --get core.hooksPath    set globally?" \
+			"        git config --system --get core.hooksPath    or system-wide?" \
+			"      A value from either of those means the hook runs for EVERY git" \
+			"      repository on this machine, not only this one. Uninstall with" \
 			"      \"$self_invocation --uninstall\", which removes the same path." ""
 		;;
 	*)
@@ -761,14 +820,35 @@ foreign)
 		# THE CHAIN-IT LINES ARE PER-SHELL, because this recovery is the only
 		# thing offered to a reader whose hook was refused and it has to actually
 		# run for them. The POSIX form uses a trailing backslash continuation and
-		# chmod; PowerShell accepts neither — it continues with a backtick, and
-		# Windows has no chmod (which the install path already argues is a no-op
-		# there, since git for Windows does not consult the exec bit). A reader
-		# who arrived through install-git-hook.ps1 is, by that wrapper's own
-		# premise, someone who may have no bash on PATH at all.
+		# chmod. PowerShell accepts neither continuation form, and — more than a
+		# syntax difference — cannot use a plain pipe into Set-Content here: piped
+		# multi-line text is written with the OS newline, which on Windows is
+		# CRLF, so the chained file would start "#!/bin/sh\r" and the sh git for
+		# Windows runs hooks under refuses a line ending in \r. This used to be
+		# exactly that pipe; it is now [System.IO.File]::WriteAllText, joining the
+		# printed lines with an explicit LF ([char]10) instead of letting the
+		# pipeline choose one. That call is relied on for two things that hold on
+		# BOTH runtimes a reader might have: WriteAllText(path, string) writes
+		# UTF-8 with no byte-order mark on both Windows PowerShell 5.1 and
+		# PowerShell 7 (a BCL call, not a cmdlet whose behaviour split across that
+		# boundary), and a single already-joined string has no per-line
+		# terminator left for either runtime to reinterpret on the way out.
+		#
+		# chmod +x IS STILL NEEDED HERE, on Windows too, and dropping it would be
+		# borrowing a justification that does not cover this case: the install
+		# path argues chmod is a no-op because git for Windows runs the
+		# pre-commit hook ITSELF through its bundled sh without consulting the
+		# exec bit. This file is different — the reader's OWN hook invokes it
+		# directly as a command (the dirname/dossierx-pre-commit line below), and
+		# that direct invocation, under the same bundled sh, DOES check the
+		# executable bit on the filesystem it runs on. A file written by
+		# WriteAllText gets no such bit by default. Shelling out to chmod is safe
+		# to hand back here because a bash is known to exist: this branch is only
+		# reached when DOSSIERX_HOOK_INVOCATION is set, and install-git-hook.ps1
+		# sets it only after Find-Bash already found one to run this script with.
 		if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
-			chain_it_lines="                 $self_invocation --print-hook |
-                     Set-Content \"$hooks_dir/dossierx-pre-commit\""
+			chain_it_lines="                 [System.IO.File]::WriteAllText(\"$hooks_dir/dossierx-pre-commit\", ((& $self_invocation --print-hook) -join [char]10) + [char]10)
+                 bash -c \"chmod +x '$hooks_dir/dossierx-pre-commit'\""
 		else
 			chain_it_lines="                 $self_invocation --print-hook > \\
                      \"$hooks_dir/dossierx-pre-commit\"

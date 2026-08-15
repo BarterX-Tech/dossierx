@@ -1084,7 +1084,7 @@ func TestRender_OverviewCanonicalIDAppearsExactlyOnce(t *testing.T) {
 	// Exactly one canonical id in the whole document (valid HTML, resolvable
 	// deep-link) even though the note renders on both facet tabs. The leading
 	// SPACE is load-bearing: it pins the real `id="…"` attribute and nothing
-	// else. Since v0.2.1 every non-banner claim carries a comment chip, so each
+	// else. Since v0.3.0 every non-banner claim carries a comment chip, so each
 	// id-less copy of this note also emits `data-claim-id="widget.overview.router"`
 	// — a bare substring count would score those as duplicate ids and fail on a
 	// document that is in fact perfectly well-formed. (It is also the exact form

@@ -88,7 +88,7 @@ func TestRender_CommentedOverviewChipFansOutToEveryFacet(t *testing.T) {
 	}
 }
 
-// v0.2.1 — the chip must reach EVERY non-banner claim through the full Render
+// v0.3.0 — the chip must reach EVERY non-banner claim through the full Render
 // pipeline, not only ones that already have threads, or the first comment on a
 // quiet card is unreachable from the viewer. This is the render-level companion
 // to components.TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault: it

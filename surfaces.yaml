@@ -169,6 +169,11 @@ surfaces:
       # Declared after the v0.5.2 gate reported this surface could not check its own last entry.
       # The last entry says "FORMAT.md documents the shipped behaviour as the rule". Judging that sentence without the file is judging a claim about a document against nothing.
       - FORMAT.md
+      # Declared after round seven. The write_conflict entry asserts what the
+      # router bundle currently tells an agent to do, and `skills` is one of the
+      # fingerprints gate/delta.json reports as CHANGED in this release — so the
+      # entry is a claim about a moving file that this surface was judging blind.
+      - skills/dossierx/SKILL.md
 
   - name: contributing
     what: How to build and test, including the two suites `go test ./...` does
@@ -380,6 +385,15 @@ surfaces:
       # The hook body justifies its `-c core.quotepath=false` override by saying
       # the engine's git runner prepends the same override for the same reason.
       - internal/check/staged.go
+      # Declared after round seven, where this surface reported that it could not
+      # check three of its own claims. Both installers send a consumer to this
+      # template for the AUTHORITY half of the gate — the hook body's "See
+      # scripts/ci/dossierx-check.yml's header for the argument", the citation for
+      # why the v6 removal happened, and the raw URL the post-install output tells
+      # a consumer to drop into .github/workflows/. A hook that says "CI is the
+      # authority" while nobody checks what it points a client at is the vacuous
+      # half of a two-part promise.
+      - scripts/ci/dossierx-check.yml
 
   - name: release-notes
     what: The GitHub release body, generated at tag time by GoReleaser from

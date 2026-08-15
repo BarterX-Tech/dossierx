@@ -45,7 +45,7 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/viewer/index.html  (+8 -10)
+testdata/fixture-basic/viewer/index.html  (+9 -11)
     size            9951 lines / 348496 bytes -> 9949 lines / 348445 bytes
 @@ -237,16 +237,14 @@
     =========================================================================
@@ -79,6 +79,15 @@ testdata/fixture-basic/viewer/index.html  (+8 -10)
  
  .claim-body hr,
  .claim-list-items hr,
+@@ -1935,7 +1933,7 @@
+   color: var(--accent);
+ }
+ 
+-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
++/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
+    comment is openable from the viewer. Since most cards on a healthy project
+    have never been commented on, this variant has to sit BELOW the ambient
+    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
 @@ -2358,8 +2356,8 @@
       50  comments overlay
       60  comments rail
@@ -91,7 +100,7 @@ testdata/fixture-basic/viewer/index.html  (+8 -10)
     The graph pane takes the band ABOVE all of them because it is the only
     full-viewport overlay here: it is not a rail beside the document or a
 
-testdata/fixture-graph-demo/viewer/index.html  (+8 -10)
+testdata/fixture-graph-demo/viewer/index.html  (+9 -11)
     size            10695 lines / 475538 bytes -> 10693 lines / 475487 bytes
 @@ -237,16 +237,14 @@
     =========================================================================
@@ -125,6 +134,15 @@ testdata/fixture-graph-demo/viewer/index.html  (+8 -10)
  
  .claim-body hr,
  .claim-list-items hr,
+@@ -1935,7 +1933,7 @@
+   color: var(--accent);
+ }
+ 
+-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
++/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
+    comment is openable from the viewer. Since most cards on a healthy project
+    have never been commented on, this variant has to sit BELOW the ambient
+    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
 @@ -2358,8 +2356,8 @@
       50  comments overlay
       60  comments rail
@@ -137,7 +155,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+8 -10)
     The graph pane takes the band ABOVE all of them because it is the only
     full-viewport overlay here: it is not a rail beside the document or a
 
-testdata/fixture-portability/viewer/index.html  (+8 -10)
+testdata/fixture-portability/viewer/index.html  (+9 -11)
     size            9942 lines / 350175 bytes -> 9940 lines / 350124 bytes
 @@ -237,16 +237,14 @@
     =========================================================================
@@ -171,6 +189,15 @@ testdata/fixture-portability/viewer/index.html  (+8 -10)
  
  .claim-body hr,
  .claim-list-items hr,
+@@ -1935,7 +1933,7 @@
+   color: var(--accent);
+ }
+ 
+-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
++/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
+    comment is openable from the viewer. Since most cards on a healthy project
+    have never been commented on, this variant has to sit BELOW the ambient
+    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
 @@ -2358,8 +2356,8 @@
       50  comments overlay
       60  comments rail

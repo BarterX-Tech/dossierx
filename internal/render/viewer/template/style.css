@@ -829,7 +829,7 @@ th {
   color: var(--accent);
 }
 
-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
+/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
    comment is openable from the viewer. Since most cards on a healthy project
    have never been commented on, this variant has to sit BELOW the ambient
    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and

@@ -143,7 +143,13 @@ func retiredTopLevelCmds() []*cobra.Command {
 			`run: dossierx claim flag <id> --claim-says "<what the claim asserts>" --now-does "<what the code does>" --reason "<their words>"`),
 		retiredCmd("reaudit",
 			`reaudit: moved in v0.3.0 — the verb is now a leaf of the claim noun`,
-			`run: dossierx claim reaudit <id> (add --confirm to accept the proposal)`),
+			// --confirm alone is not enough to apply: newReauditCmd's own doc
+			// comment states the rule (--reason is required on the writing
+			// path, never on the preview), and main.go's requireReason enforces
+			// it. A hint that named --confirm without --reason would exit 1 /
+			// missing_flag on the very command it recommended — the same
+			// defect this file's other three hints were written to avoid.
+			`run: dossierx claim reaudit <id> (add --confirm and --reason "..." to accept the proposal)`),
 		retiredCmd("lint",
 			`lint: removed in v0.3.0; linting is a stage of check, not a verb — findings are data.lint_findings on check's envelope`,
 			checkHint),
