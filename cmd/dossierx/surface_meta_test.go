@@ -446,6 +446,7 @@ func TestSurfaceRenderFingerprintHashesEveryRenderSource(t *testing.T) {
 // its packages in neither column and this test red.
 var behaviourExclusions = map[string]string{
 	"scripts/normalize-claims": "a one-off repository maintenance tool. It is in nobody's binary, is not embedded, and surfaces.yaml declares it out of scope as repository automation.",
+	"tests/procedures": "the procedure replay suite: it EXECUTES the documented procedures against a fixture project and asserts the outcome each one promises. Nothing here is compiled into the shipped binary, and surfaces.yaml declares tests/ out of scope. It is excluded for the same reason the rest of tests/ is, and named here rather than left absent so that deleting the suite is a deliberate edit a human reviews rather than a package quietly leaving both columns.",
 }
 
 // TestSurfaceBehaviourFingerprintCoversEveryPackage requires an entry for every

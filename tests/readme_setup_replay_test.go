@@ -22,7 +22,14 @@
 // git-initialized temp repo, with two substitutions both forced by "no network
 // in tests":
 //
-//   - `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@vX.Y.Z` is
+//   - the paste block's `go install` line, which names the module path and a
+//     release tag, is
+//     (THE TOKEN IS DESCRIBED HERE RATHER THAN SPELLED. surfaceVersionPins
+//     sweeps every tracked file for pin-shaped strings, and a literal one in a
+//     comment is matched by the sweep while carrying no version the extractor
+//     can read — which reds TestSurfaceCountsAreTheEnforcedNumbers with a
+//     disagreement between the sweep and the extractor. A prose description
+//     costs nothing here and keeps this file out of the inventory.)
 //     replaced by the binary cli_test.go's TestMain already built from THIS
 //     tree. NOT VERIFIED, therefore: that the published module path resolves,
 //     that the pinned tag exists, or that what `go install` would fetch matches
