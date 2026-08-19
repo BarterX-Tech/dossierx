@@ -101,23 +101,45 @@ resolved_object_name() {
 }
 
 # ---------------------------------------------------------------------------
-# provenance_bearing — which of the artifacts `record` names state, on their own
-# face, which tree and which baseline they were produced from.
+# provenance_bearing — which of the artifacts `record` names it can hold to
+# account at the moment they are recorded, rather than merely digest.
 #
-# Everything else this mode is handed is opaque bytes it can only digest. These
-# two are documents THIS repository writes with a declared shape, so recording
-# one that disagrees with the run is a disagreement that can be caught at the
-# moment it is created rather than several minutes of agent time later.
+# Everything else this mode is handed is opaque bytes. These three are documents
+# THIS repository produces with a declared shape, so recording one that
+# disagrees with the run is a disagreement that can be caught at the moment it
+# is created rather than several minutes of agent time later. They are held to
+# account in two different ways, and the guard loop in `record` says which is
+# which:
+#
+#   gate/delta.json       is RECOMPUTED. It is a pure function of surface.json
+#                         and gate/baseline.json, so the guard re-derives the
+#                         whole document and byte-compares. It deliberately
+#                         carries no tree stamp — see emit_delta_document for
+#                         why a stamp there re-keys every surface on every
+#                         commit.
+#   gate/render-diff.json states the tree and the baseline commit it compared,
+#                         and cannot be recomputed here (it needs the rendered
+#                         output of two releases), so its stamps are read and
+#                         checked against the run's own.
+#   gate/site-text.json   states the tree whose build it was extracted from,
+#                         and cannot be recomputed here either (it needs a real
+#                         build and a real browser). It compares this tree's
+#                         site against nothing, so it carries a tree stamp and
+#                         no baseline commit.
 #
 # It is a function rather than a literal comparison inside the loop because the
 # guard used to be `[ "$a" = "gate/delta.json" ] || continue`, and the second
 # artifact that needed it — gate/render-diff.json, the cross-release render diff
 # the CHANGELOG agent writes its silent-change entries from — was walked straight
-# past. A third one added later is covered by adding a line here.
+# past. The third, gate/site-text.json, was walked past for longer still: it
+# carried a node/npm toolchain stamp and no tree at all, so an extraction left
+# over from the previous release recorded cleanly and was hashed into the site
+# surface's key as this release's evidence. A fourth one added later is covered
+# by adding a line here and a branch in `record`'s guard loop.
 # ---------------------------------------------------------------------------
 provenance_bearing() {
   case "$1" in
-    gate/delta.json | gate/render-diff.json) return 0 ;;
+    gate/delta.json | gate/render-diff.json | gate/site-text.json) return 0 ;;
   esac
   return 1
 }
@@ -204,6 +226,54 @@ changed_keys() {
   rm -f "$_mine" "$_theirs"
 }
 
+# ---------------------------------------------------------------------------
+# emit_delta_document — THE ONE SPELLING of gate/delta.json's bytes.
+#
+# The delta is a PURE FUNCTION of four values: this tree's inventory, the
+# resolved baseline inventory, and the ref/commit pair the baseline was resolved
+# from. `delta` redirects this function into gate/delta.json; `record` runs the
+# SAME function over what is on disk at record time and refuses on any byte of
+# disagreement. One implementation is what makes that comparison a freshness
+# proof rather than a formatting accident: two printf sequences would drift
+# apart in whitespace, and every disagreement would then read as a stale delta.
+#
+# NOTE WHAT IS DELIBERATELY NOT IN IT: THE TREE. This file's bytes are hashed
+# into all thirteen surface keys and assembled verbatim into all thirteen
+# bundles, so any per-commit value written here re-keys every surface on every
+# commit. The landed version stamped $TREE into this document, and the gate's
+# carry-forward machinery never once fired because of it: a one-character README
+# fix moved the tree, which moved these bytes, which moved all thirteen keys and
+# re-ran all thirteen reading agents. The freshness that stamp used to buy —
+# refusing a delta computed over a different tree — is bought by recomputation
+# instead, which is strictly stronger: a stamp says who claims to have written
+# the file, a recomputation checks what it says. And when recomputation agrees,
+# carrying the file is CORRECT even after the tree moves, because a byte of it
+# is not a claim about the tree's name — a delta over two unchanged inventories
+# is exactly the delta the new tree would produce.
+#
+# The baseline ref, commit and sha256 stay in the file because they move only
+# when the PREVIOUS RELEASE moves — which is precisely when every surface should
+# re-run. What this function cannot promise: it ties the delta to whatever bytes
+# sit at gate/baseline.json; whether THOSE bytes are really the named commit's
+# inventory is the caller's resolution step (`git show "$PREV:surface.json"`),
+# which no reader of the file can re-perform after the fact.
+# ---------------------------------------------------------------------------
+emit_delta_document() {
+  # $1 = this tree's inventory, $2 = the resolved baseline inventory,
+  # $3 = the baseline's human-readable ref, $4 = the baseline's resolved commit
+  _changed="$(changed_keys "$1" "$2" | json_string_array)"
+  # THE DELTA RECORDS THE DIGEST OF THE BYTES IT READ. gate/baseline.json is
+  # what every key hashes; this file is a summary of a comparison against it.
+  # Without the digest the two are only assumed to be about each other, and a
+  # re-resolved baseline with an un-recomputed delta leaves thirteen keys
+  # carrying an inventory the comparison never saw.
+  _baseline_sha="$(sha256_of "$2")"
+  printf '{\n'
+  printf '  "baseline": {"ref": "%s", "commit": "%s", "sha256": "%s"},\n' "$3" "$4" "$_baseline_sha"
+  printf '  "changed": %s\n' "$_changed"
+  printf '}\n'
+}
+
 # json_scalar reads the first `"<key>": "<value>"` string out of a JSON document.
 #
 # Deliberately small: the only documents it reads are the ones this script wrote,
@@ -254,9 +324,12 @@ usage: run.sh <mode> [options]
   fanout  --tree T               mint this run, write gate/bundles/<surface>.md
                                  for every declared surface and gate/fanout.json,
                                  then print one invocation per surface
-  delta   --tree T --baseline-ref R --baseline-commit C --baseline-file F
+  delta   --baseline-ref R --baseline-commit C --baseline-file F
                                  resolve the baseline, write gate/baseline.json
-                                 and gate/delta.json
+                                 and gate/delta.json (no --tree: the delta is a
+                                 pure function of the two inventories, and its
+                                 freshness is proven by recomputation in
+                                 `record` rather than by a stamp)
   record  --tree T --baseline-ref R --baseline-commit C <artifact>...
                                  write gate/run.json over exactly these artifacts
 
@@ -374,7 +447,17 @@ case "$MODE" in
     ;;
 
   delta)
-    [ -n "$TREE" ] || die "delta: --tree is required; a delta that does not say which tree it covers cannot be checked for freshness" 1
+    # NO --tree HERE, AND THAT IS A DECISION RATHER THAN AN OMISSION. The delta
+    # used to be stamped with the tree so that `record` could refuse one
+    # computed over a different tree, and the stamp defeated the gate's whole
+    # cache: gate/delta.json is hashed into all thirteen surface keys and
+    # assembled into all thirteen bundles, so the per-commit stamp re-keyed
+    # every surface on every commit and a carried-forward verdict never once
+    # fired. The freshness guard survives — `record` now RE-DERIVES the delta
+    # from surface.json and gate/baseline.json and refuses on any byte of
+    # disagreement (see emit_delta_document). A --tree passed by a driver
+    # following the older procedure is accepted by the option parser and unused.
+    #
     # THE BASELINE IS RESOLVED OR THE RUN FAILS. There is no branch here that
     # turns "I could not find the previous release" into an empty delta. An
     # empty delta is a legitimate and expected answer — this project's first
@@ -389,20 +472,7 @@ case "$MODE" in
 
     mkdir -p "$ROOT/gate"
     cp "$BASELINE_FILE" "$ROOT/gate/baseline.json"
-    changed="$(changed_keys "$ROOT/surface.json" "$ROOT/gate/baseline.json" | json_string_array)"
-    # THE DELTA RECORDS THE DIGEST OF THE BYTES IT READ. gate/baseline.json is
-    # what every key hashes; this file is a summary of a comparison against it.
-    # Without the digest the two are only assumed to be about each other, and a
-    # re-resolved baseline with an un-recomputed delta leaves thirteen keys
-    # carrying an inventory the comparison never saw.
-    baseline_sha="$(sha256_of "$ROOT/gate/baseline.json")"
-    {
-      printf '{\n'
-      printf '  "tree": "%s",\n' "$TREE"
-      printf '  "baseline": {"ref": "%s", "commit": "%s", "sha256": "%s"},\n' "$BASELINE_REF" "$BASELINE_COMMIT" "$baseline_sha"
-      printf '  "changed": %s\n' "$changed"
-      printf '}\n'
-    } > "$ROOT/gate/delta.json"
+    emit_delta_document "$ROOT/surface.json" "$ROOT/gate/baseline.json" "$BASELINE_REF" "$BASELINE_COMMIT" > "$ROOT/gate/delta.json"
     printf 'gate-stage2: wrote gate/baseline.json and gate/delta.json against %s (%s)\n' "$BASELINE_REF" "$BASELINE_COMMIT" >&2
     ;;
 
@@ -413,11 +483,10 @@ case "$MODE" in
     [ -n "$BASELINE_REF" ] || die "record: --baseline-ref is required" 1
     [ -n "$ARTIFACTS" ] || die "record: name the artifacts this run produced; a manifest over zero artifacts asserts nothing" 1
 
-    # RECORDING A PROVENANCED ARTIFACT MEANS CLAIMING IT. Every other artifact
-    # this mode names is opaque bytes it can only digest, but these state which
-    # tree and which baseline they were computed from — so recording one that
-    # disagrees with this run is refused HERE, at the point the disagreement is
-    # created.
+    # RECORDING A GUARDED ARTIFACT MEANS CLAIMING IT. Every other artifact this
+    # mode names is opaque bytes it can only digest, but these it can hold to
+    # account — so recording one that disagrees with this run is refused HERE,
+    # at the point the disagreement is created.
     #
     # The sequence is ordinary and it is why this exists: a gate FAILS, a fix
     # lands, the tree moves, and the driver re-runs the captures and `record`
@@ -425,36 +494,78 @@ case "$MODE" in
     # whatever is on disk would launder the stale one into a manifest that is
     # honest about every byte it names.
     #
-    # THESE DOCUMENTS ARE READ WITH json_scalar, which takes the FIRST match on
-    # any line and exits. That is correct only because both of them put "tree"
-    # and "baseline"."commit" before everything else, so no later key and no
-    # diff hunk can be read in their place. The ordering is a promise the
-    # producers make to this reader, and it is pinned on their side —
-    # tests/render_diff_capture_test.go, TestRenderDiffCaptureProvenanceComesFirst.
+    # TWO KINDS OF ACCOUNT, per provenance_bearing above. The delta is
+    # recomputed outright, because it is a pure function of two files this
+    # checkout holds; a recomputation that agrees makes the file fresh BY
+    # CONSTRUCTION, however long it has sat on disk. The two captures cannot be
+    # recomputed here — one needs the rendered output of two releases, the
+    # other a real build in a real browser — so their own stamps are read and
+    # checked against the run's. Those stamped documents are read with
+    # json_scalar, which takes the FIRST match on any line and exits; that is
+    # correct only because both put "tree" (and, for the render diff,
+    # "baseline"."commit") before everything else, so no later key and no diff
+    # hunk can be read in their place. The ordering is a promise the producers
+    # make to this reader, and it is pinned on their side —
+    # tests/render_diff_capture_test.go, TestRenderDiffCaptureProvenanceComesFirst,
+    # and viewer-tests/site_dom_test.go, TestSiteTextProvenanceComesFirst.
     for a in $ARTIFACTS; do
       provenance_bearing "$a" || continue
-      # NOT `|| continue`. This loop IS the guard, and stepping over a
-      # provenance-bearing artifact because it is absent would be the guard
-      # declining to run on a state it exists for. Same refusal, same exit code
-      # as the digest loop below.
+      # NOT `|| continue`. This loop IS the guard, and stepping over a guarded
+      # artifact because it is absent would be the guard declining to run on a
+      # state it exists for. Same refusal, same exit code as the digest loop
+      # below.
       [ -f "$ROOT/$a" ] || die "record: $a was named as produced by this run and is not there" 4
-      _dtree="$(json_scalar "$ROOT/$a" tree)"
-      _dcommit="$(json_scalar "$ROOT/$a" commit)"
-      # THE IDENTITY RULE APPLIED TO WHAT THE FILE SAYS, not just to what the
-      # caller said. An artifact that names NEITHER a tree nor a baseline —
-      # `printf '{}' > gate/render-diff.json`, the one-line workaround for a
-      # gate that has been refusing for ten minutes — is refused here rather
-      # than stepped over: downstream it is indistinguishable from a comparison
-      # that ran and found nothing, because the manifest is honest about its
-      # bytes and its digest matches.
-      resolved_object_name "$_dtree" \
-        || die "record: $a records tree ${_dtree:-nothing}, which is not a full 40-digit object name. An artifact that cannot say which tree it covers cannot be checked against this run at all, and a file that says nothing hashes into every key exactly as cleanly as one that says the truth." 3
-      resolved_object_name "$_dcommit" \
-        || die "record: $a records baseline commit ${_dcommit:-nothing}, which is not a full 40-digit object name. A tag is a mutable pointer and an abbreviation is a prefix; either can mean a different release tomorrow than it meant when this run recorded it." 3
-      [ "$_dtree" = "$TREE" ] \
-        || die "record: $a was computed over tree $_dtree and this run covers $TREE. Re-produce it for this tree — \`delta\` for gate/delta.json, the -render-diff-out capture entry point for gate/render-diff.json; recording it as produced here would hand every surface agent a comparison against a different release." 3
-      [ "$_dcommit" = "$BASELINE_COMMIT" ] \
-        || die "record: $a compared against baseline $_dcommit and this run resolved $BASELINE_COMMIT" 3
+      case "$a" in
+        gate/delta.json)
+          # FRESHNESS BY RECOMPUTATION. The delta is emit_delta_document over
+          # surface.json, gate/baseline.json and this run's baseline flags;
+          # re-run the same function and require byte equality. This catches
+          # every stale shape the old tree stamp caught — a delta left from
+          # before a fix that moved the inventory now disagrees with the
+          # recomputation — and it refuses hand-written or truncated deltas the
+          # stamp waved through when the stamp happened to be right. The two
+          # inputs are required, not defaulted: a recomputation that cannot run
+          # is a failure, never a pass.
+          [ -f "$ROOT/surface.json" ] \
+            || die "record: gate/delta.json is named as produced and there is no surface.json under $ROOT, so the delta cannot be recomputed and its freshness cannot be checked. A check that cannot run is a failure, not a pass." 2
+          [ -f "$ROOT/gate/baseline.json" ] \
+            || die "record: gate/delta.json is named as produced and gate/baseline.json is not there. The delta is a comparison against those bytes; without them nothing can say whether the comparison on disk is the one this tree would make." 2
+          _expected="$(mktemp)"
+          emit_delta_document "$ROOT/surface.json" "$ROOT/gate/baseline.json" "$BASELINE_REF" "$BASELINE_COMMIT" > "$_expected"
+          if ! cmp -s "$_expected" "$ROOT/$a"; then
+            rm -f "$_expected"
+            die "record: gate/delta.json is not the delta this tree would produce over gate/baseline.json and baseline $BASELINE_REF ($BASELINE_COMMIT). It is stale — computed before a fix moved the inventory, against another baseline, or written by hand — and recording it would hand every surface agent a comparison this release never made. Re-run \`delta\` for this checkout and \`record\` again." 3
+          fi
+          rm -f "$_expected"
+          ;;
+        *)
+          _dtree="$(json_scalar "$ROOT/$a" tree)"
+          # THE IDENTITY RULE APPLIED TO WHAT THE FILE SAYS, not just to what
+          # the caller said. An artifact that names no tree — `printf '{}' >
+          # gate/render-diff.json`, the one-line workaround for a gate that has
+          # been refusing for ten minutes, or a site extraction run without
+          # DOSSIERX_SITE_TEXT_TREE — is refused here rather than stepped over:
+          # downstream it is indistinguishable from a capture of this release,
+          # because the manifest is honest about its bytes and its digest
+          # matches.
+          resolved_object_name "$_dtree" \
+            || die "record: $a records tree ${_dtree:-nothing}, which is not a full 40-digit object name. An artifact that cannot say which tree it covers cannot be checked against this run at all, and a file that says nothing hashes into every key exactly as cleanly as one that says the truth." 3
+          [ "$_dtree" = "$TREE" ] \
+            || die "record: $a was computed over tree $_dtree and this run covers $TREE. Re-produce it for this tree — the -render-diff-out capture entry point for gate/render-diff.json, the DOSSIERX_SITE_TEXT_OUT extraction for gate/site-text.json; recording it as produced here would hand a surface agent another release's evidence as this one's." 3
+          case "$a" in
+            gate/render-diff.json)
+              # The render diff is a comparison AGAINST the baseline, so it
+              # also states which baseline — the site extraction compares this
+              # tree's build against nothing and carries no commit to check.
+              _dcommit="$(json_scalar "$ROOT/$a" commit)"
+              resolved_object_name "$_dcommit" \
+                || die "record: $a records baseline commit ${_dcommit:-nothing}, which is not a full 40-digit object name. A tag is a mutable pointer and an abbreviation is a prefix; either can mean a different release tomorrow than it meant when this run recorded it." 3
+              [ "$_dcommit" = "$BASELINE_COMMIT" ] \
+                || die "record: $a compared against baseline $_dcommit and this run resolved $BASELINE_COMMIT" 3
+              ;;
+          esac
+          ;;
+      esac
     done
 
     # Every artifact is checked and digested BEFORE anything is written. A

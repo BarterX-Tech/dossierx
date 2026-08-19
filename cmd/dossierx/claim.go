@@ -1017,8 +1017,11 @@ func newClaimNewCmd() *cobra.Command {
 		Use:   "new <id>",
 		Short: "Author a new DRAFT claim (the sanctioned alternative to hand-writing claim YAML)",
 		Long: "Author a new draft claim at <claims_dir>/<id>.yaml.\n\n" +
-			"The claim it writes is shaped to pass the lint suite immediately: a card layout,\n" +
-			"a body, and a governed_by that satisfies the governed-required rule. Draft\n" +
+			"The claim it writes is shaped to pass the lint suite immediately: a body, a\n" +
+			"governed_by that satisfies the governed-required rule, and a layout chosen to\n" +
+			"suit the facet — card everywhere, except a claim in the reserved overview facet,\n" +
+			"which gets a banner because a card there fails orientation-note-shape. Passing\n" +
+			"--layout overrides that choice. Draft\n" +
 			"authoring is deliberately unfrictioned — no --reason, no confirmation — because\n" +
 			"drafts are the agent's workshop. The gate in this release is on LOCKED claims.",
 		Args: cobra.ExactArgs(1),

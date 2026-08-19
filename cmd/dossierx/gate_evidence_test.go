@@ -26,8 +26,9 @@
 // and that every error is returned rather than summarised. That is exactly what
 // the tests at the bottom mutate.
 //
-// THREE ANSWERS, ALL WIRED. Verdicts, Current and Archives read this
-// repository, and there is no fourth. There was: Site answered D9 with
+// FOUR ANSWERS, ALL WIRED. Verdicts, Current and Archives read this
+// repository, and TagRules reads the forge the tag will land on. A different
+// fourth answer used to exist and is gone: Site answered D9 with
 // errGateUncheckable, because reading the deployed site is one of the three
 // checks docs/RELEASING.md keeps a person's — a workflow that never fired and a
 // deploy still serving yesterday's bundle leave this tree byte-identical to the
@@ -37,7 +38,11 @@
 // check, so the driver ENDS by naming those three checks and saying it made none
 // of them. The reasoning is recorded on the D9 step in gate_driver_test.go, with
 // the tests that hold the handoff honest; nothing about it is this file's to
-// answer any more.
+// answer any more. TagRules is not that question returned in a costume: Site
+// asked whether a system outside this repository DID what it was told, which
+// only a person can read, while TagRules asks how the forge is CONFIGURED
+// before anything irreversible happens — a question with an API, an answer,
+// and a refusal for every way the answer cannot be had.
 //
 // WHAT THE WIRING STILL DOES NOT ESTABLISH, stated here rather than discovered
 // at the worst moment. It does not make the thirteen agents' answers honest.
@@ -225,6 +230,18 @@ func (gateDriverWired) Archives(version, commit string) error {
 	return gateArchivesVerify(version, commit)
 }
 
+// TagRules is D1's forge-side question — does the forge restrict who may
+// create this release's tag — and the answer is gateTagRulesVerify's whole:
+// which repository the remote names (read from this checkout's git, never
+// hardcoded), what the forge's rulesets API says about it, and what that means
+// for this tag. Root is the dir the slug is resolved in, which is the same
+// checkout every other answer here is about; nothing of the check is
+// re-implemented at this seam, for the file header's reason — this file is a
+// call graph.
+func (w gateDriverWired) TagRules(remote, version string) error {
+	return gateTagRulesVerify(w.Root, remote, version)
+}
+
 // THERE IS NO Site METHOD HERE, and its absence is the recorded shape rather
 // than a deletion somebody tidied. It answered D9 with a refusal for as long as
 // D9 was a question; D9 is now the driver's terminal handoff, so the site is
@@ -312,7 +329,7 @@ func gateWiredFixture(t *testing.T) (root, run string) {
 
 	// The plan fixture's frame carries no subject vocabulary — it is written for
 	// stage 2, which does not have one. gate/prompts/_frame.md is not one of the
-	// artifacts gate/run.json records (gateSharedEvidence is the four shared
+	// artifacts gate/run.json records (gateSharedEvidence is the three shared
 	// files and the frame is none of them), so rewriting it here does not make
 	// the run manifest stale; it does move every surface key, which is why the
 	// answers below are written after it and never before.
@@ -466,7 +483,14 @@ func TestTheWiredEvidenceIsThisRunsFanOut(t *testing.T) {
 			"go-toolchain-floor": "1.26", "lock-lifecycle": "unlock-fix-lock"}},
 		gateWiredAnswerSpec{Surface: "roadmap", Verdict: gateVerdictFailed, Subjects: map[string]string{
 			"go-toolchain-floor": "1.26", "lock-lifecycle": gateStage3NotClaimed},
-			Findings: []gateFinding{{Surface: "roadmap", Rule: "stale-pin", Severity: "major", Detail: "the roadmap still pins v0.4.1"}}},
+			Findings: []gateFinding{{
+				Surface:         "roadmap",
+				Rule:            "stale-pin",
+				Consequence:     gateConsequenceMisled,
+				FailureScenario: "a reader deciding whether to depend on this project reads a register that still calls a shipped feature deferred",
+				Blocking:        gateBlockingBlocks,
+				Detail:          "the roadmap still pins v0.4.1",
+			}}},
 	)
 	_, findings, err = wired.Verdicts(gateStage2FixtureTree)
 	if err != nil {
@@ -523,7 +547,7 @@ func TestTheWiredEvidenceRefusesEveryRunItCannotStandBehind(t *testing.T) {
 				// honestly digested against the new tree and the answers beside
 				// them were given about the old one.
 				const moved = "dddddddddddddddddddddddddddddddddddddddd"
-				gateStage2WriteEvidence(t, root, moved, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
+				gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
 				gateStage2StampRunFor(t, root, moved)
 				return moved
 			},
@@ -675,6 +699,31 @@ func TestTheWiredArchivesAnswerIsTheArchiveCheck(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "which release") {
 		t.Errorf("the refusal is not gateArchivesVerify's, so what answered is neither the check nor the honest refusal it replaced.\nIt reads:\n%v", err)
+	}
+}
+
+// TestTheWiredTagRulesAnswerIsTheForgeCheck is the same pin for D1's forge-rule
+// question: the signature is satisfied by a method that returns nil having read
+// nothing, and a driver whose forge-rule answer is such a stub publishes onto a
+// forge nobody asked. The fixture's origin is a filesystem path, so the real
+// check's FIRST refusal — "this remote is no forge" — is what must come back,
+// and it is asserted by its own words so that neither a nil stub nor
+// gateDriverUnwired's refusal can wear it. No network is touched: the check
+// refuses at slug resolution, before any read of any forge.
+func TestTheWiredTagRulesAnswerIsTheForgeCheck(t *testing.T) {
+	work := gateFixtureRepo(t)
+	err := gateDriverWired{Root: work}.TagRules("origin", "v9.9.9")
+	if err == nil {
+		t.Fatal("D1's forge-rule question reported a restriction for a remote that is a directory on this disk; an answer that can be nil without reading a forge is the residual read back as closed")
+	}
+	if !errors.Is(err, errGateUncheckable) {
+		t.Errorf("a forge that cannot be identified must be uncheckable; got %v", err)
+	}
+	if strings.Contains(err.Error(), "not something this evidence source can say") {
+		t.Errorf("D1 still answers with gateDriverUnwired's refusal, so the forge-rule check landed and nothing calls it.\nIt reads:\n%v", err)
+	}
+	if !strings.Contains(err.Error(), "filesystem-path") {
+		t.Errorf("the refusal is not gateTagRulesVerify's own slug refusal, so what answered is neither the check nor the honest refusal it replaced.\nIt reads:\n%v", err)
 	}
 }
 

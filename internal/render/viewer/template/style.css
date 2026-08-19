@@ -177,8 +177,8 @@ code {
    deliberately excluded everywhere below — RenderInline never emits any
    of this, so a bare selector here would be dead weight at best and,
    for table/hr/blockquote, would collide with existing chrome (a
-   layout: table claim's own table element, style.css:173's bare table/td/th
-   rules) at worst. */
+   layout: table claim's own table element, this file's own bare table, td/th and th
+   rules further down) at worst. */
 
 .claim-body hr,
 .claim-list-items hr,
@@ -829,7 +829,7 @@ th {
   color: var(--accent);
 }
 
-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
+/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
    comment is openable from the viewer. Since most cards on a healthy project
    have never been commented on, this variant has to sit BELOW the ambient
    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
@@ -1252,8 +1252,8 @@ th {
      50  comments overlay
      60  comments rail
      70  toast
-     80  graph pane backdrop  \  claims graph, added in v0.5.0
-     81  graph pane surface   /
+     80  graph pane root      \  claims graph, added in v0.5.0 (opaque, not a
+     81  graph pane surface   /  backdrop — the pane dims nothing behind it)
 
    The graph pane takes the band ABOVE all of them because it is the only
    full-viewport overlay here: it is not a rail beside the document or a

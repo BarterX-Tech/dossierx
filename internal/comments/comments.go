@@ -115,7 +115,7 @@ func nowRFC3339() string { return nowFunc().UTC().Format(time.RFC3339) }
 // writer's change. The lock- and flag-store review_pending inputs are likewise
 // re-read fresh inside that same sentinel — supply them as LockStorePath /
 // FlagStorePath (see below), which the production wiring does — so a concurrent
-// `dossierx flag` committed under the sentinel is honored, not orphaned. An op
+// `dossierx claim flag` committed under the sentinel is honored, not orphaned. An op
 // still takes exactly one lock (the claims sentinel), and because the two
 // stores' own sentinels are never taken here the claims -> lock-store ->
 // flag-store ordering hazard cannot arise by construction.
@@ -130,7 +130,7 @@ type Deps struct {
 	// (right before it recomputes review_pending), rather than trusting the
 	// LockStore/FlagStore snapshots above. The production wiring (the CLI and
 	// serve Deps builders) sets these paths: a snapshot loaded BEFORE the
-	// sentinel can miss a `dossierx flag` that committed concurrently — the
+	// sentinel can miss a `dossierx claim flag` that committed concurrently — the
 	// claims sentinel serializes the two writers and flag persists its
 	// flag-store entry while holding it — so a fresh read here honors that flag
 	// instead of clobbering review_pending to false and orphaning it. A caller
@@ -848,7 +848,7 @@ func (d *Deps) refreshReviewPending(claims []model.Claim, c *model.Claim, ls *lo
 // reviewStores returns the lock- and flag-store snapshots review_pending is
 // recomputed against. When the caller supplied a path (the CLI/serve production
 // wiring), the store is RE-READ FRESH from disk here — inside mutate's claims
-// sentinel — so a `dossierx flag` (or lock/reaudit) that committed concurrently
+// sentinel — so a `dossierx claim flag` (or lock/reaudit) that committed concurrently
 // is honored rather than missed by a snapshot taken before the sentinel. When
 // only an in-memory store and no path is supplied (unit tests injecting
 // synthetic drift/flag state), that snapshot is used as-is.

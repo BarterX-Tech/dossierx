@@ -1028,7 +1028,12 @@ reported by `check` as `lock-ledger-pre-ledger`.
 
 The crossing is an ordered sequence of ordinary commands. The order is not
 cosmetic: `build-order propose` requires the module still **fully locked**, so
-unlocking a claim first strands the locked order with no way to release it.
+unlocking a claim first strands the locked order with no way to release it. One
+decision belongs before the first command, per module: will you re-lock *every*
+claim in it at step 3? A build order exists only over a fully locked module, and
+step 1 releases the approved sequence — so a module you re-lock only partially
+finishes the crossing gate-green but without a locked build order, and its step 4
+waits until the day its last claim locks.
 
 ```sh
 # 1. FIRST, for every module whose build order is locked:
@@ -1041,7 +1046,9 @@ dossierx claim unlock <id> --reason "..."
 #    crosses the store onto the ledger and records a real approval:
 dossierx claim lock <id> --reason "..."
 
-# 4. then the build orders again:
+# 4. then the build orders again, for every module that is fully locked
+#    again. A module you re-locked only partially has nothing to propose
+#    yet — run this pair for it on the day its last claim locks:
 dossierx build-order propose --module <m>
 dossierx build-order lock --module <m> --reason "..."
 ```

@@ -206,12 +206,15 @@ Load one, not all four.
 Only when the human asks, and **in this order** — steps 2 and 3 are not interchangeable.
 
 1. Install the binary if absent, then `dossierx version`.
-2. `dossierx skills export .claude/skills` — or whichever directory this harness reads. **Name it
-   explicitly:** the argument is optional only *inside* an existing project, and with no directory
-   and no `project.config.yaml` the command fails with `write_failed`. That is where you are at
-   step 2, because the config does not exist until step 3.
-3. Propose `project.config.yaml` (title, facets, modules) and `claims/`, and **ask them to confirm
+2. Propose `project.config.yaml` (title, facets, modules) and `claims/`, and **ask them to confirm
    the facet list** before writing it.
+3. `dossierx skills export .claude/skills` — or whichever directory this harness reads. **Name it
+   explicitly** (the harness, not DossierX, decides where skills are read from), and run it **after
+   step 2, never before**: the export finds the project root through `project.config.yaml`, and
+   only a rooted export maintains its section in an `AGENTS.md` that already exists and writes
+   `docs/dossierx-agent-guide.md` under the root, where that section links it. Run before the
+   config exists it still exits 0 — it installs the bundles and drops the guide beside them, no
+   `AGENTS.md` touched — and nothing later in this sequence exports again.
 4. Ask before installing the git pre-commit hook. If yes, fetch
    `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.1/scripts/install-git-hook.sh`,
    show them what it does, then run `sh install-git-hook.sh --yes`. Neither it nor
@@ -220,7 +223,7 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
 5. **Only if the project predates the lock ledger AND still holds locked claims or a locked build
    order**, `check` will refuse it: take it through The pre-ledger crossing above — show the human
    what unlocking everything discards, get their yes, then re-propose, unlock, re-lock. Skip it on
-   a project you created at step 3, and say you skipped it.
+   a project you created at step 2, and say you skipped it.
 6. Run `dossierx check --format text` and show them the output exiting 0. Do not assert it works.
 7. Tell them to commit `.dossierx-lock-store.json`, and `.dossierx-comment-digest.json` and
    `.dossierx-flag-store.json` once those appear — tracked artifacts, never `.gitignore`d.

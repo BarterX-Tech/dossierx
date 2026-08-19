@@ -52,7 +52,19 @@
 #                   installed into THAT directory. Pointing core.hooksPath at
 #                   a directory of our own would silently disable every other
 #                   hook the project runs, which is a hostile thing to do to
-#                   someone who said yes to "add a pre-commit check".
+#                   someone who said yes to "add a pre-commit check". THAT
+#                   DIRECTORY CAN BE OUTSIDE THIS REPOSITORY ENTIRELY: when
+#                   core.hooksPath came from the operator's GLOBAL (or system)
+#                   git config rather than a setting scoped to this repo, the
+#                   hook is written into a machine-wide directory and then
+#                   fires on every commit, in every repository, on the whole
+#                   machine — not just the one this install was run from. The
+#                   script says so at install time (see the scope
+#                   classification below the "configured_hooks_path" note),
+#                   but that disclosure is a runtime message and a "--yes" run
+#                   may have no human reading stdout at the moment it prints —
+#                   so the global case is stated in this header too, where a
+#                   reader shown the script before saying yes will meet it.
 #   worktrees       In a linked worktree .git is a FILE, not a directory, so
 #                   ".git/hooks" is simply wrong. git rev-parse --git-path
 #                   answers correctly in both layouts (and resolves to the
@@ -61,9 +73,13 @@
 #                   with its own bundled sh, so no exec bit and no
 #                   interpreter on PATH is required. This installer runs under
 #                   Git Bash or WSL; install-git-hook.ps1 is a thin wrapper
-#                   for PowerShell users who do not have bash on PATH. Both
-#                   paths are exercised by scripts/hook-smoke-test.sh, which
-#                   CI runs on windows-latest.
+#                   for PowerShell users who do not have bash on PATH. The sh
+#                   path is exercised by scripts/hook-smoke-test.sh on all
+#                   three CI platforms; the PowerShell path by
+#                   scripts/install-git-hook.Tests.ps1 under pwsh on
+#                   windows-latest — an earlier version of this comment said
+#                   the smoke test covered both, which was never true and is
+#                   exactly how the wrapper's Find-Bash defect shipped unrun.
 #   idempotence     Re-running is a no-op with a one-line report. An existing
 #                   hook that dossierx did not write is NEVER replaced without
 #                   --force, and --force backs it up and says where.
@@ -84,6 +100,7 @@
 #
 # Exit status: 0 installed / already current / dry run; 1 declined, refused,
 # or failed.
+# END USAGE
 
 set -eu
 
@@ -101,10 +118,26 @@ set -eu
 hook_body() {
 	cat <<'PRECOMMIT_HOOK'
 #!/bin/sh
-# dossierx-hook: pre-commit v7
+# dossierx-hook: pre-commit v8
 #
 # Refuses a commit that changes a LOCKED claim without an approval record on the
 # lock ledger.
+#
+# v8 CHANGED how project configs are read out of git, because the previous
+# quoting fix was only half of one. Discovery ran ls-files under
+# "-c core.quotepath=false" and trusted that to deliver raw paths; quotepath
+# governs only bytes ABOVE ASCII, and git C-quotes a path containing a double
+# quote, a backslash or a control character UNCONDITIONALLY — quote.c's
+# quote_c_style has no knob for those. The quoted string, surrounding double
+# quotes baked in, was handed to "dossierx --config", named no file on disk,
+# came back config_not_found — and a config this hook discovered and cannot
+# open is a refusal, not a skip, so the hook refused EVERY commit under such
+# a path, including commits touching no claim at all. Discovery now asks for
+# -z (NUL-separated and never quoted, by definition) and converts NUL to
+# newline with tr; see the comment at the query for why tr rather than a NUL-
+# reading loop, and for the newline-in-path boundary that deliberately fails
+# closed. tests/hook_hostile_paths_test.go is the corpus that catches a
+# regression here.
 #
 # v7 REPLACED the "remove the hook" recovery on both refusal paths. It used to
 # read "scripts/install-git-hook.sh --uninstall" — a path that exists in
@@ -212,24 +245,38 @@ fi
 # root config that is not tracked yet (the very first commit of a project),
 # which is the one case the index cannot see.
 #
-# "-c core.quotepath=false" is load-bearing, not tidiness. core.quotepath
-# defaults to TRUE, and with it on, git prints any path holding a byte outside
-# ASCII as a C-quoted string WITH the surrounding double quotes baked in: a
-# project at "café/project.config.yaml" comes back from ls-files as the literal
-# 14-plus-character text "caf\303\251/project.config.yaml", quotes included.
-# That string is then handed to "dossierx --config", names no file that exists,
-# comes back config_not_found — and because the hook cannot tell a config it
-# discovered itself from one that vanished, it refuses. Every commit, on every
-# branch, for every developer, including commits touching no claim at all. The
-# gate installed to protect the claims would instead have to be uninstalled.
-# quotepath=false emits the raw bytes with no quoting, so the newline-separated
-# read loop below keeps working exactly as it did. We deliberately do NOT switch
-# to -z: git's bundled sh on Windows has no dependable "read -d ''", and this
-# body runs under that sh. internal/check/staged.go's git runner prepends the
-# same override to every invocation for the same reason.
+# THE QUOTING OF THIS QUERY HAS BEEN WRONG TWICE, so the whole reasoning is
+# spelled out. git C-quotes the paths it PRINTS in two independent layers:
+# core.quotepath (default TRUE) quotes any byte above ASCII — a project at
+# "café/project.config.yaml" comes back as the literal text
+# "caf\303\251/project.config.yaml", surrounding double quotes included — and
+# a second, UNCONDITIONAL layer quotes '"', '\' and control characters with
+# no configuration to turn it off (quote.c's quote_c_style). The first fix
+# here was "-c core.quotepath=false", which cured the accented-directory case
+# and left the unconditional layer standing: a project under a directory
+# named with a quote, a backslash or a tab still came back C-quoted. Either
+# way the quoted string is handed to "dossierx --config", names no file that
+# exists, comes back config_not_found — and because a config this hook
+# discovered itself and cannot open is a broken configuration rather than an
+# absent project (see that case below), the hook refuses. Every commit, on
+# every branch, for every developer, including commits touching no claim at
+# all. The gate installed to protect the claims would instead have to be
+# uninstalled.
+#
+# So the query now uses -z, the one output mode git never quotes AT ALL, and
+# tr converts its NUL separators into the newlines the read loop below
+# already speaks. tr rather than "read -d ''" because this body runs under
+# git's bundled sh on Windows, which has no dependable NUL-delimited read;
+# internal/check/staged.go's git runner reads ls-files with -z for exactly
+# this class of reason. WHAT -z CANNOT FIX, stated rather than implied: a
+# path with a NEWLINE in it still splits into two bogus entries here, each of
+# which fails the config lookup and refuses the commit. That fails CLOSED —
+# loud, attributable to the path, fixable by renaming — which is the accepted
+# residue, unlike the old failure, which was also closed but fired on paths
+# people actually have.
 configs=${DOSSIERX_CONFIG:-}
 if [ -z "$configs" ]; then
-	configs=$(git -c core.quotepath=false ls-files -- 'project.config.yaml' '*/project.config.yaml' 2>/dev/null || true)
+	configs=$(git ls-files -z -- 'project.config.yaml' '*/project.config.yaml' 2>/dev/null | tr '\0' '\n' || true)
 fi
 if [ -z "$configs" ] && [ -f project.config.yaml ]; then
 	configs=project.config.yaml
@@ -414,16 +461,108 @@ die() {
 	exit 1
 }
 
+# sh_quote STR — STR as ONE shell word that survives being pasted into any
+# POSIX shell: wrapped in single quotes, with each embedded single quote
+# spelled '\'' (close, escaped quote, reopen). This exists for the one place
+# this script prints a command it expects a human to RUN with a path
+# interpolated into it. A display form like "$hooks_dir/…" reads nicely and
+# re-parses badly: when the reader executes the printed line, `$` re-expands,
+# a backtick opens command substitution, and an embedded double quote ends
+# the string early — so on exactly the machines whose paths are awkward
+# (C:\Users\O'Brien, a mount named with a space or a `$`), the remedy is a
+# second defect. Single quotes make every character literal, and the
+# apostrophe case is why this is a helper and not a pair of quote characters
+# at the call site. tests/hook_hostile_paths_test.go replays the printed
+# lines verbatim in a fresh shell, so a regression here is a red test, not a
+# support ticket. bash 3.2's printf and both seds (BSD, GNU) take this form;
+# command substitution strips trailing newlines, which is inside the
+# newline-in-path boundary the hook body already states.
+sh_quote() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 usage() {
 	# The header of this file IS the documentation; printing the flag list
 	# twice is how the two drift apart. Piped-from-stdin invocations have no
 	# readable $0, so fall back to the one line that matters.
+	#
+	# TWO DEFECTS THIS REPLACED, both reported by the v0.5.2 gate and both
+	# from doing text work with sed ranges and sed substitutions:
+	#
+	#   THE HELP STOPPED MID-SENTENCE. The range was
+	#   `/^# USAGE/,/^# Exit status/p`, and a sed range ends AT its closing
+	#   match — so the two-line exit-status paragraph printed its first line
+	#   and lost the second. Measured: the last line a reader saw was
+	#   "1 declined, refused," with the rest of the sentence gone. The block
+	#   now closes on an explicit `# END USAGE` sentinel, which is excluded
+	#   rather than truncated — the range cannot cut a sentence it never
+	#   prints.
+	#
+	#   A WINDOWS PATH CAME OUT MANGLED. The invocation was substituted with
+	#   `sed "s|...|  $self_invocation |"`, where the replacement is not
+	#   literal text: a backslash begins an escape, and
+	#   `C:\Users\me\install-git-hook.sh` lost or transformed characters on
+	#   the way to the reader — on the platform the .ps1 wrapper exists for,
+	#   in the line whose whole job is to name a command they can type. The
+	#   replacement is now a literal prefix swap done by index, and the value
+	#   reaches awk through the environment rather than -v, because -v
+	#   processes escape sequences in exactly the same way.
+	#
+	# tests/install_hook_help_test.go pins both: the exit-status sentence
+	# reaches its final word, and a backslashed invocation survives character
+	# for character.
 	if [ -r "$0" ]; then
-		sed -n '/^# USAGE/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//'
+		DOSSIERX_USAGE_INVOCATION="$self_invocation" awk '
+			/^# END USAGE/ { exit }
+			/^# USAGE/     { printing = 1 }
+			printing {
+				line = $0
+				sub(/^# ?/, "", line)
+				head = "  scripts/install-git-hook.sh "
+				if (index(line, head) == 1) {
+					line = "  " ENVIRON["DOSSIERX_USAGE_INVOCATION"] " " substr(line, length(head) + 1)
+				}
+				print line
+			}
+		' "$0"
 	else
-		printf '%s\n' 'usage: install-git-hook.sh [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]'
+		printf '%s\n' "usage: $self_invocation [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]"
 	fi
 }
+
+# HOW TO NAME THIS SCRIPT BACK TO THE READER. Every recovery this file prints
+# used to say "scripts/install-git-hook.sh", which is where the file lives in
+# the DossierX repository and nowhere else. The ordinary reader curl'd one file
+# into their own project — README and the router skill both hand them a pinned
+# raw URL — so that path is a file-not-found, and it was the only instruction
+# offered to somebody whose hook had just been refused. This is the same defect
+# already fixed once in the hook body itself, which used to name a repository
+# path for "remove the hook".
+#
+# So: name the invocation the reader actually used when we can see it, and fall
+# back to naming the re-fetch when we cannot, which is exactly the
+# piped-from-stdin case usage() already knows about. The readable-$0 form goes
+# through sh_quote, because $0 is a path the READER's machine chose — under
+# core.hooksPath it can hold a space, an apostrophe or a `$`, and a printed
+# line that re-expands or splits on those is a second defect delivered as a
+# remedy (sh_quote's comment holds the full argument). The stdin fallback
+# names no URL of its own: this script deliberately carries no pinned release
+# URL (the pin sweep in docs/RELEASING.md enumerates every pin site, and a
+# hand-typed one here would be a fifth site the sweep then polices forever),
+# and the reader who piped us in has the real URL one line up in their own
+# shell history.
+# DOSSIERX_HOOK_INVOCATION is set by install-git-hook.ps1, which is a thin
+# wrapper for PowerShell users who may have no bash on PATH — for them a
+# `sh ...` recovery is an instruction that does not run, so the wrapper names
+# itself and we print that back instead, verbatim: it is already a complete
+# command line, and quoting it again would break the quoting it arrived with.
+if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+	self_invocation="$DOSSIERX_HOOK_INVOCATION"
+elif [ -r "$0" ]; then
+	self_invocation="sh $(sh_quote "$0")"
+else
+	self_invocation="curl -fsSL <the URL you fetched this script from> | sh -s --"
+fi
 
 assume_yes=0
 dry_run=0
@@ -454,6 +593,22 @@ while [ $# -gt 0 ]; do
 	esac
 	shift
 done
+
+# CARRY THIS RUN'S OWN --repo INTO EVERY RECOVERY LINE BUILT FROM
+# self_invocation. Every printed "run it again" below this point (the
+# machine-wide core.hooksPath uninstall advice, in particular) re-invokes this
+# script — and re-invoking it with no --repo resolves against whatever
+# repository the operator happens to be standing in when they type it, not
+# the one THIS run targeted. Installed with "--repo ../other" and asked to
+# uninstall, the printed line without this fix would silently touch the
+# operator's current directory instead: removing the wrong repo's hook, or
+# failing outright if it is not a git repository at all. Appended here, once,
+# after parsing finishes and before any recovery text is built, so every
+# later use of $self_invocation already carries it — and through sh_quote,
+# because the directory is an operator-chosen path like any other.
+if [ -n "$repo_dir" ]; then
+	self_invocation="$self_invocation --repo $(sh_quote "$repo_dir")"
+fi
 
 command -v git >/dev/null 2>&1 || die "git was not found on PATH"
 
@@ -523,6 +678,198 @@ if [ -n "$configured_hooks_path" ]; then
 		"      core.hooksPath\" says which. This script only READS it: it never sets or" \
 		"      changes core.hooksPath, because repointing it would silently disable" \
 		"      every other hook you run." ""
+
+	# SAY THE MACHINE-WIDE CASE OUT LOUD. Naming the setting and handing over
+	# the command that resolves its origin is not the same as telling somebody
+	# what is about to happen to them: a reader who does not already know how
+	# core.hooksPath scopes will read the note above as being about this
+	# repository. When the value came from global or system config, this write
+	# lands outside the repository the operator is standing in and the hook then
+	# runs for EVERY repository on the machine. That is legitimate — a global
+	# hooks path is an ordinary single-machine setup and repointing it would be
+	# worse — but it must be stated rather than inferred, which is a maintainer's
+	# ruling of 11 Aug 2026 on a v0.5.2 gate finding.
+	# NO -C HERE. The script already did `cd "$repo_dir"` above, so passing it
+	# again asks git for repo_dir/repo_dir, which fails into a discarded stderr
+	# and leaves this empty — silently skipping the warning below on exactly the
+	# invocation (`--repo`) most likely to be scripted. The unquoted expansion
+	# that did it also word-split any path containing a space. The line that
+	# reads the VALUE, a screen up, has always had this right; this one is the
+	# same question and takes the same form.
+	# stderr is CAPTURED, not discarded, and the exit status decides which
+	# variable gets the result. A "not configured" failure cannot happen here
+	# — the plain `git config --get` above already succeeded, so we know the
+	# key is set — so a failure of the --show-origin form means something is
+	# actually wrong with running it (an old git, a wrapper that mishandles
+	# the flag, ...), and that reason is exactly what the "unknown" branch
+	# below needs to hand back instead of re-issuing the same read.
+	#
+	# THE ORIGIN BYTES COME FROM A SECOND READ WITH --null, because the
+	# default output is C-quoted. This is the hook body's v8 lesson arriving
+	# at its second site: git C-quotes anything it prints that contains '"',
+	# '\' or a control character UNCONDITIONALLY — quote.c's quote_c_style,
+	# the same layer core.quotepath cannot turn off — and on Windows the
+	# origin is an absolute native path, so EVERY origin there came back as
+	# file:"C:\\Users\\...\\gitconfig", backslashes doubled and wrapping
+	# quotes baked in. That rendering fails the candidate comparison below
+	# only in the loud direction (a global setting still classifies
+	# machine-wide), but the disclosure then NAMED it — and the config file's
+	# path is the one fact that lets the reader verify or undo the setting,
+	# so naming a path that exists nowhere on their disk defeats the
+	# disclosure's whole purpose. --null separates origin from value with NUL
+	# and quotes neither, by definition, exactly as -z does for ls-files.
+	#
+	# WHY A SECOND READ instead of putting --null on the read above: $(...)
+	# cannot carry the NUL separator. POSIX leaves a NUL in command
+	# substitution unspecified, and the shells this script actually runs
+	# under drop the byte, gluing the VALUE onto the end of the origin with
+	# no seam left to split on — a wrong path that still looks like a path,
+	# the worst shape this note could print. So the read above keeps the two
+	# jobs it has always had, exit status and captured stderr for the unknown
+	# branch, and this read has exactly one: the origin's raw bytes, with tr
+	# converting NUL to newline OUTSIDE the substitution and sed keeping the
+	# first line (origin first, value second). tr rather than a NUL-delimited
+	# read for the same reason the hook body gives: git's bundled sh on
+	# Windows has no dependable "read -d ''".
+	#
+	# WHAT THIS READ CANNOT PROMISE, stated rather than implied: an origin
+	# path containing a NEWLINE is truncated at it — the truncated path
+	# matches no candidate and classifies machine-wide, the loud side of
+	# wrong, over a path shape the hook body already declares out of scope.
+	# And if this read fails where the one above succeeded (the config
+	# changed between them; a git wrapper that mishandles --null), the
+	# pipeline's status is sed's, so the result is simply EMPTY — which the
+	# classifier below already treats as unknown, its own loud answer, never
+	# a silent default to either side.
+	hooks_path_origin_stderr=
+	if hooks_path_origin_raw=$(git config --show-origin --get core.hooksPath 2>&1); then
+		hooks_path_origin=$(git config --null --show-origin --get core.hooksPath 2>/dev/null | tr '\0' '\n' | sed -n 1p)
+		hooks_path_origin=${hooks_path_origin#file:}
+	else
+		hooks_path_origin=
+		hooks_path_origin_stderr=$hooks_path_origin_raw
+	fi
+
+	# WHICH ORIGINS MEAN "NOT THIS REPOSITORY", asked of git rather than guessed
+	# from the shape of the path.
+	#
+	# The obvious spelling is a case pattern — anything not matching
+	# `*/.git/config` or a `config.worktree` is machine-wide — and it is wrong
+	# in both directions, which the v0.5.2 gate found three ways:
+	#
+	#   A SUBMODULE has no .git DIRECTORY. Its config lives at
+	#   <superproject>/.git/modules/<name>/config, which matches no pattern above,
+	#   so a setting scoped to that one submodule was announced as running for
+	#   every repository on the machine.
+	#   `--separate-git-dir` does the same thing for the same reason: .git is a
+	#   file, the config is wherever the real git dir was put.
+	#   A GIT WITHOUT --show-origin (or any read that fails) returns EMPTY, and
+	#   empty was grouped with "this repository's own" — so the case the warning
+	#   exists for was silently skipped whenever the question could not be
+	#   answered. That is "we did not check" reading as "it is fine", which this
+	#   project refuses by name.
+	#
+	# git knows where its own config is, so it is asked. --git-common-dir is what
+	# makes a linked worktree resolve to the repository it belongs to; on a git
+	# too old to know the option it echoes the option back, and the fallback to
+	# --git-dir covers that.
+	hooks_origin_git_dir=$(git rev-parse --git-dir 2>/dev/null || printf '')
+	hooks_origin_common_dir=$(git rev-parse --git-common-dir 2>/dev/null || printf '')
+	case "$hooks_origin_common_dir" in
+	"" | --*) hooks_origin_common_dir="$hooks_origin_git_dir" ;;
+	esac
+	# BOTH SIDES ARE ANCHORED AT THE WORK-TREE TOP, WHICH IS NOT $PWD.
+	#
+	# Anchoring on $PWD is wrong in a way that only appears from a
+	# subdirectory — reproduced on the branch this is ported from, where it
+	# produced exactly the false positive this classification exists to
+	# remove. `git config --show-origin` prints the origin relative to the top
+	# of the work tree NO MATTER where it is run from (`file:.git/config`),
+	# while `git rev-parse --git-dir` prints relative only at the top and
+	# ABSOLUTE from anywhere below it. Joining the origin to $PWD inside a
+	# subdirectory therefore produces `<repo>/sub/.git/config`, which matches
+	# nothing, and a purely local `core.hooksPath` is announced as running for
+	# every repository on the machine.
+	hooks_origin_top=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
+	# TWO ANCHORS, BECAUSE GIT USES TWO. --show-origin and --git-dir are relative
+	# to the work-tree TOP; --git-common-dir's relative form is relative to $PWD
+	# ("../../.git" from two levels down). Joining that one to the toplevel builds
+	# <top>/../../.git, which matches nothing. No false positive is reachable
+	# through it today — in the main work tree --git-dir is absolute from a
+	# subdirectory and matches first, and in a linked work tree both values are
+	# absolute — but a relative --git-common-dir resolved against the wrong anchor
+	# is a trap for the next edit, so it is resolved against its own.
+	absolutise_repo_path() {
+		case "$1" in
+		"" | /* | ?:[/\\]*) printf '%s' "$1" ;;
+		*) printf '%s/%s' "${2:-${hooks_origin_top:-$PWD}}" "$1" ;;
+		esac
+	}
+	hooks_origin_git_dir=$(absolutise_repo_path "$hooks_origin_git_dir")
+	hooks_origin_common_dir=$(absolutise_repo_path "$hooks_origin_common_dir" "$PWD")
+	hooks_path_origin_abs=$(absolutise_repo_path "$hooks_path_origin")
+
+	# The test is INVERTED on purpose: anything that is not provably this
+	# repository's own config is reported as machine-wide, because a glob list
+	# of "global-looking" paths misses the system gitconfig everywhere it does
+	# not live at the guessed path — and unknown-origin is its own loud answer,
+	# never a silent default to either side.
+	hooks_origin_scope=machine-wide
+	if [ -z "$hooks_path_origin" ]; then
+		hooks_origin_scope=unknown
+	else
+		for candidate in \
+			"$hooks_origin_git_dir/config" \
+			"$hooks_origin_git_dir/config.worktree" \
+			"$hooks_origin_common_dir/config" \
+			"$hooks_origin_common_dir/config.worktree"; do
+			[ "$hooks_path_origin_abs" = "$candidate" ] || continue
+			# This repository's own config, including a worktree-scoped setting
+			# under extensions.worktreeConfig — narrower than the repository
+			# rather than wider. Saying "EVERY git repository on this machine"
+			# over one of those is the same defect as staying silent over a
+			# global one, pointing the other way.
+			hooks_origin_scope=this-repository
+			break
+		done
+	fi
+
+	case "$hooks_origin_scope" in
+	this-repository) ;;
+	unknown)
+		# Telling the reader to run "git config --show-origin --get
+		# core.hooksPath" here would be handing back the exact read that just
+		# failed a screen up — it will fail again for the same reason and
+		# settle nothing. Advice that can actually settle it has to be a
+		# DIFFERENT read: the captured stderr from the failed attempt, if
+		# there was any, plus the two scope-specific queries that answer
+		# "global or system?" without needing --show-origin at all.
+		printf '%s\n' \
+			"      WHICH CONFIG THAT SETTING COMES FROM COULD NOT BE READ, so this" \
+			"      script cannot tell you whether the hook it is about to install runs" \
+			"      only here or for EVERY git repository on this machine." ""
+		if [ -n "$hooks_path_origin_stderr" ]; then
+			printf '%s\n' \
+				"      \"git config --show-origin --get core.hooksPath\" itself said:" \
+				"        $hooks_path_origin_stderr" ""
+		fi
+		printf '%s\n' \
+			"      Check instead:" \
+			"        git --version                              --show-origin needs 2.8+" \
+			"        git config --global --get core.hooksPath    set globally?" \
+			"        git config --system --get core.hooksPath    or system-wide?" \
+			"      A value from either of those means the hook runs for EVERY git" \
+			"      repository on this machine, not only this one. Uninstall with" \
+			"      \"$self_invocation --uninstall\", which removes the same path." ""
+		;;
+	*)
+		printf '%s\n' \
+			"      THAT SETTING IS NOT THIS REPOSITORY'S. It comes from" \
+			"      $hooks_path_origin, so this hook will run for EVERY git" \
+			"      repository on this machine, not only this one. Uninstall with" \
+			"      \"$self_invocation --uninstall\", which removes the same path." ""
+		;;
+	esac
 fi
 
 # --- uninstall --------------------------------------------------------------
@@ -577,6 +924,64 @@ outdated)
 	;;
 foreign)
 	if [ "$force" -ne 1 ]; then
+		# The chained-hook path is printed through sh_quote, never through
+		# display quotes: these lines are the one part of this refusal a
+		# reader executes verbatim, and the path being interpolated is
+		# precisely the kind that breaks re-parsing (see sh_quote's comment).
+		# The command that re-runs the script is $self_invocation, never the
+		# repository-relative literal this block used to print: the ordinary
+		# reader curl'd one file and has no scripts/ directory, so the literal
+		# was a file-not-found offered to exactly the person being refused.
+		# The dirname line below needs no such treatment — its expansions
+		# happen when the READER's shell runs the hook, which is the intent.
+		#
+		# THE CHAIN-IT LINES ARE PER-SHELL, because this recovery has to
+		# actually run for the reader it reaches. The POSIX form uses a
+		# trailing backslash continuation and chmod. PowerShell accepts
+		# neither continuation form, and — more than a syntax difference —
+		# cannot use a plain pipe into Set-Content here: piped multi-line text
+		# is written with the OS newline, which on Windows is CRLF, so the
+		# chained file would start "#!/bin/sh\r" and the sh git for Windows
+		# runs hooks under refuses a line ending in \r. So the PowerShell
+		# variant uses [System.IO.File]::WriteAllText, joining the printed
+		# lines with an explicit LF ([char]10) instead of letting a pipeline
+		# choose one. That call is relied on for two things that hold on BOTH
+		# runtimes a reader might have: WriteAllText(path, string) writes
+		# UTF-8 with no byte-order mark on both Windows PowerShell 5.1 and
+		# PowerShell 7 (a BCL call, not a cmdlet whose behaviour split across
+		# that boundary), and a single already-joined string has no per-line
+		# terminator left for either runtime to reinterpret on the way out.
+		#
+		# chmod +x IS STILL NEEDED in the PowerShell variant, and dropping it
+		# would be borrowing a justification that does not cover this case:
+		# the install path argues chmod is a no-op because git for Windows
+		# runs the pre-commit hook ITSELF through its bundled sh without
+		# consulting the exec bit. This file is different — the reader's OWN
+		# hook invokes it directly as a command (the dirname line below), and
+		# that direct invocation, under the same bundled sh, DOES check the
+		# executable bit. A file written by WriteAllText gets no such bit by
+		# default. Shelling out to chmod is safe to hand back here because a
+		# bash is known to exist: this branch is only reached when
+		# DOSSIERX_HOOK_INVOCATION is set, and install-git-hook.ps1 sets it
+		# only after Find-Bash already found one to run this script with.
+		#
+		# WHAT THE POWERSHELL LINES CANNOT PROMISE, stated rather than
+		# implied: the hooks path is interpolated into a PowerShell
+		# double-quoted string and, on the chmod line, into single quotes
+		# inside a `bash -c` argument — so a hooks directory holding a `$`, a
+		# backtick or an apostrophe is not defended there the way sh_quote
+		# defends the POSIX lines. tests/hook_hostile_paths_test.go replays
+		# only the POSIX branch; the PowerShell branch has no equivalent
+		# corpus, and a defence it would keep honest is not pretended here.
+		chain_target=$(sh_quote "$hooks_dir/dossierx-pre-commit")
+		if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+			chain_it_lines="                 [System.IO.File]::WriteAllText(\"$hooks_dir/dossierx-pre-commit\", ((& $self_invocation --print-hook) -join [char]10) + [char]10)
+                 bash -c \"chmod +x '$hooks_dir/dossierx-pre-commit'\""
+		else
+			chain_it_lines="                 $self_invocation --print-hook > \\
+                     $chain_target
+                 chmod +x $chain_target"
+		fi
 		printf '%s\n' \
 			"refusing to touch $target: there is already a pre-commit hook there that dossierx did not write." \
 			"" \
@@ -585,11 +990,11 @@ foreign)
 			"  replace it   re-run with --force. The existing hook is copied to" \
 			"               <hook>.pre-dossierx.<timestamp> first, and this script tells you where." \
 			"" \
-			"  chain it     keep your hook and call ours from it:" \
+			"  chain it     keep your hook and call ours from it. Re-run THIS" \
+			"               script with --print-hook; if you piped it in and have" \
+			"               no copy on disk, fetch it again from the same URL:" \
 			"" \
-			"                 scripts/install-git-hook.sh --print-hook > \\" \
-			"                     \"$hooks_dir/dossierx-pre-commit\"" \
-			"                 chmod +x \"$hooks_dir/dossierx-pre-commit\"" \
+			"$chain_it_lines" \
 			"" \
 			"               then add this to your own pre-commit, wherever you want" \
 			"               the claim gate to run:" \
@@ -655,8 +1060,10 @@ fi
 printf '%s\n' "" \
 	"Two things this hook does NOT do:" \
 	"  · it does not fire on clean merges, rebases, cherry-picks or reverts —" \
-	"    git simply does not run pre-commit for those. Add the CI workflow" \
-	"    (scripts/ci/dossierx-check.yml); CI is the authority." \
+	"    git simply does not run pre-commit for those. CI is the authority. If" \
+	"    you have not added the workflow yet, fetch scripts/ci/dossierx-check.yml" \
+	"    from wherever you got this script — the two are published side by side" \
+	"    — and put it in .github/workflows/." \
 	"  · it does not check anything you did not stage. --staged reads the index." \
 	"" \
 	"Three project-root files are TRACKED ARTIFACTS. Commit them; never" \

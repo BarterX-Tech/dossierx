@@ -175,7 +175,11 @@ func gateStage2Method(root, surface string) (gateMethod, error) {
 // either way, because either way the artifact is in the key of every surface
 // that reads it and absent-or-stale is refused. Shared would move all thirteen
 // keys whenever any one of these moved, and the whole value of the key is that a
-// one-document fix re-runs one agent.
+// one-document fix re-runs one agent. That is not a hypothetical trade: the
+// rendered site text spent its first releases in the shared set, one agent read
+// it, and every re-extraction re-keyed all thirteen — which, joined with the
+// tree stamp the delta used to carry, is why the carry-forward machinery had
+// never once fired.
 //
 // TestGateStage2EverySurfaceNamedInAPolicyIsDeclared holds the names here to the
 // manifest, so renaming a surface cannot silently orphan its capture.
@@ -211,6 +215,19 @@ func gateStage2Artifacts(surface string) []string {
 		// "the cross-release render diff says whether that changed" is the
 		// sentence in the prompt that names this file.
 		return []string{"gate/render-diff.json"}
+	case "site":
+		// viewer-tests/site_dom_test.go, DOSSIERX_SITE_TEXT_OUT: the rendered
+		// DOM of a real build, extracted in a real browser, which IS this
+		// surface per surfaces.yaml ("the RENDERED DOM of a real build ... not
+		// the component source"). It used to be the fourth SHARED evidence file
+		// — see gateSharedEvidence for what that cost — and it is read by this
+		// surface alone, so it reaches the key the way every other
+		// single-reader capture does. Its freshness is the one thing it does
+		// differently from the delta: the delta is recomputed at record time,
+		// while an extraction cannot be (it needs a build and a browser), so it
+		// carries a tree stamp of its own and scripts/gate-stage2/run.sh
+		// `record` refuses one stamped with another release's tree.
+		return []string{gateSiteTextFile}
 	}
 	return nil
 }
@@ -218,12 +235,13 @@ func gateStage2Artifacts(surface string) []string {
 // gateStage2HandsAnExtract reports whether a surface's agent is handed an
 // EXTRACT of its documents rather than their bytes.
 //
-// Two surfaces, for two different reasons, and in both cases the extract is
-// already shared evidence. `site` resolves to 47 files of TSX/TS source and the
-// surface is the RENDERED DOM of a real build — the source is what produces the
-// thing under review, not the thing. `binary-and-viewer` resolves to 106 files
-// and 1.95 MB of Go, and surface.json is the mechanical extraction of exactly
-// the fields prose is judged against.
+// Two surfaces, for two different reasons, and the extract reaches each by a
+// different route. `site` resolves to 47 files of TSX/TS source and the surface
+// is the RENDERED DOM of a real build — the source is what produces the thing
+// under review, not the thing — so its extract is that surface's own capture
+// (gateStage2Artifacts). `binary-and-viewer` resolves to 106 files and 1.95 MB
+// of Go, and surface.json — which every agent already holds as shared evidence —
+// is the mechanical extraction of exactly the fields prose is judged against.
 //
 // THE EXTRACT IS LOSSY AND THAT IS WHERE THE DEFEAT LIVES. The DOM extractor
 // captures text, labels, states and head metadata and captures no href at all,
@@ -338,11 +356,23 @@ func gateStage2CheckExtractIsWhole(spec gateBundleSpec) error {
 }
 
 // gateStage2BundleSpec is what one surface's bundle is assembled from.
-func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, error) {
+func gateStage2BundleSpec(surface string, documents, references []string) (gateBundleSpec, error) {
 	if len(documents) == 0 {
 		return gateBundleSpec{}, fmt.Errorf("surface %q resolved to no document", surface)
 	}
-	spec := gateBundleSpec{Surface: surface, Artifacts: gateStage2Artifacts(surface)}
+	spec := gateBundleSpec{
+		Surface:   surface,
+		Artifacts: gateStage2Artifacts(surface),
+		// Context this surface borrows from others, resolved by
+		// gateSurfaceReferences from the manifest's `reads:` lists. It sits
+		// OUTSIDE the Handed/Withheld split below, which is what keeps that
+		// split's totality enforceable: those two together are still exactly
+		// the resolved document set, and this is a third list of documents the
+		// surface does not own. gateBundleAssemble refuses any overlap between
+		// them, and hands each referenced document over under a heading that
+		// says it is not this surface's to report on.
+		Referenced: append([]string(nil), references...),
+	}
 	switch {
 	case surface == "binary-and-viewer":
 		// Handed and Withheld together are still the whole resolved set: every
@@ -366,8 +396,21 @@ func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, e
 }
 
 // gateStage2Inputs is one surface's whole key input set.
-func gateStage2Inputs(root, surface string, documents []string) (gateSurfaceInputs, error) {
-	spec, err := gateStage2BundleSpec(surface, documents)
+//
+// The referenced documents are NOT listed as a separate key component, for the
+// same reason the per-surface captures are not: gateBundleAssemble hands their
+// bytes to the agent verbatim, so the Bundle component already covers them, and
+// a second component over the same bytes could never be moved without moving
+// the bundle too — a component no mutation could redden. What holds the
+// coverage instead is TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther,
+// which edits a borrowed document and requires exactly the borrowing surfaces'
+// keys (plus the owner's, through ITS Documents component) to move.
+// rules is the gate-integrity digest (gateIntegrityFingerprint), computed once
+// per run by the caller — it is identical for every surface, and deriving it
+// thirteen times would be thirteen chances for two surfaces to disagree about
+// what the gate is.
+func gateStage2Inputs(root, surface string, documents, references []string, rules string) (gateSurfaceInputs, error) {
+	spec, err := gateStage2BundleSpec(surface, documents, references)
 	if err != nil {
 		return gateSurfaceInputs{}, err
 	}
@@ -414,6 +457,10 @@ func gateStage2Inputs(root, surface string, documents []string) (gateSurfaceInpu
 		// real capture on this path and requires exactly one key to move.
 		Bundle: bundle,
 		Method: method,
+		// The gate's own definition, identical across the fan-out. An empty
+		// value is refused by gateSurfaceFingerprint rather than here, so the
+		// refusal is unanimous across every caller.
+		Rules: rules,
 	}, nil
 }
 
@@ -601,11 +648,23 @@ func gateStage2FileDigest(root, rel string) (string, error) {
 // skills/ go.mod` is six files, every one a *_test.go — so an empty list is the
 // correct answer and must not be refused. A missing list means the producer
 // never computed one, which must not read as "nothing changed".
-// Tree and Baseline are the delta's own account of WHICH RELEASE it compares —
-// and they are read and checked rather than carried. A delta that names its tree
+//
+// THERE IS DELIBERATELY NO TREE FIELD. The delta is a pure function of
+// surface.json and gate/baseline.json, so which tree it belongs to is decided by
+// RECOMPUTING it against what is on disk (gateStage2ChangedKeys, called from
+// gateStage2CheckDeltaCovers) rather than by believing a stamp. The stamp the
+// producer used to write was worse than redundant: this file's bytes are in all
+// thirteen keys and all thirteen bundles, so the per-commit stamp re-keyed every
+// surface on every commit, and the carry-forward machinery never once fired —
+// TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward is what keeps it out.
+// Which tree the RUN covers is gate/run.json's field, checked by freshness.
+//
+// Baseline is the delta's own account of WHICH RELEASE it compares against — and
+// it is read and checked rather than carried. A delta that names its baseline
 // and is never asked about it is a field that documents an assumption instead of
-// enforcing it: see gateStage2CheckDeltaCovers for the sequence that turns that
-// into a shipped release.
+// enforcing it: see gateStage2CheckDeltaCovers. The baseline may stay as a stamp
+// where the tree may not because it moves only when the previous release moves,
+// which is exactly when every surface should re-run.
 //
 // Baseline.SHA256 is the digest of the baseline inventory the comparison was
 // actually made against — gate/baseline.json's bytes. It is here because
@@ -613,7 +672,6 @@ func gateStage2FileDigest(root, rel string) (string, error) {
 // lossy read of a PAIR of inventories, and without this the run holds a summary
 // and a file that are only assumed to be about each other.
 type gateStage2Delta struct {
-	Tree     string `json:"tree"`
 	Baseline struct {
 		Ref    string `json:"ref"`
 		Commit string `json:"commit"`
@@ -769,19 +827,30 @@ func gateStage2MissingFrom(want, got []string) []string {
 }
 
 // gateStage2CheckDeltaCovers makes the delta's own account of itself
-// load-bearing.
+// load-bearing, and recomputes the one part of it any agent actually reads.
 //
 // THE SEQUENCE THIS CATCHES IS ORDINARY, not adversarial. A gate run FAILS; a
 // fix lands; the tree moves; the driver re-runs the captures and `record` but
-// not `delta`. `record` re-digests whatever is on disk, so the stale delta is
-// written into a manifest that is perfectly current for the new tree, and
-// freshness — which only ever compared the MANIFEST's tree — passes. Thirteen
-// agents are then handed a document describing a different release as the truth
-// about what moved, and on a docs-only follow-up where surface.json does not
-// move, every key is identical to the previous run's, so every PASS is carried
-// forward too. Both facts needed to catch it were already on disk and neither
-// was read: gate/delta.json carries its own tree, and it carries the baseline it
-// resolved.
+// not `delta`. Freshness only ever compares the MANIFEST's tree, so a manifest
+// re-recorded for the new tree passes it with the old delta honestly digested
+// inside. What tells the stale delta apart from a fresh one is that the delta is
+// a pure function of two files that are on disk right now — surface.json and
+// gate/baseline.json — so this check derives the answer AGAIN and compares,
+// rather than believing anything the document says about its own origins.
+//
+// THE DELTA STATES NO TREE, AND THIS CHECK ASKS FOR NONE. It used to carry a
+// tree stamp and this function used to compare it, which did catch the sequence
+// above — at the price of defeating the cache outright, because the stamp sat in
+// bytes all thirteen keys hash and moved on every commit (see gateStage2Delta).
+// Recomputation subsumes the stamp where it mattered and is honest where the
+// stamp was not: a delta whose recomputation agrees IS the delta this tree would
+// produce, byte for byte, however long ago it was computed — after a docs-only
+// fix the old delta is simply still the right answer, and carrying the keys
+// forward over it is the machinery working, not a laundering. What recomputation
+// cannot do that the stamp also could not: prove that gate/baseline.json's bytes
+// really are the named commit's inventory. That resolution happens once, in the
+// driver's `git show "$PREV:surface.json"`, and nothing downstream can re-perform
+// it.
 //
 // THE BASELINE IS CHECKED THREE WAYS BECAUSE THERE ARE THREE CLAIMS. The delta
 // says which commit it compared against; the run manifest says which commit this
@@ -797,14 +866,9 @@ func gateStage2MissingFrom(want, got []string) []string {
 // agents that this release and the last are identical in every field — see
 // gateStage2ChangedKeys, which re-derives the list from the two inventories on
 // disk so that the answer is checked and not merely attributed.
-func gateStage2CheckDeltaCovers(root, tree string, run gateStage2Run, delta gateStage2Delta) error {
+func gateStage2CheckDeltaCovers(root string, run gateStage2Run, delta gateStage2Delta) error {
 	var problems []string
 
-	if delta.Tree != tree {
-		problems = append(problems, fmt.Sprintf(
-			"%s was computed over tree %q and this run covers tree %q; it describes what moved in some other release",
-			gateDeltaFile, delta.Tree, tree))
-	}
 	if delta.Baseline.Commit != run.Baseline.Commit {
 		problems = append(problems, fmt.Sprintf(
 			"%s compared against baseline %q and %s records that this run resolved %q; the run and its own comparison disagree about which release is the past",
@@ -891,11 +955,28 @@ func gateStage2Keys(root string, tracked []string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The borrowed context, resolved against the SAME tracked set the documents
+	// were, and before a single key is computed: a `reads:` entry naming a file
+	// that has moved refuses the whole run here rather than producing one
+	// surface's key over a smaller bundle than the manifest declares.
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		return nil, err
+	}
+	// The gate's own definition, resolved from the SAME tracked set the
+	// documents were and hashed before a single key is computed. It enters
+	// every surface's key, so a run whose gate definition cannot be resolved
+	// or read has no keys at all — the same never-partial rule as below, one
+	// input earlier.
+	rules, err := gateIntegrityFingerprint(root, tracked)
+	if err != nil {
+		return nil, err
+	}
 
 	keys := make(map[string]string, len(declared))
 	var problems []string
 	for _, surface := range declared {
-		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface], rules)
 		if inErr != nil {
 			problems = append(problems, inErr.Error())
 			continue
@@ -941,7 +1022,7 @@ func gateStage2Plan(root, tree string, tracked []string) (map[string]string, err
 	if err != nil {
 		return nil, err
 	}
-	if err := gateStage2CheckDeltaCovers(root, tree, run, delta); err != nil {
+	if err := gateStage2CheckDeltaCovers(root, run, delta); err != nil {
 		return nil, err
 	}
 	return gateStage2Keys(root, tracked)
@@ -963,13 +1044,17 @@ const (
 )
 
 // gateStage2WriteEvidence writes gate/baseline.json and a gate/delta.json that
-// honestly describes it: the same tree, the same resolved baseline, and the
-// digest of the baseline bytes it was actually computed from.
+// honestly describes it: the same resolved baseline, and the digest of the
+// baseline bytes it was actually computed from.
 //
-// This is what scripts/gate-stage2/run.sh delta produces, and the fixtures build
-// it here rather than by hand so that a test which means to break ONE of those
-// agreements does not silently start from a fixture that broke two.
-func gateStage2WriteEvidence(t *testing.T, root, tree, baselineBody, changedJSON string) {
+// This is what scripts/gate-stage2/run.sh delta produces — note that, like the
+// producer's emit_delta_document, it writes NO tree field: the delta is a pure
+// function of the two inventories and its freshness is proven by recomputation,
+// and a tree stamp here would re-key every surface on every commit (see
+// gateStage2Delta). The fixtures build the document here rather than by hand so
+// that a test which means to break ONE of the delta's agreements does not
+// silently start from a fixture that broke two.
+func gateStage2WriteEvidence(t *testing.T, root, baselineBody, changedJSON string) {
 	t.Helper()
 	gateWrite(t, root, gateBaselineFile, baselineBody)
 	digest, err := gateStage2FileDigest(root, gateBaselineFile)
@@ -977,8 +1062,8 @@ func gateStage2WriteEvidence(t *testing.T, root, tree, baselineBody, changedJSON
 		t.Fatalf("digest %s: %v", gateBaselineFile, err)
 	}
 	gateWrite(t, root, gateDeltaFile, fmt.Sprintf(
-		"{\n  \"tree\": %q,\n  \"baseline\": {\"ref\": %q, \"commit\": %q, \"sha256\": %q},\n  \"changed\": %s\n}\n",
-		tree, gateStage2FixtureRef, gateStage2FixtureBaseline, digest, changedJSON))
+		"{\n  \"baseline\": {\"ref\": %q, \"commit\": %q, \"sha256\": %q},\n  \"changed\": %s\n}\n",
+		gateStage2FixtureRef, gateStage2FixtureBaseline, digest, changedJSON))
 }
 
 // gateStage2Harness runs one mode of scripts/gate-stage2/run.sh and returns its
@@ -1075,13 +1160,14 @@ func gateStage2Overlay(t *testing.T) (overlay, realRoot string) {
 	if err != nil {
 		t.Fatalf("read the overlay's %s: %v", gateSurfaceInventoryFile, err)
 	}
-	gateStage2WriteEvidence(t, overlay, gateStage2FixtureTree, string(inventory), "[]")
-	gateWrite(t, overlay, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+	gateStage2WriteEvidence(t, overlay, string(inventory), "[]")
 
 	// The captures are DERIVED FROM THE MANIFEST rather than listed, so a surface
-	// that starts reading one is stubbed here on the day it does. Written once
-	// per PATH: gate/render-diff.json has two readers, and writing it once per
-	// reader would leave its bytes a function of the order they were visited in.
+	// that starts reading one is stubbed here on the day it does — the rendered
+	// site text among them, now that it is the `site` surface's capture rather
+	// than shared evidence. Written once per PATH: gate/render-diff.json has two
+	// readers, and writing it once per reader would leave its bytes a function of
+	// the order they were visited in.
 	declared, err := gateDeclaredSurfaces(overlay)
 	if err != nil {
 		t.Fatalf("read the overlay's declared surfaces: %v", err)
@@ -1541,9 +1627,13 @@ func TestGateStage2EveryClaimedDocumentIsAccountedForInItsBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
+	references, err := gateSurfaceReferences(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
 
 	for _, surface := range declared {
-		spec, err := gateStage2BundleSpec(surface, documents[surface])
+		spec, err := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if err != nil {
 			t.Errorf("surface %q: %v", surface, err)
 			continue
@@ -1591,7 +1681,11 @@ func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testin
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
-	spec, err := gateStage2BundleSpec(surface, documents[surface])
+	references, err := gateSurfaceReferences(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
+	spec, err := gateStage2BundleSpec(surface, documents[surface], references[surface])
 	if err != nil {
 		t.Fatalf("the real %s surface could not be given a bundle spec: %v", surface, err)
 	}
@@ -1706,7 +1800,7 @@ func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testin
 			Question string
 		}{"cmd/dossierx/renamed-away/", ".go", "a class whose directory was renamed"})
 
-		if _, err := gateStage2BundleSpec(surface, documents[surface]); err == nil {
+		if _, err := gateStage2BundleSpec(surface, documents[surface], references[surface]); err == nil {
 			t.Fatal("a class resolving to no handed file was accepted; the files are still in the key and still named as withheld, and the question about them is being put to nobody")
 		}
 		keys, keyErr := gateStage2Keys(overlay, tracked)
@@ -1740,9 +1834,13 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
 	key := func(t *testing.T) (string, []byte) {
 		t.Helper()
-		spec, specErr := gateStage2BundleSpec(surface, documents[surface])
+		spec, specErr := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if specErr != nil {
 			t.Fatalf("bundle spec: %v", specErr)
 		}
@@ -1750,7 +1848,11 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 		if bundleErr != nil {
 			t.Fatalf("assemble: %v", bundleErr)
 		}
-		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		rules, rulesErr := gateIntegrityFingerprint(root, tracked)
+		if rulesErr != nil {
+			t.Fatalf("gate integrity: %v", rulesErr)
+		}
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface], rules)
 		if inErr != nil {
 			t.Fatalf("inputs: %v", inErr)
 		}
@@ -1793,6 +1895,127 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 	}
 }
 
+// TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther is the key-side
+// half of the `reads:` mechanism, measured rather than asserted.
+//
+// The borrowed bytes reach a surface's key through its BUNDLE — they are handed
+// to the agent verbatim, so the bundle digest covers them, the same route a
+// per-surface capture takes and for the same reason: a second key component
+// over the same bytes could never move without the bundle moving too, so no
+// mutation could redden it. That makes this test the thing actually holding the
+// coverage. If a future assembler stopped carrying referenced documents, no
+// refusal would fire — the bundle still assembles, still hashes — and the ONLY
+// observable failure is the one below: editing a borrowed document stops moving
+// the borrower's key, and the borrower carries forward a verdict about context
+// that moved.
+//
+// Both directions are asserted, because each defeats a different decay:
+//   - the borrower MUST move, or a stale borrow sits under a carried-forward
+//     verdict (the coverage failure);
+//   - a surface that neither owns nor reads the file MUST NOT move, or the
+//     cache buys nothing and every one-document fix re-runs agents that read
+//     nothing new (the cost failure the whole key exists to avoid).
+//
+// The owner moves through its own Documents component, which is asserted too so
+// that this test notices if ownership and borrowing ever start substituting for
+// each other.
+//
+// It runs on a synthetic tree for the reason
+// TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot does: the
+// assertion is about EDITING the files, and the real-tree overlay reaches most
+// directories through symlinks.
+func TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther(t *testing.T) {
+	root := t.TempDir()
+	tracked := []string{"docs/HANDBOOK.md", "docs/NOTES.md", "docs/SPEC.md"}
+
+	// handbook BORROWS spec's document; bystander touches neither.
+	gateWrite(t, root, gateManifestFile, "surfaces:\n"+
+		"  - name: handbook\n    paths: [docs/HANDBOOK.md]\n    reads: [docs/SPEC.md]\n"+
+		"  - name: spec\n    paths: [docs/SPEC.md]\n"+
+		"  - name: bystander\n    paths: [docs/NOTES.md]\n")
+	gateWrite(t, root, "docs/HANDBOOK.md", "the handbook says the spec defines two layouts\n")
+	gateWrite(t, root, "docs/SPEC.md", "the spec defines two layouts\n")
+	gateWrite(t, root, "docs/NOTES.md", "notes about nothing in particular\n")
+
+	gateWrite(t, root, gateStage2MethodFile, "model: claude-opus-5\ntools:\n  - SurfaceFinding\n  - SurfaceVerdict\n")
+	gateWrite(t, root, gateBundleFrameFile, "# Surface review — "+gateBundleSurfaceMarker+"\n\n"+
+		"Report FAILED on any mismatch you can demonstrate from the material below.\n\n"+gateBundlePartsMarker+"\n")
+	for _, surface := range []string{"handbook", "spec", "bystander"} {
+		gateWrite(t, root, gateBundlePromptFile(surface), "Read "+surface+" against the inventory.\n")
+	}
+	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"layouts\":2}}\n")
+	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+	// No tree argument: the delta stopped carrying one when its freshness moved
+	// from a stamp to recomputation at record time. A tree inside the delta was
+	// in every surface's shared-evidence hash, so any commit re-keyed every
+	// surface and carry-forward could never fire.
+	gateStage2WriteEvidence(t, root, "{\"counts\":{\"layouts\":2}}\n", "[]")
+	// The gate's own definition, an input to every key. It is held constant
+	// across every edit below, so the one-key-moves assertions stay about the
+	// documents and the borrows.
+	tracked = append(tracked, gateIntegrityStandIns(t, root)...)
+
+	keys := func(t *testing.T) map[string]string {
+		t.Helper()
+		got, err := gateStage2Keys(root, tracked)
+		if err != nil {
+			t.Fatalf("key the fixture's three surfaces: %v", err)
+		}
+		return got
+	}
+
+	before := keys(t)
+	gateWrite(t, root, "docs/SPEC.md", "the spec now defines THREE layouts\n")
+	after := keys(t)
+	if after["handbook"] == before["handbook"] {
+		t.Error("editing a document the handbook surface BORROWS left its key unmoved; its agent's verdict — given over the previous spec — would be carried forward as current, which is precisely the staleness reads: exists to prevent")
+	}
+	if after["spec"] == before["spec"] {
+		t.Error("editing the spec surface's OWN document left its key unmoved; ownership has stopped reaching the key, which is a failure of the documents component rather than of reads:")
+	}
+	if after["bystander"] != before["bystander"] {
+		t.Error("editing a document the bystander surface neither owns nor reads moved its key; a borrow that re-runs strangers makes every one-document fix cost the whole fan-out")
+	}
+
+	// The reverse direction: the borrower's own document is nobody else's
+	// business. If this moved the spec's key, ownership and borrowing would be
+	// leaking into each other somewhere.
+	before = keys(t)
+	gateWrite(t, root, "docs/HANDBOOK.md", "the handbook, revised\n")
+	after = keys(t)
+	if after["handbook"] == before["handbook"] {
+		t.Error("editing the handbook's own document left its key unmoved")
+	}
+	if after["spec"] != before["spec"] || after["bystander"] != before["bystander"] {
+		t.Error("editing the handbook's own document moved another surface's key; borrowing is one-directional and must stay so")
+	}
+
+	// And an unresolvable borrow refuses the WHOLE keying, naming the surface
+	// and the path — never a key over a bundle smaller than the manifest
+	// declares, and never a partial map a caller could report coverage from.
+	t.Run("a borrow that no longer resolves", func(t *testing.T) {
+		original, readErr := os.ReadFile(filepath.Join(root, gateManifestFile))
+		if readErr != nil {
+			t.Fatalf("read the fixture manifest: %v", readErr)
+		}
+		defer gateWrite(t, root, gateManifestFile, string(original))
+		gateWrite(t, root, gateManifestFile, strings.Replace(string(original), "reads: [docs/SPEC.md]", "reads: [docs/MOVED.md]", 1))
+
+		got, err := gateStage2Keys(root, tracked)
+		if err == nil {
+			t.Fatal("every surface was keyed with one surface's borrowed document unresolvable; that surface's agent would be asked its question without material the manifest says it needs, and its FAILED-for-missing-bytes finding is the exact class reads: exists to end")
+		}
+		if got != nil {
+			t.Errorf("a partial key map came back alongside the error (%d entries)", len(got))
+		}
+		for _, want := range []string{"handbook", "docs/MOVED.md"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("the refusal must name %q so the fix is one manifest edit rather than a search; got:\n%v", want, err)
+			}
+		}
+	})
+}
+
 // gateStage2BinaryFixture is a synthetic tree that resolves `binary-and-viewer`
 // to one file per judged class plus one file that is judged by none, so an edit
 // to either can be measured without touching the repository.
@@ -1823,9 +2046,12 @@ func gateStage2BinaryFixture(t *testing.T) (root string, tracked []string) {
 	gateWrite(t, root, gateBundlePromptFile("binary-and-viewer"), "Read the engine's own strings against surface.json.\n")
 
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
-	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
 	gateWrite(t, root, "gate/render-diff.json", "{\"artifacts\":[]}\n")
-	gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":28}}\n", "[]")
+	gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":28}}\n", "[]")
+
+	// The gate's own definition, which is now an input to every key: a fixture
+	// without it is a run gateStage2Keys refuses, never a smaller key.
+	tracked = append(tracked, gateIntegrityStandIns(t, root)...)
 	return root, tracked
 }
 
@@ -1847,7 +2073,7 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 		isDeclared[name] = true
 	}
 
-	for _, named := range []string{"exported-skills", "release-notes", "changelog", "binary-and-viewer"} {
+	for _, named := range []string{"exported-skills", "release-notes", "changelog", "binary-and-viewer", "site"} {
 		if !isDeclared[named] {
 			t.Errorf("gateStage2Artifacts attaches a capture to surface %q, which surfaces.yaml does not declare; that capture is in no key and reaches no agent", named)
 		}
@@ -1869,7 +2095,7 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 	for _, name := range declared {
 		artifacts := gateStage2Artifacts(name)
 		switch name {
-		case "exported-skills", "release-notes", "changelog", "binary-and-viewer":
+		case "exported-skills", "release-notes", "changelog", "binary-and-viewer", "site":
 			if len(artifacts) == 0 {
 				t.Errorf("surface %q lost its capture", name)
 			}
@@ -1941,13 +2167,15 @@ func TestGateStage2TheExportedSkillsSurfaceIsLinksAndNotACopy(t *testing.T) {
 // MISSING file and never on a wrong one, so the missing half is here.
 func TestGateStage2FreshnessRefusesAnInputThisRunDidNotProduce(t *testing.T) {
 	tree := gateStage2FixtureTree
-	declared := []string{"changelog", "exported-skills", "readme", "release-notes"}
+	// `site` is in the fixture's fan-out so that its capture — the rendered
+	// site text, formerly shared evidence — stays in the produced set the rows
+	// below walk one at a time.
+	declared := []string{"changelog", "exported-skills", "readme", "release-notes", "site"}
 
 	fixture := func(t *testing.T) string {
 		t.Helper()
 		root := t.TempDir()
-		gateStage2WriteEvidence(t, root, tree, "{\"counts\":{}}\n", "[]")
-		gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+		gateStage2WriteEvidence(t, root, "{\"counts\":{}}\n", "[]")
 		for _, surface := range declared {
 			for _, rel := range gateStage2Artifacts(surface) {
 				gateWrite(t, root, rel, "{\"captured\":true}\n")
@@ -2229,7 +2457,7 @@ func TestGateStage2RecomputesTheDeltaRatherThanBelievingIt(t *testing.T) {
 		t.Helper()
 		root := t.TempDir()
 		gateWrite(t, root, gateSurfaceInventoryFile, inventory)
-		gateStage2WriteEvidence(t, root, gateStage2FixtureTree, baseline, changed)
+		gateStage2WriteEvidence(t, root, baseline, changed)
 		return root
 	}
 	check := func(t *testing.T, root string) error {
@@ -2238,7 +2466,7 @@ func TestGateStage2RecomputesTheDeltaRatherThanBelievingIt(t *testing.T) {
 		if err != nil {
 			t.Fatalf("the fixture's delta does not even read back, so this row is about the wrong thing: %v", err)
 		}
-		return gateStage2CheckDeltaCovers(root, gateStage2FixtureTree, run, delta)
+		return gateStage2CheckDeltaCovers(root, run, delta)
 	}
 
 	// An honest delta over a moved inventory, and an honest EMPTY one over an
@@ -2344,8 +2572,10 @@ func TestGateStage2RecomputesTheDeltaRatherThanBelievingIt(t *testing.T) {
 
 // gateStage2PlanFixture is a small, complete, HONEST run: two surfaces, a
 // method, a frame, two prompts, an inventory, a resolved baseline, a delta that
-// describes this tree against that baseline, the rendered site text, and a run
-// manifest that records every one of them.
+// describes this inventory against that baseline, and a run manifest that
+// records every one of them. Neither surface reads a capture, so the rendered
+// site text — which is now the `site` surface's capture rather than shared
+// evidence — has no seat here.
 //
 // Small on purpose. The real-tree tests above exist to prove thirteen keys are
 // computable over the actual repository; these exist to prove the run REFUSES,
@@ -2368,8 +2598,7 @@ func gateStage2PlanFixture(t *testing.T) (root string, tracked []string) {
 	gateWrite(t, root, gateBundlePromptFile("roadmap"), "Read the roadmap against surface.json.\n")
 
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
-	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
-	gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
+	gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
 
 	declared, err := gateDeclaredSurfaces(root)
 	if err != nil {
@@ -2377,7 +2606,10 @@ func gateStage2PlanFixture(t *testing.T) (root string, tracked []string) {
 	}
 	gateStage2StampRun(t, root, gateStage2FixtureTree, declared)
 
-	return root, []string{"README.md", "docs/ROADMAP.md"}
+	// The gate's own definition, which is now an input to every key: a fixture
+	// without it is a run gateStage2Keys refuses, never a smaller key.
+	tracked = append([]string{"README.md", "docs/ROADMAP.md"}, gateIntegrityStandIns(t, root)...)
+	return root, tracked
 }
 
 // TestGateStage2PlanRefusesEveryRunItCannotStandBehind drives the WHOLE
@@ -2424,8 +2656,13 @@ func TestGateStage2PlanRefusesEveryRunItCannotStandBehind(t *testing.T) {
 		{"the run manifest names a tag rather than a resolved commit", func(t *testing.T, root string) {
 			gateStage2RewriteManifest(t, root, gateStage2FixtureBaseline, "v0.5.0")
 		}, "not a full object name"},
-		{"the site text was replaced after the run recorded it", func(t *testing.T, root string) {
-			gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX, from last release\"}\n")
+		{"the resolved baseline was replaced after the run recorded it", func(t *testing.T, root string) {
+			// No restamp, so this is freshness's digest row: the file on disk
+			// is not the file the manifest recorded. The restamped variant —
+			// same edit, manifest honestly re-digested — is the delta-covers
+			// row further down, and the two refusals send a reader to
+			// different places.
+			gateWrite(t, root, gateBaselineFile, "{\"counts\":{\"lint_rules\":26}}\n")
 		}, "not the file this run produced"},
 
 		// ---- the delta's own state, reached through the plan ---------------
@@ -2445,20 +2682,24 @@ func TestGateStage2PlanRefusesEveryRunItCannotStandBehind(t *testing.T) {
 			gateStage2Restamp(t, root)
 		}, "is not a delta"},
 		{"a delta that resolved a baseline and compared nothing", func(t *testing.T, root string) {
-			gateWrite(t, root, gateDeltaFile, "{\"tree\":\""+gateStage2FixtureTree+"\",\"baseline\":{\"ref\":\""+gateStage2FixtureRef+"\",\"commit\":\""+gateStage2FixtureBaseline+"\"}}\n")
+			gateWrite(t, root, gateDeltaFile, "{\"baseline\":{\"ref\":\""+gateStage2FixtureRef+"\",\"commit\":\""+gateStage2FixtureBaseline+"\"}}\n")
 			gateStage2Restamp(t, root)
 		}, "carries no `changed` list"},
 
 		// ---- the agreement between them, which is the whole failure --------
 		//
-		// This is the ordinary driver sequence: a gate FAILS, a fix lands, the
-		// tree moves, the driver re-runs the captures and `record` but not
-		// `delta`. Every artifact is honestly digested against the new tree and
-		// the delta describes the old one.
-		{"the delta describes the release before the fix", func(t *testing.T, root string) {
-			gateStage2WriteEvidence(t, root, strings.Repeat("d", 40), "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
-			gateStage2Restamp(t, root)
-		}, "describes what moved in some other release"},
+		// The ordinary driver sequence behind every row here: a gate FAILS, a
+		// fix lands, the driver re-runs some producers and not others, and
+		// `record` honestly digests whatever the mismatched steps left on disk.
+		// The delta carries no tree stamp, so "computed before the fix" is not a
+		// row of its own any more — a stale delta is caught by what it SAYS:
+		// either its baseline claims disagree with the run's (these rows), or
+		// its changed list disagrees with the recomputation (the payload rows
+		// below, and TestGateStage2AStaleDeltaIsRefusedEvenWhenEveryDIGESTAgrees
+		// for the full laundering sequence). A pre-fix delta that disagrees in
+		// neither way is byte-for-byte the delta this tree would produce, and
+		// carrying it is the cache working rather than a hole —
+		// TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward pins that.
 		{"the run and its own delta disagree about the baseline", func(t *testing.T, root string) {
 			gateStage2RewriteManifest(t, root, gateStage2FixtureBaseline, strings.Repeat("e", 40))
 		}, "disagree about which release is the past"},
@@ -2474,7 +2715,7 @@ func TestGateStage2PlanRefusesEveryRunItCannotStandBehind(t *testing.T) {
 			gateStage2Restamp(t, root)
 		}, "the keys would carry bytes the comparison never saw"},
 		{"the delta does not say which baseline bytes it read", func(t *testing.T, root string) {
-			gateWrite(t, root, gateDeltaFile, "{\"tree\":\""+gateStage2FixtureTree+"\",\"baseline\":{\"ref\":\""+gateStage2FixtureRef+"\",\"commit\":\""+gateStage2FixtureBaseline+"\"},\"changed\":[]}\n")
+			gateWrite(t, root, gateDeltaFile, "{\"baseline\":{\"ref\":\""+gateStage2FixtureRef+"\",\"commit\":\""+gateStage2FixtureBaseline+"\"},\"changed\":[\"counts\"]}\n")
 			gateStage2Restamp(t, root)
 		}, "does not record the digest of the baseline inventory"},
 
@@ -2486,11 +2727,11 @@ func TestGateStage2PlanRefusesEveryRunItCannotStandBehind(t *testing.T) {
 		// nothing moved since the previous release, and every one of them then
 		// judges its document against a comparison that did not happen.
 		{"the delta says nothing moved over a tree where something did", func(t *testing.T, root string) {
-			gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":27}}\n", "[]")
+			gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":27}}\n", "[]")
 			gateStage2Restamp(t, root)
 		}, "which every surface agent would therefore be told is unchanged"},
 		{"the delta names a field that did not move", func(t *testing.T, root string) {
-			gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\",\"commands\"]")
+			gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\",\"commands\"]")
 			gateStage2Restamp(t, root)
 		}, "which did not move, so agents would be sent looking for a change nobody made"},
 
@@ -2519,20 +2760,31 @@ func TestGateStage2PlanRefusesEveryRunItCannotStandBehind(t *testing.T) {
 }
 
 // TestGateStage2AStaleDeltaIsRefusedEvenWhenEveryDIGESTAgrees is failure 5's
-// end-to-end shape, driven through the REAL producer rather than through
-// hand-written fixtures.
+// end-to-end shape.
 //
 // It is the sequence a driver falls into without doing anything unusual: run
-// `delta` for one tree, land a fix, then re-run the captures and `record` for
-// the new tree but not `delta`. `record` re-digests whatever is on disk, so the
-// stale delta is laundered into a manifest that is honest about every byte it
-// names. Nothing is inconsistent except the one thing that matters.
+// `delta`, land a fix that moves surface.json, then re-run the captures and
+// `record` for the new tree but not `delta`. `record` digests whatever is on
+// disk, so the stale delta sits in a manifest that is honest about every byte it
+// names and current for the tree being released. Nothing is inconsistent except
+// the one thing that matters: the comparison the thirteen agents will read
+// describes the inventory from BEFORE the fix.
+//
+// The delta carries no tree stamp, so what convicts it is not a name mismatch
+// but the recomputation: gateStage2ChangedKeys derives the changed list again
+// from the two inventories on disk, and the stale list disagrees. The fix here
+// ADDS a top-level key on purpose — a fix that moved a value inside `counts`
+// would leave the stale list ["counts"] accidentally identical to the fresh one,
+// and an identical list is not stale, it is the right answer arrived at early
+// (see TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward for that half).
 func TestGateStage2AStaleDeltaIsRefusedEvenWhenEveryDIGESTAgrees(t *testing.T) {
 	root, tracked := gateStage2PlanFixture(t)
 	moved := strings.Repeat("d", 40)
 
-	// The fix lands: surface.json moves, and so does the tree.
-	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":29}}\n")
+	// The fix lands: surface.json gains a `commands` key the fixture's delta —
+	// computed when the inventory held `counts` alone — has never heard of, and
+	// the tree moves with it.
+	gateWrite(t, root, gateSurfaceInventoryFile, "{\"commands\":[\"claim new\"],\"counts\":{\"lint_rules\":28}}\n")
 	gateStage2StampRunFor(t, root, moved)
 
 	// Every digest in the manifest is honest about the file it names, and the
@@ -2541,13 +2793,75 @@ func TestGateStage2AStaleDeltaIsRefusedEvenWhenEveryDIGESTAgrees(t *testing.T) {
 		t.Fatalf("the laundered run is supposed to look perfectly fresh; if it does not, this test is not exercising the failure it names: %v", err)
 	}
 
-	_, err := gateStage2Plan(root, moved, tracked)
+	keys, err := gateStage2Plan(root, moved, tracked)
 	if err == nil {
-		t.Fatal("thirteen agents would have been handed a delta computed against a different tree as the truth about what this release changed — " +
-			"and on a docs-only follow-up, where surface.json does not move, every key would be identical to the previous run's and every PASS would carry forward too")
+		t.Fatal("thirteen agents would have been handed a delta computed before the fix as the truth about what this release changed, " +
+			"and every one of them would judge its document against a comparison the release never made")
+	}
+	if keys != nil {
+		t.Errorf("a partial key map came back alongside the error (%d entries)", len(keys))
 	}
 	if !errors.Is(err, errGateStage2StaleDelta) {
 		t.Errorf("a stale delta must be reported as itself, so a reader is sent to the producer rather than to the tags or the diff; got %v", err)
+	}
+}
+
+// TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward is the repair this
+// whole lane's economics rest on, pinned so it cannot silently regress.
+//
+// THE DEFECT THIS GUARDS AGAINST RETURNING. gate/delta.json used to carry the
+// tree object name, and gate/delta.json is shared evidence: its bytes are in
+// every surface's fingerprint and in every surface's bundle. So EVERY commit —
+// a one-character README fix included — moved the stamp, which moved all
+// thirteen keys, and gatePlanRerun could never carry a single verdict forward.
+// The machinery was correct and had never once fired; "the whole value of the
+// key is that a one-document fix re-runs one agent" (gateSharedEvidence) was a
+// sentence, not a property.
+//
+// THE SEQUENCE HERE IS THE ORDINARY DOCS-ONLY FOLLOW-UP. A gate run completes;
+// a fix lands that moves no inventory and no evidence; the tree moves anyway,
+// because every commit moves it; the driver re-runs `record` for the new tree.
+// The delta is a pure function of two inventories that did not move, so it is
+// byte-for-byte the delta the new tree would produce, recording it is honest,
+// and every surface whose documents did not move must fingerprint identically —
+// that identity is what a carried-forward verdict rests on. A single moved key
+// here means some per-commit value has crept back into the shared evidence, the
+// bundles, or the method, and the cache is dead again with nothing else red.
+//
+// (The surfaces that legitimately DO re-key on a tree move are the ones reading
+// a tree-stamped capture — the render diff and the site extraction, whose
+// producers must re-run for the new tree and whose new stamps move their bytes.
+// This fixture's two surfaces read no capture, which is the point: they isolate
+// the shared evidence, the documents and the method, the components a tree move
+// must not touch.)
+func TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward(t *testing.T) {
+	root, tracked := gateStage2PlanFixture(t)
+
+	before, err := gateStage2Plan(root, gateStage2FixtureTree, tracked)
+	if err != nil {
+		t.Fatalf("the honest fixture was refused, so nothing below is about a tree move: %v", err)
+	}
+
+	// The docs-only fix: the tree moves, nothing the agents read moves, and the
+	// driver re-records the run for the new tree.
+	moved := strings.Repeat("f", 40)
+	gateStage2StampRunFor(t, root, moved)
+
+	after, err := gateStage2Plan(root, moved, tracked)
+	if err != nil {
+		t.Fatalf("a tree move over unchanged inventories was refused: %v\n"+
+			"The delta on disk is byte-for-byte the delta this tree would produce, so refusing it re-runs "+
+			"every agent for a change nobody made — the stamp-shaped defect from the other direction", err)
+	}
+	if len(after) != len(before) {
+		t.Fatalf("the re-plan covers %d surfaces and the first plan covered %d", len(after), len(before))
+	}
+	for surface, key := range before {
+		if after[surface] != key {
+			t.Errorf("surface %q re-keyed on a tree move that changed none of its inputs:\n before: %s\n  after: %s\n"+
+				"Some per-commit value is back in the key's bytes, and every verdict will re-run on every commit forever",
+				surface, key, after[surface])
+		}
 	}
 }
 
@@ -2575,7 +2889,7 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 
 	t.Run("an unchanged tree produces an EMPTY delta against a resolved baseline", func(t *testing.T) {
 		root := fixture(t)
-		if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
 			t.Fatalf("the producer refused an unchanged tree: %v", err)
@@ -2597,10 +2911,55 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 		}
 	})
 
+	// THE ANTI-REGRESSION FOR THE STAMP ITSELF. The producer used to write the
+	// tree object name into gate/delta.json, and because that file is hashed
+	// into all thirteen keys and assembled into all thirteen bundles, the stamp
+	// re-keyed every surface on every commit — the carry-forward machinery never
+	// once fired. The stamp's freshness job moved to recomputation in `record`;
+	// this row is what goes red if anyone puts a per-commit value back.
+	t.Run("the delta carries no tree stamp, and no other per-commit value", func(t *testing.T) {
+		root := fixture(t)
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
+			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			t.Fatalf("the producer failed: %v", err)
+		}
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateDeltaFile)))
+		if err != nil {
+			t.Fatalf("read the produced delta: %v", err)
+		}
+		if strings.Contains(string(raw), "\"tree\"") {
+			t.Fatalf("the produced delta carries a tree stamp:\n%s\n"+
+				"That value moves on every commit, its bytes are in every surface's key and every surface's bundle, "+
+				"so every commit re-runs every reading agent and a verdict is never carried forward. "+
+				"The freshness the stamp bought is bought by recomputation in `record` — do not put it back", raw)
+		}
+		// And the whole document is a pure function of its inputs: producing it
+		// twice yields identical bytes, which is what lets an unchanged pair of
+		// inventories carry every surface's key across a tree move.
+		again := t.TempDir()
+		gateWrite(t, again, gateManifestFile, "surfaces:\n  - name: readme\n    paths: [README.md]\n")
+		gateWrite(t, again, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n")
+		gateWrite(t, again, "baseline-source.json", "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n")
+		if _, err := gateStage2Harness(t, "delta", "--root", again,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
+			"--baseline-file", filepath.Join(again, "baseline-source.json")); err != nil {
+			t.Fatalf("the producer failed on the second checkout: %v", err)
+		}
+		other, err := os.ReadFile(filepath.Join(again, filepath.FromSlash(gateDeltaFile)))
+		if err != nil {
+			t.Fatalf("read the second delta: %v", err)
+		}
+		if !bytes.Equal(raw, other) {
+			t.Errorf("two deltas over identical inventories differ:\n first: %s\nsecond: %s\n"+
+				"Something besides the two inventories and the baseline flags is in the document, and whatever it is will re-key surfaces that did not move", raw, other)
+		}
+	})
+
 	t.Run("a moved inventory names the field that moved", func(t *testing.T) {
 		root := fixture(t)
 		gateWrite(t, root, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 29\n  }\n}\n")
-		if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
 			t.Fatalf("the producer failed: %v", err)
@@ -2638,7 +2997,7 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 		}
 		t.Run("delta refuses baseline "+name, func(t *testing.T) {
 			root := fixture(t)
-			if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+			if _, err := gateStage2Harness(t, "delta", "--root", root,
 				"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 				"--baseline-file", filepath.Join(root, "baseline-source.json")); err == nil {
 				t.Fatal("the producer accepted a baseline it had not resolved; an unresolvable baseline is a FAILED run, never an empty delta")
@@ -2668,7 +3027,7 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	// about each other.
 	t.Run("the delta records the digest of the baseline it read", func(t *testing.T) {
 		root := fixture(t)
-		if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
 			t.Fatalf("the producer failed: %v", err)
@@ -2685,39 +3044,45 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 			t.Errorf("the delta records baseline digest %q and %s hashes %q; a comparison that cannot name its own source leaves thirteen keys carrying bytes nobody checked",
 				delta.Baseline.SHA256, gateBaselineFile, digest)
 		}
-		if delta.Tree != tree {
-			t.Errorf("the delta records tree %q, want %q", delta.Tree, tree)
-		}
 	})
 
-	// THE LAUNDERING STEP, REFUSED AT THE POINT IT HAPPENS. `record` re-digests
-	// whatever is on disk, so a delta left from before a fix is written into a
-	// manifest that is honest about every byte it names. The reading side
-	// refuses it; so does this side, because the driver sequence that produces
-	// it — gate FAILS, fix lands, re-run the captures and `record` but not
+	// THE LAUNDERING STEP, REFUSED AT THE POINT IT HAPPENS — BY RECOMPUTATION.
+	// `record` re-derives the delta from surface.json and gate/baseline.json
+	// (emit_delta_document, the same function `delta` writes with) and refuses
+	// on any byte of disagreement. The driver sequence that produces the stale
+	// state — gate FAILS, fix lands, re-run the captures and `record` but not
 	// `delta` — is ordinary rather than adversarial, and the earlier something
-	// says so the less of the run is wasted.
-	t.Run("record refuses to launder a delta computed over another tree", func(t *testing.T) {
+	// says so the less of the run is wasted. The reading side
+	// (gateStage2CheckDeltaCovers) re-derives the same answer field by field.
+	t.Run("record refuses a delta the inventory has moved out from under", func(t *testing.T) {
 		root := fixture(t)
-		if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
-		// The fix lands and the tree moves; the delta is not recomputed.
-		moved := strings.Repeat("d", 40)
-		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", moved,
+		// The fix lands: surface.json moves, and the delta is not recomputed.
+		// Every digest `record` is about to take is honest about the bytes on
+		// disk; the only thing wrong is that the comparison those bytes hold
+		// was made against an inventory this checkout no longer has.
+		gateWrite(t, root, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 29\n  }\n}\n")
+		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			gateBaselineFile, gateDeltaFile); err == nil {
-			t.Fatal("a delta computed over another tree was recorded as this run's; every digest in that manifest is honest and the comparison under all thirteen keys is about a different release")
+			t.Fatal("a delta computed before the fix was recorded as this run's; every digest in that manifest is honest and the comparison under all thirteen keys describes an inventory this release does not have")
 		}
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gateStage2RunFile))); err == nil {
 			t.Error("a run manifest was written anyway")
 		}
 
-		// And the same delta recorded for the tree it was actually computed over
-		// is accepted — otherwise the row above would pass on a `record` that
-		// refuses everything.
+		// Recomputed for the tree as it now is, the same pair records cleanly —
+		// otherwise the row above would pass on a `record` that refuses
+		// everything.
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
+			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			t.Fatalf("re-running the producer failed: %v", err)
+		}
 		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			gateBaselineFile, gateDeltaFile); err != nil {
@@ -2725,9 +3090,34 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 		}
 	})
 
+	// THE OTHER HALF OF REMOVING THE TREE STAMP: a delta the recomputation
+	// AGREES with is fresh for whatever tree asks, because a byte of it is not
+	// about the tree's name. This is what lets a docs-only fix carry every
+	// key forward, and it is the row that would have failed for every release
+	// under the stamped design — `record` used to refuse this exact state.
+	t.Run("record accepts an earlier delta when the inventories have not moved", func(t *testing.T) {
+		root := fixture(t)
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
+			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			t.Fatalf("the producer failed: %v", err)
+		}
+		// The docs-only fix: the tree moves, neither inventory does.
+		moved := strings.Repeat("d", 40)
+		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", moved,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
+			gateBaselineFile, gateDeltaFile); err != nil {
+			t.Fatalf("record refused a delta that is byte-for-byte what this tree would produce: %v\n"+
+				"Refusing it forces `delta` to re-run, and if re-running it changes the file's bytes, every surface re-keys on every commit and the carry-forward machinery never fires — the defect the tree stamp used to cause", err)
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gateStage2RunFile))); err != nil {
+			t.Errorf("record exited 0 and wrote no manifest: %v", err)
+		}
+	})
+
 	t.Run("record refuses a delta computed against another baseline", func(t *testing.T) {
 		root := fixture(t)
-		if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
 			t.Fatalf("the producer failed: %v", err)
@@ -2741,7 +3131,7 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 
 	t.Run("a baseline document that cannot be read is a FAILED run", func(t *testing.T) {
 		root := fixture(t)
-		if _, err := gateStage2Harness(t, "delta", "--root", root, "--tree", tree,
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"--baseline-file", filepath.Join(root, "there-is-no-such-file.json")); err == nil {
 			t.Fatal("the producer accepted a baseline document it could not read")
@@ -2762,6 +3152,117 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 			t.Error("a run manifest was written naming an artifact that is not there")
 		}
 	})
+}
+
+// TestGateStage2RecordRefusesAStaleSiteTextExtraction holds the site extraction
+// to the same record-time account as the render diff, against the REAL harness.
+//
+// THE HISTORY THIS CLOSES. gate/site-text.json used to carry a node/npm
+// toolchain stamp and nothing that named a release: no tree, and no seat in
+// run.sh's guard loop. So an extraction left on disk from the previous release
+// — or a `printf '{}' > gate/site-text.json` typed at a gate that had been
+// refusing for ten minutes — recorded cleanly, hashed cleanly, and was handed
+// to the site agent as this release's rendered DOM. The extraction cannot be
+// recomputed at record time the way the delta is (it needs a real build and a
+// real browser), so its account is the stamped kind: the producer
+// (viewer-tests/site_dom_test.go) writes the tree it was driven with, first in
+// the document per TestSiteTextProvenanceComesFirst, and `record` refuses one
+// stamped with another release's tree. It compares this tree's build against
+// nothing, so unlike the render diff it carries no baseline commit to check.
+func TestGateStage2RecordRefusesAStaleSiteTextExtraction(t *testing.T) {
+	tree := gateStage2FixtureTree
+	commit := gateStage2FixtureBaseline
+	script := filepath.Join(surfaceRepoRoot(t), filepath.FromSlash(gateStage2HarnessFile))
+
+	// stamped is the shape the extraction writes: provenance first, the rest
+	// of the dump behind it.
+	stamped := func(tree string) string {
+		return "{\n  \"tree\": \"" + tree + "\",\n  \"generated_by\": \"viewer-tests/site_dom_test.go\",\n  \"toolchain\": {\"node_version\": \"v24.0.0\", \"npm_version\": \"11.0.0\"},\n  \"pages\": []\n}\n"
+	}
+
+	// record runs the real script and returns its combined output and exit
+	// code, because the assertions below are about WHICH refusal a human is
+	// sent to and stdout alone does not carry it.
+	record := func(t *testing.T, body string) (string, int) {
+		t.Helper()
+		root := t.TempDir()
+		gateWrite(t, root, gateManifestFile, "surfaces:\n  - name: site\n    paths: [site/]\n")
+		gateWrite(t, root, gateSiteTextFile, body)
+		cmd := exec.Command("bash", script, "record",
+			"--root", root, "--tree", tree,
+			"--baseline-ref", gateStage2FixtureRef, "--baseline-commit", commit,
+			gateSiteTextFile)
+		out, err := cmd.CombinedOutput()
+		code := 0
+		if err != nil {
+			var exitErr *exec.ExitError
+			if errors.As(err, &exitErr) {
+				code = exitErr.ExitCode()
+			} else {
+				t.Fatalf("run.sh record: %v\n%s", err, out)
+			}
+		}
+		if _, statErr := os.Stat(filepath.Join(root, filepath.FromSlash(gateStage2RunFile))); statErr == nil && code != 0 {
+			t.Error("run.sh refused and wrote gate/run.json anyway; a half-written manifest parses far enough to look like a run that recorded less than it produced")
+		}
+		return string(out), code
+	}
+
+	t.Run("an extraction stamped with this tree records (positive control)", func(t *testing.T) {
+		out, code := record(t, stamped(tree))
+		if code != 0 {
+			t.Fatalf("run.sh refused an extraction that agrees with the run, so every row below would pass over a guard that refuses everything: exit %d\n%s", code, out)
+		}
+	})
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want string
+	}{
+		{
+			"an extraction of the previous release's build",
+			stamped(strings.Repeat("d", 40)),
+			"covers " + tree,
+		},
+		{
+			// The historical shape, byte for byte: a toolchain pair and no
+			// release identity anywhere in the file. This recorded cleanly
+			// before the stamp existed.
+			"the pre-stamp shape, a toolchain and no tree",
+			"{\n  \"generated_by\": \"viewer-tests/site_dom_test.go\",\n  \"toolchain\": {\"node_version\": \"v24.0.0\", \"npm_version\": \"11.0.0\"},\n  \"pages\": []\n}\n",
+			"not a full 40-digit object name",
+		},
+		{
+			// What a local run without DOSSIERX_SITE_TEXT_TREE writes: the key
+			// is present and empty, which is not an identity either.
+			"an extraction whose stamp is empty",
+			stamped(""),
+			"not a full 40-digit object name",
+		},
+		{
+			// The two-byte workaround, same as the render diff's.
+			"the two-byte extraction",
+			"{}\n",
+			"not a full 40-digit object name",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out, code := record(t, tc.body)
+			if code == 0 {
+				t.Fatalf("run.sh recorded a site extraction that does not belong to this run. The manifest is honest about its bytes, the digest matches, and the site agent would read another release's rendered DOM as this one's:\n%s", out)
+			}
+			if code != 3 {
+				t.Errorf("run.sh exited %d, want 3 — the same could-not-be-attributed refusal the other stamped capture uses:\n%s", code, out)
+			}
+			if !strings.Contains(out, tc.want) {
+				t.Errorf("expected the refusal to say %q, got:\n%s", tc.want, out)
+			}
+			if !strings.Contains(out, gateSiteTextFile) {
+				t.Errorf("the refusal must name the artifact, or a human is left diffing six files by hand:\n%s", out)
+			}
+		})
+	}
 }
 
 // sha256Sum is a one-line helper kept beside its only caller.

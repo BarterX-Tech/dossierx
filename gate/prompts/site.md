@@ -2,8 +2,8 @@
 
 The marketing and documentation site. THE SURFACE IS THE RENDERED DOM of a real
 build plus its head metadata, and that is what you have been handed as the
-rendered site text — not the component source. But every file listed as not
-handed over decides what that DOM says.
+capture `gate/site-text.json` — not the component source. But every file listed
+as not handed over decides what that DOM says.
 
 Check, specifically:
 

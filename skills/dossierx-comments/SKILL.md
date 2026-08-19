@@ -27,10 +27,15 @@ treat an unanswered thread as a blocked task, not as background noise.
 | 1 | human | reads a card in the viewer, disagrees, opens a thread on it |
 | 2 | human | tells you, in chat, "I left comments" |
 | 3 | **you** | `dossierx comment inbox` — every open thread in the project, one call |
-| 4 | **you** | fix the claim if it is draft (or take a locked one through unlock → fix → lock, with their yes), then `dossierx comment reply <claim-id> <thread-id> --as agent --body "..."` |
+| 4 | **you** | fix the claim if it is draft (or take a locked one through unlock → fix, with their yes — the re-lock waits for their Resolve), then `dossierx comment reply <claim-id> <thread-id> --as agent --body "..."` |
 | 5 | human | clicks **Resolve** in the viewer. That click is their approval, and it is what unblocks locking |
 | 6 | human | "good, lock it" |
 | 7 | **you** | resolve their words to an id, `--dry-run`, show it, get a yes, `dossierx claim lock <id> --reason "<their words>"` |
+
+Step 4 ends in a reply, never in a lock. The thread you are answering is still open — step 5 has
+not happened — and an open thread is exactly what the lock gate refuses (`unresolved_comments`),
+so a claim you unlocked at step 4 waits in draft, its approval released, until step 7: that lock,
+after their Resolve and carrying their words, is the `lock` half of unlock → fix → lock.
 
 Step 5 is theirs and only theirs. There is no CLI verb for it — `comment resolve`, `reopen`,
 `edit` and `delete` are viewer-only in v0.3.0. If your plan contains "then I resolve the thread",

@@ -13,11 +13,14 @@
 //
 // WHAT IS IN THE DIGEST, and why each part has to be. The surface's own
 // documents (what the agent judges), surface.json (the mechanical truth it
-// judges them against), the release delta and the rendered site text (the other
-// two evidence files an agent reads), and the METHOD — because a verdict is a
-// function of the question as much as of the evidence, and re-using a verdict
+// judges them against), the resolved baseline and the release delta over it
+// (the other evidence every agent reads), the METHOD — because a verdict is
+// a function of the question as much as of the evidence, and re-using a verdict
 // produced by an older prompt against a newer one is exactly the stale pass this
-// design exists to remove.
+// design exists to remove — and the GATE'S OWN DEFINITION (the gate-integrity
+// digest, gate_integrity_test.go), because a verdict is a function of the rules
+// too: re-using a verdict produced under an older predicate against a newer one
+// is the same stale pass, one level up.
 //
 // METHOD_VERSION IS COMPUTED, NEVER WRITTEN DOWN. It is a hash of the prompt
 // sources, the model id and the tool list. A hand-maintained string is a version
@@ -58,23 +61,46 @@ import (
 //
 // surface.json is emitted by surface_test.go and is in the tree today. The other
 // two are the gate's own working artifacts, produced by the run that fans the
-// agents out — the release delta (this release's surface.json against the
-// previous release's) and the rendered site text (read out of a real build's
-// DOM, per "verify the thing the user sees"). They are named as constants here
+// agents out — the RESOLVED baseline inventory and the release delta computed
+// over it (this release's surface.json against the previous release's), both
+// written by scripts/gate-stage2/run.sh delta. They are named as constants here
 // rather than passed in so that there is one spelling of each, and hashing FAILS
 // when one is absent rather than quietly fingerprinting a smaller evidence set.
-// gateBaselineFile is the RESOLVED baseline inventory — the previous release's
-// surface.json, written into the run's own evidence directory by the producer
-// that resolved it (scripts/gate-stage2/run.sh delta).
 //
-// It is in the key because gate/delta.json is a LOSSY READ of a pair of
-// inventories, and a projection never stands in for its source. This tree's half
-// of that pair is already here as surface.json; without the other half a key
-// carrying the delta is a key that trusts a summary of bytes it never saw. And
-// the thing that belongs here is the baseline's BYTES, never the baseline tag's
-// NAME: a tag is a mutable pointer (`git tag -f` re-points an annotated tag
-// under anything that names only the tag), so "v0.5.0" hashes identically before
-// and after it is made to mean a different commit.
+// gateBaselineFile is in the key because gate/delta.json is a LOSSY READ of a
+// pair of inventories, and a projection never stands in for its source. This
+// tree's half of that pair is already here as surface.json; without the other
+// half a key carrying the delta is a key that trusts a summary of bytes it never
+// saw. And the thing that belongs here is the baseline's BYTES, never the
+// baseline tag's NAME: a tag is a mutable pointer (`git tag -f` re-points an
+// annotated tag under anything that names only the tag), so "v0.5.0" hashes
+// identically before and after it is made to mean a different commit.
+//
+// gateDeltaFile CARRIES NO TREE STAMP, and that absence is load-bearing. Its
+// bytes are in every surface's key (through this shared set) and in every
+// surface's bundle (the assembler hands the delta to all thirteen agents), so
+// any per-commit value inside it moves every key on every commit. The landed
+// producer stamped `git rev-parse HEAD^{tree}` into it, and the carry-forward
+// machinery this file builds never once fired because of that: a one-character
+// README fix moved the stamp, the stamp moved all thirteen keys, and all
+// thirteen agents re-ran. The stamp existed so `record` could refuse a delta
+// computed over a different tree; that freshness is now proven by RECOMPUTATION
+// — the delta is a pure function of surface.json and gate/baseline.json, and
+// both scripts/gate-stage2/run.sh `record` (byte-for-byte, emit_delta_document)
+// and gateStage2CheckDeltaCovers (field by field) re-derive it and refuse on
+// disagreement. TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward is what
+// keeps the stamp from coming back.
+//
+// gateSiteTextFile — the rendered site text, read out of a real build's DOM per
+// "verify the thing the user sees" — is DELIBERATELY NOT in the shared set any
+// more, and the constant stays here only so the repository keeps one spelling of
+// the path. It is read by the `site` agent alone, so it reaches that one
+// surface's key through the bundle as a per-surface capture
+// (gateStage2Artifacts); as shared evidence it re-keyed all thirteen surfaces
+// whenever the site was re-extracted. Unlike the delta it CANNOT be recomputed
+// at record time — that needs a real build and a real browser — so its freshness
+// is carried by a tree stamp of its own, written by the extraction
+// (viewer-tests/site_dom_test.go) and checked by `record`'s guard loop.
 const (
 	gateSurfaceInventoryFile = "surface.json"
 	gateBaselineFile         = "gate/baseline.json"
@@ -82,7 +108,7 @@ const (
 	gateSiteTextFile         = "gate/site-text.json"
 )
 
-// gateSharedEvidence is those four, in one place, so a fifth evidence file is
+// gateSharedEvidence is those three, in one place, so a fourth evidence file is
 // added once and every surface's fingerprint moves.
 //
 // SHARED means read by EVERY surface agent. An artifact only one agent reads —
@@ -94,8 +120,15 @@ const (
 // digest covers those bytes for the one surface that reads them and for no
 // other. TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is what holds that
 // true on the run path.
+//
+// gate/site-text.json used to be the fourth member and is the cautionary tale
+// for the paragraph above: it is read by the `site` agent alone, and folding it
+// in meant every re-extraction of the site — every release, since the extraction
+// is per-run evidence — re-keyed all thirteen surfaces. It now takes the bundle
+// route like the other single-reader captures (gateStage2Artifacts), and the
+// same test holds it to exactly one key.
 func gateSharedEvidence() []string {
-	return []string{gateSurfaceInventoryFile, gateBaselineFile, gateDeltaFile, gateSiteTextFile}
+	return []string{gateSurfaceInventoryFile, gateBaselineFile, gateDeltaFile}
 }
 
 // ---------------------------------------------------------------------
@@ -361,6 +394,21 @@ type gateSurfaceInputs struct {
 	// agents a materially weaker question while no part file moves at all.
 	Bundle []byte
 	Method gateMethod
+	// Rules is the gate-integrity fingerprint: the digest of the gate's OWN
+	// definition — the gate_*_test.go files, the emitter, the harness, the
+	// coverage manifest — computed by gateIntegrityFingerprint
+	// (gate_integrity_test.go) and identical across all surfaces of one run.
+	//
+	// It is the third thing a verdict is a function of, after the evidence and
+	// the question: the RULES. Documents, evidence, bundle and method together
+	// cover everything the agent reads and everything the surface claims, and
+	// none of them covers what the gate itself DOES with the answer — weaken
+	// the verdict predicate and every component above is byte-identical, so
+	// every surface carries a PASS forward under rules nobody re-read. With
+	// this component, changing what the gate is re-keys every surface and
+	// forces a full re-read, the same way changing the frame prompt already
+	// does and for the same reason: the question changed.
+	Rules string
 }
 
 // gateSurfaceFingerprint is the digest of one agent's whole input set.
@@ -380,6 +428,9 @@ func gateSurfaceFingerprint(root string, in gateSurfaceInputs) (string, error) {
 	if len(in.Bundle) == 0 {
 		return "", fmt.Errorf("surface fingerprint: surface %q was handed no bundle; a key over zero bytes handed over is a key over a question nobody asked, and it is the same constant for every surface in that state", in.Surface)
 	}
+	if strings.TrimSpace(in.Rules) == "" {
+		return "", fmt.Errorf("surface fingerprint: surface %q carries no gate-integrity digest; a key computed without the gate's own definition is a key that matches across a change to the rules, which is the exact staleness the component exists to notice", in.Surface)
+	}
 
 	documents, err := gateHashDocuments(root, in.Documents)
 	if err != nil {
@@ -396,8 +447,11 @@ func gateSurfaceFingerprint(root string, in gateSurfaceInputs) (string, error) {
 	bundle := sha256.Sum256(in.Bundle)
 
 	h := sha256.New()
-	fmt.Fprintf(h, "dossierx-gate-surface\x00v3\x00%s\x00%s\x00%s\x00sha256:%s\x00%s",
-		in.Surface, documents, evidence, hex.EncodeToString(bundle[:]), method)
+	// v4: the gate-integrity digest joined the stream. The version bump is the
+	// honest signal that no v3 key can ever match a v4 one — which is correct,
+	// because a v3 key attests nothing about the rules it was computed under.
+	fmt.Fprintf(h, "dossierx-gate-surface\x00v4\x00%s\x00%s\x00%s\x00sha256:%s\x00%s\x00%s",
+		in.Surface, documents, evidence, hex.EncodeToString(bundle[:]), method, in.Rules)
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
@@ -628,6 +682,20 @@ type gateManifestEntry struct {
 	Name  string   `yaml:"name"`
 	Paths []string `yaml:"paths"`
 	Not   []string `yaml:"not"`
+	// Reads are documents this surface DOES NOT OWN but whose bytes its agent
+	// needs to judge its own. They are exact repo-relative paths, never
+	// patterns: a surface borrowing another's material has to name what it
+	// borrowed, and a glob would let the borrowed set grow silently as the
+	// other surface does — and would make the surface's key depend on directory
+	// contents nobody decided to include.
+	//
+	// They take no part in ownership. gateEntryClaims reads Paths and Not only,
+	// so a `reads:` entry never makes this surface a second claimant of a file
+	// and never disturbs the manifest's exactly-one rule — which also means a
+	// file that is only ever borrowed and never owned is still UNCLAIMED, and
+	// tests/surfaces_manifest_test.go still reddens over it. Borrowing is not a
+	// way to satisfy coverage; it is a way to hand an agent context.
+	Reads []string `yaml:"reads"`
 }
 
 // gateLoadManifest reads surfaces.yaml. A manifest that cannot be read is an
@@ -688,6 +756,75 @@ func gateSurfaceDocuments(root string, tracked []string) (map[string][]string, e
 		}
 		sort.Strings(owned)
 		out[entry.Name] = owned
+	}
+	return out, nil
+}
+
+// gateSurfaceReferences resolves every surface's `reads:` list — the documents
+// it borrows from other surfaces — against the tracked set, or refuses.
+//
+// WHY THE LIST EXISTS. gateSurfaceDocuments gives each surface the files it
+// OWNS, and the bundle hands its agent those and nothing else. But documents
+// refer to each other: README.md describes behaviour FORMAT.md defines, a skill
+// quotes an error message the CLI owns. An agent asked whether such a sentence
+// is still true cannot check it — the deciding document belongs to another
+// surface, so it is not handed, not withheld, and not present at all — and the
+// frame correctly orders it to report FAILED and name the byte it needed rather
+// than guess. In the abandoned v0.5.2 release's first gate round, 20 of 39
+// findings were exactly that shape: agents naming a byte the gate's own
+// assembly had withheld from them. `reads:` closes each such gap permanently:
+// declare the path once, and that pair cannot recur.
+//
+// EVERY REFUSAL HERE IS A REFUSAL AND NOT A SHORTER LIST, for the reason
+// gateBundleAssemble gives about its own: a bundle assembled over less material
+// than it should be still hashes, still looks like a match, and still carries a
+// verdict forward. A `reads:` entry that resolves to nothing is a question the
+// agent was supposed to be able to answer and now cannot, and dropping it would
+// go unnoticed — the finding it produces looks exactly like the coverage gap
+// this mechanism exists to close.
+//
+// WHAT THIS CANNOT PROMISE. It resolves paths; it does not know WHY a surface
+// borrows one. A stale entry — a borrow whose citing sentence has since been
+// deleted — resolves cleanly and merely pads the borrower's bundle and re-runs
+// it more often than needed. That is a cost defect, not a coverage one, and
+// pruning it is a human edit to surfaces.yaml, where each entry carries the
+// comment saying which sentence it exists for.
+func gateSurfaceReferences(root string, tracked []string) (map[string][]string, error) {
+	m, err := gateLoadManifest(root)
+	if err != nil {
+		return nil, err
+	}
+	isTracked := make(map[string]bool, len(tracked))
+	for _, file := range tracked {
+		isTracked[file] = true
+	}
+
+	out := make(map[string][]string, len(m.Surfaces))
+	for _, entry := range m.Surfaces {
+		if len(entry.Reads) == 0 {
+			continue
+		}
+		seen := map[string]bool{}
+		refs := make([]string, 0, len(entry.Reads))
+		for _, rel := range entry.Reads {
+			switch {
+			case strings.ContainsAny(rel, "*?") || strings.HasSuffix(rel, "/"):
+				// Distinguished from "not tracked" because the repairs differ: a
+				// moved file means moving the entry, a pattern means someone tried
+				// to widen the borrow without naming what it grows to include.
+				return nil, fmt.Errorf("surface %q reads %q, which is a pattern. reads: takes exact repository-relative paths only: a surface borrowing another's material names what it borrowed, and a glob would let the borrowed set grow as the other surface does without anyone deciding", entry.Name, rel)
+			case !isTracked[rel]:
+				return nil, fmt.Errorf("surface %q reads %q, which is not a tracked file. If the file moved, move this entry with it. An unresolvable reads: entry refuses the whole fan-out rather than being dropped, because a dropped one leaves the agent reporting the coverage gap this list exists to close", entry.Name, rel)
+			case seen[rel]:
+				return nil, fmt.Errorf("surface %q reads %q twice; the bundle would carry the same bytes twice under the same heading", entry.Name, rel)
+			case gateEntryClaims(entry, rel):
+				return nil, fmt.Errorf("surface %q reads %q, which its own paths: already claim. reads: is for documents another surface owns — borrowing your own is either a stale entry or a paths: pattern that has grown, and the two are different edits", entry.Name, rel)
+			}
+			seen[rel] = true
+			refs = append(refs, rel)
+		}
+		sort.Strings(refs)
+		out[entry.Name] = refs
 	}
 	return out, nil
 }
@@ -785,12 +922,12 @@ func gatePassingSurfaces(names ...string) []gateSurfaceVerdict {
 }
 
 // gateFingerprintFixture writes a whole synthetic tree — the surface's document,
-// the four shared evidence files, one per-surface capture and a prompt — and
-// returns the root and the inputs over it.
+// the three shared evidence files and a prompt — and returns the root and the
+// inputs over it.
 //
 // It is synthetic rather than the real repository because the point of the tests
-// below is to move ONE input at a time and watch the digest move. Three of the
-// four evidence files do not exist in this tree until a run produces them (see
+// below is to move ONE input at a time and watch the digest move. Two of the
+// three evidence files do not exist in this tree until a run produces them (see
 // gateDeltaFile), and a fixture is also the only way to assert the direction the
 // hashing errs in when one of them is missing.
 //
@@ -806,7 +943,6 @@ func gateFingerprintFixture(t *testing.T) (root string, in gateSurfaceInputs) {
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
 	gateWrite(t, root, gateBaselineFile, "{\"counts\":{\"lint_rules\":27}}\n")
 	gateWrite(t, root, gateDeltaFile, "{\"lint_rules\":{\"added\":[\"mixed-cycle\"]}}\n")
-	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.9\"}\n")
 	gateWrite(t, root, "gate/prompts/site.md", "Read the rendered site text against surface.json.\n")
 
 	return root, gateSurfaceInputs{
@@ -818,6 +954,11 @@ func gateFingerprintFixture(t *testing.T) (root string, in gateSurfaceInputs) {
 			Model:   "claude-opus-5",
 			Tools:   append([]string(nil), gateStage2PinnedGrant...),
 		},
+		// A literal, the way Bundle is: this fixture's tests are about the
+		// digest's arithmetic, and the run path computes the real value with
+		// gateIntegrityFingerprint (gateStage2Keys). The rows that prove the
+		// real derivation live in gate_integrity_test.go.
+		Rules: "sha256:the-gate-as-it-stands",
 	}
 }
 
@@ -897,6 +1038,13 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		// moved, which the run path never does — a fixture arrangement that
 		// cannot occur, proving a component nothing else could redden.
 		//
+		// THE RENDERED SITE TEXT USED TO BE A ROW HERE AND IS ONE OF THOSE
+		// CAPTURES NOW. It is read by the `site` agent alone, and its old seat
+		// in the shared evidence meant a re-extraction moved all thirteen keys;
+		// it reaches exactly the site surface's key through that surface's
+		// bundle, and TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is
+		// the row that proves it — on the run path, with a real assembler.
+		//
 		// THE ROW THAT DEFEATS FAILURE 3. Nothing on disk moves: the same
 		// prompt, the same documents, the same evidence, the same model and
 		// grant. Only the assembled text differs, which is what softening the
@@ -905,14 +1053,23 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		{"the framing the assembler wrapped around the parts", func(t *testing.T, _ string, in *gateSurfaceInputs) {
 			in.Bundle = []byte("--- the site question ---\nNote any mismatches between the rendered site text and surface.json.\n")
 		}},
-		{"the rendered site text", func(t *testing.T, root string, _ *gateSurfaceInputs) {
-			gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.8\"}\n")
-		}},
 		{"the prompt's wording", func(t *testing.T, root string, _ *gateSurfaceInputs) {
 			gateWrite(t, root, "gate/prompts/site.md", "Read the rendered site text against surface.json, and the delta.\n")
 		}},
 		{"the model id", func(t *testing.T, _ string, in *gateSurfaceInputs) {
 			in.Method.Model = "claude-opus-5-mini"
+		}},
+		// THE ROW THAT DEFEATS THE RULES GAP. Nothing the agent reads moves:
+		// same documents, same evidence, same bundle, same method. Only the
+		// gate's own definition differs — which is what weakening the verdict
+		// predicate, the carry-forward rule or the harness looks like from
+		// here, since none of those files is a document, evidence, a prompt or
+		// part of any bundle. Before this component existed, that edit moved
+		// zero keys and every surface carried its PASS forward under rules
+		// nobody re-read. The run-path proof, with the real derivation and the
+		// real gate sources, is TestGateIntegrityEditingTheGateMovesEverySurfaceKey.
+		{"the gate's own definition", func(t *testing.T, _ string, in *gateSurfaceInputs) {
+			in.Rules = "sha256:the-gate-after-somebody-edited-its-rules"
 		}},
 		{"a tool joins the list", func(t *testing.T, _ string, in *gateSurfaceInputs) {
 			in.Method.Tools = append(in.Method.Tools, "WebFetch")
@@ -976,6 +1133,17 @@ func TestGateFingerprintRefusesEveryEmptyInput(t *testing.T) {
 		in.Bundle = nil
 		if _, err := gateSurfaceFingerprint(root, in); err == nil {
 			t.Error("a fingerprint was produced for a surface that was handed no bundle")
+		}
+	})
+
+	// An absent gate-integrity digest is the shape a caller that predates the
+	// component produces, and it is the same for every surface in that state:
+	// a key that matches across any change to the gate's own rules.
+	t.Run("an empty gate definition", func(t *testing.T) {
+		root, in := gateFingerprintFixture(t)
+		in.Rules = ""
+		if _, err := gateSurfaceFingerprint(root, in); err == nil {
+			t.Error("a fingerprint was produced for a surface carrying no gate-integrity digest")
 		}
 	})
 

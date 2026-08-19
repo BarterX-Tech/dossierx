@@ -1,0 +1,20 @@
+{
+  "run": "<<RUN>>",
+  "surface": "changelog",
+  "verdict": "FAILED",
+  "fingerprint": "<<FINGERPRINT>>",
+  "findings": [
+    {
+      "surface": "changelog",
+      "rule": "stale-version-pin",
+      "consequence": "cosmetic",
+      "failure_scenario": "a reader skimming the install section sees last release's number beside a command that still works",
+      "blocking": "deferrable",
+      "detail": "the install line pins the previous release"
+    }
+  ],
+  "subjects": {
+    "cli-operator": "agent",
+    "go-toolchain-floor": "1.26"
+  }
+}

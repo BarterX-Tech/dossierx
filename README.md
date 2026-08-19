@@ -32,11 +32,13 @@ Set up DossierX in this repository.
 3. If `project.config.yaml` and the claims directory do not exist yet,
    propose a title, the facets, and the modules, and WAIT for me to confirm
    before writing anything.
-4. ASK ME before installing the git pre-commit hook. If I say yes, fetch
+4. ASK ME before installing the git pre-commit hook. My answer decides the
+   hook alone, never CI — CI is the authority either way. If I say yes, fetch
    https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.1/scripts/install-git-hook.sh
-   to a file, show me what it does, then run `sh install-git-hook.sh --yes`.
-   If I say no, add the CI workflow instead and tell me so — CI is the
-   authority either way.
+   to a file, show me what it does, run `sh install-git-hook.sh --yes`, then
+   add the CI workflow as well. If I say no, skip the hook and
+   add the CI workflow alone, and tell me so. Either answer ends with the
+   workflow installed; the hook is only fast local feedback on top of it.
 5. ONLY if `dossierx check` reports `lock-ledger-pre-ledger`, or a lock,
    reaudit or build-order lock refuses with `pre_ledger_unadopted`: this
    project locked claims before it had a lock ledger. There is NO migration
@@ -156,7 +158,7 @@ Three files hold the review state, at the project root, next to `project.config.
 | `.dossierx-comment-digest.json` | the review history's fingerprint |
 | `.dossierx-flag-store.json` | the pending `claim flag` triggers: each flagged claim's `{claim_says, now_does, reason, flagged_at}`, parked until a confirmed `claim reaudit` consumes it |
 
-**All three are tracked artifacts. Commit them; never `.gitignore` them** — the lock store the moment anything is locked, the digest once anyone comments, the flag store the moment anything is flagged. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip. Neither one ever grandfathers its way to a pass, and since v0.4.0 there is no adoption path to reach for at all — restore the store from version control. [A store that genuinely predates the ledger is a different state with a different recovery](#upgrading-a-pre-ledger-project).
+**All three are tracked artifacts. Commit them; never `.gitignore` them** — the lock store and the digest the moment anything is locked (the first lock creates `.dossierx-comment-digest.json` in the same act, before anyone has commented — stage them together or `check --staged` reports `comment-digest-absent`), the flag store the moment anything is flagged. A claim and its approval have to travel in the same commit for CI to be able to check either one: CI compares the claims against the ledger, so without the ledger in the repository the gate has nothing to compare against and is theatre. DossierX says so out loud rather than passing quietly: locked claims with no ledger is a hard error (`lock-ledger-absent`), and a ledger that exists but will not parse is `lock-ledger-unreadable`, never a silent skip. Neither one ever grandfathers its way to a pass, and since v0.4.0 there is no adoption path to reach for at all — restore the store from version control. [A store that genuinely predates the ledger is a different state with a different recovery](#upgrading-a-pre-ledger-project).
 
 The flag store is not part of the gate — nothing compares it to anything — but it is not optional either. `claim flag` writes the before/after there and sets `review_pending` on the claim; `claim reaudit` reads it back to produce the diff it asks you to confirm. If the claim travels to another machine and the flag store does not, that claim arrives `review_pending` with nothing to propose, and confirming the empty proposal clears the flag having changed nothing.
 
@@ -235,7 +237,7 @@ The ledger is not authentication. `actor` is provenance, not identity, and anyon
 
 **The state.** A lock store written before the ledger existed — schema `version: 1`, no `ledger` key — fails `check` with the project-scoped `lock-ledger-pre-ledger` finding, and the three approval-recording commands (`claim lock`, `claim reaudit --confirm`, `build-order lock`) refuse with `error.code: pre_ledger_unadopted`. Both happen **only while the project still holds a locked claim or a locked build order.** Hold nothing locked and both are silent.
 
-**The crossing.** The order is load-bearing, not cosmetic: `build-order propose` requires the module still fully locked, so re-proposing has to happen *before* any claim is unlocked — unlock first and propose then refuses, leaving the locked order with no way to be released.
+**The crossing.** The order is load-bearing, not cosmetic: `build-order propose` requires the module still fully locked, so re-proposing has to happen *before* any claim is unlocked — unlock first and propose then refuses, leaving the locked order with no way to be released. One decision belongs before the first command, per module: will you re-lock *every* claim in it at step 3? A build order exists only over a fully locked module, and step 1 releases the approved sequence — so a module you re-lock only partially finishes the crossing gate-green but without a locked build order, and its step 4 waits until the day its last claim locks.
 
 ```sh
 # 1. FIRST, for every module whose build order is locked:
@@ -247,7 +249,9 @@ dossierx claim unlock <id> --reason "<your words>"
 # 3. then re-lock only what you still stand behind:
 dossierx claim lock <id> --reason "<your words>"
 
-# 4. then the build orders again:
+# 4. then the build orders again, for every module that is fully locked
+#    again. A module you re-locked only partially has nothing to propose
+#    yet — run this pair for it on the day its last claim locks:
 dossierx build-order propose --module <m>
 dossierx build-order lock --module <m> --reason "<your words>"
 ```

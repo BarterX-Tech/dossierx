@@ -228,6 +228,7 @@ type ciStep struct {
 	Name             string         `yaml:"name"`
 	Uses             string         `yaml:"uses"`
 	Run              string         `yaml:"run"`
+	Shell            string         `yaml:"shell"`
 	WorkingDirectory string         `yaml:"working-directory"`
 	With             map[string]any `yaml:"with"`
 	Env              map[string]any `yaml:"env"`
@@ -1031,5 +1032,273 @@ func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests(t *testing
 			"THE RECOVERY IS TO MOVE THEM TOGETHER: set both to the version you intend to ship, in the same change, and re-run the suites so the citations are re-checked against it. Neither pin may be left floating (`latest`, `nightly`, a `~>` range): a version chosen on tag day is a version no run in this repository has ever exercised.",
 			releaseWorkflowPath, published, goreleaserVersionKey, strings.TrimSuffix(goreleaserAction, "@"),
 			ciWorkflowPath, tested, goreleaserVersionEnv)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// The hooks job's PowerShell suite.
+// ---------------------------------------------------------------------------
+
+// hookSmokeCommand is the parsed command that identifies the job exercising
+// the git-hook installers. The job is found by what its steps DO — the same
+// rule every lookup in this file follows, and for the same reason: a job name
+// travels with whoever renames it, while the command is the subject itself.
+const hookSmokeCommand = "scripts/hook-smoke-test.sh"
+
+// pesterSuiteFile is the Pester suite that exercises install-git-hook.ps1 —
+// Find-Bash's WSL-launcher guard with mocks, and the wrapper end to end.
+const pesterSuiteFile = "scripts/install-git-hook.Tests.ps1"
+
+// TestTheHooksJobDeclaresThePowerShellInstallerSuite is a claim about one
+// document, named for exactly what it checks.
+//
+// WHY IT EXISTS. install-git-hook.ps1 shipped for multiple releases while no
+// CI job ever started pwsh: the hooks job ran the sh suite through bash on
+// windows-latest, so the PowerShell wrapper was verified by being read, and
+// its Find-Bash defect — accepting WSL's System32 launcher as a bash — was
+// found by a reader, never by a run. The Pester step this test pins is what
+// closed that. Pinning it here is what keeps it closed: the step lives in a
+// job whose other step is a shell script, so no go-test account, no module
+// wiring check and no suite lookup in this file would notice its deletion.
+//
+// WHAT IT ESTABLISHES: that the job whose steps run the hook smoke test also
+// declares a parsed `Invoke-Pester` over scripts/install-git-hook.Tests.ps1,
+// under `shell: pwsh` — bash has no Invoke-Pester, and the default shell on a
+// run step is bash on every runner this matrix names, so a step that forgot
+// the key would be declaring a command its shell cannot resolve. The suite
+// file itself must exist, for the reason ciViewerSuiteJob stats the module:
+// an invocation pointing at nothing would make every assertion here a claim
+// about a string two files happen to share.
+//
+// WHAT IT CANNOT ESTABLISH, the boundary this file's header draws: that the
+// step EXECUTES. The step carries `if: runner.os == 'Windows'` — Pester ships
+// on windows-latest and not on the other two images, and the wrapper exists
+// for Windows PowerShell users — and this file reads `if:` nowhere, on
+// purpose; whether any step ran is a fact about a run. Nor can the run be
+// counted the way the Go suites are: Invoke-Pester emits no `go test -json`
+// account, so tests/ci_run_evidence_test.go cannot see it either — the same
+// stated residue as the smoke test it sits beside. What is closed is the
+// silent-deletion channel, which is the one that actually happened.
+func TestTheHooksJobDeclaresThePowerShellInstallerSuite(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(ciRepoRoot(t), filepath.FromSlash(pesterSuiteFile))); err != nil {
+		t.Fatalf("%s does not exist (%v): the step this test pins would invoke a file that is not there, and every assertion below would be about a string rather than a suite", pesterSuiteFile, err)
+	}
+
+	wf := ciLoadWorkflow(t, ciWorkflowPath)
+
+	// The job, by conduct: its steps parse to a command running the smoke
+	// test. Exactly one — zero is the deletion case, and two would leave this
+	// test unable to say which runner the Pester declaration belongs to.
+	var hookJobs []string
+	for _, name := range ciJobNames(wf) {
+		declares := false
+		for _, step := range wf.Jobs[name].Steps {
+			for _, argv := range ciCommands(step.Run) {
+				for _, arg := range argv {
+					if arg == hookSmokeCommand {
+						declares = true
+					}
+				}
+			}
+		}
+		if declares {
+			hookJobs = append(hookJobs, name)
+		}
+	}
+	if len(hookJobs) != 1 {
+		t.Fatalf("expected exactly one job in %s to run %s, found %d (%v). The Pester suite is required in THAT job — same runner matrix, same subject — and with no single such job there is nowhere for this requirement to point.\nThis is a failure and not \"nothing to check\": a check that cannot locate its subject has not passed over it",
+			ciWorkflowPath, hookSmokeCommand, len(hookJobs), hookJobs)
+	}
+	jobKey := hookJobs[0]
+
+	// The declaration, parsed. `Invoke-Pester` must be the command of some
+	// step in this job and the suite file one of its arguments — a mention in
+	// a comment inside a run body parses to nothing, which is the point.
+	for _, step := range wf.Jobs[jobKey].Steps {
+		for _, argv := range ciCommands(step.Run) {
+			name, rest, _, ok := ciCommandName(argv)
+			if !ok || !strings.EqualFold(name, "Invoke-Pester") {
+				continue
+			}
+			for _, arg := range rest {
+				if arg != pesterSuiteFile {
+					continue
+				}
+				if step.Shell != "pwsh" {
+					t.Fatalf("job `%s`'s step %q invokes Pester over %s but declares `shell: %q`, and the default step shell is bash on every runner this workflow names — bash has no Invoke-Pester, so as declared this step cannot succeed anywhere. Declare `shell: pwsh` on it",
+						jobKey, step.Name, pesterSuiteFile, step.Shell)
+				}
+				return
+			}
+		}
+	}
+	t.Fatalf("job `%s` in %s — the one job running %s — declares no parsed `Invoke-Pester` command naming %s in any step.\n"+
+		"That suite is the ONLY thing in CI that executes install-git-hook.ps1: the wrapper shipped for multiple releases verified by nothing but reading, which is how its Find-Bash defect (accepting WSL's System32 launcher) shipped. Without this step the PowerShell path is back to being prose.\n"+
+		"The body is parsed rather than searched, so naming the file in a comment satisfies nothing.",
+		jobKey, ciWorkflowPath, hookSmokeCommand, pesterSuiteFile)
+}
+
+// TestTheReleasePageHasAFooterPointingAtTheChangelog holds the deliverable of
+// issue #33: every published release page carries a pointer to the document
+// where breaking changes are actually explained.
+//
+// WHY THE PAGE NEEDS ONE. Everything a release page shows is generated — grouped
+// commit subjects, with `^docs:`, `^chore:` and `^Merge` filtered out. That
+// presentation cannot distinguish a breaking change from any other feature.
+// v0.5.0's appeared there as the ordinary Features bullet "feat(lint): detect
+// cycles that alternate rests_on and governed_by", with no BREAKING framing, no
+// statement that a previously-passing corpus now exits 1, and no pointer to the
+// recovery. The audience most likely to read only the release page got the least
+// warning. This is about REACH, not correctness: the hand-written CHANGELOG entry
+// is substantive and is not being replaced by generated notes.
+//
+// WHAT THIS TEST DOES NOT CHECK, and deliberately. It does not assert the
+// footer's prose, which is editorial. And it does not assert that the footer
+// resolves no template — LoadReleaseNotesConfig in release_notes_predict_lib_test.go
+// owns that, because a templated footer is a defect in the release-notes
+// PREDICTION first (that predictor has no template engine, so it would predict
+// unrendered source and report a mismatch on every release) and its refusal
+// carries the measurements. One invariant, one owner.
+func TestTheReleasePageHasAFooterPointingAtTheChangelog(t *testing.T) {
+	const configPath = ".goreleaser.yaml"
+	path := filepath.Join(ciRepoRoot(t), configPath)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v\nThis check is about what the published release page renders; without the file there is nothing to check and nothing has been checked", configPath, err)
+	}
+
+	// Comment lines are dropped for the reason the sibling test gives: the block
+	// above the footer has to NAME a template in order to explain why there is
+	// not one, and a raw scan would fail on that explanation.
+	var live []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		live = append(live, line)
+	}
+
+	// The footer is a YAML block scalar, so it runs from `footer: |` to the next
+	// line indented no further than the key. Reading it as a block rather than
+	// scanning the whole file is what keeps this test about the footer: the
+	// ldflags and the archive name_template are full of `{{ }}` and are supposed
+	// to be, since both resolve during the BUILD, where a failure is a red run
+	// and not a published page.
+	var footer []string
+	inFooter := false
+	for _, line := range live {
+		trimmed := strings.TrimSpace(line)
+		if !inFooter {
+			if trimmed == "footer: |" {
+				inFooter = true
+			}
+			continue
+		}
+		if trimmed != "" && !strings.HasPrefix(line, "    ") {
+			break
+		}
+		footer = append(footer, line)
+	}
+
+	if !inFooter {
+		t.Fatalf("%s declares no `footer: |` under its `release:` block.\n\n"+
+			"That footer is the only thing on a published release page that points at the CHANGELOG. Without it the page carries grouped commit subjects and nothing else, and a breaking change reads as an ordinary Features bullet — which is the whole of issue #33.\n\n"+
+			"If the footer moved to a different form (`footer:` on one line, or a `body:`), move this test with it: the property being held is that the published page resolves no template, and that property does not depend on the spelling.",
+			configPath)
+	}
+
+	body := strings.Join(footer, "\n")
+	if strings.TrimSpace(body) == "" {
+		t.Fatalf("%s's `footer: |` block is empty, so the published release page gains nothing. An empty footer passes `goreleaser check` and renders as nothing at all", configPath)
+	}
+
+	if !strings.Contains(body, "CHANGELOG.md") {
+		t.Fatalf("%s's release footer no longer names CHANGELOG.md, so a published release page points at nothing.\n\n"+
+			"The generated notes above it are grouped commit subjects, and a `feat` line reads exactly the same whether or not it breaks a consumer's build — v0.5.0's breaking change appeared there as an ordinary Features bullet. The footer is the one line telling a reader where that is explained.\n\n"+
+			"The footer reads:\n%s", configPath, body)
+	}
+}
+
+// TestTheReleaseGateDoesNotAskTheForgeForOriginMain pins the shape of the forge's
+// own precondition, because nothing else in this repository did.
+//
+// WHY THIS TEST EXISTS AT ALL. Through v0.5.1 the gate job required the tagged
+// commit to be reachable from origin/main, and that requirement DEADLOCKED with
+// the release driver. The driver's order is D6 push the tag, D7 verify the six
+// archives, D8 push main — tag first, deliberately, so main never publishes a
+// site announcing a release whose archives do not exist. The gate job fires on
+// the tag push, at D6, and asked there for a branch the driver pushes at D8: it
+// refused, no archives were built, D7 waited for archives that could never
+// exist, D8 was never reached and origin/main never moved. Nothing in that ring
+// can move first, so no timeout resolves it. It stopped the v0.5.1 release with
+// the tag public and nothing else done.
+//
+// The guard was replaced with a fact about the tagged commit alone — that it is
+// a merge — and the reasoning was written into release.yml's header and
+// docs/RELEASING.md. THAT WAS THE WHOLE RECORD, and prose is not a check: the
+// deletion was invisible to `go test ./...`, and so is restoring it. A future
+// reader who finds merge-ness weaker than reachability, which it is, would be
+// right about the strength and wrong about the consequence, and the symptom
+// arrives only at the next release — a public tag with no archives behind it.
+//
+// So this test refuses the restoration by name and says why, and it reads the
+// workflow AS TEXT on purpose: the guards live inside a shell `run:` block, so a
+// YAML-shaped read would see one opaque string and could not tell which check it
+// contains.
+func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
+	path := filepath.Join(ciRepoRoot(t), filepath.FromSlash(releaseWorkflowPath))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v\nThis check is about which precondition that workflow puts on a tag; without the file there is no precondition to read and nothing has been checked", releaseWorkflowPath, err)
+	}
+	// COMMENT LINES ARE DROPPED, and that is not a convenience. release.yml's
+	// header explains at length why the origin/main check went, and explaining
+	// it requires NAMING it — as does the recovery note inside the gate script
+	// itself. Scanning the raw file would fail on its own documentation and
+	// leave a maintainer with one bad choice: delete the explanation to make the
+	// test green, which throws away the only account of why the guard must not
+	// come back. So the subject is the executable lines.
+	//
+	// A whole-line reader is the right shape here and its residual is stated
+	// rather than hidden: an idiom placed after a `#` on a line that also
+	// carries code would be missed. It cannot hide a live guard, because
+	// anything after `#` on a shell line is itself a comment — the only thing it
+	// could hide is a YAML value with a literal `#` in it, and this workflow has
+	// none.
+	var live []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		live = append(live, line)
+	}
+	body := strings.Join(live, "\n")
+
+	// Both spellings, because either one alone reintroduces the wait. The fetch
+	// refspec is how the branch is obtained and the ancestry test is how it is
+	// used; a restoration that reached for only one of the two would still be a
+	// job blocking on a ref the driver has not pushed.
+	for _, banned := range []struct{ idiom, why string }{
+		{"merge-base --is-ancestor", "the ancestry test itself"},
+		{"refs/remotes/origin/main", "the branch it compares against"},
+	} {
+		if strings.Contains(body, banned.idiom) {
+			t.Fatalf("%s contains %q — %s.\n\n"+
+				"THIS DEADLOCKS THE RELEASE. The gate job fires on the TAG push, which is the driver's D6. The driver pushes main at D8, two steps later, with D7 (verify the six archives) in between. So this job refuses, no archives are built, D7 waits for archives that can never exist, D8 is never reached, and origin/main never moves. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: D7 polled twenty minutes, this job refused every run, and the release stopped with the tag public and nothing else done.\n\n"+
+				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, the DRIVER has to push main before the tag, and that trade is a real one — deploy-site fires on the main push, so the site can announce a release whose archives are still building. Move the driver's order in cmd/dossierx/gate_driver_test.go first, then this test, then the guard, in that order and in one change.\n\n"+
+				"What the gate checks instead is that the tagged commit is a merge, which is a fact about the commit alone and so holds at D6. Its limits are written out in %s's own header.",
+				releaseWorkflowPath, banned.idiom, banned.why, releaseWorkflowPath)
+		}
+	}
+
+	// And the replacement is present. Without this half the test passes over a
+	// gate job whose (a) check was deleted outright rather than substituted,
+	// which is a weaker forge than either design intended and reads identically
+	// from here.
+	if !strings.Contains(body, "rev-list --parents") {
+		t.Fatalf("%s no longer reads the tagged commit's parent count, so nothing in the gate establishes that the tag names a MERGE.\n\n"+
+			"That check is what replaced the origin/main reachability test, and it is the only thing standing between a release and a tag on the release branch as it stood BEFORE it was merged — which already carries this release's stamp and so gets past the stamp check unnoticed.\n\n"+
+			"If it moved to a different idiom, move this assertion with it in the same change. If it was deleted, the gate now refuses nothing about which commit was tagged.",
+			releaseWorkflowPath)
 	}
 }

@@ -12,10 +12,19 @@ that job passes does GoReleaser run, building the six platform archives, stampin
 `main.version` / `main.commit` / `main.date` via ldflags, generating the GitHub
 release notes from Conventional Commit subjects, and publishing.
 
-That file records one residual rather than describing it as fixed: the workflow
-GitHub runs for a tag is the one in the tagged tree, so anyone with push rights can
-weaken the gate and tag that commit. Nothing in this repository closes it — a check
-cannot be its own enforcement — and only a forge-side tag protection rule can.
+That file records one residual, and where its enforcement actually lives: the
+workflow GitHub runs for a tag is the one in the tagged tree, so anyone who can
+create a `v*` tag can weaken the gate in a copy of it and tag that commit. Nothing
+in this repository closes that — a check cannot be its own enforcement — and only a
+forge-side rule restricting who creates such tags can refuse the tag itself. That
+rule cannot be created from inside this repository either, but its absence is now a
+checked precondition rather than a recorded residual: the driver's D1 asks the
+forge for an active tag ruleset covering `refs/tags/v*` that restricts creation and
+update, and refuses the release — before anything is merged, tagged or pushed —
+when the rule is absent, when the answer cannot be read, or when the rule does not
+cover the tag being released. What that check narrows, what it cannot close, and
+what a maintainer configures is all in **The forge restricts who can create release
+tags** under *Before tagging* below.
 
 You do not push that tag by hand either. The irreversible half of a release is
 `make release-publish`, a nine-step driver whose preconditions include the gate
@@ -24,6 +33,82 @@ document is for is the half a program cannot do: reading the findings, ruling on
 them, and the three post-publish checks that leave this repository entirely.
 
 ## Before tagging
+
+- [ ] **The forge restricts who can create release tags.** One-time forge
+      configuration, not per-release work — but it is first here because the
+      driver's D1 refuses every release until it exists, and because it is the
+      one piece of this procedure the repository cannot carry. Every other
+      guarantee a release makes is enforced by files in the tree being
+      released, and the workflow GitHub runs for a tag is the one in the
+      tagged tree: without a forge-side rule, anyone with push rights can
+      weaken the gate in a copy of it, tag that commit, and be published by
+      the weakened rules. The rule below is what makes the forge refuse that
+      tag at push time. The driver checks that the rule EXISTS before it
+      publishes; it cannot create it, and neither can anything else in this
+      tree.
+
+      Configure it as a **repository ruleset** — Settings → Rules → Rulesets →
+      New tag ruleset. (Not the older "tag protection rules": GitHub sunset
+      that feature and removed its API in August 2024, so anything configured
+      or scripted against it protects nothing now. Rulesets are the current
+      mechanism, and the rulesets API is what the driver reads.)
+
+      - **Enforcement: Active.** "Evaluate" is a dry run and "Disabled" is
+        off; the driver refuses both by name, because a rule that only
+        observes restricts nobody.
+      - **Target: tags, with the pattern `v*`** — stored and read back as
+        `refs/tags/v*`. Every release this repository has ever tagged matches
+        it, and the driver requires the pattern to cover the exact tag being
+        released, not merely to exist.
+      - **Restrict creations, and restrict updates.** Creation is the gap
+        itself; update is the same gap through a different door — a
+        force-moved existing tag is an update, and a tag push, force or not,
+        is what fires the Release workflow. The driver requires both.
+        **Restrict deletions too**, though the driver does not require it: a
+        deleted tag runs nothing and recreating one is a creation, so
+        deletion is not the weakened-workflow gap — but leaving it open lets
+        anyone erase a published tag that consumers already resolve.
+      - **Bypass list: repository admins at most** — ideally only whoever
+        operates `make release-publish`. The driver confirms the rule exists
+        and covers the pattern; it does NOT read who can bypass it, because
+        bypass entries name roles, teams and apps it cannot resolve to
+        people. A ruleset whose bypass list includes everyone with write
+        access passes the driver's check and restricts nobody. Reading that
+        list stays yours, every time this rule is touched.
+
+      Read the configuration back the way the driver does:
+
+          gh api repos/BarterX-Tech/dossierx/rulesets
+          gh api repos/BarterX-Tech/dossierx/rulesets/<id>
+
+      The first lists every ruleset with its `target` and `enforcement`
+      (org-owned rulesets that apply to this repository included); the second
+      shows one ruleset's `conditions.ref_name` patterns and its `rules`. What
+      the driver requires is one ruleset with `"target": "tag"`,
+      `"enforcement": "active"`, an include pattern covering the release tag
+      and no exclude covering it, and rules of type `creation` and `update`.
+      A classic token needs the `repo` scope (`public_repo` suffices while
+      the repository is public); a fine-grained token needs the repository
+      `Metadata: read` permission. When the forge turns the token away, the
+      driver's refusal names the missing scope — and note that GitHub answers
+      404, not 403, for a private repository a token cannot see, so "Not
+      Found" from these commands usually means the token, not the URL.
+
+      **What this closes, and what it cannot.** It closes the standing state:
+      a forge that accepts a release tag from anyone with push rights, which
+      is the state this repository was in while the residual above was only
+      recorded. Three boundaries stay open, stated here rather than implied
+      shut, the same way `gate/method.yaml` states what it cannot promise
+      about the tool grant. The driver's answer crosses a network, so a
+      spoofed or captive answer can report a restriction that does not exist;
+      the rule can be deleted after the driver's check and before the tag
+      lands, a window only the rule itself — enforced by the forge at push
+      time, not read by a check — actually covers; and a rule that exists may
+      still be hollow through its bypass list, which is the reading this item
+      leaves with you. The driver also refuses, rather than guesses, when a
+      pattern uses fnmatch syntax it has not measured — if you write the
+      pattern as anything other than literals, `*` and `**`, expect a refusal
+      that names the pattern, not a pass.
 
 - [ ] **`go test ./...` passes**, including the two suites it does not reach on
       its own — see [CONTRIBUTING.md](../CONTRIBUTING.md#the-two-suites-go-test--does-not-reach).
@@ -102,9 +187,10 @@ them, and the three post-publish checks that leave this repository entirely.
         several thousand lines of JSON rather than one `ok <pkg> <time>` line per
         package. Do not try to skim it — that is what the record above is for.
         What is worth a glance is whether the run contains jobs the command did
-        *not* account for: `hooks` runs a shell script, which emits no countable
-        account of anything, so a smoke test that degenerated into asserting
-        nothing still reaches you as a green conclusion.
+        *not* account for: `hooks` runs a shell script and, on Windows, a
+        Pester suite, neither of which emits an account the evidence command
+        counts, so a smoke test that degenerated into asserting nothing still
+        reaches you as a green conclusion.
       - the run exists and belongs to this commit at all. A workflow whose
         triggers or `paths:` filter stopped matching produces no run, and a
         commit with nothing to report reads as a commit with nothing wrong. The
@@ -135,18 +221,26 @@ them, and the three post-publish checks that leave this repository entirely.
       the comparison was against is the whole value of this gate.
 
       **1. Stage the run's evidence — each artifact by its producer, never by
-      hand.** A bundle is assembled from four things: the surface's question
+      hand.** A bundle is assembled from five things: the surface's question
       (`gate/prompts/<surface>.md`), the surface's own files read out of the tree,
-      the committed inventory `surface.json`, and the six uncommitted artifacts
+      the documents the surface's `reads:` list in `surfaces.yaml` borrows from
+      other surfaces (handed over as context, marked "NOT yours to report on" —
+      ownership and the duty to review stay with the surface that claims the
+      file), the committed inventory `surface.json`, and the six uncommitted artifacts
       under `gate/` produced below. Only those six are staged here, and the
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
-      be at those paths on the day of the run is what the agents read — and a
-      hand-written `gate/delta.json` hashes into all thirteen keys exactly as
-      cleanly as a real one. Produce them:
+      be at those paths on the day of the run is what the agents read. `record`
+      can hold three of the six to account — the delta by recomputing it, the
+      two stamped captures by reading the tree each names on its own face — and
+      the other three it can only digest, so a hand-written
+      `gate/export-output.json` is recorded exactly as cleanly as a real one.
+      Produce them:
 
-          # the rendered site text, extracted from a real build in a real browser
+          # the rendered site text, extracted from a real build in a real
+          # browser and stamped with the tree that build was made from
           DOSSIERX_SITE_TEXT_OUT="$ROOT/gate/site-text.json" \
+          DOSSIERX_SITE_TEXT_TREE="$TREE" \
           DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
           DOSSIERX_TEST_BROWSER=/path/to/chrome \
           make viewer-test
@@ -167,7 +261,7 @@ them, and the three post-publish checks that leave this repository entirely.
             -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
 
           # the resolved baseline inventory, and the surface delta over it
-          scripts/gate-stage2/run.sh delta --tree "$TREE" \
+          scripts/gate-stage2/run.sh delta \
             --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
             --baseline-file "$ROOT/surface.baseline.json"
 
@@ -183,10 +277,41 @@ them, and the three post-publish checks that leave this repository entirely.
       relative `gate/…` lands under `tests/` and the gate then looks for an
       artifact nobody produced.
 
+      **The two `DOSSIERX_SITE_TEXT_*` variables imply each other, and the
+      extraction fails loudly when only one is set.** `DOSSIERX_SITE_TEXT_TREE`
+      is the same full 40-digit tree object name everything else in this run is
+      keyed to — `$TREE`, never a tag and never an abbreviation; the producer
+      refuses both. The extraction writes it into `gate/site-text.json` as the
+      document's FIRST field, and `record` reads it back and refuses a capture
+      stamped with any other tree. The stamp exists because this is the one
+      artifact `record` cannot check by recomputing — an extraction needs this
+      build and a real browser — and before it existed the capture named which
+      node and npm built the site and nothing that named a RELEASE, so an
+      extraction left on disk from the previous gate run recorded cleanly and
+      was hashed into the `site` surface's key as this release's rendered DOM.
+      A stale capture is now refused rather than hashed cleanly into a key.
+      What the stamp cannot promise, exactly as `gate/render-diff.json`'s
+      cannot: that the working tree the build read was clean at that identity —
+      the extraction records the value it was handed, verbatim.
+
+      **`delta` takes no `--tree`, and that is a decision rather than an
+      omission.** The delta is a pure function of `surface.json` and the
+      resolved baseline, and its bytes are hashed into every surface's key and
+      assembled into every surface's bundle — so the tree stamp it used to
+      carry moved on every commit, re-keyed all thirteen surfaces every time,
+      and the carry-forward machinery never once fired: a one-character README
+      fix re-ran thirteen reading agents. The freshness the stamp bought is
+      bought the stronger way now — `record` re-derives the whole document
+      from the same two files and refuses on any byte of disagreement, which
+      catches every stale delta the stamp caught and also the hand-written one
+      the stamp waved through whenever it happened to say the right tree. (The
+      script's global parser still accepts `--tree`, so an invocation copied
+      from an older revision of this file runs; the value is unused.)
+
       **`surface.json` reaches all thirteen agents and is deliberately not on
       that manifest.** It is the mechanical inventory every surface's prose is
       judged against — commands, flags, lint rules, error codes, the envelope,
-      the counts, the four version pins — so leaving it unmentioned here is how a
+      the counts, the version pins — so leaving it unmentioned here is how a
       maintainer comes to believe the evidence set is closed at six. It is not
       staged because staging it would attest less than what already holds:
       `cmd/dossierx/surface_test.go` is both halves of one contract, writing the
@@ -203,12 +328,50 @@ them, and the three post-publish checks that leave this repository entirely.
       likewise unstaged: they are tracked and reviewed (`gate/.gitignore` ignores
       only what a run produces), and they are the QUESTION rather than the
       evidence. Neither is thereby unwatched. Both are hashed into the surface
-      key: `surface.json` is one of the four SHARED evidence files every
-      surface's fingerprint covers — beside `gate/baseline.json`,
-      `gate/delta.json` and `gate/site-text.json` — and the prompt sources are
-      hashed into `method_version`, which the same fingerprint hashes in beside
-      them. Change a byte of either and every surface is re-read rather than
-      carried forward.
+      key: `surface.json` is one of the three SHARED evidence files every
+      surface's fingerprint covers — beside `gate/baseline.json` and
+      `gate/delta.json`; the set is `gateSharedEvidence` in
+      `cmd/dossierx/gate_fingerprint_test.go`, and this sentence restates it —
+      and the prompt sources are hashed into `method_version`, which the same
+      fingerprint hashes in beside them. Change a byte of any of these and
+      every surface is re-read rather than carried forward.
+
+      **The gate's own definition is hashed into every key too.** Every surface
+      key carries a gate-integrity digest over the files that decide what the
+      gate IS: the `cmd/dossierx/gate_*_test.go` files (the verdict predicate,
+      carry-forward, the bundle assembler, freshness, the fan-out), the
+      inventory emitter and its meta-tests (`cmd/dossierx/surface*_test.go`),
+      the harness (`scripts/gate-stage2/`), and `surfaces.yaml` — the set is
+      `gateIntegrityPatterns` in `cmd/dossierx/gate_integrity_test.go`, resolved
+      against `git ls-files`, and this sentence restates it. Change a byte of
+      any of those and every surface is re-read, for the same reason a prompt
+      edit re-reads: a verdict is a function of the rules as much as of the
+      evidence, and a PASS recorded under rules that no longer exist attests
+      nothing about the rules that do. Before this digest existed, weakening the
+      verdict predicate moved zero keys and a release could go out green under a
+      gate nobody re-read. Two boundaries to know: `gate/method.yaml`'s model
+      and tool list and the `gate/prompts/` files are deliberately NOT in this
+      digest — they reach the keys by their own routes (`method_version` and the
+      bundle), and a single reworded prompt re-reads one surface rather than
+      thirteen, by design. And the digest makes a rules change LOUD, not
+      impossible: anyone with push rights can still weaken the gate and re-run
+      it under the weakened rules — the digest guarantees the change costs a
+      full fan-out and sits in the diff a human reviews, and only a forge-side
+      review requirement on those paths, outside this tree, closes the rest.
+
+      `gate/site-text.json` used to be the fourth member of that set and no
+      longer is, because SHARED means read by EVERY agent and the rendered
+      site text is read by the `site` agent alone. Folded into the shared set,
+      every re-extraction of the site — every release, since the extraction is
+      per-run evidence — re-keyed all thirteen surfaces. It now reaches
+      exactly one key the way the other single-reader captures always have:
+      the assembler hands the `site` surface its capture verbatim, so the
+      bundle digest covers those bytes for the one surface that reads them and
+      for no other — `TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther`
+      holds that true. What the demotion buys is the cache working at all: a
+      site change moves the `site` key and leaves the other twelve carrying
+      forward, instead of re-keying every surface over twelve documents
+      nothing touched.
 
       **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
       the previous release.** That release shipped before the surface emitter
@@ -224,9 +387,15 @@ them, and the three post-publish checks that leave this repository entirely.
 
       Skipping any of this does not produce a smaller gate, it produces a failed
       one. The freshness check refuses with "it was found on disk rather than
-      produced, and found on disk is not produced", and `record` refuses outright
-      to name an artifact that says on its own face it was computed over another
-      tree or against another baseline.
+      produced, and found on disk is not produced", and `record` holds every
+      guarded artifact to account before it will name one — in one of two ways.
+      The two captures it cannot recompute, the render diff and the site
+      extraction, are refused when the stamp on their own face names another
+      tree or another baseline. `gate/delta.json` carries no stamp to read:
+      `record` re-derives it outright from `surface.json` and
+      `gate/baseline.json` and refuses on any byte of disagreement — a delta
+      computed before a fix moved the inventory, one computed against another
+      baseline, and one written by hand all fail the same comparison.
 
       **2. Produce the fan-out.**
 
@@ -244,6 +413,15 @@ them, and the three post-publish checks that leave this repository entirely.
       whole, and it never shrinks to twelve. There is exactly one implementation
       of it, `TestGateFanoutProduce` in `cmd/dossierx/gate_fanout_test.go`; the
       shell wraps that and re-implements nothing.
+
+      A `reads:` entry in `surfaces.yaml` that no longer resolves — the borrowed
+      file moved or was deleted — is one of those whole-production refusals, and
+      the fix is the manifest edit the refusal names, never deleting the entry
+      to get past it: the entry exists because an agent once had to answer a
+      question without that file, and deleting it re-creates that round. The
+      borrowed bytes are inside the borrower's bundle and therefore inside its
+      key, so editing a borrowed document re-runs the surfaces that declared it
+      (and its owner, whose key covers it as a document) and no others.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. They are
@@ -265,11 +443,16 @@ them, and the three post-publish checks that leave this repository entirely.
 
       That reads `gate/fanout.json` for the run this checkout was fanned out
       under, refuses a surface `surfaces.yaml` does not declare, refuses a
-      payload carrying anything beyond those three keys — a `surface` or a
-      `fingerprint` written by the agent would otherwise be dropped in silence —
-      computes the key, and puts the assembled answer through the SAME validation
-      the collection applies, so a malformed answer is refused here, in front of
-      you, rather than at the end of the run. It then writes
+      payload carrying anything beyond those three keys — a `fingerprint`
+      written by the agent would otherwise be dropped in silence — holds every
+      finding to the finding schema (`surface`, `rule`, `consequence`,
+      `failure_scenario`, `blocking`, `detail`, optionally `about`; a
+      `severity` from a runner ported from the old schema is refused by name,
+      and so is an empty or adjective-only `failure_scenario` or any value
+      outside a closed vocabulary), computes the key, and puts the assembled
+      answer through the SAME validation the collection applies, so a
+      malformed answer is refused here, in front of you, rather than at the
+      end of the run. It then writes
       `gate/answers/<surface>.json`. `-count=1` is part of the invocation as
       belt and braces, not as the thing holding the belt: a replayed cache would
       print `ok (cached)`, write nothing, exit 0, and never reach the refusal
@@ -290,27 +473,49 @@ them, and the three post-publish checks that leave this repository entirely.
       An answer that is missing, unparseable, or attributed to a different run is
       a FAILED gate; it is never a gate over twelve surfaces.
 
-      **4. Then loop, and expect to.** Any finding at all makes the receipt
-      FAILED — there is no severity threshold, and nothing waves a finding
-      through. The gate surfaces and never fixes, so the fixes are yours, and a
-      fix moves the tree. Every artifact above is keyed to a tree, so NOTHING
-      staged for the old one is reusable: CI, `make ci-evidence` for the new
-      merge commit, and the whole of this item are produced again against the new
-      `$TREE`. Repeat until no surface reports a finding.
+      **4. Then loop, and expect to.** What makes the receipt FAILED is a
+      BLOCKING finding, and blocking is decided by the finding's own recorded
+      fields, not by a count and not by anyone's adjective: a finding whose
+      `consequence` is `acts-wrongly` — a reader following the document does
+      the wrong thing — blocks unconditionally, at every reach, with no
+      override; any other finding blocks exactly when the agent that raised it
+      judged it `blocks`. A finding judged `deferrable` does not stop the
+      release and is not dropped for it: it stays on the receipt in full and
+      reaches you with everything else. The gate surfaces and never fixes, so
+      the fixes are yours, and a fix moves the tree. So produce this item again
+      against the new `$TREE`, end to end: CI, `make ci-evidence` for the new
+      merge commit, the captures, `delta`, `record`, a fresh fan-out. The
+      tree-stamped captures leave no room to cut that short — `record` refuses
+      their old stamps by name. The one artifact deliberately NOT keyed to a
+      tree is `gate/delta.json`: its freshness is recomputation, so when the fix
+      moved no inventory the delta on disk is byte-for-byte the one the new tree
+      would produce and re-recording it is honest — that reuse is the cache
+      working, not a step skipped — and when the fix moved `surface.json`,
+      `record` refuses it until `delta` is re-run. Repeat until no surface
+      reports a blocking finding.
 
-      **5. Read the findings yourself before you authorize anything.** Nothing is
-      filtered, deduplicated away or dropped on the way to you. Each finding
-      carries a severity, but that word is the reporting agent's own about its own
-      work — no verdict, filter or threshold in the gate consults it — so the
-      ruling is yours, not the agent's. There is also no override field on the
-      receipt, so a finding you judge non-blocking has exactly two ways off it:
-      fix the tree, or delete the finding from `gate/answers/<surface>.json` by
-      hand. Know what the second one costs before you reach for it — a deleted
-      finding leaves no trace, so an adjudicated finding becomes indistinguishable
-      from one nobody ever raised, and the next reader of that record cannot tell
-      that you looked. Why the classifier that would derive a finding's weight
-      from its evidence was not built, and why no override record was added in its
-      place, is recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
+      **5. Read the findings yourself before you authorize anything.** Nothing
+      is filtered, deduplicated away or dropped on the way to you — the
+      deferrable findings included. Each finding carries its agent's judgement
+      (`consequence`, `failure_scenario`, `blocking`); the judgement is the
+      agent's and the gate honours it, so what is left for you is to read the
+      scenarios and disagree where you must. Disagreeing has exactly one shape
+      in each direction. A deferrable finding you judge blocking is a fix you
+      make before authorizing — the gate will not stop you from shipping over
+      it, so this is the one place your reading is the check. A blocking
+      finding you judge mistaken can only be cleared by disproving its own
+      `failure_scenario` — the sentence exists so that it CAN be disproven —
+      and then deleting the finding from `gate/answers/<surface>.json` by
+      hand, since there is still no override field on the receipt. Know what
+      that deletion costs before you reach for it: a deleted finding leaves no
+      trace, so an adjudicated finding becomes indistinguishable from one
+      nobody ever raised, and the next reader of that record cannot tell that
+      you looked. And know what it cannot touch at all: an `acts-wrongly`
+      finding is not deferrable and not signable-away by anyone — fix the
+      software, or show with evidence that there was never a defect. Why the
+      classifier that would derive a finding's weight from its evidence was
+      not built, and why no override record was added in its place, is
+      recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out
@@ -361,17 +566,28 @@ them, and the three post-publish checks that leave this repository entirely.
       that reports as unchanged the surfaces that changed.
 
       This used to be a `grep -rn --include="*.md" --include="*.yml"`, which does
-      not search `*.yaml` — and this repo has 232 of those against 10 `.yml`. It
-      missed nothing, but a sweep with a blind spot degrades into memory, which
-      is the exact thing this item exists to avoid. `git grep` needs no filter
-      list to keep current.
+      not search `*.yaml` — and when that sweep was retired this repo held 232
+      of those against 10 `.yml`. It missed nothing, but a sweep with a blind
+      spot degrades into memory, which is the exact thing this item exists to
+      avoid. `git grep` needs no filter list to keep current.
 
-      As of v0.5.0 that is `README.md` (the `go install` line and the
-      `install-git-hook.sh` raw URL), `skills/dossierx/SKILL.md` (the same raw
-      URL), and `scripts/ci/dossierx-check.yml` (the `go install` line — this
-      one is a template users copy into their own repository, so a stale pin
-      there ships a stale binary into someone else's merge gate). It went stale
-      through v0.3.0 and v0.3.1 and was found by a sweep, not by memory.
+      As of v0.5.1 that is FOUR pins across THREE files: `README.md` (the
+      `go install` line and the `install-git-hook.sh` raw URL),
+      `skills/dossierx/SKILL.md` (the same raw URL), and
+      `scripts/ci/dossierx-check.yml` (the `go install` line — this one is a
+      template users copy into their own repository, so a stale pin there
+      ships a stale binary into someone else's merge gate).
+
+      **Do not work from that list — work from the sweep, and treat the list
+      as a cross-check.** The list is a cache of what the sweep found last
+      time, and the hand-list form of it went stale through v0.3.0 and v0.3.1
+      before a sweep, not memory, caught it. Both counts above are derived,
+      not remembered: `surface.json`'s `version_pins` is the mechanical
+      answer, regenerated from the tree on every push, and
+      `TestTheReleasingPinParagraphMatchesTheMechanicalSweep` in
+      `tests/derived_facts_test.go` fails the build when this sentence and
+      that inventory disagree — when they do, this paragraph is the wrong
+      one.
 - [ ] **The embedded skills still describe this engine.** `skills/*/SKILL.md` is
       `go:embed`-ed into the binary and installed into *other people's*
       repositories by `dossierx skills export`, where it becomes the operating
@@ -415,11 +631,26 @@ them, and the three post-publish checks that leave this repository entirely.
       Do not reintroduce a hand-typed copy; each of those four had one, and
       three of them went stale.
 
-      **The `dossierx version` example reads `latestBinaryVersion`, not
-      `latestVersion`, and the difference is a leading `v`.** GoReleaser's
-      `{{.Version}}` strips it, so the archive published for `v0.5.0` prints
-      `dossierx version 0.5.0`. `v0.5.0` is right everywhere the site names the
-      RELEASE and wrong in a block depicting what a command prints.
+      **There is one version spelling, and it is the tag as tagged.** The
+      archive, `go install`, the git tag, this file's own commands and every
+      string on the site all read `vX.Y.Z`. Nothing derives a second form, and
+      the `dossierx version` example reads `latestVersion` like the rest.
+
+      That is newer than v0.5.1 and it was a real defect, not a tidy-up. The build
+      stamped `-X main.version={{.Version}}`, which is the tag with its leading
+      `v` stripped, so the published archive printed `dossierx version 0.5.1` —
+      while `go install …@v0.5.1` applies no ldflags at all, falls back to
+      `debug.ReadBuildInfo`, and gets the tag verbatim from the module proxy:
+      `v0.5.1`. One release answered the question two ways depending on how it
+      was installed, and a scripted
+      `dossierx version --format json | jq -r .data.version` compared against the
+      tag succeeded one way and failed the other. The site carried a second
+      constant, `latestBinaryVersion`, purely so the page could depict whichever
+      form the reader would actually see.
+
+      The stamp is `{{.Tag}}` now and both paths agree. If you find a stripped
+      derivation anywhere, the cause is `.goreleaser.yaml`, not the site —
+      `gateRequireReleaseTransform` names which template moved.
 - [ ] **The three committed sample viewers are regenerated.** This is the last
       item deliberately: regeneration has to reflect the branch's finished
       renderer, lint and CSS state, so it runs after everything above.
@@ -542,6 +773,32 @@ them, and the three post-publish checks that leave this repository entirely.
       page announcing that vX.Y.Z is the current release — while `Release`,
       which fires only on a tag push, has not built a single archive. Pushing
       `main` first therefore announces a release nobody can download.
+
+      **That order is also why the forge does not check `origin/main`, and this
+      is the one thing to read before changing either side.** `Release`'s gate
+      job used to require that the tagged commit be reachable from
+      `origin/main`. Both guards were right alone and together they deadlocked:
+      the gate job fires at the tag push, which is D6, and asks for a branch the
+      driver does not push until D8 — so it refused, so no archives were built,
+      so D7 waited for archives that could never exist, so D8 was never reached
+      and `origin/main` never moved. It is not a race that a longer timeout
+      resolves; nothing in the ring can move first. **Measured in v0.5.1:** D7
+      polled for twenty minutes, the gate refused every run, and the driver
+      stopped with the tag public and nothing else done. That release was
+      finished by hand, following the driver's own printed recovery.
+
+      What the forge checks instead is that the tagged commit **is a merge** —
+      a fact about the commit alone, so it holds at D6 with no branch to read.
+      That still refuses the ordinary mistake the old check was written for,
+      tagging the release branch instead of the merge. It does not refuse a
+      merge commit that was created locally and never pushed, and the release
+      stamp does not either, since a branch ready to merge already carries this
+      release's stamp. That residual is recorded in
+      `.github/workflows/release.yml`'s header, along with why the gate receipt
+      cannot close it: the receipt is never committed, on purpose.
+
+      **Do not restore the `origin/main` check without moving the driver
+      first.** On its own it re-creates the deadlock exactly.
 
       **Name the merge commit explicitly.** `git tag -a vX.Y.Z` with no ref tags
       HEAD, which is only right when nothing has landed since the merge; the

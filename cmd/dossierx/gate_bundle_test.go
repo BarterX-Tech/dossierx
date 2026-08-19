@@ -101,6 +101,30 @@ type gateBundleSpec struct {
 	// where that totality is enforced, because only there is the resolved set in
 	// hand.
 	Withheld []string
+	// Referenced are documents this surface DOES NOT OWN, handed over as
+	// context. They come from the surface's `reads:` list in surfaces.yaml,
+	// resolved by gateSurfaceReferences.
+	//
+	// WHY THEY EXIST. surfaces.yaml claims every tracked file for exactly one
+	// surface, and this spec splits that one surface's set into Handed and
+	// Withheld. So a sentence in CONTRIBUTING.md whose truth turns on
+	// docs/RELEASING.md was unanswerable BY CONSTRUCTION: that file belongs to
+	// another surface, so it was not handed, not withheld, and not present at
+	// all. The frame tells an agent that a byte it does not hold is never a
+	// reason to guess and never a reason to pass — report FAILED and name the
+	// byte you needed — so every gate round produced the same class of finding,
+	// correct each time, about the gate's own material rather than about the
+	// release.
+	//
+	// THEY ARE DELIBERATELY NOT PART OF THE TOTALITY. Handed + Withheld is
+	// still exactly the manifest-resolved set, and Referenced is asserted
+	// DISJOINT from both. Folding references into Handed would make that
+	// equation unenforceable and would quietly reassign ownership: the agent
+	// reading a referenced file must report on its own surface, not on the
+	// file's. The bytes still reach this surface's key — through the assembled
+	// bundle, exactly the way a per-surface capture does — so a borrowed
+	// document that changes re-reads every surface that borrowed it.
+	Referenced []string
 	// Artifacts are the capture artifacts this surface alone reads.
 	Artifacts []string
 }
@@ -135,6 +159,29 @@ func gateBundleAssemble(root string, spec gateBundleSpec) ([]byte, error) {
 	for _, rel := range spec.Withheld {
 		if handed[rel] {
 			return nil, fmt.Errorf("%w: surface %q both hands over and withholds %s", errGateBundleIncomplete, spec.Surface, rel)
+		}
+	}
+	// A referenced document that is also one of this surface's own is the same
+	// defect one level up: the bundle would carry the file under two headings
+	// that say opposite things about whose surface it is. It is refused rather
+	// than deduplicated, because the two overlaps send a maintainer to
+	// different edits — a stale `reads:` entry naming a file the surface has
+	// since taken ownership of, or a `paths:` pattern that has grown to swallow
+	// a file another surface owns — and "we handled it" would hide which one
+	// happened. gateSurfaceReferences refuses the same overlap on the run path;
+	// this check exists because this assembler also takes hand-built specs, and
+	// a spec is a claim about the bundle's shape that has to hold wherever it
+	// was written.
+	withheld := map[string]bool{}
+	for _, rel := range spec.Withheld {
+		withheld[rel] = true
+	}
+	for _, rel := range spec.Referenced {
+		switch {
+		case handed[rel]:
+			return nil, fmt.Errorf("%w: surface %q references %s as context and also owns it — the bundle would carry it twice, once as this surface's own document and once as another's", errGateBundleIncomplete, spec.Surface, rel)
+		case withheld[rel]:
+			return nil, fmt.Errorf("%w: surface %q references %s as context while withholding it as one of its own — the bundle would hand over the bytes of a file it told the agent it was withholding", errGateBundleIncomplete, spec.Surface, rel)
 		}
 	}
 
@@ -181,9 +228,14 @@ func gateBundleAssemble(root string, spec gateBundleSpec) ([]byte, error) {
 	if err := add("the release delta", gateDeltaFile); err != nil {
 		return nil, err
 	}
-	if err := add("the rendered site text", gateSiteTextFile); err != nil {
-		return nil, err
-	}
+	// THE RENDERED SITE TEXT IS DELIBERATELY NOT A SECTION OF EVERY BUNDLE. It
+	// is read by the `site` agent alone, so it enters that one surface's bundle
+	// below, as its capture (gateStage2Artifacts). When it was assembled into
+	// all thirteen — it used to sit right here, after the delta — every
+	// re-extraction of the site moved every bundle's digest and therefore every
+	// surface's key, and thirteen agents re-ran over a change only one of them
+	// reads. TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is what keeps
+	// it out.
 	for _, rel := range gateBundleSorted(spec.Artifacts) {
 		if err := add("a capture produced for this surface", rel); err != nil {
 			return nil, err
@@ -191,6 +243,21 @@ func gateBundleAssemble(root string, spec gateBundleSpec) ([]byte, error) {
 	}
 	for _, rel := range gateBundleSorted(spec.Handed) {
 		if err := add("a document of this surface", rel); err != nil {
+			return nil, err
+		}
+	}
+	// Context comes AFTER this surface's own documents and BEFORE the withheld
+	// list, so the agent reads its own material first and meets the borrowed
+	// material already knowing what it is for. The title is the load-bearing
+	// part: a referenced document arrives bytes-in exactly like the surface's
+	// own, and the heading is the ONLY thing telling the agent it is another
+	// surface's file. Left unmarked, the agent reviews it under its own
+	// surface's name, and since nothing is filtered on the way to the human
+	// that finding arrives twice — once from the owner, once misattributed.
+	// Each part carries its Source path, as every part does, which is what lets
+	// a finding say it rests on a document belonging to another surface.
+	for _, rel := range gateBundleSorted(spec.Referenced) {
+		if err := add("context from another surface — NOT yours to report on", rel); err != nil {
 			return nil, err
 		}
 	}
@@ -312,10 +379,15 @@ func gateBundleFixture(t *testing.T) (root string, spec gateBundleSpec) {
 	gateWrite(t, root, gateStage2MethodFile, "model: claude-opus-5\ntools:\n  - SurfaceFinding\n  - SurfaceVerdict\n")
 
 	return root, gateBundleSpec{
-		Surface:   "site",
-		Handed:    []string{"site/README.md"},
-		Withheld:  []string{"site/src/content.ts", "site/src/nav.ts"},
-		Artifacts: []string{"gate/render-diff.json"},
+		Surface:  "site",
+		Handed:   []string{"site/README.md"},
+		Withheld: []string{"site/src/content.ts", "site/src/nav.ts"},
+		// The rendered site text rides as a CAPTURE, the way the real `site`
+		// surface receives it (gateStage2Artifacts) — it is not a section the
+		// assembler gives every bundle. The render diff is here too so the
+		// rows about a missing or stale capture have one that is not also the
+		// site extraction.
+		Artifacts: []string{gateSiteTextFile, "gate/render-diff.json"},
 	}
 }
 
@@ -349,7 +421,9 @@ func TestGateBundleCarriesEveryPartAndNamesWhatItWithheld(t *testing.T) {
 		"BEGIN the mechanical inventory — " + gateSurfaceInventoryFile,
 		"BEGIN the baseline inventory — " + gateBaselineFile,
 		"BEGIN the release delta — " + gateDeltaFile,
-		"BEGIN the rendered site text — " + gateSiteTextFile,
+		// The rendered site text reaches THIS surface as its capture, not as a
+		// shared section every bundle carries.
+		"BEGIN a capture produced for this surface — " + gateSiteTextFile,
 		"BEGIN a capture produced for this surface — gate/render-diff.json",
 		"BEGIN a document of this surface — site/README.md",
 		"BEGIN documents of this surface that were not handed over",
@@ -492,6 +566,25 @@ func TestGateBundleDigestMovesWhenTheAssemblyMoves(t *testing.T) {
 			gateWrite(t, root, "site/src/footer.ts", "export const footer = 1;\n")
 			spec.Withheld = append(spec.Withheld, "site/src/footer.ts")
 		}},
+		// The borrowed-context rows. Both matter for the same reason the handed
+		// rows do: a referenced document's bytes are part of the question this
+		// agent is asked, so a change to them that left the digest still is a
+		// verdict about text that moved, carried forward as current.
+		{"a document joins the referenced list", func(t *testing.T, root string, spec *gateBundleSpec) {
+			gateWrite(t, root, "docs/RELEASING.md", "the borrowed sentence\n")
+			spec.Referenced = append(spec.Referenced, "docs/RELEASING.md")
+		}},
+		{"a referenced document's bytes change", func(t *testing.T, root string, spec *gateBundleSpec) {
+			gateWrite(t, root, "docs/RELEASING.md", "the borrowed sentence\n")
+			spec.Referenced = append(spec.Referenced, "docs/RELEASING.md")
+			// Assemble once with the original bytes, then edit; the outer loop's
+			// "before" was taken without the reference, so take our own here.
+			before := gateBundleDigest(gateBundleMust(t, root, *spec))
+			gateWrite(t, root, "docs/RELEASING.md", "the borrowed sentence, revised\n")
+			if after := gateBundleDigest(gateBundleMust(t, root, *spec)); after == before {
+				t.Fatal("editing a REFERENCED document left the bundle byte-identical; the borrowing surface would carry its previous verdict forward over context that moved")
+			}
+		}},
 		{"the surface's name", func(t *testing.T, root string, spec *gateBundleSpec) {
 			gateWrite(t, root, gateBundlePromptFile("readme"), "Read the rendered site text against surface.json.\n")
 			spec.Surface = "readme"
@@ -539,6 +632,9 @@ func TestGateBundleFrameReachesTheKeyOnlyThroughTheBundle(t *testing.T) {
 		Documents: append(append([]string(nil), spec.Handed...), spec.Withheld...),
 		Bundle:    gateBundleMust(t, root, spec),
 		Method:    method,
+		// A constant: this test moves the frame and nothing else, and the
+		// gate's definition is not the frame.
+		Rules: "sha256:the-gate-as-it-stands",
 	}
 
 	methodBefore, err := in.Method.version(root)
@@ -622,6 +718,9 @@ func TestGateBundleWithheldBytesStayOutOfTheBundle(t *testing.T) {
 		Documents: append(append([]string(nil), spec.Handed...), spec.Withheld...),
 		Bundle:    gateBundleMust(t, root, spec),
 		Method:    method,
+		// A constant: this test moves a withheld document and nothing else,
+		// and the gate's definition is not a document.
+		Rules: "sha256:the-gate-as-it-stands",
 	}
 	withEdit := gateMustFingerprint(t, root, in)
 	gateWrite(t, root, "site/src/content.ts", "export const latestVersion = \"v9.9.9\";\n")
@@ -661,5 +760,96 @@ func TestGateBundleReadsASymlinkedDocument(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("the bundle for a symlinked surface is missing %q; the agent would be reviewing an export it was never shown", want)
 		}
+	}
+}
+
+// ---------------------------------------------------------------------
+// context a surface reads but does not own
+// ---------------------------------------------------------------------
+
+// TestGateBundleReferencedBytesAreHandedOverAndMarkedAsNotYours is the positive
+// half of the `reads:` mechanism: the bytes arrive, and they arrive labelled.
+//
+// The label is the load-bearing part. A referenced document is handed over,
+// bytes-in, exactly like the surface's own, and the ONE thing distinguishing
+// them is the heading the assembler writes. Without it an agent reviews another
+// surface's file under its own name, and because nothing is filtered on the way
+// to the human that finding arrives twice — once from the surface that owns the
+// file and once from the surface that borrowed it — attributed to the wrong one.
+func TestGateBundleReferencedBytesAreHandedOverAndMarkedAsNotYours(t *testing.T) {
+	root, spec := gateBundleFixture(t)
+	gateWrite(t, root, "docs/RELEASING.md", "the borrowed sentence\n")
+	spec.Referenced = []string{"docs/RELEASING.md"}
+
+	bundle, err := gateBundleAssemble(root, spec)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	body := string(bundle)
+
+	if !strings.Contains(body, "the borrowed sentence") {
+		t.Error("the referenced document's BYTES are not in the bundle. A reads: entry exists so the agent can judge its own claims against that file; naming it without handing it over is the coverage gap the mechanism was built to close, reproduced by the mechanism itself")
+	}
+	if !strings.Contains(body, "docs/RELEASING.md") {
+		t.Error("the referenced document's SOURCE PATH is not in the bundle. Every part states its source so a finding can say which document it rests on — for borrowed material that is what tells the human the finding arrived by reference")
+	}
+	if !strings.Contains(body, "NOT yours to report on") {
+		t.Errorf("the referenced document is handed over with no marker separating it from this surface's own documents.\n"+
+			"An agent cannot tell borrowed material from its own by looking at the bytes, so it will review it, and a finding about a file this surface does not own arrives under the wrong surface's name.\nThe bundle reads:\n%s", body)
+	}
+
+	// And the marked section must sit ahead of the withheld list, so an agent
+	// reading top to bottom meets "this is context" before "these are yours,
+	// bytes withheld" — the two sentences that must never be confused, because
+	// they assign the burden of a dependent reading in opposite directions.
+	if ctx, withheld := strings.Index(body, "NOT yours to report on"), strings.Index(body, "documents of this surface that were not handed over"); withheld >= 0 && ctx > withheld {
+		t.Error("the borrowed context is rendered after the withheld list; the bundle's own account of what is whose reads out of order")
+	}
+}
+
+// TestGateBundleRefusesReferencedDocumentsThatAreAlsoTheSurfacesOwn is the
+// disjointness half, and it is a refusal rather than a deduplication on
+// purpose.
+//
+// The two overlaps mean different things and send a maintainer to different
+// edits — a stale `reads:` entry naming a file this surface has since taken
+// ownership of, or a `paths:` pattern that has grown to swallow another
+// surface's file — so collapsing them into "we handled it" would hide which one
+// happened. And the withheld case is worse than a duplicate: the bundle would
+// hand over the bytes of a document it told the agent in the same breath that
+// it was withholding.
+func TestGateBundleRefusesReferencedDocumentsThatAreAlsoTheSurfacesOwn(t *testing.T) {
+	root, base := gateBundleFixture(t)
+
+	for _, tc := range []struct {
+		name       string
+		referenced []string
+		want       string
+	}{
+		{
+			name:       "referenced and handed",
+			referenced: []string{"site/README.md"},
+			want:       "and also owns it",
+		},
+		{
+			name:       "referenced and withheld",
+			referenced: []string{"site/src/content.ts"},
+			want:       "while withholding it as one of its own",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			spec := base
+			spec.Referenced = tc.referenced
+			_, err := gateBundleAssemble(root, spec)
+			if err == nil {
+				t.Fatal("the bundle was assembled anyway; it would hash, look like a match, and carry a verdict forward over material the bundle contradicts itself about")
+			}
+			if !errors.Is(err, errGateBundleIncomplete) {
+				t.Errorf("the refusal must be the incomplete-bundle sentinel, so no caller resolves it by hashing what it got; got %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("the refusal does not say which overlap it was; the two are different edits.\ngot: %v", err)
+			}
+		})
 	}
 }

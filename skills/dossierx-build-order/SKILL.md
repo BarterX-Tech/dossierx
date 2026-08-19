@@ -37,8 +37,8 @@ so it follows the same rule as `claim lock`: preview, show the human, get a yes,
 |---|---|---|
 | a module claim is still draft | `build_order_refused` | lock the remaining claims (each with the human's approval) |
 | a module claim has an open thread | `build_order_refused` | reply; the human resolves in the viewer |
-| a locked claim has no `build_role` | `build_order_refused` | set it, then re-propose |
-| a same-phase `rests_on` cycle | `build_order_refused` | fix the edges — this is a real modelling error, never silently dropped |
+| a locked claim has no `build_role` | `build_order_refused` | unlock the claims it names (their yes, `--reason` with their words), set `build_role` on each, lock them again, then re-propose — no verb sets `build_role` on a locked claim, and setting it by editing the locked file is `lock-content-drift` on the next `dossierx check` |
+| a same-phase `rests_on` cycle | `build_order_refused` | a real modelling error, never silently dropped — the claims on the loop are locked, so break it through unlock → fix → lock, each with the human's yes, then re-propose |
 | the artifact was edited by hand | `build_order_hand_edited` | the claims are fine and the artifact is not — re-`propose` to discard the edit, then `lock` what the engine derived |
 | nothing proposed yet | `not_proposed` | run `propose` |
 | the locked order is stale | `build_order_stale` | re-`propose`, then re-`lock` |

@@ -5,6 +5,170 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+**SILENT: three shipped skill guides changed, and the skills are embedded in the binary — anyone
+who has run `dossierx skills export` must re-run it after upgrading, or their agents keep
+following procedures that do not work:** a review loop that wedges on a refusal whose recovery is
+the step scheduled after it, a bootstrap that ends silently uninstructed, and a build-order
+recovery whose advice fails every claim it touches at the next `check`. In all three the engine
+was right and the guide was wrong — no command, flag, `error.code`, lint rule or gate behaves
+differently. The corrections are the first three items under **Changed**.
+
+### Added
+
+- **The release driver requires the forge to restrict who can create release tags.** The gate is
+  enforced by files inside the repository being gated, so anyone with push rights could weaken it
+  and tag that commit — a residual `docs/RELEASING.md` could previously only record. The driver
+  now reads the rulesets off GitHub's API and refuses the release unless an ACTIVE tag ruleset
+  covers the exact tag and restricts both `creation` and `update`. A check that cannot run — no
+  `gh`, no token, a refused token, an uninterpretable ruleset pattern — is a refusal naming the
+  problem, never a skip; its stated limits and the required configuration are in `docs/RELEASING.md`.
+- **Every published release page points at the CHANGELOG**: two hand-written literal blocks in
+  `.goreleaser.yaml` — a header saying changes your own tooling cannot detect are called out at
+  the top of the release's CHANGELOG entry, a footer linking `CHANGELOG.md` on `main` — bracket
+  the generated commit-subject bullets, where a breaking `feat` reads like any other. Both are
+  deliberately template-free — a template there first renders after the tag is public — and the
+  release-notes predictor refuses the templated form of either.
+- A markdown case pinning `mailto:`, the only allowlisted non-http(s) scheme
+  (`testdata/markdown-cases/link-mailto.{yaml,golden.html}`) — what notices if `mailto:` ever
+  silently leaves the renderer's allowlist.
+
+### Changed
+
+The three skill-guide corrections behind the callout above:
+
+- **The review loop no longer schedules a lock the lock gate refuses**
+  (`skills/dossierx-comments/SKILL.md`). Step 4 sent a locked claim through unlock → fix → lock
+  before replying — but the human's thread is still open then, exactly what `claim lock` refuses
+  (`unresolved_comments`). Step 4 now ends in the reply; the lock lands at step 7, after Resolve.
+- **The bootstrap creates the project before exporting the skills** (`skills/dossierx/SKILL.md`).
+  The export resolves its root from `project.config.yaml`, which the old ordering had not written
+  yet — rootless, it exits 0, maintains no `AGENTS.md` section, drops the agent guide in the
+  wrong place, and nothing later exported again. Steps 2 and 3 are swapped.
+- **The build-order recovery for a missing `build_role` routes through the approval path**
+  (`skills/dossierx-build-order/SKILL.md`). "Set it, then re-propose" could only mean hand-editing
+  a locked file — no verb sets `build_role` after creation — and the next `check` failed
+  `integrity_failed` / `lock-content-drift` on every claim so edited. The row now reads unlock
+  (with the human's `--reason`) → set while draft → lock → re-propose; the same-phase `rests_on`
+  cycle row routes the same way.
+- `docs/RELEASING.md`'s evidence staging matches the stage-2 gate: site-text extraction requires
+  `DOSSIERX_SITE_TEXT_TREE` beside `DOSSIERX_SITE_TEXT_OUT` (a stale capture is refused, not
+  hashed cleanly into a key); `delta` is documented without `--tree` (still accepted, unused);
+  and the SHARED evidence files are three, not four — `gate/site-text.json` is the `site`
+  surface's own capture, so a site change re-keys one surface, not thirteen. The pin paragraph's
+  counts are now derived from `surface.json` and test-pinned; the hand-list had gone stale twice.
+- The viewer templates say the truth about themselves: `graph.css` no longer describes a backdrop
+  dim and drop shadow the opaque pane does not have, z-index band 80 is named as the pane root it
+  is, the zero-thread comment chip is dated v0.3.0 (not v0.2.1), and `comments.html` names
+  `components.CommentChipHTML` rather than a hand-built chip gone since v0.4.1. The fixture
+  viewers are regenerated; nothing a reader sees changes.
+
+### Fixed
+
+In the documents client teams follow, each a procedure that failed a reader following it as written:
+
+- **README's setup paste block installs the CI workflow on both answers to the hook question.**
+  It fetched the workflow only when the human *declined* the pre-commit hook, so the nudged
+  answer — yes — ended setup with only the local, skippable gate.
+- **README says to commit the comment digest store with the first lock, not "once anyone
+  comments".** The engine creates `.dossierx-comment-digest.json` empty at the first lock; a
+  reader who waited staged the lock store without it and was stopped by the hook's own
+  `check --staged` with `comment-digest-absent`.
+- **The pre-ledger crossing's step 4 is conditional on the module being fully locked again** — in
+  README, FORMAT.md, the CI template's recovery, and the `pre_ledger_unadopted` hint. The recipe
+  licensed re-locking "only what you still stand behind", then handed out an unconditional
+  `build-order propose` + `lock` that refuses the moment that license is exercised. A partially
+  re-locked module now finishes the crossing gate-green and runs the pair when fully locked.
+
+In the pre-commit hook and its installer — the hook body moves to v8, so re-run the installer to
+replace an installed v7:
+
+- **The hook no longer refuses every commit on a path containing `"`, `\` or a tab.** Discovery
+  trusted `-c core.quotepath=false` for raw paths, but git C-quotes those characters
+  unconditionally: the quoted string named no file on disk, and a discovered config the hook
+  cannot open is a refusal — every commit under such a path was refused until somebody
+  uninstalled the hook. Discovery now uses `-z`, the one output mode git never quotes (a newline
+  in a path still fails closed, and says so), and the foreign-hook refusal's remediation lines go
+  through `sh_quote` so they re-parse when executed.
+- **Printed recoveries name the invocation the reader actually used.** Every "run it again" line
+  said `scripts/install-git-hook.sh` — a path only this repository has, offered to readers who
+  curl'd one file into their own project. The script now prints its own `$0`, and the PowerShell
+  wrapper passes its name through `DOSSIERX_HOOK_INVOCATION` so its readers get a PowerShell line.
+- **A machine-wide hook install is said out loud.** A `core.hooksPath` from the global or system
+  git config makes the hook fire on every commit on the whole machine; the installer used to name
+  only the setting, not its reach. It now asks git for the setting's origin (submodules and
+  linked worktrees classify as the repository's own), states the reach, names the config file,
+  and prints the matching uninstall line. The disclosure accompanies the install, never vetoes it.
+- **That disclosure names the config file by its real path, not git's C-quoted rendering of it.**
+  `git config --show-origin` C-quotes an origin containing `"` or `\` unconditionally — on
+  Windows, where the origin is a native absolute path, that is every origin — so the disclosure
+  named `"C:\\Users\\...\\gitconfig"`, a string that exists nowhere on disk, as the one fact meant
+  to let the reader verify or undo the setting. The origin is re-read with `--null`, the output
+  mode git never quotes, converted outside command substitution (which cannot carry NUL and would
+  glue the value onto the path); a newline in the config's own path still classifies loudly as
+  machine-wide rather than silently as anything.
+- **The PowerShell wrapper's `Find-Bash` rejects WSL's launcher.** A `bash` under
+  `%SystemRoot%\System32` resolves a `C:\` script path inside the Linux filesystem: the install
+  died "No such file or directory", and because a bash HAD been found, neither remedy printed.
+  The wrapper falls through to the Git for Windows candidates, and now runs under Pester on
+  `windows-latest` — it had shipped for releases while no CI job ever started pwsh.
+- **`--help` no longer stops mid-sentence.** A sed range ends AT its closing match, so the last
+  thing a reader saw was `1 declined, refused,`. Extraction now closes on an explicit
+  `# END USAGE` sentinel, and the usage line swaps in the reader's own invocation by literal
+  index — never sed replacement or awk `-v`, which mangle exactly the `C:\...` paths at stake.
+
+In the engine — **the claims file lock could refuse the one case it exists for, on Windows** —
+the fix to have if two `dossierx` invocations can touch one project at once. `AcquireFileLock`
+retried its `O_EXCL` sentinel only on "already exists", but Windows keeps a deleted file's
+directory entry in a delete-pending state that fails opens with `ERROR_ACCESS_DENIED` — beginning
+at the exact instant the holder releases, which is the instant a waiter polls — so the waiter
+returned `Access is denied.` at the one moment it should have polled once more. The
+classification is pinned per-platform (POSIX `unlink` is atomic, so `EACCES` there fails fast as
+a real permission problem), and the two contended timeouts now report apart.
+
+In the release pipeline:
+
+- **The release workflow's tag gate no longer deadlocks against the release driver.** The gate
+  required the tagged commit to be reachable from `origin/main`, but the driver pushes the tag
+  first and `main` last — deliberately, so the site never announces archives that do not exist
+  yet — so the gate refused at the tag push and the driver waited for archives that could never
+  exist; v0.5.1 was finished by hand this way. The gate now asks what the tag can answer alone:
+  the tagged commit is a merge (the driver always tags its `--no-ff` merge) whose tree stamps
+  exactly this release; the trade is stated in `release.yml`'s header, pinned by test.
+- **Both install paths print one version string, the tag as tagged** (#38). The archive stamped
+  `{{.Version}}` — the tag minus its leading `v` — while `go install` falls back to
+  `debug.ReadBuildInfo`: one release, two answers (`0.5.1` and `v0.5.1`), so a scripted
+  version-against-tag comparison succeeded one way and failed the other. The stamp is now
+  `{{.Tag}}`, and the site's second constant (`latestBinaryVersion`) is deleted, any
+  strip-the-`v` successor refused by test.
+
+And the smaller corrections:
+
+- **`dossierx lock|unlock|flag|reaudit` answer with their replacement, not a bare usage error.**
+  The four verbs most likely typed from pre-v0.3.0 memory — each lives on at
+  `dossierx claim <verb>` — answered `unknown command "lock"`, because cobra's `legacyArgs`
+  rejects unknown commands before the root's hint-bearing branch runs. Each now returns the same
+  `retired_command` refusal as the other retired spellings, with a `run:` hint that actually
+  runs, and the site's migration table gains the row naming all four.
+- **A comment sweep: what the code says about itself matches what it does** — no behaviour
+  changes. Nine files said `dossierx flag` for what has been `dossierx claim flag` since v0.3.0;
+  `MockupModules`' doc (and `structured_layout`'s) kept v0.4.0's mockup-only framing after v0.4.1
+  widened the `raw_html` gate to any layout; `already_locked`'s doc gains its second state (a
+  draft claim with a standing approval is tampered content — restore it first); `claim new
+  --help` no longer says every claim is a card; and two stale comments — a roll-up gate that
+  moved to `evaluateLockGates`, and a `prepareStore` grandfathering claim that read literally
+  meant a reaudit can bless content nobody approved — now say what the code does.
+- **Two test guards advertised more than they checked** (#29, #28). The summary dash guard
+  promised to refuse both the en and the em dash and checked one; it is now a check on the test
+  data, run before the exact match it protects, naming both. The `</details>` ordering probe
+  proved nothing the exact-adjacency match beside it does not — deleted rather than anchored.
+- **A serve test raced the server it started, and only Windows noticed.** The watcher's re-walk
+  holds a directory handle Windows refuses to unlink under, reddening
+  `TestClaimAsset_SymlinkedDirectoryIsRefused` and, through it, CI on `main` — a refused release.
+  The removal now retries in a bounded window and then **fails**: giving up quietly would leave
+  the assertion passing against an ordinary missing file. Mutation-checked.
+
 ## [0.5.1] - 2026-08-10
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.

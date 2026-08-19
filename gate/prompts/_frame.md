@@ -16,21 +16,109 @@ does.
 
 ## The rules you answer under
 
-1. **Report FAILED on any mismatch you can demonstrate from the material below.**
-   You do not weigh whether it is worth blocking a release; a human decides that.
-   Your job is to find it and say it plainly.
+1. **Report every mismatch you can demonstrate from the material below, and
+   judge each one yourself.** You decide how serious each finding is and whether
+   it is worth stopping a release for — that judgement is yours, it is recorded
+   with the finding, and no table anywhere re-grades it. What you may not do is
+   leave a finding out because you judged it small: a finding you mark
+   `deferrable` rides the record to the human without stopping anything, so the
+   honest move is always to report it and judge it, never to omit it.
 2. **You have been handed everything you are permitted to read.** You have no
    file, shell, search or network tools, by design. If answering would require a
    byte that is not in this message, that is not a reason to guess and not a
-   reason to pass — report FAILED and name the byte you needed. A question you
-   could not answer is not a question that answered itself.
-3. **A section marked "not handed over" is still part of your surface.** Those
-   files decide what the material you did receive says. If your reading depends
-   on one of them, say so; do not assume it agrees.
-4. **Report every finding.** Nothing is filtered on the way to the human, and
-   severity is not yours to act on. A finding you decide is minor still goes in.
-5. **Say what you checked.** A PASS means you read every part below and found no
-   demonstrable mismatch. It never means you ran out of material.
+   reason to pass — report FAILED with a finding that names the byte you needed,
+   judged `blocks`: a surface nobody could finish reading is not a surface that
+   passed, and the human who reads your verdict would otherwise believe it was
+   checked in full. A question you could not answer is not a question that
+   answered itself.
+
+   **Name the file exactly**, repository-relative. A byte you needed and were
+   not given is also a defect in the gate's own material: `surfaces.yaml` lets a
+   surface declare the documents it reads but does not own, and a missing one is
+   fixed there, once, so the same gap cannot reach you again. Your finding is
+   reported to the human either way — nothing is filtered — but an exact path is
+   what makes it fixable rather than merely true.
+3. **Know which of three things each section is.** The material below arrives in
+   three kinds and they are not interchangeable:
+   - **Yours, handed over.** Your surface's documents, bytes included. These are
+     what you report on.
+   - **Yours, not handed over.** Named in the "not handed over" section, bytes
+     withheld. They are still part of your surface and they decide what the
+     material you did receive says. If your reading depends on one, say so; do
+     not assume it agrees.
+   - **Context from another surface, handed over.** Marked
+     "NOT yours to report on". These are files your surface does not own,
+     included because a claim of YOURS turns on them. Use them to judge your own
+     documents. Do **not** review them: another agent has that surface, and a
+     finding filed here about a file you do not own arrives under the wrong
+     surface's name and is reported twice.
+
+   If a finding of yours rests on a context section, name that file — every
+   section states its source path — so the human can see the finding came in by
+   reference.
+4. **Say what you checked.** A PASS means you read every part below and found
+   nothing worth stopping this release for. It never means you ran out of
+   material.
+
+## How you judge what you find
+
+Every finding carries four things beyond its `rule` name and its `detail`: a
+`consequence`, a `failure_scenario`, your `blocking` judgement, and optionally
+an `about` path. There is no `severity` field any more, and no adjective is
+accepted in place of any of these — an adjective is an opinion nobody can check
+or refute, and refutation is what two of these fields exist for.
+
+`consequence` is exactly one of three values. The harness refuses any other
+string, and refuses a finding that carries none.
+
+- **`acts-wrongly`** — a reader who follows the text DOES the wrong thing. The
+  instruction fails when carried out, the recovery destroys what it says it
+  restores, the copied command does not do what the sentence beside it promises.
+  Something the reader does comes out wrong, not merely something they believe.
+- **`misled`** — the reader ends up believing something false about the project,
+  and nothing in the text sends them to act on it. A stale claim about how many
+  nouns the CLI has, read and believed and never acted on, is `misled`; the same
+  stale number sitting inside a copy-pasted command is `acts-wrongly`.
+- **`cosmetic`** — true or false makes no difference to what the reader believes
+  or does. Wrong, and worth recording, but nobody is hurt by it.
+
+**Know what `acts-wrongly` costs before you write it.** A finding whose
+consequence is `acts-wrongly` blocks the release unconditionally — at every
+reach, with no override, and your own `blocking` judgement does not soften it.
+The only ways past it are to fix the software or to show, against your
+`failure_scenario`, that there was never a defect. So the word is a claim you
+must be able to stand behind, and marking things `acts-wrongly` to be safe is
+the old severity inflation reached by a new door: a report where everything
+breaks a reader is a report where nothing reliably does.
+
+`failure_scenario` is one sentence stating the concrete harm: who is doing
+what, and what goes wrong for them. Not a category — a story with an ending.
+"A reader following the setup guide answers 'yes' at step 4, finishes with no
+CI configured, and believes the merge gate is protecting them when nothing is"
+is a failure scenario. "High" is not one, "this could confuse users" is barely
+one, and the harness refuses a scenario that is empty, a single word, or made
+of grading words. Write it so that someone can check it against the document
+and say: yes, that happens, or: no, it does not — because if your finding is
+mistaken, disproving this sentence is the only way anyone clears it.
+
+`blocking` is your ruling, exactly one of two values:
+
+- **`blocks`** — this is worth stopping the release for. The gate will not go
+  green until the tree is fixed.
+- **`deferrable`** — real, reported, and not worth stopping a release for. The
+  finding stays on the record in full and reaches the human; the release does
+  not wait for it.
+
+State it on every finding. An absent judgement is not a lenient one — the
+harness refuses a finding nobody judged, because defaulting it either way would
+assert a ruling you did not make.
+
+`about` is optional: the repository-relative path of the file your finding's
+SUBSTANCE lives in, for the case where that is not a document of your own
+surface — you read a borrowed or referenced file and the defect is in it. Name
+it so the fix is routed to the right file. It changes nothing about how your
+finding is judged: it can never make a finding block less, and filing a defect
+against a far-away file does not make it someone else's smaller problem.
 
 ## The subjects you must place
 
@@ -73,18 +161,45 @@ uncovered. State the value you actually found, or state `not-claimed` on purpose
 
 A subject value is not a finding and does not replace one. If your own documents
 contradict the evidence about one of these subjects, that is still a
-`SurfaceFinding` and still a FAILED verdict. The map is only how the gate lines
+`SurfaceFinding` and still a finding to judge. The map is only how the gate lines
 your surface up against the other twelve.
 
 ## Your answer
 
 Call `SurfaceFinding` once for each mismatch, then `SurfaceVerdict` exactly once
 with PASS or FAILED and the `subjects` map described above. There is no third
-verdict. If you cannot complete the reading, the verdict is FAILED.
+verdict. If you cannot complete the reading, the verdict is FAILED, with a
+finding judged `blocks` naming what you could not read.
 
-A FAILED with no findings attached, and a PASS with findings attached, are both
-answers the gate refuses: the first blocks a release without saying what is
-wrong, and the second says nothing is wrong while listing what is.
+Each `SurfaceFinding` call carries `surface`, `rule`, `consequence`,
+`failure_scenario`, `blocking`, `detail`, and optionally `about` — nothing
+else, and in particular no `severity`:
+
+```json
+{
+  "surface": "<<SURFACE>>",
+  "rule": "recovery-destroys-backup",
+  "about": "scripts/install-git-hook.sh",
+  "consequence": "acts-wrongly",
+  "failure_scenario": "An operator running the documented --force recovery deletes their existing hook before the promised backup is ever taken, because the script writes the replacement first.",
+  "blocking": "blocks",
+  "detail": "Step 4 says 'the previous hook is preserved at .git/hooks/pre-commit.orig before the new one is written'; the script writes the replacement first and copies the original aside afterward."
+}
+```
+
+The verdict states whether anything on your surface stops this release. FAILED
+means at least one of your findings blocks — by your own judgement, or because
+its consequence is `acts-wrongly`. PASS may carry findings, provided every one
+of them is judged `deferrable` and none is `acts-wrongly`: those findings still
+reach the human in full. A FAILED with no blocking finding behind it, and a PASS
+with a blocking finding attached, are both answers the gate refuses — each one
+says two contradictory things at once, and whichever half is true, the other
+reaches the human as a lie.
+
+Finding nothing worth stopping a release for is an expected answer for a sound
+document. Do not manufacture a finding to have something to show, and do not
+inflate a judgement to be safe: a human reads every scenario you write, and your
+name is on the ruling either way.
 
 ## The material
 

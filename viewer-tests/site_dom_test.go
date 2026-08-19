@@ -268,6 +268,34 @@ func (p sitePage) transcript(command string) (siteTranscript, bool) {
 }
 
 type siteDump struct {
+	// Tree is the full 40-digit tree object name this extraction's build was
+	// made from, SUPPLIED by the driver via DOSSIERX_SITE_TEXT_TREE and never
+	// probed from git here — for the reason every other capture producer gives
+	// (tests/render_diff_capture_test.go, cmd/dossierx/gate_fanout_test.go):
+	// each piece of a run's evidence is computed from an identity the driver
+	// hands down, and a producer that resolved its own would be a second answer
+	// to "which tree is this run about" inside one run.
+	//
+	// IT IS THE FIRST FIELD ON PURPOSE, and encoding/json preserves struct
+	// order. scripts/gate-stage2/run.sh `record` cross-checks this document
+	// with json_scalar, which takes the FIRST `"tree"` match it sees on any
+	// line and exits — so the stamp must precede every page's text, or a
+	// sentence on the site that happened to look like provenance would be read
+	// in its place. That is the same positional promise gate/render-diff.json
+	// makes, pinned there by TestRenderDiffCaptureProvenanceComesFirst and here
+	// by TestSiteTextProvenanceComesFirst.
+	//
+	// WHY IT EXISTS AT ALL: before this stamp the artifact recorded which node
+	// and npm built the site and nothing that named a RELEASE, so an extraction
+	// left on disk from the previous gate run recorded cleanly and was hashed
+	// into the site surface's key as this release's rendered DOM. The delta
+	// gets no such stamp — record RECOMPUTES it — but an extraction cannot be
+	// recomputed at record time (it needs this build, this browser), so the
+	// stamp is the account it can give. What the stamp cannot promise, exactly
+	// as gate/render-diff.json's cannot: that the working tree the build read
+	// was clean at that identity. The driver resolves the tree; this file
+	// records it verbatim.
+	Tree        string `json:"tree"`
 	GeneratedBy string `json:"generated_by"`
 	// Toolchain is the node/npm pair this dist/ was built by. It is in the
 	// artifact because a prose agent reading site-text.json is reading a claim
@@ -825,6 +853,54 @@ func siteTextPath(t *testing.T) string {
 	return filepath.Join(root, "viewer-tests", siteTextFileName)
 }
 
+// siteTextTreeEnv names the tree the extraction is being driven for. See
+// siteDump.Tree for why it is supplied rather than probed.
+const siteTextTreeEnv = "DOSSIERX_SITE_TEXT_TREE"
+
+// siteTextObjectName is the identity rule, applied on this producer's side the
+// way every other gate producer applies it: forty hexadecimal digits and
+// nothing else. A tag name is a mutable pointer, an abbreviation is a prefix,
+// and either can mean a different release tomorrow than it means today.
+var siteTextObjectName = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+// siteTextTree resolves the tree stamp for this extraction, or fails.
+//
+// THE TWO VARIABLES IMPLY EACH OTHER, the same contract the render diff's
+// flags keep (-render-diff-out and -render-diff-tree): a driver that sets the
+// output path is collecting gate evidence and MUST say which release it is
+// evidence of, and a driver that names a tree while writing to the default
+// local path is confused about which of the two runs it is performing. Both
+// halves fail rather than guess, because the guessable answers are exactly the
+// wrong ones — an unstamped collected artifact is the pre-stamp defect back
+// again, and a locally stamped one looks collectable when it was built from
+// whatever this laptop had checked out.
+//
+// With NEITHER set this is a local run: the artifact lands beside the suite,
+// git-ignored, and its stamp is the empty string — which run.sh `record`
+// refuses ("not a full 40-digit object name"), so a local artifact that drifts
+// into gate/ cannot be recorded as a release's evidence.
+func siteTextTree(t *testing.T) string {
+	t.Helper()
+	tree := os.Getenv(siteTextTreeEnv)
+	out := os.Getenv("DOSSIERX_SITE_TEXT_OUT")
+	switch {
+	case out != "" && tree == "":
+		t.Fatalf("DOSSIERX_SITE_TEXT_OUT is set and %s is not. A collected extraction that cannot say "+
+			"which tree its build came from records into the gate exactly as cleanly as one left over from "+
+			"the previous release — that unaccountability is the defect the stamp exists to close. Pass the "+
+			"same tree the rest of the run uses: %s=$(git rev-parse \"HEAD^{tree}\")", siteTextTreeEnv, siteTextTreeEnv)
+	case out == "" && tree != "":
+		t.Fatalf("%s is set and DOSSIERX_SITE_TEXT_OUT is not. A tree was named but the artifact is about "+
+			"to be written to the suite's local default path, which no gate run reads; one of the two "+
+			"intentions is a mistake, and this producer will not pick which", siteTextTreeEnv)
+	case tree != "" && !siteTextObjectName.MatchString(tree):
+		t.Fatalf("%s is %q, which is not a full 40-digit object name. A tag is a mutable pointer and an "+
+			"abbreviation is a prefix; a stamp made of either cannot be checked against the run that records it",
+			siteTextTreeEnv, tree)
+	}
+	return tree
+}
+
 func writeSiteText(t *testing.T, dump siteDump) string {
 	t.Helper()
 	b, err := json.MarshalIndent(dump, "", "  ")
@@ -837,6 +913,96 @@ func writeSiteText(t *testing.T, dump siteDump) string {
 	}
 	t.Logf("wrote %s (%d bytes)", out, len(b)+1)
 	return out
+}
+
+// TestSiteTextProvenanceComesFirst is the direct check on the thing the
+// record-time cross-check silently depends on, and it needs no browser: field
+// ORDER in the marshalled artifact.
+//
+// scripts/gate-stage2/run.sh reads this document with json_scalar, a
+// deliberately tiny awk reader that is not a JSON parser: it takes the FIRST
+// `"tree"` string on any line and exits. Its answer is therefore POSITIONAL —
+// the stamp must be the first key of the document, ahead of every page's
+// captured text, or a sentence the site happens to render that looks like a
+// provenance line would be read as the artifact's identity. The pages are
+// exactly the untrusted half here: they are whatever the DOM said, and this
+// fixture poisons one with a stamp-shaped string to prove the reader cannot
+// reach it. This is gate/render-diff.json's promise
+// (TestRenderDiffCaptureProvenanceComesFirst), made by this producer for its
+// own document.
+func TestSiteTextProvenanceComesFirst(t *testing.T) {
+	tree := strings.Repeat("a", 40)
+	poison := "the release delta records \"tree\": \"" + strings.Repeat("d", 40) + "\" for the previous build"
+	dump := siteDump{
+		Tree:        tree,
+		GeneratedBy: "viewer-tests/site_dom_test.go",
+		Toolchain:   siteToolchain{NodeVersion: "v24.0.0", NPMVersion: "11.0.0"},
+		Pages: []sitePage{{
+			Entry: "index.html",
+			URL:   "http://127.0.0.1/index.html",
+			Head:  []string{"title: DossierX"},
+			Text:  []string{poison},
+		}},
+	}
+	data, err := json.MarshalIndent(dump, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal the dump: %v", err)
+	}
+	doc := string(data) + "\n"
+
+	// The top-level key order, read back with a real decoder. encoding/json
+	// preserves struct field order, so this pins the struct's shape: a field
+	// added above Tree, or Tree moved for tidiness, reds this before it reds a
+	// release.
+	dec := json.NewDecoder(strings.NewReader(doc))
+	if _, err := dec.Token(); err != nil {
+		t.Fatalf("read the opening brace: %v", err)
+	}
+	var keys []string
+	for dec.More() {
+		tok, tokErr := dec.Token()
+		if tokErr != nil {
+			t.Fatalf("read a key: %v", tokErr)
+		}
+		// A key in a JSON object is a string by the grammar, so this assertion
+		// cannot fail against well-formed input — which is exactly why it is
+		// checked rather than assumed. This test reads the document to prove
+		// which key comes FIRST, and an unchecked assertion here would panic on
+		// a malformed capture instead of naming it, turning a finding about the
+		// artifact into a crash report about this test.
+		key, ok := tok.(string)
+		if !ok {
+			t.Fatalf("the capture's object key at position %d decoded as %T (%v), not a string; the document is not the object this test can read a first key out of", len(keys), tok, tok)
+		}
+		keys = append(keys, key)
+		var skip json.RawMessage
+		if err := dec.Decode(&skip); err != nil {
+			t.Fatalf("skip a value: %v", err)
+		}
+	}
+	if len(keys) == 0 || keys[0] != "tree" {
+		t.Fatalf("the document's keys are %v; run.sh reads it with an awk one-liner that takes the FIRST "+
+			"\"tree\" it sees on any line, so the stamp must be the first key. Anywhere else, the record-time "+
+			"cross-check compares this run against whatever a page's own text happens to say, and an extraction "+
+			"from another release records cleanly.", keys)
+	}
+
+	// And the first-match reader itself, mimicked the way json_scalar reads:
+	// line by line, first `"tree": "<value>"` wins. The poisoned page text must
+	// lose to the stamp — note that JSON escaping alone does not defend it,
+	// so the position is the whole defence.
+	re := regexp.MustCompile(`"tree"[ \t]*:[ \t]*"([^"]*)"`)
+	first := ""
+	for _, line := range strings.Split(doc, "\n") {
+		if m := re.FindStringSubmatch(line); m != nil {
+			first = m[1]
+			break
+		}
+	}
+	if first != tree {
+		t.Fatalf("the first \"tree\" scalar in the document is %q, want the driver's tree %q; whatever "+
+			"produced that value — a page's text, a reordered struct — is what run.sh would check the run against", first, tree)
+	}
 }
 
 // surfaceCommandCount reads counts.commands out of the committed surface.json —
@@ -1152,8 +1318,12 @@ func summarise(vals []string, n int) string {
 // closed disclosure would let a false statement through while reporting green,
 // which is the failure this file exists to make impossible.
 func TestSiteRenderedDOMExtraction(t *testing.T) {
-	// Condition 5, first and alone: with no browser there is no rendered DOM,
-	// and every other condition here would be a pass over zero assertions.
+	// The provenance first, before anything is paid for: a gate driver that
+	// forgot the tree should hear about it now, not after a build and a
+	// browser traversal whose artifact would be refused at record time anyway.
+	tree := siteTextTree(t)
+	// Condition 5, next: with no browser there is no rendered DOM, and every
+	// other condition here would be a pass over zero assertions.
 	browser := requireSiteBrowser(t)
 	// And the same rule applied to the other two prerequisites: no node, no
 	// npm, no build, no DOM. Resolved before anything else so the failure names
@@ -1165,7 +1335,7 @@ func TestSiteRenderedDOMExtraction(t *testing.T) {
 	t.Cleanup(srv.Close)
 	assertEntryPointsReachable(t, srv.URL)
 
-	dump := siteDump{GeneratedBy: "viewer-tests/site_dom_test.go", Toolchain: tc}
+	dump := siteDump{Tree: tree, GeneratedBy: "viewer-tests/site_dom_test.go", Toolchain: tc}
 	for _, e := range siteEntries {
 		dump.Pages = append(dump.Pages, readSitePage(t, browser, srv.URL, e))
 	}
@@ -1284,6 +1454,15 @@ func TestSiteRenderedDOMExtraction(t *testing.T) {
 				"produced the DOM it records; site_toolchain_test.go checks that toolchain against the "+
 				"publish workflow, and neither is worth anything if the dump does not carry it",
 				out, round.Toolchain.NodeVersion, round.Toolchain.NPMVersion)
+		}
+		// The tree stamp has to survive the round trip too — it is the one fact
+		// that lets run.sh `record` tell this release's extraction from one
+		// left over by the last, and a stamp that was set going in and blank
+		// coming back is a marshalling defect the gate would read as a stale
+		// artifact.
+		if round.Tree != tree {
+			t.Fatalf("%s records tree %q and this extraction was driven for %q; the stamp did not survive "+
+				"the round trip, and record-time freshness would judge the wrong value", out, round.Tree, tree)
 		}
 		for _, page := range round.Pages {
 			if len(page.Text) == 0 {
@@ -1726,19 +1905,32 @@ func assertVersionTranscriptIsRealOutput(t *testing.T, dump siteDump) {
 	}
 
 	// THE VERSION THE RELEASE WOULD STAMP, derived from the tag the site itself
-	// calls current. `.goreleaser.yaml` stamps `-X main.version={{.Version}}`, and
-	// GoReleaser's `{{.Version}}` is the tag with its leading `v` stripped —
-	// `{{.Tag}}` is the spelling that keeps it. That MODEL is not held here; it is
+	// calls current. `.goreleaser.yaml` stamps `-X main.version={{.Tag}}`, and
+	// GoReleaser's `{{.Tag}}` is the tag exactly as tagged — `{{.Version}}` is the
+	// spelling that strips the leading `v`. That MODEL is not held here; it is
 	// held in the root module by gateRequireReleaseTransform, which parses
 	// .goreleaser.yaml and fails if the template ever changes. Splitting it that
 	// way is deliberate: this module cannot parse YAML (its go.mod is chromedp and
 	// nothing else), and a second hand-rolled reader of that file would be a second
 	// model to keep in step.
+	//
+	// THE TRANSFORM IS THE IDENTITY, SINCE THE `{{.Tag}}` STAMP, and that is issue #38's fix
+	// rather than a simplification. The archive used to print `0.5.1` while
+	// `go install …@v0.5.1` printed `v0.5.1`, because the module proxy hands
+	// debug.ReadBuildInfo the tag verbatim and no ldflags reach that path at all.
+	// One canonical form ends it, and the tag is that form: it is what the git
+	// tag, `go install`'s argument, the CHANGELOG heading and every string the
+	// site renders already say.
+	//
+	// So the tag is used directly, with no transform to apply and none to keep in
+	// step. The variable stays named `stamped` because that is what it is — the
+	// value the release build stamps into the binary — and naming it for its
+	// current equality with the tag would hide what it is for.
 	ra := repoReleases(t)
 	tag := ra.current()
-	stamped := strings.TrimPrefix(tag, "v")
-	if stamped == tag {
-		t.Fatalf("the current release entry is %q, which carries no leading \"v\" to strip. The release build's version and the release's name would then be one string, and this comparison could no longer tell the page depicting the right one from the page depicting the wrong one",
+	stamped := tag
+	if !strings.HasPrefix(tag, "v") {
+		t.Fatalf("the current release entry is %q, which carries no leading \"v\". Every version string in this project is the tag as tagged — the archive, `go install`, the CHANGELOG heading and the site — and an entry that drops the prefix means the site and the binary have started spelling the same release two ways again, which is exactly issue #38",
 			tag)
 	}
 
@@ -1781,8 +1973,8 @@ func assertVersionTranscriptIsRealOutput(t *testing.T, dump siteDump) {
 			return
 		}
 		t.Errorf("the rendered %q session depicts %q, which `dossierx %s` does not print.\nreal output (from a binary linked the way the release links one, `-X main.version=%s`):\n  %s\nrendered:\n  %s\n"+
-			"The page may abridge that output and may not invent a line of it. If the difference is the version's leading `v`: the release build strips it, so the tag is %s and the binary prints %s.",
-			versionCommandCard, line.Text, strings.Join(argv[1:], " "), stamped, strings.Join(printed, "\n  "), renderedTranscript(depicted), tag, stamped)
+			"The page may abridge that output and may not invent a line of it. If the difference is the version's leading `v`: there is no longer a difference to reconcile — the release build stamps the tag as tagged, so the tag and the printed version are both %s. A page depicting the stripped form is depicting output no install path produces.",
+			versionCommandCard, line.Text, strings.Join(argv[1:], " "), stamped, strings.Join(printed, "\n  "), renderedTranscript(depicted), tag)
 		return
 	}
 
