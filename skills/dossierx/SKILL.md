@@ -215,11 +215,15 @@ Only when the human asks, and **in this order** — steps 2 and 3 are not interc
    `docs/dossierx-agent-guide.md` under the root, where that section links it. Run before the
    config exists it still exits 0 — it installs the bundles and drops the guide beside them, no
    `AGENTS.md` touched — and nothing later in this sequence exports again.
-4. Ask before installing the git pre-commit hook. If yes, fetch
+4. Ask before installing the git pre-commit hook. Their answer decides the hook alone, never CI:
+   **CI is the authority either way**, and both answers end with the workflow installed — the hook
+   is only fast local feedback on top of it, which git skips on merges, rebases, cherry-picks and
+   reverts, and which `--no-verify` bypasses. Neither the hook installer nor
+   `scripts/ci/dossierx-check.yml` exists in *their* repo — both ship with DossierX, so fetch each
+   from the same release path. If yes, fetch
    `https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.6.0/scripts/install-git-hook.sh`,
-   show them what it does, then run `sh install-git-hook.sh --yes`. Neither it nor
-   `scripts/ci/dossierx-check.yml` exists in *their* repo — both ship with DossierX, so fetch from
-   the same release path. If no, add the CI workflow instead and say so: **CI is the authority.**
+   show them what it does, run `sh install-git-hook.sh --yes`, then add the CI workflow as well.
+   If no, skip the hook, add the CI workflow alone, and say so.
 5. **Only if the project predates the lock ledger AND still holds locked claims or a locked build
    order**, `check` will refuse it: take it through The pre-ledger crossing above — show the human
    what unlocking everything discards, get their yes, then re-propose, unlock, re-lock. Skip it on

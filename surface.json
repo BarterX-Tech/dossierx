@@ -479,7 +479,7 @@
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
     "internal/serve": "sha256:bfa5e4e6c5bac0180b547e2ac7a6e6deaecce37570014a6f5d49dcee591ce989",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:790e7c647a4ca8e06f9765639f7899c97200196bdcd544eeda53b9ca0e79ac9c"
+    "skills": "sha256:4694f0dca84d8bfef89e83c50e748c0c06ceaca6b2707fcc56416e07b2e6aa97"
   },
   "envelope": {
     "keys": [

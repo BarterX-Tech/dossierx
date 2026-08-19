@@ -26,12 +26,17 @@ Set up DossierX in this repository.
 1. If the `dossierx` binary is missing, install it with
    `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.6.0`,
    then run `dossierx version` and show me the output.
-2. Run `dossierx skills export .claude/skills` — or point it at whichever
-   skills/instructions directory this harness actually reads. Load what it
-   wrote and follow it: those guides, not this message, are the contract.
-3. If `project.config.yaml` and the claims directory do not exist yet,
+2. If `project.config.yaml` and the claims directory do not exist yet,
    propose a title, the facets, and the modules, and WAIT for me to confirm
    before writing anything.
+3. Run `dossierx skills export .claude/skills` — or point it at whichever
+   skills/instructions directory this harness actually reads. Run it AFTER
+   step 2, never before: the export finds the project root through
+   `project.config.yaml`, and only a rooted export maintains its section in
+   an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md`
+   under the root — run rootless it still exits 0, and nothing later in this
+   message exports again. Load what it wrote and follow it: those guides,
+   not this message, are the contract.
 4. ASK ME before installing the git pre-commit hook. My answer decides the
    hook alone, never CI — CI is the authority either way. If I say yes, fetch
    https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.6.0/scripts/install-git-hook.sh
@@ -45,7 +50,7 @@ Set up DossierX in this repository.
    command. Crossing means re-proposing every locked build order, unlocking
    every locked claim, then re-locking only what I still stand behind. Show
    me the plan and WAIT for my yes before unlocking anything. On a project
-   you created at step 3 this never fires — say you skipped it.
+   you created at step 2 this never fires — say you skipped it.
 6. Run `dossierx check --format text` and show me the output. Do not tell me
    it works; show me it exiting 0.
 7. Tell me to commit `.dossierx-lock-store.json` — and
@@ -317,7 +322,7 @@ Config loading is strict: an unknown top-level or `viewer.theme` field is a hard
 
 DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the seven nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
 
-`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 2 of the paste block above does this. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. That is why step 2 names `.claude/skills` explicitly: it runs before the config exists, so the guides are in place to be followed while the project is set up. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
+`dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md` under the root, while a rootless one exits 0 having installed only the bundles, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 
 The skills are one source written in three forms, because no two agent harnesses read the same file:
 

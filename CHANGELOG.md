@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **SILENT: three shipped skill guides changed, and the skills are embedded in the binary — anyone
 who has run `dossierx skills export` must re-run it after upgrading, or their agents keep
 following procedures that do not work:** a review loop that wedges on a refusal whose recovery is
-the step scheduled after it, a bootstrap that ends silently uninstructed, and a build-order
-recovery whose advice fails every claim it touches at the next `check`. In all three the engine
-was right and the guide was wrong — no command, flag, `error.code`, lint rule or gate behaves
-differently. The corrections are the first three items under **Changed**.
+the step scheduled after it, a bootstrap that ends silently uninstructed, a bootstrap whose
+yes-to-the-hook answer ends with no CI gate at all, and a build-order recovery whose advice fails
+every claim it touches at the next `check`. In all four the engine was right and the guide was
+wrong — no command, flag, `error.code`, lint rule or gate behaves differently. The corrections
+are the first four items under **Changed**.
 
 ### Added
 
@@ -46,6 +47,14 @@ The three skill-guide corrections behind the callout above:
   The export resolves its root from `project.config.yaml`, which the old ordering had not written
   yet — rootless, it exits 0, maintains no `AGENTS.md` section, drops the agent guide in the
   wrong place, and nothing later exported again. Steps 2 and 3 are swapped.
+- **The bootstrap installs the CI workflow on both answers to the hook question**
+  (`skills/dossierx/SKILL.md`). Step 4 fetched `scripts/ci/dossierx-check.yml` only when the human
+  *declined* the pre-commit hook — the identical defect this release fixes in README's paste
+  block (under **Fixed** below), standing uncorrected in the procedure's other home, so the
+  nudged answer — yes — ended the bootstrap with only the local gate git skips on merges,
+  rebases, cherry-picks and reverts, and that `--no-verify` bypasses. The hook question now
+  decides the hook alone, both answers end with the workflow installed, and "CI is the authority
+  either way" governs both branches from the step's shared preface.
 - **The build-order recovery for a missing `build_role` routes through the approval path**
   (`skills/dossierx-build-order/SKILL.md`). "Set it, then re-propose" could only mean hand-editing
   a locked file — no verb sets `build_role` after creation — and the next `check` failed
@@ -71,6 +80,14 @@ In the documents client teams follow, each a procedure that failed a reader foll
 - **README's setup paste block installs the CI workflow on both answers to the hook question.**
   It fetched the workflow only when the human *declined* the pre-commit hook, so the nudged
   answer — yes — ended setup with only the local, skippable gate.
+- **README's setup paste block creates the project before exporting the skills.** Step 2 ran
+  `dossierx skills export .claude/skills` before step 3 had written `project.config.yaml` — the
+  identical defect this release fixes in the router skill's bootstrap (under **Changed** above),
+  standing uncorrected in the procedure's other home. Rootless, the export exits 0, maintains no
+  section in an existing `AGENTS.md`, drops the agent guide beside the bundles instead of at
+  `docs/`, and nothing later in the block exports again — a harness that reads `AGENTS.md` was
+  never taught DossierX at all. Steps 2 and 3 are swapped, and the two documents now give the
+  bootstrap in the same order.
 - **README says to commit the comment digest store with the first lock, not "once anyone
   comments".** The engine creates `.dossierx-comment-digest.json` empty at the first lock; a
   reader who waited staged the lock store without it and was stopped by the hook's own
