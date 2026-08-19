@@ -356,11 +356,23 @@ func gateStage2CheckExtractIsWhole(spec gateBundleSpec) error {
 }
 
 // gateStage2BundleSpec is what one surface's bundle is assembled from.
-func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, error) {
+func gateStage2BundleSpec(surface string, documents, references []string) (gateBundleSpec, error) {
 	if len(documents) == 0 {
 		return gateBundleSpec{}, fmt.Errorf("surface %q resolved to no document", surface)
 	}
-	spec := gateBundleSpec{Surface: surface, Artifacts: gateStage2Artifacts(surface)}
+	spec := gateBundleSpec{
+		Surface:   surface,
+		Artifacts: gateStage2Artifacts(surface),
+		// Context this surface borrows from others, resolved by
+		// gateSurfaceReferences from the manifest's `reads:` lists. It sits
+		// OUTSIDE the Handed/Withheld split below, which is what keeps that
+		// split's totality enforceable: those two together are still exactly
+		// the resolved document set, and this is a third list of documents the
+		// surface does not own. gateBundleAssemble refuses any overlap between
+		// them, and hands each referenced document over under a heading that
+		// says it is not this surface's to report on.
+		Referenced: append([]string(nil), references...),
+	}
 	switch {
 	case surface == "binary-and-viewer":
 		// Handed and Withheld together are still the whole resolved set: every
@@ -384,8 +396,17 @@ func gateStage2BundleSpec(surface string, documents []string) (gateBundleSpec, e
 }
 
 // gateStage2Inputs is one surface's whole key input set.
-func gateStage2Inputs(root, surface string, documents []string) (gateSurfaceInputs, error) {
-	spec, err := gateStage2BundleSpec(surface, documents)
+//
+// The referenced documents are NOT listed as a separate key component, for the
+// same reason the per-surface captures are not: gateBundleAssemble hands their
+// bytes to the agent verbatim, so the Bundle component already covers them, and
+// a second component over the same bytes could never be moved without moving
+// the bundle too — a component no mutation could redden. What holds the
+// coverage instead is TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther,
+// which edits a borrowed document and requires exactly the borrowing surfaces'
+// keys (plus the owner's, through ITS Documents component) to move.
+func gateStage2Inputs(root, surface string, documents, references []string) (gateSurfaceInputs, error) {
+	spec, err := gateStage2BundleSpec(surface, documents, references)
 	if err != nil {
 		return gateSurfaceInputs{}, err
 	}
@@ -926,11 +947,19 @@ func gateStage2Keys(root string, tracked []string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The borrowed context, resolved against the SAME tracked set the documents
+	// were, and before a single key is computed: a `reads:` entry naming a file
+	// that has moved refuses the whole run here rather than producing one
+	// surface's key over a smaller bundle than the manifest declares.
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		return nil, err
+	}
 
 	keys := make(map[string]string, len(declared))
 	var problems []string
 	for _, surface := range declared {
-		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface])
 		if inErr != nil {
 			problems = append(problems, inErr.Error())
 			continue
@@ -1581,9 +1610,13 @@ func TestGateStage2EveryClaimedDocumentIsAccountedForInItsBundle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
+	references, err := gateSurfaceReferences(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
 
 	for _, surface := range declared {
-		spec, err := gateStage2BundleSpec(surface, documents[surface])
+		spec, err := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if err != nil {
 			t.Errorf("surface %q: %v", surface, err)
 			continue
@@ -1631,7 +1664,11 @@ func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testin
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
-	spec, err := gateStage2BundleSpec(surface, documents[surface])
+	references, err := gateSurfaceReferences(overlay, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
+	spec, err := gateStage2BundleSpec(surface, documents[surface], references[surface])
 	if err != nil {
 		t.Fatalf("the real %s surface could not be given a bundle spec: %v", surface, err)
 	}
@@ -1746,7 +1783,7 @@ func TestGateStage2BinaryAndViewerHoldsTheMaterialItsQuestionsAreAbout(t *testin
 			Question string
 		}{"cmd/dossierx/renamed-away/", ".go", "a class whose directory was renamed"})
 
-		if _, err := gateStage2BundleSpec(surface, documents[surface]); err == nil {
+		if _, err := gateStage2BundleSpec(surface, documents[surface], references[surface]); err == nil {
 			t.Fatal("a class resolving to no handed file was accepted; the files are still in the key and still named as withheld, and the question about them is being put to nobody")
 		}
 		keys, keyErr := gateStage2Keys(overlay, tracked)
@@ -1780,9 +1817,13 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 	if err != nil {
 		t.Fatalf("resolve documents: %v", err)
 	}
+	references, err := gateSurfaceReferences(root, tracked)
+	if err != nil {
+		t.Fatalf("resolve the surfaces' borrowed context: %v", err)
+	}
 	key := func(t *testing.T) (string, []byte) {
 		t.Helper()
-		spec, specErr := gateStage2BundleSpec(surface, documents[surface])
+		spec, specErr := gateStage2BundleSpec(surface, documents[surface], references[surface])
 		if specErr != nil {
 			t.Fatalf("bundle spec: %v", specErr)
 		}
@@ -1790,7 +1831,7 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 		if bundleErr != nil {
 			t.Fatalf("assemble: %v", bundleErr)
 		}
-		in, inErr := gateStage2Inputs(root, surface, documents[surface])
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface])
 		if inErr != nil {
 			t.Fatalf("inputs: %v", inErr)
 		}
@@ -1831,6 +1872,119 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 	if afterKey == beforeKey {
 		t.Error("editing a withheld document left the surface's key unmoved; a document nobody was handed is still part of the surface, and a verdict must not be carried across a change to it")
 	}
+}
+
+// TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther is the key-side
+// half of the `reads:` mechanism, measured rather than asserted.
+//
+// The borrowed bytes reach a surface's key through its BUNDLE — they are handed
+// to the agent verbatim, so the bundle digest covers them, the same route a
+// per-surface capture takes and for the same reason: a second key component
+// over the same bytes could never move without the bundle moving too, so no
+// mutation could redden it. That makes this test the thing actually holding the
+// coverage. If a future assembler stopped carrying referenced documents, no
+// refusal would fire — the bundle still assembles, still hashes — and the ONLY
+// observable failure is the one below: editing a borrowed document stops moving
+// the borrower's key, and the borrower carries forward a verdict about context
+// that moved.
+//
+// Both directions are asserted, because each defeats a different decay:
+//   - the borrower MUST move, or a stale borrow sits under a carried-forward
+//     verdict (the coverage failure);
+//   - a surface that neither owns nor reads the file MUST NOT move, or the
+//     cache buys nothing and every one-document fix re-runs agents that read
+//     nothing new (the cost failure the whole key exists to avoid).
+//
+// The owner moves through its own Documents component, which is asserted too so
+// that this test notices if ownership and borrowing ever start substituting for
+// each other.
+//
+// It runs on a synthetic tree for the reason
+// TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot does: the
+// assertion is about EDITING the files, and the real-tree overlay reaches most
+// directories through symlinks.
+func TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther(t *testing.T) {
+	root := t.TempDir()
+	tracked := []string{"docs/HANDBOOK.md", "docs/NOTES.md", "docs/SPEC.md"}
+
+	// handbook BORROWS spec's document; bystander touches neither.
+	gateWrite(t, root, gateManifestFile, "surfaces:\n"+
+		"  - name: handbook\n    paths: [docs/HANDBOOK.md]\n    reads: [docs/SPEC.md]\n"+
+		"  - name: spec\n    paths: [docs/SPEC.md]\n"+
+		"  - name: bystander\n    paths: [docs/NOTES.md]\n")
+	gateWrite(t, root, "docs/HANDBOOK.md", "the handbook says the spec defines two layouts\n")
+	gateWrite(t, root, "docs/SPEC.md", "the spec defines two layouts\n")
+	gateWrite(t, root, "docs/NOTES.md", "notes about nothing in particular\n")
+
+	gateWrite(t, root, gateStage2MethodFile, "model: claude-opus-5\ntools:\n  - SurfaceFinding\n  - SurfaceVerdict\n")
+	gateWrite(t, root, gateBundleFrameFile, "# Surface review — "+gateBundleSurfaceMarker+"\n\n"+
+		"Report FAILED on any mismatch you can demonstrate from the material below.\n\n"+gateBundlePartsMarker+"\n")
+	for _, surface := range []string{"handbook", "spec", "bystander"} {
+		gateWrite(t, root, gateBundlePromptFile(surface), "Read "+surface+" against the inventory.\n")
+	}
+	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"layouts\":2}}\n")
+	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+	gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"layouts\":2}}\n", "[]")
+
+	keys := func(t *testing.T) map[string]string {
+		t.Helper()
+		got, err := gateStage2Keys(root, tracked)
+		if err != nil {
+			t.Fatalf("key the fixture's three surfaces: %v", err)
+		}
+		return got
+	}
+
+	before := keys(t)
+	gateWrite(t, root, "docs/SPEC.md", "the spec now defines THREE layouts\n")
+	after := keys(t)
+	if after["handbook"] == before["handbook"] {
+		t.Error("editing a document the handbook surface BORROWS left its key unmoved; its agent's verdict — given over the previous spec — would be carried forward as current, which is precisely the staleness reads: exists to prevent")
+	}
+	if after["spec"] == before["spec"] {
+		t.Error("editing the spec surface's OWN document left its key unmoved; ownership has stopped reaching the key, which is a failure of the documents component rather than of reads:")
+	}
+	if after["bystander"] != before["bystander"] {
+		t.Error("editing a document the bystander surface neither owns nor reads moved its key; a borrow that re-runs strangers makes every one-document fix cost the whole fan-out")
+	}
+
+	// The reverse direction: the borrower's own document is nobody else's
+	// business. If this moved the spec's key, ownership and borrowing would be
+	// leaking into each other somewhere.
+	before = keys(t)
+	gateWrite(t, root, "docs/HANDBOOK.md", "the handbook, revised\n")
+	after = keys(t)
+	if after["handbook"] == before["handbook"] {
+		t.Error("editing the handbook's own document left its key unmoved")
+	}
+	if after["spec"] != before["spec"] || after["bystander"] != before["bystander"] {
+		t.Error("editing the handbook's own document moved another surface's key; borrowing is one-directional and must stay so")
+	}
+
+	// And an unresolvable borrow refuses the WHOLE keying, naming the surface
+	// and the path — never a key over a bundle smaller than the manifest
+	// declares, and never a partial map a caller could report coverage from.
+	t.Run("a borrow that no longer resolves", func(t *testing.T) {
+		original, readErr := os.ReadFile(filepath.Join(root, gateManifestFile))
+		if readErr != nil {
+			t.Fatalf("read the fixture manifest: %v", readErr)
+		}
+		defer gateWrite(t, root, gateManifestFile, string(original))
+		gateWrite(t, root, gateManifestFile, strings.Replace(string(original), "reads: [docs/SPEC.md]", "reads: [docs/MOVED.md]", 1))
+
+		got, err := gateStage2Keys(root, tracked)
+		if err == nil {
+			t.Fatal("every surface was keyed with one surface's borrowed document unresolvable; that surface's agent would be asked its question without material the manifest says it needs, and its FAILED-for-missing-bytes finding is the exact class reads: exists to end")
+		}
+		if got != nil {
+			t.Errorf("a partial key map came back alongside the error (%d entries)", len(got))
+		}
+		for _, want := range []string{"handbook", "docs/MOVED.md"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("the refusal must name %q so the fix is one manifest edit rather than a search; got:\n%v", want, err)
+			}
+		}
+	})
 }
 
 // gateStage2BinaryFixture is a synthetic tree that resolves `binary-and-viewer`

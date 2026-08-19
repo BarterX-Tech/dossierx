@@ -57,6 +57,16 @@ type surfaceEntry struct {
 	Reason string   `yaml:"reason"`
 	Paths  []string `yaml:"paths"`
 	Not    []string `yaml:"not"`
+	// Reads are documents this surface does NOT own, whose bytes its reviewing
+	// agent needs in order to judge its own — README.md describing behaviour
+	// FORMAT.md defines, a skill quoting an error message the CLI owns. They
+	// take no part in ownership: `claims` below reads Paths and Not only, so a
+	// reads: entry never makes this entry a second claimant and never disturbs
+	// the exactly-one rule — and a file that is only ever borrowed and never
+	// owned is still unclaimed and still reddens the coverage test. See
+	// surfaces.yaml's header for what the list is for and the rules it answers
+	// to.
+	Reads []string `yaml:"reads"`
 }
 
 // TestEveryTrackedFileIsDeclaredASurfaceOrExcluded is the whole point of the
@@ -137,6 +147,116 @@ func TestSurfaceManifestEntriesAreWellFormed(t *testing.T) {
 	for _, entry := range manifest.OutOfScope {
 		if strings.TrimSpace(entry.Reason) == "" {
 			t.Errorf("out_of_scope entry %q carries no reason; an undeclared exclusion is the gap this manifest exists to close", entry.Name)
+		}
+	}
+}
+
+// TestReadsDoesNotCountTowardTheExactlyOneRule pins the scoping that makes
+// `reads:` possible at all.
+//
+// A surface entry may carry a `reads:` list naming documents it does NOT own
+// but whose bytes its reviewing agent needs — see surfaces.yaml's own header
+// for why that exists. Ownership stays with `paths:`, and this file's central
+// rule is that every tracked file is claimed by EXACTLY ONE entry. If the
+// coverage walk ever started counting `reads:` as a claim, the first borrow to
+// land would make its target doubly-claimed and redden the build immediately,
+// and the obvious repair — deleting the reads: entry — throws the mechanism
+// away. So the property is asserted directly rather than left to the coverage
+// test to discover: a file named in some surface's reads: is claimed by
+// whichever entry owns it, and by that entry alone.
+//
+// WHAT THIS DELIBERATELY DOES NOT LICENSE: borrowing is not a way to satisfy
+// coverage. A file that appears only in reads: lists and in no entry's paths:
+// is still unclaimed, and TestEveryTrackedFileIsDeclaredASurfaceOrExcluded
+// still fails over it — the synthetic check at the bottom holds that reading of
+// `claims` in place, because the real manifest cannot: every real borrow
+// targets a file something else already owns, so the borrow-only case never
+// arises there until the day it matters.
+func TestReadsDoesNotCountTowardTheExactlyOneRule(t *testing.T) {
+	root := repoRoot(t)
+	manifest := loadSurfaceManifest(t, root)
+
+	var referenced []string
+	for _, entry := range manifest.Surfaces {
+		referenced = append(referenced, entry.Reads...)
+	}
+	// NOT a skip. surfaces.yaml declares reads: entries today, so an empty set
+	// here means this test's decode of the manifest has diverged from the file
+	// — a renamed field, a moved key — and every assertion below would pass
+	// over nothing, which is indistinguishable from a clean run and must never
+	// be.
+	if len(referenced) == 0 {
+		t.Fatalf("%s declares no reads: entries as this test decodes it, but the manifest carries them; the decode has gone stale and the assertions below would pass over zero borrows", surfacesManifestFile)
+	}
+
+	for _, file := range referenced {
+		var claimants []string
+		for _, entry := range allSurfaceEntries(manifest) {
+			if entry.claims(t, file) {
+				claimants = append(claimants, entry.Name)
+			}
+		}
+		if len(claimants) != 1 {
+			t.Errorf("%q is named in a surface's reads: and is claimed by %d entries (%v); it must be claimed by exactly one.\n"+
+				"reads: is not a claim — ownership is decided by paths: alone. If the coverage walk has started counting reads: as ownership, fix the walk rather than the manifest: deleting the reads: entry to make this green removes material an agent needs and re-opens the coverage gap it was declared to close.",
+				file, len(claimants), claimants)
+		}
+	}
+
+	// The synthetic half: an entry that BORROWS a file must not CLAIM it. This
+	// is what keeps a borrow-only file unclaimed — and therefore still a red
+	// build — no matter what the real manifest happens to borrow today.
+	borrower := surfaceEntry{Name: "borrower", Paths: []string{"docs/OWNED.md"}, Reads: []string{"docs/BORROWED.md"}}
+	if borrower.claims(t, "docs/BORROWED.md") {
+		t.Error("an entry claims a file it only reads: borrowing has been folded into ownership, so a borrow-only file would read as covered while no agent is responsible for reviewing it — coverage narrowed with nobody deciding to narrow it")
+	}
+	if !borrower.claims(t, "docs/OWNED.md") {
+		t.Error("the synthetic entry does not claim its own paths: file, so the assertion above proves nothing")
+	}
+}
+
+// TestReadsEntriesAreExactTrackedPathsSomebodyElseOwns holds the rules a
+// reads: entry answers to, at the manifest level.
+//
+// The gate enforces the same rules in gateSurfaceReferences
+// (cmd/dossierx/gate_fingerprint_test.go), as refusals on the run path, which
+// is what makes them checks rather than tests. They are asserted here as well
+// because this file is where a person edits the manifest: a failure here names
+// the entry and the rule in one place, instead of surfacing as a refused
+// fan-out several steps into a release.
+func TestReadsEntriesAreExactTrackedPathsSomebodyElseOwns(t *testing.T) {
+	root := repoRoot(t)
+	manifest := loadSurfaceManifest(t, root)
+	tracked := trackedFiles(t, root)
+
+	isTracked := make(map[string]bool, len(tracked))
+	for _, file := range tracked {
+		isTracked[file] = true
+	}
+
+	// Only surfaces may borrow. An out_of_scope entry has no reviewing agent,
+	// so a reads: list on one is material handed to nobody — a stated need the
+	// gate can never satisfy, sitting in the manifest looking satisfied.
+	for _, entry := range manifest.OutOfScope {
+		if len(entry.Reads) > 0 {
+			t.Errorf("out_of_scope entry %q declares reads: %v; exclusions have no reviewing agent, so there is nobody to hand the borrowed bytes to", entry.Name, entry.Reads)
+		}
+	}
+
+	for _, entry := range manifest.Surfaces {
+		seen := map[string]bool{}
+		for _, rel := range entry.Reads {
+			switch {
+			case strings.ContainsAny(rel, "*?") || strings.HasSuffix(rel, "/"):
+				t.Errorf("surface %q reads %q, which is a pattern. reads: takes exact repository-relative paths: a surface borrowing another's material names what it borrowed, and a glob lets the borrowed set grow as the other surface does without anyone deciding — and makes the surface's key depend on directory contents", entry.Name, rel)
+			case !isTracked[rel]:
+				t.Errorf("surface %q reads %q, which is not a tracked file. If the file moved, move this entry with it — the gate refuses the whole fan-out over an unresolvable borrow rather than dropping it, because a dropped one leaves the agent reporting the coverage gap this list exists to close", entry.Name, rel)
+			case seen[rel]:
+				t.Errorf("surface %q reads %q twice", entry.Name, rel)
+			case entry.claims(t, rel):
+				t.Errorf("surface %q reads %q, which its own paths: already claim. reads: is for documents another surface owns — borrowing your own is either a stale entry or a paths: pattern that has grown, and those are different edits", entry.Name, rel)
+			}
+			seen[rel] = true
 		}
 	}
 }
