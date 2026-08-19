@@ -101,6 +101,19 @@ so already-installed hooks are already current:
   are given a PowerShell line — including a chain-it variant that writes LF through
   `[System.IO.File]::WriteAllText` instead of a CRLF pipeline — and the wrapper's own no-bash
   message names the resolved script path rather than a hardcoded repository-relative one.
+- **A machine-wide hook install is now said out loud.** When `core.hooksPath` comes from the
+  operator's global or system git config, the hook the installer writes fires on every commit,
+  in every repository, on the whole machine — and the installer used to write it while naming
+  only the setting, not its reach. It now classifies the setting's origin by asking git
+  (`--show-origin` compared against the repository's own `--git-dir`/`--git-common-dir` config
+  paths, anchored at the work-tree top, so submodules, `--separate-git-dir` layouts and linked
+  worktrees classify as the repository's own rather than as false alarms) and, when the origin
+  is not this repository's, states that the hook runs machine-wide, names the config file it
+  came from, and prints the uninstall line that removes the same path. An origin that cannot be
+  read is its own loud answer — the captured error plus the global/system queries that settle
+  it — never a silent default to either side. The disclosure accompanies the install; it does
+  not veto it. Per a maintainer's ruling of 11 Aug 2026 on a v0.5.2 gate finding;
+  `tests/install_hook_scope_test.go` pins both directions.
 
 ## [0.5.1] - 2026-08-10
 

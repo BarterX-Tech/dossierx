@@ -52,7 +52,19 @@
 #                   installed into THAT directory. Pointing core.hooksPath at
 #                   a directory of our own would silently disable every other
 #                   hook the project runs, which is a hostile thing to do to
-#                   someone who said yes to "add a pre-commit check".
+#                   someone who said yes to "add a pre-commit check". THAT
+#                   DIRECTORY CAN BE OUTSIDE THIS REPOSITORY ENTIRELY: when
+#                   core.hooksPath came from the operator's GLOBAL (or system)
+#                   git config rather than a setting scoped to this repo, the
+#                   hook is written into a machine-wide directory and then
+#                   fires on every commit, in every repository, on the whole
+#                   machine — not just the one this install was run from. The
+#                   script says so at install time (see the scope
+#                   classification below the "configured_hooks_path" note),
+#                   but that disclosure is a runtime message and a "--yes" run
+#                   may have no human reading stdout at the moment it prints —
+#                   so the global case is stated in this header too, where a
+#                   reader shown the script before saying yes will meet it.
 #   worktrees       In a linked worktree .git is a FILE, not a directory, so
 #                   ".git/hooks" is simply wrong. git rev-parse --git-path
 #                   answers correctly in both layouts (and resolves to the
@@ -627,6 +639,160 @@ if [ -n "$configured_hooks_path" ]; then
 		"      core.hooksPath\" says which. This script only READS it: it never sets or" \
 		"      changes core.hooksPath, because repointing it would silently disable" \
 		"      every other hook you run." ""
+
+	# SAY THE MACHINE-WIDE CASE OUT LOUD. Naming the setting and handing over
+	# the command that resolves its origin is not the same as telling somebody
+	# what is about to happen to them: a reader who does not already know how
+	# core.hooksPath scopes will read the note above as being about this
+	# repository. When the value came from global or system config, this write
+	# lands outside the repository the operator is standing in and the hook then
+	# runs for EVERY repository on the machine. That is legitimate — a global
+	# hooks path is an ordinary single-machine setup and repointing it would be
+	# worse — but it must be stated rather than inferred, which is a maintainer's
+	# ruling of 11 Aug 2026 on a v0.5.2 gate finding.
+	# NO -C HERE. The script already did `cd "$repo_dir"` above, so passing it
+	# again asks git for repo_dir/repo_dir, which fails into a discarded stderr
+	# and leaves this empty — silently skipping the warning below on exactly the
+	# invocation (`--repo`) most likely to be scripted. The unquoted expansion
+	# that did it also word-split any path containing a space. The line that
+	# reads the VALUE, a screen up, has always had this right; this one is the
+	# same question and takes the same form.
+	# stderr is CAPTURED, not discarded, and the exit status decides which
+	# variable gets the result. A "not configured" failure cannot happen here
+	# — the plain `git config --get` above already succeeded, so we know the
+	# key is set — so a failure of the --show-origin form means something is
+	# actually wrong with running it (an old git, a wrapper that mishandles
+	# the flag, ...), and that reason is exactly what the "unknown" branch
+	# below needs to hand back instead of re-issuing the same read.
+	hooks_path_origin_stderr=
+	if hooks_path_origin_raw=$(git config --show-origin --get core.hooksPath 2>&1); then
+		hooks_path_origin=$(printf '%s\n' "$hooks_path_origin_raw" | cut -f1)
+		hooks_path_origin=${hooks_path_origin#file:}
+	else
+		hooks_path_origin=
+		hooks_path_origin_stderr=$hooks_path_origin_raw
+	fi
+
+	# WHICH ORIGINS MEAN "NOT THIS REPOSITORY", asked of git rather than guessed
+	# from the shape of the path.
+	#
+	# The obvious spelling is a case pattern — anything not matching
+	# `*/.git/config` or a `config.worktree` is machine-wide — and it is wrong
+	# in both directions, which the v0.5.2 gate found three ways:
+	#
+	#   A SUBMODULE has no .git DIRECTORY. Its config lives at
+	#   <superproject>/.git/modules/<name>/config, which matches no pattern above,
+	#   so a setting scoped to that one submodule was announced as running for
+	#   every repository on the machine.
+	#   `--separate-git-dir` does the same thing for the same reason: .git is a
+	#   file, the config is wherever the real git dir was put.
+	#   A GIT WITHOUT --show-origin (or any read that fails) returns EMPTY, and
+	#   empty was grouped with "this repository's own" — so the case the warning
+	#   exists for was silently skipped whenever the question could not be
+	#   answered. That is "we did not check" reading as "it is fine", which this
+	#   project refuses by name.
+	#
+	# git knows where its own config is, so it is asked. --git-common-dir is what
+	# makes a linked worktree resolve to the repository it belongs to; on a git
+	# too old to know the option it echoes the option back, and the fallback to
+	# --git-dir covers that.
+	hooks_origin_git_dir=$(git rev-parse --git-dir 2>/dev/null || printf '')
+	hooks_origin_common_dir=$(git rev-parse --git-common-dir 2>/dev/null || printf '')
+	case "$hooks_origin_common_dir" in
+	"" | --*) hooks_origin_common_dir="$hooks_origin_git_dir" ;;
+	esac
+	# BOTH SIDES ARE ANCHORED AT THE WORK-TREE TOP, WHICH IS NOT $PWD.
+	#
+	# Anchoring on $PWD is wrong in a way that only appears from a
+	# subdirectory — reproduced on the branch this is ported from, where it
+	# produced exactly the false positive this classification exists to
+	# remove. `git config --show-origin` prints the origin relative to the top
+	# of the work tree NO MATTER where it is run from (`file:.git/config`),
+	# while `git rev-parse --git-dir` prints relative only at the top and
+	# ABSOLUTE from anywhere below it. Joining the origin to $PWD inside a
+	# subdirectory therefore produces `<repo>/sub/.git/config`, which matches
+	# nothing, and a purely local `core.hooksPath` is announced as running for
+	# every repository on the machine.
+	hooks_origin_top=$(git rev-parse --show-toplevel 2>/dev/null || printf '')
+	# TWO ANCHORS, BECAUSE GIT USES TWO. --show-origin and --git-dir are relative
+	# to the work-tree TOP; --git-common-dir's relative form is relative to $PWD
+	# ("../../.git" from two levels down). Joining that one to the toplevel builds
+	# <top>/../../.git, which matches nothing. No false positive is reachable
+	# through it today — in the main work tree --git-dir is absolute from a
+	# subdirectory and matches first, and in a linked work tree both values are
+	# absolute — but a relative --git-common-dir resolved against the wrong anchor
+	# is a trap for the next edit, so it is resolved against its own.
+	absolutise_repo_path() {
+		case "$1" in
+		"" | /* | ?:[/\\]*) printf '%s' "$1" ;;
+		*) printf '%s/%s' "${2:-${hooks_origin_top:-$PWD}}" "$1" ;;
+		esac
+	}
+	hooks_origin_git_dir=$(absolutise_repo_path "$hooks_origin_git_dir")
+	hooks_origin_common_dir=$(absolutise_repo_path "$hooks_origin_common_dir" "$PWD")
+	hooks_path_origin_abs=$(absolutise_repo_path "$hooks_path_origin")
+
+	# The test is INVERTED on purpose: anything that is not provably this
+	# repository's own config is reported as machine-wide, because a glob list
+	# of "global-looking" paths misses the system gitconfig everywhere it does
+	# not live at the guessed path — and unknown-origin is its own loud answer,
+	# never a silent default to either side.
+	hooks_origin_scope=machine-wide
+	if [ -z "$hooks_path_origin" ]; then
+		hooks_origin_scope=unknown
+	else
+		for candidate in \
+			"$hooks_origin_git_dir/config" \
+			"$hooks_origin_git_dir/config.worktree" \
+			"$hooks_origin_common_dir/config" \
+			"$hooks_origin_common_dir/config.worktree"; do
+			[ "$hooks_path_origin_abs" = "$candidate" ] || continue
+			# This repository's own config, including a worktree-scoped setting
+			# under extensions.worktreeConfig — narrower than the repository
+			# rather than wider. Saying "EVERY git repository on this machine"
+			# over one of those is the same defect as staying silent over a
+			# global one, pointing the other way.
+			hooks_origin_scope=this-repository
+			break
+		done
+	fi
+
+	case "$hooks_origin_scope" in
+	this-repository) ;;
+	unknown)
+		# Telling the reader to run "git config --show-origin --get
+		# core.hooksPath" here would be handing back the exact read that just
+		# failed a screen up — it will fail again for the same reason and
+		# settle nothing. Advice that can actually settle it has to be a
+		# DIFFERENT read: the captured stderr from the failed attempt, if
+		# there was any, plus the two scope-specific queries that answer
+		# "global or system?" without needing --show-origin at all.
+		printf '%s\n' \
+			"      WHICH CONFIG THAT SETTING COMES FROM COULD NOT BE READ, so this" \
+			"      script cannot tell you whether the hook it is about to install runs" \
+			"      only here or for EVERY git repository on this machine." ""
+		if [ -n "$hooks_path_origin_stderr" ]; then
+			printf '%s\n' \
+				"      \"git config --show-origin --get core.hooksPath\" itself said:" \
+				"        $hooks_path_origin_stderr" ""
+		fi
+		printf '%s\n' \
+			"      Check instead:" \
+			"        git --version                              --show-origin needs 2.8+" \
+			"        git config --global --get core.hooksPath    set globally?" \
+			"        git config --system --get core.hooksPath    or system-wide?" \
+			"      A value from either of those means the hook runs for EVERY git" \
+			"      repository on this machine, not only this one. Uninstall with" \
+			"      \"$self_invocation --uninstall\", which removes the same path." ""
+		;;
+	*)
+		printf '%s\n' \
+			"      THAT SETTING IS NOT THIS REPOSITORY'S. It comes from" \
+			"      $hooks_path_origin, so this hook will run for EVERY git" \
+			"      repository on this machine, not only this one. Uninstall with" \
+			"      \"$self_invocation --uninstall\", which removes the same path." ""
+		;;
+	esac
 fi
 
 # --- uninstall --------------------------------------------------------------
