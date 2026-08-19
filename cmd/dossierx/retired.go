@@ -108,8 +108,8 @@ func retiredCommentVerbs() []*cobra.Command {
 // "if you remember an older command" table, in the same words, so the binary and
 // the skill cannot drift into disagreeing about where a caller should go next.
 //
-// lock/unlock/flag/reaudit ARE here as of v0.5.2, and the reason they were not
-// is worth keeping because it was wrong in an instructive way. It said they
+// lock/unlock/flag/reaudit ARE here now, and the reason they were not for so
+// long is worth keeping because it was wrong in an instructive way. It said they
 // moved under a noun of the same name, so the root "already" answers
 // `dossierx lock <id>` with a hint listing the seven nouns. It does not. This
 // file's own package doc states why: cobra's legacyArgs rejects an unknown
