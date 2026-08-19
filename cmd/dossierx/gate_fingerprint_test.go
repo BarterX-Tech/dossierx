@@ -628,6 +628,20 @@ type gateManifestEntry struct {
 	Name  string   `yaml:"name"`
 	Paths []string `yaml:"paths"`
 	Not   []string `yaml:"not"`
+	// Reads are documents this surface DOES NOT OWN but whose bytes its agent
+	// needs to judge its own. They are exact repo-relative paths, never
+	// patterns: a surface borrowing another's material has to name what it
+	// borrowed, and a glob would let the borrowed set grow silently as the
+	// other surface does — and would make the surface's key depend on directory
+	// contents nobody decided to include.
+	//
+	// They take no part in ownership. gateEntryClaims reads Paths and Not only,
+	// so a `reads:` entry never makes this surface a second claimant of a file
+	// and never disturbs the manifest's exactly-one rule — which also means a
+	// file that is only ever borrowed and never owned is still UNCLAIMED, and
+	// tests/surfaces_manifest_test.go still reddens over it. Borrowing is not a
+	// way to satisfy coverage; it is a way to hand an agent context.
+	Reads []string `yaml:"reads"`
 }
 
 // gateLoadManifest reads surfaces.yaml. A manifest that cannot be read is an
@@ -688,6 +702,75 @@ func gateSurfaceDocuments(root string, tracked []string) (map[string][]string, e
 		}
 		sort.Strings(owned)
 		out[entry.Name] = owned
+	}
+	return out, nil
+}
+
+// gateSurfaceReferences resolves every surface's `reads:` list — the documents
+// it borrows from other surfaces — against the tracked set, or refuses.
+//
+// WHY THE LIST EXISTS. gateSurfaceDocuments gives each surface the files it
+// OWNS, and the bundle hands its agent those and nothing else. But documents
+// refer to each other: README.md describes behaviour FORMAT.md defines, a skill
+// quotes an error message the CLI owns. An agent asked whether such a sentence
+// is still true cannot check it — the deciding document belongs to another
+// surface, so it is not handed, not withheld, and not present at all — and the
+// frame correctly orders it to report FAILED and name the byte it needed rather
+// than guess. In the abandoned v0.5.2 release's first gate round, 20 of 39
+// findings were exactly that shape: agents naming a byte the gate's own
+// assembly had withheld from them. `reads:` closes each such gap permanently:
+// declare the path once, and that pair cannot recur.
+//
+// EVERY REFUSAL HERE IS A REFUSAL AND NOT A SHORTER LIST, for the reason
+// gateBundleAssemble gives about its own: a bundle assembled over less material
+// than it should be still hashes, still looks like a match, and still carries a
+// verdict forward. A `reads:` entry that resolves to nothing is a question the
+// agent was supposed to be able to answer and now cannot, and dropping it would
+// go unnoticed — the finding it produces looks exactly like the coverage gap
+// this mechanism exists to close.
+//
+// WHAT THIS CANNOT PROMISE. It resolves paths; it does not know WHY a surface
+// borrows one. A stale entry — a borrow whose citing sentence has since been
+// deleted — resolves cleanly and merely pads the borrower's bundle and re-runs
+// it more often than needed. That is a cost defect, not a coverage one, and
+// pruning it is a human edit to surfaces.yaml, where each entry carries the
+// comment saying which sentence it exists for.
+func gateSurfaceReferences(root string, tracked []string) (map[string][]string, error) {
+	m, err := gateLoadManifest(root)
+	if err != nil {
+		return nil, err
+	}
+	isTracked := make(map[string]bool, len(tracked))
+	for _, file := range tracked {
+		isTracked[file] = true
+	}
+
+	out := make(map[string][]string, len(m.Surfaces))
+	for _, entry := range m.Surfaces {
+		if len(entry.Reads) == 0 {
+			continue
+		}
+		seen := map[string]bool{}
+		refs := make([]string, 0, len(entry.Reads))
+		for _, rel := range entry.Reads {
+			switch {
+			case strings.ContainsAny(rel, "*?") || strings.HasSuffix(rel, "/"):
+				// Distinguished from "not tracked" because the repairs differ: a
+				// moved file means moving the entry, a pattern means someone tried
+				// to widen the borrow without naming what it grows to include.
+				return nil, fmt.Errorf("surface %q reads %q, which is a pattern. reads: takes exact repository-relative paths only: a surface borrowing another's material names what it borrowed, and a glob would let the borrowed set grow as the other surface does without anyone deciding", entry.Name, rel)
+			case !isTracked[rel]:
+				return nil, fmt.Errorf("surface %q reads %q, which is not a tracked file. If the file moved, move this entry with it. An unresolvable reads: entry refuses the whole fan-out rather than being dropped, because a dropped one leaves the agent reporting the coverage gap this list exists to close", entry.Name, rel)
+			case seen[rel]:
+				return nil, fmt.Errorf("surface %q reads %q twice; the bundle would carry the same bytes twice under the same heading", entry.Name, rel)
+			case gateEntryClaims(entry, rel):
+				return nil, fmt.Errorf("surface %q reads %q, which its own paths: already claim. reads: is for documents another surface owns — borrowing your own is either a stale entry or a paths: pattern that has grown, and the two are different edits", entry.Name, rel)
+			}
+			seen[rel] = true
+			refs = append(refs, rel)
+		}
+		sort.Strings(refs)
+		out[entry.Name] = refs
 	}
 	return out, nil
 }

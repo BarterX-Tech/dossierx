@@ -329,14 +329,14 @@ var gateLedgerBases = map[string]gateLedgerBasisSpec{
 	"binary.embedded_prose": {
 		Resolves: "the prose compiled INTO the binary — cobra Short and Long text, flag usage, error messages and hints, " +
 			"and the viewer templates rendered into every client's index.html",
-		Provenance: "surfaces.yaml:131-135, which is surfaces.yaml's own description of what the binary-and-viewer surface IS. " +
+		Provenance: "surfaces.yaml:444-451, which is surfaces.yaml's own description of what the binary-and-viewer surface IS. " +
 			"NOT RESOLVABLE TODAY: surface.json's commands array carries only {path, short, flags} — no long text, no flag usage, " +
 			"no error-message strings, no templates — so this document cannot be reconstructed from the committed inventory.",
 		size: gateLedgerSizeUnavailable,
 	},
 	"site.rendered_dom": {
 		Resolves:   "the rendered DOM text of a real build, plus its head metadata",
-		Provenance: "surfaces.yaml:92-95 and the design's 'verify the thing the user sees'. NOT RESOLVABLE TODAY: the rendered site text is gate/site-text.json, an ephemeral gate working artifact that does not exist on disk.",
+		Provenance: "surfaces.yaml:355-362 and the design's 'verify the thing the user sees'. NOT RESOLVABLE TODAY: the rendered site text is gate/site-text.json, an ephemeral gate working artifact that does not exist on disk.",
 		size:       gateLedgerSizeUnavailable,
 	},
 }

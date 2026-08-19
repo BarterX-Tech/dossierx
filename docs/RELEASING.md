@@ -135,9 +135,12 @@ them, and the three post-publish checks that leave this repository entirely.
       the comparison was against is the whole value of this gate.
 
       **1. Stage the run's evidence — each artifact by its producer, never by
-      hand.** A bundle is assembled from four things: the surface's question
+      hand.** A bundle is assembled from five things: the surface's question
       (`gate/prompts/<surface>.md`), the surface's own files read out of the tree,
-      the committed inventory `surface.json`, and the six uncommitted artifacts
+      the documents the surface's `reads:` list in `surfaces.yaml` borrows from
+      other surfaces (handed over as context, marked "NOT yours to report on" —
+      ownership and the duty to review stay with the surface that claims the
+      file), the committed inventory `surface.json`, and the six uncommitted artifacts
       under `gate/` produced below. Only those six are staged here, and the
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
@@ -244,6 +247,15 @@ them, and the three post-publish checks that leave this repository entirely.
       whole, and it never shrinks to twelve. There is exactly one implementation
       of it, `TestGateFanoutProduce` in `cmd/dossierx/gate_fanout_test.go`; the
       shell wraps that and re-implements nothing.
+
+      A `reads:` entry in `surfaces.yaml` that no longer resolves — the borrowed
+      file moved or was deleted — is one of those whole-production refusals, and
+      the fix is the manifest edit the refusal names, never deleting the entry
+      to get past it: the entry exists because an agent once had to answer a
+      question without that file, and deleting it re-creates that round. The
+      borrowed bytes are inside the borrower's bundle and therefore inside its
+      key, so editing a borrowed document re-runs the surfaces that declared it
+      (and its owner, whose key covers it as a document) and no others.
 
       **3. Run the thirteen agents.** Run exactly the invocations `fanout`
       printed, one per surface, and change nothing about them. They are
