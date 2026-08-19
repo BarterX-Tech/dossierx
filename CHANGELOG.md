@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Every published release page now points at the CHANGELOG**, in two hand-written literal
+  blocks `.goreleaser.yaml` composes into the release body: a header saying that any change your
+  own tooling cannot detect for you is called out at the top of the release's CHANGELOG entry,
+  and a footer linking the cumulative `CHANGELOG.md` on `main`. The generated bullets between
+  them are grouped commit subjects, and a `feat` line reads the same whether or not it breaks a
+  build — v0.5.0's breaking change appeared there as an ordinary Features bullet. Both blocks are
+  deliberately template-free: GoReleaser composes header and footer into the release body at
+  publish time, so a template in either first renders after the tag is public, where nothing —
+  not `goreleaser check`, not `--skip=publish` — has looked at it. The release-notes predictor
+  models the literal footer in GoReleaser's own position, carries the header beside the predicted
+  body, and refuses the templated form of either.
+
 ### Changed
 
 - The release procedure's evidence-staging instructions in `docs/RELEASING.md` now match how
@@ -58,6 +72,29 @@ right and the guide was wrong, and what changed is the guide.
   routes through unlock → fix → lock as well.
 
 ### Fixed
+
+- **The release workflow's tag gate no longer deadlocks against the release driver.** The gate
+  job required the tagged commit to be reachable from `origin/main`, but the driver pushes the
+  tag first and `main` last — deliberately, so the site never announces a release whose archives
+  do not exist yet. So the gate fired at the tag push and asked for a branch that arrives two
+  steps later: it refused, no archives were built, the driver's archive verification waited for
+  archives that could never exist, and `main` never moved. Measured in v0.5.1 — the driver polled
+  for twenty minutes and stopped with the tag public and nothing else done; a human finished that
+  release by hand. The gate now asks a question the tag can answer alone: the tagged commit must
+  be a merge (the driver always tags the `--no-ff` merge it made), and the tagged tree must stamp
+  exactly this release. What that trade gives up is stated in `release.yml`'s header rather than
+  described as fixed, and `TestTheReleaseGateDoesNotAskTheForgeForOriginMain` refuses the
+  restoration by name.
+- **Both install paths print one version string, the tag as tagged** (issue #38). The published
+  archive stamped `-X main.version={{.Version}}` — the tag with its leading `v` stripped — and
+  printed `dossierx version 0.5.1`, while `go install …@v0.5.1` applies no ldflags, falls back to
+  `debug.ReadBuildInfo`, and printed `v0.5.1`: one release, two answers, decided by how it was
+  installed, and a scripted `dossierx version --format json | jq -r .data.version` compared
+  against the tag succeeded one way and failed the other. The stamp is now `{{.Tag}}`, the two
+  paths converge rather than being reconciled, and the site's second constant
+  (`latestBinaryVersion`) is deleted — its transcript reads `latestVersion` like every other
+  version string on the page, and `TestSiteDeclaresNoSecondVersionSpelling` refuses any constant
+  derived by stripping a leading `v`.
 
 Three defects in the documents client teams follow, each one a procedure that failed or stranded
 a reader who followed it as written. No command, flag, `error.code` or gate behaviour changes —

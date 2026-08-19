@@ -208,6 +208,15 @@ type ReleaseNotesConfig struct {
 	Sort    string              `yaml:"sort"`
 	Groups  []ReleaseNotesGroup `yaml:"groups"`
 	Filters ReleaseNotesFilters `yaml:"filters"`
+	// Header is release.header, NOT a changelog: key — it is carried here
+	// because it changes the published BODY, which is what this predictor
+	// answers about. LoadReleaseNotesConfig admits it only when it contains no
+	// template, so the prediction can carry it byte for byte; see that
+	// function's refusal for what a templated one would cost.
+	Header string `yaml:"-"`
+
+	// Footer is release.footer, NOT a changelog: key.
+	Footer string `yaml:"-"`
 }
 
 // ReleaseNotesFilters is changelog.filters — only its Exclude half, see
@@ -268,7 +277,9 @@ type goreleaserChangelogFull struct {
 //   - GitHub, Draft, Prerelease: the fields this project's committed file
 //     actually sets today. KnownFields(true) needs them named or the base
 //     fixture itself would fail to decode.
-//   - Header, Footer, Disable, Mode: fields the committed file does NOT set,
+//   - Header, Footer: fields the committed file sets, as literals, which this
+//     predictor reproduces verbatim — Header beside the body and Footer inside
+//     it. Disable, Mode: fields the committed file does NOT set,
 //     but which change what gets PUBLISHED in a way this predictor's
 //     algorithm does not implement, so they must be recognized (not folded
 //     into "unknown key" rejection) and then explicitly checked against
@@ -433,8 +444,15 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: changelog.groups is empty; either the file changed shape or the path is wrong", goreleaserPath)
 	}
 
-	// --- release: stanza — see goreleaserReleaseFull's doc comment for why
-	// header/footer/disable/mode specifically must be at their defaults. ---
+	// --- release: stanza — see goreleaserReleaseFull's doc comment for what each
+	// of header/footer/disable/mode has to be. Header and footer are SET in the
+	// committed file and required to be LITERAL rather than templated; disable and
+	// mode are required to be at their DEFAULTS, which is not the same as absent —
+	// disableIsDefault accepts nil, false and "false", and an explicit
+	// `mode: keep-existing` is accepted too. An earlier version of this comment
+	// said all four had to be at their defaults, which stopped being true when
+	// the committed config gained the first two; the version after that said
+	// disable and mode had to be absent, which was never true. ---
 	relNode, ok := topLevelNode(&root, "release")
 	if !ok {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: no top-level \"release:\" key found; either the file changed shape or the path is wrong", goreleaserPath)
@@ -450,10 +468,41 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: release: has a key this predictor does not recognize (%w) — teach LoadReleaseNotesConfig about it before trusting a prediction against this config", goreleaserPath, err)
 	}
 	switch {
-	case rel.Header != "":
-		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.header is set to %q; this predictor's Body does not account for a release-level header (see PublishedBodyMatches's tolerance for a hand-written prefix — that is a DIFFERENT thing: an untracked human edit, not a templated value this config controls)", goreleaserPath, rel.Header)
-	case rel.Footer != "":
-		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.footer is set to %q; this predictor's Body does not account for a release-level footer", goreleaserPath, rel.Footer)
+	// A HEADER IS MODELLED ON EXACTLY THE FOOTER'S TERMS, and for the same
+	// reason: goreleaser composes header and footer into the release BODY at
+	// publish time, so a template in either first renders on the publish path,
+	// where this project has no undo. Literal only. This used to be a flat
+	// refusal of any header at all, which was right while the config set none —
+	// the committed config now sets one, so the refusal narrows to the part that
+	// is actually unsafe rather than blocking the field.
+	case strings.Contains(rel.Header, "{{"):
+		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.header contains a Go template (%q).\n"+
+			"Same contract as the footer: this predictor reproduces it verbatim and has no template engine, and nothing catches a broken template before publish — `goreleaser check` validates one naming a field that does not exist, `goreleaser release --skip=publish` exits 0 over it, and it never reaches dist/CHANGELOG.md because header and footer are composed into the release BODY. Use a literal",
+			goreleaserPath, rel.Header)
+	// A FOOTER IS MODELLED, BUT ONLY A LITERAL ONE, and the distinction is the
+	// whole reason this stays a refusal rather than becoming a passthrough.
+	//
+	// goreleaser applies its template engine to the body it composes, so a
+	// footer containing `{{ ... }}` publishes something other than the bytes in
+	// this file — and PredictReleaseNotes has no template engine, so its
+	// prediction would be the unrendered source. The two would differ on every
+	// release, and the difference would be reported as a release-notes mismatch
+	// against a config that is perfectly fine. Worse in the other direction: a
+	// footer template naming a field that does not exist is caught by NOTHING
+	// before publish. Measured with the pinned v2.17.1 — `goreleaser check`
+	// validates it, `goreleaser release --skip=publish` exits 0 over it, and it
+	// never reaches dist/CHANGELOG.md, because header and footer are composed
+	// into the RELEASE BODY and that file is the changelog. The first render of
+	// a footer template is the published page, after the tag is on the forge.
+	//
+	// So the contract is: a footer with nothing to resolve, which this predictor
+	// can then reproduce byte for byte.
+	case strings.Contains(rel.Footer, "{{"):
+		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.footer contains a Go template (%q).\n"+
+			"This predictor reproduces the footer verbatim and has no template engine, so it would predict the unrendered source and report a mismatch on every release.\n"+
+			"And nothing catches a BROKEN template before publish: `goreleaser check` validates one naming a field that does not exist, `goreleaser release --skip=publish` exits 0 over it, and it never appears in dist/CHANGELOG.md — header and footer are composed into the release BODY at publish time, and that file is the changelog. The first render would be the published page, after the tag is public.\n"+
+			"Use a literal. The CHANGELOG is cumulative, so a link to it on main carries this release's entry and every later one, which is what a reader deciding whether to upgrade needs — a tag-pinned URL buys nothing and costs the only unverifiable moving part",
+			goreleaserPath, rel.Footer)
 	case !disableIsDefault(rel.Disable):
 		return ReleaseNotesConfig{}, fmt.Errorf("%s: release.disable is set to %v; this predictor always assumes GoReleaser actually publishes a release", goreleaserPath, rel.Disable)
 	case rel.Mode != "" && rel.Mode != "keep-existing":
@@ -464,6 +513,8 @@ func LoadReleaseNotesConfig(goreleaserPath string) (ReleaseNotesConfig, error) {
 		Sort:    full.Sort,
 		Groups:  full.Groups,
 		Filters: ReleaseNotesFilters{Exclude: full.Filters.Exclude},
+		Header:  rel.Header,
+		Footer:  rel.Footer,
 	}, nil
 }
 
@@ -498,11 +549,17 @@ type PredictedGroup struct {
 
 // ReleaseNotesPrediction is what PredictReleaseNotes returns: Body is the
 // exact markdown GoReleaser's "git" changeloger generates (see
-// internal/pipe/release/body.go in the goreleaser module — this project's
-// .goreleaser.yaml sets neither release.header nor release.footer, so
-// GoReleaser itself hands ctx.ReleaseNotes to the release pipe unmodified),
-// plus the Groups/Dropped breakdown a gate agent diffs and reasons over
-// without re-parsing the markdown.
+// internal/pipe/release/body.go in the goreleaser module), plus the
+// Groups/Dropped breakdown a gate agent diffs and reasons over without
+// re-parsing the markdown, and the header carried beside it.
+//
+// That parenthesis used to end "— this project's .goreleaser.yaml sets neither
+// release.header nor release.footer, so GoReleaser itself hands ctx.ReleaseNotes
+// to the release pipe unmodified". The committed config now sets both. It
+// is corrected here rather than deleted because it names the mechanism the
+// header and footer are modelled ON: goreleaser wraps the generated notes as
+// `{{ with .Header }}{{ . }}\n{{ end }}{{ .ReleaseNotes }}{{ with .Footer }}\n{{ . }}{{ end }}`,
+// which is why the footer lands inside Body and the header cannot.
 //
 // Body is NOT, in general, the entire published GitHub release body byte for
 // byte, and G3 must not compare it that way. docs/RELEASING.md's own
@@ -527,6 +584,23 @@ type ReleaseNotesPrediction struct {
 	Body    string           `json:"body"`
 	Groups  []PredictedGroup `json:"groups"`
 	Dropped []DroppedCommit  `json:"dropped"`
+
+	// Header is release.header verbatim, carried BESIDE Body rather than inside
+	// it. Inside it would fail G3 on every release — PublishedBodyMatches
+	// compares from the "## Changelog" anchor onward, and a header sits ahead of
+	// that anchor.
+	//
+	// It is here because of what the gate reported about the release that
+	// introduced the header: it was the one client-facing line that change added
+	// which reached NO artifact any reading agent is handed. The footer is
+	// client-facing too and was already covered — it lands inside Body, which
+	// the release-notes surface reads. The prediction is what the release-notes
+	// surface reads, so a header absent from it is a line that ships to every
+	// consumer with nobody having read it.
+	// Carrying it does not verify it against the published page — nothing here
+	// can, for the anchor reason above — but it is the difference between a
+	// reviewed line and an unreviewed one.
+	Header string `json:"header"`
 }
 
 // mergeExcludePattern is exactly the "^Merge " changelog.filters.exclude
@@ -582,6 +656,12 @@ func withoutMergeDrops(dropped []DroppedCommit) []DroppedCommit {
 // through undetected.
 func (p ReleaseNotesPrediction) PublishedEqual(other ReleaseNotesPrediction) bool {
 	if p.Body != other.Body {
+		return false
+	}
+	// The header publishes with the body, so two predictions that disagree about
+	// it describe two different pages — even though nothing downstream compares
+	// it against what GitHub actually served.
+	if p.Header != other.Header {
 		return false
 	}
 	if len(p.Groups) != len(other.Groups) {
@@ -845,7 +925,46 @@ func PredictReleaseNotes(rawLines []string, cfg ReleaseNotesConfig) (ReleaseNote
 	}
 	body := strings.Join(lines, "\n") + "\n"
 
-	return ReleaseNotesPrediction{Body: body, Groups: rendered, Dropped: dropped}, nil
+	// --- then the release-level footer, exactly as describeBody does ---
+	//
+	// goreleaser's internal/pipe/release/body.go wraps the generated notes in
+	//   {{ with .Header }}{{ . }}\n{{ end }}{{ .ReleaseNotes }}{{ with .Footer }}\n{{ . }}{{ end }}
+	// so a non-empty footer is appended after the changelog with exactly one
+	// newline in front of it. That is what is reproduced here, and it is the
+	// whole of the footer's effect on the published body: it does not change
+	// grouping, ordering or which commits survive, so Groups and Dropped are
+	// untouched.
+	//
+	// This lands in Body rather than beside it because PublishedBodyMatches
+	// compares from the "## Changelog" anchor TO THE END of the published body.
+	// A footer modelled anywhere else would leave that comparison reporting a
+	// mismatch on every release, for a difference the predictor knew about —
+	// which is a false finding, and this file exists to prevent those rather
+	// than manufacture them.
+	// THE HEADER IS DELIBERATELY NOT PREPENDED HERE, and the asymmetry with the
+	// footer is a property of what G3 can check rather than an oversight.
+	//
+	// goreleaser renders release.header BEFORE the "## Changelog" anchor and the
+	// footer after it. PublishedBodyMatches finds that anchor in the published
+	// body and compares from there onward against Body, ignoring everything
+	// ahead of it as an expected hand-written prefix. So a footer inside Body IS
+	// verified against the real published page; a header inside Body would make
+	// that comparison fail on every release, because Body would no longer start
+	// at the anchor.
+	//
+	// The residual, stated rather than implied: the header's bytes are never
+	// compared against the published page. What stands behind them is that a
+	// templated header is refused at load (the case above), so what publishes is
+	// the literal in .goreleaser.yaml, which is tracked and reviewed like any
+	// other line in it. That is weaker than the footer's guarantee and it is the
+	// most this check can honestly offer, since the anchor tolerance ahead of it
+	// exists for a real reason — this project hand-writes prose above the
+	// generated section on a breaking release.
+	if cfg.Footer != "" {
+		body += "\n" + cfg.Footer
+	}
+
+	return ReleaseNotesPrediction{Body: body, Groups: rendered, Dropped: dropped, Header: cfg.Header}, nil
 }
 
 // gitLogOneline runs a NARROWED form of the invocation GoReleaser's

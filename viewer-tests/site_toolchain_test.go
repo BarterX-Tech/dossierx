@@ -899,7 +899,7 @@ var (
 // 3339 timestamp. Every SHAPE check below is satisfied by that fallback, which is
 // why each field is also compared against the flag that names it.
 var releaseStamps = []struct{ symbol, stands string }{
-	{"main.version", "the tag with its leading `v` stripped, which is what the site's `latestBinaryVersion` derives and what the rendered `dossierx version` transcript is judged against"},
+	{"main.version", "the tag as tagged — `{{.Tag}}` keeps the leading `v`, so it is the same string the site's `latestVersion` renders and the rendered `dossierx version` transcript is judged against"},
 	{"main.commit", "the full forty-character sha — the width docs/RELEASING.md contrasts with the seven the deleted site field carried"},
 	{"main.date", "the BUILD's RFC 3339 timestamp, which is why the site's transcript may not depict a `date:` line beside a calendar day"},
 }

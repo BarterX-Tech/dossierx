@@ -277,26 +277,25 @@ export const latestRelease: Release = releases[releases.length - 1];
 /** The single source for every version string on the site. */
 export const latestVersion: string = latestRelease.version;
 
-/**
- * What the RELEASED BINARY prints for its version, which is NOT the string above.
+/*
+ * THERE IS NO SECOND VERSION STRING, AND THAT IS NEW — v0.5.1 STILL HAD TWO.
  *
- * `.goreleaser.yaml` stamps `-X main.version={{.Version}}`, and GoReleaser's
- * `{{.Version}}` is the tag with the leading `v` stripped — `{{.Tag}}` is the one
- * that keeps it. Measured against the published archive rather than reasoned
- * about: `dossierx_darwin_arm64.tar.gz` from the v0.5.0 release prints
- * `dossierx version 0.5.0`, and its recorded build settings read
- * `-X main.version=0.5.0`.
+ * A `latestBinaryVersion` used to live here — `latestVersion` with the leading
+ * `v` stripped — because the two install paths disagreed. `.goreleaser.yaml`
+ * stamped `-X main.version={{.Version}}`, which is the tag with its `v` removed,
+ * so the published archive printed `dossierx version 0.5.1`; but
+ * `go install …@v0.5.1` applies no ldflags at all and falls back to
+ * `debug.ReadBuildInfo`, which the module proxy fills with the tag verbatim, so
+ * that binary printed `v0.5.1`. One release, two answers, decided by how you
+ * installed it. The extra constant existed so this page could depict whichever
+ * one the reader would actually see.
  *
- * So `v0.5.0` and `0.5.0` are both correct, in different jobs. `latestVersion` is
- * the RELEASE — the tag, the ledger entry, the thing prose names — and the `v` is
- * this project's display convention for it. `latestBinaryVersion` is a
- * TRANSCRIPT value: it may only appear where the page is depicting what a command
- * prints, and there the tag spelling is a fabrication. The site depicted
- * `dossierx v0.5.0` in the `version` example while the binary printed
- * `dossierx version 0.5.0`, which is two errors in one short line, and nothing
- * compared it to real output until gate_release_stamp_test.go did.
+ * Issue #38 fixed the cause instead: the stamp is now `{{.Tag}}`, both paths
+ * print the tag as tagged, and the transcript below reads `latestVersion` like
+ * everything else on the page. Do not reintroduce a stripped copy — the bare
+ * v-less form is now a string no install path produces, and
+ * viewer-tests/site_source_test.go scans this file for exactly that literal.
  */
-export const latestBinaryVersion: string = latestRelease.version.replace(/^v/, "");
 
 /**
  * Lowercases only the first character, so a release title reads as a clause
@@ -1200,10 +1199,14 @@ export const contentSpec: ContentSpec = {
                 // Both are dropped rather than approximated: an abridged
                 // transcript states less than the truth, where an approximated
                 // one states something else. What remains is literal — including
-                // the word "version", which this line lost for several releases,
-                // and `latestBinaryVersion` rather than `latestVersion`, because
-                // the release build strips the leading `v` and a transcript is
-                // the one place on this page that spelling is wrong.
+                // the word "version", which this line lost for several releases.
+                //
+                // It reads `latestVersion`, like every other version string on
+                // this page. It used to read a separate `latestBinaryVersion`
+                // with the leading `v` stripped, because the release build stamped
+                // `{{.Version}}` and the archive genuinely printed `0.5.1` while
+                // `go install` printed `v0.5.1`. The stamp is `{{.Tag}}` now, both
+                // paths print the tag as tagged, and there is one spelling again.
                 //
                 // This is held against a binary linked the way the release links
                 // one — but not from here. viewer-tests/site_dom_test.go reads
@@ -1214,7 +1217,7 @@ export const contentSpec: ContentSpec = {
                 // declaration after the good one satisfied it while the bundler
                 // evaluated the second. A comment renders nothing.
                 example:
-                  `$ dossierx version --format text\ndossierx version ${latestBinaryVersion}`,
+                  `$ dossierx version --format text\ndossierx version ${latestVersion}`,
               },
             ],
           },

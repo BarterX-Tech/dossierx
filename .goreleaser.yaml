@@ -24,7 +24,7 @@ builds:
       # path form silently no-ops for a main package, leaving the binary to
       # fall back to its debug.ReadBuildInfo default.
       - -s -w
-      - -X main.version={{.Version}}
+      - -X main.version={{.Tag}}
       - -X main.commit={{.Commit}}
       - -X main.date={{.Date}}
 
@@ -76,3 +76,84 @@ release:
     name: dossierx
   draft: false
   prerelease: auto
+  # WHAT THIS HEADER IS FOR, and why it is worded for every release rather than
+  # for one. The bullets below it are commit SUBJECTS, grouped. That format can
+  # carry a change only if somebody happened to title a commit after it, and the
+  # changes most dangerous to a consumer are exactly the ones no subject
+  # describes: a SILENT change, one their own gate cannot detect for them. The
+  # worked example is a release in which the embedded agent skills change and
+  # every consumer has to re-run `dossierx skills export`, with no commit subject
+  # in the range saying so. (A subject carrying a `skills` scope is not the same
+  # thing: a reader scanning bullets for "what must I do" finds nothing.)
+  #
+  # The alternative considered and rejected was writing release commit subjects
+  # to steer this page. That makes commit hygiene load-bearing for a client-facing
+  # surface, puts the gate in the business of reviewing commit messages, and fails
+  # silently the first time somebody titles a commit naturally. A header states the
+  # rule once, for every release, and cannot go stale because it names no version.
+  #
+  # LITERAL, for the footer's reason exactly: goreleaser composes header and
+  # footer into the release BODY at publish time, so a template here first renders
+  # on the publish path, after the tag is public. `goreleaser check` and
+  # `--skip=publish` both pass over a template naming a field that does not exist.
+  header: |
+    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md)** — if it is not there yet, this release is still publishing: the entry lands when the driver pushes `main`, which it does after verifying the archives.
+    The bullets below are commit subjects. Any change your own tooling cannot
+    detect for you — a re-export you must run, a string your scripts compare
+    against — is called out at the TOP of that entry, and only there.
+  # WHAT THIS FOOTER IS FOR. Everything BETWEEN the header above and this footer is
+  # generated: grouped commit subjects, with `^docs:`, `^chore:` and `^Merge`
+  # filtered out. (It said "everything above it" until this file gained a header,
+  # which was true until then — goreleaser composes both into the release BODY, so
+  # the topmost block on every page from here on is hand-written literal text.) That presentation cannot distinguish a breaking change from any
+  # other feature — v0.5.0's appeared as the ordinary Features bullet
+  # "feat(lint): detect cycles that alternate rests_on and governed_by", with no
+  # BREAKING framing, no statement that a previously-passing corpus now exits 1,
+  # and no pointer to the recovery. The audience most likely to read only the
+  # release page got the least warning.
+  #
+  # The hand-written CHANGELOG entry is not being replaced by generated notes and
+  # this does not try to reproduce it. It is about REACH: one line, on every
+  # release page from here on, pointing at the document where breaking and silent
+  # changes are actually explained.
+  #
+  # THERE IS NO TEMPLATE IN THIS FOOTER, DELIBERATELY, AND THIS IS THE REASON.
+  # A footer is not part of the changelog: GoReleaser writes the changelog to
+  # dist/CHANGELOG.md, but composes header and footer into the RELEASE BODY at
+  # publish time. Measured with the pinned v2.17.1 against a tagged clone —
+  # `goreleaser check` validates a footer carrying `{{ .NoSuchFieldAtAll }}`,
+  # `goreleaser release --skip=publish` exits 0 over it, and the string never
+  # appears in dist/CHANGELOG.md at all, because that file is the changelog and
+  # not the body. So a templated footer FIRST RENDERS ON THE PUBLISH PATH, where
+  # this project has no undo: the tag is already on the forge by then.
+  #
+  # That is the same shape as the check #39 was opened for — a step whose failure
+  # mode is invisible to every check in front of it. The answer here is not a
+  # better guard but a footer with nothing to resolve. A literal link cannot
+  # render wrong.
+  #
+  # AND IT POINTS AT main, NOT AT THE TAG, which is the better link anyway. The
+  # CHANGELOG is cumulative, so the copy on main contains this release's entry
+  # and every later one; a reader arriving from an old release page gets that
+  # entry plus the history that followed it, which is what somebody deciding
+  # whether to upgrade actually needs.
+  #
+  # TWO TESTS HOLD THIS, and they own different halves.
+  # LoadReleaseNotesConfig in tests/release_notes_predict_lib_test.go refuses a
+  # TEMPLATED footer, because the release-notes predictor reproduces this value
+  # verbatim and has no template engine — it also models a literal one into the
+  # predicted body, in goreleaser's own position, so the prediction still matches
+  # the published page. TestTheReleasePageHasAFooterPointingAtTheChangelog in
+  # tests/ci_workflow_test.go requires the footer to EXIST and to name
+  # CHANGELOG.md, which is the deliverable rather than the mechanism.
+  footer: |
+    ---
+
+    **The full account of this release is its `CHANGELOG.md` entry** — the only place a
+    breaking change, or a change that alters behaviour without altering any command, is
+    written out with its recovery steps:
+
+    https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md
+
+    The notes above are grouped commit subjects, and a `feat` line reads exactly the same
+    whether or not it breaks your build.
