@@ -2344,10 +2344,32 @@ func TestTheDriverRefusesAGateThatIsNotGreen(t *testing.T) {
 		evidence func(gateDriverFixtureEvidence) gateDriverFixtureEvidence
 		why      string
 	}{
-		{"a finding reached the report", func(e gateDriverFixtureEvidence) gateDriverFixtureEvidence {
-			e.findings = []gateFinding{{Surface: "readme", Rule: "undocumented-flag", Severity: "minor", Detail: "--strict is not described"}}
+		{"a blocking finding reached the report", func(e gateDriverFixtureEvidence) gateDriverFixtureEvidence {
+			e.findings = []gateFinding{{
+				Surface:         "readme",
+				Rule:            "undocumented-flag",
+				Consequence:     gateConsequenceMisled,
+				FailureScenario: "a reader scripting against the documented flags never learns --strict exists and ships a wrapper that cannot enable it",
+				Blocking:        gateBlockingBlocks,
+				Detail:          "--strict is not described",
+			}}
 			return e
-		}, "a human confirms what blocks a release; the driver does not clear itself"},
+		}, "the reading agent judged this worth stopping the release for; the driver does not overrule it"},
+		{"an acts-wrongly finding its own agent judged deferrable", func(e gateDriverFixtureEvidence) gateDriverFixtureEvidence {
+			// The second ruling at the last door it could be argued at: the
+			// agent said deferrable, and acts-wrongly is not the agent's to
+			// defer. A driver that read the judgement without the consequence
+			// would publish a release whose reader does the wrong thing.
+			e.findings = []gateFinding{{
+				Surface:         "readme",
+				Rule:            "wrong-install-command",
+				Consequence:     gateConsequenceActsWrongly,
+				FailureScenario: "a reader copying the install line fetches the previous release's archive and runs a binary without the fix the page announces",
+				Blocking:        gateBlockingDeferrable,
+				Detail:          "the install line pins the previous version",
+			}}
+			return e
+		}, "acts-wrongly blocks at every reach with no override, whatever the agent ruled"},
 		{"a declared surface holds no verdict", func(e gateDriverFixtureEvidence) gateDriverFixtureEvidence {
 			e.declared = []string{"readme", "site"}
 			e.current = map[string]string{"readme": "sha256:readme", "site": "sha256:site"}
@@ -2379,6 +2401,47 @@ func TestTheDriverRefusesAGateThatIsNotGreen(t *testing.T) {
 			}
 			gateDriverAssertNothingPublished(t, repo, version, mainWas)
 		})
+	}
+}
+
+// TestTheDriverPublishesOverAFindingItsAgentJudgedDeferrable is the first
+// ruling at the driver: a finding the reading agent judged deferrable — with
+// any consequence but acts-wrongly — does not stop a publication, and it is not
+// dropped to achieve that. The receipt the driver records carries the finding
+// whole, so what shipped and what was known about it at shipping time are both
+// on the record.
+//
+// This is the row the previous blocking rule made impossible: under
+// `len(findings) > 0` a release with one cosmetic line on its report could
+// never publish, ran ten rounds without going green, and taught operators that
+// the gate is something to get around. The escape valve is the agent's
+// judgement — recorded, visible, and overridable in exactly one direction by
+// the acts-wrongly rule the rows above pin.
+func TestTheDriverPublishesOverAFindingItsAgentJudgedDeferrable(t *testing.T) {
+	const version = "v9.9.9"
+	repo := gateDriverFixture(t, version)
+	plan := gateDriverAuthorized(t, repo, version)
+
+	deferrable := gateFinding{
+		Surface:         "readme",
+		Rule:            "stale-count",
+		Consequence:     gateConsequenceCosmetic,
+		FailureScenario: "a reader skimming the noun table sees 27 where the registry holds 28 and nothing they do changes",
+		Blocking:        gateBlockingDeferrable,
+		Detail:          "says 27, the registry holds 28",
+	}
+	evidence := gateDriverGreenEvidence()
+	evidence.findings = []gateFinding{deferrable}
+
+	run := gateDriverPublish(plan, repo, evidence)
+	if run.Err != nil {
+		t.Fatalf("a release whose only finding its agent judged deferrable was refused; the agent read the surface and the agent rules, and a gate that blocks anyway is the fixed lookup table the design refused:\n%s", run.report())
+	}
+	if run.Verdict != gateVerdictPass {
+		t.Fatalf("the recomputed verdict is %s over a deferrable finding", run.Verdict)
+	}
+	if len(run.Receipt.Findings) != 1 || run.Receipt.Findings[0] != deferrable {
+		t.Fatalf("the deferrable finding is not on the receipt whole; a release published over it must still show it to the human who reads the record: %+v", run.Receipt.Findings)
 	}
 }
 

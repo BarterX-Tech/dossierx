@@ -265,11 +265,16 @@ them, and the three post-publish checks that leave this repository entirely.
 
       That reads `gate/fanout.json` for the run this checkout was fanned out
       under, refuses a surface `surfaces.yaml` does not declare, refuses a
-      payload carrying anything beyond those three keys — a `surface` or a
-      `fingerprint` written by the agent would otherwise be dropped in silence —
-      computes the key, and puts the assembled answer through the SAME validation
-      the collection applies, so a malformed answer is refused here, in front of
-      you, rather than at the end of the run. It then writes
+      payload carrying anything beyond those three keys — a `fingerprint`
+      written by the agent would otherwise be dropped in silence — holds every
+      finding to the finding schema (`surface`, `rule`, `consequence`,
+      `failure_scenario`, `blocking`, `detail`, optionally `about`; a
+      `severity` from a runner ported from the old schema is refused by name,
+      and so is an empty or adjective-only `failure_scenario` or any value
+      outside a closed vocabulary), computes the key, and puts the assembled
+      answer through the SAME validation the collection applies, so a
+      malformed answer is refused here, in front of you, rather than at the
+      end of the run. It then writes
       `gate/answers/<surface>.json`. `-count=1` is part of the invocation as
       belt and braces, not as the thing holding the belt: a replayed cache would
       print `ok (cached)`, write nothing, exit 0, and never reach the refusal
@@ -290,27 +295,43 @@ them, and the three post-publish checks that leave this repository entirely.
       An answer that is missing, unparseable, or attributed to a different run is
       a FAILED gate; it is never a gate over twelve surfaces.
 
-      **4. Then loop, and expect to.** Any finding at all makes the receipt
-      FAILED — there is no severity threshold, and nothing waves a finding
-      through. The gate surfaces and never fixes, so the fixes are yours, and a
-      fix moves the tree. Every artifact above is keyed to a tree, so NOTHING
-      staged for the old one is reusable: CI, `make ci-evidence` for the new
-      merge commit, and the whole of this item are produced again against the new
-      `$TREE`. Repeat until no surface reports a finding.
+      **4. Then loop, and expect to.** What makes the receipt FAILED is a
+      BLOCKING finding, and blocking is decided by the finding's own recorded
+      fields, not by a count and not by anyone's adjective: a finding whose
+      `consequence` is `acts-wrongly` — a reader following the document does
+      the wrong thing — blocks unconditionally, at every reach, with no
+      override; any other finding blocks exactly when the agent that raised it
+      judged it `blocks`. A finding judged `deferrable` does not stop the
+      release and is not dropped for it: it stays on the receipt in full and
+      reaches you with everything else. The gate surfaces and never fixes, so
+      the fixes are yours, and a fix moves the tree. Every artifact above is
+      keyed to a tree, so NOTHING staged for the old one is reusable: CI,
+      `make ci-evidence` for the new merge commit, and the whole of this item
+      are produced again against the new `$TREE`. Repeat until no surface
+      reports a blocking finding.
 
-      **5. Read the findings yourself before you authorize anything.** Nothing is
-      filtered, deduplicated away or dropped on the way to you. Each finding
-      carries a severity, but that word is the reporting agent's own about its own
-      work — no verdict, filter or threshold in the gate consults it — so the
-      ruling is yours, not the agent's. There is also no override field on the
-      receipt, so a finding you judge non-blocking has exactly two ways off it:
-      fix the tree, or delete the finding from `gate/answers/<surface>.json` by
-      hand. Know what the second one costs before you reach for it — a deleted
-      finding leaves no trace, so an adjudicated finding becomes indistinguishable
-      from one nobody ever raised, and the next reader of that record cannot tell
-      that you looked. Why the classifier that would derive a finding's weight
-      from its evidence was not built, and why no override record was added in its
-      place, is recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
+      **5. Read the findings yourself before you authorize anything.** Nothing
+      is filtered, deduplicated away or dropped on the way to you — the
+      deferrable findings included. Each finding carries its agent's judgement
+      (`consequence`, `failure_scenario`, `blocking`); the judgement is the
+      agent's and the gate honours it, so what is left for you is to read the
+      scenarios and disagree where you must. Disagreeing has exactly one shape
+      in each direction. A deferrable finding you judge blocking is a fix you
+      make before authorizing — the gate will not stop you from shipping over
+      it, so this is the one place your reading is the check. A blocking
+      finding you judge mistaken can only be cleared by disproving its own
+      `failure_scenario` — the sentence exists so that it CAN be disproven —
+      and then deleting the finding from `gate/answers/<surface>.json` by
+      hand, since there is still no override field on the receipt. Know what
+      that deletion costs before you reach for it: a deleted finding leaves no
+      trace, so an adjudicated finding becomes indistinguishable from one
+      nobody ever raised, and the next reader of that record cannot tell that
+      you looked. And know what it cannot touch at all: an `acts-wrongly`
+      finding is not deferrable and not signable-away by anyone — fix the
+      software, or show with evidence that there was never a defect. Why the
+      classifier that would derive a finding's weight from its evidence was
+      not built, and why no override record was added in its place, is
+      recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out

@@ -39,7 +39,8 @@ model: claude-opus-5
 # The exact tool grant. Both are report-only: they carry the agent's answer back
 # and can read nothing.
 #
-#   SurfaceFinding — report one mismatch (surface, rule, severity, detail)
+#   SurfaceFinding — report one mismatch (surface, rule, consequence,
+#                    failure_scenario, blocking, detail, and optionally about)
 #   SurfaceVerdict — report the surface's verdict, exactly once
 #
 # There is deliberately no file, shell, search, network or subagent tool here.
