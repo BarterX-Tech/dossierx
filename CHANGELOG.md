@@ -83,6 +83,17 @@ only what the documents (and one CLI hint) tell a reader to do:
   one runs: a partially re-locked module finishes the crossing gate-green but without a locked
   build order, and runs the propose + lock pair on the day its last claim locks.
 
+### Fixed — `dossierx lock|unlock|flag|reaudit` answer with their replacement, not a bare usage error
+
+The four verbs most likely to be typed from pre-v0.3.0 memory — each still exists at
+`dossierx claim <verb>` — answered with `unknown command "lock" for "dossierx"`: no hint, no
+replacement named, an empty `command` field. The reason they were left out of the retired-stub
+table was wrong in an instructive way (cobra's `legacyArgs` rejects an unknown command before the
+root's hint-bearing branch runs), and is kept in the code. Each verb now returns the same
+`retired_command` refusal the other retired spellings do, with a `run:` hint that actually runs —
+`claim flag`'s hint carries the `--claim-says`/`--now-does`/`--reason` flags it requires, and
+`claim reaudit`'s names `--reason` beside `--confirm`.
+
 ### Fixed — two test guards advertised more than they checked
 
 The summary dash guard promised to refuse both the en dash and the em dash and checked one — and
