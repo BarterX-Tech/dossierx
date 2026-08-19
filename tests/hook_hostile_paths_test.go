@@ -458,12 +458,18 @@ func TestHookGatesEveryHostilePath(t *testing.T) {
 // idea of what that text meant.
 //
 // The selection is structural, not textual: a command line is recognised by
-// the program it invokes (the installer, then chmod), and the chain line by
-// being the one line the block tells the user to put in their own hook. If the
-// block is reworded so that nothing matches, this fails loudly — the
-// remediation this test replays no longer exists in a form it can find, and
-// that is a finding about the installer's output contract, not a parsing
-// inconvenience to code around.
+// what it does (the `--print-hook >` redirection that writes the hook body,
+// then chmod), and the chain line by being the one line the block tells the
+// user to put in their own hook. The write line used to be recognised by a
+// literal "scripts/install-git-hook.sh " prefix; that prefix WAS the defect —
+// a repository-relative path printed to a reader who curl'd one file — and
+// the installer now prints its own invocation there ($self_invocation, e.g.
+// `sh 'scripts/install-git-hook.sh'` under this fixture), so the matcher
+// follows the output's shape rather than its old bug. If the block is
+// reworded so that nothing matches, this fails loudly — the remediation this
+// test replays no longer exists in a form it can find, and that is a finding
+// about the installer's output contract, not a parsing inconvenience to code
+// around.
 func extractChainItLines(t *testing.T, refusal []byte) (script, chainLine string) {
 	t.Helper()
 	text := strings.ReplaceAll(string(refusal), "\r\n", "\n")
@@ -472,7 +478,7 @@ func extractChainItLines(t *testing.T, refusal []byte) (script, chainLine string
 	for i := 0; i < len(lines); i++ {
 		trimmed := strings.TrimSpace(lines[i])
 		switch {
-		case strings.HasPrefix(trimmed, "scripts/install-git-hook.sh "):
+		case len(cmd) == 0 && strings.Contains(trimmed, "--print-hook >"):
 			cur := trimmed
 			cmd = append(cmd, cur)
 			for strings.HasSuffix(cur, "\\") && i+1 < len(lines) {
@@ -500,9 +506,11 @@ func extractChainItLines(t *testing.T, refusal []byte) (script, chainLine string
 // lines whose quoting cannot carry the path they interpolate.
 //
 // The installer is COPIED to scripts/install-git-hook.sh inside the fixture
-// first, because that is the relative path the printed line names: the
-// instructions assume the reader's repository holds the script where this one
-// does, and replaying them anywhere else would test a different sentence.
+// first and invoked by that relative path, because the printed lines re-run
+// the invocation the installer was started with ($0, sh_quoted): the replay
+// runs from the same cwd the refusal was produced in, exactly as a reader
+// re-running the printed line would, and replaying it anywhere else would
+// test a different sentence.
 func TestPrintedChainItRemediationExecutesUnderHostilePaths(t *testing.T) {
 	shell := hostileShell(t)
 	env := hostileEnv(t)

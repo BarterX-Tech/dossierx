@@ -83,6 +83,25 @@ only what the documents (and one CLI hint) tell a reader to do:
   one runs: a partially re-locked module finishes the crossing gate-green but without a locked
   build order, and runs the propose + lock pair on the day its last claim locks.
 
+### Fixed — the hook installer speaks to the reader who actually has it
+
+Defects in `scripts/install-git-hook.sh` and its PowerShell wrapper, each one an instruction or
+a silence aimed at the wrong reader. The hook body itself is unchanged (still `pre-commit v8`),
+so already-installed hooks are already current:
+
+- **The installer's printed recoveries now name the invocation the reader actually used, not a
+  path only this repository has.** Every "run it again" line the installer prints — the
+  chain-a-foreign-hook recovery, the closing pointer at the CI workflow — used to say
+  `scripts/install-git-hook.sh`, which is where the file lives in the DossierX repository and
+  nowhere else; the ordinary reader curl'd one file into their own project, so the one
+  instruction offered to somebody whose hook had just been refused was a file-not-found. The
+  script now prints how it was invoked (its own `$0`, `sh_quote`d so hostile paths survive
+  re-parsing; a `--repo DIR` is carried along so the re-run targets the same repository), the
+  PowerShell wrapper hands its own name through `DOSSIERX_HOOK_INVOCATION` so PowerShell readers
+  are given a PowerShell line — including a chain-it variant that writes LF through
+  `[System.IO.File]::WriteAllText` instead of a CRLF pipeline — and the wrapper's own no-bash
+  message names the resolved script path rather than a hardcoded repository-relative one.
+
 ## [0.5.1] - 2026-08-10
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.

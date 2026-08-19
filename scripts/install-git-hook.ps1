@@ -111,17 +111,43 @@ if ($MyInvocation.InvocationName -ne '.') {
         exit 1
     }
 
+    # NAME $sh HERE, NOT A HARDCODED "scripts/install-git-hook.sh". That literal
+    # is where the file lives in the DossierX repository and nowhere else — a
+    # reader who fetched just these two files into their own project (README and
+    # the router skill both hand out a pinned raw URL for exactly that) is not
+    # standing in a directory with a scripts/ folder, and the hardcoded path is
+    # a file-not-found for exactly the reader this message is for. install-git-
+    # hook.sh had the same defect once, on the recoveries it prints for itself,
+    # and DOSSIERX_HOOK_INVOCATION below exists to stop it coming back a second
+    # time there. This message is a third place the same mistake could be
+    # reintroduced, so: use the resolved path, not a literal. (The here-string
+    # is expandable for that one interpolation; everything else in it is
+    # literal text.)
     $bash = Find-Bash
     if (-not $bash) {
-        Write-Error @'
+        Write-Error @"
 No usable bash was found. A bash under Windows' System32 is WSL's launcher and
 cannot run a script on a C:\ path, so it does not count. Install Git for
 Windows (which bundles a real one) or run the installer from inside WSL:
 
-  bash scripts/install-git-hook.sh --yes
-'@
+  bash "$sh" --yes
+"@
         exit 1
     }
+
+    # TELL THE SHELL SCRIPT HOW THE READER GOT HERE, so the recoveries it prints
+    # are ones this reader can actually type. Every instruction install-git-
+    # hook.sh offers — chaining a foreign hook, uninstalling a machine-wide
+    # install — is a command line built from its own $0. A reader who reached it
+    # through this wrapper is standing in PowerShell and, by this wrapper's
+    # whole premise, may have no bash on PATH at all, so `sh ".../install-git-
+    # hook.sh" --uninstall` is an instruction that does not run for them. This
+    # names the wrapper instead. "powershell" rather than the host that is
+    # running right now, because the line has to work when the reader pastes it
+    # into whichever shell they have open later, and powershell.exe is the one
+    # spelling every supported Windows has (pwsh understands -File the same
+    # way, so a reader who substitutes it loses nothing).
+    $env:DOSSIERX_HOOK_INVOCATION = "powershell -File `"$PSCommandPath`""
 
     & $bash $sh @args
     exit $LASTEXITCODE

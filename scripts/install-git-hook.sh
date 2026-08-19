@@ -475,9 +475,43 @@ usage() {
 	if [ -r "$0" ]; then
 		sed -n '/^# USAGE/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//'
 	else
-		printf '%s\n' 'usage: install-git-hook.sh [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]'
+		printf '%s\n' "usage: $self_invocation [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]"
 	fi
 }
+
+# HOW TO NAME THIS SCRIPT BACK TO THE READER. Every recovery this file prints
+# used to say "scripts/install-git-hook.sh", which is where the file lives in
+# the DossierX repository and nowhere else. The ordinary reader curl'd one file
+# into their own project — README and the router skill both hand them a pinned
+# raw URL — so that path is a file-not-found, and it was the only instruction
+# offered to somebody whose hook had just been refused. This is the same defect
+# already fixed once in the hook body itself, which used to name a repository
+# path for "remove the hook".
+#
+# So: name the invocation the reader actually used when we can see it, and fall
+# back to naming the re-fetch when we cannot, which is exactly the
+# piped-from-stdin case usage() already knows about. The readable-$0 form goes
+# through sh_quote, because $0 is a path the READER's machine chose — under
+# core.hooksPath it can hold a space, an apostrophe or a `$`, and a printed
+# line that re-expands or splits on those is a second defect delivered as a
+# remedy (sh_quote's comment holds the full argument). The stdin fallback
+# names no URL of its own: this script deliberately carries no pinned release
+# URL (the pin sweep in docs/RELEASING.md enumerates every pin site, and a
+# hand-typed one here would be a fifth site the sweep then polices forever),
+# and the reader who piped us in has the real URL one line up in their own
+# shell history.
+# DOSSIERX_HOOK_INVOCATION is set by install-git-hook.ps1, which is a thin
+# wrapper for PowerShell users who may have no bash on PATH — for them a
+# `sh ...` recovery is an instruction that does not run, so the wrapper names
+# itself and we print that back instead, verbatim: it is already a complete
+# command line, and quoting it again would break the quoting it arrived with.
+if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+	self_invocation="$DOSSIERX_HOOK_INVOCATION"
+elif [ -r "$0" ]; then
+	self_invocation="sh $(sh_quote "$0")"
+else
+	self_invocation="curl -fsSL <the URL you fetched this script from> | sh -s --"
+fi
 
 assume_yes=0
 dry_run=0
@@ -508,6 +542,22 @@ while [ $# -gt 0 ]; do
 	esac
 	shift
 done
+
+# CARRY THIS RUN'S OWN --repo INTO EVERY RECOVERY LINE BUILT FROM
+# self_invocation. Every printed "run it again" below this point (the
+# machine-wide core.hooksPath uninstall advice, in particular) re-invokes this
+# script — and re-invoking it with no --repo resolves against whatever
+# repository the operator happens to be standing in when they type it, not
+# the one THIS run targeted. Installed with "--repo ../other" and asked to
+# uninstall, the printed line without this fix would silently touch the
+# operator's current directory instead: removing the wrong repo's hook, or
+# failing outright if it is not a git repository at all. Appended here, once,
+# after parsing finishes and before any recovery text is built, so every
+# later use of $self_invocation already carries it — and through sh_quote,
+# because the directory is an operator-chosen path like any other.
+if [ -n "$repo_dir" ]; then
+	self_invocation="$self_invocation --repo $(sh_quote "$repo_dir")"
+fi
 
 command -v git >/dev/null 2>&1 || die "git was not found on PATH"
 
@@ -632,12 +682,63 @@ outdated)
 foreign)
 	if [ "$force" -ne 1 ]; then
 		# The chained-hook path is printed through sh_quote, never through
-		# display quotes: these two lines are the one part of this refusal a
+		# display quotes: these lines are the one part of this refusal a
 		# reader executes verbatim, and the path being interpolated is
 		# precisely the kind that breaks re-parsing (see sh_quote's comment).
+		# The command that re-runs the script is $self_invocation, never the
+		# repository-relative literal this block used to print: the ordinary
+		# reader curl'd one file and has no scripts/ directory, so the literal
+		# was a file-not-found offered to exactly the person being refused.
 		# The dirname line below needs no such treatment — its expansions
 		# happen when the READER's shell runs the hook, which is the intent.
+		#
+		# THE CHAIN-IT LINES ARE PER-SHELL, because this recovery has to
+		# actually run for the reader it reaches. The POSIX form uses a
+		# trailing backslash continuation and chmod. PowerShell accepts
+		# neither continuation form, and — more than a syntax difference —
+		# cannot use a plain pipe into Set-Content here: piped multi-line text
+		# is written with the OS newline, which on Windows is CRLF, so the
+		# chained file would start "#!/bin/sh\r" and the sh git for Windows
+		# runs hooks under refuses a line ending in \r. So the PowerShell
+		# variant uses [System.IO.File]::WriteAllText, joining the printed
+		# lines with an explicit LF ([char]10) instead of letting a pipeline
+		# choose one. That call is relied on for two things that hold on BOTH
+		# runtimes a reader might have: WriteAllText(path, string) writes
+		# UTF-8 with no byte-order mark on both Windows PowerShell 5.1 and
+		# PowerShell 7 (a BCL call, not a cmdlet whose behaviour split across
+		# that boundary), and a single already-joined string has no per-line
+		# terminator left for either runtime to reinterpret on the way out.
+		#
+		# chmod +x IS STILL NEEDED in the PowerShell variant, and dropping it
+		# would be borrowing a justification that does not cover this case:
+		# the install path argues chmod is a no-op because git for Windows
+		# runs the pre-commit hook ITSELF through its bundled sh without
+		# consulting the exec bit. This file is different — the reader's OWN
+		# hook invokes it directly as a command (the dirname line below), and
+		# that direct invocation, under the same bundled sh, DOES check the
+		# executable bit. A file written by WriteAllText gets no such bit by
+		# default. Shelling out to chmod is safe to hand back here because a
+		# bash is known to exist: this branch is only reached when
+		# DOSSIERX_HOOK_INVOCATION is set, and install-git-hook.ps1 sets it
+		# only after Find-Bash already found one to run this script with.
+		#
+		# WHAT THE POWERSHELL LINES CANNOT PROMISE, stated rather than
+		# implied: the hooks path is interpolated into a PowerShell
+		# double-quoted string and, on the chmod line, into single quotes
+		# inside a `bash -c` argument — so a hooks directory holding a `$`, a
+		# backtick or an apostrophe is not defended there the way sh_quote
+		# defends the POSIX lines. tests/hook_hostile_paths_test.go replays
+		# only the POSIX branch; the PowerShell branch has no equivalent
+		# corpus, and a defence it would keep honest is not pretended here.
 		chain_target=$(sh_quote "$hooks_dir/dossierx-pre-commit")
+		if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+			chain_it_lines="                 [System.IO.File]::WriteAllText(\"$hooks_dir/dossierx-pre-commit\", ((& $self_invocation --print-hook) -join [char]10) + [char]10)
+                 bash -c \"chmod +x '$hooks_dir/dossierx-pre-commit'\""
+		else
+			chain_it_lines="                 $self_invocation --print-hook > \\
+                     $chain_target
+                 chmod +x $chain_target"
+		fi
 		printf '%s\n' \
 			"refusing to touch $target: there is already a pre-commit hook there that dossierx did not write." \
 			"" \
@@ -646,11 +747,11 @@ foreign)
 			"  replace it   re-run with --force. The existing hook is copied to" \
 			"               <hook>.pre-dossierx.<timestamp> first, and this script tells you where." \
 			"" \
-			"  chain it     keep your hook and call ours from it:" \
+			"  chain it     keep your hook and call ours from it. Re-run THIS" \
+			"               script with --print-hook; if you piped it in and have" \
+			"               no copy on disk, fetch it again from the same URL:" \
 			"" \
-			"                 scripts/install-git-hook.sh --print-hook > \\" \
-			"                     $chain_target" \
-			"                 chmod +x $chain_target" \
+			"$chain_it_lines" \
 			"" \
 			"               then add this to your own pre-commit, wherever you want" \
 			"               the claim gate to run:" \
@@ -716,8 +817,10 @@ fi
 printf '%s\n' "" \
 	"Two things this hook does NOT do:" \
 	"  · it does not fire on clean merges, rebases, cherry-picks or reverts —" \
-	"    git simply does not run pre-commit for those. Add the CI workflow" \
-	"    (scripts/ci/dossierx-check.yml); CI is the authority." \
+	"    git simply does not run pre-commit for those. CI is the authority. If" \
+	"    you have not added the workflow yet, fetch scripts/ci/dossierx-check.yml" \
+	"    from wherever you got this script — the two are published side by side" \
+	"    — and put it in .github/workflows/." \
 	"  · it does not check anything you did not stage. --staged reads the index." \
 	"" \
 	"Three project-root files are TRACKED ARTIFACTS. Commit them; never" \
