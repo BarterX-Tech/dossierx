@@ -83,6 +83,16 @@ only what the documents (and one CLI hint) tell a reader to do:
   one runs: a partially re-locked module finishes the crossing gate-green but without a locked
   build order, and runs the propose + lock pair on the day its last claim locks.
 
+### Fixed — two test guards advertised more than they checked
+
+The summary dash guard promised to refuse both the en dash and the em dash and checked one — and
+could not check the other against rendered output, since the em dash is live in the same emitter.
+The guard is now the check on the test data, run before the exact match it protects, and it names
+both dashes. The `</details>` ordering probe found the first closer in the output, which is the
+footer's only because that fixture claim carries an edge — on an edge-less claim with resolved
+threads it would compare the comments panel against itself. It proved nothing the exact-adjacency
+match beside it does not already prove, so it is deleted rather than anchored. (#29, #28)
+
 ### Fixed — a serve test raced the server it started, and only Windows noticed
 
 The watcher re-walks the claims tree with `filepath.WalkDir` twice a second, which holds a
