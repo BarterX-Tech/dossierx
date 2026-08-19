@@ -294,7 +294,7 @@ type historyLiteral struct {
 }
 
 // declaredHistoryLiterals is every renderable version literal that lives in
-// content.ts outside the releases array. Eight sentences today, each naming what
+// content.ts outside the releases array — each naming what
 // some past release did.
 //
 // WHY EACH ONE IS WRITTEN DOWN, rather than exempted by a rule.
@@ -363,6 +363,11 @@ var declaredHistoryLiterals = []historyLiteral{
 		version: "v0.4.0",
 		phrase:  "Removed outright in v0.4.0.",
 		why:     "the removed-commands table, naming the release that deleted `migrate`",
+	},
+	{
+		version: "v0.3.0",
+		phrase:  "was a top-level command through v0.3.0",
+		why:     "the migration table's four-verbs row, naming the last release in which lock/unlock/reaudit/flag were top-level. The row exists because the table said twelve commands were retired when the binary retires sixteen, and the four it omitted are exactly these — so the sentence that dates them is the correction, not decoration.",
 	},
 	{
 		version: "v0.2.0",
