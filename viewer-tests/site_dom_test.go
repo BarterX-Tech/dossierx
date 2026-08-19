@@ -964,7 +964,17 @@ func TestSiteTextProvenanceComesFirst(t *testing.T) {
 		if tokErr != nil {
 			t.Fatalf("read a key: %v", tokErr)
 		}
-		keys = append(keys, tok.(string))
+		// A key in a JSON object is a string by the grammar, so this assertion
+		// cannot fail against well-formed input — which is exactly why it is
+		// checked rather than assumed. This test reads the document to prove
+		// which key comes FIRST, and an unchecked assertion here would panic on
+		// a malformed capture instead of naming it, turning a finding about the
+		// artifact into a crash report about this test.
+		key, ok := tok.(string)
+		if !ok {
+			t.Fatalf("the capture's object key at position %d decoded as %T (%v), not a string; the document is not the object this test can read a first key out of", len(keys), tok, tok)
+		}
+		keys = append(keys, key)
 		var skip json.RawMessage
 		if err := dec.Decode(&skip); err != nil {
 			t.Fatalf("skip a value: %v", err)

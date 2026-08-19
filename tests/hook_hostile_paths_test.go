@@ -76,6 +76,7 @@ package tests
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -242,8 +243,8 @@ func hostileExec(t *testing.T, dir string, env []string, name string, args ...st
 	cmd.Stderr = &errb
 	err := cmd.Run()
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			t.Fatalf("could not run %s %v in %s: %v", name, args, dir, err)
 		}
 		code = exitErr.ExitCode()
@@ -375,7 +376,7 @@ func hostileTamper(t *testing.T, projectDir string) {
 // gitHooksPathState reads core.hooksPath as (bytes, exit code). Both halves
 // matter: "unset" is exit 1 with no output, and collapsing that to an empty
 // string would let "unset before, set-to-empty after" read as unchanged.
-func gitHooksPathState(t *testing.T, repo string, env []string) ([]byte, int) {
+func gitHooksPathState(t *testing.T, repo string, env []string) (value []byte, code int) {
 	t.Helper()
 	out, _, code := hostileExec(t, repo, env, "git", "config", "--get", "core.hooksPath")
 	return out, code

@@ -69,6 +69,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -656,9 +657,9 @@ func (f *fixture) OpenHumanThread(claimID, body string) string {
 	if inv.Env == nil {
 		f.t.Fatalf("comment add printed no envelope; cannot learn the minted thread id\nstdout: %s", inv.Stdout)
 	}
-	tid, _ := inv.Env.Data["thread_id"].(string)
-	if tid == "" {
-		f.t.Fatalf("comment add's envelope carries no data.thread_id: %s", inv.Stdout)
+	tid, ok := inv.Env.Data["thread_id"].(string)
+	if !ok || tid == "" {
+		f.t.Fatalf("comment add's envelope carries no data.thread_id string; without the minted id the loop's later steps would act on a thread that was never opened: %s", inv.Stdout)
 	}
 	return tid
 }
@@ -682,7 +683,7 @@ func (f *fixture) claimFile(id string) string {
 //     which is worse than no finding. The first run of this suite produced
 //     precisely that artifact (the thread's text shared a token with the
 //     body), which is why this split exists.
-func (f *fixture) RewriteClaimBody(id, old, new string) {
+func (f *fixture) RewriteClaimBody(id, from, to string) {
 	f.t.Helper()
 	path := f.claimFile(id)
 	raw, err := os.ReadFile(path)
@@ -696,13 +697,13 @@ func (f *fixture) RewriteClaimBody(id, old, new string) {
 	if idx := strings.Index(head, "\ncomments:"); idx >= 0 {
 		head, tail = head[:idx], head[idx:]
 	}
-	if !strings.Contains(head, old) {
-		f.t.Fatalf("claim %s's own content does not contain %q; the fixture is not in the state this edit assumes", id, old)
+	if !strings.Contains(head, from) {
+		f.t.Fatalf("claim %s's own content does not contain %q; the fixture is not in the state this edit assumes", id, from)
 	}
-	if strings.Contains(tail, old) {
-		f.t.Fatalf("the edit %q -> %q would also match inside claim %s's engine-managed comments: block; pick fixture text that does not collide, or this enactment would hand-edit review history and manufacture a drift the document never caused", old, new, id)
+	if strings.Contains(tail, from) {
+		f.t.Fatalf("the edit %q -> %q would also match inside claim %s's engine-managed comments: block; pick fixture text that does not collide, or this enactment would hand-edit review history and manufacture a drift the document never caused", from, to, id)
 	}
-	if err := os.WriteFile(path, []byte(strings.ReplaceAll(head, old, new)+tail), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(strings.ReplaceAll(head, from, to)+tail), 0o644); err != nil {
 		f.t.Fatalf("write %s: %v", path, err)
 	}
 }
@@ -765,7 +766,7 @@ func (f *fixture) RewindStoreToPreLedger() {
 // the HTTP surface — the human's half of the loop
 // ---------------------------------------------------------------------------
 
-var serveURLRe = regexp.MustCompile(`http://127\.0\.0\.1:[0-9]+`)
+var serveURLRe = regexp.MustCompile(`http://127\.0\.0\.1:\d+`)
 
 // StartServe runs "dossierx serve" against the fixture project on an
 // ephemeral port, waits until /api/ping answers 200, and registers an orderly
@@ -802,7 +803,10 @@ func (f *fixture) StartServe() string {
 
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
-		raw, _ := os.ReadFile(f.serveOut)
+		raw, err := os.ReadFile(f.serveOut)
+		if err != nil {
+			f.t.Fatalf("read serve output %s: %v; the harness created this file above, so an unreadable one means the wait for serve's URL would poll nothing and time out blaming serve for a filesystem problem", f.serveOut, err)
+		}
 		if base := serveURLRe.FindString(string(raw)); base != "" {
 			f.serveBase = base
 			break
@@ -813,7 +817,10 @@ func (f *fixture) StartServe() string {
 		time.Sleep(100 * time.Millisecond)
 	}
 	if f.serveBase == "" {
-		raw, _ := os.ReadFile(f.serveOut)
+		raw, err := os.ReadFile(f.serveOut)
+		if err != nil {
+			f.t.Fatalf("dossierx serve never printed its URL, and its output at %s could not even be read for diagnosis: %v", f.serveOut, err)
+		}
 		f.t.Fatalf("dossierx serve never printed its URL; a scenario that needs the viewer surface cannot run without it, and cannot pass without running\nserve output: %s", raw)
 	}
 	for time.Now().Before(deadline) {
@@ -834,16 +841,26 @@ func (f *fixture) stopServe() {
 	if f.serveCmd == nil || f.serveCmd.Process == nil {
 		return
 	}
-	_ = f.serveCmd.Process.Signal(os.Interrupt)
+	// Best-effort from here down: the server may have exited on its own
+	// already, in which case a failed signal, wait or kill is the desired end
+	// state arriving early, not a finding. Logged, never fatal — teardown
+	// must not fail a scenario whose assertions already ran.
+	if err := f.serveCmd.Process.Signal(os.Interrupt); err != nil {
+		f.t.Logf("SIGINT to dossierx serve: %v (best-effort; the kill fallback below still reaps it)", err)
+	}
 	done := make(chan struct{})
 	go func() {
-		_, _ = f.serveCmd.Process.Wait()
+		if _, err := f.serveCmd.Process.Wait(); err != nil {
+			f.t.Logf("wait for dossierx serve on teardown: %v (best-effort reap; the exit status of a server the harness told to stop is not a finding)", err)
+		}
 		close(done)
 	}()
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		_ = f.serveCmd.Process.Kill()
+		if err := f.serveCmd.Process.Kill(); err != nil {
+			f.t.Logf("kill dossierx serve after the SIGINT timeout: %v (best-effort; Kill fails only when the process died in the race, which is the outcome stopping wants)", err)
+		}
 		<-done
 	}
 	f.serveCmd = nil
@@ -872,9 +889,11 @@ func (f *fixture) ResolveThreadAsHuman(step, claimID, threadID string) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		buf := make([]byte, 4096)
-		n, _ := resp.Body.Read(buf)
-		f.t.Fatalf("the human's Resolve click failed: POST %s -> HTTP %d\n%s", url, resp.StatusCode, string(buf[:n]))
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		if readErr != nil {
+			f.t.Fatalf("the human's Resolve click failed: POST %s -> HTTP %d, and the response body could not be read for diagnosis: %v", url, resp.StatusCode, readErr)
+		}
+		f.t.Fatalf("the human's Resolve click failed: POST %s -> HTTP %d\n%s", url, resp.StatusCode, body)
 	}
 	f.record(step)
 }

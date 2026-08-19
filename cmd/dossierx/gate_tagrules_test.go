@@ -195,7 +195,7 @@ func gateTagRulePatternCovers(pattern, ref string) (bool, error) {
 		// literal byte; kept as a refusal rather than a panic because a
 		// matcher that cannot be built is a pattern this check cannot
 		// interpret, which already has a meaning here.
-		return false, fmt.Errorf("the pattern %q could not be compiled for matching: %v", pattern, err)
+		return false, fmt.Errorf("the pattern %q could not be compiled for matching: %w", pattern, err)
 	}
 	return matcher.MatchString(ref), nil
 }
@@ -440,7 +440,7 @@ func (f gateTagRulesForge) rulesets(slug string) (total int, tag []gateTagRulese
 		if err := dec.Decode(&page); err == io.EOF {
 			break
 		} else if err != nil {
-			return 0, nil, fmt.Errorf("%w: the forge's ruleset listing for %s could not be decoded (%v), so whether the tag is protected is unknown — and unknown is a refusal, not a pass. The undecodable answer begins: %.200s",
+			return 0, nil, fmt.Errorf("%w: the forge's ruleset listing for %s could not be decoded (%w), so whether the tag is protected is unknown — and unknown is a refusal, not a pass. The undecodable answer begins: %.200s",
 				errGateUncheckable, slug, err, strings.TrimSpace(string(blob)))
 		}
 		summaries = append(summaries, page...)
@@ -462,7 +462,7 @@ func (f gateTagRulesForge) rulesets(slug string) (total int, tag []gateTagRulese
 		}
 		var full gateTagRuleset
 		if err := json.Unmarshal(blob, &full); err != nil {
-			return 0, nil, fmt.Errorf("%w: ruleset %d of %s could not be decoded (%v), and it targets tags, so it might be the very rule this check is looking for — refusing is the only reading that does not guess",
+			return 0, nil, fmt.Errorf("%w: ruleset %d of %s could not be decoded (%w), and it targets tags, so it might be the very rule this check is looking for — refusing is the only reading that does not guess",
 				errGateUncheckable, s.ID, slug, err)
 		}
 		tag = append(tag, full)

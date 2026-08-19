@@ -24,6 +24,7 @@
 package tests
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -39,7 +40,7 @@ const machineWideSentence = "EVERY git\n      repository on this machine"
 
 // runInstallerWithGlobal runs the installer with --yes in repo, under a global
 // git config at globalConfig, and returns combined output and exit code.
-func runInstallerWithGlobal(t *testing.T, repo, globalConfig string, args ...string) (string, int) {
+func runInstallerWithGlobal(t *testing.T, repo, globalConfig string, args ...string) (output string, code int) {
 	t.Helper()
 	shell := hostileShell(t)
 	cmd := exec.Command(shell, append([]string{hostileInstaller(t)}, args...)...)
@@ -49,10 +50,9 @@ func runInstallerWithGlobal(t *testing.T, repo, globalConfig string, args ...str
 		"GIT_CONFIG_GLOBAL="+globalConfig,
 	)
 	out, err := cmd.CombinedOutput()
-	code := 0
 	if err != nil {
-		exitErr, ok := err.(*exec.ExitError)
-		if !ok {
+		var exitErr *exec.ExitError
+		if !errors.As(err, &exitErr) {
 			t.Fatalf("could not run the installer in %s: %v", repo, err)
 		}
 		code = exitErr.ExitCode()

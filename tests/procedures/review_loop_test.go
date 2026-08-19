@@ -104,7 +104,11 @@ func assertInboxListsHumanThread(t *testing.T, inbox *invocation, tid string) {
 		t.Errorf("comment inbox printed no JSON envelope; the loop's step 3 contract (one machine-readable call) is unverifiable\nstdout: %s", inbox.Stdout)
 		return
 	}
-	threads, _ := inbox.Env.Data["threads"].([]any)
+	threads, ok := inbox.Env.Data["threads"].([]any)
+	if !ok {
+		t.Errorf("comment inbox's envelope carries no data.threads array; an inbox whose thread list cannot be read hides the human's thread as thoroughly as one that omits it\nstdout: %s", inbox.Stdout)
+		return
+	}
 	for _, raw := range threads {
 		m, ok := raw.(map[string]any)
 		if !ok {
@@ -113,7 +117,12 @@ func assertInboxListsHumanThread(t *testing.T, inbox *invocation, tid string) {
 		if m["thread_id"] != tid {
 			continue
 		}
-		if resolvable, _ := m["agent_can_resolve"].(bool); resolvable {
+		resolvable, ok := m["agent_can_resolve"].(bool)
+		if !ok {
+			t.Errorf("inbox lists the human's thread %s without a boolean agent_can_resolve; the rights rule as data is absent, and reading its absence as false would pass this check without the engine ever asserting the rule", tid)
+			return
+		}
+		if resolvable {
 			t.Errorf("inbox reports agent_can_resolve=true on the HUMAN's thread %s; the rights rule as data is wrong, and an agent reading the field as the skill instructs would resolve a thread it may not touch", tid)
 		}
 		return
