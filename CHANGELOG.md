@@ -67,6 +67,23 @@ The three skill-guide corrections behind the callout above:
   and the SHARED evidence files are three, not four — `gate/site-text.json` is the `site`
   surface's own capture, so a site change re-keys one surface, not thirteen. The pin paragraph's
   counts are now derived from `surface.json` and test-pinned; the hand-list had gone stale twice.
+- **The stage-2 baseline is derived from the previous release itself, never handed in as a
+  file.** `scripts/gate-stage2/run.sh delta` now reads the baseline inventory out of
+  `--baseline-commit`'s own tree (`git show <commit>:surface.json`; the frozen v0.5.0 commit —
+  the one release with no `surface.json` of its own — resolves to the committed
+  `surface.baseline.json`, chosen by identity and never as a fallback for a failed read) and
+  refuses the retired `--baseline-file` flag by name; `record` derives the same bytes again and
+  refuses a `gate/baseline.json` holding anything else. What forced it: the first v0.6.0 gate
+  run computed its delta against v0.5.0's frozen inventory while recording baseline ref v0.5.1 —
+  thirteen reading agents were handed a two-release comparison as this release's, and every
+  digest in that run's manifest was honest — because `docs/RELEASING.md`'s staging block
+  hard-coded `--baseline-file "$ROOT/surface.baseline.json"`, an invocation that was right for
+  exactly one release. The staging block now passes only the ref and the commit.
+- `docs/RELEASING.md`'s opening describes the forge gate that actually ships: the tagged commit
+  must be a merge and its tree must carry the release stamp. The old text still promised the
+  `origin/main` reachability check that was replaced after it deadlocked the v0.5.1 release — a
+  maintainer reading it would conclude a locally created, never-pushed merge cannot be
+  published, and take no care over exactly the case nothing refuses.
 - The viewer templates say the truth about themselves: `graph.css` no longer describes a backdrop
   dim and drop shadow the opaque pane does not have, z-index band 80 is named as the pane root it
   is, the zero-thread comment chip is dated v0.3.0 (not v0.2.1), and `comments.html` names

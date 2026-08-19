@@ -2,13 +2,21 @@
 
 A `v*` tag no longer publishes anything on its own. `.github/workflows/release.yml`
 opens with a `gate` job that the publishing job `needs:`, so a tag that does not
-get past it produces no archives at all. The gate establishes two facts about the
-tagged **tree** rather than about whoever pushed: that the tagged commit is
-reachable from `origin/main`, and that the tree at that commit carries the release
-stamp for exactly this version — `site/src/content.ts`'s last `releases[]` entry
-names the tag being pushed. Every exit path that is not a pass is a refusal; there
-is deliberately no branch that reports "could not check" and exits 0. Only once
-that job passes does GoReleaser run, building the six platform archives, stamping
+get past it produces no archives at all. The gate establishes two facts about
+what was tagged rather than about whoever pushed: that the tagged commit **is a
+merge** — it has two or more parents, which refuses the ordinary mistake of
+tagging the release branch instead of the merge — and that the tree at that
+commit carries the release stamp for exactly this version —
+`site/src/content.ts`'s last `releases[]` entry names the tag being pushed. Every
+exit path that is not a pass is a refusal; there is deliberately no branch that
+reports "could not check" and exits 0. The gate used to establish something
+stronger — that the tagged commit is reachable from `origin/main` — and that
+check deadlocked against the driver's own order, which pushes the tag at D6 and
+`main` not until D8: v0.5.1 stalled with a public tag and no archives behind it.
+The full account is under *Tagging* below, along with the one case merge-ness
+deliberately does NOT refuse — a merge commit created locally and never pushed —
+so do not lean on the forge to catch that case; nothing does. Only once that job
+passes does GoReleaser run, building the six platform archives, stamping
 `main.version` / `main.commit` / `main.date` via ldflags, generating the GitHub
 release notes from Conventional Commit subjects, and publishing.
 
@@ -231,9 +239,10 @@ them, and the three post-publish checks that leave this repository entirely.
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
       be at those paths on the day of the run is what the agents read. `record`
-      can hold three of the six to account — the delta by recomputing it, the
+      can hold four of the six to account — the resolved baseline by deriving
+      the named commit's inventory again, the delta by recomputing it, the
       two stamped captures by reading the tree each names on its own face — and
-      the other three it can only digest, so a hand-written
+      the other two it can only digest, so a hand-written
       `gate/export-output.json` is recorded exactly as cleanly as a real one.
       Produce them:
 
@@ -260,10 +269,10 @@ them, and the three post-publish checks that leave this repository entirely.
             -release-notes-range="$PREV..HEAD" \
             -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
 
-          # the resolved baseline inventory, and the surface delta over it
+          # the resolved baseline inventory, and the surface delta over it —
+          # the baseline is read out of $PREV_COMMIT itself, never handed in
           scripts/gate-stage2/run.sh delta \
-            --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
-            --baseline-file "$ROOT/surface.baseline.json"
+            --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT"
 
           # the run manifest: this tree, this baseline, these exact bytes
           scripts/gate-stage2/run.sh record --tree "$TREE" \
@@ -373,29 +382,48 @@ them, and the three post-publish checks that leave this repository entirely.
       forward, instead of re-keying every surface over twelve documents
       nothing touched.
 
-      **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
-      the previous release.** That release shipped before the surface emitter
-      existed and carries no `surface.json` of its own, which is the only reason
-      `surface.baseline.json` is in this tree. Every later release carries its
-      own, and the baseline is then read out of the tag —
-      `git show "$PREV:surface.json" > "$ROOT/gate/baseline-input.json"`, and
-      that path is what `--baseline-file` gets. Falling back on the committed
-      bootstrap because a tag could not be read is the one move never to make: in
-      a shallow clone that failure reads character for character like an absent
-      tag, and the delta would then span two releases — full, plausible, and
-      handed to thirteen agents as the truth about the past.
+      **`delta` resolves the baseline inventory itself, from `$PREV_COMMIT` and
+      nothing else — there is no file argument, and its absence is the fix for
+      a defect rather than a convenience.** The command used to take
+      `--baseline-file`, and this document hard-coded it to
+      `surface.baseline.json` — right for exactly one release and stale forever
+      after: the first v0.6.0 gate run computed its delta against v0.5.0's
+      frozen inventory while recording baseline ref v0.5.1, and handed thirteen
+      agents a comparison spanning two releases as the truth about what the
+      release changed. The previous release's inventory is a fact git already
+      holds, and a file handed in beside the commit is a second answer that can
+      drift from the first, so the harness now derives the bytes from the
+      commit's identity: the frozen v0.5.0 commit — the one release that
+      shipped before the surface emitter existed and carries no `surface.json`
+      of its own, which is the only reason `surface.baseline.json` is in this
+      tree — resolves to that committed bootstrap, and every other commit
+      resolves to `git show "$PREV_COMMIT:surface.json"`. A clone that cannot
+      read that — shallow, or one that never fetched the commit — is a refusal,
+      never a fallback to the bootstrap: that failure reads character for
+      character like a pre-emitter release, and the substituted delta would be
+      full, plausible, and wrong about which past it describes. An invocation
+      still carrying `--baseline-file` is refused by name, and `record` derives
+      the same bytes from the same commit again and refuses a
+      `gate/baseline.json` holding anything else — so a mismatch between the
+      baseline the run names and the bytes the agents read is refused at both
+      ends, never recorded.
 
       Skipping any of this does not produce a smaller gate, it produces a failed
       one. The freshness check refuses with "it was found on disk rather than
       produced, and found on disk is not produced", and `record` holds every
-      guarded artifact to account before it will name one — in one of two ways.
-      The two captures it cannot recompute, the render diff and the site
+      guarded artifact to account before it will name one — in one of three
+      ways. The two captures it cannot recompute, the render diff and the site
       extraction, are refused when the stamp on their own face names another
       tree or another baseline. `gate/delta.json` carries no stamp to read:
       `record` re-derives it outright from `surface.json` and
       `gate/baseline.json` and refuses on any byte of disagreement — a delta
       computed before a fix moved the inventory, one computed against another
-      baseline, and one written by hand all fail the same comparison.
+      baseline, and one written by hand all fail the same comparison. And
+      `gate/baseline.json` is re-resolved outright from the commit the run
+      names, which is the refusal the recomputation alone cannot make: a stale
+      baseline with a delta honestly computed over it agrees with itself on
+      every byte, and only deriving the named release's inventory again can say
+      the pair is about the wrong past.
 
       **2. Produce the fan-out.**
 
