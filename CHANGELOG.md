@@ -83,6 +83,18 @@ only what the documents (and one CLI hint) tell a reader to do:
   one runs: a partially re-locked module finishes the crossing gate-green but without a locked
   build order, and runs the propose + lock pair on the day its last claim locks.
 
+### Fixed — a serve test raced the server it started, and only Windows noticed
+
+The watcher re-walks the claims tree with `filepath.WalkDir` twice a second, which holds a
+directory handle. POSIX unlinks a directory out from under one; Windows refuses with "The process
+cannot access the file because it is being used by another process", so
+`TestClaimAsset_SymlinkedDirectoryIsRefused` reddened the `windows-latest` leg and, through it, CI
+on `main` — which is a refused release, since `make ci-evidence` fails on any failed test. The
+removal now retries inside a bounded window and then **fails**: giving up quietly would leave the
+fixture directory standing, the symlink never created, and the assertion passing against an
+ordinary missing file. Mutation-checked — with the removal silently skipped, the test reports SKIP
+and the package prints `ok`.
+
 ### Fixed — the claims file lock could refuse the one case it exists for, on Windows
 
 **If you run DossierX on Windows and two `dossierx` invocations can touch one project at the same

@@ -69,6 +69,51 @@ func writeBytes(t *testing.T, path string, content []byte) {
 	}
 }
 
+// removeWatchedDir removes a DIRECTORY that sits inside the tree the running
+// server's watcher is polling.
+//
+// WHY THIS IS NOT A PLAIN os.RemoveAll, and the reason is a platform difference
+// rather than a flake. The watcher is a zero-dependency mtime poll: every
+// defaultPollInterval it re-walks the claims tree with filepath.WalkDir, which
+// opens a handle on each directory it enumerates. POSIX unlinks a directory out
+// from under an open handle without comment, so on macOS and Linux the removal
+// below has never once failed. Windows refuses it — "The process cannot access
+// the file because it is being used by another process" — whenever the poll
+// happens to be inside this directory at the moment the test asks for it, and on
+// a half-second tick that is often enough to red the job. It reds the whole
+// windows-latest matrix leg, which then reds CI on main, which then refuses the
+// release: `make ci-evidence` fails on any failed test, by design.
+//
+// The race is between the test and the server the test itself started. Nothing
+// about it touches the defence under test, which is that a symlinked assets
+// directory is not served.
+//
+// IT RETRIES, AND THEN IT FAILS — it never gives up quietly and it never skips.
+// The removal is a PRECONDITION of the assertion that follows it: if the fixture
+// directory is still standing, the symlink is never created, and the
+// assertNotFound below would pass against an ordinary missing file rather than
+// against the link it is supposed to refuse. A silent return here would convert
+// this test into one that cannot fail, which is the same defect #28 and #29 were
+// about.
+func removeWatchedDir(t *testing.T, path string) {
+	t.Helper()
+	const window = 10 * time.Second
+	deadline := time.Now().Add(window)
+	for {
+		err := os.RemoveAll(path)
+		if err == nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("remove fixture dir %s: still refused after %s: %v\n"+
+				"On Windows this is the watcher's poll holding a handle on the directory. "+
+				"If it never clears inside the window, the poll is not the cause and this is a real failure.",
+				path, window, err)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // --- the happy path ---------------------------------------------------------
 
 // TestClaimAsset_ServesAReferencedImage is the feature working end to end: the
@@ -209,9 +254,7 @@ func TestClaimAsset_SymlinkedDirectoryIsRefused(t *testing.T) {
 	writeBytes(t, filepath.Join(outside, "diagram.png"), []byte("outside the tree"))
 
 	assets := filepath.Join(root, "claims", "facet-a", "assets")
-	if err := os.RemoveAll(assets); err != nil {
-		t.Fatalf("remove fixture dir: %v", err)
-	}
+	removeWatchedDir(t, assets)
 	if err := os.Symlink(outside, assets); err != nil {
 		t.Skipf("symlinks unavailable on this platform: %v", err)
 	}
