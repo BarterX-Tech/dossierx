@@ -102,9 +102,10 @@ them, and the three post-publish checks that leave this repository entirely.
         several thousand lines of JSON rather than one `ok <pkg> <time>` line per
         package. Do not try to skim it — that is what the record above is for.
         What is worth a glance is whether the run contains jobs the command did
-        *not* account for: `hooks` runs a shell script, which emits no countable
-        account of anything, so a smoke test that degenerated into asserting
-        nothing still reaches you as a green conclusion.
+        *not* account for: `hooks` runs a shell script and, on Windows, a
+        Pester suite, neither of which emits an account the evidence command
+        counts, so a smoke test that degenerated into asserting nothing still
+        reaches you as a green conclusion.
       - the run exists and belongs to this commit at all. A workflow whose
         triggers or `paths:` filter stopped matching produces no run, and a
         commit with nothing to report reads as a commit with nothing wrong. The
@@ -141,12 +142,17 @@ them, and the three post-publish checks that leave this repository entirely.
       under `gate/` produced below. Only those six are staged here, and the
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
-      be at those paths on the day of the run is what the agents read — and a
-      hand-written `gate/delta.json` hashes into all thirteen keys exactly as
-      cleanly as a real one. Produce them:
+      be at those paths on the day of the run is what the agents read. `record`
+      can hold three of the six to account — the delta by recomputing it, the
+      two stamped captures by reading the tree each names on its own face — and
+      the other three it can only digest, so a hand-written
+      `gate/export-output.json` is recorded exactly as cleanly as a real one.
+      Produce them:
 
-          # the rendered site text, extracted from a real build in a real browser
+          # the rendered site text, extracted from a real build in a real
+          # browser and stamped with the tree that build was made from
           DOSSIERX_SITE_TEXT_OUT="$ROOT/gate/site-text.json" \
+          DOSSIERX_SITE_TEXT_TREE="$TREE" \
           DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
           DOSSIERX_TEST_BROWSER=/path/to/chrome \
           make viewer-test
@@ -167,7 +173,7 @@ them, and the three post-publish checks that leave this repository entirely.
             -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
 
           # the resolved baseline inventory, and the surface delta over it
-          scripts/gate-stage2/run.sh delta --tree "$TREE" \
+          scripts/gate-stage2/run.sh delta \
             --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
             --baseline-file "$ROOT/surface.baseline.json"
 
@@ -183,10 +189,41 @@ them, and the three post-publish checks that leave this repository entirely.
       relative `gate/…` lands under `tests/` and the gate then looks for an
       artifact nobody produced.
 
+      **The two `DOSSIERX_SITE_TEXT_*` variables imply each other, and the
+      extraction fails loudly when only one is set.** `DOSSIERX_SITE_TEXT_TREE`
+      is the same full 40-digit tree object name everything else in this run is
+      keyed to — `$TREE`, never a tag and never an abbreviation; the producer
+      refuses both. The extraction writes it into `gate/site-text.json` as the
+      document's FIRST field, and `record` reads it back and refuses a capture
+      stamped with any other tree. The stamp exists because this is the one
+      artifact `record` cannot check by recomputing — an extraction needs this
+      build and a real browser — and before it existed the capture named which
+      node and npm built the site and nothing that named a RELEASE, so an
+      extraction left on disk from the previous gate run recorded cleanly and
+      was hashed into the `site` surface's key as this release's rendered DOM.
+      A stale capture is now refused rather than hashed cleanly into a key.
+      What the stamp cannot promise, exactly as `gate/render-diff.json`'s
+      cannot: that the working tree the build read was clean at that identity —
+      the extraction records the value it was handed, verbatim.
+
+      **`delta` takes no `--tree`, and that is a decision rather than an
+      omission.** The delta is a pure function of `surface.json` and the
+      resolved baseline, and its bytes are hashed into every surface's key and
+      assembled into every surface's bundle — so the tree stamp it used to
+      carry moved on every commit, re-keyed all thirteen surfaces every time,
+      and the carry-forward machinery never once fired: a one-character README
+      fix re-ran thirteen reading agents. The freshness the stamp bought is
+      bought the stronger way now — `record` re-derives the whole document
+      from the same two files and refuses on any byte of disagreement, which
+      catches every stale delta the stamp caught and also the hand-written one
+      the stamp waved through whenever it happened to say the right tree. (The
+      script's global parser still accepts `--tree`, so an invocation copied
+      from an older revision of this file runs; the value is unused.)
+
       **`surface.json` reaches all thirteen agents and is deliberately not on
       that manifest.** It is the mechanical inventory every surface's prose is
       judged against — commands, flags, lint rules, error codes, the envelope,
-      the counts, the four version pins — so leaving it unmentioned here is how a
+      the counts, the version pins — so leaving it unmentioned here is how a
       maintainer comes to believe the evidence set is closed at six. It is not
       staged because staging it would attest less than what already holds:
       `cmd/dossierx/surface_test.go` is both halves of one contract, writing the
@@ -203,12 +240,27 @@ them, and the three post-publish checks that leave this repository entirely.
       likewise unstaged: they are tracked and reviewed (`gate/.gitignore` ignores
       only what a run produces), and they are the QUESTION rather than the
       evidence. Neither is thereby unwatched. Both are hashed into the surface
-      key: `surface.json` is one of the four SHARED evidence files every
-      surface's fingerprint covers — beside `gate/baseline.json`,
-      `gate/delta.json` and `gate/site-text.json` — and the prompt sources are
-      hashed into `method_version`, which the same fingerprint hashes in beside
-      them. Change a byte of either and every surface is re-read rather than
-      carried forward.
+      key: `surface.json` is one of the three SHARED evidence files every
+      surface's fingerprint covers — beside `gate/baseline.json` and
+      `gate/delta.json`; the set is `gateSharedEvidence` in
+      `cmd/dossierx/gate_fingerprint_test.go`, and this sentence restates it —
+      and the prompt sources are hashed into `method_version`, which the same
+      fingerprint hashes in beside them. Change a byte of any of these and
+      every surface is re-read rather than carried forward.
+
+      `gate/site-text.json` used to be the fourth member of that set and no
+      longer is, because SHARED means read by EVERY agent and the rendered
+      site text is read by the `site` agent alone. Folded into the shared set,
+      every re-extraction of the site — every release, since the extraction is
+      per-run evidence — re-keyed all thirteen surfaces. It now reaches
+      exactly one key the way the other single-reader captures always have:
+      the assembler hands the `site` surface its capture verbatim, so the
+      bundle digest covers those bytes for the one surface that reads them and
+      for no other — `TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther`
+      holds that true. What the demotion buys is the cache working at all: a
+      site change moves the `site` key and leaves the other twelve carrying
+      forward, instead of re-keying every surface over twelve documents
+      nothing touched.
 
       **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
       the previous release.** That release shipped before the surface emitter
@@ -224,9 +276,15 @@ them, and the three post-publish checks that leave this repository entirely.
 
       Skipping any of this does not produce a smaller gate, it produces a failed
       one. The freshness check refuses with "it was found on disk rather than
-      produced, and found on disk is not produced", and `record` refuses outright
-      to name an artifact that says on its own face it was computed over another
-      tree or against another baseline.
+      produced, and found on disk is not produced", and `record` holds every
+      guarded artifact to account before it will name one — in one of two ways.
+      The two captures it cannot recompute, the render diff and the site
+      extraction, are refused when the stamp on their own face names another
+      tree or another baseline. `gate/delta.json` carries no stamp to read:
+      `record` re-derives it outright from `surface.json` and
+      `gate/baseline.json` and refuses on any byte of disagreement — a delta
+      computed before a fix moved the inventory, one computed against another
+      baseline, and one written by hand all fail the same comparison.
 
       **2. Produce the fan-out.**
 
@@ -293,10 +351,17 @@ them, and the three post-publish checks that leave this repository entirely.
       **4. Then loop, and expect to.** Any finding at all makes the receipt
       FAILED — there is no severity threshold, and nothing waves a finding
       through. The gate surfaces and never fixes, so the fixes are yours, and a
-      fix moves the tree. Every artifact above is keyed to a tree, so NOTHING
-      staged for the old one is reusable: CI, `make ci-evidence` for the new
-      merge commit, and the whole of this item are produced again against the new
-      `$TREE`. Repeat until no surface reports a finding.
+      fix moves the tree. So produce this item again against the new `$TREE`,
+      end to end: CI, `make ci-evidence` for the new merge commit, the
+      captures, `delta`, `record`, a fresh fan-out. The tree-stamped captures
+      leave no room to cut that short — `record` refuses their old stamps by
+      name. The one artifact deliberately NOT keyed to a tree is
+      `gate/delta.json`: its freshness is recomputation, so when the fix moved
+      no inventory the delta on disk is byte-for-byte the one the new tree
+      would produce and re-recording it is honest — that reuse is the cache
+      working, not a step skipped — and when the fix moved `surface.json`,
+      `record` refuses it until `delta` is re-run. Repeat until no surface
+      reports a finding.
 
       **5. Read the findings yourself before you authorize anything.** Nothing is
       filtered, deduplicated away or dropped on the way to you. Each finding
@@ -361,17 +426,28 @@ them, and the three post-publish checks that leave this repository entirely.
       that reports as unchanged the surfaces that changed.
 
       This used to be a `grep -rn --include="*.md" --include="*.yml"`, which does
-      not search `*.yaml` — and this repo has 232 of those against 10 `.yml`. It
-      missed nothing, but a sweep with a blind spot degrades into memory, which
-      is the exact thing this item exists to avoid. `git grep` needs no filter
-      list to keep current.
+      not search `*.yaml` — and when that sweep was retired this repo held 232
+      of those against 10 `.yml`. It missed nothing, but a sweep with a blind
+      spot degrades into memory, which is the exact thing this item exists to
+      avoid. `git grep` needs no filter list to keep current.
 
-      As of v0.5.0 that is `README.md` (the `go install` line and the
-      `install-git-hook.sh` raw URL), `skills/dossierx/SKILL.md` (the same raw
-      URL), and `scripts/ci/dossierx-check.yml` (the `go install` line — this
-      one is a template users copy into their own repository, so a stale pin
-      there ships a stale binary into someone else's merge gate). It went stale
-      through v0.3.0 and v0.3.1 and was found by a sweep, not by memory.
+      As of v0.5.1 that is FOUR pins across THREE files: `README.md` (the
+      `go install` line and the `install-git-hook.sh` raw URL),
+      `skills/dossierx/SKILL.md` (the same raw URL), and
+      `scripts/ci/dossierx-check.yml` (the `go install` line — this one is a
+      template users copy into their own repository, so a stale pin there
+      ships a stale binary into someone else's merge gate).
+
+      **Do not work from that list — work from the sweep, and treat the list
+      as a cross-check.** The list is a cache of what the sweep found last
+      time, and the hand-list form of it went stale through v0.3.0 and v0.3.1
+      before a sweep, not memory, caught it. Both counts above are derived,
+      not remembered: `surface.json`'s `version_pins` is the mechanical
+      answer, regenerated from the tree on every push, and
+      `TestTheReleasingPinParagraphMatchesTheMechanicalSweep` in
+      `tests/derived_facts_test.go` fails the build when this sentence and
+      that inventory disagree — when they do, this paragraph is the wrong
+      one.
 - [ ] **The embedded skills still describe this engine.** `skills/*/SKILL.md` is
       `go:embed`-ed into the binary and installed into *other people's*
       repositories by `dossierx skills export`, where it becomes the operating

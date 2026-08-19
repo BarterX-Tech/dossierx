@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The release procedure's evidence-staging instructions in `docs/RELEASING.md` now match how
+  the stage-2 gate actually stages evidence. Three corrections: the site-text extraction is
+  documented as requiring `DOSSIERX_SITE_TEXT_TREE` beside `DOSSIERX_SITE_TEXT_OUT` (the
+  extraction stamps the tree into `gate/site-text.json` and fails loudly without it, so a stale
+  capture is refused at `record` time rather than hashed cleanly into a key); the `delta`
+  command is documented without `--tree` (the delta is a pure function of the two inventories
+  and its freshness is proven by recomputation in `record`, so the per-commit stamp that
+  defeated the gate's carry-forward cache is gone — the flag is still accepted, and unused);
+  and the SHARED evidence files every surface's fingerprint covers are three, not four —
+  `gate/site-text.json` was demoted to the `site` surface's own capture, so a site change
+  re-keys one surface instead of thirteen.
+- The pin paragraph in `docs/RELEASING.md` states its counts — "As of v0.5.1 that is FOUR pins
+  across THREE files" — derived from `surface.json`'s `version_pins` and cross-checked by
+  `TestTheReleasingPinParagraphMatchesTheMechanicalSweep`, replacing the hand-list form that
+  had gone stale twice before.
+
 ## [0.5.1] - 2026-08-10
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
