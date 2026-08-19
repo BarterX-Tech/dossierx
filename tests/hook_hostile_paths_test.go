@@ -53,18 +53,18 @@
 // WHAT IS ASSERTED PER CASE, all on exit codes and file bytes, never on
 // message text (prose is rewordable; bytes and exit codes are the contract):
 //
-//   1. the installed hook is byte-identical to `--print-hook` output;
-//   2. core.hooksPath is unchanged across the install (bytes AND exit code
-//      of `git config --get`, so "unset before, unset after" is checked as
-//      exactly that rather than as two empty strings that happen to agree);
-//   3. an honest commit exits 0 — the half that fails when the gate starts
-//      refusing everything, which is precisely what defect (3) above does;
-//   4. a commit carrying a hand-edited LOCKED claim exits non-zero — the
-//      half that fails when the gate silently skips the project it cannot
-//      name, so neither half alone means anything;
-//   5. `git status --porcelain` is byte-identical before and after the
-//      refusal: the hook reads the index and must never dirty the tree it
-//      judges.
+//  1. the installed hook is byte-identical to `--print-hook` output;
+//  2. core.hooksPath is unchanged across the install (bytes AND exit code
+//     of `git config --get`, so "unset before, unset after" is checked as
+//     exactly that rather than as two empty strings that happen to agree);
+//  3. an honest commit exits 0 — the half that fails when the gate starts
+//     refusing everything, which is precisely what defect (3) above does;
+//  4. a commit carrying a hand-edited LOCKED claim exits non-zero — the
+//     half that fails when the gate silently skips the project it cannot
+//     name, so neither half alone means anything;
+//  5. `git status --porcelain` is byte-identical before and after the
+//     refusal: the hook reads the index and must never dirty the tree it
+//     judges.
 //
 // WHAT THIS FILE CANNOT PROMISE. It runs the installer under the sh this
 // machine has, against paths this machine's filesystem accepts. It cannot

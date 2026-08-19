@@ -61,9 +61,13 @@
 #                   with its own bundled sh, so no exec bit and no
 #                   interpreter on PATH is required. This installer runs under
 #                   Git Bash or WSL; install-git-hook.ps1 is a thin wrapper
-#                   for PowerShell users who do not have bash on PATH. Both
-#                   paths are exercised by scripts/hook-smoke-test.sh, which
-#                   CI runs on windows-latest.
+#                   for PowerShell users who do not have bash on PATH. The sh
+#                   path is exercised by scripts/hook-smoke-test.sh on all
+#                   three CI platforms; the PowerShell path by
+#                   scripts/install-git-hook.Tests.ps1 under pwsh on
+#                   windows-latest — an earlier version of this comment said
+#                   the smoke test covered both, which was never true and is
+#                   exactly how the wrapper's Find-Bash defect shipped unrun.
 #   idempotence     Re-running is a no-op with a one-line report. An existing
 #                   hook that dossierx did not write is NEVER replaced without
 #                   --force, and --force backs it up and says where.

@@ -61,9 +61,14 @@ DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
 make viewer-test
 ```
 
-**`make hook-test`** is the pre-commit gate's suite. The gate is shell driving a real binary
-against a real git repository, so no Go test can cover it; CI runs this on Linux, macOS and
-Windows, because the hook body executes under git's own bundled `sh`.
+**`make hook-test`** is the pre-commit gate's behavioural suite. The gate is shell driving a
+real binary against a real git repository; CI runs this on Linux, macOS and Windows, because
+the hook body executes under git's own bundled `sh`. It is not the gate's only coverage:
+`tests/hook_hostile_paths_test.go` (part of the ordinary `go test ./...`) drives the installer
+over a corpus of hostile paths — apostrophes, `$`, backticks, quotes, backslashes, control
+characters — and `scripts/install-git-hook.Tests.ps1` is a Pester suite for the PowerShell
+wrapper, which CI runs under `pwsh` on `windows-latest` (run `Invoke-Pester -Path
+scripts/install-git-hook.Tests.ps1` yourself if you have PowerShell and Pester).
 
 `tests/nested_module_coverage_test.go` fails the build if a nested module is ever added
 without a CI job *and* a Makefile target, so this list cannot quietly go stale.

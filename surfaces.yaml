@@ -205,14 +205,16 @@ out_of_scope:
       read by a client of the binary — the one workflow that is copied outward,
       scripts/ci/dossierx-check.yml, is a surface above, and .goreleaser.yaml is
       a surface above because its changelog rules decide what the published
-      release notes say. The install-hook smoke test and the comment end-to-end
-      script drive the shipped scripts; they are not themselves shipped.
+      release notes say. The install-hook smoke test, the Pester suite that
+      exercises the PowerShell wrapper, and the comment end-to-end script all
+      drive the shipped scripts; they are not themselves shipped.
     paths:
       - .github/
       - .claude/workflows/
       - Makefile
       - scripts/e2e-comments.sh
       - scripts/hook-smoke-test.sh
+      - scripts/install-git-hook.Tests.ps1
       - scripts/normalize-claims/
 
   - name: toolchain-config
