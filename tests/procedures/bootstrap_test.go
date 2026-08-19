@@ -3,27 +3,24 @@
 // steps 2 and 3 are not interchangeable"), against a repository that already
 // has an AGENTS.md — the exact repository the export's Codex form exists for.
 //
-// THE DEFECT THIS DETECTS. Step 2 runs `dossierx skills export .claude/skills`
-// BEFORE step 3 creates project.config.yaml. The export resolves its project
-// root from the config; with no config there is no root, and by the export's
-// own contract a rootless export writes NO AGENTS.md section (it cannot find
-// the file) and drops the generic guide beside the bundles instead of at
-// docs/dossierx-agent-guide.md. Nothing later in the bootstrap re-runs the
-// export, so a repo bootstrapped by the book ends with:
+// THE DEFECT THIS DETECTED, kept red until the sequence was fixed. The export
+// used to run at step 2, BEFORE step 3 created project.config.yaml. The export
+// resolves its project root from the config; with no config there is no root,
+// and by the export's own contract a rootless export writes NO AGENTS.md
+// section (it cannot find the file) and drops the generic guide beside the
+// bundles instead of at docs/dossierx-agent-guide.md. Nothing later in the
+// bootstrap re-ran the export, and the export exits 0 both ways, so no step
+// ever failed — a repo bootstrapped by the book ended with an uninstructed
+// AGENTS.md and no guide under the root, silently, forever.
 //
-//   - an AGENTS.md that never received the dossierx section — the always-on
-//     harness this repo actually uses stays uninstructed, forever, silently;
-//   - no docs/dossierx-agent-guide.md under the project root, so the section's
-//     documented companion (and the harness-independent form "guaranteed to be
-//     read") is not where anything expects it.
-//
-// The export exits 0 both times a reader might look, so no step of the
-// bootstrap ever fails — the defect is only visible in the terminal state,
-// which is what this scenario asserts: after the whole documented sequence,
-// the AGENTS.md section and the agent guide exist under the project root.
-// It asserts the postcondition, not the mechanism, so it goes green whether
-// the fix is reordering the steps, re-running the export after step 3, or
-// teaching the export to find the root some other way.
+// The fixed sequence creates the config at step 2 and exports at step 3, so
+// the export runs rooted and both artifacts land. This scenario replays that
+// order and asserts the terminal postconditions: after the whole documented
+// sequence, the AGENTS.md section and the agent guide exist under the project
+// root. It asserts the postcondition, not the mechanism, so it stays green
+// under any future fix shape that reaches the same terminal state — and goes
+// red again if the steps are ever swapped back (the postconditions, not the
+// anchors, are what catch that: a rootless export still exits 0).
 package procedures
 
 import (
@@ -51,10 +48,10 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 
 	f.Plan("bootstrap export order (dossierx)",
 		"dossierx version",
+		"write project.config.yaml and claims/ (step 2: the config the human confirmed)",
 		"dossierx skills export .claude/skills",
-		"write project.config.yaml and claims/ (step 3: the config the human confirmed)",
 		"copy scripts/ci/dossierx-check.yml into .github/workflows/ (step 4's \"no\" branch: CI is the authority; the documented fetch from the release path is substituted with this checkout's copy to stay off the network)",
-		"step 5 skipped, and said out loud: the project was created at step 3, so there is no pre-ledger store to cross",
+		"step 5 skipped, and said out loud: the project was created at step 2, so there is no pre-ledger store to cross",
 		"dossierx check --format text",
 	)
 
@@ -63,18 +60,18 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 	version := f.Run("dossierx version", nil)
 	f.DocumentedSuccess(version, "bootstrap step 1: dossierx version")
 
-	// Step 2, exactly as documented and exactly where documented: before the
-	// config exists. The skill itself warns that at step 2 "the config does not
-	// exist until step 3" — and still schedules the export here.
-	export := f.Run("dossierx skills export .claude/skills", nil)
-	f.DocumentedSuccess(export, "bootstrap step 2: the export the skill orders before the config exists")
-
-	// Step 3: propose and write the config. The human's confirmation of the
+	// Step 2: propose and write the config. The human's confirmation of the
 	// facet list is judgement this harness cannot enact (see the package
 	// comment); the write is the step's executable half.
-	f.Enact("write project.config.yaml and claims/ (step 3: the config the human confirmed)", func() {
+	f.Enact("write project.config.yaml and claims/ (step 2: the config the human confirmed)", func() {
 		f.WriteProjectConfig()
 	})
+
+	// Step 3, exactly as documented and exactly where documented: AFTER the
+	// config exists ("after step 2, never before"), so the export runs rooted
+	// and maintains the AGENTS.md section and the guide under the root.
+	export := f.Run("dossierx skills export .claude/skills", nil)
+	f.DocumentedSuccess(export, "bootstrap step 3: the export, ordered after the config so it finds the project root")
 
 	// Step 4, "no" branch: no hook, add the CI workflow instead. The document
 	// fetches the template from the pinned release URL; a hermetic suite
@@ -97,8 +94,8 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 
 	// Step 5 is conditional on a pre-ledger store, and the skill says exactly
 	// what to do when the condition is false: "Skip it on a project you created
-	// at step 3, and say you skipped it." The skip is recorded, not silent.
-	f.Enact("step 5 skipped, and said out loud: the project was created at step 3, so there is no pre-ledger store to cross", nil)
+	// at step 2, and say you skipped it." The skip is recorded, not silent.
+	f.Enact("step 5 skipped, and said out loud: the project was created at step 2, so there is no pre-ledger store to cross", nil)
 
 	// Step 6, verbatim including --format text: "Run `dossierx check --format
 	// text` and show them the output exiting 0." Text mode prints prose, not an
@@ -125,13 +122,13 @@ func TestBootstrap_ExportOrderStillReachesAgentsMDAndTheGuide(t *testing.T) {
 		t.Fatalf("read AGENTS.md after the bootstrap: %v", err)
 	}
 	if string(after) == preexisting {
-		t.Errorf("FINDING — after the whole documented bootstrap, the pre-existing AGENTS.md is byte-for-byte untouched: the export ran at step 2 with no project root, wrote no section, and nothing in the sequence ever exports again. The always-on harness this repo uses never learns DossierX exists.")
+		t.Errorf("FINDING — after the whole documented bootstrap, the pre-existing AGENTS.md is byte-for-byte untouched: the export ran with no project root and wrote no section, and nothing in the sequence ever exports again. The always-on harness this repo uses never learns DossierX exists.")
 	}
 
 	// (b) The guide, at the path the AGENTS.md section links it by and the only
 	//     path the export's own contract writes it to when a root exists.
 	guide := filepath.Join(f.root, "docs", "dossierx-agent-guide.md")
 	if _, err := os.Stat(guide); err != nil {
-		t.Errorf("FINDING — after the whole documented bootstrap, %s does not exist under the project root (%v): the rootless step-2 export dropped the guide beside the skill bundles instead, where nothing documented ever looks for it.", filepath.Join("docs", "dossierx-agent-guide.md"), err)
+		t.Errorf("FINDING — after the whole documented bootstrap, %s does not exist under the project root (%v): a rootless export dropped the guide beside the skill bundles instead, where nothing documented ever looks for it.", filepath.Join("docs", "dossierx-agent-guide.md"), err)
 	}
 }

@@ -707,12 +707,12 @@ func (f *fixture) RewriteClaimBody(id, old, new string) {
 	}
 }
 
-// SetBuildRoleByHand appends build_role to a claim FILE — the only way to set
-// it on an already-locked claim, which is exactly what the build-order skill's
-// "set it, then re-propose" recovery instructs without saying how. On a DRAFT
-// claim this is the ordinary workshop edit; on a LOCKED one it is the edit the
-// ledger exists to catch, and the scenario that calls it there does so to
-// enact the documented recovery verbatim, defect included.
+// SetBuildRoleByHand appends build_role to a claim FILE — there is no command
+// that sets it after creation, which is why the build-order skill's recovery
+// row routes through unlock first. On a DRAFT claim this is the ordinary
+// workshop edit, and that is where the recovery scenario now calls it; on a
+// LOCKED one it would be the edit the ledger exists to catch, which the old
+// "set it, then re-propose" row instructed verbatim until it was fixed.
 func (f *fixture) SetBuildRoleByHand(id, role string) {
 	f.t.Helper()
 	path := f.claimFile(id)

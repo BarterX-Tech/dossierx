@@ -150,10 +150,13 @@ func newSkillsExportCmd() *cobra.Command {
 //
 // It returns "" rather than an error when there is no project, because "export
 // the bundles into this directory" is a legitimate call in a repo DossierX has
-// not been set up in yet — that is the ORDER the bootstrap sequence runs in (the
-// agent installs the guide, reads it, and only then proposes a config). An
-// unrooted export writes the bundles and the guide into the named directory and
-// leaves the repo alone; it never guesses where a project root might be.
+// not been set up in yet — an agent may install the guides to read before any
+// project exists. The documented BOOTSTRAP sequence, though, creates the config
+// FIRST and exports after (skills/dossierx/SKILL.md), precisely because only a
+// rooted export maintains the AGENTS.md section and places the guide at
+// docs/dossierx-agent-guide.md. An unrooted export writes the bundles and the
+// guide into the named directory and leaves the repo alone; it never guesses
+// where a project root might be.
 //
 // Every failure mode collapses to the same answer for that reason — a missing
 // config, an unreadable cwd, a --config naming a file that is not there — because

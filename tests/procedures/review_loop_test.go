@@ -3,27 +3,23 @@
 // viewer and the agent on the CLI — in ONE fixture, in the documented order,
 // with no resets between steps.
 //
-// THE DEFECT THIS DETECTS. Step 4 tells the agent, for a locked claim the
-// human commented on: "take a locked one through unlock → fix → lock, with
-// their yes", and only THEN reply on the thread. But the human's thread is
-// still open at step 4 by the table's own construction — the human does not
-// click Resolve until step 5 — and an open thread is precisely what the lock
-// gate refuses (`unresolved_comments`, per the same skill's "How an open
-// thread gates the lifecycle": "A claim cannot be locked while it carries an
-// open thread"). So the re-lock the step instructs cannot succeed in the
-// position the table puts it. An agent following the table verbatim wedges at
-// step 4 with a refusal whose documented recovery ("the human resolves") is
-// the very step the table schedules AFTER the lock.
+// THE DEFECT THIS DETECTED, kept red until the table was fixed. Step 4 used to
+// end the locked-claim branch in a lock ("unlock → fix → lock"), but the
+// human's thread is still open at step 4 by the table's own construction — the
+// human does not click Resolve until step 5 — and an open thread is precisely
+// what the lock gate refuses (`unresolved_comments`, per the same skill's "How
+// an open thread gates the lifecycle"). An agent following that table verbatim
+// wedged at step 4 with a refusal whose documented recovery ("the human
+// resolves") was the very step the table scheduled AFTER the lock.
 //
-// The scenario asserts the DOCUMENTED outcome — step 4 completes — so it is
-// RED on any tree where the table and the gate disagree, and goes green only
-// when one of them is fixed. It does not assert the refusal: asserting the
-// observed behavior would pin the defect in place.
-//
-// The loop is played to its end regardless (reply, the human's Resolve over
-// the viewer API, the step-7 lock), both so the account records the whole
-// procedure and so the report shows whether the REST of the loop holds once a
-// human unwedges step 4 by resolving early.
+// The fixed table ends step 4 in the reply: a locked claim goes through
+// unlock → fix at step 4 and WAITS in draft, its approval released, until
+// step 7 — where the lock after the human's Resolve is the `lock` half of
+// unlock → fix → lock. This scenario replays that sequence and asserts every
+// step's DOCUMENTED outcome, so it goes red again if the table regresses to
+// scheduling a lock while the thread it answers is still open (the anchor
+// below trips on any rewrite of the branch), or if the gate stops honouring
+// the order the table now gives.
 package procedures
 
 import (
@@ -38,7 +34,7 @@ func TestReviewLoop_Step4RelockRunsBeforeTheHumanResolves(t *testing.T) {
 	// these steps in this order. If either phrase is gone, the procedure moved:
 	// re-read the skill and update the enactment, do not delete the scenario.
 	requireDocAnchor(t, "skills/dossierx-comments/SKILL.md",
-		"or take a locked one through unlock → fix → lock, with their yes")
+		"or take a locked one through unlock → fix, with their yes — the re-lock waits for their Resolve")
 	requireDocAnchor(t, "skills/dossierx-comments/SKILL.md",
 		"clicks **Resolve** in the viewer")
 
@@ -57,7 +53,6 @@ func TestReviewLoop_Step4RelockRunsBeforeTheHumanResolves(t *testing.T) {
 		"dossierx comment inbox",
 		"dossierx claim unlock <id> --reason <words>",
 		"hand-edit the draft claim's body (step 4's \"fix\"; a draft is freely editable)",
-		"dossierx claim lock <id> --reason <words>",
 		"dossierx comment reply <id> <tid> --as agent --body <body>",
 		"POST /api/claims/<id>/comments/<tid>/resolve (loop step 5: the human's Resolve click, on the viewer surface)",
 		"dossierx claim lock <id> --reason <words>",
@@ -68,29 +63,20 @@ func TestReviewLoop_Step4RelockRunsBeforeTheHumanResolves(t *testing.T) {
 	f.DocumentedSuccess(inbox, "loop step 3: `dossierx comment inbox` — every open thread in the project, one call")
 	assertInboxListsHumanThread(t, inbox, tid)
 
-	// Loop step 4, exactly as the table orders it: unlock → fix → lock, then
-	// reply. The thread is still open — step 5 has not happened yet.
+	// Loop step 4, exactly as the table orders it: unlock → fix, then reply.
+	// The re-lock is NOT here — the thread is still open, and the table now
+	// says so: the claim waits in draft until step 7.
 	unlock := f.Run("dossierx claim unlock <id> --reason <words>",
-		map[string]string{"id": defaultClaimID, "words": "taking it through unlock -> fix -> lock, per step 4"})
+		map[string]string{"id": defaultClaimID, "words": "taking it through unlock -> fix, per step 4; the re-lock waits for their Resolve"})
 	f.DocumentedSuccess(unlock, "loop step 4: unlock is the first move of the locked-claim branch")
 
 	f.Enact("hand-edit the draft claim's body (step 4's \"fix\"; a draft is freely editable)", func() {
 		f.RewriteClaimBody(defaultClaimID, "200ms", "150ms")
 	})
 
-	// THE ASSERTION THIS SCENARIO EXISTS FOR. The table's step 4 ends in a
-	// lock; the documented outcome of a documented step is that it completes.
-	// Today the gate refuses it with unresolved_comments — which is the gate
-	// being right and the table being wrong, and either way a defect in what
-	// this repository ships.
-	relock := f.Run("dossierx claim lock <id> --reason <words>",
-		map[string]string{"id": defaultClaimID, "words": "re-locking as step 4 instructs, before the human has resolved"})
-	f.DocumentedSuccess(relock,
-		"loop step 4 schedules the re-lock BEFORE step 5's Resolve click, so following the table verbatim must complete here — if this fails, the table and the lock gate disagree about their own ordering")
-
 	reply := f.Run("dossierx comment reply <id> <tid> --as agent --body <body>",
 		map[string]string{"id": defaultClaimID, "tid": tid, "body": "tightened the budget to 150ms, please confirm"})
-	f.DocumentedSuccess(reply, "loop step 4 ends with the agent's reply on the thread")
+	f.DocumentedSuccess(reply, "loop step 4 ends with the agent's reply on the thread — never in a lock, the skill now says in as many words")
 
 	// Loop step 5 — the human's half, on the human's surface. This is the one
 	// legitimate use of the resolve endpoint in this suite (see the harness
@@ -99,8 +85,10 @@ func TestReviewLoop_Step4RelockRunsBeforeTheHumanResolves(t *testing.T) {
 		"POST /api/claims/<id>/comments/<tid>/resolve (loop step 5: the human's Resolve click, on the viewer surface)",
 		defaultClaimID, tid)
 
-	// Loop steps 6–7: "good, lock it" → the final lock. Whatever happened at
-	// step 4, the loop's terminal promise is a locked claim.
+	// Loop steps 6–7: "good, lock it" → the lock the whole loop exists to
+	// reach. For the claim unlocked at step 4, THIS is the `lock` half of
+	// unlock → fix → lock — after the human's Resolve, which is what makes it
+	// succeed where a step-4 lock could not.
 	final := f.Run("dossierx claim lock <id> --reason <words>",
 		map[string]string{"id": defaultClaimID, "words": "good, lock it"})
 	f.DocumentedSuccess(final, "loop step 7: the lock the whole loop exists to reach, after the human's Resolve")
