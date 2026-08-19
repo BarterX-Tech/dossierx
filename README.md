@@ -24,7 +24,7 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.5.1`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.6.0`,
    then run `dossierx version` and show me the output.
 2. Run `dossierx skills export .claude/skills` — or point it at whichever
    skills/instructions directory this harness actually reads. Load what it
@@ -34,7 +34,7 @@ Set up DossierX in this repository.
    before writing anything.
 4. ASK ME before installing the git pre-commit hook. My answer decides the
    hook alone, never CI — CI is the authority either way. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.5.1/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.6.0/scripts/install-git-hook.sh
    to a file, show me what it does, run `sh install-git-hook.sh --yes`, then
    add the CI workflow as well. If I say no, skip the hook and
    add the CI workflow alone, and tell me so. Either answer ends with the
