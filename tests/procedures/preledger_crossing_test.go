@@ -4,25 +4,26 @@
 // documents license the same branch at step 3: "re-lock only what you still
 // stand behind".
 //
-// THE DEFECT THIS DETECTS. Step 4 says "then the build orders again:
-// propose + lock" — unconditionally. But `build-order propose` refuses any
-// module that is not 100% locked, so the moment a human exercises the
-// documented license to stand behind only SOME claims, step 4 cannot succeed:
-// propose refuses (`build_order_refused`, module not fully locked) and the
-// subsequent lock has nothing approved to freeze. The crossing's own header
-// calls its ordering "load-bearing, not cosmetic" — and then hands out a step
-// 3 whose licensed branch breaks its step 4. A team following the fence
-// verbatim finishes the crossing with their build orders un-derivable and no
-// documented way out that does not contradict "only what you still stand
-// behind".
+// THE DEFECT THIS DETECTED, kept here because the scenarios pin its fix. Step
+// 4 used to say "then the build orders again: propose + lock" —
+// unconditionally. But `build-order propose` refuses any module that is not
+// 100% locked, so the moment a human exercised the documented license to
+// stand behind only SOME claims, step 4 could not succeed: propose refused
+// (`build_order_refused`, module not fully locked) and the subsequent lock
+// had nothing approved to freeze. The fence now states the per-module choice
+// BEFORE command one runs and conditions step 4 on the module being fully
+// locked again: a partially re-locked module finishes the crossing gate-green
+// but without a locked build order, and runs the propose + lock pair on the
+// day its last claim locks. The partial-re-lock scenario below enacts exactly
+// that licensed branch, deferred step 4 included.
 //
-// TWO SCENARIOS, ON PURPOSE. The partial-re-lock scenario asserts step 4
-// succeeds and is RED today — that is the finding. The all-re-lock sibling
-// asserts the same fence GREEN end to end, so the cheapest "fix" — deleting
-// the fence, or deleting the license to re-lock partially — cannot turn this
-// file green: a real fix has to keep the working path working while repairing
-// the licensed branch (condition step 4 on the module's state, or say what a
-// partially-re-locked module does about its build orders).
+// TWO SCENARIOS, ON PURPOSE. The partial-re-lock scenario enacts step 3's
+// licensed branch to its documented end state — gate-green with the module
+// partially locked, then the deferred step 4 the day the last claim locks.
+// The all-re-lock sibling asserts the same fence GREEN end to end, so the
+// cheapest "fix" — deleting the fence, or deleting the license to re-lock
+// partially — cannot turn this file green: both branches of step 3's choice
+// have to keep working.
 package procedures
 
 import "testing"
@@ -65,12 +66,18 @@ func buildPreLedgerProject(f *fixture, t *testing.T) {
 // README fence is the one the scenarios enact; the CI template's commented
 // copy is anchored too because it licenses the same branch to a different
 // reader, and a fix that repairs one document while the other still hands out
-// the broken sequence has not fixed the procedure.
+// the broken sequence has not fixed the procedure. The last three anchors pin
+// the per-module condition on step 4 — the sentence that makes the partial
+// scenario's deferred step 4 a documented step rather than this suite's
+// invention.
 func crossingAnchors(t *testing.T) {
 	t.Helper()
 	requireDocAnchor(t, "README.md", "re-lock only what you still stand behind")
 	requireDocAnchor(t, "README.md", "then the build orders again")
 	requireDocAnchor(t, "scripts/ci/dossierx-check.yml", "re-lock only what you still stand")
+	requireDocAnchor(t, "README.md", "build order exists only over a fully locked module")
+	requireDocAnchor(t, "README.md", "on the day its last claim locks")
+	requireDocAnchor(t, "scripts/ci/dossierx-check.yml", "the day its last claim locks")
 }
 
 func TestPreLedgerCrossing_PartialRelockThenBuildOrders(t *testing.T) {
@@ -83,6 +90,9 @@ func TestPreLedgerCrossing_PartialRelockThenBuildOrders(t *testing.T) {
 		"dossierx claim unlock <idA> --reason <words>",
 		"dossierx claim unlock <idB> --reason <words>",
 		"dossierx claim lock <idA> --reason <words>",
+		"step 4 waits for <m>: the module is not fully locked again (the fence's per-module condition)",
+		"dossierx check",
+		"dossierx claim lock <idB> --reason <words>",
 		"dossierx build-order propose --module <m>",
 		"dossierx build-order lock --module <m> --reason <words>",
 	)
@@ -114,16 +124,35 @@ func TestPreLedgerCrossing_PartialRelockThenBuildOrders(t *testing.T) {
 		map[string]string{"idA": defaultClaimID, "words": "still standing behind this one"})
 	f.DocumentedSuccess(step3, "crossing step 3: the first re-lock, which stamps the store onto the ledger")
 
-	// THE ASSERTION THIS SCENARIO EXISTS FOR. Fence step 4, verbatim and
-	// unconditional: "then the build orders again". The document that licensed
-	// keeping a claim draft two lines earlier promises these two commands next.
+	// THE ASSERTIONS THIS SCENARIO EXISTS FOR. Fence step 4 is conditional per
+	// module — "for every module that is fully locked again" — and widget is
+	// not, so the fence says its propose + lock pair waits. That documented
+	// wait is recorded as a step: an undocumented skip would be a failure, and
+	// this one is the document's own instruction (crossingAnchors pins it).
+	f.Enact("step 4 waits for <m>: the module is not fully locked again (the fence's per-module condition)", nil)
+
+	// The fence's promise for this exact state: a partially re-locked module
+	// "finishes the crossing gate-green but without a locked build order" —
+	// the pre-ledger finding is cleared by step 3's first lock, and the
+	// unlocked proposal step 1 left on disk is nobody's approved artifact.
+	check := f.Run("dossierx check", nil)
+	f.DocumentedSuccess(check, "the fence: a partially re-locked module finishes the crossing gate-green")
+
+	// "run this pair for it on the day its last claim locks" — the day comes.
+	// The lock is the documented trigger, and the deferred step 4 must then
+	// succeed exactly as written, or the licensed branch still has no reachable
+	// way back to a locked build order.
+	lockLast := f.Run("dossierx claim lock <idB> --reason <words>",
+		map[string]string{"idB": "widget.contract.alpha", "words": "now standing behind this one too"})
+	f.DocumentedSuccess(lockLast, "the day the module's last claim locks — the fence's trigger for the deferred step 4")
+
 	step4a := f.Run("dossierx build-order propose --module <m>", map[string]string{"m": "widget"})
 	f.DocumentedSuccess(step4a,
-		"crossing step 4 is unconditional in the fence, so it must succeed on every state step 3's license can produce — including a partially re-locked module")
+		"the deferred step 4: propose runs for a module that is fully locked again")
 	step4b := f.Run("dossierx build-order lock --module <m> --reason <words>",
 		map[string]string{"m": "widget", "words": "sequence re-approved after the crossing"})
 	f.DocumentedSuccess(step4b,
-		"crossing step 4's second half: lock the re-proposed order")
+		"the deferred step 4's second half: lock the re-proposed order")
 }
 
 // TestPreLedgerCrossing_FullRelockStaysGreen is the sibling that must PASS on
