@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+**Three shipped procedures were wrong about their own ordering, and each one is now stated in the
+order that actually succeeds. Re-run `dossierx skills export` after upgrading** — these live in the
+embedded skill bundles, so a project that skips the re-export keeps following the broken sequences.
+No command, flag, `error.code`, lint rule or gate behaves differently: in every case the engine was
+right and the guide was wrong, and what changed is the guide.
+
+- **The review loop no longer schedules a lock the lock gate refuses**
+  (`skills/dossierx-comments/SKILL.md`). Step 4 of "The whole loop" told the agent to take a locked
+  claim through unlock → fix → lock before replying — but the human's thread is still open at step
+  4 by the table's own construction, and an open thread is exactly what `claim lock` refuses
+  (`unresolved_comments`), so an agent following the table verbatim wedged on a refusal whose
+  recovery was the very step scheduled after it. Step 4 now ends in the reply: a locked claim goes
+  through unlock → fix and waits in draft, its approval released, until step 7 — where the lock
+  after the human's Resolve completes unlock → fix → lock.
+- **The bootstrap creates the project before exporting the skills**
+  (`skills/dossierx/SKILL.md`). The old step 2 ran `dossierx skills export` before step 3 wrote
+  `project.config.yaml`. The export resolves its project root from that config; rootless, it exits
+  0, maintains no section in an existing `AGENTS.md`, and drops the agent guide beside the bundles
+  instead of at `docs/dossierx-agent-guide.md` — and nothing later in the sequence exported again,
+  so a repo bootstrapped by the book ended silently uninstructed. Steps 2 and 3 are swapped: the
+  config is written first, the export runs rooted, and both artifacts land where everything else
+  looks for them.
+- **The build-order recovery for a missing `build_role` routes through the approval path**
+  (`skills/dossierx-build-order/SKILL.md`). The refusal-table row said "set it, then re-propose" —
+  but the refusal only occurs on claims that are already locked, and no verb sets `build_role`
+  after creation, so "set it" could only mean hand-editing a locked file: the re-propose then
+  succeeded and the next `dossierx check` failed with `integrity_failed` / `lock-content-drift` on
+  every claim so edited. The row now says what survives the gate: unlock the claims propose names
+  (with the human's `--reason`), set `build_role` on each while draft, lock them again, then
+  re-propose. The same-phase `rests_on` cycle row, whose "fix the edges" had the same shape, now
+  routes through unlock → fix → lock as well.
+
 ## [0.5.1] - 2026-08-10
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.
