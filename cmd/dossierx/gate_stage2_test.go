@@ -1924,7 +1924,11 @@ func TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther(t *testing.T)
 	}
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"layouts\":2}}\n")
 	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
-	gateStage2WriteEvidence(t, root, gateStage2FixtureTree, "{\"counts\":{\"layouts\":2}}\n", "[]")
+	// No tree argument: the delta stopped carrying one when its freshness moved
+	// from a stamp to recomputation at record time. A tree inside the delta was
+	// in every surface's shared-evidence hash, so any commit re-keyed every
+	// surface and carry-forward could never fire.
+	gateStage2WriteEvidence(t, root, "{\"counts\":{\"layouts\":2}}\n", "[]")
 
 	keys := func(t *testing.T) map[string]string {
 		t.Helper()
