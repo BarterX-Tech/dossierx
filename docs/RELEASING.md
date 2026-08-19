@@ -12,10 +12,19 @@ that job passes does GoReleaser run, building the six platform archives, stampin
 `main.version` / `main.commit` / `main.date` via ldflags, generating the GitHub
 release notes from Conventional Commit subjects, and publishing.
 
-That file records one residual rather than describing it as fixed: the workflow
-GitHub runs for a tag is the one in the tagged tree, so anyone with push rights can
-weaken the gate and tag that commit. Nothing in this repository closes it — a check
-cannot be its own enforcement — and only a forge-side tag protection rule can.
+That file records one residual, and where its enforcement actually lives: the
+workflow GitHub runs for a tag is the one in the tagged tree, so anyone who can
+create a `v*` tag can weaken the gate in a copy of it and tag that commit. Nothing
+in this repository closes that — a check cannot be its own enforcement — and only a
+forge-side rule restricting who creates such tags can refuse the tag itself. That
+rule cannot be created from inside this repository either, but its absence is now a
+checked precondition rather than a recorded residual: the driver's D1 asks the
+forge for an active tag ruleset covering `refs/tags/v*` that restricts creation and
+update, and refuses the release — before anything is merged, tagged or pushed —
+when the rule is absent, when the answer cannot be read, or when the rule does not
+cover the tag being released. What that check narrows, what it cannot close, and
+what a maintainer configures is all in **The forge restricts who can create release
+tags** under *Before tagging* below.
 
 You do not push that tag by hand either. The irreversible half of a release is
 `make release-publish`, a nine-step driver whose preconditions include the gate
@@ -24,6 +33,82 @@ document is for is the half a program cannot do: reading the findings, ruling on
 them, and the three post-publish checks that leave this repository entirely.
 
 ## Before tagging
+
+- [ ] **The forge restricts who can create release tags.** One-time forge
+      configuration, not per-release work — but it is first here because the
+      driver's D1 refuses every release until it exists, and because it is the
+      one piece of this procedure the repository cannot carry. Every other
+      guarantee a release makes is enforced by files in the tree being
+      released, and the workflow GitHub runs for a tag is the one in the
+      tagged tree: without a forge-side rule, anyone with push rights can
+      weaken the gate in a copy of it, tag that commit, and be published by
+      the weakened rules. The rule below is what makes the forge refuse that
+      tag at push time. The driver checks that the rule EXISTS before it
+      publishes; it cannot create it, and neither can anything else in this
+      tree.
+
+      Configure it as a **repository ruleset** — Settings → Rules → Rulesets →
+      New tag ruleset. (Not the older "tag protection rules": GitHub sunset
+      that feature and removed its API in August 2024, so anything configured
+      or scripted against it protects nothing now. Rulesets are the current
+      mechanism, and the rulesets API is what the driver reads.)
+
+      - **Enforcement: Active.** "Evaluate" is a dry run and "Disabled" is
+        off; the driver refuses both by name, because a rule that only
+        observes restricts nobody.
+      - **Target: tags, with the pattern `v*`** — stored and read back as
+        `refs/tags/v*`. Every release this repository has ever tagged matches
+        it, and the driver requires the pattern to cover the exact tag being
+        released, not merely to exist.
+      - **Restrict creations, and restrict updates.** Creation is the gap
+        itself; update is the same gap through a different door — a
+        force-moved existing tag is an update, and a tag push, force or not,
+        is what fires the Release workflow. The driver requires both.
+        **Restrict deletions too**, though the driver does not require it: a
+        deleted tag runs nothing and recreating one is a creation, so
+        deletion is not the weakened-workflow gap — but leaving it open lets
+        anyone erase a published tag that consumers already resolve.
+      - **Bypass list: repository admins at most** — ideally only whoever
+        operates `make release-publish`. The driver confirms the rule exists
+        and covers the pattern; it does NOT read who can bypass it, because
+        bypass entries name roles, teams and apps it cannot resolve to
+        people. A ruleset whose bypass list includes everyone with write
+        access passes the driver's check and restricts nobody. Reading that
+        list stays yours, every time this rule is touched.
+
+      Read the configuration back the way the driver does:
+
+          gh api repos/BarterX-Tech/dossierx/rulesets
+          gh api repos/BarterX-Tech/dossierx/rulesets/<id>
+
+      The first lists every ruleset with its `target` and `enforcement`
+      (org-owned rulesets that apply to this repository included); the second
+      shows one ruleset's `conditions.ref_name` patterns and its `rules`. What
+      the driver requires is one ruleset with `"target": "tag"`,
+      `"enforcement": "active"`, an include pattern covering the release tag
+      and no exclude covering it, and rules of type `creation` and `update`.
+      A classic token needs the `repo` scope (`public_repo` suffices while
+      the repository is public); a fine-grained token needs the repository
+      `Metadata: read` permission. When the forge turns the token away, the
+      driver's refusal names the missing scope — and note that GitHub answers
+      404, not 403, for a private repository a token cannot see, so "Not
+      Found" from these commands usually means the token, not the URL.
+
+      **What this closes, and what it cannot.** It closes the standing state:
+      a forge that accepts a release tag from anyone with push rights, which
+      is the state this repository was in while the residual above was only
+      recorded. Three boundaries stay open, stated here rather than implied
+      shut, the same way `gate/method.yaml` states what it cannot promise
+      about the tool grant. The driver's answer crosses a network, so a
+      spoofed or captive answer can report a restriction that does not exist;
+      the rule can be deleted after the driver's check and before the tag
+      lands, a window only the rule itself — enforced by the forge at push
+      time, not read by a check — actually covers; and a rule that exists may
+      still be hollow through its bypass list, which is the reading this item
+      leaves with you. The driver also refuses, rather than guesses, when a
+      pattern uses fnmatch syntax it has not measured — if you write the
+      pattern as anything other than literals, `*` and `**`, expect a refusal
+      that names the pattern, not a pass.
 
 - [ ] **`go test ./...` passes**, including the two suites it does not reach on
       its own — see [CONTRIBUTING.md](../CONTRIBUTING.md#the-two-suites-go-test--does-not-reach).

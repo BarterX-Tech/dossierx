@@ -7,7 +7,7 @@
 // a process that, in that same process, read the tree being published, found it
 // green, and found that the tree declares the very release being published — and
 // no such process starts except when a human asked for that specific release.
-// Everything below is one of the six clauses that make up that sentence, and none
+// Everything below is one of the seven clauses that make up that sentence, and none
 // of them is a consequence of the others.
 //
 //  1. THE RECEIPT IS MEASURED, NOT ACCEPTED. The value the driver publishes
@@ -81,6 +81,27 @@
 //     the stage that wrote it, which fails loudly rather than writing a clearing
 //     record. The driver cannot close that gap without re-running CI itself, and
 //     it says so rather than implying it is closed.
+//
+//  7. THE FORGE ITSELF REFUSES RELEASE TAGS FROM ANYONE ELSE. Every clause
+//     above is enforced by files INSIDE the repository being gated, and the
+//     workflow GitHub runs for a tag is the one in the tagged tree — so a
+//     writer with push rights does not have to get past any of this: they can
+//     weaken the gate in a copy of these very files, tag that commit, and the
+//     forge runs the weakened rules. docs/RELEASING.md recorded that as a
+//     residual closable only from the forge's side, and a recorded residual is
+//     a state, not a check. So D1's final question asks the forge, before
+//     anything is merged or written, whether it restricts who may create this
+//     release's tag — an ACTIVE tag ruleset covering the ref, restricting
+//     `creation` and `update` (gate_tagrules_test.go is the check, and its
+//     header carries the full argument). WHAT THAT DOES NOT ESTABLISH, because
+//     the boundary is real in three directions: the answer crosses a network
+//     that can lie; the rule can be deleted between the answer and D6's push,
+//     which only the rule itself — not this check — can survive; and a rule's
+//     bypass list, which decides whether it restricts anyone at all, is not
+//     read here. An answer that cannot be read — no `gh`, no token, a scope
+//     the forge turned away — is a REFUSAL naming what is missing, never a
+//     pass: this is the one clause whose subject the maintainer cannot fix
+//     from inside this tree, and the refusal says where the fix lives.
 //
 // AND ONE THING THE INVARIANT DOES NOT CLAIM, stated here rather than discovered
 // later: it says nothing about whether the thirteen agents' verdicts are honest.
@@ -420,7 +441,7 @@ type gateDriverStep struct {
 // goes first, the archives are verified, and main goes last.
 var gateDriverSequence = []gateDriverStep{
 	{ID: "D0", What: "authorize — a human named this release, twice, on the named target"},
-	{ID: "D1", What: "precondition — refuse an environment D2 cannot run in, refuse a partly-published release, derive the version from the tree and refuse a tag that disagrees with it, record the receipt IN THIS PROCESS, recompute the verdict against the tree about to be released, and require the CI-run evidence for that tree"},
+	{ID: "D1", What: "precondition — refuse an environment D2 cannot run in, refuse a partly-published release, derive the version from the tree and refuse a tag that disagrees with it, record the receipt IN THIS PROCESS, recompute the verdict against the tree about to be released, require the CI-run evidence for that tree, and confirm the forge itself restricts who may create the release tag"},
 	{ID: "D2", What: "merge the release branch into main with --no-ff, capturing the merge commit by value"},
 	{ID: "D3", What: "handshake — the named merge commit's tree is the tree the receipt records"},
 	{ID: "D4", What: "tag the named merge commit, never HEAD"},
@@ -558,12 +579,17 @@ type gateDriverRepo struct {
 // answers all three with errGateUncheckable and is what the tests hand the
 // driver when they need a step that cannot run.
 //
-// THERE ARE THREE QUESTIONS AND NOT FOUR. Site was the fourth until D9 became a
-// handoff; it is gone rather than left answering errGateUncheckable, because an
-// interface method nobody asks is a question the next reader will wire an answer
-// to. The deployed site is read by a person — see the D9 step for the two
-// rulings — and the driver's honesty about that is now a state it ENDS in rather
-// than an answer it receives.
+// THERE ARE FOUR QUESTIONS, AND THE COUNT HAS MOVED IN BOTH DIRECTIONS. Site
+// was a fourth until D9 became a handoff; it is gone rather than left answering
+// errGateUncheckable, because an interface method nobody asks is a question the
+// next reader will wire an answer to. The deployed site is read by a person —
+// see the D9 step for the two rulings — and the driver's honesty about that is
+// now a state it ENDS in rather than an answer it receives. TagRules is the
+// fourth that arrived later, and it earns a seat Site could not: D1 asks it on
+// every authorized run. It is here, rather than computed inside the driver the
+// way the git questions are, because its answer lives on the forge — exactly
+// the boundary this interface exists to mark — and because a forge that says
+// "no" must be constructible in a test, which no test can do to GitHub.
 type gateDriverEvidence interface {
 	// Verdicts are the per-surface answers and findings the gate run produced
 	// for tree. They are the receipt's contents, never the receipt.
@@ -573,6 +599,13 @@ type gateDriverEvidence interface {
 	Current(tree string) (declared []string, current map[string]string, err error)
 	// Archives is D7: the published artifacts for version, verified.
 	Archives(version, commit string) error
+	// TagRules is D1's final question (clause 7): whether the forge that
+	// remote names restricts who may create version's tag. nil means an
+	// active, covering, creation-and-update-restricting tag ruleset was read
+	// off the forge; anything else is either errGateTagsUnprotected (the
+	// forge was read and restricts nobody) or errGateUncheckable (the forge
+	// could not be read, which is a failure and never a skip).
+	TagRules(remote, version string) error
 }
 
 // gateDriverUnwired is the evidence source that answers nothing.
@@ -603,6 +636,12 @@ func (gateDriverUnwired) Archives(version, commit string) error {
 		"Nothing here downloads a release artifact, checks a sha256 against checksums.txt, or reads the stamped version, commit and date out of an extracted binary. "+
 		"So the driver stops HERE, after the tag is published and before main is, and says so — which is the failure-not-skip rule applied to the driver's own incompleteness. "+
 		"A driver that pushed main without verifying the archives would announce a release whose artifacts nobody checked", errGateUncheckable, version, commit)
+}
+
+func (gateDriverUnwired) TagRules(remote, version string) error {
+	return fmt.Errorf("%w: whether %s restricts who may create %s is not something this evidence source can say — nothing here has asked the forge. "+
+		"The driver will not assume a restriction nobody read: the gap that question closes is a weakened copy of this very gate, tagged by someone this process never sees, "+
+		"and assuming it closed is how it stays open with a green light over it", errGateUncheckable, remote, version)
 }
 
 // gateDriverRun is one execution: what it completed, what it failed at, and the
@@ -929,8 +968,8 @@ func gateDriverExecute(r *gateDriverRun, ev gateDriverEvidence) *gateDriverRun {
 	return r
 }
 
-// precondition is D1, and it is eight questions rather than one: two about the
-// ENVIRONMENT this driver was invoked in, then six about the release.
+// precondition is D1, and it is nine questions rather than one: two about the
+// ENVIRONMENT this driver was invoked in, then seven about the release.
 //
 // THE TWO ENVIRONMENT QUESTIONS ARE ASKED FIRST BECAUSE THEY ARE FREE. Neither
 // needs the network, the evidence or a receipt — one is a string comparison, the
@@ -1018,11 +1057,38 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 	}
 
 	// (f) And the half of the evidence this gate does not gather: the CI run over
-	// this content. It is asked last because it is the only question here whose
-	// answer lives in a file rather than in git, and it is asked at all because
-	// nothing else in the sequence would notice that `make ci-evidence` was never
-	// run — which is a check that did not happen reading as a check that passed.
-	return r.requireCIRunEvidence()
+	// this content. It is asked after everything git can answer because it is
+	// the only question so far whose answer lives in a file rather than in git,
+	// and it is asked at all because nothing else in the sequence would notice
+	// that `make ci-evidence` was never run — which is a check that did not
+	// happen reading as a check that passed.
+	if err := r.requireCIRunEvidence(); err != nil {
+		return err
+	}
+
+	// (g) THE FORGE'S OWN GUARD ON THE TAG, and it is clause 7: the one
+	// question in this function whose subject is not this tree, this receipt
+	// or this machine, but the configuration of the forge the tag will land
+	// on. Every check above reads the tree THIS driver is holding; the gap
+	// this one closes is a DIFFERENT tree — the gate weakened in a copy of
+	// these very files, tagged by someone this process never sees, and run by
+	// the forge exactly as tagged. Only a forge-side rule restricting who
+	// creates refs/tags/v* refuses that tag, so the rule's existence is
+	// required here, where its absence stops a release before anything is
+	// spent or written.
+	//
+	// IT IS ASKED LAST, DELIBERATELY. Not because it is expensive — it is two
+	// API reads — but because it is the one answer here that can stop being
+	// true on its own: the rule can be deleted between this answer and D6's
+	// tag push, and nothing in this driver can see that happen. Asking it as
+	// the precondition's final question makes that window as narrow as D1's
+	// structure allows; it does not close it, and the check's own header
+	// (gate_tagrules_test.go) says so beside its other boundaries rather than
+	// letting this placement imply otherwise. What crosses this seam is the
+	// remote's NAME and the tag's NAME; the reading — which repository that
+	// remote is, what the forge says about it, what that means — is the
+	// evidence source's, so a test can hand the driver a forge that says no.
+	return ev.TagRules(r.Repo.Remote, r.Plan.Version)
 }
 
 // ---------------------------------------------------------------------
@@ -1568,6 +1634,13 @@ type gateDriverFixtureEvidence struct {
 	declared []string
 	current  map[string]string
 	archives error
+
+	// tagRules is D1's forge-rule answer. The zero value is nil — a forge
+	// that restricts the tag — for the same reason archives' is: the fixture
+	// states the world a test wants, and most tests want the forge out of the
+	// way. Production never sees this default; its answer is gateDriverWired's,
+	// which is gateTagRulesVerify's, and the unwired source refuses.
+	tagRules error
 }
 
 func (e gateDriverFixtureEvidence) Verdicts(string) ([]gateSurfaceVerdict, []gateFinding, error) {
@@ -1579,6 +1652,8 @@ func (e gateDriverFixtureEvidence) Current(string) (declared []string, current m
 }
 
 func (e gateDriverFixtureEvidence) Archives(string, string) error { return e.archives }
+
+func (e gateDriverFixtureEvidence) TagRules(string, string) error { return e.tagRules }
 
 // gateDriverGreenEvidence is a clean run over one surface: a PASS whose
 // fingerprint is the one this tree produces, no findings, and the one post-tag

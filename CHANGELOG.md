@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **The release driver now requires the forge to restrict who can create release tags.**
+  Every guarantee the release gate makes is enforced by files inside the repository being gated —
+  the workflow GitHub runs for a tag is the one in the tagged tree — so anyone with push rights
+  could weaken the gate, tag that commit, and be published by the weakened rules.
+  `docs/RELEASING.md` recorded that as a residual closable only by a forge-side rule; the rule's
+  absence is now a checked precondition instead of a recorded state. D1's final question
+  (`cmd/dossierx/gate_tagrules_test.go`) reads the repository's rulesets off GitHub's API and
+  refuses the release — before anything is merged, tagged or pushed — unless an ACTIVE tag
+  ruleset covers the exact tag being released and restricts both `creation` and `update`. A check
+  that cannot run is a failure, never a skip: no `gh`, no token, or a token the forge turns away
+  is a refusal naming the missing scope (classic `repo` / fine-grained `Metadata: read`), and a
+  ruleset pattern the check cannot interpret is refused rather than guessed about. The check's
+  own boundaries are stated where they are met rather than implied closed: the answer crosses a
+  network that can lie, the rule can be deleted between the check and the tag push, and the
+  rule's bypass list — which decides whether it restricts anyone — is not read. What a maintainer
+  must configure, and why, is written out in `docs/RELEASING.md` under **The forge restricts who
+  can create release tags**; the rule itself cannot be created from inside this repository.
+
 - **Every published release page now points at the CHANGELOG**, in two hand-written literal
   blocks `.goreleaser.yaml` composes into the release body: a header saying that any change your
   own tooling cannot detect for you is called out at the top of the release's CHANGELOG entry,
