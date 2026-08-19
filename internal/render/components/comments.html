@@ -1,7 +1,15 @@
 {{/* comments.html — engine-managed review-thread panel, baked into the static
-     render right after a claim's shared edges footer (see
-     components.EdgesHTMLWithLinks, which appends this after the edges <ul> and
-     hand-builds the 💬 chip that reveals it). It emits ZERO id= attributes: an
+     render right after a claim's shared edges footer: components.EdgesHTMLWithLinks
+     executes this template and appends its output as a SIBLING after the whole
+     edges <details>...</details> block (never a child of it — a claim with
+     comments but no edges suppresses the <details> entirely while still
+     rendering this panel), and only when the claim carries at least one thread
+     (len(c.Comments) > 0; a zero-thread claim gets no baked panel at all, only
+     the chip below). The 💬 chip that reveals this panel is NOT hand-built here
+     any more: since v0.4.1 it is components.CommentChipHTML, bound as the
+     "commentChip" template func and called from each chip-bearing partial's own
+     <div class="k"> head line, so the chip sits in the claim head rather than
+     beside this panel. It emits ZERO id= attributes: an
      overview claim renders N times and only one copy may keep its root id
      (render.stripOverviewIDs strips the rest), so claims and threads are keyed
      by data-claim-id / data-thread-id and the viewer JS fans state out with

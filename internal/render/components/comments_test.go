@@ -52,7 +52,7 @@ func resolvedThread(id, body string) model.Comment {
 // them apart. Match the class.
 // ---------------------------------------------------------------------
 
-// v0.2.1 — a claim with NO comments still renders a chip, so the FIRST comment
+// v0.3.0 — a claim with NO comments still renders a chip, so the FIRST comment
 // on it is openable from the viewer (the human's only surface). Gating chip
 // emission on len(c.Comments) > 0 was the bug: a card nobody had questioned yet
 // could never be questioned. The zero state is its own variant reading "💬 0",
