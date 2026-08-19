@@ -6,7 +6,7 @@
 //	                           on an unresolved comment thread)
 //	locked -> locked+pending   on ANY of three independent triggers — a
 //	                           dependency's content hash drifts (DetectStale),
-//	                           a "dossierx flag" records a spec mismatch, or a
+//	                           a "dossierx claim flag" records a spec mismatch, or a
 //	                           comment thread is opened on the locked claim
 //	locked+pending -> locked   once EVERY trigger is gone, via ANY of three
 //	                           clearers — a human-confirmed "dossierx reaudit

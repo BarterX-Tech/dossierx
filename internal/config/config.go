@@ -138,12 +138,17 @@ type Config struct {
 	SourceDirs []string `yaml:"source_dirs,omitempty"`
 
 	// MockupModules is the checked-in allowlist of modules permitted to
-	// author layout: mockup claims (model.LayoutMockup, model.Claim.RawHTML)
-	// — the "module allowlist" leg of the raw-html-scope lint's five-part
-	// gate (see internal/lint/raw_html_scope.go). It is optional: a project
-	// that has never authored a mockup claim need not set it, and the lint
-	// treats an unset/empty list as "no module may author layout: mockup",
-	// not a vacuous pass. Every entry must also appear in Modules — an
+	// author a claim carrying RawHTML AT ALL — on any layout, not only
+	// model.LayoutMockup. The NAME PREDATES v0.4.1, which made raw_html an
+	// attachment legal beside card, banner, list and tree content; the gate
+	// widened with it and the field's name did not, so a reader who takes
+	// this for a mockup-only allowlist will expect a `card` claim bearing
+	// markup to be ungated, and it is not. It is the "module allowlist" leg
+	// of the raw-html-scope lint's five-part gate (see
+	// internal/lint/raw_html_scope.go). It is optional: a project that has
+	// never authored a raw_html claim need not set it, and the lint treats
+	// an unset/empty list as "no module may author one", not a vacuous
+	// pass. Every entry must also appear in Modules — an
 	// allowlisted module that isn't even a project module can never gate
 	// anything, which almost certainly indicates a typo (same reasoning as
 	// DoctrineFacet's membership check below).

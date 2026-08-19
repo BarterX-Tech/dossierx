@@ -1,7 +1,10 @@
 package lock
 
 import (
+	"io/fs"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -81,5 +84,80 @@ func TestAcquireFileLock_SerializesConcurrentGoroutines(t *testing.T) {
 	}
 	if got := counter.Load(); got != n {
 		t.Errorf("expected counter == %d after all goroutines held the lock exactly once, got %d", n, got)
+	}
+}
+
+// TestLockOpenIsTransientMatchesThisPlatformsUnlinkSemantics pins the one
+// classification AcquireFileLock's retry loop turns on, per platform, because
+// getting it wrong is invisible in the uncontended case and intermittent in the
+// contended one.
+//
+// It is written against the platform rather than against a fixed expectation on
+// purpose: the correct answer genuinely differs, and a test that asserted one
+// answer everywhere would have to be wrong on one side.
+func TestLockOpenIsTransientMatchesThisPlatformsUnlinkSemantics(t *testing.T) {
+	permission := &fs.PathError{Op: "open", Path: "store.json.lock", Err: fs.ErrPermission}
+	exists := &fs.PathError{Op: "open", Path: "store.json.lock", Err: fs.ErrExist}
+	missing := &fs.PathError{Op: "open", Path: "store.json.lock", Err: fs.ErrNotExist}
+
+	// On Windows a permission error is the DELETE-PENDING window and must be
+	// waited out; everywhere else unlink is atomic, there is no such window, and
+	// the same error is a real permission problem that must fail fast.
+	wantPermissionTransient := runtime.GOOS == "windows"
+	if got := lockOpenIsTransient(permission); got != wantPermissionTransient {
+		t.Errorf("lockOpenIsTransient(permission) = %v on %s, want %v.\n"+
+			"On Windows this must be true or the contended case — the only case the lock exists for — fails outright the moment another process releases the lock.\n"+
+			"Everywhere else it must be false or a genuinely unwritable directory spins for the whole acquire timeout and then reports a vaguer error than the OS already gave.",
+			got, runtime.GOOS, wantPermissionTransient)
+	}
+
+	// "Already exists" is the OTHER contended branch, handled by os.IsExist. If
+	// this ever answered true for it the two would collapse, and the timeout
+	// message would stop being able to tell a holder that never let go from a
+	// path that was never openable.
+	if lockOpenIsTransient(exists) {
+		t.Error("lockOpenIsTransient(exists) = true; the already-exists case is os.IsExist's, and conflating the two makes AcquireFileLock's two timeout messages indistinguishable")
+	}
+
+	// Nothing else is transient on any platform. A missing file is not even a
+	// failure mode of O_CREATE|O_EXCL, so answering true here would mean the
+	// classifier is not reading the error at all.
+	if lockOpenIsTransient(missing) {
+		t.Error("lockOpenIsTransient(not-exist) = true; that is not a state O_CREATE|O_EXCL can report, so a true here means the classifier ignores its argument")
+	}
+}
+
+// TestAcquireFileLockReportsTheTwoContendedTimeoutsApart holds the lock and
+// times a waiter out, which is the "already exists" ending. The message has to
+// name a holder, because that is the recovery: find the other process, or delete
+// a file a crash left behind.
+//
+// The other ending — every attempt failing with a transient error for the whole
+// window — cannot be provoked portably, since only Windows produces it and only
+// under a race. It is covered by the classifier test above rather than left
+// unstated.
+func TestAcquireFileLockReportsTheTwoContendedTimeoutsApart(t *testing.T) {
+	storePath := filepath.Join(t.TempDir(), "store.json")
+
+	release, err := AcquireFileLock(storePath)
+	if err != nil {
+		t.Fatalf("acquire the lock to hold it: %v", err)
+	}
+	defer release()
+
+	origTimeout, origPoll := lockAcquireTimeout, lockPollInterval
+	lockAcquireTimeout = 80 * time.Millisecond
+	lockPollInterval = 10 * time.Millisecond
+	t.Cleanup(func() { lockAcquireTimeout, lockPollInterval = origTimeout, origPoll })
+
+	_, err = AcquireFileLock(storePath)
+	if err == nil {
+		t.Fatal("a second acquire against a held lock returned no error")
+	}
+	if !strings.Contains(err.Error(), "another docs process may be holding it") {
+		t.Errorf("the held-lock timeout must name a holder and the manual recovery; got: %v", err)
+	}
+	if strings.Contains(err.Error(), "check the directory's permissions") {
+		t.Errorf("the held-lock timeout reported the permission ending, which sends the reader after a problem that is not there; got: %v", err)
 	}
 }

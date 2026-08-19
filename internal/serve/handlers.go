@@ -516,7 +516,7 @@ var errReadOnly = errors.New("serve: read-only (viewer runtime unavailable)")
 // cmd/dossierx's mutatingCommentDeps: the lock- and flag-store are supplied as
 // PATHS, not pre-loaded snapshots, so each op re-reads them fresh inside the
 // claims sentinel before recomputing review_pending — a snapshot loaded here,
-// before the sentinel, could miss a `dossierx flag` that committed concurrently
+// before the sentinel, could miss a `dossierx claim flag` that committed concurrently
 // and orphan it with review_pending:false. Claims is left unset — every mutating
 // op re-reads claims fresh inside the claims lock. In read-only mode (degraded
 // viewer) it short-circuits with errReadOnly before touching any store.

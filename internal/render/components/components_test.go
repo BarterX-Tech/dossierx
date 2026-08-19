@@ -458,20 +458,39 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 				return
 			}
 
-			want := `<summary class="claim-links-summary">` + tc.wantSummary + `</summary>`
-			if !strings.Contains(got, want) {
-				t.Fatalf("expected the summary %q, got: %s", want, got)
-			}
 			// The separator is SPACE HYPHEN-MINUS SPACE — never the en dash or
 			// the em dash this repo's prose uses, which is the likeliest way a
 			// copy-paste gets this wrong.
+			//
+			// THE GUARD IS THE CHECK ON THE TEST DATA, AND IT IS THE WHOLE GUARD.
+			// The exact-match assertion below compares the emitter's entire
+			// summary against tc.wantSummary byte for byte, so an emitter that
+			// reached for a prose dash already fails there, printing both
+			// strings. The one edit that assertion CANNOT notice is the two
+			// moving together — the emitter changed and its new output pasted
+			// back in here — and refusing a non-ASCII dash in the expected string
+			// is exactly what catches that. So this runs FIRST: validate the
+			// fixture, then assert against it.
+			//
+			// WHAT WAS DELETED AND WHY. A second check, `strings.Contains(got,
+			// "–")`, used to sit after the exact match. It was unreachable in any
+			// failing state — the exact match Fatals on any byte of difference,
+			// including that one — and it could only ever name the EN dash,
+			// because the em dash is a live character in this same emitter, where
+			// components.go writes `governed_by: none — <reason>`. Adding the
+			// em-dash half to it would have failed a correct render, which is why
+			// the comment promised two checks while the code performed one. A
+			// redundant assertion that can silently degrade is worse than no
+			// assertion.
 			for _, forbidden := range []string{"–", "—"} {
 				if strings.Contains(tc.wantSummary, forbidden) {
-					t.Fatalf("test case itself uses a non-ASCII dash")
+					t.Fatalf("the expected summary %q carries %q. The separator is ASCII hyphen-minus; a prose dash in the EXPECTED string means the emitter was changed and its new output pasted back in here, which is the one move the exact match below cannot see", tc.wantSummary, forbidden)
 				}
 			}
-			if strings.Contains(got, "–") {
-				t.Errorf("summary must use ASCII '-', not an en dash, got: %s", got)
+
+			want := `<summary class="claim-links-summary">` + tc.wantSummary + `</summary>`
+			if !strings.Contains(got, want) {
+				t.Fatalf("expected the summary %q, got: %s", want, got)
 			}
 			// drifted is the ONE segment suppressed at zero; links and files
 			// always print, even as 0.

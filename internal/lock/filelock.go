@@ -35,6 +35,28 @@ var (
 // future invocation forever. On success it returns a release func the
 // caller must call (typically via defer) to remove the lock file; release
 // is always non-nil when err is nil.
+// "ALREADY EXISTS" IS NOT THE ONLY WAY A CONTENDED LOCK FAILS, and the other
+// way is why this loop does not simply test os.IsExist.
+//
+// On Windows, deleting a file does not remove its directory entry the moment
+// the unlink returns. The entry survives in a DELETE-PENDING state until the
+// last handle to it closes, and while it is in that state every open of that
+// path fails with ERROR_ACCESS_DENIED — not ERROR_FILE_EXISTS. So the instant
+// another process releases the lock is precisely an instant when this open
+// reports "Access is denied."
+//
+// That is a transient state which clears on its own within one poll, and it is
+// exactly what this retry loop exists for. Reading it as a hard failure turned
+// the contended case — the ONLY case the lock is for — into an immediate error,
+// and it did so intermittently, which is the shape that survives review. It
+// failed a windows-latest CI leg on this very release, in
+// TestConcurrentClaimWritersNeverCorruptClaimFiles, having passed the two runs
+// before it.
+//
+// POSIX never reaches it: unlink is atomic there, so a lock path is either
+// present or gone and EACCES on it is a real permission problem that must fail
+// fast rather than spin for ten seconds. lockOpenIsTransient is therefore
+// per-platform, and on every platform but Windows it is a constant false.
 func AcquireFileLock(storePath string) (release func(), err error) {
 	lockPath := storePath + ".lock"
 	deadline := time.Now().Add(lockAcquireTimeout)
@@ -44,10 +66,21 @@ func AcquireFileLock(storePath string) (release func(), err error) {
 			f.Close()
 			return func() { os.Remove(lockPath) }, nil
 		}
-		if !os.IsExist(err) {
+		contended := os.IsExist(err) || lockOpenIsTransient(err)
+		if !contended {
 			return nil, fmt.Errorf("lock: acquire file lock %s: %w", lockPath, err)
 		}
 		if time.Now().After(deadline) {
+			// The two contended endings are reported apart. A timeout over
+			// "already exists" is a holder that never let go; a timeout over the
+			// transient error is a path that stayed unopenable for the whole
+			// window, which is not delete-pending behaviour and is much more
+			// likely a permission or antivirus problem wearing its clothes.
+			// Collapsing them would send a reader hunting for a process that was
+			// never there.
+			if !os.IsExist(err) {
+				return nil, fmt.Errorf("lock: timed out waiting for file lock %s, and every attempt failed with %w rather than \"already exists\". That is not a lock another process is holding — check the directory's permissions, and any scanner that may be holding the path open", lockPath, err)
+			}
 			return nil, fmt.Errorf("lock: timed out waiting for file lock %s (another docs process may be holding it; remove the file manually if it was left behind by a crash)", lockPath)
 		}
 		time.Sleep(lockPollInterval)

@@ -37,9 +37,179 @@
 
 baseline   v0.5.1 (8c3a9c1c1b0a4ef8f752d3d73c3f072432584c1e)
 compared   147 rendered artifacts present at both revisions
-added      0
+added      1
 removed    0
-silent     0 rendered differently from byte-identical inputs
+silent     3 rendered differently from byte-identical inputs
 explained  0 rendered differently after their own inputs changed
 
-no rendered artifact has moved since the baseline.
+SILENT RENDER CHANGES
+---------------------
+
+testdata/fixture-basic/viewer/index.html  (+9 -11)
+    size            9951 lines / 348496 bytes -> 9949 lines / 348445 bytes
+@@ -237,16 +237,14 @@
+    =========================================================================
+ 
+    From here down, every colour is a var(--token) read from the base
+-   stylesheet's fixed allowlist, with exactly two exceptions, both of which
+-   the base stylesheet itself already makes for the same reasons: the backdrop
+-   dim and the panel drop shadow are rgba() blacks, because "how dark is the
+-   thing behind this overlay" and "how deep is this shadow" are not colours a
+-   project themes — they are the same value at every accent.
++   stylesheet's fixed allowlist, with no exceptions: this section holds no rgba()
++   literal. The pane is opaque (var(--paper)), has no box-shadow, and has no
++   backdrop element at all — see "no scrim, no inset, no drop shadow" below.
+ 
+    Z-INDEX. The existing stack is hand-assigned with explicit reasoning: nav
+    overlay 20/30, nav toggle 40, status strip 45, comments overlay 50,
+    comments rail 60, toast 70. The graph pane is a full-viewport overlay and
+-   takes the band ABOVE all of them — backdrop 80, surface 81 — and the base
++   takes the band ABOVE all of them — pane root 80, surface 81 — and the base
+    stylesheet's z-index ledger comment records that band, because that comment
+    is the single place this stack is reasoned about.
+ 
+@@ -1283,8 +1281,8 @@
+    deliberately excluded everywhere below — RenderInline never emits any
+    of this, so a bare selector here would be dead weight at best and,
+    for table/hr/blockquote, would collide with existing chrome (a
+-   layout: table claim's own table element, style.css:173's bare table/td/th
+-   rules) at worst. */
++   layout: table claim's own table element, this file's own bare table, td/th and th
++   rules further down) at worst. */
+ 
+ .claim-body hr,
+ .claim-list-items hr,
+@@ -1935,7 +1933,7 @@
+   color: var(--accent);
+ }
+ 
+-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
++/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
+    comment is openable from the viewer. Since most cards on a healthy project
+    have never been commented on, this variant has to sit BELOW the ambient
+    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
+@@ -2358,8 +2356,8 @@
+      50  comments overlay
+      60  comments rail
+      70  toast
+-     80  graph pane backdrop  \  claims graph, added in v0.5.0
+-     81  graph pane surface   /
++     80  graph pane root      \  claims graph, added in v0.5.0 (opaque, not a
++     81  graph pane surface   /  backdrop — the pane dims nothing behind it)
+ 
+    The graph pane takes the band ABOVE all of them because it is the only
+    full-viewport overlay here: it is not a rail beside the document or a
+
+testdata/fixture-graph-demo/viewer/index.html  (+9 -11)
+    size            10695 lines / 475538 bytes -> 10693 lines / 475487 bytes
+@@ -237,16 +237,14 @@
+    =========================================================================
+ 
+    From here down, every colour is a var(--token) read from the base
+-   stylesheet's fixed allowlist, with exactly two exceptions, both of which
+-   the base stylesheet itself already makes for the same reasons: the backdrop
+-   dim and the panel drop shadow are rgba() blacks, because "how dark is the
+-   thing behind this overlay" and "how deep is this shadow" are not colours a
+-   project themes — they are the same value at every accent.
++   stylesheet's fixed allowlist, with no exceptions: this section holds no rgba()
++   literal. The pane is opaque (var(--paper)), has no box-shadow, and has no
++   backdrop element at all — see "no scrim, no inset, no drop shadow" below.
+ 
+    Z-INDEX. The existing stack is hand-assigned with explicit reasoning: nav
+    overlay 20/30, nav toggle 40, status strip 45, comments overlay 50,
+    comments rail 60, toast 70. The graph pane is a full-viewport overlay and
+-   takes the band ABOVE all of them — backdrop 80, surface 81 — and the base
++   takes the band ABOVE all of them — pane root 80, surface 81 — and the base
+    stylesheet's z-index ledger comment records that band, because that comment
+    is the single place this stack is reasoned about.
+ 
+@@ -1283,8 +1281,8 @@
+    deliberately excluded everywhere below — RenderInline never emits any
+    of this, so a bare selector here would be dead weight at best and,
+    for table/hr/blockquote, would collide with existing chrome (a
+-   layout: table claim's own table element, style.css:173's bare table/td/th
+-   rules) at worst. */
++   layout: table claim's own table element, this file's own bare table, td/th and th
++   rules further down) at worst. */
+ 
+ .claim-body hr,
+ .claim-list-items hr,
+@@ -1935,7 +1933,7 @@
+   color: var(--accent);
+ }
+ 
+-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
++/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
+    comment is openable from the viewer. Since most cards on a healthy project
+    have never been commented on, this variant has to sit BELOW the ambient
+    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
+@@ -2358,8 +2356,8 @@
+      50  comments overlay
+      60  comments rail
+      70  toast
+-     80  graph pane backdrop  \  claims graph, added in v0.5.0
+-     81  graph pane surface   /
++     80  graph pane root      \  claims graph, added in v0.5.0 (opaque, not a
++     81  graph pane surface   /  backdrop — the pane dims nothing behind it)
+ 
+    The graph pane takes the band ABOVE all of them because it is the only
+    full-viewport overlay here: it is not a rail beside the document or a
+
+testdata/fixture-portability/viewer/index.html  (+9 -11)
+    size            9942 lines / 350175 bytes -> 9940 lines / 350124 bytes
+@@ -237,16 +237,14 @@
+    =========================================================================
+ 
+    From here down, every colour is a var(--token) read from the base
+-   stylesheet's fixed allowlist, with exactly two exceptions, both of which
+-   the base stylesheet itself already makes for the same reasons: the backdrop
+-   dim and the panel drop shadow are rgba() blacks, because "how dark is the
+-   thing behind this overlay" and "how deep is this shadow" are not colours a
+-   project themes — they are the same value at every accent.
++   stylesheet's fixed allowlist, with no exceptions: this section holds no rgba()
++   literal. The pane is opaque (var(--paper)), has no box-shadow, and has no
++   backdrop element at all — see "no scrim, no inset, no drop shadow" below.
+ 
+    Z-INDEX. The existing stack is hand-assigned with explicit reasoning: nav
+    overlay 20/30, nav toggle 40, status strip 45, comments overlay 50,
+    comments rail 60, toast 70. The graph pane is a full-viewport overlay and
+-   takes the band ABOVE all of them — backdrop 80, surface 81 — and the base
++   takes the band ABOVE all of them — pane root 80, surface 81 — and the base
+    stylesheet's z-index ledger comment records that band, because that comment
+    is the single place this stack is reasoned about.
+ 
+@@ -1283,8 +1281,8 @@
+    deliberately excluded everywhere below — RenderInline never emits any
+    of this, so a bare selector here would be dead weight at best and,
+    for table/hr/blockquote, would collide with existing chrome (a
+-   layout: table claim's own table element, style.css:173's bare table/td/th
+-   rules) at worst. */
++   layout: table claim's own table element, this file's own bare table, td/th and th
++   rules further down) at worst. */
+ 
+ .claim-body hr,
+ .claim-list-items hr,
+@@ -1935,7 +1933,7 @@
+   color: var(--accent);
+ }
+ 
+-/* The zero-thread chip (v0.2.1): every claim carries a chip now, so the FIRST
++/* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
+    comment is openable from the viewer. Since most cards on a healthy project
+    have never been commented on, this variant has to sit BELOW the ambient
+    noise floor at rest — dashed, --faint (the lowest-contrast ink token), and
+@@ -2358,8 +2356,8 @@
+      50  comments overlay
+      60  comments rail
+      70  toast
+-     80  graph pane backdrop  \  claims graph, added in v0.5.0
+-     81  graph pane surface   /
++     80  graph pane root      \  claims graph, added in v0.5.0 (opaque, not a
++     81  graph pane surface   /  backdrop — the pane dims nothing behind it)
+ 
+    The graph pane takes the band ABOVE all of them because it is the only
+    full-viewport overlay here: it is not a rail beside the document or a
+
+ADDED SINCE THE BASELINE
+------------------------
+testdata/markdown-cases/link-mailto.golden.html

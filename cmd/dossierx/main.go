@@ -175,7 +175,7 @@ func newRootCmd() *cobra.Command {
 	// The count is a design constraint, not a coincidence. Every verb here is
 	// something an AGENT does, because the agent is this CLI's operator; the
 	// human's entire surface is "dossierx serve" plus the viewer it opens. The
-	// ten verbs v0.3.0 removed (lint, catalog, render, deps, stale, coverage,
+	// verbs v0.3.0 removed (lint, catalog, render, deps, stale, coverage,
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
@@ -2141,14 +2141,6 @@ func newLockCmd() *cobra.Command {
 				return cmdResult{Warnings: adoptionWarnings(adopted)}, err
 			}
 
-			// THE ROLL-UP GATE, ahead of lock.Lock because lock.Lock cannot see
-			// it: roll-up is a warning-severity lint now (internal/lint/roll_up.go
-			// explains why an error deadlocked every ordinary module), and Lock's
-			// lint gate counts error-severity findings only. Without this, locking
-			// a banner whose module still holds a draft would SUCCEED — the exact
-			// misrepresentation the rule exists to prevent, since a banner is a
-			// module-wide "reviewed" callout.
-			//
 			updated, err := lock.Lock(claim, claims, cfg, store, lock.Approval{Actor: lock.DefaultActor(), Reason: reason})
 			if err != nil {
 				// THE PRE-LEDGER PROJECT, classified before everything else.
@@ -2522,7 +2514,7 @@ func newUnlockCmd() *cobra.Command {
 // re-show that the write happened, without re-deriving anything.
 //
 // Trigger names why the claim is review_pending at all: "flag" (a recorded
-// dossierx flag), "drift" (a dependency changed), or "none" (a drift that was
+// dossierx claim flag), "drift" (a dependency changed), or "none" (a drift that was
 // reverted, leaving the flag set with nothing left to explain it). It matters
 // because reaudit is the DRIFT tool, and an agent that finds trigger "none"
 // should be reaching for unlock -> fix -> lock, not for this command.
@@ -2701,8 +2693,14 @@ func newReauditCmd() *cobra.Command {
 			// from current content — see lock.MigrateLegacyStore. Persisted here
 			// (not only on the --confirm path below) so a mere propose still
 			// restores drift detection for the project's already-locked claims.
-			// PrepareStore also grandfathers already-locked claims into the
-			// lock ledger the first time a pre-ledger store is opened.
+			// PrepareStore grandfathers NOTHING. No path in this build writes a
+			// grandfathered ledger record — v0.4.0 removed the one that did — and
+			// the only adoption left in it is the comment-digest coverage sweep
+			// plus the legacy per-dependent baseline re-arm, which is what
+			// prepareStore's own doc says. This comment claimed the opposite for
+			// several releases, and read literally it told a maintainer an
+			// ordinary reaudit can bless content nobody approved: the exact
+			// property v0.4.0 removed.
 			changedStore, adopted := prepareStore(cfg, store, claims)
 			if changedStore {
 				if err := store.Save(); err != nil {
