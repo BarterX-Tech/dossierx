@@ -1895,19 +1895,32 @@ func assertVersionTranscriptIsRealOutput(t *testing.T, dump siteDump) {
 	}
 
 	// THE VERSION THE RELEASE WOULD STAMP, derived from the tag the site itself
-	// calls current. `.goreleaser.yaml` stamps `-X main.version={{.Version}}`, and
-	// GoReleaser's `{{.Version}}` is the tag with its leading `v` stripped —
-	// `{{.Tag}}` is the spelling that keeps it. That MODEL is not held here; it is
+	// calls current. `.goreleaser.yaml` stamps `-X main.version={{.Tag}}`, and
+	// GoReleaser's `{{.Tag}}` is the tag exactly as tagged — `{{.Version}}` is the
+	// spelling that strips the leading `v`. That MODEL is not held here; it is
 	// held in the root module by gateRequireReleaseTransform, which parses
 	// .goreleaser.yaml and fails if the template ever changes. Splitting it that
 	// way is deliberate: this module cannot parse YAML (its go.mod is chromedp and
 	// nothing else), and a second hand-rolled reader of that file would be a second
 	// model to keep in step.
+	//
+	// THE TRANSFORM IS THE IDENTITY, SINCE THE `{{.Tag}}` STAMP, and that is issue #38's fix
+	// rather than a simplification. The archive used to print `0.5.1` while
+	// `go install …@v0.5.1` printed `v0.5.1`, because the module proxy hands
+	// debug.ReadBuildInfo the tag verbatim and no ldflags reach that path at all.
+	// One canonical form ends it, and the tag is that form: it is what the git
+	// tag, `go install`'s argument, the CHANGELOG heading and every string the
+	// site renders already say.
+	//
+	// So the tag is used directly, with no transform to apply and none to keep in
+	// step. The variable stays named `stamped` because that is what it is — the
+	// value the release build stamps into the binary — and naming it for its
+	// current equality with the tag would hide what it is for.
 	ra := repoReleases(t)
 	tag := ra.current()
-	stamped := strings.TrimPrefix(tag, "v")
-	if stamped == tag {
-		t.Fatalf("the current release entry is %q, which carries no leading \"v\" to strip. The release build's version and the release's name would then be one string, and this comparison could no longer tell the page depicting the right one from the page depicting the wrong one",
+	stamped := tag
+	if !strings.HasPrefix(tag, "v") {
+		t.Fatalf("the current release entry is %q, which carries no leading \"v\". Every version string in this project is the tag as tagged — the archive, `go install`, the CHANGELOG heading and the site — and an entry that drops the prefix means the site and the binary have started spelling the same release two ways again, which is exactly issue #38",
 			tag)
 	}
 
@@ -1950,8 +1963,8 @@ func assertVersionTranscriptIsRealOutput(t *testing.T, dump siteDump) {
 			return
 		}
 		t.Errorf("the rendered %q session depicts %q, which `dossierx %s` does not print.\nreal output (from a binary linked the way the release links one, `-X main.version=%s`):\n  %s\nrendered:\n  %s\n"+
-			"The page may abridge that output and may not invent a line of it. If the difference is the version's leading `v`: the release build strips it, so the tag is %s and the binary prints %s.",
-			versionCommandCard, line.Text, strings.Join(argv[1:], " "), stamped, strings.Join(printed, "\n  "), renderedTranscript(depicted), tag, stamped)
+			"The page may abridge that output and may not invent a line of it. If the difference is the version's leading `v`: there is no longer a difference to reconcile — the release build stamps the tag as tagged, so the tag and the printed version are both %s. A page depicting the stripped form is depicting output no install path produces.",
+			versionCommandCard, line.Text, strings.Join(argv[1:], " "), stamped, strings.Join(printed, "\n  "), renderedTranscript(depicted), tag)
 		return
 	}
 

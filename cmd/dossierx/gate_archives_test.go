@@ -1108,10 +1108,13 @@ func gateArchivesVerifyHostBinary(dir string, release gateArchivesRelease, versi
 	}
 
 	var findings []string
-	// Normalized on both sides because the two spellings are deliberate:
-	// `.goreleaser.yaml` stamps `main.version` from `{{.Version}}`, which is the
-	// tag with its leading `v` stripped, while the tag the driver was authorized
-	// for carries it.
+	// Normalized on both sides so this check is about which RELEASE the binary
+	// is, never about the spelling. `.goreleaser.yaml` stamps `main.version`
+	// from `{{.Tag}}` now, so the two sides agree byte for byte on a healthy
+	// release — but the spelling has its own pin (gate_release_stamp_test.go),
+	// and this check must not double as it: a stamp that moved back to the
+	// stripped form is that pin's finding, while a binary carrying a DIFFERENT
+	// release's version is this one's, and normalizing keeps the two apart.
 	if gateDriverNormalizeVersion(stamp.Version) != gateDriverNormalizeVersion(version) {
 		findings = append(findings, fmt.Sprintf("it reports version %q, and the release being published is %s. The archive is named for one release and carries the binary of another — every name, every checksum and every download link is correct, and `dossierx version` tells its user something else",
 			stamp.Version, version))

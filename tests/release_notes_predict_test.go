@@ -689,13 +689,29 @@ func TestLoadReleaseNotesConfig_RejectsUnmodeledReleaseKeys(t *testing.T) {
 		name         string
 		releaseLines string
 	}{
-		// release.header lands BEFORE "## Changelog" in the published body —
-		// see this test's own doc comment for why an un-caught regression
-		// here is worse than the other four, not merely equivalent to them.
-		{"header", baseRelease + "  header: 'Upgrade notes go here.'\n"},
-		// release.footer lands AFTER the generated section; this predictor's
-		// Body does not account for it either.
-		{"footer", baseRelease + "  footer: 'Thanks for reading.'\n"},
+		// A TEMPLATED release.header, on the footer's terms exactly. A LITERAL
+		// header is modelled — the committed config sets one — and is
+		// accepted; a templated one is refused, because header and footer are
+		// both composed into the release BODY at publish time and a template in
+		// either first renders after the tag is public.
+		//
+		// The header carries an extra residual the footer does not, and it is
+		// why this case matters more than its four neighbours: release.header
+		// lands BEFORE "## Changelog", and PublishedBodyMatches ignores
+		// everything ahead of that anchor as an expected hand-written prefix. So
+		// a header is never compared against the published page. Refusing the
+		// templated form is therefore the ONLY thing standing between this
+		// config and un-predicted prose on a release page.
+		{"templated header", baseRelease + "  header: 'Upgrade notes for {{ .Tag }}.'\n"},
+		// A TEMPLATED release.footer. A LITERAL one is modelled — Body appends
+		// it exactly as goreleaser's describeBody does — but a templated one is
+		// refused, because this predictor has no template engine and would
+		// predict the unrendered source, reporting a mismatch on every release
+		// against a config that is fine. The other direction is worse: a footer
+		// naming a field that does not exist reaches the published page before
+		// anything catches it, since `goreleaser check` validates it and
+		// `--skip=publish` never composes a body at all.
+		{"templated footer", baseRelease + "  footer: 'Read more at {{ .Tag }}.'\n"},
 		// release.disable: true skips the entire release pipe — no GitHub
 		// release is created at all, so predicting a body for it is a wrong
 		// answer dressed as a right one.
@@ -717,8 +733,63 @@ func TestLoadReleaseNotesConfig_RejectsUnmodeledReleaseKeys(t *testing.T) {
 			t.Fatalf("%s: write fixture: %v", c.name, err)
 		}
 		if _, err := LoadReleaseNotesConfig(path); err == nil {
-			t.Errorf("%s: LoadReleaseNotesConfig accepted a config carrying release.%s; want an error, since this predictor's algorithm does not implement it and would silently mispredict", c.name, c.name)
+			t.Errorf("%s: LoadReleaseNotesConfig accepted it; want an error. This predictor's algorithm does not implement that key, so a prediction made against such a config is a wrong answer dressed as a right one", c.name)
 		}
+	}
+}
+
+// TestLoadReleaseNotesConfig_ModelsALiteralFooter is the other half of the case
+// above, and it exists because a refusal test alone cannot tell "modelled" from
+// "rejected for a different reason".
+//
+// A literal release.footer is ACCEPTED and carried into the prediction, because
+// goreleaser's internal/pipe/release/body.go appends it to the generated notes
+// with exactly one newline in front — and PublishedBodyMatches compares from the
+// "## Changelog" anchor TO THE END of the published body, so a footer the
+// predictor did not model would be reported as a release-notes mismatch on every
+// single release. That is a false finding, and this file exists to prevent them
+// rather than manufacture them.
+func TestLoadReleaseNotesConfig_ModelsALiteralFooter(t *testing.T) {
+	const footer = "See the CHANGELOG.\n"
+	fixture := "changelog:\n" +
+		"  sort: asc\n" +
+		"  groups:\n" +
+		"    - title: Features\n" +
+		"      regexp: '^feat:'\n" +
+		"      order: 0\n" +
+		"  filters:\n" +
+		"    exclude:\n" +
+		"      - '^chore:'\n" +
+		"release:\n" +
+		"  github:\n" +
+		"    owner: example\n" +
+		"    name: example\n" +
+		"  footer: |\n" +
+		"    See the CHANGELOG.\n"
+
+	path := filepath.Join(t.TempDir(), "goreleaser.yaml")
+	if err := os.WriteFile(path, []byte(fixture), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	cfg, err := LoadReleaseNotesConfig(path)
+	if err != nil {
+		t.Fatalf("LoadReleaseNotesConfig refused a literal footer: %v\nA footer with nothing to resolve is exactly what this predictor can reproduce byte for byte; refusing it would leave the project unable to point a release page at its CHANGELOG at all, which is the whole of issue #33", err)
+	}
+	if cfg.Footer != footer {
+		t.Fatalf("cfg.Footer = %q, want %q. The footer is carried verbatim: goreleaser reads the same YAML scalar, and with no template in it there is nothing for either side to render", cfg.Footer, footer)
+	}
+
+	// And it reaches the predicted body, in goreleaser's own position.
+	got, err := PredictReleaseNotes(nil, cfg)
+	if err != nil {
+		t.Fatalf("PredictReleaseNotes over an empty range: %v", err)
+	}
+	const want = "## Changelog\n" + "\n" + footer
+	if got.Body != want {
+		t.Fatalf("predicted body = %q, want %q.\n"+
+			"goreleaser composes `{{ .ReleaseNotes }}{{ with .Footer }}\\n{{ . }}{{ end }}`, so the footer follows the changelog after exactly one newline. A predictor that puts it anywhere else — or omits it — disagrees with the published page on every release, and PublishedBodyMatches compares to the END of that page",
+			got.Body, want)
 	}
 }
 
@@ -1697,14 +1768,41 @@ func TestPredictReleaseNotesForRange_G1Capture_MismatchFailsTheGate(t *testing.T
 
 	// emptyRangeBody is what PredictReleaseNotesForRange returns for
 	// HEAD..HEAD: formatChangelog always emits the "## Changelog" header even
-	// when no group claimed anything (see TestPredictReleaseNotes_EmptyRange).
-	const emptyRangeBody = "## Changelog\n"
+	// when no group claimed anything (see TestPredictReleaseNotes_EmptyRange),
+	// followed by the release footer the committed config sets.
+	//
+	// IT IS DERIVED FROM THE COMMITTED CONFIG RATHER THAN WRITTEN OUT. This was
+	// a `const "## Changelog\n"`, and adding a release.footer broke every case
+	// below at once — including the POSITIVE CONTROL, whose whole job is to
+	// prove that an identical recorded prediction passes. A hand-written copy of
+	// the footer here would fix that and re-arm the same trap for whoever edits
+	// the footer's wording next, in a file whose subject is two predictions
+	// agreeing. Reading the real config means the fixture cannot disagree with
+	// the thing it is a fixture for.
+	cfg, err := LoadReleaseNotesConfig(filepath.Join(repoRoot(t), ".goreleaser.yaml"))
+	if err != nil {
+		t.Fatalf("LoadReleaseNotesConfig: %v\nEvery case below compares a hand-built prediction against one this repository's own config produces, so a config that will not load leaves them comparing against nothing", err)
+	}
+	emptyRangeBody := "## Changelog\n"
+	if cfg.Footer != "" {
+		emptyRangeBody += "\n" + cfg.Footer
+	}
 
 	// recordAs writes a hand-built ReleaseNotesPrediction to a temp file in
 	// exactly the shape G1's -release-notes-predict-out produces, and returns
 	// its path — this is the "prediction G1 recorded" side of the comparison.
 	recordAs := func(t *testing.T, p ReleaseNotesPrediction) string {
 		t.Helper()
+		// The header gets the footer's treatment, for the footer's reason, one
+		// release later. Every case below varies Body or Dropped and says nothing
+		// about the header, so a hand-built prediction that omitted it would
+		// differ from the fresh one in a field none of these cases is about — and
+		// the positive control, whose whole job is to prove an identical
+		// prediction passes, would fail. Derived from the committed config so the
+		// fixture cannot disagree with the thing it is a fixture for.
+		if p.Header == "" {
+			p.Header = cfg.Header
+		}
 		path := filepath.Join(t.TempDir(), "g1-prediction.json")
 		data, err := json.MarshalIndent(p, "", "  ")
 		if err != nil {

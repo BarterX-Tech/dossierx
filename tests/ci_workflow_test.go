@@ -1137,3 +1137,168 @@ func TestTheHooksJobDeclaresThePowerShellInstallerSuite(t *testing.T) {
 		"The body is parsed rather than searched, so naming the file in a comment satisfies nothing.",
 		jobKey, ciWorkflowPath, hookSmokeCommand, pesterSuiteFile)
 }
+
+// TestTheReleasePageHasAFooterPointingAtTheChangelog holds the deliverable of
+// issue #33: every published release page carries a pointer to the document
+// where breaking changes are actually explained.
+//
+// WHY THE PAGE NEEDS ONE. Everything a release page shows is generated — grouped
+// commit subjects, with `^docs:`, `^chore:` and `^Merge` filtered out. That
+// presentation cannot distinguish a breaking change from any other feature.
+// v0.5.0's appeared there as the ordinary Features bullet "feat(lint): detect
+// cycles that alternate rests_on and governed_by", with no BREAKING framing, no
+// statement that a previously-passing corpus now exits 1, and no pointer to the
+// recovery. The audience most likely to read only the release page got the least
+// warning. This is about REACH, not correctness: the hand-written CHANGELOG entry
+// is substantive and is not being replaced by generated notes.
+//
+// WHAT THIS TEST DOES NOT CHECK, and deliberately. It does not assert the
+// footer's prose, which is editorial. And it does not assert that the footer
+// resolves no template — LoadReleaseNotesConfig in release_notes_predict_lib_test.go
+// owns that, because a templated footer is a defect in the release-notes
+// PREDICTION first (that predictor has no template engine, so it would predict
+// unrendered source and report a mismatch on every release) and its refusal
+// carries the measurements. One invariant, one owner.
+func TestTheReleasePageHasAFooterPointingAtTheChangelog(t *testing.T) {
+	const configPath = ".goreleaser.yaml"
+	path := filepath.Join(ciRepoRoot(t), configPath)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v\nThis check is about what the published release page renders; without the file there is nothing to check and nothing has been checked", configPath, err)
+	}
+
+	// Comment lines are dropped for the reason the sibling test gives: the block
+	// above the footer has to NAME a template in order to explain why there is
+	// not one, and a raw scan would fail on that explanation.
+	var live []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		live = append(live, line)
+	}
+
+	// The footer is a YAML block scalar, so it runs from `footer: |` to the next
+	// line indented no further than the key. Reading it as a block rather than
+	// scanning the whole file is what keeps this test about the footer: the
+	// ldflags and the archive name_template are full of `{{ }}` and are supposed
+	// to be, since both resolve during the BUILD, where a failure is a red run
+	// and not a published page.
+	var footer []string
+	inFooter := false
+	for _, line := range live {
+		trimmed := strings.TrimSpace(line)
+		if !inFooter {
+			if trimmed == "footer: |" {
+				inFooter = true
+			}
+			continue
+		}
+		if trimmed != "" && !strings.HasPrefix(line, "    ") {
+			break
+		}
+		footer = append(footer, line)
+	}
+
+	if !inFooter {
+		t.Fatalf("%s declares no `footer: |` under its `release:` block.\n\n"+
+			"That footer is the only thing on a published release page that points at the CHANGELOG. Without it the page carries grouped commit subjects and nothing else, and a breaking change reads as an ordinary Features bullet — which is the whole of issue #33.\n\n"+
+			"If the footer moved to a different form (`footer:` on one line, or a `body:`), move this test with it: the property being held is that the published page resolves no template, and that property does not depend on the spelling.",
+			configPath)
+	}
+
+	body := strings.Join(footer, "\n")
+	if strings.TrimSpace(body) == "" {
+		t.Fatalf("%s's `footer: |` block is empty, so the published release page gains nothing. An empty footer passes `goreleaser check` and renders as nothing at all", configPath)
+	}
+
+	if !strings.Contains(body, "CHANGELOG.md") {
+		t.Fatalf("%s's release footer no longer names CHANGELOG.md, so a published release page points at nothing.\n\n"+
+			"The generated notes above it are grouped commit subjects, and a `feat` line reads exactly the same whether or not it breaks a consumer's build — v0.5.0's breaking change appeared there as an ordinary Features bullet. The footer is the one line telling a reader where that is explained.\n\n"+
+			"The footer reads:\n%s", configPath, body)
+	}
+}
+
+// TestTheReleaseGateDoesNotAskTheForgeForOriginMain pins the shape of the forge's
+// own precondition, because nothing else in this repository did.
+//
+// WHY THIS TEST EXISTS AT ALL. Through v0.5.1 the gate job required the tagged
+// commit to be reachable from origin/main, and that requirement DEADLOCKED with
+// the release driver. The driver's order is D6 push the tag, D7 verify the six
+// archives, D8 push main — tag first, deliberately, so main never publishes a
+// site announcing a release whose archives do not exist. The gate job fires on
+// the tag push, at D6, and asked there for a branch the driver pushes at D8: it
+// refused, no archives were built, D7 waited for archives that could never
+// exist, D8 was never reached and origin/main never moved. Nothing in that ring
+// can move first, so no timeout resolves it. It stopped the v0.5.1 release with
+// the tag public and nothing else done.
+//
+// The guard was replaced with a fact about the tagged commit alone — that it is
+// a merge — and the reasoning was written into release.yml's header and
+// docs/RELEASING.md. THAT WAS THE WHOLE RECORD, and prose is not a check: the
+// deletion was invisible to `go test ./...`, and so is restoring it. A future
+// reader who finds merge-ness weaker than reachability, which it is, would be
+// right about the strength and wrong about the consequence, and the symptom
+// arrives only at the next release — a public tag with no archives behind it.
+//
+// So this test refuses the restoration by name and says why, and it reads the
+// workflow AS TEXT on purpose: the guards live inside a shell `run:` block, so a
+// YAML-shaped read would see one opaque string and could not tell which check it
+// contains.
+func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
+	path := filepath.Join(ciRepoRoot(t), filepath.FromSlash(releaseWorkflowPath))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v\nThis check is about which precondition that workflow puts on a tag; without the file there is no precondition to read and nothing has been checked", releaseWorkflowPath, err)
+	}
+	// COMMENT LINES ARE DROPPED, and that is not a convenience. release.yml's
+	// header explains at length why the origin/main check went, and explaining
+	// it requires NAMING it — as does the recovery note inside the gate script
+	// itself. Scanning the raw file would fail on its own documentation and
+	// leave a maintainer with one bad choice: delete the explanation to make the
+	// test green, which throws away the only account of why the guard must not
+	// come back. So the subject is the executable lines.
+	//
+	// A whole-line reader is the right shape here and its residual is stated
+	// rather than hidden: an idiom placed after a `#` on a line that also
+	// carries code would be missed. It cannot hide a live guard, because
+	// anything after `#` on a shell line is itself a comment — the only thing it
+	// could hide is a YAML value with a literal `#` in it, and this workflow has
+	// none.
+	var live []string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		live = append(live, line)
+	}
+	body := strings.Join(live, "\n")
+
+	// Both spellings, because either one alone reintroduces the wait. The fetch
+	// refspec is how the branch is obtained and the ancestry test is how it is
+	// used; a restoration that reached for only one of the two would still be a
+	// job blocking on a ref the driver has not pushed.
+	for _, banned := range []struct{ idiom, why string }{
+		{"merge-base --is-ancestor", "the ancestry test itself"},
+		{"refs/remotes/origin/main", "the branch it compares against"},
+	} {
+		if strings.Contains(body, banned.idiom) {
+			t.Fatalf("%s contains %q — %s.\n\n"+
+				"THIS DEADLOCKS THE RELEASE. The gate job fires on the TAG push, which is the driver's D6. The driver pushes main at D8, two steps later, with D7 (verify the six archives) in between. So this job refuses, no archives are built, D7 waits for archives that can never exist, D8 is never reached, and origin/main never moves. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: D7 polled twenty minutes, this job refused every run, and the release stopped with the tag public and nothing else done.\n\n"+
+				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, the DRIVER has to push main before the tag, and that trade is a real one — deploy-site fires on the main push, so the site can announce a release whose archives are still building. Move the driver's order in cmd/dossierx/gate_driver_test.go first, then this test, then the guard, in that order and in one change.\n\n"+
+				"What the gate checks instead is that the tagged commit is a merge, which is a fact about the commit alone and so holds at D6. Its limits are written out in %s's own header.",
+				releaseWorkflowPath, banned.idiom, banned.why, releaseWorkflowPath)
+		}
+	}
+
+	// And the replacement is present. Without this half the test passes over a
+	// gate job whose (a) check was deleted outright rather than substituted,
+	// which is a weaker forge than either design intended and reads identically
+	// from here.
+	if !strings.Contains(body, "rev-list --parents") {
+		t.Fatalf("%s no longer reads the tagged commit's parent count, so nothing in the gate establishes that the tag names a MERGE.\n\n"+
+			"That check is what replaced the origin/main reachability test, and it is the only thing standing between a release and a tag on the release branch as it stood BEFORE it was merged — which already carries this release's stamp and so gets past the stamp check unnoticed.\n\n"+
+			"If it moved to a different idiom, move this assertion with it in the same change. If it was deleted, the gate now refuses nothing about which commit was tagged.",
+			releaseWorkflowPath)
+	}
+}

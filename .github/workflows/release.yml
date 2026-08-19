@@ -11,14 +11,57 @@
 # facts have to hold, and both are about the TAGGED TREE rather than about
 # whoever pushed:
 #
-#   (a) the tagged commit is reachable from origin/main — the release is a thing
-#       that was merged, not a branch someone tagged;
+#   (a) the tagged commit is a MERGE — a release is the merge of a reviewed
+#       branch into main, and the driver tags that merge commit by value (D2
+#       creates it with `--no-ff`, D4 tags it, never HEAD). A branch head tagged
+#       before it was merged has one parent and is refused here;
 #   (b) the tree at that commit carries the release stamp for exactly this
 #       version — site/src/content.ts's last `releases[]` entry names the tag
 #       being pushed. That stamp is what the whole site derives its version
 #       strings from (the hero, the release history, the `dossierx version`
 #       transcript), so a tag whose tree disagrees with it publishes a binary
 #       that the project's own site describes as a different release.
+#
+# WHY (a) IS MERGE-NESS AND NOT REACHABILITY FROM origin/main, WHICH IS WHAT IT
+# USED TO BE. The stronger check DEADLOCKED against the release driver, and the
+# deadlock is structural rather than a timing accident. The driver's order is D6
+# push the tag, D7 verify the six archives, D8 push main — tag first,
+# deliberately, so that main never publishes a site announcing a release whose
+# archives do not exist yet. This job fires on the tag push, at D6. Asking it for
+# origin/main there asks for something the driver pushes two steps later: the job
+# refuses, so no archives build, so D7 waits for archives that will never exist,
+# so D8 is never reached and origin/main never moves. Measured in the v0.5.1
+# release — D7 polled for twenty minutes, this job refused every run, and the
+# driver stopped with the tag public and nothing else done. A human finished that
+# release by hand, following the driver's own printed recovery.
+#
+# Neither side was wrong alone and each is proven by its own mutation test, so
+# the fix had to GIVE UP a property rather than reconcile the two. What was given
+# up is the part of (a) that has to read a branch. Merge-ness is a fact about the
+# tagged commit by itself, so this job can establish it at D6 holding nothing but
+# the tag.
+#
+# WHAT THAT COSTS, STATED PLAINLY RATHER THAN DESCRIBED AS FIXED. Reachability
+# refused a tag on any commit not on main. Merge-ness refuses a tag on a commit
+# with one parent. So this still closes the ordinary failure the old check was
+# written for — tagging the release branch instead of the merge, which is tagging
+# before the merge — and it no longer closes a merge commit created locally and
+# never pushed to main. The stamp does not cover that residual either: a release
+# branch carries the release's own stamp by the time it is ready to merge, which
+# is exactly when it would be mistagged.
+#
+# AND THE RECEIPT CANNOT COVER IT FROM HERE, which is worth writing down because
+# it is the first thing a reader will reach for. The driver refuses to act unless
+# a gate receipt accounts for the tree it is about to publish, but that receipt is
+# never committed: gate/.gitignore ignores every run-produced artifact on purpose,
+# so that a copy left on disk cannot look authoritative. There is nothing in the
+# tagged tree for this job to read. A forge-side tag protection rule on `v*` is
+# what would close the residual, and it is the same accepted residual the section
+# below already records.
+#
+# DO NOT RESTORE THE origin/main CHECK WITHOUT MOVING THE DRIVER FIRST. Added
+# back on its own it re-creates the deadlock exactly, and the symptom is a
+# release that stops with a public tag and no archives behind it.
 #
 # RESIDUAL, ACCEPTED. This gate lives in the repository, and the workflow GitHub
 # runs for a tag is the one in the tagged tree — so anyone with push rights can
@@ -52,7 +95,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: The tag is on main, and its tree stamps this release
+      - name: The tag names a merge, and its tree stamps this release
         env:
           TAG: ${{ github.ref_name }}
           STAMP_FILE: site/src/content.ts
@@ -82,18 +125,22 @@ jobs:
           COMMIT="$(git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}")" || COMMIT=""
           [ -n "$COMMIT" ] || refuse "refs/tags/${TAG} resolves to no commit in this checkout. This job checks out with fetch-depth: 0 precisely so the tag and the full history are present; if they are not, this gate has read nothing."
 
-          # (a) REACHABLE FROM origin/main. Fetched explicitly by refspec rather
-          # than trusted to whatever the checkout action's default refspec
-          # happens to be this major version: the branch this compares against
-          # is the entire meaning of the check, so it is named here.
-          git fetch --no-tags --quiet origin '+refs/heads/main:refs/remotes/origin/main' \
-            || refuse "origin/main could not be fetched, so it is not known whether ${TAG} is on main. That is a failed check, not a skipped one."
-          MAIN="$(git rev-parse --verify --quiet refs/remotes/origin/main)" || MAIN=""
-          [ -n "$MAIN" ] || refuse "origin/main resolves to no commit after fetching it. The branch this release must come from cannot be read, so nothing about the tag has been established."
+          # (a) THE TAGGED COMMIT IS A MERGE. Read from the commit alone, with no
+          # branch involved — see the header for why this is not
+          # `merge-base --is-ancestor "$COMMIT" origin/main`, which deadlocks
+          # against the driver's D6/D7/D8 order and stopped the v0.5.1 release.
+          #
+          # `rev-list --parents -n 1` prints the commit followed by each parent
+          # on one line, so the parent count is NF - 1. The driver's D2 makes the
+          # merge with `--no-ff`, which always yields exactly two; this accepts
+          # two OR MORE because the fact being established is merge-ness, not a
+          # parent arity, and an octopus merge is still a merge.
+          NPARENTS="$(git rev-list --parents -n 1 "$COMMIT" | awk 'NR == 1 { print NF - 1 }')"
+          [ -n "$NPARENTS" ] || refuse "the parent count of ${COMMIT} could not be read, so it is not known whether ${TAG} names a merge. That is a failed check, not a skipped one."
 
-          if ! git merge-base --is-ancestor "$COMMIT" "$MAIN"; then
-            refuse "${TAG} names ${COMMIT}, which is NOT reachable from origin/main (${MAIN}).
-          A release is the tree that was reviewed and merged. This tag is on something else — an unmerged branch, a commit that was rebased away, or a tree that never went through a pull request — and publishing it would ship code that the project's own history does not contain.
+          if [ "$NPARENTS" -lt 2 ]; then
+            refuse "${TAG} names ${COMMIT}, which has ${NPARENTS} parent(s) and so is NOT a merge commit.
+          A release is the merge of a reviewed branch into main, and the driver tags THAT commit (D2 merges with --no-ff, D4 tags the merge by value, never HEAD). A tag on a single-parent commit is a tag on a branch head — the release branch as it stood BEFORE it was merged, which already carries this release's stamp and would therefore get past check (b) unnoticed.
           Merge first, then tag the merge."
           fi
 
@@ -148,7 +195,7 @@ jobs:
           Either the release stamp was not moved before tagging, or the tag was cut from the wrong commit."
           fi
 
-          printf '%s is reachable from origin/main (%s) and its tree stamps %s. Publishing may proceed.\n' "$TAG" "$COMMIT" "$STAMP"
+          printf '%s names the merge %s (%s parents) and its tree stamps %s. Publishing may proceed.\n' "$TAG" "$COMMIT" "$NPARENTS" "$STAMP"
 
   goreleaser:
     name: goreleaser

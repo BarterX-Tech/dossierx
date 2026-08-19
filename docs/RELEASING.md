@@ -523,11 +523,26 @@ them, and the three post-publish checks that leave this repository entirely.
       Do not reintroduce a hand-typed copy; each of those four had one, and
       three of them went stale.
 
-      **The `dossierx version` example reads `latestBinaryVersion`, not
-      `latestVersion`, and the difference is a leading `v`.** GoReleaser's
-      `{{.Version}}` strips it, so the archive published for `v0.5.0` prints
-      `dossierx version 0.5.0`. `v0.5.0` is right everywhere the site names the
-      RELEASE and wrong in a block depicting what a command prints.
+      **There is one version spelling, and it is the tag as tagged.** The
+      archive, `go install`, the git tag, this file's own commands and every
+      string on the site all read `vX.Y.Z`. Nothing derives a second form, and
+      the `dossierx version` example reads `latestVersion` like the rest.
+
+      That is newer than v0.5.1 and it was a real defect, not a tidy-up. The build
+      stamped `-X main.version={{.Version}}`, which is the tag with its leading
+      `v` stripped, so the published archive printed `dossierx version 0.5.1` —
+      while `go install …@v0.5.1` applies no ldflags at all, falls back to
+      `debug.ReadBuildInfo`, and gets the tag verbatim from the module proxy:
+      `v0.5.1`. One release answered the question two ways depending on how it
+      was installed, and a scripted
+      `dossierx version --format json | jq -r .data.version` compared against the
+      tag succeeded one way and failed the other. The site carried a second
+      constant, `latestBinaryVersion`, purely so the page could depict whichever
+      form the reader would actually see.
+
+      The stamp is `{{.Tag}}` now and both paths agree. If you find a stripped
+      derivation anywhere, the cause is `.goreleaser.yaml`, not the site —
+      `gateRequireReleaseTransform` names which template moved.
 - [ ] **The three committed sample viewers are regenerated.** This is the last
       item deliberately: regeneration has to reflect the branch's finished
       renderer, lint and CSS state, so it runs after everything above.
@@ -650,6 +665,32 @@ them, and the three post-publish checks that leave this repository entirely.
       page announcing that vX.Y.Z is the current release — while `Release`,
       which fires only on a tag push, has not built a single archive. Pushing
       `main` first therefore announces a release nobody can download.
+
+      **That order is also why the forge does not check `origin/main`, and this
+      is the one thing to read before changing either side.** `Release`'s gate
+      job used to require that the tagged commit be reachable from
+      `origin/main`. Both guards were right alone and together they deadlocked:
+      the gate job fires at the tag push, which is D6, and asks for a branch the
+      driver does not push until D8 — so it refused, so no archives were built,
+      so D7 waited for archives that could never exist, so D8 was never reached
+      and `origin/main` never moved. It is not a race that a longer timeout
+      resolves; nothing in the ring can move first. **Measured in v0.5.1:** D7
+      polled for twenty minutes, the gate refused every run, and the driver
+      stopped with the tag public and nothing else done. That release was
+      finished by hand, following the driver's own printed recovery.
+
+      What the forge checks instead is that the tagged commit **is a merge** —
+      a fact about the commit alone, so it holds at D6 with no branch to read.
+      That still refuses the ordinary mistake the old check was written for,
+      tagging the release branch instead of the merge. It does not refuse a
+      merge commit that was created locally and never pushed, and the release
+      stamp does not either, since a branch ready to merge already carries this
+      release's stamp. That residual is recorded in
+      `.github/workflows/release.yml`'s header, along with why the gate receipt
+      cannot close it: the receipt is never committed, on purpose.
+
+      **Do not restore the `origin/main` check without moving the driver
+      first.** On its own it re-creates the deadlock exactly.
 
       **Name the merge commit explicitly.** `git tag -a vX.Y.Z` with no ref tags
       HEAD, which is only right when nothing has landed since the merge; the
