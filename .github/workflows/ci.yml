@@ -174,12 +174,16 @@ jobs:
         run: go test -race -json ./...
 
   # The pre-commit gate is a shell script running a real binary against a real
-  # git repository, so no Go test can cover it: the assertions that matter are
-  # "git refused the commit", "the hook landed where git actually looks", and
-  # "the working tree is byte-identical afterwards". scripts/hook-smoke-test.sh
-  # makes those, and this job runs it on all three platforms — the hook body is
-  # POSIX sh executed by git's own bundled sh, and Windows is exactly where that
-  # claim needs proving rather than asserting.
+  # git repository: the assertions that matter are "git refused the commit",
+  # "the hook landed where git actually looks", and "the working tree is
+  # byte-identical afterwards". scripts/hook-smoke-test.sh makes those, and
+  # this job runs it on all three platforms — the hook body is POSIX sh
+  # executed by git's own bundled sh, and Windows is exactly where that claim
+  # needs proving rather than asserting. An earlier version of this comment
+  # said no Go test could cover the gate; tests/hook_hostile_paths_test.go
+  # (in the `test` job's ordinary suite, where its cases are COUNTED by the
+  # evidence stage) now covers the installer over hostile paths, so this job's
+  # subject is the behavioural matrix, not exclusivity.
   hooks:
     name: git hook (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -202,6 +206,27 @@ jobs:
         # to run hooks there.
         shell: bash
         run: bash scripts/hook-smoke-test.sh
+
+      # THE POWERSHELL PATH, EXECUTED. Until this step existed, no CI job ever
+      # started pwsh: install-git-hook.ps1 was shipped to PowerShell users on
+      # the strength of having been read, and its Find-Bash defect (accepting
+      # WSL's System32 launcher as a bash) was found by a reader, never by a
+      # run. The Pester suite proves the guard with mocks and then executes
+      # the wrapper for real against a throwaway repository; its header states
+      # what the mocks cannot prove — WSL's actual behaviour — because
+      # GitHub-hosted Windows runners cannot run WSL distros.
+      #
+      # Windows-only BY DECLARATION, for the same reason the Go corpus in
+      # tests/hook_hostile_paths_test.go declares its per-OS split: the
+      # wrapper exists for Windows PowerShell users, and Pester ships
+      # preinstalled on windows-latest and not on the other two images.
+      # tests/ci_workflow_test.go requires this step, parsed, in the job that
+      # runs the hook smoke test — the same file states the boundary that no
+      # reader of this file can establish the step EXECUTED, `if:` included.
+      - name: PowerShell installer suite (Pester)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Invoke-Pester -Path scripts/install-git-hook.Tests.ps1 -Output Detailed -CI
 
   # viewer-tests/ is a SEPARATE Go module (its own go.mod, requiring chromedp) so
   # that chromedp and its transitive dependencies can never enter the engine's

@@ -535,8 +535,15 @@ grep -qi 'refused' "$TMP/au-commit3.out" ||
 # binary answers config_not_found — and a config the hook DISCOVERED and cannot
 # open is a refusal, not a skip. The result is a hook that refuses every commit
 # on every branch for every developer, including commits touching no claim at
-# all, until somebody uninstalls it. The fix is one "-c core.quotepath=false" on
-# the ls-files call, and this is the case that would have caught its absence.
+# all, until somebody uninstalls it. The first fix was "-c core.quotepath=false"
+# on the ls-files call, which this case would have caught the absence of — and
+# which turned out to be HALF a fix: quotepath governs only bytes above ASCII,
+# and git quotes '"', '\' and control characters unconditionally, so the hook
+# now reads the query with -z (never quoted) piped through tr. This case still
+# stands guard over the >ASCII half; the unconditional half needs path bytes
+# that are illegal on Windows, so it is pinned per-OS in Go by
+# tests/hook_hostile_paths_test.go rather than here, where one shell suite runs
+# on all three platforms.
 #
 # Both halves are asserted. "still refuses a tampered claim" alone would pass
 # against a hook that refuses unconditionally, which is exactly the bug.

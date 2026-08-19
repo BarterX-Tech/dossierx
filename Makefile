@@ -41,8 +41,16 @@ viewer-test:
 	cd viewer-tests && go test -count=1 ./...
 
 # The pre-commit gate is shell driving a real binary against a real git
-# repository, so no Go test can cover it; scripts/hook-smoke-test.sh is its
-# suite, and CI runs it on all three platforms.
+# repository; scripts/hook-smoke-test.sh is its behavioural suite, and CI runs
+# it on all three platforms. It is no longer the ONLY coverage: an earlier
+# version of this comment said no Go test could cover the gate, and that
+# claim aged into a blind spot — tests/hook_hostile_paths_test.go now drives
+# the installer over a hostile-path corpus from inside the root Go suite,
+# where every case is counted by the release gate's CI-run evidence stage,
+# which a shell script's green never is. The PowerShell wrapper has its own
+# suite too, scripts/install-git-hook.Tests.ps1 (Pester; CI runs it under
+# pwsh on windows-latest — the wrapper used to be executed by no CI job at
+# all).
 # viewer-tests/ is a separate module, so `golangci-lint run ./...` at the root
 # does not read a line of it — the same blind spot `go test ./...` has, and the
 # reason viewer-test exists above. CI runs this as a second step of the lint

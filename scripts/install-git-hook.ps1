@@ -12,8 +12,12 @@
 # This file solves exactly that and nothing else. A parallel PowerShell
 # implementation of the installer would double the surface that has to stay
 # honest about core.hooksPath, worktrees, backups and the confirmation prompt,
-# and the two copies would drift — the second one silently, since it is the one
-# nobody's CI would exercise.
+# and the two copies would drift — the second one silently, since for a long
+# time it was the one nobody's CI exercised: the hooks job ran the sh suite on
+# windows-latest and never started pwsh at all, which is exactly how the WSL
+# defect below shipped. install-git-hook.Tests.ps1 is what ended that; ci.yml's
+# hooks job runs it under pwsh on windows-latest, and
+# tests/ci_workflow_test.go holds that declaration in place.
 #
 # USAGE (from a repository, in PowerShell):
 #
@@ -26,22 +30,47 @@
 
 $ErrorActionPreference = 'Stop'
 
-$sh = Join-Path $PSScriptRoot 'install-git-hook.sh'
-if (-not (Test-Path -LiteralPath $sh)) {
-    Write-Error "install-git-hook.sh was not found next to this wrapper ($sh)"
-    exit 1
+# Test-WslBashLauncher — is this path Windows' WSL launcher rather than a bash?
+#
+# C:\Windows\System32\bash.exe exists on any machine with the WSL optional
+# feature enabled, System32 is early on PATH, and the thing it launches is a
+# LINUX shell inside a VM: hand it "C:\...\install-git-hook.sh" and it resolves
+# that string inside the Linux filesystem, dies with "No such file or
+# directory" — and because a bash WAS found, the wrapper's no-bash remedy
+# message (install Git for Windows / run from WSL yourself) never printed.
+# Failing to reject this launcher is therefore worse than finding no bash at
+# all. Sysnative is the same file seen from a 32-bit process, where Windows
+# redirects "System32" to SysWOW64 and offers Sysnative as the real one.
+#
+# The comparison is textual and case-insensitive on the directory PREFIX, with
+# separators normalised first, because that is what PATH resolution hands us; a
+# bash merely NAMED oddly elsewhere is not rejected — the guard is about these
+# two directories, which only Windows populates, not about the file's contents.
+function Test-WslBashLauncher {
+    param([string]$Path)
+    if (-not $Path -or -not $env:SystemRoot) { return $false }
+    $normalized = $Path.Replace('/', '\')
+    foreach ($sysDir in @('System32', 'Sysnative')) {
+        $prefix = $env:SystemRoot.TrimEnd('\') + '\' + $sysDir + '\'
+        if ($normalized.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
 }
 
 # Find a bash. Preference order is deliberate: a bash the user has put on PATH
-# is the one they expect to be used, and only if there is none do we go digging
-# in the Git installation. git --exec-path points at <git>\mingw64\libexec\
-# git-core, and the Git install root is THREE directories up from there
-# (git-core -> libexec -> mingw64 -> <git>) — which is what the three
-# Split-Path -Parent calls below compute. The bundled bash is under that root,
-# in bin\ or usr\bin\.
+# is the one they expect to be used — UNLESS it is WSL's launcher, which nobody
+# "put" anywhere (enabling the WSL feature drops it into System32) and which
+# cannot run a script that lives on a C:\ path; see Test-WslBashLauncher. Only
+# past that do we go digging in the Git installation. git --exec-path points at
+# <git>\mingw64\libexec\git-core, and the Git install root is THREE directories
+# up from there (git-core -> libexec -> mingw64 -> <git>) — which is what the
+# three Split-Path -Parent calls below compute. The bundled bash is under that
+# root, in bin\ or usr\bin\.
 function Find-Bash {
     $onPath = Get-Command bash -ErrorAction SilentlyContinue
-    if ($onPath) { return $onPath.Source }
+    if ($onPath -and -not (Test-WslBashLauncher $onPath.Source)) { return $onPath.Source }
 
     $git = Get-Command git -ErrorAction SilentlyContinue
     if ($git) {
@@ -66,16 +95,34 @@ function Find-Bash {
     return $null
 }
 
-$bash = Find-Bash
-if (-not $bash) {
-    Write-Error @'
-No bash was found. Install Git for Windows (which bundles one) or run the
-installer from WSL:
+# THE MAIN GUARD. Everything below runs only when this file is executed as a
+# script; dot-sourcing it (`. .\install-git-hook.ps1`) defines the functions
+# above and stops here — $MyInvocation.InvocationName is the literal '.' in
+# that case and the script's own name or path in every executing case. This is
+# the PowerShell spelling of Python's __main__ guard, and it exists so that
+# install-git-hook.Tests.ps1 can load Find-Bash and test it WITHOUT running an
+# installer whose main body would prompt, resolve a bash, and exit the process
+# — that `exit $LASTEXITCODE` at the bottom would take a dot-sourcing session
+# down with it.
+if ($MyInvocation.InvocationName -ne '.') {
+    $sh = Join-Path $PSScriptRoot 'install-git-hook.sh'
+    if (-not (Test-Path -LiteralPath $sh)) {
+        Write-Error "install-git-hook.sh was not found next to this wrapper ($sh)"
+        exit 1
+    }
+
+    $bash = Find-Bash
+    if (-not $bash) {
+        Write-Error @'
+No usable bash was found. A bash under Windows' System32 is WSL's launcher and
+cannot run a script on a C:\ path, so it does not count. Install Git for
+Windows (which bundles a real one) or run the installer from inside WSL:
 
   bash scripts/install-git-hook.sh --yes
 '@
-    exit 1
-}
+        exit 1
+    }
 
-& $bash $sh @args
-exit $LASTEXITCODE
+    & $bash $sh @args
+    exit $LASTEXITCODE
+}

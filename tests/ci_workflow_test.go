@@ -228,6 +228,7 @@ type ciStep struct {
 	Name             string         `yaml:"name"`
 	Uses             string         `yaml:"uses"`
 	Run              string         `yaml:"run"`
+	Shell            string         `yaml:"shell"`
 	WorkingDirectory string         `yaml:"working-directory"`
 	With             map[string]any `yaml:"with"`
 	Env              map[string]any `yaml:"env"`
@@ -1032,4 +1033,107 @@ func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests(t *testing
 			releaseWorkflowPath, published, goreleaserVersionKey, strings.TrimSuffix(goreleaserAction, "@"),
 			ciWorkflowPath, tested, goreleaserVersionEnv)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// The hooks job's PowerShell suite.
+// ---------------------------------------------------------------------------
+
+// hookSmokeCommand is the parsed command that identifies the job exercising
+// the git-hook installers. The job is found by what its steps DO — the same
+// rule every lookup in this file follows, and for the same reason: a job name
+// travels with whoever renames it, while the command is the subject itself.
+const hookSmokeCommand = "scripts/hook-smoke-test.sh"
+
+// pesterSuiteFile is the Pester suite that exercises install-git-hook.ps1 —
+// Find-Bash's WSL-launcher guard with mocks, and the wrapper end to end.
+const pesterSuiteFile = "scripts/install-git-hook.Tests.ps1"
+
+// TestTheHooksJobDeclaresThePowerShellInstallerSuite is a claim about one
+// document, named for exactly what it checks.
+//
+// WHY IT EXISTS. install-git-hook.ps1 shipped for multiple releases while no
+// CI job ever started pwsh: the hooks job ran the sh suite through bash on
+// windows-latest, so the PowerShell wrapper was verified by being read, and
+// its Find-Bash defect — accepting WSL's System32 launcher as a bash — was
+// found by a reader, never by a run. The Pester step this test pins is what
+// closed that. Pinning it here is what keeps it closed: the step lives in a
+// job whose other step is a shell script, so no go-test account, no module
+// wiring check and no suite lookup in this file would notice its deletion.
+//
+// WHAT IT ESTABLISHES: that the job whose steps run the hook smoke test also
+// declares a parsed `Invoke-Pester` over scripts/install-git-hook.Tests.ps1,
+// under `shell: pwsh` — bash has no Invoke-Pester, and the default shell on a
+// run step is bash on every runner this matrix names, so a step that forgot
+// the key would be declaring a command its shell cannot resolve. The suite
+// file itself must exist, for the reason ciViewerSuiteJob stats the module:
+// an invocation pointing at nothing would make every assertion here a claim
+// about a string two files happen to share.
+//
+// WHAT IT CANNOT ESTABLISH, the boundary this file's header draws: that the
+// step EXECUTES. The step carries `if: runner.os == 'Windows'` — Pester ships
+// on windows-latest and not on the other two images, and the wrapper exists
+// for Windows PowerShell users — and this file reads `if:` nowhere, on
+// purpose; whether any step ran is a fact about a run. Nor can the run be
+// counted the way the Go suites are: Invoke-Pester emits no `go test -json`
+// account, so tests/ci_run_evidence_test.go cannot see it either — the same
+// stated residue as the smoke test it sits beside. What is closed is the
+// silent-deletion channel, which is the one that actually happened.
+func TestTheHooksJobDeclaresThePowerShellInstallerSuite(t *testing.T) {
+	if _, err := os.Stat(filepath.Join(ciRepoRoot(t), filepath.FromSlash(pesterSuiteFile))); err != nil {
+		t.Fatalf("%s does not exist (%v): the step this test pins would invoke a file that is not there, and every assertion below would be about a string rather than a suite", pesterSuiteFile, err)
+	}
+
+	wf := ciLoadWorkflow(t, ciWorkflowPath)
+
+	// The job, by conduct: its steps parse to a command running the smoke
+	// test. Exactly one — zero is the deletion case, and two would leave this
+	// test unable to say which runner the Pester declaration belongs to.
+	var hookJobs []string
+	for _, name := range ciJobNames(wf) {
+		declares := false
+		for _, step := range wf.Jobs[name].Steps {
+			for _, argv := range ciCommands(step.Run) {
+				for _, arg := range argv {
+					if arg == hookSmokeCommand {
+						declares = true
+					}
+				}
+			}
+		}
+		if declares {
+			hookJobs = append(hookJobs, name)
+		}
+	}
+	if len(hookJobs) != 1 {
+		t.Fatalf("expected exactly one job in %s to run %s, found %d (%v). The Pester suite is required in THAT job — same runner matrix, same subject — and with no single such job there is nowhere for this requirement to point.\nThis is a failure and not \"nothing to check\": a check that cannot locate its subject has not passed over it",
+			ciWorkflowPath, hookSmokeCommand, len(hookJobs), hookJobs)
+	}
+	jobKey := hookJobs[0]
+
+	// The declaration, parsed. `Invoke-Pester` must be the command of some
+	// step in this job and the suite file one of its arguments — a mention in
+	// a comment inside a run body parses to nothing, which is the point.
+	for _, step := range wf.Jobs[jobKey].Steps {
+		for _, argv := range ciCommands(step.Run) {
+			name, rest, _, ok := ciCommandName(argv)
+			if !ok || !strings.EqualFold(name, "Invoke-Pester") {
+				continue
+			}
+			for _, arg := range rest {
+				if arg != pesterSuiteFile {
+					continue
+				}
+				if step.Shell != "pwsh" {
+					t.Fatalf("job `%s`'s step %q invokes Pester over %s but declares `shell: %q`, and the default step shell is bash on every runner this workflow names — bash has no Invoke-Pester, so as declared this step cannot succeed anywhere. Declare `shell: pwsh` on it",
+						jobKey, step.Name, pesterSuiteFile, step.Shell)
+				}
+				return
+			}
+		}
+	}
+	t.Fatalf("job `%s` in %s — the one job running %s — declares no parsed `Invoke-Pester` command naming %s in any step.\n"+
+		"That suite is the ONLY thing in CI that executes install-git-hook.ps1: the wrapper shipped for multiple releases verified by nothing but reading, which is how its Find-Bash defect (accepting WSL's System32 launcher) shipped. Without this step the PowerShell path is back to being prose.\n"+
+		"The body is parsed rather than searched, so naming the file in a comment satisfies nothing.",
+		jobKey, ciWorkflowPath, hookSmokeCommand, pesterSuiteFile)
 }
