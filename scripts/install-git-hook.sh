@@ -101,10 +101,26 @@ set -eu
 hook_body() {
 	cat <<'PRECOMMIT_HOOK'
 #!/bin/sh
-# dossierx-hook: pre-commit v7
+# dossierx-hook: pre-commit v8
 #
 # Refuses a commit that changes a LOCKED claim without an approval record on the
 # lock ledger.
+#
+# v8 CHANGED how project configs are read out of git, because the previous
+# quoting fix was only half of one. Discovery ran ls-files under
+# "-c core.quotepath=false" and trusted that to deliver raw paths; quotepath
+# governs only bytes ABOVE ASCII, and git C-quotes a path containing a double
+# quote, a backslash or a control character UNCONDITIONALLY — quote.c's
+# quote_c_style has no knob for those. The quoted string, surrounding double
+# quotes baked in, was handed to "dossierx --config", named no file on disk,
+# came back config_not_found — and a config this hook discovered and cannot
+# open is a refusal, not a skip, so the hook refused EVERY commit under such
+# a path, including commits touching no claim at all. Discovery now asks for
+# -z (NUL-separated and never quoted, by definition) and converts NUL to
+# newline with tr; see the comment at the query for why tr rather than a NUL-
+# reading loop, and for the newline-in-path boundary that deliberately fails
+# closed. tests/hook_hostile_paths_test.go is the corpus that catches a
+# regression here.
 #
 # v7 REPLACED the "remove the hook" recovery on both refusal paths. It used to
 # read "scripts/install-git-hook.sh --uninstall" — a path that exists in
@@ -212,24 +228,38 @@ fi
 # root config that is not tracked yet (the very first commit of a project),
 # which is the one case the index cannot see.
 #
-# "-c core.quotepath=false" is load-bearing, not tidiness. core.quotepath
-# defaults to TRUE, and with it on, git prints any path holding a byte outside
-# ASCII as a C-quoted string WITH the surrounding double quotes baked in: a
-# project at "café/project.config.yaml" comes back from ls-files as the literal
-# 14-plus-character text "caf\303\251/project.config.yaml", quotes included.
-# That string is then handed to "dossierx --config", names no file that exists,
-# comes back config_not_found — and because the hook cannot tell a config it
-# discovered itself from one that vanished, it refuses. Every commit, on every
-# branch, for every developer, including commits touching no claim at all. The
-# gate installed to protect the claims would instead have to be uninstalled.
-# quotepath=false emits the raw bytes with no quoting, so the newline-separated
-# read loop below keeps working exactly as it did. We deliberately do NOT switch
-# to -z: git's bundled sh on Windows has no dependable "read -d ''", and this
-# body runs under that sh. internal/check/staged.go's git runner prepends the
-# same override to every invocation for the same reason.
+# THE QUOTING OF THIS QUERY HAS BEEN WRONG TWICE, so the whole reasoning is
+# spelled out. git C-quotes the paths it PRINTS in two independent layers:
+# core.quotepath (default TRUE) quotes any byte above ASCII — a project at
+# "café/project.config.yaml" comes back as the literal text
+# "caf\303\251/project.config.yaml", surrounding double quotes included — and
+# a second, UNCONDITIONAL layer quotes '"', '\' and control characters with
+# no configuration to turn it off (quote.c's quote_c_style). The first fix
+# here was "-c core.quotepath=false", which cured the accented-directory case
+# and left the unconditional layer standing: a project under a directory
+# named with a quote, a backslash or a tab still came back C-quoted. Either
+# way the quoted string is handed to "dossierx --config", names no file that
+# exists, comes back config_not_found — and because a config this hook
+# discovered itself and cannot open is a broken configuration rather than an
+# absent project (see that case below), the hook refuses. Every commit, on
+# every branch, for every developer, including commits touching no claim at
+# all. The gate installed to protect the claims would instead have to be
+# uninstalled.
+#
+# So the query now uses -z, the one output mode git never quotes AT ALL, and
+# tr converts its NUL separators into the newlines the read loop below
+# already speaks. tr rather than "read -d ''" because this body runs under
+# git's bundled sh on Windows, which has no dependable NUL-delimited read;
+# internal/check/staged.go's git runner reads ls-files with -z for exactly
+# this class of reason. WHAT -z CANNOT FIX, stated rather than implied: a
+# path with a NEWLINE in it still splits into two bogus entries here, each of
+# which fails the config lookup and refuses the commit. That fails CLOSED —
+# loud, attributable to the path, fixable by renaming — which is the accepted
+# residue, unlike the old failure, which was also closed but fired on paths
+# people actually have.
 configs=${DOSSIERX_CONFIG:-}
 if [ -z "$configs" ]; then
-	configs=$(git -c core.quotepath=false ls-files -- 'project.config.yaml' '*/project.config.yaml' 2>/dev/null || true)
+	configs=$(git ls-files -z -- 'project.config.yaml' '*/project.config.yaml' 2>/dev/null | tr '\0' '\n' || true)
 fi
 if [ -z "$configs" ] && [ -f project.config.yaml ]; then
 	configs=project.config.yaml
@@ -414,6 +444,26 @@ die() {
 	exit 1
 }
 
+# sh_quote STR — STR as ONE shell word that survives being pasted into any
+# POSIX shell: wrapped in single quotes, with each embedded single quote
+# spelled '\'' (close, escaped quote, reopen). This exists for the one place
+# this script prints a command it expects a human to RUN with a path
+# interpolated into it. A display form like "$hooks_dir/…" reads nicely and
+# re-parses badly: when the reader executes the printed line, `$` re-expands,
+# a backtick opens command substitution, and an embedded double quote ends
+# the string early — so on exactly the machines whose paths are awkward
+# (C:\Users\O'Brien, a mount named with a space or a `$`), the remedy is a
+# second defect. Single quotes make every character literal, and the
+# apostrophe case is why this is a helper and not a pair of quote characters
+# at the call site. tests/hook_hostile_paths_test.go replays the printed
+# lines verbatim in a fresh shell, so a regression here is a red test, not a
+# support ticket. bash 3.2's printf and both seds (BSD, GNU) take this form;
+# command substitution strips trailing newlines, which is inside the
+# newline-in-path boundary the hook body already states.
+sh_quote() {
+	printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"
+}
+
 usage() {
 	# The header of this file IS the documentation; printing the flag list
 	# twice is how the two drift apart. Piped-from-stdin invocations have no
@@ -577,6 +627,13 @@ outdated)
 	;;
 foreign)
 	if [ "$force" -ne 1 ]; then
+		# The chained-hook path is printed through sh_quote, never through
+		# display quotes: these two lines are the one part of this refusal a
+		# reader executes verbatim, and the path being interpolated is
+		# precisely the kind that breaks re-parsing (see sh_quote's comment).
+		# The dirname line below needs no such treatment — its expansions
+		# happen when the READER's shell runs the hook, which is the intent.
+		chain_target=$(sh_quote "$hooks_dir/dossierx-pre-commit")
 		printf '%s\n' \
 			"refusing to touch $target: there is already a pre-commit hook there that dossierx did not write." \
 			"" \
@@ -588,8 +645,8 @@ foreign)
 			"  chain it     keep your hook and call ours from it:" \
 			"" \
 			"                 scripts/install-git-hook.sh --print-hook > \\" \
-			"                     \"$hooks_dir/dossierx-pre-commit\"" \
-			"                 chmod +x \"$hooks_dir/dossierx-pre-commit\"" \
+			"                     $chain_target" \
+			"                 chmod +x $chain_target" \
 			"" \
 			"               then add this to your own pre-commit, wherever you want" \
 			"               the claim gate to run:" \
