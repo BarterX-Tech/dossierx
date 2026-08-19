@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+Three defects in the documents client teams follow, each one a procedure that failed or stranded
+a reader who followed it as written. No command, flag, `error.code` or gate behaviour changes —
+only what the documents (and one CLI hint) tell a reader to do:
+
+- **README's setup paste block now installs the CI workflow on both answers to the hook
+  question.** Step 4 fetched the workflow only when the human *declined* the pre-commit hook, so
+  the nudged answer — yes — ended setup with only the local, skippable gate, while the sentence
+  "CI is the authority either way" sat inside the branch not taken. The question now decides the
+  hook alone, never CI: either answer ends with the workflow installed.
+- **README now says to commit the comment digest store with the first lock, not "once anyone
+  comments".** The engine creates `.dossierx-comment-digest.json` empty at the first lock, in the
+  same act that writes the lock store — README's own crossing section already said so. A reader
+  who waited for a comment as the tracked-artifacts paragraph instructed staged the lock store
+  without the digest beside it and was stopped by `check --staged` — the pre-commit hook's own
+  invocation — with `comment-digest-absent`.
+- **The pre-ledger crossing's step 4 is now conditional on the module being fully locked
+  again** — in README, FORMAT.md, the CI template's commented recovery, and the
+  `pre_ledger_unadopted` refusal's hint. The recipe licensed re-locking "only what you still
+  stand behind" at step 3 and then handed out an unconditional `build-order propose` + `lock`,
+  which refuses (`build_order_refused`, then `build_order_hand_edited`) the moment that license
+  is exercised, with no documented way out. The per-module choice is now stated before command
+  one runs: a partially re-locked module finishes the crossing gate-green but without a locked
+  build order, and runs the propose + lock pair on the day its last claim locks.
+
 ## [0.5.1] - 2026-08-10
 
 **SILENT: the embedded agent skills changed, and nothing on your side reports it.

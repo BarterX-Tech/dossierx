@@ -620,7 +620,8 @@ const preLedgerCrossingSteps = `Cross onto the ledger by emptying the project of
   3. dossierx claim lock <id> --reason "..."
      re-lock only what you still stand behind. The FIRST of these crosses the store onto the ledger and records a real approval — locking is what says a human approved these exact bytes.
   4. dossierx build-order propose --module <m>
-     dossierx build-order lock --module <m> --reason "..."`
+     dossierx build-order lock --module <m> --reason "..."
+     for every module that is fully locked again. A build order exists only over a fully locked module, so a module you re-locked only partially has nothing to propose yet — run this pair for it on the day its last claim locks.`
 
 // preLedgerRefusal composes the refusal ErrPreLedgerUnadopted carries, naming
 // how much of the project still predates the ledger so a reader can see which

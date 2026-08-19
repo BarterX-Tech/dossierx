@@ -142,7 +142,12 @@
 # of nothing, and no evidence inside a repository distinguishes an honest
 # pre-ledger store from a downgraded one. So if you are upgrading a project that
 # locked claims before v0.3.0, this job will fail until you do this ONCE,
-# locally, at a keyboard, IN THIS ORDER:
+# locally, at a keyboard, IN THIS ORDER. Decide per module, before the first
+# command, whether you will re-lock every claim in it: a build order exists
+# only over a fully locked module, and the first command releases the approved
+# sequence — so a module you re-lock only partially finishes the crossing
+# gate-green but without a locked build order, and its propose + lock pair
+# waits until the day its last claim locks.
 #
 #   dossierx build-order propose --module <m>    # every LOCKED build order, re-proposed
 #   dossierx claim unlock <id> --reason "..."    # every locked claim
@@ -150,6 +155,10 @@
 #                                                # behind; the first lock in a project
 #                                                # holding nothing locked is what
 #                                                # crosses the store onto the ledger
+#   dossierx build-order propose --module <m>    # then, for every module that is
+#   dossierx build-order lock --module <m> --reason "..."
+#                                                # fully locked again: re-derive
+#                                                # the sequence and re-approve it
 #
 # then COMMIT the .dossierx-lock-store.json and .dossierx-comment-digest.json it
 # writes. Until that commit lands, every run here checks out the old-format store
