@@ -396,6 +396,7 @@
     "link-fragment",
     "link-http",
     "link-javascript-rejected",
+    "link-mailto",
     "link-network-path-rejected",
     "link-relative",
     "list-dedent-snaps-to-open-level",
