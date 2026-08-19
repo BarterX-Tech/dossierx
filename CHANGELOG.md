@@ -100,6 +100,14 @@ replace an installed v7:
   only the setting, not its reach. It now asks git for the setting's origin (submodules and
   linked worktrees classify as the repository's own), states the reach, names the config file,
   and prints the matching uninstall line. The disclosure accompanies the install, never vetoes it.
+- **That disclosure names the config file by its real path, not git's C-quoted rendering of it.**
+  `git config --show-origin` C-quotes an origin containing `"` or `\` unconditionally — on
+  Windows, where the origin is a native absolute path, that is every origin — so the disclosure
+  named `"C:\\Users\\...\\gitconfig"`, a string that exists nowhere on disk, as the one fact meant
+  to let the reader verify or undo the setting. The origin is re-read with `--null`, the output
+  mode git never quotes, converted outside command substitution (which cannot carry NUL and would
+  glue the value onto the path); a newline in the config's own path still classifies loudly as
+  machine-wide rather than silently as anything.
 - **The PowerShell wrapper's `Find-Bash` rejects WSL's launcher.** A `bash` under
   `%SystemRoot%\System32` resolves a `C:\` script path inside the Linux filesystem: the install
   died "No such file or directory", and because a bash HAD been found, neither remedy printed.

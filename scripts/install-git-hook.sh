@@ -703,9 +703,47 @@ if [ -n "$configured_hooks_path" ]; then
 	# actually wrong with running it (an old git, a wrapper that mishandles
 	# the flag, ...), and that reason is exactly what the "unknown" branch
 	# below needs to hand back instead of re-issuing the same read.
+	#
+	# THE ORIGIN BYTES COME FROM A SECOND READ WITH --null, because the
+	# default output is C-quoted. This is the hook body's v8 lesson arriving
+	# at its second site: git C-quotes anything it prints that contains '"',
+	# '\' or a control character UNCONDITIONALLY — quote.c's quote_c_style,
+	# the same layer core.quotepath cannot turn off — and on Windows the
+	# origin is an absolute native path, so EVERY origin there came back as
+	# file:"C:\\Users\\...\\gitconfig", backslashes doubled and wrapping
+	# quotes baked in. That rendering fails the candidate comparison below
+	# only in the loud direction (a global setting still classifies
+	# machine-wide), but the disclosure then NAMED it — and the config file's
+	# path is the one fact that lets the reader verify or undo the setting,
+	# so naming a path that exists nowhere on their disk defeats the
+	# disclosure's whole purpose. --null separates origin from value with NUL
+	# and quotes neither, by definition, exactly as -z does for ls-files.
+	#
+	# WHY A SECOND READ instead of putting --null on the read above: $(...)
+	# cannot carry the NUL separator. POSIX leaves a NUL in command
+	# substitution unspecified, and the shells this script actually runs
+	# under drop the byte, gluing the VALUE onto the end of the origin with
+	# no seam left to split on — a wrong path that still looks like a path,
+	# the worst shape this note could print. So the read above keeps the two
+	# jobs it has always had, exit status and captured stderr for the unknown
+	# branch, and this read has exactly one: the origin's raw bytes, with tr
+	# converting NUL to newline OUTSIDE the substitution and sed keeping the
+	# first line (origin first, value second). tr rather than a NUL-delimited
+	# read for the same reason the hook body gives: git's bundled sh on
+	# Windows has no dependable "read -d ''".
+	#
+	# WHAT THIS READ CANNOT PROMISE, stated rather than implied: an origin
+	# path containing a NEWLINE is truncated at it — the truncated path
+	# matches no candidate and classifies machine-wide, the loud side of
+	# wrong, over a path shape the hook body already declares out of scope.
+	# And if this read fails where the one above succeeded (the config
+	# changed between them; a git wrapper that mishandles --null), the
+	# pipeline's status is sed's, so the result is simply EMPTY — which the
+	# classifier below already treats as unknown, its own loud answer, never
+	# a silent default to either side.
 	hooks_path_origin_stderr=
 	if hooks_path_origin_raw=$(git config --show-origin --get core.hooksPath 2>&1); then
-		hooks_path_origin=$(printf '%s\n' "$hooks_path_origin_raw" | cut -f1)
+		hooks_path_origin=$(git config --null --show-origin --get core.hooksPath 2>/dev/null | tr '\0' '\n' | sed -n 1p)
 		hooks_path_origin=${hooks_path_origin#file:}
 	else
 		hooks_path_origin=
