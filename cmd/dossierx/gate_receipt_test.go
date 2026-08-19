@@ -150,16 +150,260 @@ type gateReceipt struct {
 
 // gateFinding is one thing the gate found.
 //
-// Severity is carried but is NOT what decides the verdict. CLAUDE.md's rule is
-// that every finding reaches the human and the HUMAN confirms what blocks a
-// release, so a receipt carrying any finding at all evaluates to FAILED and the
-// override is the human's to record. Filtering by severity here would be an
-// agent making that call alone.
+// WHAT REPLACED SEVERITY, AND WHY. The field an agent used to fill in here was
+// `severity`: an adjective it wrote about its own work, which nothing derived
+// from evidence and nothing acted on — one sort comparator ordered the record
+// by it, and the verdict blocked on any finding at all regardless. That rule
+// kept the record honest and made the gate unusable at the far end: a cosmetic
+// line in a maintainer-only document stopped a release exactly as hard as a
+// wrong install command, and the previous release ran ten rounds without ever
+// going green. Three recorded fields replace the adjective, and each answers a
+// question the adjective only gestured at:
+//
+//	consequence      — WHAT KIND of harm, from a closed vocabulary
+//	                   (gateConsequences). Closed because the blocking rule
+//	                   keys on it, and a rule keyed on free text is at the
+//	                   mercy of whichever synonym an agent reached for. A
+//	                   value outside the vocabulary is refused at recording
+//	                   time, never coerced to a default.
+//	failure_scenario — THE HARM ITSELF, as prose: who is doing what, and what
+//	                   goes wrong for them. This is the load-bearing field.
+//	                   An acts-wrongly finding has no override — the only
+//	                   ways past it are to fix the tree or to show with
+//	                   evidence that there was never a defect — and nobody
+//	                   can disprove an adjective. A scenario names a reader
+//	                   and an action, so a human can hold it against the
+//	                   document and say: yes, that happens, or no, it does
+//	                   not. See gateScenarioProblem for what is refused.
+//	blocking         — THE AGENT'S OWN RULING on whether this finding is
+//	                   worth stopping the release for. The reading agent
+//	                   judged the finding; no fixed lookup table re-grades
+//	                   it. One of gateBlockingJudgements, stated always —
+//	                   an absent judgement is not a lenient one, it is a
+//	                   finding nobody judged, and it blocks as its own
+//	                   reason.
+//
+// AND WHAT THE VERDICT DOES WITH THEM, which is the two rulings this schema
+// implements. (1) The agent's judgement is honoured: a finding it marked
+// deferrable does not stop the release — it still reaches the receipt in
+// full, it is still on the report the human reads, and nothing filters,
+// deduplicates or drops it on the way. (2) EXCEPT when the consequence is
+// acts-wrongly: a finding whose consequence is that the reader acts wrongly
+// blocks the release at every reach, whatever the agent's own blocking
+// judgement says, with no override path. gateFindingBlockers is the whole
+// predicate, and it is a pure function of the finding's recorded fields.
 type gateFinding struct {
-	Surface  string `json:"surface"`
-	Rule     string `json:"rule"`
-	Severity string `json:"severity"`
+	Surface string `json:"surface"`
+	Rule    string `json:"rule"`
+	// About is the repo-relative path whose contents this finding's SUBSTANCE
+	// is about, for the case where that file is not one the READING surface
+	// owns — a release-procedure agent reporting a defect in a document the
+	// binary's surface owns, to take the case that produced the field.
+	// Without it the finding is filed against the reading surface alone, and
+	// whoever goes there to fix it finds nothing wrong.
+	//
+	// It is optional, it is the agent's, and it is DELIBERATELY POWERLESS
+	// over the verdict: gateFindingBlockers never reads it, so naming some
+	// smaller file can never demote a finding into being someone else's
+	// smaller problem. That is the direction the field must never gain — it
+	// may only ever raise a finding's rank — and
+	// TestGateAboutCannotLowerAFindingsRank is what holds the direction if a
+	// rank source keyed on the named file is ever added.
+	About string `json:"about,omitempty"`
+	// Consequence is one of gateConsequences, and it is closed. See the type
+	// comment.
+	Consequence string `json:"consequence"`
+	// FailureScenario is the sentence that says who gets hurt and how. It is
+	// MANDATORY and it may not be an adjective: an agent that writes
+	// "acts-wrongly" and then describes a typo has contradicted itself in the
+	// record, where the contradiction is visible to the human — which is the
+	// only check this field can honestly promise. gateScenarioProblem refuses
+	// the shapes that make even that check impossible.
+	FailureScenario string `json:"failure_scenario"`
+	// Blocking is the agent's ruling, one of gateBlockingJudgements. It
+	// carries NO omitempty on purpose: a finding with no judgement is not a
+	// tidier finding, it is one nobody judged, and the reader of a receipt
+	// has to be able to see the empty string.
+	Blocking string `json:"blocking"`
 	Detail   string `json:"detail"`
+}
+
+// The consequence vocabulary, CLOSED. Each value is a question about the
+// reader of the surface, because that is the only question a reading agent
+// handed one surface is placed to answer:
+//
+//	acts-wrongly — a reader who follows the text DOES the wrong thing: the
+//	               instruction fails when carried out, the recovery destroys
+//	               what it says it restores, the copied command does not do
+//	               what the sentence beside it promises.
+//	misled       — the reader ends up BELIEVING something false and nothing
+//	               in the text sends them to act on it.
+//	cosmetic     — true or false makes no difference to what the reader
+//	               believes or does; wrong, and worth recording, but nobody
+//	               is hurt by it.
+//
+// A fourth word is refused at recording time. Coercing it to any of the three
+// would be the gate answering a question the agent was asked.
+const (
+	gateConsequenceActsWrongly = "acts-wrongly"
+	gateConsequenceMisled      = "misled"
+	gateConsequenceCosmetic    = "cosmetic"
+)
+
+var gateConsequences = []string{gateConsequenceActsWrongly, gateConsequenceMisled, gateConsequenceCosmetic}
+
+// The two blocking judgements an agent can record. There is no third, and in
+// particular there is nothing that means "someone else decides later" — the
+// agent read the surface and the agent rules, except where the acts-wrongly
+// rule takes the question away from everyone.
+const (
+	gateBlockingBlocks     = "blocks"
+	gateBlockingDeferrable = "deferrable"
+)
+
+var gateBlockingJudgements = []string{gateBlockingBlocks, gateBlockingDeferrable}
+
+// gateScenarioAdjectives is the severity lexicon: the words a runner ported
+// from the old schema, or an agent reaching for a grade instead of a story,
+// writes into failure_scenario. A scenario made ENTIRELY of these words is an
+// adjective wearing the field's name, and it is refused — see
+// gateScenarioProblem for what that refusal can and cannot promise.
+var gateScenarioAdjectives = map[string]bool{
+	"critical": true, "high": true, "medium": true, "low": true,
+	"minor": true, "major": true, "severe": true, "severity": true,
+	"serious": true, "trivial": true, "moderate": true, "negligible": true,
+	"blocker": true, "blocking": true, "urgent": true, "important": true,
+	"significant": true, "big": true, "small": true, "bad": true,
+	"p0": true, "p1": true, "p2": true, "p3": true, "p4": true,
+	"priority": true, "sev": true, "very": true, "extremely": true,
+	"somewhat": true, "quite": true, "issue": true, "problem": true,
+	"bug": true, "risk": true, "impact": true,
+}
+
+// gateScenarioWordRE splits a scenario into words for the lexicon check.
+var gateScenarioWordRE = regexp.MustCompile(`[a-zA-Z0-9]+`)
+
+// gateScenarioProblem says what disqualifies a failure_scenario, or "" for one
+// this gate can stand behind.
+//
+// WHY IT IS THIS STRICT AND NO STRICTER. The scenario is the only part of a
+// finding a human can check and REFUTE — and with no override on an
+// acts-wrongly finding, refuting the scenario is the one lawful way past a
+// mistaken one. So the shapes that make refutation impossible are refused at
+// recording time, before anyone has to puzzle over them:
+//
+//	empty          — there is nothing to check.
+//	a lone word    — one word names no reader, no action and no break;
+//	                 whatever the word is, it is a label and not a scenario.
+//	adjectives only — "high", "very severe", "critical priority": the old
+//	                 severity field's vocabulary moved into the new field's
+//	                 clothes. An adjective is an opinion nobody can check or
+//	                 refute, which is exactly what this field replaced.
+//
+// WHAT THIS CANNOT PROMISE, stated so nobody leans on it: it cannot tell a
+// true scenario from a fluent lie, and it cannot detect vagueness that uses
+// ordinary words — "a user could be confused" passes this check and fails the
+// human reading it. The mechanism catches the mechanical shapes (a ported
+// runner, a grade where a story belongs); the judgement stays the human's,
+// which is possible precisely because the sentence is on the record.
+func gateScenarioProblem(scenario string) string {
+	words := gateScenarioWordRE.FindAllString(scenario, -1)
+	if len(words) == 0 {
+		return "carries no failure_scenario. That sentence — who is doing what, and what goes wrong for them — is the only part of a finding a human can check and disprove, and with no override on an acts-wrongly finding, disproving the scenario is the one lawful way past a mistaken one; a finding without it is refused now rather than puzzled over later"
+	}
+	if len(words) == 1 {
+		return fmt.Sprintf("states failure_scenario %q, a single word. A scenario names a reader, an action and a break; one word names none of them, whatever the word is", strings.TrimSpace(scenario))
+	}
+	all := true
+	for _, w := range words {
+		if !gateScenarioAdjectives[strings.ToLower(w)] {
+			all = false
+			break
+		}
+	}
+	if all {
+		return fmt.Sprintf("states failure_scenario %q, which grades the finding instead of describing the harm. An adjective is an opinion nobody can check or refute — the exact defect the field replaced — so it is not an answer here: say who is doing what, and what goes wrong for them", strings.TrimSpace(scenario))
+	}
+	return ""
+}
+
+// gateFindingProblems is every way one finding is malformed: fields absent,
+// outside their closed vocabularies, or shaped so that nothing downstream can
+// act on them. The clauses are plain sentences; callers prefix the file and
+// index.
+//
+// It is ONE function used from both ends — the recorder refuses a malformed
+// finding before it is on disk (gateStage3ValidateAnswer), and the verdict
+// treats one that reached a receipt anyway as blocking
+// (gateFindingBlockers) — because a recorder holding findings to a different
+// standard than the verdict writes records that pass on the way in and fail
+// on the way out.
+func gateFindingProblems(f gateFinding) []string {
+	var problems []string
+	if strings.TrimSpace(f.Rule) == "" || strings.TrimSpace(f.Detail) == "" {
+		problems = append(problems, "names no rule or carries no detail; it reaches the report as an unactionable line and the release is blocked by it anyway")
+	}
+	known := false
+	for _, c := range gateConsequences {
+		if f.Consequence == c {
+			known = true
+			break
+		}
+	}
+	if !known {
+		problems = append(problems, fmt.Sprintf("states consequence %q, which is not one of %s. The three are the questions an agent reading one surface is placed to answer — does a reader ACT wrongly, is a reader MISLED, or is it COSMETIC — and a fourth word is one the blocking rule cannot assess; it is refused rather than coerced, because coercing it would be the gate answering the agent's question", f.Consequence, strings.Join(gateConsequences, ", ")))
+	}
+	if p := gateScenarioProblem(f.FailureScenario); p != "" {
+		problems = append(problems, p)
+	}
+	if f.Blocking != gateBlockingBlocks && f.Blocking != gateBlockingDeferrable {
+		problems = append(problems, fmt.Sprintf("states blocking %q, which is not one of %s. The judgement is the reading agent's to make and it must be made: defaulting an absent one to %q would let a producer that skips judging pass silently, and defaulting to %q would assert a ruling nobody made", f.Blocking, strings.Join(gateBlockingJudgements, ", "), gateBlockingDeferrable, gateBlockingBlocks))
+	}
+	if f.About != "" {
+		switch {
+		case strings.HasPrefix(f.About, "/") || strings.Contains(f.About, "\\"):
+			problems = append(problems, fmt.Sprintf("states about %q, which is not a repository-relative path with forward slashes; a path only one machine can resolve is a finding only one machine can route", f.About))
+		default:
+			for _, segment := range strings.Split(f.About, "/") {
+				if segment == ".." || segment == "." || segment == "" {
+					problems = append(problems, fmt.Sprintf("states about %q, which steps outside or around the repository; the field names the tracked file the finding's substance lives in, and a path that resolves elsewhere routes the fix to nowhere", f.About))
+					break
+				}
+			}
+		}
+	}
+	return problems
+}
+
+// gateFindingBlockers is THE BLOCKING PREDICATE: every clause under which f
+// stops the release, each as a sentence, empty when the finding does not
+// block. It is a pure function of the finding's recorded fields — the same
+// receipt always yields the same verdict — and it reads, in order:
+//
+//  1. A malformed finding blocks, one clause per defect
+//     (gateFindingProblems). A finding the rule cannot assess is not a
+//     smaller finding, and the failing direction is the only honest default.
+//  2. consequence == acts-wrongly blocks, UNCONDITIONALLY. At every reach,
+//     with no override, whatever the agent's own blocking judgement says:
+//     the two ways past it are to fix the tree or to disprove the scenario,
+//     and neither is a field on this record.
+//  3. blocking == blocks blocks: the agent that read the surface judged it
+//     worth stopping the release for, and no lookup table re-grades that.
+//  4. Nothing else blocks. A well-formed finding judged deferrable, with any
+//     consequence but acts-wrongly, rides the receipt to the human without
+//     stopping the release.
+//
+// About is deliberately never consulted — see gateFinding.About: a field that
+// cannot move the rank cannot lower it.
+func gateFindingBlockers(f gateFinding) []string {
+	blockers := gateFindingProblems(f)
+	if f.Consequence == gateConsequenceActsWrongly {
+		blockers = append(blockers, fmt.Sprintf("its consequence is %s: a reader following this surface does the wrong thing. That blocks at every reach with no override — the agent's own %q judgement does not clear it, and neither does any human's signature; the release ships after the tree is fixed, or after the scenario (%q) is shown with evidence to describe no defect", gateConsequenceActsWrongly, f.Blocking, f.FailureScenario))
+	}
+	if f.Blocking == gateBlockingBlocks {
+		blockers = append(blockers, "the agent that read the surface judged it worth stopping the release for, and that judgement is the agent's to make")
+	}
+	return blockers
 }
 
 // ---------------------------------------------------------------------
@@ -377,8 +621,17 @@ func gateRecordReceipt(dir, version, branch string, surfaces []gateSurfaceVerdic
 		if found[i].Rule != found[j].Rule {
 			return found[i].Rule < found[j].Rule
 		}
-		if found[i].Severity != found[j].Severity {
-			return found[i].Severity < found[j].Severity
+		if found[i].About != found[j].About {
+			return found[i].About < found[j].About
+		}
+		if found[i].Consequence != found[j].Consequence {
+			return found[i].Consequence < found[j].Consequence
+		}
+		if found[i].Blocking != found[j].Blocking {
+			return found[i].Blocking < found[j].Blocking
+		}
+		if found[i].FailureScenario != found[j].FailureScenario {
+			return found[i].FailureScenario < found[j].FailureScenario
 		}
 		return found[i].Detail < found[j].Detail
 	})
@@ -474,14 +727,35 @@ func gateAssertMergeMatchesReceipt(r gateReceipt, mergeTree string) error {
 // evaluate is the receipt's verdict, recomputed from its own contents plus the
 // surfaces the manifest declares and the fingerprints this tree produces.
 //
-// PASS requires all three: no findings, and every declared surface holding a
-// PASS, and every one of those PASSes fingerprinted against THIS tree. Anything
-// else is FAILED with an error naming every reason, because a verdict that says
-// only "FAILED" sends the reader back to re-derive what the gate already knew.
+// PASS requires all three: no BLOCKING finding, and every declared surface
+// holding a PASS, and every one of those PASSes fingerprinted against THIS
+// tree. Anything else is FAILED with an error naming every reason — every
+// blocking finding, every failed clause of the predicate behind it — because
+// a verdict that says only "FAILED" sends the reader back to re-derive what
+// the gate already knew.
+//
+// WHAT CHANGED HERE AND WHAT DID NOT. The rule used to be `len(r.Findings) >
+// 0`: any finding at all was FAILED, the human's ruling was the only
+// classification, and the previous release ran ten rounds without ever going
+// green because a cosmetic line blocked exactly as hard as a wrong command.
+// The verdict now reads each finding through gateFindingBlockers — the
+// agent's own recorded judgement, overridden in exactly one direction by the
+// acts-wrongly rule. What did NOT change: every finding, blocking or not,
+// stays on the receipt in full and reaches the human unfiltered. "Does not
+// block" and "was never written down" remain different facts, and this
+// function only ever decides the first one.
+//
+// It is a pure function of (receipt, declared, current): the same tree and
+// the same answers always yield the same verdict AND the same error text,
+// which TestGateEvaluateIsReproducibleOverAnUnchangedReceipt holds — a
+// verdict that depended on anything else would make the receipt's whole
+// reproducibility argument false.
 func (r gateReceipt) evaluate(declared []string, current map[string]string) (string, error) {
 	var reasons []string
-	if len(r.Findings) > 0 {
-		reasons = append(reasons, fmt.Sprintf("%d finding(s) reached the report; a human confirms what blocks the release, so the gate does not clear itself", len(r.Findings)))
+	for i, f := range r.Findings {
+		for _, why := range gateFindingBlockers(f) {
+			reasons = append(reasons, fmt.Sprintf("finding %d (surface %s, rule %s) blocks the release: %s", i, f.Surface, f.Rule, why))
+		}
 	}
 	if err := gateIsGreen(declared, r.Surfaces, current); err != nil {
 		reasons = append(reasons, err.Error())
@@ -1014,6 +1288,22 @@ func TestGatePreMergePreconditionRefusesAnUncheckableReceipt(t *testing.T) {
 	}
 }
 
+// gateReceiptFinding is one WELL-FORMED finding for the fixtures below: every
+// closed-vocabulary field filled from the vocabulary, and a scenario that
+// names a reader, an action and a break — so that a test built on it is red
+// for the thing it is about and never for a fixture the recorder would have
+// refused.
+func gateReceiptFinding(surface, rule, consequence, blocking, detail string) gateFinding {
+	return gateFinding{
+		Surface:         surface,
+		Rule:            rule,
+		Consequence:     consequence,
+		FailureScenario: "a reader who trusts this line plans against a project that is not the one shipping, and their first run surprises them",
+		Blocking:        blocking,
+		Detail:          detail,
+	}
+}
+
 // TestGateReceiptRefusesToRecordASurfaceTwice is errGateDuplicateVerdict at the
 // earliest point it can be caught, plus the property that catching it there
 // buys: a receipt that is a function of the SET of results, not of the order the
@@ -1042,9 +1332,9 @@ func TestGateReceiptRefusesToRecordASurfaceTwice(t *testing.T) {
 	// leaves to the sort.
 	surfaces := gatePassingSurfaces("changelog", "readme", "site")
 	findings := []gateFinding{
-		{Surface: "site", Rule: "stale-count", Severity: "minor", Detail: "says 27, the registry holds 28"},
-		{Surface: "site", Rule: "stale-count", Severity: "minor", Detail: "says 6 nouns, the contract lists 7"},
-		{Surface: "readme", Rule: "undocumented-flag", Severity: "major", Detail: "--strict is not described"},
+		gateReceiptFinding("site", "stale-count", gateConsequenceMisled, gateBlockingDeferrable, "says 27, the registry holds 28"),
+		gateReceiptFinding("site", "stale-count", gateConsequenceMisled, gateBlockingDeferrable, "says 6 nouns, the contract lists 7"),
+		gateReceiptFinding("readme", "undocumented-flag", gateConsequenceMisled, gateBlockingBlocks, "--strict is not described"),
 	}
 	first, err := gateRecordReceipt(work, "v9.9.9", "release", surfaces, findings)
 	if err != nil {
@@ -1160,8 +1450,8 @@ func TestReleaseProcedurePinsTheAncestryPrecondition(t *testing.T) {
 }
 
 // TestGateReceiptVerdictIsDerivedNotStored covers the receipt's own arithmetic:
-// PASS needs no findings AND full, current, passing surface coverage, and every
-// way of losing one of those reports FAILED.
+// PASS needs no BLOCKING finding AND full, current, passing surface coverage,
+// and every way of losing one of those reports FAILED.
 func TestGateReceiptVerdictIsDerivedNotStored(t *testing.T) {
 	declared := []string{"readme", "site"}
 	current := map[string]string{"readme": "sha256:aa", "site": "sha256:bb"}
@@ -1199,7 +1489,7 @@ func TestGateReceiptVerdictIsDerivedNotStored(t *testing.T) {
 		name    string
 		receipt gateReceipt
 	}{
-		{"a finding reached the report", gateReceipt{Surfaces: green, Findings: []gateFinding{{Surface: "site", Rule: "stale-count", Severity: "minor", Detail: "says 27, the registry holds 28"}}}},
+		{"a blocking finding reached the report", gateReceipt{Surfaces: green, Findings: []gateFinding{gateReceiptFinding("site", "stale-count", gateConsequenceMisled, gateBlockingBlocks, "says 27, the registry holds 28")}}},
 		{"a declared surface holds no verdict", gateReceipt{Surfaces: green[:1]}},
 		{"a surface holds a FAIL", gateReceipt{Surfaces: []gateSurfaceVerdict{green[0], {Surface: "site", Verdict: gateVerdictFailed, Fingerprint: "sha256:bb"}}}},
 		{"a PASS was fingerprinted against another tree", gateReceipt{Surfaces: []gateSurfaceVerdict{green[0], {Surface: "site", Verdict: gateVerdictPass, Fingerprint: "sha256:stale"}}}},
@@ -1210,5 +1500,241 @@ func TestGateReceiptVerdictIsDerivedNotStored(t *testing.T) {
 				t.Fatalf("expected FAILED with a reason; got %s (%v)", verdict, err)
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------
+// the blocking rule: two rulings, pinned from every side
+// ---------------------------------------------------------------------
+
+// gateEvaluateGreenFixture is the coverage half of an evaluate call, so the
+// tests below fail only for the finding under test and never for a surface
+// hole.
+func gateEvaluateGreenFixture() (declared []string, current map[string]string, green []gateSurfaceVerdict) {
+	declared = []string{"readme", "site"}
+	current = map[string]string{"readme": "sha256:aa", "site": "sha256:bb"}
+	green = []gateSurfaceVerdict{
+		{Surface: "readme", Verdict: gateVerdictPass, Fingerprint: "sha256:aa"},
+		{Surface: "site", Verdict: gateVerdictPass, Fingerprint: "sha256:bb"},
+	}
+	return declared, current, green
+}
+
+// TestGateActsWronglyBlocksAtEveryReachWithNoOverride is the second ruling,
+// pinned where it can never be argued with: a finding whose consequence is
+// acts-wrongly blocks the release EVEN WHEN the agent that raised it judged it
+// deferrable, and even when it names some other file as what it is about. The
+// only ways past it are outside this record entirely — fix the tree, or show
+// with evidence that the scenario describes no defect — and the refusal has to
+// say so, because the move an operator reaches for is to look for the override
+// field this receipt deliberately does not have.
+func TestGateActsWronglyBlocksAtEveryReachWithNoOverride(t *testing.T) {
+	declared, current, green := gateEvaluateGreenFixture()
+
+	finding := gateReceiptFinding("site", "recovery-destroys-backup", gateConsequenceActsWrongly, gateBlockingDeferrable, "step 4 overwrites the hook before the backup step runs")
+	finding.FailureScenario = "an operator running the documented recovery deletes their existing hook before the promised backup is ever taken, and the original is gone"
+
+	for _, tc := range []struct {
+		name    string
+		finding gateFinding
+	}{
+		{"judged deferrable by its own agent", finding},
+		{"judged deferrable and filed about another file", func() gateFinding {
+			f := finding
+			f.About = "scripts/install-git-hook.sh"
+			return f
+		}()},
+		{"judged blocking, the agreeing case", func() gateFinding {
+			f := finding
+			f.Blocking = gateBlockingBlocks
+			return f
+		}()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receipt := gateReceipt{Surfaces: green, Findings: []gateFinding{tc.finding}}
+			verdict, err := receipt.evaluate(declared, current)
+			if verdict != gateVerdictFailed || err == nil {
+				t.Fatalf("an acts-wrongly finding did not block: got %s (%v). A reader following the surface does the wrong thing, and no judgement of the agent's — and no field on this receipt — clears that", verdict, err)
+			}
+			if !strings.Contains(err.Error(), gateConsequenceActsWrongly) {
+				t.Errorf("the refusal does not name the consequence that makes it unconditional:\n%v", err)
+			}
+			if !strings.Contains(err.Error(), "no override") {
+				t.Errorf("the refusal must say there is no override, because that is the field an operator goes looking for:\n%v", err)
+			}
+		})
+	}
+}
+
+// TestGateTheAgentsJudgementDecidesForMisledAndCosmetic is the first ruling:
+// outside acts-wrongly, the reading agent's own recorded judgement is what
+// decides, in both directions — a deferrable finding does not stop the
+// release, a blocking one does, and no lookup table sits between the agent and
+// the verdict. And the deferrable finding is NOT thereby dropped: it stays on
+// the receipt byte for byte, because "does not block" and "was never written
+// down" are different facts and only the first one is the verdict's to decide.
+func TestGateTheAgentsJudgementDecidesForMisledAndCosmetic(t *testing.T) {
+	declared, current, green := gateEvaluateGreenFixture()
+
+	for _, consequence := range []string{gateConsequenceMisled, gateConsequenceCosmetic} {
+		t.Run(consequence, func(t *testing.T) {
+			deferrable := gateReceiptFinding("site", "stale-count", consequence, gateBlockingDeferrable, "says 27, the registry holds 28")
+			receipt := gateReceipt{Surfaces: green, Findings: []gateFinding{deferrable}}
+			verdict, err := receipt.evaluate(declared, current)
+			if verdict != gateVerdictPass || err != nil {
+				t.Fatalf("a %s finding the agent judged deferrable stopped the release anyway: %s (%v). The agent read the surface and the agent rules; overriding it here is the fixed lookup table the design refused", consequence, verdict, err)
+			}
+			if len(receipt.Findings) != 1 || receipt.Findings[0] != deferrable {
+				t.Fatalf("the deferrable finding did not survive evaluation intact; a finding that does not block must still reach the human in full: %+v", receipt.Findings)
+			}
+
+			blocking := deferrable
+			blocking.Blocking = gateBlockingBlocks
+			verdict, err = gateReceipt{Surfaces: green, Findings: []gateFinding{blocking}}.evaluate(declared, current)
+			if verdict != gateVerdictFailed || err == nil {
+				t.Fatalf("a %s finding the agent judged blocking was waved through: %s (%v)", consequence, verdict, err)
+			}
+			if !strings.Contains(err.Error(), "judged it worth stopping the release for") {
+				t.Errorf("the refusal must attribute the stop to the agent's own judgement, because that is who to argue with:\n%v", err)
+			}
+		})
+	}
+}
+
+// TestGateAboutCannotLowerAFindingsRank is the one property `about` must never
+// lose: it routes the fix, it never moves the verdict, and in particular it
+// can never DEMOTE. The enforcement today is structural — gateFindingBlockers
+// does not read the field — so this test is what notices the day someone
+// wires a rank source to the named file: whatever they wire, a finding with
+// `about` set may never block less than the identical finding without it,
+// because a field the agent fills in freely must not be a way to make a
+// finding someone else's smaller problem.
+func TestGateAboutCannotLowerAFindingsRank(t *testing.T) {
+	for _, base := range []gateFinding{
+		gateReceiptFinding("release-procedure", "wrong-recovery", gateConsequenceActsWrongly, gateBlockingBlocks, "the recovery command deletes the worktree"),
+		gateReceiptFinding("release-procedure", "stale-count", gateConsequenceMisled, gateBlockingBlocks, "says 27, the registry holds 28"),
+		gateReceiptFinding("release-procedure", "stale-count", gateConsequenceCosmetic, gateBlockingDeferrable, "says 27, the registry holds 28"),
+	} {
+		t.Run(base.Consequence+"/"+base.Blocking, func(t *testing.T) {
+			without := gateFindingBlockers(base)
+			pointed := base
+			pointed.About = "docs/RELEASING.md"
+			with := gateFindingBlockers(pointed)
+			if len(without) > 0 && len(with) == 0 {
+				t.Fatalf("naming a file in `about` demoted a blocking finding to deferrable; the field may only ever raise a rank, and a lever an agent can pull downwards is a way to file a finding as someone else's smaller problem.\nwithout about: %v\nwith about: %v", without, with)
+			}
+			if len(with) < len(without) {
+				t.Errorf("`about` removed %d blocking clause(s) from an identical finding; the predicate must not consult it in the lowering direction.\nwithout: %v\nwith: %v", len(without)-len(with), without, with)
+			}
+		})
+	}
+}
+
+// TestGateAMalformedFindingBlocksAsItsOwnReason is the found-on-disk half of
+// recording-time validation. The recorder refuses these shapes before they are
+// written (gateStage3ValidateAnswer), so on any receipt this repository
+// produced they cannot occur — but a receipt is a document, documents get
+// hand-edited, and a hand-edited finding the predicate cannot assess must fail
+// as itself rather than slide through whichever branch its empty fields happen
+// to satisfy. Each row is a finding that would otherwise read as deferrable.
+func TestGateAMalformedFindingBlocksAsItsOwnReason(t *testing.T) {
+	well := gateReceiptFinding("site", "stale-count", gateConsequenceMisled, gateBlockingDeferrable, "says 27, the registry holds 28")
+	if blockers := gateFindingBlockers(well); len(blockers) != 0 {
+		t.Fatalf("the well-formed deferrable base blocks (%v), so every row below would be red for the fixture's reason", blockers)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(f *gateFinding)
+		want   string
+	}{
+		{"a consequence outside the vocabulary", func(f *gateFinding) { f.Consequence = "catastrophic" }, "not one of"},
+		{"no consequence at all", func(f *gateFinding) { f.Consequence = "" }, "not one of"},
+		{"no blocking judgement", func(f *gateFinding) { f.Blocking = "" }, "assert a ruling nobody made"},
+		{"a judgement outside the vocabulary", func(f *gateFinding) { f.Blocking = "maybe" }, "assert a ruling nobody made"},
+		{"an empty failure scenario", func(f *gateFinding) { f.FailureScenario = "   " }, "carries no failure_scenario"},
+		{"an adjective where the scenario belongs", func(f *gateFinding) { f.FailureScenario = "very high" }, "grades the finding instead of describing the harm"},
+		{"a lone word where the scenario belongs", func(f *gateFinding) { f.FailureScenario = "typo" }, "a single word"},
+		{"an about that escapes the repository", func(f *gateFinding) { f.About = "../other-repo/README.md" }, "steps outside or around the repository"},
+		{"an about only one machine can resolve", func(f *gateFinding) { f.About = "/etc/passwd" }, "not a repository-relative path"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := well
+			tc.mutate(&f)
+			blockers := gateFindingBlockers(f)
+			if len(blockers) == 0 {
+				t.Fatalf("a finding the rule cannot assess was read as deferrable; the failing direction is the only honest default for a malformed record: %+v", f)
+			}
+			if !strings.Contains(strings.Join(blockers, "\n"), tc.want) {
+				t.Errorf("the blocking clauses do not name %q:\n%s", tc.want, strings.Join(blockers, "\n"))
+			}
+		})
+	}
+}
+
+// TestGateScenarioProblemAcceptsProseAndOnlyProse holds the boundary of the
+// scenario check from the accepting side, because a lexicon that grows too
+// greedy would refuse the very sentences the field exists for.
+func TestGateScenarioProblemAcceptsProseAndOnlyProse(t *testing.T) {
+	for _, ok := range []string{
+		"a reader following the setup guide answers yes at step 4, finishes with no CI configured, and believes the merge gate is protecting them when nothing is",
+		// Lexicon words are fine INSIDE a sentence; only a scenario made of
+		// nothing else is a grade in disguise.
+		"an operator misjudges the impact of the flag and deletes the high-priority queue",
+	} {
+		if p := gateScenarioProblem(ok); p != "" {
+			t.Errorf("a real scenario was refused: %q\n%s", ok, p)
+		}
+	}
+	for _, bad := range []string{"", "  ", "critical", "high impact", "severity: high", "P1", "very very bad bug"} {
+		if p := gateScenarioProblem(bad); p == "" {
+			t.Errorf("%q was accepted as a failure scenario; it names no reader, no action and no break, and nobody can disprove it", bad)
+		}
+	}
+}
+
+// TestGateEvaluateIsReproducibleOverAnUnchangedReceipt pins the predicate as a
+// pure function of the receipt: the same tree and the same answers yield the
+// same verdict AND the same words, twice, because the ancestry precondition's
+// whole argument rests on a re-run over an unchanged branch reproducing an
+// identical result — and a verdict whose text wandered between runs would make
+// diffs of gate output read as changes in the tree.
+func TestGateEvaluateIsReproducibleOverAnUnchangedReceipt(t *testing.T) {
+	declared, current, green := gateEvaluateGreenFixture()
+	receipt := gateReceipt{
+		Surfaces: green,
+		Findings: []gateFinding{
+			gateReceiptFinding("site", "stale-count", gateConsequenceCosmetic, gateBlockingDeferrable, "says 27, the registry holds 28"),
+			gateReceiptFinding("readme", "wrong-command", gateConsequenceActsWrongly, gateBlockingDeferrable, "the install line pipes to sh from the wrong host"),
+			gateReceiptFinding("readme", "undocumented-flag", gateConsequenceMisled, gateBlockingBlocks, "--strict is not described"),
+		},
+	}
+
+	firstVerdict, firstErr := receipt.evaluate(declared, current)
+	secondVerdict, secondErr := receipt.evaluate(declared, current)
+	if firstVerdict != secondVerdict {
+		t.Fatalf("the same receipt evaluated to %s and then %s", firstVerdict, secondVerdict)
+	}
+	if firstErr == nil || secondErr == nil {
+		t.Fatalf("a receipt carrying an acts-wrongly finding evaluated with no reason: %v / %v", firstErr, secondErr)
+	}
+	if firstErr.Error() != secondErr.Error() {
+		t.Fatalf("the same receipt produced two different accounts of itself:\nfirst:\n%s\nsecond:\n%s", firstErr, secondErr)
+	}
+	// And every failed clause is named: the acts-wrongly rule and the agent's
+	// blocking judgement are different accusations with different recoveries,
+	// so both have to be in the text.
+	for _, want := range []string{"acts-wrongly", "judged it worth stopping the release for"} {
+		if !strings.Contains(firstErr.Error(), want) {
+			t.Errorf("the verdict does not name the clause %q; a FAILED that hides one of its reasons reveals it on the next re-run instead:\n%s", want, firstErr)
+		}
+	}
+	// The deferrable cosmetic finding must NOT be a clause — it rides the
+	// receipt without blocking — and it must still be ON the receipt.
+	if strings.Contains(firstErr.Error(), "stale-count") {
+		t.Errorf("the deferrable finding appears among the blocking clauses:\n%s", firstErr)
+	}
+	if len(receipt.Findings) != 3 {
+		t.Errorf("evaluation changed the findings themselves; the record is the human's, not the predicate's")
 	}
 }

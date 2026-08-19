@@ -8,8 +8,16 @@ them, substitutes `<<RUN>>` and `<<FINGERPRINT>>`, and requires the refusal.
 case and proves the least: it fails at `json.Unmarshal` and no design decision is
 involved. What has to be refused deliberately is the answer that decodes cleanly
 and is still not something an agent produced — a `FAILED` whose findings never
-arrived, a `PASS` that lists what it found, a fingerprint from the tree before
-the fix landed, a run identifier belonging to the previous fan-out.
+arrived, a `PASS` beside a finding that blocks, a `FAILED` justified by nothing
+that blocks, a `failure_scenario` that is an adjective instead of a story, a
+`consequence` or `blocking` value outside its closed vocabulary, a fingerprint
+from the tree before the fix landed, a run identifier belonging to the previous
+fan-out.
+
+One fixture here is ACCEPTED besides `well-formed.json`:
+`pass-with-deferrable-findings.json`, a `PASS` carrying a finding its agent
+judged `deferrable` — that shape is the point of the blocking judgement, and a
+test holds the door open so the refusals cannot quietly close it.
 
 Every fixture is `well-formed.json` with exactly ONE thing changed, so a test
 that means to exercise one refusal cannot quietly be starting from a fixture that

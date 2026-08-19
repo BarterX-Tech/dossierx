@@ -466,7 +466,14 @@ func TestTheWiredEvidenceIsThisRunsFanOut(t *testing.T) {
 			"go-toolchain-floor": "1.26", "lock-lifecycle": "unlock-fix-lock"}},
 		gateWiredAnswerSpec{Surface: "roadmap", Verdict: gateVerdictFailed, Subjects: map[string]string{
 			"go-toolchain-floor": "1.26", "lock-lifecycle": gateStage3NotClaimed},
-			Findings: []gateFinding{{Surface: "roadmap", Rule: "stale-pin", Severity: "major", Detail: "the roadmap still pins v0.4.1"}}},
+			Findings: []gateFinding{{
+				Surface:         "roadmap",
+				Rule:            "stale-pin",
+				Consequence:     gateConsequenceMisled,
+				FailureScenario: "a reader deciding whether to depend on this project reads a register that still calls a shipped feature deferred",
+				Blocking:        gateBlockingBlocks,
+				Detail:          "the roadmap still pins v0.4.1",
+			}}},
 	)
 	_, findings, err = wired.Verdicts(gateStage2FixtureTree)
 	if err != nil {

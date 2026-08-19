@@ -39,28 +39,37 @@
 //
 // WHAT THIS FILE DELIBERATELY DOES NOT BUILD, and the residue that leaves:
 //
-//   - THE EVIDENCE-DERIVED CLASSIFIER. Findings are collected whole and ordered
-//     by nothing; gateFinding.Severity remains a string the agent writes about
-//     its own work, read only by gateRecordReceipt's sort comparator. Deriving a
-//     classification from evidence needs an evidence bar that the bundle W6
-//     landed can actually meet — surface.json carries no source path and no line
-//     number anywhere, so C4's "a file:line in code plus the contradicting prose
+//   - THE EVIDENCE-DERIVED CLASSIFIER. A finding's rank is still nothing the
+//     gate derives from evidence. What replaced free-text severity —
+//     gateFinding's `consequence`, `failure_scenario` and `blocking`, see
+//     gate_receipt_test.go — is the READING AGENT'S OWN JUDGEMENT, recorded in
+//     a form a human can check and refute, not a classification computed from
+//     the material. Deriving one from evidence still needs an evidence bar the
+//     bundle cannot meet — surface.json carries no source path and no line
+//     number anywhere, so "a file:line in code plus the contradicting prose
 //     span" is unsatisfiable by construction and every finding would classify
-//     UNSUPPORTED. That is a decision about a closed design point, not an
-//     implementation gap, and it is left open rather than guessed at.
-//   - THE OVERRIDE RECORD. gateReceipt has no field for a human waving a finding
-//     through with a rationale, and evaluate() returns FAILED whenever any
-//     finding is present, so today the only way to ship past a finding the human
-//     has judged non-blocking is to delete it from the record. Adding the field
-//     is an edit to gate_receipt_test.go, which is in no lane's write set this
-//     wave. Until it exists, an adjudicated finding and a finding nobody raised
-//     are indistinguishable to the next release. THIS NOW HAS A ROUTINE CALLER:
-//     a subject no surface claims is a legitimate state of a tree and is raised
-//     as a finding (gateStage3JoinFindings), so the first release with a quiet
-//     subject blocks until a human either answers the subject, removes it from
-//     the frame's vocabulary, or has somewhere to record the override. That is
-//     the honest ordering — the human is asked — but it is a real cost and it is
-//     the strongest argument for the field.
+//     UNSUPPORTED. That remains a decision about a closed design point, left
+//     open rather than guessed at; the owner's ruling in the meantime is that
+//     the agents judge their own findings and no fixed lookup table re-grades
+//     them — with the one exception that is not anyone's to judge: a finding
+//     whose consequence is acts-wrongly blocks at every reach, whatever its
+//     agent ruled (gateFindingBlockers).
+//   - THE OVERRIDE RECORD. gateReceipt still has no field for a human waving a
+//     finding through with a rationale. The routine pressure on it is gone —
+//     a finding the AGENT judges deferrable no longer blocks, so most
+//     non-blocking findings never need a ruling at all — but the hard case is
+//     unchanged and now deliberate: an acts-wrongly finding, or one its agent
+//     judged blocking, can be cleared only by fixing the tree or by showing
+//     the finding's own failure_scenario describes no defect, which for a
+//     mistaken finding still means deleting it from the record by hand — and
+//     a deleted finding leaves an adjudicated finding indistinguishable from
+//     one nobody raised. For acts-wrongly that absence is the second ruling
+//     itself: not deferrable, not signable-away, no override BY DESIGN. The
+//     join's findings keep their routine cost: a subject no surface claims is
+//     raised blocking (gateStage3JoinFindings), so the first release with a
+//     quiet subject stops until a human answers the subject or removes it
+//     from the frame's vocabulary. That is the honest ordering — the human is
+//     asked.
 //   - A PRODUCER. Nothing in this repository writes gate/answers/<surface>.json
 //     yet; scripts/gate-stage2/run.sh has six modes and none of them reads an
 //     agent's answer back. This file pins the SCHEMA and refuses everything
@@ -348,21 +357,48 @@ func gateStage3ValidateAnswer(a gateStage3Answer, surface, wantRun, wantFingerpr
 		problems = append(problems, fmt.Sprintf("%s was produced over fingerprint %s and this tree fingerprints surface %q as %s; the agent answered about different inputs", rel, a.Fingerprint, surface, wantFingerprint))
 	}
 
+	// THE VERDICT AND THE FINDINGS MUST TELL ONE STORY, and since the blocking
+	// rule moved into the findings the story is about BLOCKING. A verdict is
+	// the agent's answer to "does anything here stop this release": PASS may
+	// carry findings — the ones the agent judged deferrable ride the record to
+	// the human without stopping anything — but a PASS carrying a finding that
+	// BLOCKS (by the agent's own judgement, or by the acts-wrongly rule that
+	// overrides it) contradicts itself, and so does a FAILED justified by
+	// nothing that blocks. Both directions are counted with the verdict's own
+	// predicate, gateFindingBlockers, because a recorder that decided
+	// "blocking" by any other rule would write answers that pass on the way in
+	// and flip the verdict on the way out.
+	blocking := 0
+	if a.Findings != nil {
+		for _, f := range *a.Findings {
+			if len(gateFindingBlockers(f)) > 0 {
+				blocking++
+			}
+		}
+	}
 	switch {
 	case a.Findings == nil:
 		problems = append(problems, fmt.Sprintf("%s has no `findings` key at all. An absent list is not an empty one: it says the producer never recorded what the agent reported, and a truncated write stops in exactly this shape", rel))
-	case a.Verdict == gateVerdictPass && len(*a.Findings) > 0:
-		problems = append(problems, fmt.Sprintf("%s holds a PASS and %d finding(s). A PASS says nothing demonstrable was found while the answer lists what was found; whichever half is true, the other one reaches the human as a lie", rel, len(*a.Findings)))
+	case a.Verdict == gateVerdictPass && blocking > 0:
+		problems = append(problems, fmt.Sprintf("%s holds a PASS and %d finding(s) that block the release. A PASS says nothing here stops this release while the findings say something does; whichever half is true, the other one reaches the human as a lie", rel, blocking))
 	case a.Verdict == gateVerdictFailed && len(*a.Findings) == 0:
 		problems = append(problems, fmt.Sprintf("%s holds a FAILED and no findings. It blocks the release without stating what is wrong with it, and the only recovery a human has is to re-run the surface — paying for the agent the cache exists to avoid, for exactly the surfaces that found something", rel))
+	case a.Verdict == gateVerdictFailed && blocking == 0:
+		problems = append(problems, fmt.Sprintf("%s holds a FAILED and no finding that blocks. The verdict stops the release while every finding on it was judged deferrable; either one of them is worth stopping for and its `blocking` should say so, or nothing is and the verdict is a PASS with the findings still attached", rel))
 	}
 	if a.Findings != nil {
 		for i, f := range *a.Findings {
-			switch {
-			case f.Surface != surface:
+			if f.Surface != surface {
 				problems = append(problems, fmt.Sprintf("%s finding %d is attributed to surface %q; a finding filed under a surface that did not raise it is a finding the human cannot trace and a surface that looks worse than it is", rel, i, f.Surface))
-			case strings.TrimSpace(f.Rule) == "" || strings.TrimSpace(f.Detail) == "":
-				problems = append(problems, fmt.Sprintf("%s finding %d names no rule or carries no detail; it reaches the report as an unactionable line and the release is blocked by it anyway", rel, i))
+				continue
+			}
+			// The schema checks are gate_receipt_test.go's, shared with the
+			// verdict so a malformed finding dies HERE, at recording time and
+			// in front of the human running the agent, instead of reaching a
+			// receipt where the same clauses would block the release with a
+			// message about a broken producer.
+			for _, problem := range gateFindingProblems(f) {
+				problems = append(problems, fmt.Sprintf("%s finding %d %s", rel, i, problem))
 			}
 		}
 	}
@@ -664,9 +700,9 @@ const (
 // A COLLISION IS A FINDING AND NOT A VERDICT. It does not overrule any surface's
 // answer — every one of them may be right about its own document — it says the
 // union is inconsistent and names who said what, which is the only form a human
-// can act on. That a finding blocks the release is gateReceipt.evaluate's rule
-// and CLAUDE.md's: every finding reaches the human, and the human confirms what
-// blocks.
+// can act on. That it blocks the release is the join's own recorded judgement
+// (`blocking: blocks`, see below), read by gateReceipt.evaluate the same way
+// any agent's is; every finding reaches the human either way.
 //
 // AN UNCLAIMED SUBJECT IS A FINDING FOR THE SAME REASON A SKIPPED CHECK IS A
 // FAILURE. A subject every surface answers `not-claimed` is a subject the join
@@ -687,19 +723,39 @@ func gateStage3JoinFindings(answers []gateStage3Answer, vocabulary []gateStage3S
 		for _, v := range c.Values {
 			said = append(said, fmt.Sprintf("%s say %q", strings.Join(v.Surfaces, ", "), v.Value))
 		}
+		// The join's own findings carry the same fields an agent's do, judged
+		// by the join in the only position it has. Consequence is `misled` and
+		// deliberately not `acts-wrongly`: a collision PROVES that at least
+		// one document tells its reader something false, and it does not prove
+		// that anyone acts on it — claiming acts-wrongly would overstate what
+		// a collision demonstrates and make the one non-overridable word in
+		// the vocabulary cheap. Blocking is `blocks`, the join's own
+		// judgement: a disagreement no per-surface agent can see is exactly
+		// the class of finding deferring which would restore the state the
+		// join was built to end.
 		out = append(out, gateFinding{
-			Surface:  gateStage3JoinSurface,
-			Rule:     gateStage3RuleCollision,
-			Severity: "major",
+			Surface:         gateStage3JoinSurface,
+			Rule:            gateStage3RuleCollision,
+			Consequence:     gateConsequenceMisled,
+			FailureScenario: fmt.Sprintf("a reader who trusts whichever document states the wrong value of %s believes something false about this project, and nothing warns them that another surface disagrees", c.Subject),
+			Blocking:        gateBlockingBlocks,
 			Detail: fmt.Sprintf("the surfaces do not agree about %s: %s. No per-surface agent can see this — each document is internally consistent and none of them was handed the others — so every one of these surfaces passed. Decide which value is right and correct the documents that state the other.",
 				c.Subject, strings.Join(said, "; ")),
 		})
 	}
 	for _, subject := range gateStage3UnclaimedSubjects(answers, vocabulary) {
+		// Misled again, and here the misled reader is named precisely: the
+		// human who reads this run's report, who would otherwise take the
+		// join's silence about this subject as thirteen surfaces agreeing.
+		// Blocking, because the two recoveries — answer the subject or remove
+		// it from the vocabulary — are a human's edits and nothing about a
+		// later tree makes the silence more visible than it is right now.
 		out = append(out, gateFinding{
-			Surface:  gateStage3JoinSurface,
-			Rule:     gateStage3RuleUnclaimed,
-			Severity: "major",
+			Surface:         gateStage3JoinSurface,
+			Rule:            gateStage3RuleUnclaimed,
+			Consequence:     gateConsequenceMisled,
+			FailureScenario: fmt.Sprintf("the human reading this run's report takes the join's silence about %s as the surfaces agreeing, when in fact nothing was compared at all", subject),
+			Blocking:        gateBlockingBlocks,
 			Detail: fmt.Sprintf("not one surface stated a value for %s, so the cross-surface join cannot fire on it: it reports agreement on this tree and on every future one, and that reads exactly like %d surfaces agreeing. Either a surface stopped stating it, or the subject no longer describes anything this project publishes and belongs out of the vocabulary in %s.",
 				subject, len(answers), gateBundleFrameFile),
 		})
@@ -900,13 +956,17 @@ func gateStage3Vocab(t *testing.T) []gateStage3Subject {
 	}
 }
 
-// gateStage3Findings builds a one-finding list attributed to surface.
+// gateStage3OneFinding builds a one-finding list attributed to surface — a
+// BLOCKING finding, because most fixtures pair it with a FAILED verdict and a
+// FAILED justified by nothing that blocks is itself a refusal now.
 func gateStage3OneFinding(surface string) *[]gateFinding {
 	return &[]gateFinding{{
-		Surface:  surface,
-		Rule:     "counted-claim-mismatch",
-		Severity: "major",
-		Detail:   "the document says nineteen commands and the inventory holds twenty",
+		Surface:         surface,
+		Rule:            "counted-claim-mismatch",
+		Consequence:     gateConsequenceMisled,
+		FailureScenario: "a reader planning an integration counts on nineteen commands being all of them and designs around a surface smaller than the one that ships",
+		Blocking:        gateBlockingBlocks,
+		Detail:          "the document says nineteen commands and the inventory holds twenty",
 	}}
 }
 
@@ -1075,9 +1135,47 @@ func TestGateStage3RefusesEveryMalformedAnswer(t *testing.T) {
 			want:    "blocks the release without stating what is wrong",
 		},
 		{
-			name:    "a PASS that lists what it found",
+			// A PASS may carry DEFERRABLE findings now — they ride the record
+			// to the human without stopping anything, and
+			// TestGateStage3AcceptsAPassCarryingDeferrableFindings holds that
+			// door open — so the contradiction this fixture pins is a PASS
+			// beside a finding that BLOCKS.
+			name:    "a PASS that lists a blocking finding",
 			fixture: "pass-with-findings.json",
 			want:    "the other one reaches the human as a lie",
+		},
+		{
+			// The same contradiction mirrored: FAILED stops the release, and
+			// every finding on it says nothing here is worth stopping for.
+			name:    "a FAILED justified by nothing that blocks",
+			fixture: "failed-with-only-deferrable-findings.json",
+			want:    "holds a FAILED and no finding that blocks",
+		},
+		{
+			// The old severity vocabulary trying to live in the new field. An
+			// adjective is an opinion nobody can check or refute, and with no
+			// override on an acts-wrongly finding, refuting the scenario is
+			// the one lawful way past a mistaken one — so a scenario that
+			// cannot be refuted is refused at recording, not puzzled over on
+			// the receipt.
+			name:    "a failure scenario that is an adjective",
+			fixture: "adjective-scenario.json",
+			want:    "grades the finding instead of describing the harm",
+		},
+		{
+			name:    "a consequence outside the closed vocabulary",
+			fixture: "unknown-consequence.json",
+			want:    "not one of",
+		},
+		{
+			name:    "a finding nobody judged",
+			fixture: "no-blocking-judgement.json",
+			want:    "assert a ruling nobody made",
+		},
+		{
+			name:    "an about that escapes the repository",
+			fixture: "about-escapes-the-repo.json",
+			want:    "steps outside or around the repository",
 		},
 		{
 			name:    "no findings key at all",
@@ -1172,6 +1270,36 @@ func TestGateStage3AcceptsAWellFormedAnswer(t *testing.T) {
 	}
 	if a.Findings == nil || len(*a.Findings) != 1 {
 		t.Fatalf("the well-formed fixture is meant to carry exactly one finding; it carries %v", a.Findings)
+	}
+}
+
+// TestGateStage3AcceptsAPassCarryingDeferrableFindings is the first ruling at
+// the recording boundary: an agent that found something and judged it not
+// worth stopping the release for answers PASS WITH the finding attached, and
+// the record keeps both halves. Refusing this shape — as the gate used to,
+// when any finding contradicted a PASS — left an agent with only bad moves:
+// block the release over a cosmetic line, or leave the line out of the record
+// entirely, which is the filtered report CLAUDE.md forbids.
+func TestGateStage3AcceptsAPassCarryingDeferrableFindings(t *testing.T) {
+	const (
+		surface = "changelog"
+		run     = "0123456789abcdef0123456789abcdef"
+		key     = "sha256:aaaa"
+	)
+	root := t.TempDir()
+	gateWrite(t, root, gateStage3AnswerFile(surface), gateStage3Fixture(t, "pass-with-deferrable-findings.json", run, key))
+	a, err := gateStage3LoadAnswer(root, surface)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if err := gateStage3ValidateAnswer(a, surface, run, key, gateStage3Vocab(t)); err != nil {
+		t.Fatalf("a PASS carrying only deferrable findings was refused; the agent's judgement is the agent's to make, and this refusal invites it to leave the finding out instead: %v", err)
+	}
+	if a.Findings == nil || len(*a.Findings) != 1 {
+		t.Fatalf("the fixture is meant to carry exactly one deferrable finding; it carries %v", a.Findings)
+	}
+	if f := (*a.Findings)[0]; f.Blocking != gateBlockingDeferrable || len(gateFindingBlockers(f)) != 0 {
+		t.Fatalf("the fixture's finding is not the deferrable, non-blocking one this test is about: %+v (blockers: %v)", f, gateFindingBlockers(f))
 	}
 }
 
@@ -1537,7 +1665,14 @@ func TestGateStage3HandsTheReceiptEveryFindingItCollected(t *testing.T) {
 	var want int
 	for _, surface := range declared {
 		a := gateStage3Good(surface, run, current[surface], gateVerdictFailed)
-		extra := append(*a.Findings, gateFinding{Surface: surface, Rule: "stale-version-pin", Severity: "minor", Detail: "the install line pins the previous release"})
+		extra := append(*a.Findings, gateFinding{
+			Surface:         surface,
+			Rule:            "stale-version-pin",
+			Consequence:     gateConsequenceCosmetic,
+			FailureScenario: "a reader skimming the install section sees last release's number beside a command that still works",
+			Blocking:        gateBlockingDeferrable,
+			Detail:          "the install line pins the previous release",
+		})
 		a.Findings = &extra
 		want += len(extra)
 		gateStage3WriteAnswer(t, root, a)
@@ -1561,16 +1696,19 @@ func TestGateStage3HandsTheReceiptEveryFindingItCollected(t *testing.T) {
 	if got := len(projected); got != want {
 		t.Fatalf("%d of %d findings reached the record; a finding nobody can see is a run that did not happen", got, want)
 	}
-	// Including the ones an agent labelled minor: severity orders a report and
-	// decides nothing, because the human confirms what blocks a release.
-	var minor int
+	// Including the ones the agents judged DEFERRABLE. A deferrable finding no
+	// longer blocks the verdict — that is the point of the judgement — but
+	// "does not block" and "was never written down" are different facts, and
+	// the record carries both kinds whole. Dropping the deferrable ones here
+	// is exactly how "did not block" decays into "was never seen".
+	var deferrable int
 	for _, f := range projected {
-		if f.Severity == "minor" {
-			minor++
+		if f.Blocking == gateBlockingDeferrable {
+			deferrable++
 		}
 	}
-	if minor != len(declared) {
-		t.Errorf("%d of %d self-labelled minor findings survived collection", minor, len(declared))
+	if deferrable != len(declared) {
+		t.Errorf("%d of %d deferrable findings survived collection; a finding the agent judged non-blocking still reaches the human in full", deferrable, len(declared))
 	}
 }
 
@@ -1785,8 +1923,8 @@ func TestGateStage3TheJoinsFindingsReachTheReceipt(t *testing.T) {
 	if verdict != gateVerdictFailed {
 		t.Fatalf("the recomputed verdict is %q over a receipt carrying a cross-surface disagreement; the driver publishes on PASS", verdict)
 	}
-	if err == nil || !strings.Contains(err.Error(), "finding(s) reached the report") {
-		t.Errorf("the FAILED does not say why, so the human is stopped and not told what to look at; got %v", err)
+	if err == nil || !strings.Contains(err.Error(), gateStage3RuleCollision) {
+		t.Errorf("the FAILED does not name the blocking finding's rule, so the human is stopped and not told what to look at; got %v", err)
 	}
 
 	// The join's own name is not a surface anybody declares. If it ever became

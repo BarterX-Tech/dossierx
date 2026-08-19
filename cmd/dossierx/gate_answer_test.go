@@ -136,6 +136,59 @@ type gateAnswerPayload struct {
 // that the refusal below reads the same on every run.
 var gateAnswerPayloadKeys = []string{"findings", "subjects", "verdict"}
 
+// gateAnswerFindingKeys is the same rule one level down: the closed set of keys
+// ONE FINDING may carry, sorted for the same reason.
+//
+// Every one of these is the agent's to write — the surface it read, the rule it
+// broke, the file the substance really lives in, the consequence for the
+// reader, the scenario that consequence stands for, the agent's own blocking
+// judgement, and the detail. What is NOT here, and why it is refused by NAME
+// rather than left to read as an unknown key:
+//
+//	severity — REPLACED. It was an adjective the agent wrote about its own
+//	           work, which nothing derived from evidence and nothing acted on.
+//	           A runner ported from that schema still writes it, and dropping
+//	           the key in silence would file a finding stating something other
+//	           than what was reported — while "unknown key" is a worse message
+//	           than "that field was replaced, here is what replaced it".
+var gateAnswerFindingKeys = []string{"about", "blocking", "consequence", "detail", "failure_scenario", "rule", "surface"}
+
+// gateAnswerFindingProblems refuses every key in one finding the schema does
+// not carry, naming them all rather than the first.
+//
+// It is a separate check from the payload's own key screen because the message
+// is different: at the top level an unknown key is a runner writing something
+// the schema never had, and here the likeliest one by far is `severity`, from a
+// runner that predates the consequence/scenario/blocking split — which deserves
+// to be told what happened to the field, not just that the key is unwelcome.
+func gateAnswerFindingProblems(path string, index int, keys map[string]json.RawMessage) error {
+	var extra []string
+	for key := range keys {
+		known := false
+		for _, allowed := range gateAnswerFindingKeys {
+			if key == allowed {
+				known = true
+				break
+			}
+		}
+		if !known {
+			extra = append(extra, "`"+key+"`")
+		}
+	}
+	if len(extra) == 0 {
+		return nil
+	}
+	sort.Strings(extra)
+	hint := ""
+	if _, ported := keys["severity"]; ported {
+		hint = " `severity` is not part of this schema any more: what replaced it is `consequence` (one of " +
+			strings.Join(gateConsequences, ", ") + "), a `failure_scenario` stating who is doing what and what goes wrong for them, and the agent's own `blocking` judgement (" +
+			strings.Join(gateBlockingJudgements, " or ") + ")."
+	}
+	return fmt.Errorf("%s finding %d states %s, which is not part of a finding. A finding carries exactly `%s`, and a key dropped in silence would file a finding stating something other than what was reported.%s",
+		path, index, strings.Join(extra, ", "), strings.Join(gateAnswerFindingKeys, "`, `"), hint)
+}
+
 // gateAnswerReadPayload reads the agent's file and refuses everything that is
 // not exactly those three facts.
 //
@@ -189,6 +242,23 @@ func gateAnswerReadPayload(surface, path string) (gateAnswerPayload, error) {
 	if value, ok := keys["findings"]; ok && bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
 		return gateAnswerPayload{}, fmt.Errorf("%s states `findings` as null. Three things are being distinguished here and only two of them are answers: `[]` says the agent found nothing, an absent key says its runner never recorded what it found, and null says the runner wrote that absence down as a value. Write `[]` for a surface the agent passed",
 			path)
+	}
+
+	// AND THE SAME KEY QUESTION ASKED OF EVERY FINDING. The type cannot see a
+	// key gateFinding has no field for — a finding still carrying `severity`
+	// from a ported runner decodes perfectly with the adjective dropped on the
+	// floor, which is the same wrong the top-level check exists for, one level
+	// down and against the exact field this schema replaced on purpose.
+	if value, ok := keys["findings"]; ok {
+		var list []map[string]json.RawMessage
+		if err := json.Unmarshal(value, &list); err != nil {
+			return gateAnswerPayload{}, fmt.Errorf("%s states `findings` as something other than a list of findings, so what the agent reported cannot be read one finding at a time: %w", path, err)
+		}
+		for i, finding := range list {
+			if err := gateAnswerFindingProblems(path, i, finding); err != nil {
+				return gateAnswerPayload{}, err
+			}
+		}
 	}
 
 	var payload gateAnswerPayload
@@ -555,13 +625,18 @@ func gateAnswerWriteRawPayload(t *testing.T, body string) string {
 	return path
 }
 
-// gateAnswerFinding is one finding in the shape an agent reports it.
+// gateAnswerFinding is one finding in the shape an agent reports it: every
+// closed-vocabulary field from the vocabulary, a scenario that names a reader,
+// an action and a break, and the agent's own blocking judgement — so a row
+// built on it is refused for the thing it mutates and never for the fixture.
 func gateAnswerFinding(surface string) gateFinding {
 	return gateFinding{
-		Surface:  surface,
-		Rule:     "counted-claim-mismatch",
-		Severity: "major",
-		Detail:   "the document says nineteen commands and the inventory holds twenty",
+		Surface:         surface,
+		Rule:            "counted-claim-mismatch",
+		Consequence:     gateConsequenceMisled,
+		FailureScenario: "a reader planning an integration counts on nineteen commands being all of them and designs around a surface smaller than the one that ships",
+		Blocking:        gateBlockingBlocks,
+		Detail:          "the document says nineteen commands and the inventory holds twenty",
 	}
 }
 
@@ -756,7 +831,7 @@ func TestGateAnswerRecordRefusesAPayloadItCannotStandBehind(t *testing.T) {
 			want: "there are exactly two verdicts",
 		},
 		{
-			name: "a PASS that lists what it found",
+			name: "a PASS that lists a blocking finding",
 			mutate: func(_ *testing.T, root string, payload map[string]any) {
 				declared, err := gateDeclaredSurfaces(root)
 				if err != nil {
@@ -764,7 +839,117 @@ func TestGateAnswerRecordRefusesAPayloadItCannotStandBehind(t *testing.T) {
 				}
 				payload["findings"] = []gateFinding{gateAnswerFinding(declared[0])}
 			},
-			want: "holds a PASS and 1 finding(s)",
+			want: "holds a PASS and 1 finding(s) that block",
+		},
+		{
+			name: "a FAILED justified by nothing that blocks",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				f := gateAnswerFinding(declared[0])
+				f.Consequence = gateConsequenceCosmetic
+				f.Blocking = gateBlockingDeferrable
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []gateFinding{f}
+			},
+			want: "holds a FAILED and no finding that blocks",
+		},
+		{
+			// The ported runner: the old schema's adjective, refused by NAME
+			// with the fields that replaced it, because "unknown key" sends
+			// its author to hunt a typo rather than to the new schema.
+			name: "a finding still graded with a severity",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []map[string]any{{
+					"surface":  declared[0],
+					"rule":     "counted-claim-mismatch",
+					"severity": "major",
+					"detail":   "the document says nineteen commands and the inventory holds twenty",
+				}}
+			},
+			want: "`severity` is not part of this schema any more",
+		},
+		{
+			name: "a consequence outside the closed vocabulary",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				f := gateAnswerFinding(declared[0])
+				f.Consequence = "catastrophic"
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []gateFinding{f}
+			},
+			want: "not one of acts-wrongly, misled, cosmetic",
+		},
+		{
+			// The adjective moved INTO the new field instead of beside it. It
+			// is refused at recording rather than accepted and puzzled over
+			// later, because with no override on an acts-wrongly finding the
+			// scenario is the one part of the record a human can disprove —
+			// and nobody can disprove "very high".
+			name: "a failure scenario that is an adjective",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				f := gateAnswerFinding(declared[0])
+				f.FailureScenario = "very high"
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []gateFinding{f}
+			},
+			want: "grades the finding instead of describing the harm",
+		},
+		{
+			name: "a finding with no failure scenario at all",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				f := gateAnswerFinding(declared[0])
+				f.FailureScenario = ""
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []gateFinding{f}
+			},
+			want: "carries no failure_scenario",
+		},
+		{
+			name: "a finding nobody judged",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				f := gateAnswerFinding(declared[0])
+				f.Blocking = ""
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []gateFinding{f}
+			},
+			want: "assert a ruling nobody made",
+		},
+		{
+			name: "an about that escapes the repository",
+			mutate: func(_ *testing.T, root string, payload map[string]any) {
+				declared, err := gateDeclaredSurfaces(root)
+				if err != nil {
+					t.Fatalf("declared surfaces: %v", err)
+				}
+				f := gateAnswerFinding(declared[0])
+				f.About = "../somewhere-else/README.md"
+				payload["verdict"] = gateVerdictFailed
+				payload["findings"] = []gateFinding{f}
+			},
+			want: "steps outside or around the repository",
 		},
 		{
 			name: "a FAILED that does not say what is wrong",
@@ -858,6 +1043,76 @@ func TestGateAnswerRecordRefusesAPayloadItCannotStandBehind(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestGateAnswerRecordAcceptsTheJudgementsTheRulingsProtect is the accepting
+// side of the two rulings, at the recorder — because a schema is as much what
+// it lets through as what it refuses, and both of these shapes are ones an
+// earlier gate would have refused or made pointless.
+//
+// A PASS CARRYING A DEFERRABLE FINDING is the first ruling working: the agent
+// found something real, judged it not worth stopping a release for, and the
+// record keeps both the verdict and the finding — the human reads the finding,
+// the release does not wait for it. Refuse this and the agent's only moves are
+// to block over a cosmetic line or to leave it out of the record.
+//
+// A FAILED CARRYING AN ACTS-WRONGLY FINDING THE AGENT JUDGED DEFERRABLE is the
+// second ruling working: the recorder ACCEPTS the contradiction rather than
+// smoothing it over, because both halves are information — the agent's
+// judgement is on the record for the human to see, and the verdict still
+// blocks, since gateFindingBlockers reads acts-wrongly as blocking whatever the
+// agent ruled. Refusing it would force the agent to falsify one of its own two
+// statements before the answer could land.
+func TestGateAnswerRecordAcceptsTheJudgementsTheRulingsProtect(t *testing.T) {
+	t.Run("a PASS carrying a deferrable finding", func(t *testing.T) {
+		root, tracked, _ := gateAnswerFixture(t)
+		declared, err := gateDeclaredSurfaces(root)
+		if err != nil {
+			t.Fatalf("declared surfaces: %v", err)
+		}
+		surface := declared[0]
+
+		deferrable := gateAnswerFinding(surface)
+		deferrable.Consequence = gateConsequenceCosmetic
+		deferrable.Blocking = gateBlockingDeferrable
+		payload := gateAnswerHonestPayload(t, root)
+		payload["findings"] = []gateFinding{deferrable}
+
+		written, err := gateAnswerRecord(root, surface, gateAnswerWritePayload(t, payload), gateStage2FixtureTree, tracked)
+		if err != nil {
+			t.Fatalf("a PASS carrying a finding its agent judged deferrable was refused; this invites the agent to leave the finding out, which is the filtered record the gate forbids: %v", err)
+		}
+		if written.Findings == nil || len(*written.Findings) != 1 || (*written.Findings)[0] != deferrable {
+			t.Fatalf("the deferrable finding did not land whole; \"does not block\" must never decay into \"was never written down\": %+v", written.Findings)
+		}
+	})
+
+	t.Run("a FAILED carrying an acts-wrongly finding its agent judged deferrable", func(t *testing.T) {
+		root, tracked, _ := gateAnswerFixture(t)
+		declared, err := gateDeclaredSurfaces(root)
+		if err != nil {
+			t.Fatalf("declared surfaces: %v", err)
+		}
+		surface := declared[0]
+
+		contradiction := gateAnswerFinding(surface)
+		contradiction.Consequence = gateConsequenceActsWrongly
+		contradiction.Blocking = gateBlockingDeferrable
+		payload := gateAnswerHonestPayload(t, root)
+		payload["verdict"] = gateVerdictFailed
+		payload["findings"] = []gateFinding{contradiction}
+
+		written, err := gateAnswerRecord(root, surface, gateAnswerWritePayload(t, payload), gateStage2FixtureTree, tracked)
+		if err != nil {
+			t.Fatalf("the recorder refused an acts-wrongly finding judged deferrable; both halves are the agent's statements and both belong on the record, where the verdict — not the recorder — overrides the judgement: %v", err)
+		}
+		if written.Findings == nil || len(*written.Findings) != 1 || (*written.Findings)[0] != contradiction {
+			t.Fatalf("the finding did not land as written: %+v", written.Findings)
+		}
+		if blockers := gateFindingBlockers((*written.Findings)[0]); len(blockers) == 0 {
+			t.Fatal("the recorded acts-wrongly finding does not block; the agent's deferrable judgement overrode the one rule that is not the agent's to make")
+		}
+	})
 }
 
 // ---------------------------------------------------------------------

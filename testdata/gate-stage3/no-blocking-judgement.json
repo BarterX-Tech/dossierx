@@ -1,5 +1,5 @@
 {
-  "run": "fedcba9876543210fedcba9876543210",
+  "run": "<<RUN>>",
   "surface": "changelog",
   "verdict": "FAILED",
   "fingerprint": "<<FINGERPRINT>>",
@@ -9,7 +9,6 @@
       "rule": "counted-claim-mismatch",
       "consequence": "misled",
       "failure_scenario": "a reader planning an integration counts on nineteen commands being all of them and designs around a surface smaller than the one that ships",
-      "blocking": "blocks",
       "detail": "the entry for v0.6.0 says nineteen commands and the inventory holds twenty"
     }
   ],

@@ -7,7 +7,9 @@
     {
       "surface": "changelog",
       "rule": "counted-claim-mismatch",
-      "severity": "major",
+      "consequence": "misled",
+      "failure_scenario": "a reader planning an integration counts on nineteen commands being all of them and designs around a surface smaller than the one that ships",
+      "blocking": "blocks",
       "detail": "the entry for v0.6.0 says nineteen commands and the inventory holds twenty"
     }
   ],
