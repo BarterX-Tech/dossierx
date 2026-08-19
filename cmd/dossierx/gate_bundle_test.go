@@ -632,6 +632,9 @@ func TestGateBundleFrameReachesTheKeyOnlyThroughTheBundle(t *testing.T) {
 		Documents: append(append([]string(nil), spec.Handed...), spec.Withheld...),
 		Bundle:    gateBundleMust(t, root, spec),
 		Method:    method,
+		// A constant: this test moves the frame and nothing else, and the
+		// gate's definition is not the frame.
+		Rules: "sha256:the-gate-as-it-stands",
 	}
 
 	methodBefore, err := in.Method.version(root)
@@ -715,6 +718,9 @@ func TestGateBundleWithheldBytesStayOutOfTheBundle(t *testing.T) {
 		Documents: append(append([]string(nil), spec.Handed...), spec.Withheld...),
 		Bundle:    gateBundleMust(t, root, spec),
 		Method:    method,
+		// A constant: this test moves a withheld document and nothing else,
+		// and the gate's definition is not a document.
+		Rules: "sha256:the-gate-as-it-stands",
 	}
 	withEdit := gateMustFingerprint(t, root, in)
 	gateWrite(t, root, "site/src/content.ts", "export const latestVersion = \"v9.9.9\";\n")

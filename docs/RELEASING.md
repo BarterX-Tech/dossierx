@@ -336,6 +336,29 @@ them, and the three post-publish checks that leave this repository entirely.
       fingerprint hashes in beside them. Change a byte of any of these and
       every surface is re-read rather than carried forward.
 
+      **The gate's own definition is hashed into every key too.** Every surface
+      key carries a gate-integrity digest over the files that decide what the
+      gate IS: the `cmd/dossierx/gate_*_test.go` files (the verdict predicate,
+      carry-forward, the bundle assembler, freshness, the fan-out), the
+      inventory emitter and its meta-tests (`cmd/dossierx/surface*_test.go`),
+      the harness (`scripts/gate-stage2/`), and `surfaces.yaml` — the set is
+      `gateIntegrityPatterns` in `cmd/dossierx/gate_integrity_test.go`, resolved
+      against `git ls-files`, and this sentence restates it. Change a byte of
+      any of those and every surface is re-read, for the same reason a prompt
+      edit re-reads: a verdict is a function of the rules as much as of the
+      evidence, and a PASS recorded under rules that no longer exist attests
+      nothing about the rules that do. Before this digest existed, weakening the
+      verdict predicate moved zero keys and a release could go out green under a
+      gate nobody re-read. Two boundaries to know: `gate/method.yaml`'s model
+      and tool list and the `gate/prompts/` files are deliberately NOT in this
+      digest — they reach the keys by their own routes (`method_version` and the
+      bundle), and a single reworded prompt re-reads one surface rather than
+      thirteen, by design. And the digest makes a rules change LOUD, not
+      impossible: anyone with push rights can still weaken the gate and re-run
+      it under the weakened rules — the digest guarantees the change costs a
+      full fan-out and sits in the diff a human reviews, and only a forge-side
+      review requirement on those paths, outside this tree, closes the rest.
+
       `gate/site-text.json` used to be the fourth member of that set and no
       longer is, because SHARED means read by EVERY agent and the rendered
       site text is read by the `site` agent alone. Folded into the shared set,

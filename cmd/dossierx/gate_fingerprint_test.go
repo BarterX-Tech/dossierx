@@ -14,10 +14,13 @@
 // WHAT IS IN THE DIGEST, and why each part has to be. The surface's own
 // documents (what the agent judges), surface.json (the mechanical truth it
 // judges them against), the resolved baseline and the release delta over it
-// (the other evidence every agent reads), and the METHOD — because a verdict is
+// (the other evidence every agent reads), the METHOD — because a verdict is
 // a function of the question as much as of the evidence, and re-using a verdict
 // produced by an older prompt against a newer one is exactly the stale pass this
-// design exists to remove.
+// design exists to remove — and the GATE'S OWN DEFINITION (the gate-integrity
+// digest, gate_integrity_test.go), because a verdict is a function of the rules
+// too: re-using a verdict produced under an older predicate against a newer one
+// is the same stale pass, one level up.
 //
 // METHOD_VERSION IS COMPUTED, NEVER WRITTEN DOWN. It is a hash of the prompt
 // sources, the model id and the tool list. A hand-maintained string is a version
@@ -391,6 +394,21 @@ type gateSurfaceInputs struct {
 	// agents a materially weaker question while no part file moves at all.
 	Bundle []byte
 	Method gateMethod
+	// Rules is the gate-integrity fingerprint: the digest of the gate's OWN
+	// definition — the gate_*_test.go files, the emitter, the harness, the
+	// coverage manifest — computed by gateIntegrityFingerprint
+	// (gate_integrity_test.go) and identical across all surfaces of one run.
+	//
+	// It is the third thing a verdict is a function of, after the evidence and
+	// the question: the RULES. Documents, evidence, bundle and method together
+	// cover everything the agent reads and everything the surface claims, and
+	// none of them covers what the gate itself DOES with the answer — weaken
+	// the verdict predicate and every component above is byte-identical, so
+	// every surface carries a PASS forward under rules nobody re-read. With
+	// this component, changing what the gate is re-keys every surface and
+	// forces a full re-read, the same way changing the frame prompt already
+	// does and for the same reason: the question changed.
+	Rules string
 }
 
 // gateSurfaceFingerprint is the digest of one agent's whole input set.
@@ -410,6 +428,9 @@ func gateSurfaceFingerprint(root string, in gateSurfaceInputs) (string, error) {
 	if len(in.Bundle) == 0 {
 		return "", fmt.Errorf("surface fingerprint: surface %q was handed no bundle; a key over zero bytes handed over is a key over a question nobody asked, and it is the same constant for every surface in that state", in.Surface)
 	}
+	if strings.TrimSpace(in.Rules) == "" {
+		return "", fmt.Errorf("surface fingerprint: surface %q carries no gate-integrity digest; a key computed without the gate's own definition is a key that matches across a change to the rules, which is the exact staleness the component exists to notice", in.Surface)
+	}
 
 	documents, err := gateHashDocuments(root, in.Documents)
 	if err != nil {
@@ -426,8 +447,11 @@ func gateSurfaceFingerprint(root string, in gateSurfaceInputs) (string, error) {
 	bundle := sha256.Sum256(in.Bundle)
 
 	h := sha256.New()
-	fmt.Fprintf(h, "dossierx-gate-surface\x00v3\x00%s\x00%s\x00%s\x00sha256:%s\x00%s",
-		in.Surface, documents, evidence, hex.EncodeToString(bundle[:]), method)
+	// v4: the gate-integrity digest joined the stream. The version bump is the
+	// honest signal that no v3 key can ever match a v4 one — which is correct,
+	// because a v3 key attests nothing about the rules it was computed under.
+	fmt.Fprintf(h, "dossierx-gate-surface\x00v4\x00%s\x00%s\x00%s\x00sha256:%s\x00%s\x00%s",
+		in.Surface, documents, evidence, hex.EncodeToString(bundle[:]), method, in.Rules)
 	return "sha256:" + hex.EncodeToString(h.Sum(nil)), nil
 }
 
@@ -930,6 +954,11 @@ func gateFingerprintFixture(t *testing.T) (root string, in gateSurfaceInputs) {
 			Model:   "claude-opus-5",
 			Tools:   append([]string(nil), gateStage2PinnedGrant...),
 		},
+		// A literal, the way Bundle is: this fixture's tests are about the
+		// digest's arithmetic, and the run path computes the real value with
+		// gateIntegrityFingerprint (gateStage2Keys). The rows that prove the
+		// real derivation live in gate_integrity_test.go.
+		Rules: "sha256:the-gate-as-it-stands",
 	}
 }
 
@@ -1030,6 +1059,18 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		{"the model id", func(t *testing.T, _ string, in *gateSurfaceInputs) {
 			in.Method.Model = "claude-opus-5-mini"
 		}},
+		// THE ROW THAT DEFEATS THE RULES GAP. Nothing the agent reads moves:
+		// same documents, same evidence, same bundle, same method. Only the
+		// gate's own definition differs — which is what weakening the verdict
+		// predicate, the carry-forward rule or the harness looks like from
+		// here, since none of those files is a document, evidence, a prompt or
+		// part of any bundle. Before this component existed, that edit moved
+		// zero keys and every surface carried its PASS forward under rules
+		// nobody re-read. The run-path proof, with the real derivation and the
+		// real gate sources, is TestGateIntegrityEditingTheGateMovesEverySurfaceKey.
+		{"the gate's own definition", func(t *testing.T, _ string, in *gateSurfaceInputs) {
+			in.Rules = "sha256:the-gate-after-somebody-edited-its-rules"
+		}},
 		{"a tool joins the list", func(t *testing.T, _ string, in *gateSurfaceInputs) {
 			in.Method.Tools = append(in.Method.Tools, "WebFetch")
 		}},
@@ -1092,6 +1133,17 @@ func TestGateFingerprintRefusesEveryEmptyInput(t *testing.T) {
 		in.Bundle = nil
 		if _, err := gateSurfaceFingerprint(root, in); err == nil {
 			t.Error("a fingerprint was produced for a surface that was handed no bundle")
+		}
+	})
+
+	// An absent gate-integrity digest is the shape a caller that predates the
+	// component produces, and it is the same for every surface in that state:
+	// a key that matches across any change to the gate's own rules.
+	t.Run("an empty gate definition", func(t *testing.T) {
+		root, in := gateFingerprintFixture(t)
+		in.Rules = ""
+		if _, err := gateSurfaceFingerprint(root, in); err == nil {
+			t.Error("a fingerprint was produced for a surface carrying no gate-integrity digest")
 		}
 	})
 
