@@ -113,6 +113,12 @@ replace an installed v7:
   died "No such file or directory", and because a bash HAD been found, neither remedy printed.
   The wrapper falls through to the Git for Windows candidates, and now runs under Pester on
   `windows-latest` — it had shipped for releases while no CI job ever started pwsh.
+- **The wrapper's no-bash remedy hands WSL a path WSL can open.** The message whose first
+  sentence explains that WSL's bash cannot run a script on a `C:\` path went on to offer exactly
+  that command — `bash "C:\...\install-git-hook.sh" --yes`, the path resolved on the Windows
+  side. The WSL line now translates it with `wslpath` inside the WSL invocation, where the
+  distro's mounts are known; whether a distro mounts that drive at all is more than the wrapper
+  can check from Windows, and the message says so instead of implying the line always works.
 - **`--help` no longer stops mid-sentence.** A sed range ends AT its closing match, so the last
   thing a reader saw was `1 declined, refused,`. Extraction now closes on an explicit
   `# END USAGE` sentinel, and the usage line swaps in the reader's own invocation by literal

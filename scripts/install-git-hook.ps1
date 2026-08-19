@@ -120,17 +120,36 @@ if ($MyInvocation.InvocationName -ne '.') {
     # hook.sh had the same defect once, on the recoveries it prints for itself,
     # and DOSSIERX_HOOK_INVOCATION below exists to stop it coming back a second
     # time there. This message is a third place the same mistake could be
-    # reintroduced, so: use the resolved path, not a literal. (The here-string
-    # is expandable for that one interpolation; everything else in it is
-    # literal text.)
+    # reintroduced, so: use the resolved path, not a literal.
+    #
+    # BUT NOT THE WINDOWS SPELLING OF IT ON THE WSL LINE. $sh is a native
+    # Windows path — exactly the string the sentence above that line says
+    # WSL's bash cannot open (the fix that put the resolved $sh here was right
+    # for the "Install Git for Windows" half, which runs on the Windows side,
+    # and self-contradicting for the WSL half). So the WSL line hands $sh to
+    # wslpath INSIDE the WSL invocation, where the distro's mounts are
+    # actually known; nothing computed here, on the Windows side, can know
+    # them. What this wrapper still cannot promise — and the message says so —
+    # is that the reader's distro mounts this drive at all: on a drive WSL
+    # does not mount, or a distro without the interop mounts, no spelling of
+    # this path is reachable and no line printed from here can fix that. The
+    # single-quote doubling is bash's own escape for a ' inside a
+    # single-quoted string, for the rare path that contains one. (The
+    # here-string is expandable for those two interpolations; the backtick
+    # before `$( keeps the command substitution literal text for PowerShell so
+    # it reaches bash intact.)
     $bash = Find-Bash
     if (-not $bash) {
+        $shForWsl = $sh.Replace("'", "'\''")
         Write-Error @"
 No usable bash was found. A bash under Windows' System32 is WSL's launcher and
 cannot run a script on a C:\ path, so it does not count. Install Git for
-Windows (which bundles a real one) or run the installer from inside WSL:
+Windows (which bundles a real one) or run the installer from inside WSL, where
+wslpath translates this script's Windows path into one WSL can open (whether
+your distro mounts this drive at all is more than this wrapper can check from
+Windows; if it does not, no spelling of this command can reach the script):
 
-  bash "$sh" --yes
+  bash "`$(wslpath '$shForWsl')" --yes
 "@
         exit 1
     }
