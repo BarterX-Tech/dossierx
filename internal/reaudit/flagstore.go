@@ -7,7 +7,7 @@
 // This is a second, independent trigger source for the exact same
 // lifecycle transition internal/lock.DetectStale already drives
 // (locked -> locked+review_pending): DetectStale flips ReviewPending when a
-// dependency's content changes underneath a claim; "dossierx flag" flips the
+// dependency's content changes underneath a claim; "dossierx claim flag" flips the
 // very same field when an agent asserts the claim itself is now wrong,
 // based on something it just observed (e.g. its own code change) rather
 // than a tracked mirrors/rests_on edge. Both these paths converge on the same
@@ -33,7 +33,7 @@ import (
 	"path/filepath"
 )
 
-// PendingFlag is one claim's outstanding "dossierx flag" trigger: the agent's
+// PendingFlag is one claim's outstanding "dossierx claim flag" trigger: the agent's
 // own account of what the claim currently (wrongly) asserts, what is
 // actually true now, and why. It stays parked in FlagStore until a
 // confirmed "dossierx reaudit <id> --confirm" consumes it (see
@@ -49,7 +49,7 @@ type PendingFlag struct {
 }
 
 // FlagStore is the on-disk (JSON) table of every locked claim's pending
-// "dossierx flag" trigger, keyed by claim id. Like internal/lock.Store, it is a
+// "dossierx claim flag" trigger, keyed by claim id. Like internal/lock.Store, it is a
 // single project-wide shared file (not one per module or per claim), so
 // callers writing to it are expected to serialize concurrent access via
 // internal/lock.AcquireFileLock, the same way "dossierx lock"/"dossierx reaudit
@@ -63,7 +63,7 @@ type FlagStore struct {
 
 // LoadFlagStore reads the flag store from path. A missing file is not an
 // error — it is the common, expected case for any claim or project that has
-// never used "dossierx flag" — and is treated as an empty, freshly-initialized
+// never used "dossierx claim flag" — and is treated as an empty, freshly-initialized
 // store, mirroring internal/lock.LoadStore's same "missing file is a fresh
 // store, not a failure" contract.
 func LoadFlagStore(path string) (*FlagStore, error) {

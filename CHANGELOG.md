@@ -83,6 +83,30 @@ only what the documents (and one CLI hint) tell a reader to do:
   one runs: a partially re-locked module finishes the crossing gate-green but without a locked
   build order, and runs the propose + lock pair on the day its last claim locks.
 
+### Fixed — a comment sweep: what the code says about itself now matches what it does
+
+No command, flag, `error.code`, lint rule or gate behaves differently; what changed is what the
+code and one help text tell a reader. The corrections of substance:
+
+- Nine files named `dossierx flag`, a verb this CLI has not had since v0.3.0 moved it under the
+  claim noun — every mention now reads `dossierx claim flag`.
+- `config.go`'s `MockupModules` doc said the allowlist gates `layout: mockup` claims, which is
+  v0.4.0's framing: v0.4.1 made `raw_html` an attachment legal on any layout and the gate widened
+  with it while the field's name did not. A reader taking it for a mockup-only allowlist expects a
+  `card` claim bearing markup to be ungated, and `raw_html_scope` refuses it. The doc (and
+  `structured_layout`'s in `codes.go`) now states the widened rule.
+- `codes.go`'s `already_locked` documented one state while the code emits it for two, and state
+  2's "there is nothing to do" reading is wrong in the damaging direction: a draft-on-disk claim
+  with a standing approval is tampered content, and an agent that walks away leaves it standing —
+  the hint's restore-from-version-control-first recovery is now in the code's own doc.
+- `dossierx claim new --help` said every claim it writes is a card; the command has chosen a
+  banner for the reserved overview facet since the facet landed, and the help now says so.
+- A comment above `claim lock`'s write path described a roll-up gate that no longer lives there
+  (it is `evaluateLockGates`'s job now), and `claim reaudit`'s said `prepareStore` grandfathers
+  pre-ledger claims into the ledger — no path in this build writes a grandfathered record, and
+  reading it literally meant an ordinary reaudit can bless content nobody approved, the exact
+  property v0.4.0 removed. Both now say what the code does.
+
 ### Fixed — `dossierx lock|unlock|flag|reaudit` answer with their replacement, not a bare usage error
 
 The four verbs most likely to be typed from pre-v0.3.0 memory — each still exists at
