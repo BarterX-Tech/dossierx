@@ -182,6 +182,25 @@ Describe 'install-git-hook.ps1 executed as a script' {
         }
     }
 
+    It 'hands the sh installer its own invocation, so printed recoveries name this wrapper' {
+        # The defect this pins: every recovery install-git-hook.sh prints is
+        # built from how it was invoked, and a reader who came through this
+        # wrapper is standing in PowerShell — possibly with no bash on PATH at
+        # all — so a `sh ...` line is an instruction that does not run for
+        # them. The wrapper exports DOSSIERX_HOOK_INVOCATION naming itself;
+        # --help is the cheapest output that interpolates it (the usage line),
+        # so that is what is asserted: the wrapper's own file name appears,
+        # and the repository-relative usage line it used to print does not.
+        Push-Location $script:repo
+        try {
+            $help = (& $script:wrapper --help 2>&1) -join "`n"
+            $LASTEXITCODE | Should -Be 0
+        }
+        finally { Pop-Location }
+        $help | Should -Match ([regex]::Escape('install-git-hook.ps1'))
+        $help | Should -Not -Match ([regex]::Escape('  scripts/install-git-hook.sh [options]'))
+    }
+
     It 'propagates the sh installer''s exit code instead of laundering it to 0' {
         Push-Location $script:repo
         try {

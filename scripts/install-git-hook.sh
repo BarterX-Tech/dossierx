@@ -100,6 +100,7 @@
 #
 # Exit status: 0 installed / already current / dry run; 1 declined, refused,
 # or failed.
+# END USAGE
 
 set -eu
 
@@ -484,8 +485,46 @@ usage() {
 	# The header of this file IS the documentation; printing the flag list
 	# twice is how the two drift apart. Piped-from-stdin invocations have no
 	# readable $0, so fall back to the one line that matters.
+	#
+	# TWO DEFECTS THIS REPLACED, both reported by the v0.5.2 gate and both
+	# from doing text work with sed ranges and sed substitutions:
+	#
+	#   THE HELP STOPPED MID-SENTENCE. The range was
+	#   `/^# USAGE/,/^# Exit status/p`, and a sed range ends AT its closing
+	#   match — so the two-line exit-status paragraph printed its first line
+	#   and lost the second. Measured: the last line a reader saw was
+	#   "1 declined, refused," with the rest of the sentence gone. The block
+	#   now closes on an explicit `# END USAGE` sentinel, which is excluded
+	#   rather than truncated — the range cannot cut a sentence it never
+	#   prints.
+	#
+	#   A WINDOWS PATH CAME OUT MANGLED. The invocation was substituted with
+	#   `sed "s|...|  $self_invocation |"`, where the replacement is not
+	#   literal text: a backslash begins an escape, and
+	#   `C:\Users\me\install-git-hook.sh` lost or transformed characters on
+	#   the way to the reader — on the platform the .ps1 wrapper exists for,
+	#   in the line whose whole job is to name a command they can type. The
+	#   replacement is now a literal prefix swap done by index, and the value
+	#   reaches awk through the environment rather than -v, because -v
+	#   processes escape sequences in exactly the same way.
+	#
+	# tests/install_hook_help_test.go pins both: the exit-status sentence
+	# reaches its final word, and a backslashed invocation survives character
+	# for character.
 	if [ -r "$0" ]; then
-		sed -n '/^# USAGE/,/^# Exit status/p' "$0" | sed 's/^# \{0,1\}//'
+		DOSSIERX_USAGE_INVOCATION="$self_invocation" awk '
+			/^# END USAGE/ { exit }
+			/^# USAGE/     { printing = 1 }
+			printing {
+				line = $0
+				sub(/^# ?/, "", line)
+				head = "  scripts/install-git-hook.sh "
+				if (index(line, head) == 1) {
+					line = "  " ENVIRON["DOSSIERX_USAGE_INVOCATION"] " " substr(line, length(head) + 1)
+				}
+				print line
+			}
+		' "$0"
 	else
 		printf '%s\n' "usage: $self_invocation [-y|--yes] [--dry-run] [--force] [--uninstall] [--print-hook] [--repo DIR]"
 	fi

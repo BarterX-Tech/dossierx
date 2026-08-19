@@ -114,6 +114,16 @@ so already-installed hooks are already current:
   it — never a silent default to either side. The disclosure accompanies the install; it does
   not veto it. Per a maintainer's ruling of 11 Aug 2026 on a v0.5.2 gate finding;
   `tests/install_hook_scope_test.go` pins both directions.
+- **`--help` no longer stops mid-sentence, and the usage line names the invocation the reader
+  used.** The help was extracted with `sed -n '/^# USAGE/,/^# Exit status/p'`, and a sed range
+  ends AT its closing match — so the two-line exit-status paragraph lost its second line and the
+  last thing a reader saw was `1 declined, refused,`. The range now closes on an explicit
+  `# END USAGE` sentinel (excluded, not truncated) via awk, and the usage line substitutes the
+  reader's own invocation by literal index swap with the value passed through the environment —
+  never sed replacement text or awk `-v`, both of which treat a backslash as an escape and
+  mangled exactly the `C:\...` paths the PowerShell wrapper hands over.
+  `tests/install_hook_help_test.go` pins the whole sentence and the character-for-character
+  invocation.
 
 ## [0.5.1] - 2026-08-10
 
