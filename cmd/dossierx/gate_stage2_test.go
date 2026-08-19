@@ -405,7 +405,11 @@ func gateStage2BundleSpec(surface string, documents, references []string) (gateB
 // coverage instead is TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther,
 // which edits a borrowed document and requires exactly the borrowing surfaces'
 // keys (plus the owner's, through ITS Documents component) to move.
-func gateStage2Inputs(root, surface string, documents, references []string) (gateSurfaceInputs, error) {
+// rules is the gate-integrity digest (gateIntegrityFingerprint), computed once
+// per run by the caller — it is identical for every surface, and deriving it
+// thirteen times would be thirteen chances for two surfaces to disagree about
+// what the gate is.
+func gateStage2Inputs(root, surface string, documents, references []string, rules string) (gateSurfaceInputs, error) {
 	spec, err := gateStage2BundleSpec(surface, documents, references)
 	if err != nil {
 		return gateSurfaceInputs{}, err
@@ -453,6 +457,10 @@ func gateStage2Inputs(root, surface string, documents, references []string) (gat
 		// real capture on this path and requires exactly one key to move.
 		Bundle: bundle,
 		Method: method,
+		// The gate's own definition, identical across the fan-out. An empty
+		// value is refused by gateSurfaceFingerprint rather than here, so the
+		// refusal is unanimous across every caller.
+		Rules: rules,
 	}, nil
 }
 
@@ -955,11 +963,20 @@ func gateStage2Keys(root string, tracked []string) (map[string]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	// The gate's own definition, resolved from the SAME tracked set the
+	// documents were and hashed before a single key is computed. It enters
+	// every surface's key, so a run whose gate definition cannot be resolved
+	// or read has no keys at all — the same never-partial rule as below, one
+	// input earlier.
+	rules, err := gateIntegrityFingerprint(root, tracked)
+	if err != nil {
+		return nil, err
+	}
 
 	keys := make(map[string]string, len(declared))
 	var problems []string
 	for _, surface := range declared {
-		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface])
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface], rules)
 		if inErr != nil {
 			problems = append(problems, inErr.Error())
 			continue
@@ -1831,7 +1848,11 @@ func TestGateStage2AHandedStringReachesTheBundleAndAWithheldOneDoesNot(t *testin
 		if bundleErr != nil {
 			t.Fatalf("assemble: %v", bundleErr)
 		}
-		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface])
+		rules, rulesErr := gateIntegrityFingerprint(root, tracked)
+		if rulesErr != nil {
+			t.Fatalf("gate integrity: %v", rulesErr)
+		}
+		in, inErr := gateStage2Inputs(root, surface, documents[surface], references[surface], rules)
 		if inErr != nil {
 			t.Fatalf("inputs: %v", inErr)
 		}
@@ -1929,6 +1950,10 @@ func TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther(t *testing.T)
 	// in every surface's shared-evidence hash, so any commit re-keyed every
 	// surface and carry-forward could never fire.
 	gateStage2WriteEvidence(t, root, "{\"counts\":{\"layouts\":2}}\n", "[]")
+	// The gate's own definition, an input to every key. It is held constant
+	// across every edit below, so the one-key-moves assertions stay about the
+	// documents and the borrows.
+	tracked = append(tracked, gateIntegrityStandIns(t, root)...)
 
 	keys := func(t *testing.T) map[string]string {
 		t.Helper()
@@ -2023,6 +2048,10 @@ func gateStage2BinaryFixture(t *testing.T) (root string, tracked []string) {
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
 	gateWrite(t, root, "gate/render-diff.json", "{\"artifacts\":[]}\n")
 	gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":28}}\n", "[]")
+
+	// The gate's own definition, which is now an input to every key: a fixture
+	// without it is a run gateStage2Keys refuses, never a smaller key.
+	tracked = append(tracked, gateIntegrityStandIns(t, root)...)
 	return root, tracked
 }
 
@@ -2577,7 +2606,10 @@ func gateStage2PlanFixture(t *testing.T) (root string, tracked []string) {
 	}
 	gateStage2StampRun(t, root, gateStage2FixtureTree, declared)
 
-	return root, []string{"README.md", "docs/ROADMAP.md"}
+	// The gate's own definition, which is now an input to every key: a fixture
+	// without it is a run gateStage2Keys refuses, never a smaller key.
+	tracked = append([]string{"README.md", "docs/ROADMAP.md"}, gateIntegrityStandIns(t, root)...)
+	return root, tracked
 }
 
 // TestGateStage2PlanRefusesEveryRunItCannotStandBehind drives the WHOLE
