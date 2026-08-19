@@ -181,9 +181,14 @@ func gateBundleAssemble(root string, spec gateBundleSpec) ([]byte, error) {
 	if err := add("the release delta", gateDeltaFile); err != nil {
 		return nil, err
 	}
-	if err := add("the rendered site text", gateSiteTextFile); err != nil {
-		return nil, err
-	}
+	// THE RENDERED SITE TEXT IS DELIBERATELY NOT A SECTION OF EVERY BUNDLE. It
+	// is read by the `site` agent alone, so it enters that one surface's bundle
+	// below, as its capture (gateStage2Artifacts). When it was assembled into
+	// all thirteen — it used to sit right here, after the delta — every
+	// re-extraction of the site moved every bundle's digest and therefore every
+	// surface's key, and thirteen agents re-ran over a change only one of them
+	// reads. TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is what keeps
+	// it out.
 	for _, rel := range gateBundleSorted(spec.Artifacts) {
 		if err := add("a capture produced for this surface", rel); err != nil {
 			return nil, err
@@ -312,10 +317,15 @@ func gateBundleFixture(t *testing.T) (root string, spec gateBundleSpec) {
 	gateWrite(t, root, gateStage2MethodFile, "model: claude-opus-5\ntools:\n  - SurfaceFinding\n  - SurfaceVerdict\n")
 
 	return root, gateBundleSpec{
-		Surface:   "site",
-		Handed:    []string{"site/README.md"},
-		Withheld:  []string{"site/src/content.ts", "site/src/nav.ts"},
-		Artifacts: []string{"gate/render-diff.json"},
+		Surface:  "site",
+		Handed:   []string{"site/README.md"},
+		Withheld: []string{"site/src/content.ts", "site/src/nav.ts"},
+		// The rendered site text rides as a CAPTURE, the way the real `site`
+		// surface receives it (gateStage2Artifacts) — it is not a section the
+		// assembler gives every bundle. The render diff is here too so the
+		// rows about a missing or stale capture have one that is not also the
+		// site extraction.
+		Artifacts: []string{gateSiteTextFile, "gate/render-diff.json"},
 	}
 }
 
@@ -349,7 +359,9 @@ func TestGateBundleCarriesEveryPartAndNamesWhatItWithheld(t *testing.T) {
 		"BEGIN the mechanical inventory — " + gateSurfaceInventoryFile,
 		"BEGIN the baseline inventory — " + gateBaselineFile,
 		"BEGIN the release delta — " + gateDeltaFile,
-		"BEGIN the rendered site text — " + gateSiteTextFile,
+		// The rendered site text reaches THIS surface as its capture, not as a
+		// shared section every bundle carries.
+		"BEGIN a capture produced for this surface — " + gateSiteTextFile,
 		"BEGIN a capture produced for this surface — gate/render-diff.json",
 		"BEGIN a document of this surface — site/README.md",
 		"BEGIN documents of this surface that were not handed over",

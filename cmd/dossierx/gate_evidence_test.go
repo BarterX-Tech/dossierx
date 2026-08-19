@@ -312,7 +312,7 @@ func gateWiredFixture(t *testing.T) (root, run string) {
 
 	// The plan fixture's frame carries no subject vocabulary — it is written for
 	// stage 2, which does not have one. gate/prompts/_frame.md is not one of the
-	// artifacts gate/run.json records (gateSharedEvidence is the four shared
+	// artifacts gate/run.json records (gateSharedEvidence is the three shared
 	// files and the frame is none of them), so rewriting it here does not make
 	// the run manifest stale; it does move every surface key, which is why the
 	// answers below are written after it and never before.
@@ -523,7 +523,7 @@ func TestTheWiredEvidenceRefusesEveryRunItCannotStandBehind(t *testing.T) {
 				// honestly digested against the new tree and the answers beside
 				// them were given about the old one.
 				const moved = "dddddddddddddddddddddddddddddddddddddddd"
-				gateStage2WriteEvidence(t, root, moved, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
+				gateStage2WriteEvidence(t, root, "{\"counts\":{\"lint_rules\":27}}\n", "[\"counts\"]")
 				gateStage2StampRunFor(t, root, moved)
 				return moved
 			},

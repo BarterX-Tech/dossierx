@@ -13,9 +13,9 @@
 //
 // WHAT IS IN THE DIGEST, and why each part has to be. The surface's own
 // documents (what the agent judges), surface.json (the mechanical truth it
-// judges them against), the release delta and the rendered site text (the other
-// two evidence files an agent reads), and the METHOD — because a verdict is a
-// function of the question as much as of the evidence, and re-using a verdict
+// judges them against), the resolved baseline and the release delta over it
+// (the other evidence every agent reads), and the METHOD — because a verdict is
+// a function of the question as much as of the evidence, and re-using a verdict
 // produced by an older prompt against a newer one is exactly the stale pass this
 // design exists to remove.
 //
@@ -58,23 +58,46 @@ import (
 //
 // surface.json is emitted by surface_test.go and is in the tree today. The other
 // two are the gate's own working artifacts, produced by the run that fans the
-// agents out — the release delta (this release's surface.json against the
-// previous release's) and the rendered site text (read out of a real build's
-// DOM, per "verify the thing the user sees"). They are named as constants here
+// agents out — the RESOLVED baseline inventory and the release delta computed
+// over it (this release's surface.json against the previous release's), both
+// written by scripts/gate-stage2/run.sh delta. They are named as constants here
 // rather than passed in so that there is one spelling of each, and hashing FAILS
 // when one is absent rather than quietly fingerprinting a smaller evidence set.
-// gateBaselineFile is the RESOLVED baseline inventory — the previous release's
-// surface.json, written into the run's own evidence directory by the producer
-// that resolved it (scripts/gate-stage2/run.sh delta).
 //
-// It is in the key because gate/delta.json is a LOSSY READ of a pair of
-// inventories, and a projection never stands in for its source. This tree's half
-// of that pair is already here as surface.json; without the other half a key
-// carrying the delta is a key that trusts a summary of bytes it never saw. And
-// the thing that belongs here is the baseline's BYTES, never the baseline tag's
-// NAME: a tag is a mutable pointer (`git tag -f` re-points an annotated tag
-// under anything that names only the tag), so "v0.5.0" hashes identically before
-// and after it is made to mean a different commit.
+// gateBaselineFile is in the key because gate/delta.json is a LOSSY READ of a
+// pair of inventories, and a projection never stands in for its source. This
+// tree's half of that pair is already here as surface.json; without the other
+// half a key carrying the delta is a key that trusts a summary of bytes it never
+// saw. And the thing that belongs here is the baseline's BYTES, never the
+// baseline tag's NAME: a tag is a mutable pointer (`git tag -f` re-points an
+// annotated tag under anything that names only the tag), so "v0.5.0" hashes
+// identically before and after it is made to mean a different commit.
+//
+// gateDeltaFile CARRIES NO TREE STAMP, and that absence is load-bearing. Its
+// bytes are in every surface's key (through this shared set) and in every
+// surface's bundle (the assembler hands the delta to all thirteen agents), so
+// any per-commit value inside it moves every key on every commit. The landed
+// producer stamped `git rev-parse HEAD^{tree}` into it, and the carry-forward
+// machinery this file builds never once fired because of that: a one-character
+// README fix moved the stamp, the stamp moved all thirteen keys, and all
+// thirteen agents re-ran. The stamp existed so `record` could refuse a delta
+// computed over a different tree; that freshness is now proven by RECOMPUTATION
+// — the delta is a pure function of surface.json and gate/baseline.json, and
+// both scripts/gate-stage2/run.sh `record` (byte-for-byte, emit_delta_document)
+// and gateStage2CheckDeltaCovers (field by field) re-derive it and refuse on
+// disagreement. TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward is what
+// keeps the stamp from coming back.
+//
+// gateSiteTextFile — the rendered site text, read out of a real build's DOM per
+// "verify the thing the user sees" — is DELIBERATELY NOT in the shared set any
+// more, and the constant stays here only so the repository keeps one spelling of
+// the path. It is read by the `site` agent alone, so it reaches that one
+// surface's key through the bundle as a per-surface capture
+// (gateStage2Artifacts); as shared evidence it re-keyed all thirteen surfaces
+// whenever the site was re-extracted. Unlike the delta it CANNOT be recomputed
+// at record time — that needs a real build and a real browser — so its freshness
+// is carried by a tree stamp of its own, written by the extraction
+// (viewer-tests/site_dom_test.go) and checked by `record`'s guard loop.
 const (
 	gateSurfaceInventoryFile = "surface.json"
 	gateBaselineFile         = "gate/baseline.json"
@@ -82,7 +105,7 @@ const (
 	gateSiteTextFile         = "gate/site-text.json"
 )
 
-// gateSharedEvidence is those four, in one place, so a fifth evidence file is
+// gateSharedEvidence is those three, in one place, so a fourth evidence file is
 // added once and every surface's fingerprint moves.
 //
 // SHARED means read by EVERY surface agent. An artifact only one agent reads —
@@ -94,8 +117,15 @@ const (
 // digest covers those bytes for the one surface that reads them and for no
 // other. TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is what holds that
 // true on the run path.
+//
+// gate/site-text.json used to be the fourth member and is the cautionary tale
+// for the paragraph above: it is read by the `site` agent alone, and folding it
+// in meant every re-extraction of the site — every release, since the extraction
+// is per-run evidence — re-keyed all thirteen surfaces. It now takes the bundle
+// route like the other single-reader captures (gateStage2Artifacts), and the
+// same test holds it to exactly one key.
 func gateSharedEvidence() []string {
-	return []string{gateSurfaceInventoryFile, gateBaselineFile, gateDeltaFile, gateSiteTextFile}
+	return []string{gateSurfaceInventoryFile, gateBaselineFile, gateDeltaFile}
 }
 
 // ---------------------------------------------------------------------
@@ -785,12 +815,12 @@ func gatePassingSurfaces(names ...string) []gateSurfaceVerdict {
 }
 
 // gateFingerprintFixture writes a whole synthetic tree — the surface's document,
-// the four shared evidence files, one per-surface capture and a prompt — and
-// returns the root and the inputs over it.
+// the three shared evidence files and a prompt — and returns the root and the
+// inputs over it.
 //
 // It is synthetic rather than the real repository because the point of the tests
-// below is to move ONE input at a time and watch the digest move. Three of the
-// four evidence files do not exist in this tree until a run produces them (see
+// below is to move ONE input at a time and watch the digest move. Two of the
+// three evidence files do not exist in this tree until a run produces them (see
 // gateDeltaFile), and a fixture is also the only way to assert the direction the
 // hashing errs in when one of them is missing.
 //
@@ -806,7 +836,6 @@ func gateFingerprintFixture(t *testing.T) (root string, in gateSurfaceInputs) {
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
 	gateWrite(t, root, gateBaselineFile, "{\"counts\":{\"lint_rules\":27}}\n")
 	gateWrite(t, root, gateDeltaFile, "{\"lint_rules\":{\"added\":[\"mixed-cycle\"]}}\n")
-	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.9\"}\n")
 	gateWrite(t, root, "gate/prompts/site.md", "Read the rendered site text against surface.json.\n")
 
 	return root, gateSurfaceInputs{
@@ -897,6 +926,13 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		// moved, which the run path never does — a fixture arrangement that
 		// cannot occur, proving a component nothing else could redden.
 		//
+		// THE RENDERED SITE TEXT USED TO BE A ROW HERE AND IS ONE OF THOSE
+		// CAPTURES NOW. It is read by the `site` agent alone, and its old seat
+		// in the shared evidence meant a re-extraction moved all thirteen keys;
+		// it reaches exactly the site surface's key through that surface's
+		// bundle, and TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther is
+		// the row that proves it — on the run path, with a real assembler.
+		//
 		// THE ROW THAT DEFEATS FAILURE 3. Nothing on disk moves: the same
 		// prompt, the same documents, the same evidence, the same model and
 		// grant. Only the assembled text differs, which is what softening the
@@ -904,9 +940,6 @@ func TestGateSurfaceFingerprintMovesWhenAnyInputMoves(t *testing.T) {
 		// "note mismatches" edits no file the parts list names.
 		{"the framing the assembler wrapped around the parts", func(t *testing.T, _ string, in *gateSurfaceInputs) {
 			in.Bundle = []byte("--- the site question ---\nNote any mismatches between the rendered site text and surface.json.\n")
-		}},
-		{"the rendered site text", func(t *testing.T, root string, _ *gateSurfaceInputs) {
-			gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.8\"}\n")
 		}},
 		{"the prompt's wording", func(t *testing.T, root string, _ *gateSurfaceInputs) {
 			gateWrite(t, root, "gate/prompts/site.md", "Read the rendered site text against surface.json, and the delta.\n")
