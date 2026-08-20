@@ -285,7 +285,17 @@ Describe 'the no-bash remedy' {
         # No bash means no install: the branch under test is the failing one,
         # and a 0 here would mean the child found a bash and this test proved
         # nothing about the remedy — a pass over the wrong branch, not a pass.
-        $exit | Should -Be 1
+        #
+        # THE CHILD'S OUTPUT IS IN THE FAILURE, because the parent's Find-Bash
+        # already answered $null above and the child still installed: the two
+        # processes disagree about what is reachable, and only the child can
+        # say what it found. Without this the message is `Expected 1, but got
+        # 0` twice over, which names the symptom and hides the cause.
+        if ($exit -ne 1) {
+            throw ("the wrapper exited $exit, not 1, though Find-Bash answered `$null in this " +
+                "very environment moments earlier — so the child process reaches a bash the " +
+                "parent does not. What the child printed:`n" + $out)
+        }
 
         # The remedy's bash argument is a command substitution over wslpath,
         # carrying the same resolved installer path the wrapper computed...
