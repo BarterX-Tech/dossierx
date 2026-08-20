@@ -435,7 +435,7 @@ USAGE
 [ $# -ge 1 ] || usage
 MODE="$1"; shift
 
-TREE=""; BASELINE_REF=""; BASELINE_COMMIT=""; BASELINE_FILE=""; SURFACE=""; BUNDLE=""
+TREE=""; BASELINE_REF=""; BASELINE_COMMIT=""; SURFACE=""; BUNDLE=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -443,7 +443,12 @@ while [ $# -gt 0 ]; do
     --tree)             TREE="$2"; shift 2 ;;
     --baseline-ref)     BASELINE_REF="$2"; shift 2 ;;
     --baseline-commit)  BASELINE_COMMIT="$2"; shift 2 ;;
-    --baseline-file)    BASELINE_FILE="$2"; shift 2 ;;
+    # RETIRED, AND REFUSED HERE RATHER THAN IN ONE MODE. The refusal used to
+    # live in `delta`, because `delta` was the only mode the old procedure
+    # passed it to — so `record --baseline-file X` accepted the flag and
+    # ignored it, which is the silent half of the very defect the retirement
+    # exists to close. A flag nobody honours must say so wherever it is typed.
+    --baseline-file)    die "--baseline-file is retired and refused. The baseline inventory is derived from --baseline-commit itself — the committed $BOOTSTRAP_FILE when that commit IS the frozen $BOOTSTRAP_COMMIT, and \`git show <commit>:surface.json\` for every later release — because a file argument is a second answer that can drift: hard-coded to the bootstrap, it computed one release's delta against an inventory two releases old. Drop the flag and run the command again." 1 ;;
     --surface)          SURFACE="$2"; shift 2 ;;
     --bundle)           BUNDLE="$2"; shift 2 ;;
     -*)                 die "unknown option: $1" 1 ;;
@@ -567,7 +572,6 @@ case "$MODE" in
     # recording it under ref v0.5.1 — so the operator typing it believes they
     # are choosing the baseline's bytes, and silently ignoring the flag would
     # leave that belief standing over different bytes.
-    [ -z "$BASELINE_FILE" ] || die "delta: --baseline-file is retired and refused. The baseline inventory is derived from --baseline-commit itself — the committed $BOOTSTRAP_FILE when that commit IS the frozen $BOOTSTRAP_COMMIT, and \`git show <commit>:surface.json\` for every later release — because a file argument is a second answer that can drift: hard-coded to the bootstrap, it computed one release's delta against an inventory two releases old. Drop the flag and run \`delta\` again." 1
     [ -f "$ROOT/surface.json" ] || die "delta: no surface.json under $ROOT to diff against the baseline" 2
 
     # Resolved into a private file first, so a refusal partway through `git
