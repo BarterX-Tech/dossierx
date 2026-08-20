@@ -255,6 +255,22 @@ Describe 'the no-bash remedy' {
             $env:ProgramFiles = $empty
             ${env:ProgramFiles(x86)} = $empty
             $env:LOCALAPPDATA = $empty
+            # ASSERT THE PRECONDITION BEFORE TRUSTING THE RUN. Find-Bash is
+            # dot-sourced in BeforeAll, so it can be asked, in this very
+            # environment, whether it still finds a bash. The first CI run of
+            # this test failed as `Expected 1, but got 0` — the wrapper
+            # installed instead of refusing — and that message says only that
+            # the branch under test never ran, not WHY. A test that cannot
+            # build its own condition must say what it found, or the next
+            # reader is left guessing at a runner they cannot see.
+            $stillFound = Find-Bash
+            if ($stillFound) {
+                throw ("the no-bash environment is not bash-free: Find-Bash still returned '" +
+                    $stillFound + "'. PATH, ProgramFiles, ProgramFiles(x86) and LOCALAPPDATA were " +
+                    "all pointed at an empty directory, so this is a location Find-Bash consults " +
+                    "that this test does not blank. Blank it here rather than deleting the " +
+                    "assertion below: a remedy nobody can reach is the finding this test pins.")
+            }
             $out = (& $pwshExe -NoProfile -File $script:wrapper --yes 2>&1) -join "`n"
             $exit = $LASTEXITCODE
         }
