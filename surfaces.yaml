@@ -300,12 +300,20 @@ surfaces:
       # sentence without it might configure no ruleset, expecting
       # `make release-publish` to stop them.
       - cmd/dossierx/gate_tagrules_test.go
-      # The three G1 capture invocations the procedure spells out, flag by
-      # flag: the cross-release render diff, the skills export capture, and
-      # the release-notes prediction.
+      # The G1 capture invocations the procedure spells out, flag by flag: the
+      # cross-release render diff, the skills export capture, the release-notes
+      # prediction, and the rendered-site extraction. The fourth was missing
+      # and the count above it said three, so the release-procedure agent was
+      # asked to check the site-text invocation and its three stated
+      # behaviours — that DOSSIERX_SITE_TEXT_OUT and _TREE imply each other,
+      # that the tree must be a full 40-digit object name, that the stamp is
+      # the document's first field — with no file that names any of them. It
+      # reported the missing byte rather than guessing, which is the answer
+      # the frame asks for; this is the entry that answer names.
       - tests/render_diff_capture_test.go
       - tests/skills_export_capture_test.go
       - tests/release_notes_predict_test.go
+      - viewer-tests/site_dom_test.go
       # The procedure states the whole tool grant — SurfaceFinding and
       # SurfaceVerdict, nothing else, passed as an exclusive allow-list — and
       # this file is where that is declared.
