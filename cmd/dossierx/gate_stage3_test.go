@@ -1059,9 +1059,17 @@ func TestGateStage3RefusesAnUnusableVocabulary(t *testing.T) {
 			want:  "carries no",
 		},
 		{
-			name:  "the section lists nothing",
-			frame: gateStage3SubjectsHeading + "\n\nThere are no subjects.\n\n## The material\n\n<<PARTS>>\n<<SURFACE>>\n",
-			want:  "lists no subject",
+			name: "the section lists nothing",
+			// The markers are built from the constants rather than spelled,
+			// and not only because a literal is a second answer to what the
+			// marker IS. This file is borrowed by the release-procedure
+			// surface, so its bytes land inside that surface's bundle — and
+			// a literal here is an unreplaced placeholder as far as the
+			// assembler's own check can tell, which refuses the whole
+			// fan-out. Spelling it out reds the gate from inside a fixture.
+			frame: gateStage3SubjectsHeading + "\n\nThere are no subjects.\n\n## The material\n\n" +
+				gateBundlePartsMarker + "\n" + gateBundleSurfaceMarker + "\n",
+			want: "lists no subject",
 		},
 		{
 			name:  "a subject with no value form",

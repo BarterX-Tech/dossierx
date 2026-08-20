@@ -533,10 +533,17 @@ them, and the three post-publish checks that leave this repository entirely.
       it, so this is the one place your reading is the check. A blocking
       finding you judge mistaken can only be cleared by disproving its own
       `failure_scenario` — the sentence exists so that it CAN be disproven —
-      and then deleting the finding from `gate/answers/<surface>.json` by
-      hand, since there is still no override field on the receipt. Know what
-      that deletion costs before you reach for it: a deleted finding leaves no
-      trace, so an adjudicated finding becomes indistinguishable from one
+      and then editing `gate/answers/<surface>.json` by hand, since there is
+      still no override field on the receipt. TWO EDITS, NOT ONE, and the
+      second is easy to miss: delete the finding, AND set that surface's
+      `verdict` to `PASS` if nothing blocking remains in it. An answer is
+      validated for agreement between the two — a PASS listing a blocking
+      finding is refused, and so is a FAILED with nothing left that blocks —
+      by the same function the recorder and the collector both run. Delete
+      the finding alone and the answer holds a FAILED justified by nothing;
+      D1 refuses the release at collection, and you have made the
+      irreversible edit below for no gain. Know what that edit costs before
+      you reach for it: a deleted finding leaves no trace, so an adjudicated finding becomes indistinguishable from one
       nobody ever raised, and the next reader of that record cannot tell that
       you looked. And know what it cannot touch at all: an `acts-wrongly`
       finding is not deferrable and not signable-away by anyone — fix the

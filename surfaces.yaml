@@ -314,6 +314,20 @@ surfaces:
       - tests/skills_export_capture_test.go
       - tests/release_notes_predict_test.go
       - viewer-tests/site_dom_test.go
+      # The authorities for the OTHER claims this procedure invites a reader to
+      # check, added together rather than one per round. Two consecutive gate
+      # rounds each blocked on a single missing borrow here — one entry fixed,
+      # the next gap surfaced — because a reading agent can only name the byte
+      # it needed for the sentence in front of it. These five are the files the
+      # round-four finding itself enumerated: the inventory emitter behind the
+      # -regenerate-goldens command line, the two functions whose contents this
+      # document restates in prose, the fan-out's one implementation, and the
+      # file a line-range citation points at.
+      - cmd/dossierx/surface_test.go
+      - cmd/dossierx/gate_fingerprint_test.go
+      - cmd/dossierx/gate_integrity_test.go
+      - cmd/dossierx/gate_fanout_test.go
+      - cmd/dossierx/gate_stage3_test.go
       # The procedure states the whole tool grant — SurfaceFinding and
       # SurfaceVerdict, nothing else, passed as an exclusive allow-list — and
       # this file is where that is declared.
