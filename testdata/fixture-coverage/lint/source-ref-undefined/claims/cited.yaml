@@ -1,0 +1,20 @@
+id: srcundef.internals.cited
+facet: internals
+module: srcundef
+status: draft
+layout: card
+body: |
+  The vendor caps requests at 100 per minute [1], and the burst ceiling is
+  500 [2] — but only ref 1 is declared below, so the second marker resolves
+  to nothing.
+sources:
+  - ref: 1
+    kind: external
+    title: Vendor rate limit reference
+    url: https://example.com/docs/rate-limits
+    accessed_on: "2026-08-01"
+rests_on:
+  - srcundef.internals.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

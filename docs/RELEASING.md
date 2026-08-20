@@ -6,8 +6,8 @@ get past it produces no archives at all. The gate establishes two facts about
 what was tagged rather than about whoever pushed: that the tagged commit **is a
 merge** — it has two or more parents, which refuses the ordinary mistake of
 tagging the release branch instead of the merge — and that the tree at that
-commit carries the release stamp for exactly this version —
-`site/src/content.ts`'s last `releases[]` entry names the tag being pushed. Every
+commit carries the release stamp for exactly this version — the entry in
+`site/releases.html` marked `data-current="true"` names the tag being pushed. Every
 exit path that is not a pass is a refusal; there is deliberately no branch that
 reports "could not check" and exits 0. The gate used to establish something
 stronger — that the tagged commit is reachable from `origin/main` — and that
@@ -170,9 +170,8 @@ them, and the three post-publish checks that leave this repository entirely.
       … or a commit this clone has never fetched" — the refusal names this
       mistake, so read it as this mistake rather than as a broken gate.
 
-      That fetches the CI run **for that exact sha** — never HEAD, because the
-      `content.ts` commit stamp lands on `main` after the merge as a matter of
-      routine — derives from `.github/workflows/ci.yml` which suites exist and in
+      That fetches the CI run **for that exact sha** — never HEAD, because
+      commits land on `main` after the merge as a matter of routine — derives from `.github/workflows/ci.yml` which suites exist and in
       how many matrix instantiations, fetches each instantiation's log, and reads
       the `go test -json` account the suite step emits. It fails, rather than
       passing quietly, when a declared instantiation produced no account, when a
@@ -234,22 +233,19 @@ them, and the three post-publish checks that leave this repository entirely.
       the documents the surface's `reads:` list in `surfaces.yaml` borrows from
       other surfaces (handed over as context, marked "NOT yours to report on" —
       ownership and the duty to review stay with the surface that claims the
-      file), the committed inventory `surface.json`, and the six uncommitted artifacts
-      under `gate/` produced below. Only those six are staged here, and the
-      difference is worth knowing rather than discovering: none of the six has a
+      file), the committed inventory `surface.json`, and the five uncommitted artifacts
+      under `gate/` produced below. Only those five are staged here, and the
+      difference is worth knowing rather than discovering: none of the five has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
       be at those paths on the day of the run is what the agents read. `record`
-      can hold four of the six to account — the resolved baseline by deriving
-      the named commit's inventory again, the delta by recomputing it, the
-      two stamped captures by reading the tree each names on its own face — and
+      can hold three of the five to account — the resolved baseline by deriving
+      the named commit's inventory again, the delta by recomputing it, and the
+      one stamped capture by reading the tree it names on its own face — and
       the other two it can only digest, so a hand-written
       `gate/export-output.json` is recorded exactly as cleanly as a real one.
       Produce them:
 
-          # the rendered site text, extracted from a real build in a real
-          # browser and stamped with the tree that build was made from
-          DOSSIERX_SITE_TEXT_OUT="$ROOT/gate/site-text.json" \
-          DOSSIERX_SITE_TEXT_TREE="$TREE" \
+          # the release build's dry run — no site extraction any more; see below
           DOSSIERX_TEST_GORELEASER="$(go env GOPATH)/bin/goreleaser" \
           DOSSIERX_TEST_BROWSER=/path/to/chrome \
           make viewer-test
@@ -278,30 +274,38 @@ them, and the three post-publish checks that leave this repository entirely.
           scripts/gate-stage2/run.sh record --tree "$TREE" \
             --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
             gate/baseline.json gate/delta.json gate/export-output.json \
-            gate/release-notes-prediction.json gate/render-diff.json \
-            gate/site-text.json
+            gate/release-notes-prediction.json gate/render-diff.json
 
       **The output paths are absolute on purpose.** `go test` runs each test
       binary with its own package directory as the working directory, so a
       relative `gate/…` lands under `tests/` and the gate then looks for an
       artifact nobody produced.
 
-      **The two `DOSSIERX_SITE_TEXT_*` variables imply each other, and the
-      extraction fails loudly when only one is set.** `DOSSIERX_SITE_TEXT_TREE`
-      is the same full 40-digit tree object name everything else in this run is
-      keyed to — `$TREE`, never a tag and never an abbreviation; the producer
-      refuses both. The extraction writes it into `gate/site-text.json` as the
-      document's FIRST field, and `record` reads it back and refuses a capture
-      stamped with any other tree. The stamp exists because this is the one
-      artifact `record` cannot check by recomputing — an extraction needs this
-      build and a real browser — and before it existed the capture named which
-      node and npm built the site and nothing that named a RELEASE, so an
-      extraction left on disk from the previous gate run recorded cleanly and
-      was hashed into the `site` surface's key as this release's rendered DOM.
-      A stale capture is now refused rather than hashed cleanly into a key.
-      What the stamp cannot promise, exactly as `gate/render-diff.json`'s
-      cannot: that the working tree the build read was clean at that identity —
-      the extraction records the value it was handed, verbatim.
+      **There is no site extraction any more, and its absence is the point.**
+      `gate/site-text.json` used to be the sixth artifact: the rendered DOM of a
+      real build of `site/`, captured in a headless browser and stamped with the
+      tree it was built from, because the site was a Vite application and the
+      source a reviewer read was not the page a visitor got. `site/` is now two
+      static HTML pages that `.github/workflows/deploy-site.yml` uploads
+      unchanged, so the `site` surface's bundle is the files themselves and
+      there is nothing to extract, stamp or go stale.
+      `tests/ci_workflow_test.go`'s
+      `TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt` refuses the
+      reintroduction of a build step, which is what would silently make the
+      files stop being the surface again.
+
+      **`make viewer-test` is still run here, and now only for the release dry
+      run.** It also drives the browser suite against the rendered VIEWER, which
+      the engine produces in Go — so `DOSSIERX_TEST_BROWSER` is still required
+      and a missing browser is still a failure, not a skip.
+
+      **The lesson the extraction taught is kept, because it applies to every
+      artifact still staged.** Before it carried a tree stamp it named only the
+      node and npm that built the site — nothing that identified a RELEASE — so
+      an extraction left on disk from the previous gate run recorded cleanly and
+      was hashed into the `site` surface's key as this release's evidence. That
+      is why `gate/render-diff.json` is stamped and checked, and why a capture
+      that names no tree is refused rather than stepped over.
 
       **`delta` takes no `--tree`, and that is a decision rather than an
       omission.** The delta is a pure function of `surface.json` and the
@@ -368,19 +372,17 @@ them, and the three post-publish checks that leave this repository entirely.
       full fan-out and sits in the diff a human reviews, and only a forge-side
       review requirement on those paths, outside this tree, closes the rest.
 
-      `gate/site-text.json` used to be the fourth member of that set and no
-      longer is, because SHARED means read by EVERY agent and the rendered
-      site text is read by the `site` agent alone. Folded into the shared set,
-      every re-extraction of the site — every release, since the extraction is
-      per-run evidence — re-keyed all thirteen surfaces. It now reaches
-      exactly one key the way the other single-reader captures always have:
-      the assembler hands the `site` surface its capture verbatim, so the
-      bundle digest covers those bytes for the one surface that reads them and
-      for no other — `TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther`
-      holds that true. What the demotion buys is the cache working at all: a
-      site change moves the `site` key and leaves the other twelve carrying
-      forward, instead of re-keying every surface over twelve documents
-      nothing touched.
+      `gate/site-text.json` used to be the fourth member of that set, then a
+      single-reader capture, and is now nothing at all — the site is static HTML
+      and the `site` surface's bundle is the files. Both demotions are recorded
+      here because the reasoning outlives the artifact and applies to the next
+      capture somebody is tempted to share. SHARED means read by EVERY agent,
+      and the rendered site text was read by the `site` agent alone: folded into
+      the shared set, every re-extraction — every release, since it was per-run
+      evidence — re-keyed all thirteen surfaces. Demoting it made the cache work
+      at all, a site change moving one key and leaving the other twelve to carry
+      forward. `TestGateStage2ACaptureReachesOneSurfaceKeyAndNoOther` still holds
+      that property for the captures that remain.
 
       **`delta` resolves the baseline inventory itself, from `$PREV_COMMIT` and
       nothing else — there is no file argument, and its absence is the fix for
@@ -689,50 +691,63 @@ them, and the three post-publish checks that leave this repository entirely.
       broke, finds nothing, and loops. If this release adds such a rule and no
       skill names it, that is blocking. v0.5.0's `mixed-cycle` is the worked
       example, and the router carries a section for it.
-- [ ] **The site's release entry is appended.** In `site/src/content.ts` the
-      `releases` array is **oldest-first**, and the last entry is the current
-      release. Append; do not prepend. Move `tag: "Latest release"` off the
-      previous entry.
+- [ ] **The site's release entry is added and marked current.** The ledger is
+      `site/releases.html`, which is static HTML with no build: what GitHub Pages
+      serves is what is in that file.
 
-      **Two expressions say "last", in two files, and they must agree.**
-      `content.ts` selects `releases[releases.length - 1]` and
-      `ReleaseTimeline.tsx` badges `releases.length - 1` "latest". Change one and
-      every derived string names one release while the timeline badges another.
-      Both are pinned by `TestSiteSelectsTheReleaseThisTreeModels`.
+      Add the new entry at the **top** — the page reads newest-first — and move
+      `data-current="true"` and the `Latest` badge off the entry that carries
+      them. An entry looks like this:
+
+      ```html
+      <article class="release release--current" data-version="vX.Y.Z" data-current="true">
+        <p class="release__meta">
+          <span class="release__version">vX.Y.Z</span>
+          <time datetime="YYYY-MM-DD">YYYY-MM-DD</time>
+        </p>
+        <div>
+          <h2 class="release__title">
+            <title><span class="release__badge">Latest</span>
+          </h2>
+          <p class="release__note"><one or two sentences></p>
+        </div>
+      </article>
+      ```
+
+      **Exactly one entry may be marked, and the marking is the whole of what
+      "current" means.** Order is presentation: this page could be re-sorted
+      tomorrow and it would still name the same release. That is the point of
+      the attribute, and it is the fix for a real defect — the previous ledger
+      was an oldest-first TypeScript array where "current" meant "the last
+      element", which took three expressions in two files to state, and a
+      prepended entry silently demoted the new release while the page went on
+      rendering perfectly.
+
+      `TestSiteLedgerNamesExactlyOneCurrentRelease` refuses nought marked
+      entries and refuses two. `TestChangelogHoldsTheReleaseItDescribes` holds
+      the marked entry against `CHANGELOG.md`'s newest heading, and the release
+      driver refuses to publish while the two disagree.
 
       **There is no `commit` field, and no step that stamps one.** It held the
       tagged release's short sha and was deleted outright, because it could not
       converge: writing the sha is itself a commit, so the value was stale the
       moment it landed — v0.4.1 shipped naming `5327923` while `refs/tags/v0.4.1`
-      points at `206b4a4`. If you find an entry carrying one, delete it; do not
-      fill it in.
-
-      Every other version string on the site derives from that entry —
-      the hero kicker, the hero badge, the release-history intro, and the
-      `dossierx version` example all read `latestRelease` / `latestVersion`.
-      Do not reintroduce a hand-typed copy; each of those four had one, and
-      three of them went stale.
+      points at `206b4a4`. `TestSiteLedgerCarriesNoCommitSha` refuses a
+      sha-shaped token anywhere on the page.
 
       **There is one version spelling, and it is the tag as tagged.** The
       archive, `go install`, the git tag, this file's own commands and every
       string on the site all read `vX.Y.Z`. Nothing derives a second form, and
-      the `dossierx version` example reads `latestVersion` like the rest.
+      `TestSiteDeclaresNoSecondVersionSpelling` refuses a bare `X.Y.Z` on either
+      page.
 
-      That is newer than v0.5.1 and it was a real defect, not a tidy-up. The build
-      stamped `-X main.version={{.Version}}`, which is the tag with its leading
-      `v` stripped, so the published archive printed `dossierx version 0.5.1` —
-      while `go install …@v0.5.1` applies no ldflags at all, falls back to
-      `debug.ReadBuildInfo`, and gets the tag verbatim from the module proxy:
-      `v0.5.1`. One release answered the question two ways depending on how it
-      was installed, and a scripted
-      `dossierx version --format json | jq -r .data.version` compared against the
-      tag succeeded one way and failed the other. The site carried a second
-      constant, `latestBinaryVersion`, purely so the page could depict whichever
-      form the reader would actually see.
+      **Nothing else on the site names a release, and nothing on it is counted.**
+      `site/index.html` is a memo on why the project exists; it states no
+      version, no command count and no transcript, so it needs no edit at
+      release time and cannot go stale between them. If you find yourself adding
+      a number to it, that is the decision to reverse — the counts that must be
+      right live in `README.md`, next to the binary that settles them.
 
-      The stamp is `{{.Tag}}` now and both paths agree. If you find a stripped
-      derivation anywhere, the cause is `.goreleaser.yaml`, not the site —
-      `gateRequireReleaseTransform` names which template moved.
 - [ ] **The three committed sample viewers are regenerated.** This is the last
       item deliberately: regeneration has to reflect the branch's finished
       renderer, lint and CSS state, so it runs after everything above.
@@ -850,7 +865,7 @@ them, and the three post-publish checks that leave this repository entirely.
       git push origin main
 
       **The tag goes first and `main` goes last, and the order is not
-      interchangeable.** The release branch edits `site/src/content.ts`, so
+      interchangeable.** The release branch edits `site/releases.html`, so
       pushing `main` fires `.github/workflows/deploy-site.yml` and publishes a
       page announcing that vX.Y.Z is the current release — while `Release`,
       which fires only on a tag push, has not built a single archive. Pushing
@@ -907,8 +922,8 @@ them, and the three post-publish checks that leave this repository entirely.
       are already public and which are not, and never resumes and never undoes.
 
       **No sha is stamped onto the site after this.** The step that wrote the
-      release commit's short sha into `site/src/content.ts` is gone with the
-      field it wrote to.
+      release commit's short sha into the site's ledger is gone with the field
+      it wrote to.
 
 - [ ] **Regenerate the cross-release render report against the new baseline,**
       and push it to `main`:

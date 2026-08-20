@@ -74,7 +74,7 @@ func TestImageSrc_NeverNamesAFileTheAuthorDidNot(t *testing.T) {
 // loaded from some other file.
 func TestRenderClaimBody_SubstitutableSrcIsEscapedLiteralText(t *testing.T) {
 	const body = "![the file I meant](assets/team photo.png)"
-	got := string(RenderClaimBody(body, testAssets))
+	got := string(RenderClaimBody(body, testAssets, Citations{}))
 	if strings.Contains(got, "<img") {
 		t.Fatalf("emitted an image for a src with a space in it: %q", got)
 	}

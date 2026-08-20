@@ -142,7 +142,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The seven nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The eight nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -285,7 +285,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The seven nouns, nineteen leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The eight nouns, twenty-two leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}
@@ -477,8 +477,32 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // "keep the budget". The four companions are unaffected and still sit under
 // 235 (claims 231, comments 187, code-links 128, build-order 110), which is the
 // check that this is a surface change and not prose creep.
+// Raised again to 265, on the same reasoning that moved it to 230 and then to
+// 255, and on no other. This release adds a NOUN and a SCHEMA FIELD: `track`
+// with three read-only leaves, taking the surface from seven nouns and nineteen
+// leaves to eight and twenty-two, and `sources` with its citation grammar and
+// five lint rules. The router is the one file every agent is guaranteed to read
+// before it meets either, and an agent that reaches `track status` or a
+// `source-internal-drift` finding without having read what they are is the
+// looping case this budget's history is entirely about.
+//
+// THE PROSE WAS TIGHTENED FIRST, and the raise is what was left. The tracks
+// paragraph came down from three lines to two by saying the same thing in fewer
+// words. The remaining two lines could only have come out of the ledger-boundary
+// paragraph, which is load-bearing, so this is the file's own stated choice:
+// "cover it" or "cut something else load-bearing", not "keep the budget".
+//
+// THE COMPANION CHECK MOVED WITH IT, and it is worth reading rather than
+// skipping. Previous raises could point at four companions sitting far under the
+// ceiling as evidence that the router alone had grown, which is what tells a
+// surface change apart from prose creep. That is no longer the shape: claims is
+// at 255, up from 231, because `sources` and `tracks` are claim-authoring
+// concerns and its guide had to carry both. The other three did not move at all
+// (comments 192, code-links 136, build-order 110). Two guides growing for one
+// schema change and three not moving is still the surface signature; four
+// growing together would not be, and that is the thing to look for next time.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
-	const maxLines = 255
+	const maxLines = 265
 
 	for _, name := range wantSkillNames {
 		raw, err := fs.ReadFile(dxskills.FS, name+"/SKILL.md")

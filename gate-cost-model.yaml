@@ -144,15 +144,18 @@ classes:
 # judgement about how much of a document is in scope for falsification and
 # inventing one here would bury a design choice inside a configuration file.
 #
-# THE BASES THAT ARE DECIDED ARE THE ELEVEN WHERE surfaces.yaml'S OWN DESCRIPTION
-# AND ITS PATHS AGREE. Two do not agree, and both are undecided:
+# THE BASES THAT ARE DECIDED ARE THE TWELVE WHERE surfaces.yaml'S OWN DESCRIPTION
+# AND ITS PATHS AGREE. One does not agree, and it is undecided:
 #
-#   site               surfaces.yaml says "the surface is the RENDERED DOM of a
-#                      real build (plus its head metadata), not the component
-#                      source" while its paths claim site/ — 375,332 bytes of
-#                      source. The rendered text is gate/site-text.json, an
-#                      ephemeral gate artifact that does not exist on disk, so
-#                      the right basis is not extractable from this tree today.
+# SITE USED TO BE THE SECOND, AND IS NOW DECIDED. surfaces.yaml said "the surface
+# is the RENDERED DOM of a real build (plus its head metadata), not the component
+# source" while its paths claimed site/ — 375,332 bytes of TSX and TS. The
+# rendered text was gate/site-text.json, an ephemeral artifact that did not exist
+# on disk, so the right basis was not extractable from the tree at all. That gap
+# closed by removal rather than by measurement: site/ is now two static HTML
+# pages and a stylesheet with no build step, the surface IS those tracked files,
+# and the description and the paths describe the same bytes. Its basis is
+# manifest.tracked_files like every other agreeing surface.
 #
 #   binary-and-viewer  surfaces.yaml says the surface is "cobra Short and Long
 #                      text and flag usage ... the error messages and hints, and
@@ -162,11 +165,12 @@ classes:
 #                      only {path, short, flags}, so the prose document cannot be
 #                      reconstructed from the committed inventory either.
 #
-# Those two are why a basis has no default. The plan's own budget basis is
-# roughly 560 KB across all thirteen surfaces; the tracked files those thirteen
-# own come to about 2.65 MB, and the gap is almost entirely these two. Funding
-# them from tracked files would leave every other rule green and the ceiling an
-# order of magnitude too large, with nothing able to notice.
+# That one is why a basis has no default — and the gap it names shrank sharply
+# when the site's did. The plan's own budget basis is roughly 560 KB across all
+# thirteen surfaces; the tracked files those thirteen own came to about 2.65 MB,
+# of which site/ was 375 KB and binary-and-viewer is 1.95 MB. Funding an
+# unextractable surface from tracked files would leave every other rule green and
+# the ceiling an order of magnitude too large, with nothing able to notice.
 #
 # NOTE THAT binary-and-viewer'S CLASS AND ITS BASIS ARE BOTH UNDECIDED, AND THAT
 # IS NOT AN ACCIDENT. Deciding its class alone would arm the wrong-bytes failure:
@@ -207,9 +211,11 @@ surfaces:
     class: undecided
     document_basis: manifest.tracked_files
 
+  # DECIDED, and it was undecided for a real reason that no longer holds — see
+  # the note above the classes block.
   - name: site
     class: read-once-counted
-    document_basis: undecided
+    document_basis: manifest.tracked_files
 
   - name: ci-merge-gate-template
     class: undecided

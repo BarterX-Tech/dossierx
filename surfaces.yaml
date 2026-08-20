@@ -301,19 +301,23 @@ surfaces:
       # `make release-publish` to stop them.
       - cmd/dossierx/gate_tagrules_test.go
       # The G1 capture invocations the procedure spells out, flag by flag: the
-      # cross-release render diff, the skills export capture, the release-notes
-      # prediction, and the rendered-site extraction. The fourth was missing
-      # and the count above it said three, so the release-procedure agent was
-      # asked to check the site-text invocation and its three stated
-      # behaviours — that DOSSIERX_SITE_TEXT_OUT and _TREE imply each other,
-      # that the tree must be a full 40-digit object name, that the stamp is
-      # the document's first field — with no file that names any of them. It
-      # reported the missing byte rather than guessing, which is the answer
-      # the frame asks for; this is the entry that answer names.
+      # cross-release render diff, the skills export capture and the
+      # release-notes prediction.
+      #
+      # THERE WAS A FOURTH, and its history is why this list is a list rather
+      # than a count. The rendered-site extraction was missing while the count
+      # above it said three, so the release-procedure agent was asked to check
+      # the site-text invocation and its three stated behaviours, that
+      # DOSSIERX_SITE_TEXT_OUT and _TREE imply each other, that the tree must be
+      # a full 40-digit object name, and that the stamp is the document's first
+      # field, with no file that named any of them. It reported the missing byte
+      # rather than guessing, and v0.6.0 added the entry that answer named:
+      # viewer-tests/site_dom_test.go. That extraction is now gone with the
+      # site's build step, the procedure spells out no site capture, and the
+      # entry goes with the sentences it was here to evidence.
       - tests/render_diff_capture_test.go
       - tests/skills_export_capture_test.go
       - tests/release_notes_predict_test.go
-      - viewer-tests/site_dom_test.go
       # The authorities for the OTHER claims this procedure invites a reader to
       # check, added together rather than one per round. Two consecutive gate
       # rounds each blocked on a single missing borrow here — one entry fixed,
@@ -403,18 +407,30 @@ surfaces:
       - FORMAT.md
 
   - name: site
-    what: The marketing and documentation site, sources and entry points. The
-      surface is the RENDERED DOM of a real build (plus its head metadata), not
-      the component source — but every file here decides what that DOM says.
+    what: The published site — two static HTML pages and their stylesheet. The
+      surface is these FILES, because with no build step between them and
+      GitHub Pages the file IS the page — index.html is a memo on why the
+      project exists, and releases.html is the release ledger.
     reach: Every prospective user. The only client-facing statement of what this
       project is, and the one whose counts have gone stale live.
+    # THE SURFACE USED TO BE "THE RENDERED DOM OF A REAL BUILD", and the change
+    # is a narrowing of what stands between the reviewed bytes and the served
+    # ones, not a relaxation. site/ was a Vite + React application, so the source
+    # a reviewer read and the DOM a visitor got were two different artifacts and
+    # the gate had to be handed the second — an extraction produced by a headless
+    # browser against a real build, staged as gate/site-text.json. That artifact
+    # is gone with the build: `.github/workflows/deploy-site.yml` uploads this
+    # directory as it stands, and tests/ci_workflow_test.go refuses the
+    # reintroduction of any step that would transform it. Reading the files here
+    # now satisfies "verify the thing the user sees" directly rather than by
+    # proxy.
     paths:
       - site/
     reads:
-      # The site's release ledger (`releases` in site/src/content.ts, rendered
-      # onto the releases page) must agree with the CHANGELOG's newest heading
-      # — the release driver refuses to publish when they disagree — and the
-      # ledger's per-release summaries are compressions of that file's entries.
+      # The site's release ledger — the entry in site/releases.html marked
+      # `data-current="true"` — must agree with the CHANGELOG's newest heading,
+      # and the release driver refuses to publish when they disagree. The
+      # ledger's per-release notes are compressions of that file's entries.
       # Without it the site agent is judging one half of the one agreement the
       # release rests on.
       - CHANGELOG.md

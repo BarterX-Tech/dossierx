@@ -215,19 +215,14 @@ func gateStage2Artifacts(surface string) []string {
 		// "the cross-release render diff says whether that changed" is the
 		// sentence in the prompt that names this file.
 		return []string{"gate/render-diff.json"}
-	case "site":
-		// viewer-tests/site_dom_test.go, DOSSIERX_SITE_TEXT_OUT: the rendered
-		// DOM of a real build, extracted in a real browser, which IS this
-		// surface per surfaces.yaml ("the RENDERED DOM of a real build ... not
-		// the component source"). It used to be the fourth SHARED evidence file
-		// — see gateSharedEvidence for what that cost — and it is read by this
-		// surface alone, so it reaches the key the way every other
-		// single-reader capture does. Its freshness is the one thing it does
-		// differently from the delta: the delta is recomputed at record time,
-		// while an extraction cannot be (it needs a build and a browser), so it
-		// carries a tree stamp of its own and scripts/gate-stage2/run.sh
-		// `record` refuses one stamped with another release's tree.
-		return []string{gateSiteTextFile}
+		// THE `site` SURFACE HAS NO CAPTURE, and it used to have the biggest one.
+		// gate/site-text.json was the rendered DOM of a real build of site/,
+		// extracted in a headless browser, because surfaces.yaml defined the
+		// surface as that DOM and not as the component source — the site was a Vite
+		// application, so the two were different artifacts. site/ is now two static
+		// HTML pages that deploy-site.yml uploads unchanged, the surface is those
+		// files, and the assembler hands them over as documents like every other
+		// surface's. Nothing is extracted, so nothing can be extracted staleley.
 	}
 	return nil
 }
@@ -258,7 +253,7 @@ func gateStage2Artifacts(surface string) []string {
 // stays withheld and named, because surface.json IS a faithful mechanical
 // projection of the engine's behaviour and is not of its prose.
 func gateStage2HandsAnExtract(surface string) bool {
-	return surface == "site" || surface == "binary-and-viewer"
+	return surface == "binary-and-viewer"
 }
 
 // gateStage2BinaryStringClasses are the file classes whose BYTES
@@ -1982,7 +1977,7 @@ func TestGateStage2AReferencedDocumentReKeysItsBorrowersAndNoOther(t *testing.T)
 		gateWrite(t, root, gateBundlePromptFile(surface), "Read "+surface+" against the inventory.\n")
 	}
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"layouts\":2}}\n")
-	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+	gateWrite(t, root, gateBundleExportCapture, "{\"/\":\"DossierX\"}\n")
 	// No tree argument: the delta stopped carrying one when its freshness moved
 	// from a stamp to recomputation at record time. A tree inside the delta was
 	// in every surface's shared-evidence hash, so any commit re-keyed every
@@ -2111,7 +2106,7 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 		isDeclared[name] = true
 	}
 
-	for _, named := range []string{"exported-skills", "release-notes", "changelog", "binary-and-viewer", "site"} {
+	for _, named := range []string{"exported-skills", "release-notes", "changelog", "binary-and-viewer"} {
 		if !isDeclared[named] {
 			t.Errorf("gateStage2Artifacts attaches a capture to surface %q, which surfaces.yaml does not declare; that capture is in no key and reaches no agent", named)
 		}
@@ -2119,7 +2114,13 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 			t.Errorf("surface %q is named here as reading a capture and gateStage2Artifacts returns none for it", named)
 		}
 	}
-	for _, named := range []string{"site", "binary-and-viewer"} {
+	// ONE SURFACE RECEIVES AN EXTRACT, AND IT USED TO BE TWO. `site` was the
+	// other: it resolved to 47 files of TSX source and the surface was the
+	// RENDERED DOM of a real build, so the source was what PRODUCED the thing
+	// under review rather than the thing. The site is two static HTML pages now
+	// and deploy-site.yml uploads them unchanged, so its documents are handed
+	// over whole like every other surface's.
+	for _, named := range []string{"binary-and-viewer"} {
 		if !isDeclared[named] {
 			t.Errorf("gateStage2HandsAnExtract names surface %q, which surfaces.yaml does not declare", named)
 		}
@@ -2133,7 +2134,7 @@ func TestGateStage2EverySurfaceNamedInAPolicyIsDeclared(t *testing.T) {
 	for _, name := range declared {
 		artifacts := gateStage2Artifacts(name)
 		switch name {
-		case "exported-skills", "release-notes", "changelog", "binary-and-viewer", "site":
+		case "exported-skills", "release-notes", "changelog", "binary-and-viewer":
 			if len(artifacts) == 0 {
 				t.Errorf("surface %q lost its capture", name)
 			}
@@ -2240,7 +2241,6 @@ func TestGateStage2FreshnessRefusesAnInputThisRunDidNotProduce(t *testing.T) {
 	for _, rel := range []string{
 		gateBaselineFile,
 		gateDeltaFile,
-		gateSiteTextFile,
 		"gate/export-output.json",
 		"gate/release-notes-prediction.json",
 		"gate/render-diff.json",
@@ -3069,9 +3069,9 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 
 		t.Run("record refuses baseline "+name, func(t *testing.T) {
 			root, _ := fixture(t)
-			gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
+			gateWrite(t, root, gateBundleExportCapture, "{\"/\":\"DossierX\"}\n")
 			if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
-				"--baseline-ref", "v0.5.0", "--baseline-commit", commit, gateSiteTextFile); err == nil {
+				"--baseline-ref", "v0.5.0", "--baseline-commit", commit, gateBundleExportCapture); err == nil {
 				t.Fatal("a run manifest was written naming a baseline this run never resolved; every key computed under it would be attached to a release nobody can identify")
 			}
 			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gateStage2RunFile))); err == nil {
@@ -3334,30 +3334,41 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	})
 }
 
-// TestGateStage2RecordRefusesAStaleSiteTextExtraction holds the site extraction
-// to the same record-time account as the render diff, against the REAL harness.
+// TestGateStage2RecordRefusesAStaleStampedCapture holds the one capture that
+// cannot be recomputed at record time to an account of which release it belongs
+// to, against the REAL harness.
 //
-// THE HISTORY THIS CLOSES. gate/site-text.json used to carry a node/npm
-// toolchain stamp and nothing that named a release: no tree, and no seat in
-// run.sh's guard loop. So an extraction left on disk from the previous release
-// — or a `printf '{}' > gate/site-text.json` typed at a gate that had been
-// refusing for ten minutes — recorded cleanly, hashed cleanly, and was handed
-// to the site agent as this release's rendered DOM. The extraction cannot be
-// recomputed at record time the way the delta is (it needs a real build and a
-// real browser), so its account is the stamped kind: the producer
-// (viewer-tests/site_dom_test.go) writes the tree it was driven with, first in
-// the document per TestSiteTextProvenanceComesFirst, and `record` refuses one
-// stamped with another release's tree. It compares this tree's build against
-// nothing, so unlike the render diff it carries no baseline commit to check.
-func TestGateStage2RecordRefusesAStaleSiteTextExtraction(t *testing.T) {
+// WHAT IT USED TO BE AIMED AT, because the history is the whole argument.
+// This was TestGateStage2RecordRefusesAStaleSiteTextExtraction, and its subject
+// was gate/site-text.json: the rendered DOM of a real build of site/. That file
+// once carried a node/npm toolchain stamp and nothing that named a release — no
+// tree, and no seat in run.sh's guard loop — so an extraction left on disk from
+// the previous release, or a `printf '{}' > gate/site-text.json` typed at a gate
+// that had been refusing for ten minutes, recorded cleanly, hashed cleanly, and
+// was handed to the site agent as this release's rendered DOM.
+//
+// The extraction is gone: site/ is static HTML, so the site surface is read as
+// files and there is nothing to extract. gate/render-diff.json is now the only
+// stamped capture left — it compares two releases' rendered output, which record
+// time cannot reproduce either — and it inherited the guard the site extraction's
+// failure bought. Re-aiming this test rather than deleting it is the point:
+// without it, run.sh's stamped-capture branch has no test at all, and the defect
+// that branch exists for is one this repository has actually shipped.
+//
+// The render diff carries a baseline commit as well as a tree, because it IS a
+// comparison against the baseline. Both are checked; the rows below move the
+// tree, which is the half the site extraction taught.
+func TestGateStage2RecordRefusesAStaleStampedCapture(t *testing.T) {
 	tree := gateStage2FixtureTree
 	commit := gateStage2FixtureBaseline
 	script := filepath.Join(surfaceRepoRoot(t), filepath.FromSlash(gateStage2HarnessFile))
 
-	// stamped is the shape the extraction writes: provenance first, the rest
-	// of the dump behind it.
+	const capture = "gate/render-diff.json"
+
+	// stamped is the shape the capture writes: provenance first, the rest of
+	// the document behind it.
 	stamped := func(tree string) string {
-		return "{\n  \"tree\": \"" + tree + "\",\n  \"generated_by\": \"viewer-tests/site_dom_test.go\",\n  \"toolchain\": {\"node_version\": \"v24.0.0\", \"npm_version\": \"11.0.0\"},\n  \"pages\": []\n}\n"
+		return "{\n  \"tree\": \"" + tree + "\",\n  \"commit\": \"" + commit + "\",\n  \"generated_by\": \"tests/render_across_releases_test.go\",\n  \"claims\": []\n}\n"
 	}
 
 	// record runs the real script and returns its combined output and exit
@@ -3366,12 +3377,12 @@ func TestGateStage2RecordRefusesAStaleSiteTextExtraction(t *testing.T) {
 	record := func(t *testing.T, body string) (string, int) {
 		t.Helper()
 		root := t.TempDir()
-		gateWrite(t, root, gateManifestFile, "surfaces:\n  - name: site\n    paths: [site/]\n")
-		gateWrite(t, root, gateSiteTextFile, body)
+		gateWrite(t, root, gateManifestFile, "surfaces:\n  - name: changelog\n    paths: [CHANGELOG.md]\n")
+		gateWrite(t, root, capture, body)
 		cmd := exec.Command("bash", script, "record",
 			"--root", root, "--tree", tree,
 			"--baseline-ref", gateStage2FixtureRef, "--baseline-commit", commit,
-			gateSiteTextFile)
+			capture)
 		out, err := cmd.CombinedOutput()
 		code := 0
 		if err != nil {
@@ -3388,10 +3399,10 @@ func TestGateStage2RecordRefusesAStaleSiteTextExtraction(t *testing.T) {
 		return string(out), code
 	}
 
-	t.Run("an extraction stamped with this tree records (positive control)", func(t *testing.T) {
+	t.Run("a capture stamped with this tree records (positive control)", func(t *testing.T) {
 		out, code := record(t, stamped(tree))
 		if code != 0 {
-			t.Fatalf("run.sh refused an extraction that agrees with the run, so every row below would pass over a guard that refuses everything: exit %d\n%s", code, out)
+			t.Fatalf("run.sh refused a capture that agrees with the run, so every row below would pass over a guard that refuses everything: exit %d\n%s", code, out)
 		}
 	})
 
@@ -3401,28 +3412,28 @@ func TestGateStage2RecordRefusesAStaleSiteTextExtraction(t *testing.T) {
 		want string
 	}{
 		{
-			"an extraction of the previous release's build",
+			"a capture of the previous release's tree",
 			stamped(strings.Repeat("d", 40)),
 			"covers " + tree,
 		},
 		{
-			// The historical shape, byte for byte: a toolchain pair and no
+			// The historical shape, byte for byte: a producer name and no
 			// release identity anywhere in the file. This recorded cleanly
 			// before the stamp existed.
-			"the pre-stamp shape, a toolchain and no tree",
-			"{\n  \"generated_by\": \"viewer-tests/site_dom_test.go\",\n  \"toolchain\": {\"node_version\": \"v24.0.0\", \"npm_version\": \"11.0.0\"},\n  \"pages\": []\n}\n",
+			"the pre-stamp shape, a producer and no tree",
+			"{\n  \"generated_by\": \"tests/render_across_releases_test.go\",\n  \"claims\": []\n}\n",
 			"not a full 40-digit object name",
 		},
 		{
-			// What a local run without DOSSIERX_SITE_TEXT_TREE writes: the key
-			// is present and empty, which is not an identity either.
-			"an extraction whose stamp is empty",
+			// What a local run without the tree flag writes: the key is
+			// present and empty, which is not an identity either.
+			"a capture whose stamp is empty",
 			stamped(""),
 			"not a full 40-digit object name",
 		},
 		{
-			// The two-byte workaround, same as the render diff's.
-			"the two-byte extraction",
+			// The two-byte workaround.
+			"the two-byte capture",
 			"{}\n",
 			"not a full 40-digit object name",
 		},
@@ -3430,16 +3441,16 @@ func TestGateStage2RecordRefusesAStaleSiteTextExtraction(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			out, code := record(t, tc.body)
 			if code == 0 {
-				t.Fatalf("run.sh recorded a site extraction that does not belong to this run. The manifest is honest about its bytes, the digest matches, and the site agent would read another release's rendered DOM as this one's:\n%s", out)
+				t.Fatalf("run.sh recorded a stamped capture that does not belong to this run. The manifest is honest about its bytes, the digest matches, and a surface agent would read another release's evidence as this one's:\n%s", out)
 			}
 			if code != 3 {
-				t.Errorf("run.sh exited %d, want 3 — the same could-not-be-attributed refusal the other stamped capture uses:\n%s", code, out)
+				t.Errorf("run.sh exited %d, want 3 — the could-not-be-attributed refusal:\n%s", code, out)
 			}
 			if !strings.Contains(out, tc.want) {
 				t.Errorf("expected the refusal to say %q, got:\n%s", tc.want, out)
 			}
-			if !strings.Contains(out, gateSiteTextFile) {
-				t.Errorf("the refusal must name the artifact, or a human is left diffing six files by hand:\n%s", out)
+			if !strings.Contains(out, capture) {
+				t.Errorf("the refusal must name the artifact, or a human is left diffing five files by hand:\n%s", out)
 			}
 		})
 	}

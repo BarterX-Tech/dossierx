@@ -202,16 +202,16 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsNineteenLeavesUnderSevenNouns treats the leaf count.
+// TestSurfaceIsTwentyTwoLeavesUnderEightNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":       7,
-		"commands":    19,
-		"lint_rules":  28,
-		"error_codes": 44,
+		"nouns":       8,
+		"commands":    22,
+		"lint_rules":  38,
+		"error_codes": 45,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

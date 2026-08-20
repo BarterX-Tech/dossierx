@@ -82,11 +82,22 @@ const (
 
 // Node is one claim, projected down to the facts the pane draws with.
 //
-// Every field is emitted unconditionally — no omitempty anywhere in this
-// file. The client reads a fixed shape, and an absent key and a zero value
-// are different things to it: "build_role": "" is the fact the
-// missing_build_phase rule keys off, and a node object that simply lacked
-// the key would make that rule silently unable to fire.
+// Every SCALAR field is emitted unconditionally. The client reads a fixed
+// shape, and an absent key and a zero value are different things to it:
+// "build_role": "" is the fact the missing_build_phase rule keys off, and a
+// node object that simply lacked the key would make that rule silently unable
+// to fire.
+//
+// Tracks is the one exception, and it is one for a reason that does not
+// weaken the rule above. It is a LIST, and an absent list and an empty list
+// mean the identical thing here — "this claim joins no track" — so no client
+// rule can key off the difference the way missing_build_phase keys off the
+// empty string. What the difference DOES decide is whether a project that
+// never opted into tracks pays for them: with the key always present, every
+// node in every track-less corpus grows a "tracks":null, and the three
+// tracked fixture viewers this repository commits would all move. Tracks are
+// optional (see config.Config.Tracks), and an optional feature nobody enabled
+// has to cost nothing — including zero bytes on the wire.
 type Node struct {
 	// ID is model.Claim.ID, verbatim.
 	ID string `json:"id"`
@@ -136,6 +147,54 @@ type Node struct {
 	// be well-connected project-wide.
 	InDegree  int `json:"in_degree"`
 	OutDegree int `json:"out_degree"`
+
+	// Tracks is this claim's track memberships, in the order the claim
+	// declares them, with every role resolved. Absent when the claim joins
+	// no track — see the type's doc comment for why this one field carries
+	// omitempty.
+	//
+	// DECLARATION ORDER, NOT SORTED, and that is deliberate. It is already
+	// deterministic (a YAML sequence in one file, never a map), so sorting
+	// would buy nothing; and model.Claim.OwnedTrackID resolves a claim that
+	// wrongly owns two tracks by taking the FIRST, so a payload in the same
+	// order says the same thing the engine says about that defect instead of
+	// naming a different owner than track-multi-owner reports.
+	//
+	// This did NOT bump SchemaVersion. A client built before tracks existed
+	// reads a payload carrying them unchanged: it ignores the key, and for a
+	// project with no tracks the key is not there at all.
+	Tracks []NodeTrack `json:"tracks,omitempty"`
+}
+
+// NodeTrack is one claim's membership in one track.
+//
+// MEMBERSHIP IS NOT AN EDGE, and this type existing beside Edge rather than
+// inside it is the whole statement. RestsOn, Mirrors and Governed are
+// semantic dependencies between claims and carry cycle lints; a track is a
+// SET, and a set has no direction to run in a circle. Emitting membership as
+// an Edge would put it into the client's scc() walk and ring every track
+// member red. See model.TrackRef, which decides this for the model, and
+// internal/lint/mixed_cycle.go, which states the rule that a new edge kind
+// must say whether it joins the union walk.
+//
+// The two fields are deliberately the same two, under the same names, that
+// .catalog.json carries in catalog.TrackMembership: a reader comparing the
+// two artifacts for one claim finds one shape, not two that have to be
+// mentally translated.
+type NodeTrack struct {
+	// ID is the track this claim belongs to. It may name a track the project
+	// config does not declare — that is a lint error (track-unknown), but
+	// "dossierx serve" never lints, so a live session can carry one and the
+	// pane still has to draw it. Groups.Tracks carries such an id too, so the
+	// filter can select it rather than leaving a node in a track nothing can
+	// reach.
+	ID string `json:"id"`
+
+	// Role is model.TrackRef.EffectiveRole(), never the raw Role field: the
+	// unset role MEANS cites, and a client re-deriving that default would be
+	// a second place to keep it correct. So this is always exactly "owns" or
+	// "cites" — never "".
+	Role string `json:"role"`
 }
 
 // Edge is one declared relation, in the direction the claim declares it.
@@ -148,13 +207,46 @@ type Edge struct {
 	Type string `json:"type"`
 }
 
-// Groups carries the two grouping axes the pane can collapse the graph
-// along, each in the order the viewer's sidebar already reads them in:
-// the project config's declared order first, then anything else a claim
-// mentions, sorted. Empty values are not groups and are excluded.
+// Groups carries the axes the pane offers as controls, each in the order the
+// viewer's sidebar already reads them in: the project config's declared order
+// first, then anything else a claim mentions, sorted. Empty values are not
+// groups and are excluded.
+//
+// Modules and Facets are COLLAPSE axes as well as filters — the pane can fold
+// the graph down to one node per module or per facet. Tracks is a filter
+// only. Collapsing to tracks would need a node to belong to at most one of
+// them, and a claim may cite any number, so there is no representative to
+// collapse it into; the granularity control therefore stays two-valued and
+// this axis narrows the corpus instead of folding it.
 type Groups struct {
 	Modules []string `json:"modules"`
 	Facets  []string `json:"facets"`
+
+	// Tracks is the project's declared tracks, plus any track id a claim
+	// names that the config does not declare. Absent — not empty — when the
+	// project declares none and no claim mentions one, which is what keeps a
+	// track-less project's payload byte-identical to what it was before this
+	// axis existed.
+	//
+	// It carries objects rather than the bare strings Modules and Facets use
+	// because a track HAS a title and a module does not. Deriving a label
+	// from the id, the way the pane derives a claim's label from its slug,
+	// would be inventing a name over the top of one the project already
+	// wrote down.
+	Tracks []TrackGroup `json:"tracks,omitempty"`
+}
+
+// TrackGroup is one entry of Groups.Tracks.
+type TrackGroup struct {
+	// ID is the id claims cite and the value the filter control selects on.
+	ID string `json:"id"`
+
+	// Title is config.Track.Title — required of every declared track, so it
+	// is empty for none of them. For a track id no config declares, this is
+	// the ID VERBATIM: there is no title to render, and showing the raw id is
+	// both the only honest label and the visible signal that nothing declared
+	// it.
+	Title string `json:"title"`
 }
 
 // Dropped reports what Build could not represent, so the pane can say so in

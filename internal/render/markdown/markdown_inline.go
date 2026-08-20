@@ -95,15 +95,15 @@ import (
 // parseLink takes its text verbatim up to the FIRST "]", so a link's text can
 // never contain the "](" a nested link would need. Depth is at most two.
 //
-// img — the IMAGE CAPABILITY, carried here rather than passed alongside so that
-// every recursive call into the pass has to carry it too. Its zero value renders
-// no images (see markdown_images.go), which is why an inlineCtx built literally
-// — as RenderInline and every non-claim-body caller build it — refuses images
-// without saying so.
+// pol — the CLAIM-BODY CAPABILITIES (images, citation markers), carried here
+// rather than passed alongside so that every recursive call into the pass has to
+// carry it too. Its zero value grants neither (see bodyPolicy), which is why an
+// inlineCtx built literally — as RenderInline and every non-claim-body caller
+// build it — refuses both without saying so.
 type inlineCtx struct {
 	inLink              bool
 	leftEdge, rightEdge rune
-	img                 imagePolicy
+	pol                 bodyPolicy
 }
 
 // edgeNone is the "there is no character on this side" edge: the real start or
@@ -303,7 +303,7 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 					links = newLinkIndex(text, i+1)
 				}
 				if ok {
-					if url, permitted := ctx.img.accept(src); permitted {
+					if url, permitted := ctx.pol.img.accept(src); permitted {
 						flush(i)
 						b.WriteString(imgHTML(url, alt))
 						i += 1 + matchLen
@@ -326,6 +326,21 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 				links = newLinkIndex(text, i)
 			}
 			if !ok {
+				// THE CITATION MARKER LIVES EXACTLY HERE, IN THE LINK
+				// GRAMMAR'S SHADOW. "[" belongs to links and images first: a
+				// "[1](url)" is a link whose text happens to be a digit, and it
+				// must keep rendering as one, so the marker is only ever offered
+				// the positions where parseLink has ALREADY declined. That is
+				// what makes this construct additive — every "[" that used to
+				// fall through to literal text still does, unless the claim
+				// declares a source with that exact ref.
+				if n, ref, hit := ctx.pol.cite.match(text, i); hit {
+					flush(i)
+					b.WriteString(ctx.pol.cite.markerHTML(ref))
+					i += n
+					plain = i
+					continue
+				}
 				// A literal "[": it stays in the pending plain run.
 				i++
 				continue
@@ -350,8 +365,23 @@ func inlineScan(b *strings.Builder, text string, breaks []int, ctx inlineCtx) []
 			// has on either side of this substring. Passing them is what makes a
 			// delimiter run at either end of the text flank as CommonMark says
 			// it does; see inlineCtx.
+			//
+			// THE CITATION CAPABILITY IS DROPPED ON THE WAY IN, and the image
+			// one is not. An anchor may not contain another anchor, and a
+			// citation marker IS an anchor.
+			//
+			// Today that is belt AND braces: parseLink takes its text verbatim
+			// up to the FIRST "]", so a link's text can never contain the "]"
+			// a marker needs to close, and the recursion could not meet one if
+			// it tried. The field is zeroed anyway because the grammar is the
+			// only thing making that true, and a later widening of it (bracket
+			// nesting, reference links) would silently hand the recursion a
+			// capability nobody re-decided. An absent capability cannot be
+			// reached by a construct added to the pass later; a flag test
+			// inside the marker scanner could be forgotten by one.
 			inner := renderInlineCtx(linkText, nil, inlineCtx{
-				inLink: true, leftEdge: '[', rightEdge: ']', img: ctx.img,
+				inLink: true, leftEdge: '[', rightEdge: ']',
+				pol: bodyPolicy{img: ctx.pol.img},
 			})
 			b.WriteString(anchorHTML(url, inner))
 			i += matchLen

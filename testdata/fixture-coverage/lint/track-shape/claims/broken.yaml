@@ -1,0 +1,21 @@
+id: trackmod.contract.broken
+facet: contract
+module: trackmod
+status: draft
+layout: card
+body: |
+  A claim whose membership list is malformed three ways at once: an entry with
+  no id, an entry whose role is outside the owns/cites pair, and a second entry
+  for a track it has already named. Each is a separate track-shape finding, and
+  none of them is any other rule's business -- the ids that are present are
+  declared, and nothing here claims ownership.
+rests_on:
+  - trackmod.contract.anchor
+tracks:
+  - id: "   "
+  - id: checkout
+    role: sideways
+  - id: checkout
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

@@ -378,9 +378,15 @@ body.dxg-open {
   border-color: var(--border);
 }
 
-/* ---- control bar: six groups, in the frozen prototype order ------------
-   Module · Facet · Granularity · Highlight overlay · Edge types · View.
-   Scope was one group and is now two; the pair sits where the one did. */
+/* ---- control bar: six groups, seven with a track axis ------------------
+   Module · Facet · [Track] · Granularity · Highlight overlay · Edge types ·
+   View. Scope was one group and is now two; the pair sits where the one did.
+
+   Track is bracketed because it is absent — not disabled — for the projects
+   that declare no tracks, which is most of them. Nothing here styles it
+   specially: it is a .dxg-ctl holding a .dxg-select like its two neighbours,
+   and a third scope axis should not announce itself as a different KIND of
+   control when it is the same kind. */
 
 .dxg-controls {
   flex-shrink: 0;
@@ -837,6 +843,30 @@ body.dxg-open #dxgOpen {
 .dxg-legend-item--governed .dxg-legend-edge,
 .dxg-legend-item--governed .dxg-legend-name {
   color: var(--dxg-governed);
+}
+
+/* The two track rows, shown only while a track is selected.
+
+   THE SAMPLES CARRY NO COLOUR OF THEIR OWN, and that is the point rather than
+   an omission. Owns-vs-cites is drawn on the canvas as an inner ruling in
+   --ink, the same ink the status ring already uses, precisely so the
+   distinction survives a reader who cannot separate two hues, a printed page
+   and both themes — this project's own
+   viewer.decision.colour-is-not-the-only-channel is the argument. currentColor
+   here inherits the row's --ink, so the strip draws what the canvas draws and
+   neither side holds a second copy of the other's value. */
+.dxg-legend-mark {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--ink);
+}
+
+/* Held at full strength during a legend hover, with the edge and overlay
+   rows: hovering a facet asks "which nodes are this facet?", and a track role
+   is not a facet and is not answering it. */
+.dxg-legend-list:hover .dxg-legend-item--track {
+  opacity: 1;
 }
 
 /* =========================================================================

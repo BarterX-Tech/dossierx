@@ -30,7 +30,14 @@ import (
 //
 // Ordering, stated because the client and the fixtures both depend on it:
 // nodes by id; edges by (from, type, to); groups.modules in cfg order then
-// any other module a claim names, sorted; groups.facets likewise.
+// any other module a claim names, sorted; groups.facets and groups.tracks
+// likewise; a node's own tracks in the order the claim declares them.
+//
+// It is also ZERO-COST WHEN UNUSED, and that is a contract rather than a
+// happy accident: over a corpus where no claim joins a track and the config
+// declares none, Encode's bytes are IDENTICAL to what they were before tracks
+// existed. Both new keys carry omitempty and both are left nil rather than
+// empty here. TestTrackLessPayloadIsByteIdenticalToPreTracks holds it.
 func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 	p := Payload{
 		Schema: SchemaVersion,
@@ -66,6 +73,7 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 			Emphasis:      c.Emphasis,
 			ReviewPending: c.ReviewPending,
 			OpenComments:  len(c.OpenThreadIDs()),
+			Tracks:        nodeTracks(c),
 		})
 	}
 
@@ -93,6 +101,15 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 		if t := c.Governed.Type; t != "" && t != "none" {
 			p.appendEdge(known, c.ID, t, EdgeGovernedBy)
 		}
+		// c.Tracks IS NOT WALKED HERE, AND NOTHING BELONGS IN THIS LOOP FOR
+		// IT. Track membership is a set, not a dependency: it has no
+		// direction, so it cannot be a cycle, and the client's scc() walks
+		// every edge in Edges. An edge kind that joined the walk here would
+		// ring every claim in a track red under the `cycle` rule and hand a
+		// reviewer a structural defect the corpus does not have. Membership
+		// rides on the node instead (Node.Tracks), where a set belongs. See
+		// model.TrackRef and internal/lint/mixed_cycle.go for the same
+		// decision taken twice before this one.
 	}
 
 	sort.Slice(p.Nodes, func(i, j int) bool { return p.Nodes[i].ID < p.Nodes[j].ID })
@@ -123,8 +140,9 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 	}
 
 	var cfgModules, cfgFacets []string
+	var cfgTracks []config.Track
 	if cfg != nil {
-		cfgModules, cfgFacets = cfg.Modules, cfg.Facets
+		cfgModules, cfgFacets, cfgTracks = cfg.Modules, cfg.Facets, cfg.Tracks
 	}
 	seenModules := make([]string, 0, len(claims))
 	seenFacets := make([]string, 0, len(claims))
@@ -134,8 +152,79 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 	}
 	p.Groups.Modules = groupOrder(cfgModules, seenModules)
 	p.Groups.Facets = groupOrder(cfgFacets, seenFacets)
+	// Left NIL when this project has no tracks, which is what the field's
+	// omitempty turns into an absent key. Modules and Facets are initialised
+	// to empty slices at the top of this function precisely because they are
+	// always emitted; this one must not be.
+	p.Groups.Tracks = trackOrder(cfgTracks, claims)
 
 	return p
+}
+
+// nodeTracks projects one claim's memberships onto the wire, resolving every
+// role. It returns NIL rather than an empty slice for a claim that joins no
+// track, which is what makes the key disappear instead of arriving as
+// "tracks":[] — see Node's doc comment for why that byte matters.
+//
+// A membership naming no track is dropped, for the reason groupOrder drops
+// the empty group: it selects nothing, it cannot be filtered on, and it would
+// render as a nameless row in a control. The claim keeps its node either way.
+func nodeTracks(c model.Claim) []NodeTrack {
+	out := make([]NodeTrack, 0, len(c.Tracks))
+	for _, t := range c.Tracks {
+		if t.ID == "" {
+			continue
+		}
+		out = append(out, NodeTrack{ID: t.ID, Role: string(t.EffectiveRole())})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// trackOrder returns the project's declared tracks in the config's own order,
+// then every other track id some claim names, sorted — the same shape
+// groupOrder produces for modules and facets, and for the same reasons.
+//
+// The extras are not only typos. "dossierx serve" never lints, so a claim
+// naming a track the config has not caught up with reaches this function
+// routinely during authoring. Dropping such an id would leave its claims
+// carrying a membership the filter control could not offer: a track a reader
+// can see on a node and can never select. It is listed under its raw id
+// instead, which is simultaneously the only label available and the visible
+// evidence that track-unknown has something to say about it.
+//
+// Returns nil — never an empty slice — when there is nothing to list, so a
+// project that never opted into tracks emits no groups.tracks key at all.
+func trackOrder(declared []config.Track, claims []model.Claim) []TrackGroup {
+	out := make([]TrackGroup, 0, len(declared))
+	taken := make(map[string]bool, len(declared))
+	for _, t := range declared {
+		if t.ID == "" || taken[t.ID] {
+			continue
+		}
+		taken[t.ID] = true
+		out = append(out, TrackGroup{ID: t.ID, Title: t.Title})
+	}
+	extras := make([]string, 0, len(claims))
+	for _, c := range claims {
+		for _, m := range c.Tracks {
+			if m.ID == "" || taken[m.ID] {
+				continue
+			}
+			taken[m.ID] = true
+			extras = append(extras, m.ID)
+		}
+	}
+	sort.Strings(extras)
+	for _, id := range extras {
+		out = append(out, TrackGroup{ID: id, Title: id})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // appendEdge emits one edge, or counts one drop. It is a method on Payload

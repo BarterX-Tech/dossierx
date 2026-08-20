@@ -277,386 +277,137 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// gateReleasesArrayRE isolates the `releases` array in content.ts, so the
-// assertions below judge the release entries and not the prose elsewhere in the
-// file (which discusses the deleted field at length, on purpose).
-var gateReleasesArrayRE = regexp.MustCompile(`(?s)const releases: Release\[\] = \[.*?\n\];`)
-
-// gateCommitKeyRE is a `commit:` object key. It is anchored to the start of a
-// line so that the word "commit" in a highlight's prose — every release entry is
-// full of them — is not mistaken for the field.
-var gateCommitKeyRE = regexp.MustCompile(`(?m)^\s*commit:`)
-
-// TestSiteReleaseEntriesCarryNoCommitStamp is the deletion, held.
-func TestSiteReleaseEntriesCarryNoCommitStamp(t *testing.T) {
-	root := surfaceRepoRoot(t)
-	content := gateReadRepoFile(t, root, filepath.Join("site", "src", "content.ts"))
-
-	array := gateReleasesArrayRE.FindString(content)
-	if array == "" {
-		t.Fatal("site/src/content.ts no longer declares a `const releases: Release[] = [ ... ];` array; this assertion has lost its subject")
-	}
-	if hits := gateCommitKeyRE.FindAllString(array, -1); len(hits) > 0 {
-		t.Errorf("%d release entr(ies) in site/src/content.ts carry a `commit` field. "+
-			"It was deleted because it cannot converge — writing the sha is itself a commit, so the value is stale the moment it lands — "+
-			"and because the binary spells the same value as a forty-character sha. Delete it; do not fill it in.", len(hits))
-	}
-	if strings.Contains(content, `"(devel)"`) {
-		t.Error("site/src/content.ts still carries a \"(devel)\" fallback. The binary cannot print that value — resolveVersionInfo excludes it — so depicting it would be depicting output no user can see")
-	}
-}
-
-// gateCommitReadRE is a READ of the deleted field: `.commit` on some receiver.
-// The receiver is CAPTURED rather than ignored, because one spelling has to be
-// allowed through and it must be allowed by name — see gateCommitReadExempt.
-// The word boundary keeps it off `.commitment`, and a declaration (`commit?:`)
-// is not a read and does not match.
-var gateCommitReadRE = regexp.MustCompile(`(\w+)\.commit\b`)
-
-// gateCommitReadExempt is the one receiver that is not the site's field.
+// EVERYTHING THIS SECTION USED TO HOLD, AND WHERE EACH PART WENT.
 //
-// `main.commit` is the Go LDFLAGS SYMBOL — the variable GoReleaser stamps with
-// the full forty-character sha — and the prose explaining why the site's field
-// was deleted cannot make its argument without naming it: the two disagreeing by
-// construction, seven characters against forty, is half the reason the field is
-// gone. Exempting it by name is what lets the explanation live next to the
-// assertion instead of being softened to get past it.
+// site/ was a Vite + React + TypeScript application, and the release stamp was
+// a typed array inside site/src/content.ts that a component rendered. Five
+// tests and a small TypeScript lexer lived here to hold that arrangement to its
+// own rules. The application was replaced by two static HTML pages — a memo on
+// why the project exists, and site/releases.html, the ledger — and the tests
+// are accounted for one at a time below, because a section that simply vanished
+// would leave the next reader unable to tell a retired check from a deleted one.
 //
-// It is a receiver name and not a substring: `release.commit` is caught,
-// `main.commit` is not, and nothing else is exempt.
-func gateCommitReadExempt(receiver string) bool { return receiver == "main" }
+//   - TestSiteReleaseEntriesCarryNoCommitStamp refused a `commit:` field on any
+//     release entry. IT MOVED, whole, to TestSiteLedgerCarriesNoCommitSha in
+//     tests/site_ledger_test.go, and it got stricter on the way: the old check
+//     refused the FIELD, and the new one refuses a sha-shaped token anywhere on
+//     the page, because static HTML has no field to name.
+//
+//   - TestNoSiteFileReadsTheDeletedCommitField and
+//     TestNoSiteTypeDeclaresTheDeletedCommitField swept every tracked file under
+//     site/src/ for a read of the field and for an optional property declaring
+//     it. Both existed for one reason: a reader is what gives a deleted field a
+//     reason to come back, and a declared-but-unused property is the doorway it
+//     comes back through. NEITHER HAS A SUBJECT NOW — there is no site/src/, no
+//     TypeScript, and no type declaration anywhere on the site — and the risk
+//     they guarded went with it. An HTML page has no way to declare a field it
+//     does not display; anything a future ledger says about a commit is text on
+//     the page, which is exactly what the moved check above reads.
+//
+//   - TestSiteSelectsTheReleaseThisTreeModels pinned three expressions across
+//     two files that all had to agree about what "the current release" meant:
+//     the array's oldest-first order, `releases[releases.length - 1]`, and
+//     ReleaseTimeline's own `releases.length - 1`. IT WAS REPLACED RATHER THAN
+//     MOVED, by TestSiteLedgerNamesExactlyOneCurrentRelease. The three
+//     expressions existed because the ledger encoded "current" as a POSITION;
+//     the entry now carries `data-current="true"` and says so about itself, so
+//     there is one statement instead of three and nothing left for them to
+//     disagree about. That is the defect being designed out, not a check being
+//     dropped: a prepended entry used to silently demote the new release while
+//     the page went on rendering perfectly.
+//
+//   - TestSiteDeclaresNoSecondVersionSpelling refused a constant that derived a
+//     `v`-less spelling. IT SURVIVES BELOW, re-aimed at the pages themselves,
+//     because the rule it enforced is about the project and not about
+//     TypeScript.
+//
+// The lexer went with them. gateStripTSComments was 70 lines of state machine
+// that existed to tell `https://` inside a string and the regex `/^v/` apart
+// from a comment; tests/site_ledger_test.go strips HTML comments with one
+// regexp, which is all a page with no script needs.
 
-// TestNoSiteFileReadsTheDeletedCommitField is the deletion held across the WHOLE
-// site rather than in the one file the field was written in.
-//
-// The narrower assertion above reads content.ts, because that is where the
-// entries live and where the transcript that rendered the field lived. But a
-// deleted field comes back through whoever wants to render it, and that is a
-// component, not the data file: the next person to want a sha on the release
-// timeline writes `release.commit` in a `.tsx` file, discovers the entries do not
-// carry one, and adds it back to content.ts to feed what they just wrote. The
-// entry-level check fires only at the END of that sequence, after the reader
-// exists and the field has a reason to.
-//
-// So the assertion is about READERS, over every tracked file the site ships. A
-// field nothing reads is a field nobody has a reason to re-add.
-func TestNoSiteFileReadsTheDeletedCommitField(t *testing.T) {
-	root := surfaceRepoRoot(t)
+// gateSiteVersionRE is a version literal in the site's own text. Both spellings
+// are matched — the point is to find the one that should not be there — and the
+// leading boundary keeps it off the `v` in an ordinary word.
+var gateSiteVersionRE = regexp.MustCompile(`(?:^|[^\w.])(v?\d+\.\d+\.\d+)`)
 
-	var scanned int
-	for _, file := range surfaceTrackedFiles(t, root) {
-		if !strings.HasPrefix(file, "site/src/") {
-			continue
-		}
-		scanned++
-		body := gateReadRepoFile(t, root, filepath.FromSlash(file))
-		for _, hit := range gateCommitReadRE.FindAllStringSubmatch(body, -1) {
-			if gateCommitReadExempt(hit[1]) {
-				continue
-			}
-			t.Errorf("%s reads %s — the release entries' `commit` field, which was deleted for naming the wrong sha two releases running and which no entry carries. "+
-				"Nothing on the site may read it: a reader is what gives the field a reason to come back, and it comes back as a seven-character sha the binary spells with forty", file, hit[0])
-		}
-	}
-	// The scan has to have had something to scan. An empty file list would make
-	// the loop above pass over zero comparisons, which is the shape of green this
-	// gate exists to refuse.
-	if scanned == 0 {
-		t.Fatal("no tracked file under site/src/ was scanned; this assertion passed over nothing")
-	}
-}
+// gateSitePages are the pages a visitor can reach, relative to the repository
+// root. Named rather than globbed: a page added to site/ and not added here is
+// a page this check does not read, and the surfaces.yaml entry for site/ is
+// what catches that — but naming them means the failure is "the list is stale"
+// rather than a glob quietly matching nothing.
+var gateSitePages = []string{"site/index.html", "site/releases.html"}
 
-// gateCommitDeclarationRE is a TypeScript property DECLARATION of the deleted
-// field — `commit?: string` or `commit: string` — as it would appear on an
-// interface. It is anchored to the start of a line so that prose about a commit,
-// of which the release entries carry a great deal, cannot match.
-var gateCommitDeclarationRE = regexp.MustCompile(`(?m)^\s*commit\??\s*:\s*string`)
-
-// TestNoSiteTypeDeclaresTheDeletedCommitField is the third leg of the deletion,
-// and it is here because the first two both passed while the field was still
-// half alive.
+// TestSiteDeclaresNoSecondVersionSpelling holds the project to one version
+// spelling, and it is the tag as tagged.
 //
-// When the field was removed, three of its four parts went: the data on the
-// entries, the transcript that read it, and the RELEASING.md step that wrote it.
-// The DECLARATION stayed — `commit?: string` on ReleaseTimeline's `Release`
-// interface, under a doc comment that still described it as feeding the
-// `dossierx version` example, which by then it did not.
-//
-// Neither assertion next door could see it. TestSiteReleaseEntriesCarryNoCommitStamp
-// reads the `releases` array, and an unused optional property puts nothing in
-// the array. TestNoSiteFileReadsTheDeletedCommitField looks for READS, and a
-// declaration is not a read. So the field survived in the one form that matters
-// most for its return: optional means `commit: "abc1234"` on a new entry
-// type-checks silently, which is precisely how the next person re-adds it — the
-// compiler, the only thing that would have objected, had been told in advance
-// not to.
-//
-// A deleted field's type declaration is not a leftover. It is a standing offer.
-func TestNoSiteTypeDeclaresTheDeletedCommitField(t *testing.T) {
-	root := surfaceRepoRoot(t)
-
-	var scanned int
-	for _, file := range surfaceTrackedFiles(t, root) {
-		if !strings.HasPrefix(file, "site/src/") {
-			continue
-		}
-		scanned++
-		body := gateReadRepoFile(t, root, filepath.FromSlash(file))
-		if hit := gateCommitDeclarationRE.FindString(body); hit != "" {
-			t.Errorf("%s declares %q — the release entries' `commit` field, whose data, reader and release step were all deleted. "+
-				"The declaration outliving them is what makes re-adding the field type-check: it is optional, so an entry carrying one compiles clean and the field is back before anything objects. Delete the declaration too",
-				file, strings.TrimSpace(hit))
-		}
-	}
-	if scanned == 0 {
-		t.Fatal("no tracked file under site/src/ was scanned; this assertion passed over nothing")
-	}
-}
-
-// gateSiteDeclaration is one TypeScript declaration this file MODELS and cannot
-// evaluate, held against the source it models.
-//
-// There are three, and each is a duplicate on purpose: this test resolves the
-// site's transcript without a TypeScript runtime, so it has to know which entry
-// the page selects, which entry the timeline badges "latest", and how the site
-// spells the string the BINARY prints. A duplicate that is not held is exactly
-// how a guard stops describing its subject.
-//
-// HOW they are held is correction SIX, and it is the whole of this type. They
-// used to be `strings.Contains` over the entire file, which is the shape
-// correction FIVE dismantled one file over: a comment is a substring. Commenting
-// the pinned line out and writing the wrong expression underneath it left the
-// pinned text in the file and the whole suite green, on all three declarations
-// independently — `releases[0]` for the current release, `0` for the timeline's
-// latest index, and a `latestBinaryVersion` that stops stripping the `v` and so
-// puts `dossierx version v0.5.0` back on the page.
-//
-// So the file's COMMENTS ARE STRIPPED before the search, which makes a
-// commented-out original evidence of nothing, and the declaration must be the
-// stripped file's ONLY one, which makes a second live declaration a failure
-// rather than a match on whichever came first. Those two together are what a
-// reader — and a bundler — actually act on.
-type gateSiteDeclaration struct {
-	rel      string         // repo-relative file the declaration must live in
-	landmark string         // structure that must survive comment stripping; see gateRequireSiteDeclarations
-	head     *regexp.Regexp // the declaration, from its `const` through its `;`
-	want     string         // what it must say
-	why      string         // what the deployed page does when it says something else
-}
-
-// gateSiteDeclarations are the three, and the two selection expressions are held
-// TOGETHER because the contradiction needs both: either one moving alone is what
-// makes the page disagree with itself, and a guard holding one of them cannot
-// tell which moved.
-var gateSiteDeclarations = []gateSiteDeclaration{
-	{
-		rel:      filepath.Join("site", "src", "content.ts"),
-		landmark: "const releases: Release[] = [",
-		head:     regexp.MustCompile(`(?:export\s+)?const\s+latestRelease\s*:[^;]*;`),
-		want:     `export const latestRelease: Release = releases[releases.length - 1];`,
-		why: "This test reads the LAST `version:` literal in the `releases` array because that is the entry the page renders. If the page selects a different one, every version string on it — the hero kicker, the hero badge, " +
-			"the release-history intro and the `dossierx version` transcript — depicts THAT release while ReleaseTimeline goes on badging the last entry \"latest\", and this test would go on judging the transcript against this one",
-	},
-	{
-		rel:      filepath.Join("site", "src", "components", "ReleaseTimeline.tsx"),
-		landmark: "export function ReleaseTimeline(",
-		head:     regexp.MustCompile(`(?:export\s+)?const\s+latestIndex\b[^;]*;`),
-		want:     `const latestIndex = releases.length - 1;`,
-		why:      "The timeline and content.ts must agree on which release is current. When they do not, the page badges one entry \"latest\" while every derived string on it names another — a page that contradicts itself, with each half correct about the wrong entry",
-	},
-	// A THIRD DECLARATION USED TO BE HELD HERE and is now REFUSED instead, by
-	// TestSiteDeclaresNoSecondVersionSpelling below. It was
-	//
-	//   export const latestBinaryVersion: string = latestRelease.version.replace(/^v/, "");
-	//
-	// and it existed because the two install paths disagreed: the archive stamped
-	// `{{.Version}}` and printed `0.5.1`, while `go install …@v0.5.1` took the tag
-	// verbatim from the module proxy and printed `v0.5.1`. The site needed both
-	// spellings to depict either honestly. The stamp has since moved to
-	// `{{.Tag}}`, so there is one spelling and a second constant would be a copy
-	// that can go stale on its own.
-}
-
-// TestSiteSelectsTheReleaseThisTreeModels is the three declarations, held.
-//
-// It used to be a step INSIDE the transcript comparison, because that comparison
-// modelled the site's selection and derivation in Go and could not be allowed to
-// run against a stale model. The comparison has moved: the transcript is now read
-// as RENDERED DOM in viewer-tests/site_dom_test.go, where nothing is modelled
-// because the page has already evaluated itself.
-//
-// These three are what a rendered read STRUCTURALLY CANNOT SEE, which is why they
-// stayed behind rather than moving with it. Two of them do show up in the DOM
-// eventually — a page selecting `releases[0]` renders the oldest release's version
-// into the transcript, and a `latestBinaryVersion` that stops stripping the `v`
-// renders `dossierx version v<x.y.z>`, and the rendered check catches both. The
-// THIRD does not: ReleaseTimeline's `latestIndex` decides which entry is badged
-// "latest", and a timeline badging one entry while every derived string names
-// another is a page that contradicts itself with both halves rendering perfectly.
-// No read of the transcript can see that, so it is asserted here.
-func TestSiteSelectsTheReleaseThisTreeModels(t *testing.T) {
-	gateRequireSiteDeclarations(t, surfaceRepoRoot(t))
-}
-
-// TestSiteDeclaresNoSecondVersionSpelling refuses the constant the `{{.Tag}}`
-// fix deleted, because deleting it is only half the fix.
-//
-// WHAT IT WAS. `latestBinaryVersion` was `latestVersion` with the leading `v`
-// stripped, and it was CORRECT while it existed: `.goreleaser.yaml` stamped
-// `-X main.version={{.Version}}`, so the published archive printed
-// `dossierx version 0.5.1`, while `go install …@v0.5.1` applies no ldflags at
-// all and falls back to `debug.ReadBuildInfo`, which the module proxy fills with
-// the tag verbatim — `v0.5.1`. One release answered the question two ways
-// depending on how it was installed, and the site kept two constants so it could
-// depict whichever the reader would see.
+// WHAT IT WAS. site/src/content.ts declared `latestBinaryVersion` —
+// `latestVersion` with the leading `v` stripped — and it was CORRECT while it
+// existed: `.goreleaser.yaml` stamped `-X main.version={{.Version}}`, so the
+// published archive printed `dossierx version 0.5.1`, while `go install …@v0.5.1`
+// applies no ldflags at all and falls back to `debug.ReadBuildInfo`, which the
+// module proxy fills with the tag verbatim — `v0.5.1`. One release answered the
+// question two ways depending on how it was installed, and the site kept two
+// constants so it could depict whichever the reader would see.
 //
 // Issue #38 fixed the cause: the stamp is `{{.Tag}}` and both paths print the
-// tag as tagged. The second constant is therefore not merely redundant, it is a
-// derivation of a spelling nothing produces — and reintroducing one would put
-// `dossierx version <x.y.z>` back into a transcript no install path matches,
-// which is the defect this whole file was opened for, arrived at from the other
-// direction.
+// tag as tagged. A second spelling is therefore not merely redundant, it depicts
+// output no install path produces.
 //
-// It is refused BY NAME rather than by scanning for a stripped literal, because
-// the literal check already exists elsewhere and answers a different question:
-// viewer-tests/site_source_test.go hunts a hand-typed bare version anywhere in
-// the source, and this one refuses the reintroduction of the derivation that
-// would generate one on every release without a literal ever being typed.
+// WHAT CHANGED HERE. The old check refused the DERIVATION by name — a constant
+// declared with `.replace(/^v/, …)` — because a derivation regenerates the wrong
+// spelling every release without anybody typing a literal, and a sibling suite
+// (viewer-tests/site_source_test.go) hunted hand-typed literals separately. The
+// site has no constants and no derivations now; every version on it is a literal
+// somebody typed. So this reads the literals, which is the only shape left, and
+// the sibling suite that used to own that half is gone.
+//
+// THE MEMO IS INCLUDED, AND IT IS EXPECTED TO CARRY NO VERSION AT ALL. That is
+// not slack in the check: site/index.html states no version and no count on
+// purpose, so a version literal appearing on it is a regression in its own
+// right, caught here as a bare spelling would be.
 func TestSiteDeclaresNoSecondVersionSpelling(t *testing.T) {
-	const rel = "site/src/content.ts"
-	code := gateStripTSComments(gateReadRepoFile(t, surfaceRepoRoot(t), filepath.FromSlash(rel)))
+	root := surfaceRepoRoot(t)
 
-	// Comments are stripped for the reason gateRequireSiteDeclarations strips
-	// them, plus one specific to this test: content.ts now carries a block
-	// comment explaining why the constant is gone, and that explanation has to be
-	// able to NAME it.
-	if !strings.Contains(code, "const releases: Release[] = [") {
-		t.Fatalf("stripping comments from %s removed the releases array, which is not a comment. The lexer has mis-read the source — an unclosed literal, most likely — so the search below would run over a truncated file and pass over nothing", rel)
-	}
+	scanned := 0
+	for _, rel := range gateSitePages {
+		raw := gateReadRepoFile(t, root, filepath.FromSlash(rel))
+		code := gateStripHTMLComments(raw)
 
-	stripped := regexp.MustCompile(`(?:export\s+)?const\s+\w+\s*:[^;]*\.replace\(\s*/\^v/`)
-	if found := stripped.FindAllString(code, -1); len(found) > 0 {
-		t.Fatalf("%s declares a version constant derived by stripping the leading `v`:\n\t%s\n\n"+
-			"There is one version spelling in this project and it is the tag as tagged. `.goreleaser.yaml` now stamps `-X main.version={{.Tag}}`, and `go install` takes the same string verbatim from the module proxy, so BOTH install paths print `v<x.y.z>` — a stripped derivation depicts output neither one produces.\n\n"+
-			"This constant existed while the archive stamped `{{.Version}}` and was correct then, because the archive really did print the stripped form while `go install` printed the tag. If a release ever needs two spellings again, the cause is in .goreleaser.yaml, not here: fix it there, and gateRequireReleaseTransform will tell you which template moved.",
-			rel, strings.Join(found, "\n\t"))
-	}
-}
-
-// gateRequireSiteDeclarations holds every one of them.
-//
-// The landmark is a stripper self-check, not an assertion about the site. This
-// file lexes TypeScript with a small state machine, and the failure mode of a
-// small lexer is swallowing code it mistook for a literal — which would show up
-// as "the declaration is missing" and send a maintainer to look at a file that
-// is perfectly correct. If the landmark did not survive the strip, the strip is
-// what is wrong, and it says so in those words.
-func gateRequireSiteDeclarations(t *testing.T, root string) {
-	t.Helper()
-
-	for _, decl := range gateSiteDeclarations {
-		code := gateStripTSComments(gateReadRepoFile(t, root, decl.rel))
-		if !strings.Contains(code, decl.landmark) {
-			t.Fatalf("stripping comments from %s removed %q, which is not a comment. This file's TypeScript lexer has mis-read the source — a literal it did not close, most likely — so the search below would be running over a truncated file. "+
-				"Fix gateStripTSComments; the site is not what is wrong here", decl.rel, decl.landmark)
+		// A stripper self-check, not an assertion about the page: releases.html
+		// carries a comment that names v0.4.1 while explaining a deleted field,
+		// and a raw scan would read that as a live version literal. If the strip
+		// removed the whole document instead, the strip is what is wrong.
+		if strings.TrimSpace(code) == "" {
+			t.Fatalf("stripping HTML comments from %s left nothing. The stripper has mis-read the page, so the scan below would pass over an empty document", rel)
 		}
+		scanned++
 
-		found := decl.head.FindAllString(code, -1)
-		switch len(found) {
-		case 1:
-			// The only live declaration, which is what is required.
-		case 0:
-			t.Fatalf("%s declares nothing matching\n\t%s\noutside its comments. A commented-out declaration is not one: the page would not compile, and if it did it would not select what this file models. %s",
-				decl.rel, decl.want, decl.why)
-		default:
-			t.Fatalf("%s carries %d live declarations of that name — %q. Only one of them is what the page evaluates, and this file cannot tell which; a correct declaration standing beside a wrong one is a wrong page that reads as a right one",
-				decl.rel, len(found), found)
-		}
-
-		if got, want := gateCollapseSpace(found[0]), gateCollapseSpace(decl.want); got != want {
-			t.Fatalf("%s declares\n\t%s\nwhere this file models\n\t%s\n%s", decl.rel, got, want, decl.why)
-		}
-	}
-}
-
-// gateStripTSComments removes `//` line comments and `/* */` block comments from
-// TypeScript source, leaving string, template and regex literals alone.
-//
-// It is a lexer and not a regexp because the two things it must not confuse are
-// both spelled with a slash: the `https://` inside a string is not a comment,
-// and `/^v/` — the regex in `latestBinaryVersion`'s own derivation — is not one
-// either. Newlines inside stripped comments are preserved so the shape of the
-// remaining source is unchanged.
-//
-// Its failure mode is swallowing, never inventing: a literal it fails to close
-// eats the rest of the file, which removes declarations and fails loudly, rather
-// than exposing commented-out text and passing quietly. gateRequireSiteDeclarations
-// names that case explicitly through its landmark.
-func gateStripTSComments(src string) string {
-	const (
-		code = iota
-		lineComment
-		blockComment
-		single
-		double
-		template
-	)
-
-	var out strings.Builder
-	out.Grow(len(src))
-	state := code
-
-	for i := 0; i < len(src); i++ {
-		c := src[i]
-		var next byte
-		if i+1 < len(src) {
-			next = src[i+1]
-		}
-
-		switch state {
-		case code:
-			switch {
-			case c == '/' && next == '/':
-				state, i = lineComment, i+1
-			case c == '/' && next == '*':
-				state, i = blockComment, i+1
-			case c == '\'':
-				state = single
-				out.WriteByte(c)
-			case c == '"':
-				state = double
-				out.WriteByte(c)
-			case c == '`':
-				state = template
-				out.WriteByte(c)
-			default:
-				out.WriteByte(c)
-			}
-		case lineComment:
-			if c == '\n' {
-				state = code
-				out.WriteByte(c)
-			}
-		case blockComment:
-			switch {
-			case c == '*' && next == '/':
-				state, i = code, i+1
-			case c == '\n':
-				out.WriteByte(c)
-			}
-		default: // inside a string, template or the middle of one
-			out.WriteByte(c)
-			if c == '\\' && i+1 < len(src) {
-				i++
-				out.WriteByte(src[i])
+		for _, m := range gateSiteVersionRE.FindAllStringSubmatch(code, -1) {
+			if strings.HasPrefix(m[1], "v") {
 				continue
 			}
-			if (state == single && c == '\'') || (state == double && c == '"') || (state == template && c == '`') {
-				state = code
-			}
+			t.Errorf("%s carries the version literal %q, spelled without its leading `v`.\n\n"+
+				"There is one version spelling in this project and it is the tag as tagged. `.goreleaser.yaml` stamps `-X main.version={{.Tag}}`, and `go install` takes the same string verbatim from the module proxy, so BOTH install paths print `v<x.y.z>`. A bare spelling names a release nothing produces and no tag matches.\n\n"+
+				"If a release ever genuinely needs two spellings again, the cause is in .goreleaser.yaml and not here: fix it there, and gateRequireReleaseTransform will tell you which template moved.",
+				rel, m[1])
 		}
 	}
-	return out.String()
+
+	if scanned != len(gateSitePages) {
+		t.Fatalf("scanned %d of %d pages; this assertion did not run over its whole subject", scanned, len(gateSitePages))
+	}
+}
+
+// gateStripHTMLComments blanks HTML comments, preserving length so that
+// everything read afterwards still lines up with the file a maintainer opens.
+// It is a regexp and not a parser for the reason the TypeScript lexer it
+// replaced could not be: a page with no script and no `<!--` inside an attribute
+// has nothing for a parser to disambiguate.
+func gateStripHTMLComments(src string) string {
+	return regexp.MustCompile(`(?s)<!--.*?-->`).ReplaceAllStringFunc(src, func(c string) string {
+		return strings.Repeat(" ", len(c))
+	})
 }
 
 // gateCollapseSpace reduces every run of whitespace to one space, so that a

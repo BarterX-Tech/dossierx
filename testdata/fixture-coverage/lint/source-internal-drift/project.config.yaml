@@ -1,0 +1,6 @@
+schema_version: 1
+facets:
+  - internals
+modules:
+  - srcdrift
+claims_dir: claims

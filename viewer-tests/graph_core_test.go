@@ -150,6 +150,31 @@ var coreNodesJSON = func() string {
 	return string(b)
 }()
 
+// trackNodes is the payload-shaped node set the track-axis cases run over:
+// one claim OWNING t1, one CITING both t1 and t2 with the role left unset the
+// way an author leaves it, and one claim in no track at all. The third is what
+// makes "no track filter" a strictly larger set than the union of the tracks.
+func trackNodes() []any {
+	return []any{
+		map[string]any{"id": "a.owner", "module": "a", "facet": "contract",
+			"tracks": []any{map[string]any{"id": "t1", "role": "owns"}}},
+		map[string]any{"id": "b.citer", "module": "b", "facet": "contract",
+			"tracks": []any{map[string]any{"id": "t1", "role": "cites"}, map[string]any{"id": "t2"}}},
+		map[string]any{"id": "c.none", "module": "c", "facet": "schema"},
+	}
+}
+
+// trackNodesJSON is trackNodes() as a JS array literal, for the case asking
+// what happens when the track argument is ABSENT — which fn + args cannot say,
+// because it always passes exactly the arguments it is given.
+var trackNodesJSON = func() string {
+	b, err := json.Marshal(trackNodes())
+	if err != nil {
+		panic("marshal trackNodes: " + err.Error())
+	}
+	return string(b)
+}()
+
 func edge(from, to, typ string) map[string]any {
 	return map[string]any{"from": from, "to": to, "type": typ}
 }
@@ -213,8 +238,10 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "edgeKey", fn: "edgeKey", args: []any{edge("a", "b", "rests_on")}, want: "a|rests_on|b"},
 		{name: "edgeKey of an unusable edge is empty", fn: "edgeKey", args: []any{map[string]any{"from": "a"}}, want: ""},
 
-		// scopeFilter is TWO INDEPENDENT AXES intersected, and returns the node
-		// objects themselves, unchanged.
+		// scopeFilter is THREE INDEPENDENT AXES intersected, and returns the
+		// node objects themselves, unchanged. Module and facet are field
+		// equality; the track axis is a SET MEMBERSHIP and has its own cases
+		// after these.
 		//
 		// coreNodes is shaped to make every row here distinguishable: module a
 		// holds two contract claims, module b one contract claim, module c one
@@ -261,6 +288,58 @@ func TestGraphCoreScopeRepresentativesAndEdges(t *testing.T) {
 		{name: "scopeFilter with a missing facet argument filters on module only",
 			expr: `window.dossierxGraphCore.scopeFilter(` + coreNodesJSON + `, 'b').map(function (n) { return n.id; })`,
 			want: []any{"b.one"}},
+
+		// ---- the track axis ----------------------------------------------
+		//
+		// A TRACK'S SUBGRAPH IS BOTH ROLES. The claim that OWNS the track is
+		// the feature's own statement and the ones that cite it are what the
+		// feature is assembled from; a filter that kept only one of them would
+		// answer a question nobody asked. The role is a DRAWING distinction,
+		// not a second filter.
+		//
+		// trackNodes is shaped so every row is distinguishable: a.owner owns
+		// t1, b.citer cites both t1 and t2, and c.none is in no track — which
+		// is also why the pane's "all" option cannot honestly say "all
+		// tracks", since that would be a strictly smaller set than this one.
+		{name: "scopeFilter keeps both roles of one track", fn: "scopeFilter",
+			args: []any{trackNodes(), "", "", "t1"},
+			post: ".map(function (n) { return n.id; })", want: []any{"a.owner", "b.citer"}},
+		{name: "scopeFilter on a track drops the claims outside it", fn: "scopeFilter",
+			args: []any{trackNodes(), "", "", "t2"},
+			post: ".map(function (n) { return n.id; })", want: []any{"b.citer"}},
+		// The third axis composes with the other two exactly like they compose
+		// with each other: an intersection, in any combination.
+		{name: "scopeFilter intersects the track axis with the module axis", fn: "scopeFilter",
+			args: []any{trackNodes(), "b", "", "t1"},
+			post: ".map(function (n) { return n.id; })", want: []any{"b.citer"}},
+		{name: "scopeFilter on an unknown track selects nothing", fn: "scopeFilter",
+			args: []any{trackNodes(), "", "", "nope"},
+			post: ".map(function (n) { return n.id; })", want: []any{}},
+		// A caller that passes no track argument at all — every call site that
+		// predates the axis — filters on the two it did pass and nothing else.
+		{name: "scopeFilter with no track argument does not filter on tracks",
+			expr: `window.dossierxGraphCore.scopeFilter(` + trackNodesJSON + `, '', '').map(function (n) { return n.id; })`,
+			want: []any{"a.owner", "b.citer", "c.none"}},
+
+		// An unset role MEANS cites (model.TrackRoleCites): citing adds a
+		// reference, owning makes an exclusivity assertion, and an assertion
+		// that strong is typed out rather than fallen into. Go resolves it
+		// before the payload is written; this is what keeps a hand-edited one
+		// from promoting a claim to owner by accident.
+		{name: "trackRole names the owner", fn: "trackRole",
+			args: []any{trackNodes()[0], "t1"}, want: "owns"},
+		{name: "trackRole reads an explicit cites as cites", fn: "trackRole",
+			args: []any{trackNodes()[1], "t1"}, want: "cites"},
+		// b.citer's t2 membership writes no role at all, which is how an
+		// author leaves it and what the default exists for.
+		{name: "trackRole reads an unset role as cites", fn: "trackRole",
+			args: []any{trackNodes()[1], "t2"}, want: "cites"},
+		{name: "trackRole answers empty for a non-member", fn: "trackRole",
+			args: []any{trackNodes()[0], "t2"}, want: ""},
+		{name: "trackRole is total on a node carrying no tracks", fn: "trackRole",
+			args: []any{trackNodes()[2], "t1"}, want: ""},
+		{name: "trackRole is total on a missing track id", fn: "trackRole",
+			args: []any{trackNodes()[0], ""}, want: ""},
 
 		{name: "representatives claims map every claim to itself", fn: "representatives",
 			args: []any{coreNodes(), "claims", []any{}}, post: ".repByClaim",
@@ -530,7 +609,8 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		{name: "decodeState reads both axes back", fn: "decodeState",
 			args: []any{"md=viewer&fc=contract"},
 			want: map[string]any{
-				"scopeModule": "viewer", "scopeFacet": "contract", "granularity": "claims", "overlay": "none",
+				"scopeModule": "viewer", "scopeFacet": "contract", "scopeTrack": "",
+				"granularity": "claims", "overlay": "none",
 				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
@@ -547,7 +627,8 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		{name: "decodeState ignores the retired sc key", fn: "decodeState",
 			args: []any{"sc=module%3Aviewer&gr=module"},
 			want: map[string]any{
-				"scopeModule": "", "scopeFacet": "", "granularity": "module", "overlay": "none",
+				"scopeModule": "", "scopeFacet": "", "scopeTrack": "",
+				"granularity": "module", "overlay": "none",
 				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
@@ -577,7 +658,8 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		{name: "decodeState of an empty string is the default state", fn: "decodeState",
 			args: []any{""},
 			want: map[string]any{
-				"scopeModule": "", "scopeFacet": "", "granularity": "claims", "overlay": "none",
+				"scopeModule": "", "scopeFacet": "", "scopeTrack": "",
+				"granularity": "claims", "overlay": "none",
 				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
@@ -591,9 +673,33 @@ func TestGraphCoreVerdictsAndHashState(t *testing.T) {
 		{name: "decodeState is total on a hand-mangled hash", fn: "decodeState",
 			args: []any{"ov=nonsense&gr=nonsense&junk&md=%E0%A4%A&fc=%E0%A4%A"},
 			want: map[string]any{
-				"scopeModule": "%E0%A4%A", "scopeFacet": "%E0%A4%A", "granularity": "claims", "overlay": "none",
+				"scopeModule": "%E0%A4%A", "scopeFacet": "%E0%A4%A", "scopeTrack": "",
+				"granularity": "claims", "overlay": "none",
 				"types": []any{"rests_on", "mirrors", "governed_by"}, "labels": true,
 				"expanded": []any{}, "selected": "",
 			}},
+
+		// ---- the track axis in the hash ------------------------------
+		//
+		// THE ONE CONDITIONAL KEY. For every other key an absent key and an
+		// empty value are different states — `ty=` and `ex=` are written
+		// empty precisely so "no edge types enabled" round-trips. For the
+		// track axis "" is both the default and the only empty value, so
+		// writing it would change nothing except to lengthen every hash in
+		// every project that has no tracks at all.
+		{name: "encodeState omits the track key when no track is selected", fn: "encodeState",
+			args: []any{map[string]any{"scopeModule": "viewer"}},
+			want: "md=viewer&fc=&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
+		{name: "encodeState carries a selected track", fn: "encodeState",
+			args: []any{map[string]any{"scopeTrack": "check out"}},
+			want: "md=&fc=&tk=check%20out&gr=claims&ov=none&ty=rmg&lb=1&ex=&se="},
+		{name: "decodeState reads the track axis back", fn: "decodeState",
+			args: []any{"tk=checkout"}, post: ".scopeTrack", want: "checkout"},
+		{name: "a track round-trips by value",
+			expr: `(function () {
+					var c = window.dossierxGraphCore;
+					return c.decodeState(c.encodeState({ scopeTrack: 'a b' })).scopeTrack;
+				})()`,
+			want: "a b"},
 	})
 }

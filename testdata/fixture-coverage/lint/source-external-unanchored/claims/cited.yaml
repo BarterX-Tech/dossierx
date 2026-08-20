@@ -1,0 +1,20 @@
+id: srcextern.internals.cited
+facet: internals
+module: srcextern
+status: draft
+layout: card
+body: |
+  The vendor caps requests at 100 per minute [1]. The citation below records
+  where that page lives but not the day it was read, so a reader who finds a
+  different number there cannot tell whether the page changed or the author
+  misread it.
+sources:
+  - ref: 1
+    kind: external
+    title: Vendor rate limit reference
+    url: https://example.com/docs/rate-limits
+rests_on:
+  - srcextern.internals.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

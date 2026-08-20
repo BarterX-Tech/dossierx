@@ -334,11 +334,15 @@ var gateLedgerBases = map[string]gateLedgerBasisSpec{
 			"no error-message strings, no templates — so this document cannot be reconstructed from the committed inventory.",
 		size: gateLedgerSizeUnavailable,
 	},
-	"site.rendered_dom": {
-		Resolves:   "the rendered DOM text of a real build, plus its head metadata",
-		Provenance: "surfaces.yaml:355-362 and the design's 'verify the thing the user sees'. NOT RESOLVABLE TODAY: the rendered site text is gate/site-text.json, an ephemeral gate working artifact that does not exist on disk.",
-		size:       gateLedgerSizeUnavailable,
-	},
+	// "site.rendered_dom" WAS THE THIRD ENTRY AND IS RETIRED. It resolved to
+	// "the rendered DOM text of a real build, plus its head metadata" and always
+	// refused, because that text was gate/site-text.json — an ephemeral gate
+	// artifact that did not exist on disk. The site is two static HTML pages
+	// with no build now, so the surface IS its tracked files and it is funded
+	// from manifest.tracked_files like everything else. The basis is deleted
+	// rather than left refusing: an unreachable key nothing names is how a
+	// retired concept comes back, and gate-cost-model.yaml would fail to load
+	// against a name this registry does not carry.
 }
 
 // gateLedgerSizeFromTrackedFiles sums the bytes of the tracked files the
@@ -2006,25 +2010,30 @@ func TestGateLedgerBasisRegistryIsCompleteAboutEveryNameItAdmits(t *testing.T) {
 // the rendered DOM and the binary's embedded prose, neither of which is
 // extractable from this tree.
 //
-// So the two bases that name those documents must refuse. If either quietly
-// resolved to tracked files, binary-and-viewer would be funded from 1,949,261
-// bytes with every other rule green.
-func TestGateLedgerTheTwoUnreconstructibleBasesRefuseRatherThanApproximate(t *testing.T) {
+// So the basis that names that document must refuse. If it quietly resolved to
+// tracked files, binary-and-viewer would be funded from 1,949,261 bytes with
+// every other rule green.
+//
+// THERE WERE TWO, and "site.rendered_dom" was the other. It is retired rather
+// than still refusing here: the site stopped being a built artifact, so its
+// description and its paths now name the same bytes and there is no
+// unreconstructible document left to refuse for. See gateLedgerBases.
+func TestGateLedgerTheUnreconstructibleBasisRefusesRatherThanApproximates(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	tracked, err := gateLedgerTrackedFiles(root)
 	if err != nil {
 		t.Fatalf("git ls-files: %v", err)
 	}
-	for _, name := range []string{"binary.embedded_prose", "site.rendered_dom"} {
+	for _, name := range []string{"binary.embedded_prose"} {
 		spec := gateLedgerBases[name]
 		got, err := spec.size(root, "binary-and-viewer", tracked)
 		if !errors.Is(err, errGateLedgerBasisUnavailable) {
 			t.Errorf(`basis %q answered %d bytes instead of refusing (%v).
 
-Neither of these documents can be reconstructed from the committed tree —
-surface.json's commands array carries only {path, short, flags}, and the rendered
-site text is an ephemeral gate artifact. A basis that answers anyway is answering
-with somebody else's bytes.`, name, got, err)
+This document cannot be reconstructed from the committed tree — surface.json's
+commands array carries only {path, short, flags}: no long text, no flag usage, no
+error-message strings, no templates. A basis that answers anyway is answering with
+somebody else's bytes.`, name, got, err)
 		}
 	}
 	// The available basis must actually answer, or the refusals above would be
@@ -2981,7 +2990,16 @@ func TestGateLedgerTheUnmadeDecisionsAreExactlyThese(t *testing.T) {
 		"binary-and-viewer", "ci-merge-gate-template", "contributing",
 		"exported-skills", "install-scripts", "release-notes", "release-procedure",
 	}
-	wantBasis := []string{"binary-and-viewer", "site"}
+	// ONE, AND IT USED TO BE TWO. `site` was the other, and its basis was
+	// decided by DELETION rather than by measurement: surfaces.yaml called the
+	// surface "the RENDERED DOM of a real build" while its paths claimed 375,332
+	// bytes of TSX, so the right basis existed only as an ephemeral gate
+	// artifact. The site is two static HTML pages with no build now — the
+	// description and the paths name the same bytes — so its basis is
+	// manifest.tracked_files like every other agreeing surface. That is the
+	// shape an answer here can take: the disagreement went away, rather than
+	// somebody picking a number for it.
+	wantBasis := []string{"binary-and-viewer"}
 
 	var gotClass, gotBasis []string
 	for _, p := range model.Surfaces {
@@ -3000,10 +3018,13 @@ func TestGateLedgerTheUnmadeDecisionsAreExactlyThese(t *testing.T) {
 	if !reflect.DeepEqual(gotBasis, wantBasis) {
 		t.Errorf(`the surfaces with no document basis decided are now %v; this test says %v.
 
-surfaces.yaml's own text is what puts these two here: site is "the RENDERED DOM
-of a real build" against paths claiming 375,332 bytes of source, and
-binary-and-viewer is "cobra Short and Long text ... the error messages and hints,
-and the viewer templates" against paths claiming 1,949,261 bytes of source.`, gotBasis, wantBasis)
+surfaces.yaml's own text is what puts a surface here: binary-and-viewer is "cobra
+Short and Long text ... the error messages and hints, and the viewer templates"
+against paths claiming 1,949,261 bytes of source, so the bytes the prose is
+judged against are not the bytes the paths resolve to. An entry LEAVES this list
+when that disagreement is resolved — which can mean measuring the right basis, or
+(as it did for site) changing the surface until its description and its paths name
+the same bytes.`, gotBasis, wantBasis)
 	}
 	if len(gotClass) == 0 && len(gotBasis) == 0 {
 		t.Log("every decision is now made; this test has become a pin on a finished partition rather than a register of open questions")
@@ -3147,14 +3168,15 @@ func TestGateLedgerRefusesToQuoteFromAnUnextractableBasis(t *testing.T) {
 	}
 	for i := range model.Surfaces {
 		if model.Surfaces[i].Name == "readme" {
-			model.Surfaces[i].DocumentBasis = "site.rendered_dom"
+			model.Surfaces[i].DocumentBasis = "binary.embedded_prose"
 		}
 	}
 	if _, err := gateLedgerQuoteSurface(model, root, "readme", tracked, 0); !errors.Is(err, errGateLedgerBasisUnavailable) {
 		t.Fatalf(`a surface was funded from a basis this tree cannot resolve: %v
 
-The rendered site text is gate/site-text.json, which does not exist on disk. A
-quote that came back anyway came back from somebody else's bytes.`, err)
+surface.json carries only {path, short, flags}, so the prose compiled into the
+binary cannot be reconstructed from the committed tree. A quote that came back
+anyway came back from somebody else's bytes.`, err)
 	}
 }
 

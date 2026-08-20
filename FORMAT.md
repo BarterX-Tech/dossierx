@@ -36,7 +36,21 @@ rests_on: [ id, ... ]          # optional
 governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
   type: none | doctrine_id
   reason: string                # required when type is "none"
-migrated_from: string           # optional provenance note
+migrated_from: string           # optional provenance note — what this claim REPLACED
+sources:                        # optional — what evidence BACKS this claim; cited from prose as [n] (see below)
+  - ref: 1                      # positive int, unique within the claim
+    kind: external | internal   # closed enum
+    title: string               # required for both kinds
+    url: https://...            # external only, REQUIRED
+    accessed_on: 2026-08-15     # external only, REQUIRED, YYYY-MM-DD
+    path: migration/map.jsonl   # internal only, REQUIRED, relative to the config's own directory
+    record_id: PVR-010          # internal only, optional — pins ONE JSONL record by its top-level "id"
+    sha256: 8afd3c9a...         # internal only, REQUIRED
+    supports: string            # optional, both kinds
+    does_not_support: string    # optional, both kinds
+tracks:                         # optional — cross-cutting feature membership (see below)
+  - id: checkout                # must be in project.config.yaml's tracks[]
+    role: owns | cites          # optional, default cites; at most ONE owns per claim
 order: int                      # optional, viewer-only display sequencing (see below)
 comments:                       # optional, engine-managed review threads — authored via `dossierx comment`, not by hand (see below)
   - id: c-8f3a2b                # engine-generated: "c-" + 6 lowercase hex, unique within the file
@@ -290,6 +304,14 @@ permitted:
   includes `img-src 'self'`, so a browser will not fetch an image from
   anywhere else even if a `src` somehow reached the page unvalidated.
 
+**Citation markers.** `[n]` in a claim `body` is a source citation, and it is
+the one inline construct that is not a property of the text alone: it is
+recognized only on a claim that declares `sources`, and only in prose — never
+inside a fenced code block, never inside an inline `` `code` `` span. On a claim
+with no `sources` it is not a construct at all, so an existing corpus renders
+exactly as it did before the field existed. See "`sources` and `[n]` citations"
+below for the field and its lints.
+
 **The INLINE ceiling** covers two surfaces that both end at the same
 renderer, and they diverge on exactly one thing:
 
@@ -313,7 +335,10 @@ happens not to do:
 - **Reference-style links, footnotes, and raw inline HTML are non-goals.**
   They are not partially supported and not planned as a near-term addition;
   `[text](url)` inline links and the two autolink forms above are the only
-  link forms.
+  link forms. A `[n]` citation marker is not a markdown footnote and does
+  not open one: it resolves against the claim's own `sources` list, which
+  is a schema field the engine lints, not a block of link definitions
+  parsed out of the body's own text.
 - **Body headings render, but the viewer's navigation ignores them.** An
   `###`-`######` heading inside `body` produces a real heading element in
   the rendered claim, but it does not appear in the viewer's own sidebar/nav
@@ -364,6 +389,180 @@ to keep `.catalog.json` and lint diffs byte-deterministic across builds and
 must never be repurposed for display sequencing. `order` only reorders how
 a module/facet group's claims are laid out in the rendered viewer
 (`internal/render.orderClaims`); it does not exist in `.catalog.json`.
+
+### `sources` and `[n]` citations
+
+`sources` is optional and names **what evidence backs this claim** — the pages,
+specifications and internal records a reader would have to open to check the
+sentence in front of them. It is a different question from `migrated_from`,
+which is unchanged, undeprecated, and stays exactly where it is: `migrated_from`
+answers *what this claim replaced*, `sources` answers *what makes it true*. A
+claim may carry either, both, or neither.
+
+**Why it is a schema field and not a convention.** Before it, a claim could
+record *which* sources it came from — `migrated_from`, one free-text string —
+but not *what they were*, so a reader had to already know which external
+registry to open before they could check one sentence. Writing the evidence into
+a sidecar file beside the claim is worse than untidy: a sidecar is invisible to
+`dossierx check`, invisible to the viewer, and invisible to the lock ledger's
+content-drift rule, so the evidence behind a *locked* claim could be rewritten
+freely after a human approved it. That is backwards — the source is the part of
+a locked claim that most needs pinning — and the fix is for the evidence to live
+inside the claim, where everything that watches the claim already watches it.
+
+**Citing from prose.** A claim that declares sources cites them from its `body`
+with `[n]` markers, the convention a reader already knows from Perplexity and
+Wikipedia. A body reading *the API delivers frames only while the stream is
+running [1].* — the marker written as ordinary prose text, never inside
+backticks — renders that `[1]` as a citation of `ref: 1`. Two
+limits keep the marker from eating ordinary text:
+
+- Markers are recognized **in prose only** — never inside a fenced code block
+  and never inside an inline `` `code` `` span. A body that documents
+  `buf[1]` inside backticks is showing code, not citing source 1.
+- Markers are recognized **only on a claim that declares `sources`**. A
+  source-less claim writing `array[0]` in prose is unaffected, so the field is
+  additive over an existing corpus rather than a new way for old bodies to
+  render differently.
+
+**The two kinds differ because they are falsifiable in different ways.** This is
+the whole reason the enum is closed at two values rather than being free-form:
+
+| | `external` | `internal` |
+|---|---|---|
+| what it names | a page or document outside this repository | a file inside this project |
+| required | `title`, `url`, `accessed_on` | `title`, `path`, `sha256` |
+| optional | `supports`, `does_not_support` | `record_id`, `supports`, `does_not_support` |
+| what makes it checkable | the **access date** — an external page can be rewritten under you, and nothing in this repository can stop it, so the honest record is *what it said on the day it was read* | the **content hash** — the engine can open the file, so drift is detectable rather than merely possible |
+
+`path` is resolved relative to the config file's own directory, like
+`claims_dir` and `source_dirs`, never the process's working directory.
+
+`record_id` is the internal kind's one refinement: set it and the hash pins that
+**one JSONL record** — matched on the record's top-level `"id"` — instead of the
+whole file. A shared registry (a requirement map, an export log) changes
+constantly for reasons that have nothing to do with any one claim, and a
+whole-file hash over it would report drift on every one of those edits. Findings
+a reader learns to wave through are worse than no findings, because they teach
+the wave-through on the day the drift is real.
+
+`supports` and `does_not_support` are optional free text on both kinds, and the
+second is the more valuable one: it is where an author records the part of a
+source that does **not** carry the claim, so a later reader does not have to
+rediscover the gap by reading the source themselves.
+
+Write them as long as the evidence needs. Neither has a length limit, and the
+viewer does not need one: a note that runs past **three lines** on screen is
+clamped to three with a `show more` control beside it, and one that fits is left
+exactly as it is. The clamp is applied by the page's script, which is the only
+party that can see how wide the reader's box is — so a page whose script never
+ran (a printout, a text browser) shows every note whole and offers no control,
+rather than cutting one off behind a button that cannot work.
+
+**Five lints police the field:**
+
+| Lint | Severity | What it catches |
+|---|---|---|
+| `source-shape` | ERROR | `ref` not a positive integer or not unique within the claim, `kind` not one of the two known values, `title` absent, a field used across kinds (a `url` on an `internal` entry, a `sha256` on an `external` one), or an `internal` entry naming no `path`. |
+| `source-ref-undefined` | ERROR | the body cites `[n]` and no entry declares that `ref`. The citation points at nothing, which is a reader sent to look for evidence that was never recorded. |
+| `source-ref-unused` | WARNING | an entry no marker cites. Clutter, not falsehood — the evidence is still recorded and still hashed; nothing a reader is told is wrong. |
+| `source-external-unanchored` | ERROR | an `external` entry missing `url` or `accessed_on`. Without both, the citation names a page but not a version of it, and cannot be checked by anyone. |
+| `source-internal-drift` | ERROR | an `internal` entry whose `sha256` is absent, whose `path` (or `record_id`) cannot be read, or whose content no longer hashes to the recorded value. **A check that cannot execute is reported as a failure, never as a silent pass** — an unreadable source and a rewritten one are the same amount of evidence, which is none. |
+
+**What signs it, and what does not.** The distinction is subtle and it is the
+point of the field, so it is stated twice — here and under "What is signed, and
+what is not":
+
+- `sources` **is** covered by the lock ledger's `LockedClaimHash`. Editing a
+  citation under a locked claim is caught exactly the way editing its `body` is,
+  and reported as `lock-content-drift`. This is the thing the field exists for:
+  approving a claim now approves the evidence behind it too.
+- `sources` is **not** part of the dependency-drift `ContentHash`, the baseline a
+  dependent records for the claims it `rests_on`, `mirrors` or is `governed_by`.
+  Adding or correcting a citation does not change what a claim *promises*, so it
+  must not flip every dependent to `review_pending`. Provenance is not contract.
+- The field is `omitempty`: a claim carrying no sources serializes and hashes
+  byte-for-byte as it did before the field existed, so upgrading an existing
+  project reports no drift on a single claim.
+
+### `tracks` and the second ownership axis
+
+`tracks` is optional and additive, and it answers a question `module` cannot.
+
+`module` answers **"who guarantees this?"** — exactly one per claim, which is the
+right partition for writing and reviewing contracts, because a guarantee with two
+owners has none. It cannot answer **"what does the user get, and is it
+finished?"** A user-facing feature is assembled from claims spread across many
+modules, and one module serves many features: the relationship is many-to-many
+and the schema allowed one. The workaround was to generate a feature document
+outside the tool — which keeps the text true by regenerating it, but cannot reach
+the lock ledger, `dossierx check`, review threads or the claims graph, and is a
+second copy of the corpus by construction.
+
+A claim declares its membership as a list, each entry naming a track from
+`project.config.yaml`'s `tracks[]` and a role:
+
+```yaml
+tracks:
+  - id: checkout
+    role: owns          # owns | cites; omitted means cites
+  - id: refunds         # role omitted — cites
+```
+
+**The invariant that keeps this from being tagging: every claim has exactly one
+owner on each axis.** One `module`, and at most one track whose `role` is `owns`.
+Everything else is `cites` — a reference, never a copy. Owning is what earns the
+axis its keep: a feature's trigger, its failure behaviour and its acceptance
+criteria are statements that belong to no single module, and without an owning
+track they have nowhere in the corpus to live. With one, they are an ordinary
+claim: linted, reviewable, and lockable like any other.
+
+**Track membership is not an edge.** `rests_on`, `mirrors` and `governed_by` are
+semantic dependencies, which is why each carries a cycle lint — a loop in them is
+a set of claims that can only be reviewed together, and drift has no order to
+propagate in. A track is a *set*, and a set has no direction to run in a circle.
+Track membership therefore joins no cycle walk: not `cycle`, not
+`governed-cycle`, and not the `mixed-cycle` union graph.
+
+**Five lints police the axis:**
+
+| Lint | Severity | What it catches |
+|---|---|---|
+| `track-shape` | ERROR | a malformed entry — a missing `id`, or a `role` that is neither `owns` nor `cites`. The enum is closed for the same reason `kind` and `build_role` are: a third value invented by a typo would be a membership nothing reads. |
+| `track-unknown` | ERROR | a claim naming a track that `project.config.yaml` does not declare. The config is the whole vocabulary, exactly as it is for `modules[]` and `facets[]`; a typo that created a track would put a claim in a feature nobody is looking at. |
+| `track-multi-owner` | ERROR | two claims claiming `role: owns` on the same track. The one-owner-per-axis invariant, enforced. |
+| `track-empty` | WARNING | a track declared in config that no claim references. Nothing a reader is told is wrong; the track page is empty, and the human decides whether the track is premature or the claims are missing. |
+| `track-unowned` | WARNING | a track with citations but no owner. The assembled document renders as references with no statement of what the feature *is* — incomplete, not false. |
+
+**Track membership never gates `dossierx claim lock`, and this is a non-goal
+rather than an omission.** A claim locks on its own merits — lint clean, doctrine
+dependencies locked, no unresolved comment thread — and adding a second axis must
+not add a second way to be refused. `dossierx track status <id>` **reports**:
+a track is COMPLETE when every claim it owns and every claim it cites is locked,
+and an incomplete track is a fact about the feature, not a verdict on any claim
+in it. Changing a locked claim's tracks is `unlock → fix → lock` like every other
+change to a locked claim, and for the same reason — `tracks` is signed by
+`LockedClaimHash`.
+
+Three leaf commands read the axis, and none of them writes a claim:
+
+```
+dossierx track list             # every track the project declares
+dossierx track show <id>        # one track and its claims — the one it owns, then the ones citing it
+dossierx track status <id>      # whether every claim the track owns and cites is locked
+```
+
+In the viewer, tracks are a group in the sidebar, each track has a page
+rendering the assembled document, and the claims graph gains a track filter. A
+**cited** claim renders on a track page as a reference — its id, its owning
+module and its lock state — and never as an inlined duplicate of its body. That
+is the same rule as everywhere else in this format: one claim, one home, and
+every other appearance is a pointer to it.
+
+Like `sources`, `tracks` is `omitempty` and outside the dependency-drift
+`ContentHash`: a claim carrying no tracks is byte-identical to what it was before
+the field existed, and adding a claim to a track never flips its dependents
+`review_pending`.
 
 ### `comments`
 
@@ -563,6 +762,13 @@ see. These are enforced by the lint suite, so a violation blocks
    are locked that is unlock, edit, lock, like any other correction. `mirrors`
    is not part of the union graph and never trips this rule.
 
+`tracks` is not a fourth edge kind and appears in none of these graphs. It is a
+membership set, not a dependency: no claim's truth rests on another claim's track
+membership, so there is no direction for a track to run in a circle and nothing
+for a cycle walk to find. Two claims in the same track constrain each other in
+exactly one way — `track-multi-owner`, at most one owner apiece — which is a
+per-track count, not a walk. See "`tracks` and the second ownership axis" above.
+
 Across all four, a claim may never name **its own id** in any edge
 (`self-edge`). A self-edge is trivially satisfied by every content rule —
 a claim always equals itself, always mirrors itself back, and always
@@ -650,12 +856,18 @@ Everything else is signed, **including any field added to the schema later**.
 This is deliberately not the same hash as the dependency-drift `ContentHash`,
 which covers a hand-picked eleven fields and must stay byte-identical
 forever: `raw_html_reviewed`, `build_role`, `kind`, `section`, `order`,
-`emphasis`, `migrated_from`, and `audit_notes` are invisible to it —
+`emphasis`, `migrated_from`, `sources`, `tracks`, and `audit_notes` are
+invisible to it —
 `raw_html` was in that blind list through v0.4.0, but as of v0.4.1 a
 non-empty `raw_html` is one of the eleven, because it can now sit on a
 rule-bearing claim other claims `rests_on`, and a dependent needs
 `ContentHash` to notice that edit, not only a reviewer re-locking the claim
-itself. That leaves eight fields `ContentHash` still cannot see, and
+itself. `sources` and `tracks` join the blind list by the same rule that put
+the others there and are meant to stay on it: neither changes what a claim
+*promises*, so a corrected citation or a new track membership must not flip
+every dependent to `review_pending` — provenance is not contract, and
+membership is not contract either. That leaves ten fields `ContentHash` still
+cannot see, and
 `LockedClaimHash` is the net for all of them regardless of what
 `ContentHash` tracks: it signs everything a claim persists except `status`,
 `review_pending`, and `comments` (above), so a swapped `raw_html` payload —
@@ -805,7 +1017,7 @@ read the sentence above as covering the file byte for byte.
 
 | The tampering | Named by |
 |---|---|
-| a locked claim's content edited — including `raw_html`, `build_role`, `section`, `order` | `lock-content-drift` |
+| a locked claim's content edited — including `raw_html`, `build_role`, `section`, `order`, `sources`, `tracks` | `lock-content-drift` |
 | `status: draft` flipped to `locked` by hand, with no approval record | `lock-ledger-missing` |
 | a record deleted from a claim this engine locked | `lock-ledger-deleted` |
 | `status:` edited back to `locked` over a record `unlock` already released | `lock-ledger-released` |
@@ -1105,6 +1317,12 @@ eyebrow: string                  # optional one-line subtitle rendered under
                                    # eyebrow element at all.
 facets: [string, ...]           # non-empty, no duplicates
 modules: [string, ...]          # non-empty, no duplicates
+tracks:                          # optional; the whole vocabulary of cross-cutting
+  - id: checkout                 # feature tracks a claim may name. Unset/empty
+    title: Checkout              # means the project uses no tracks, and a claim
+    summary: string              # naming one anyway is `track-unknown`. `id` and
+                                  # `title` required, `summary` optional.
+                                  # See "Tracks" below.
 claims_dir: path                 # resolved relative to this file's own directory
                                   # (directory layout inside it is not part of
                                   # this spec — see "Directory layout" below)
@@ -1145,6 +1363,33 @@ viewer:
 All paths in this file are resolved relative to the config file's own
 location, never the process's current working directory — this is what
 lets the same engine binary be pointed at a config file from anywhere.
+
+### Tracks
+
+`tracks[]` declares the whole vocabulary of cross-cutting feature tracks, the
+same way `modules[]` and `facets[]` declare theirs. Each entry is:
+
+- `id` — required, the value a claim's `tracks[].id` names. Kebab-case, unique
+  within the list.
+- `title` — required, what the viewer's sidebar and track page render.
+- `summary` — optional, one or two sentences saying what the user gets. It heads
+  the track page above the assembled claims.
+
+The field is optional as a whole: a project that declares no tracks behaves
+exactly as it did before the field existed, and the five `track-*` lints have
+nothing to report. A claim naming a track this list does not declare is
+`track-unknown` at error severity, which is deliberately the same treatment an
+unknown `module` or `facet` gets — a typo that silently created a track would
+put a claim in a feature nobody is looking at, and the human would find out by
+noticing an absence.
+
+Declaring a track that no claim yet references is `track-empty` at **warning**
+severity, not error: a track declared ahead of the claims that will fill it is a
+normal way to start, and nothing a reader is told is wrong while it is empty.
+
+See "`tracks` and the second ownership axis" under Claim above for what a claim's
+own `tracks:` block means, why membership is not an edge, and why it never gates
+`dossierx claim lock`.
 
 ### Directory layout is not part of this spec
 

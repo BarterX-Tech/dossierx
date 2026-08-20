@@ -355,20 +355,33 @@ func gateBundleSorted(in []string) []string {
 // fixture
 // ---------------------------------------------------------------------
 
+// gateBundleExportCapture is the fixture's stand-in per-surface capture.
+const gateBundleExportCapture = "gate/export-output.json"
+
 // gateBundleFixture writes a synthetic tree holding everything one surface's
-// bundle is built from, and returns the root and a spec over it. The `site`
-// shape is used because it is the one with a real withheld set.
+// bundle is built from, and returns the root and a spec over it.
+//
+// THE SURFACE NAME AND PATHS HERE ARE A FIXTURE LABEL, NOT THE REAL `site`
+// SURFACE, and that is worth saying because they were once the same thing. This
+// tree was shaped after `site` while site/ was a Vite application: its TSX
+// source was withheld, its rendered DOM rode in as a capture, and the fixture
+// exercised a bundle that had both. The real site is two static HTML pages now
+// — it withholds nothing and carries no capture — so what remains here is a
+// synthetic surface that happens to be spelled "site". It is kept rather than
+// renamed because what these tests are about is the ASSEMBLER: a bundle with a
+// withheld set and two captures, which is a shape `binary-and-viewer` still has
+// and which the assembler must refuse to assemble incompletely.
 func gateBundleFixture(t *testing.T) (root string, spec gateBundleSpec) {
 	t.Helper()
 	root = t.TempDir()
 	gateWrite(t, root, gateBundleFrameFile, "# Surface review — "+gateBundleSurfaceMarker+"\n\n"+
 		"Report FAILED on any mismatch you can demonstrate from the material below.\n\n"+
 		gateBundlePartsMarker+"\n")
-	gateWrite(t, root, gateBundlePromptFile("site"), "Read the rendered site text against surface.json.\n")
+	gateWrite(t, root, gateBundlePromptFile("site"), "Read the handed-over documents against surface.json.\n")
 	gateWrite(t, root, gateSurfaceInventoryFile, "{\"counts\":{\"lint_rules\":28}}\n")
 	gateWrite(t, root, gateBaselineFile, "{\"counts\":{\"lint_rules\":27}}\n")
 	gateWrite(t, root, gateDeltaFile, "{\"changed\":[\"lint_rules\"]}\n")
-	gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX v9.9.9 — 28 lint rules\"}\n")
+	gateWrite(t, root, gateBundleExportCapture, "{\"/\":\"DossierX v9.9.9 — 28 lint rules\"}\n")
 	gateWrite(t, root, "gate/render-diff.json", "{\"artifacts\":[]}\n")
 	gateWrite(t, root, "site/src/content.ts", "export const latestVersion = \"v9.9.9\";\n")
 	gateWrite(t, root, "site/src/nav.ts", "export const nav = [\"/docs\"];\n")
@@ -382,12 +395,11 @@ func gateBundleFixture(t *testing.T) (root string, spec gateBundleSpec) {
 		Surface:  "site",
 		Handed:   []string{"site/README.md"},
 		Withheld: []string{"site/src/content.ts", "site/src/nav.ts"},
-		// The rendered site text rides as a CAPTURE, the way the real `site`
-		// surface receives it (gateStage2Artifacts) — it is not a section the
-		// assembler gives every bundle. The render diff is here too so the
-		// rows about a missing or stale capture have one that is not also the
-		// site extraction.
-		Artifacts: []string{gateSiteTextFile, "gate/render-diff.json"},
+		// Captures ride as CAPTURES — a section the assembler gives only the
+		// surface a capture was produced for, not one every bundle carries.
+		// Two of them, so the rows about a missing or stale capture have one
+		// that is not also the one being mutated.
+		Artifacts: []string{gateBundleExportCapture, "gate/render-diff.json"},
 	}
 }
 
@@ -421,9 +433,9 @@ func TestGateBundleCarriesEveryPartAndNamesWhatItWithheld(t *testing.T) {
 		"BEGIN the mechanical inventory — " + gateSurfaceInventoryFile,
 		"BEGIN the baseline inventory — " + gateBaselineFile,
 		"BEGIN the release delta — " + gateDeltaFile,
-		// The rendered site text reaches THIS surface as its capture, not as a
-		// shared section every bundle carries.
-		"BEGIN a capture produced for this surface — " + gateSiteTextFile,
+		// A capture reaches THIS surface as its capture, not as a shared
+		// section every bundle carries.
+		"BEGIN a capture produced for this surface — " + gateBundleExportCapture,
 		"BEGIN a capture produced for this surface — gate/render-diff.json",
 		"BEGIN a document of this surface — site/README.md",
 		"BEGIN documents of this surface that were not handed over",
@@ -501,7 +513,7 @@ func TestGateBundleRefusesAnAssemblyItCannotStandBehind(t *testing.T) {
 			}
 		}, "a capture produced for this surface"},
 		{"a part is present but empty", func(t *testing.T, root string, _ *gateBundleSpec) {
-			gateWrite(t, root, gateSiteTextFile, "   \n")
+			gateWrite(t, root, gateBundleExportCapture, "   \n")
 		}, "is empty"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

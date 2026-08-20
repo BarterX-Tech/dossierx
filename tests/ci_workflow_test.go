@@ -750,56 +750,84 @@ func ciViewerSuiteJob(t *testing.T, wf ciWorkflow) (string, ciJob) {
 	return "", ciJob{}
 }
 
-// TestTheViewerJobsNodePinAgreesWithThePublishWorkflow is a claim about two
-// documents and is named for exactly that.
+// WHAT REPLACED TestTheViewerJobsNodePinAgreesWithThePublishWorkflow.
 //
-// IT DOES NOT CLAIM THE JOB BUILDS site/ WITH THAT NODE. It used to be named as
-// though it did, and the name was a lie a parse cannot support: move the
-// actions/setup-node step BELOW the suite step in ci.yml and both pins still
-// agree, this test is still green, and the npm build inside the suite has
-// already run on the runner image's default Node. Step order, and whether the
-// step ran at all, are facts about a run — see the header for where those are
-// answered. What is checked here is that ci.yml's viewer job and
-// deploy-site.yml name the SAME Node major, which is a fact about the files and
-// goes red the moment either pin moves.
+// That test held ci.yml's viewer job and deploy-site.yml to the SAME Node
+// major. The reasoning was that the DOM viewer-tests/site_dom_test.go read was
+// evidence about the page a visitor is served only while the toolchain that
+// produced it was the toolchain that serves it — and that the drift was silent
+// in the direction that mattered, since a newer Node which merely emitted a
+// slightly different tree failed nothing.
 //
-// WHY THAT AGREEMENT IS WORTH PINNING. The DOM that viewer-tests/site_dom_test.go
-// reads is evidence about the page a visitor is served only for as long as it was
-// produced by the toolchain that serves it, and the drift is silent in the
-// direction that matters: a newer Node that BROKE vite or tsc fails the build
-// loudly and gets noticed, while one that merely emits a slightly different tree
-// does not fail at all.
-func TestTheViewerJobsNodePinAgreesWithThePublishWorkflow(t *testing.T) {
+// Both sides of that comparison are gone. site/ was a Vite + React application
+// and is now two static HTML pages with no build; deploy-site.yml declares no
+// Node, no npm and no build step, and site_dom_test.go — the suite that built
+// the app in CI to read its output — was deleted with the app.
+//
+// The invariant did not weaken so much as become trivial, and the check below
+// is what it collapses into. "The published page was built by the same
+// toolchain the gate read" is a comparison you need only while there IS a
+// toolchain; when the artifact is the tree, the property to pin is that nothing
+// stands between them. That is a stronger statement than the one it replaces
+// and a cheaper one to keep true — but it is only true while the publish
+// workflow stays a copy, which is precisely what can be reintroduced by
+// somebody adding a "quick" build step, and precisely what this refuses.
+
+// ciBuildToolTokens are the tokens that mean a publish step transformed the
+// tree rather than copying it. A `run:` naming any of them is what this check
+// exists to catch.
+var ciBuildToolTokens = []string{"npm ", "npx ", "yarn ", "pnpm ", "vite", "tsc ", "esbuild", "webpack", "rollup"}
+
+// TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt pins that what GitHub
+// Pages serves is what is in site/, byte for byte.
+//
+// WHY THIS IS THE CHECK AND NOT A STYLE PREFERENCE. Every review of the site in
+// this repository — the release gate's site agent included — reads files in the
+// worktree. That reading is evidence about the deployed page only while the
+// deployed page IS those files. A build step re-opens the exact gap the old
+// Node-pin test was written to narrow, and re-opens it silently: a bundler that
+// rewrote, minified, inlined or dropped something would produce a page nobody
+// in this repository has ever looked at, while every check over site/ stayed
+// green.
+func TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt(t *testing.T) {
 	publish := ciLoadWorkflow(t, deployWorkflowPath)
-	ci := ciLoadWorkflow(t, ciWorkflowPath)
 
-	// The publish pin, read across the WHOLE publish workflow. Unlike ci.yml this
-	// is a workflow whose only purpose is to build and publish site/, so every
-	// setup-node in it is a setup-node on the publish path and they must agree.
-	var publishSteps []ciStep
-	for _, name := range ciJobNames(publish) {
-		publishSteps = append(publishSteps, publish.Jobs[name].Steps...)
-	}
-	publishPin, err := ciOnePin(publishSteps, deployWorkflowPath)
-	if err != nil {
-		t.Fatalf("%v.\nThat workflow is the build a visitor's page actually comes from, so it is the source of truth here: until it names one Node version there is nothing for the suite's own job to match against",
-			err)
+	jobs := ciJobNames(publish)
+	if len(jobs) == 0 {
+		t.Fatalf("%s declares no jobs, so there is no publish path to check. This test has lost its subject rather than passed", deployWorkflowPath)
 	}
 
-	jobKey, job := ciViewerSuiteJob(t, ci)
-	t.Logf("the job declaring a run of %s is %s (name: %q); %s publishes with Node %s", ciViewerModule, jobKey, job.Name, deployWorkflowPath, publishPin)
-
-	suitePin, err := ciOnePin(job.Steps, fmt.Sprintf("%s's `%s` job — the one that declares a run of %s", ciWorkflowPath, jobKey, ciViewerModule))
-	if err != nil {
-		t.Fatalf("%v.\nThat job's suite builds site/ with npm and reads the result as rendered DOM. With no pin declared, nothing in this repository names the Node it would be built under, and every assertion in the browser suite can stay green while describing a page no visitor is served.\n"+
-			"The step is looked for in THAT JOB and nowhere else in %s, on purpose: a setup-node in another job is another runner with another Node and says nothing about this one. Add the step there, pinned to %s.",
-			err, ciWorkflowPath, publishPin)
+	uploadsSite := false
+	for _, name := range jobs {
+		for _, step := range publish.Jobs[name].Steps {
+			if strings.Contains(step.Uses, "setup-node") {
+				t.Errorf("%s's `%s` job declares %s.\n\n"+
+					"site/ is static: two HTML pages and a stylesheet, with no build. A Node on the publish path means something is transforming the tree on its way to Pages, and every check in this repository reads the tree.",
+					deployWorkflowPath, name, step.Uses)
+			}
+			run := strings.ToLower(step.Run)
+			for _, tok := range ciBuildToolTokens {
+				if strings.Contains(run, tok) {
+					t.Errorf("%s's `%s` job runs %q, which names the build tool %q.\n\n"+
+						"What Pages serves must be what site/ contains. A build step means the published page is one nobody has read — not the release gate, not a reviewer, not this suite — while every assertion over site/ stays green.",
+						deployWorkflowPath, name, strings.TrimSpace(step.Run), strings.TrimSpace(tok))
+					break
+				}
+			}
+			if strings.Contains(step.Uses, "upload-pages-artifact") {
+				uploadsSite = true
+				got, _ := step.With["path"].(string)
+				if got = strings.TrimSpace(got); got != "site" {
+					t.Errorf("%s uploads %q to Pages, and the tree it must publish is %q.\n\n"+
+						"A path naming a generated directory is the build this check refuses, arriving as an upload target rather than as a step.",
+						deployWorkflowPath, got, "site")
+				}
+			}
+		}
 	}
 
-	if suitePin != publishPin {
-		t.Fatalf("%s's `%s` job pins Node %s, but %s publishes the site with Node %s.\n"+
-			"The DOM that job's suite reads is evidence about the page a visitor gets only while the two toolchains are the same one. Move the job's pin to %s — a pin elsewhere in %s belongs to a different runner and is not read here.",
-			ciWorkflowPath, jobKey, suitePin, deployWorkflowPath, publishPin, publishPin, ciWorkflowPath)
+	if !uploadsSite {
+		t.Fatalf("%s declares no `upload-pages-artifact` step, so nothing in it publishes site/ at all and the assertions above passed over a workflow that does not do the thing they are about", deployWorkflowPath)
 	}
 }
 

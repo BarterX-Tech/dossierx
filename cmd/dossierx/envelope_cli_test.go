@@ -1,5 +1,5 @@
 // envelope_cli_test.go is the golden-fixture suite for the machine contract: for
-// every one of the nineteen leaves, it runs the real command tree with the
+// every one of the twenty-two leaves, it runs the real command tree with the
 // default (JSON) format and pins the envelope the agent actually receives.
 //
 // TestEveryLeafButServeEmitsAnEnvelope below is the coverage floor — every leaf
@@ -101,7 +101,7 @@ func TestUnknownFormatIsRefusedWithACode(t *testing.T) {
 
 // TestEveryLeafButServeEmitsAnEnvelope is the inverse of Phase 1's
 // text-only-opt-out fixture, and it is the stronger statement now that the ten
-// commands that carried the opt-out are gone: with the surface at nineteen
+// commands that carried the opt-out are gone: with the surface at twenty-two
 // leaves, EVERY leaf except "serve" must answer --format json with exactly one
 // envelope. A leaf that quietly printed prose instead would be a hole in the
 // contract that no per-command test would notice.
@@ -111,6 +111,14 @@ func TestUnknownFormatIsRefusedWithACode(t *testing.T) {
 func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
+
+	// The track leaves need a project that declares one: "track show" and
+	// "track status" REFUSE an id the config does not carry, on purpose (see
+	// cliout.CodeUnknownTrack), so the fixture above cannot produce the success
+	// envelope this test is about. It is a second config rather than a widening
+	// of the shared fixture because every prose golden in check_parity_test.go
+	// is taken against that one.
+	trackCfg, _ := writeTrackFixture(t)
 
 	// One invocation per leaf, chosen to SUCCEED against the fixture project so
 	// what is being asserted is the envelope, not an error envelope.
@@ -133,6 +141,9 @@ func TestEveryLeafButServeEmitsAnEnvelope(t *testing.T) {
 		{"--config", cfgPath, "build-order", "propose", "--module", "widget", "--dry-run"},
 		{"--config", cfgPath, "build-order", "status", "--module", "widget"},
 		{"--config", cfgPath, "build-order", "lock", "--module", "widget", "--dry-run"},
+		{"--config", trackCfg, "track", "list"},
+		{"--config", trackCfg, "track", "show", "guest-checkout"},
+		{"--config", trackCfg, "track", "status", "guest-checkout"},
 		{"--config", cfgPath, "skills", "export", filepath.Join(root, "skills-out")},
 		{"version"},
 	} {

@@ -207,28 +207,31 @@ require_recorded_baseline_is_resolved() {
 #                         and cannot be recomputed here (it needs the rendered
 #                         output of two releases), so its stamps are read and
 #                         checked against the run's own.
-#   gate/site-text.json   states the tree whose build it was extracted from,
-#                         and cannot be recomputed here either (it needs a real
-#                         build and a real browser). It compares this tree's
-#                         site against nothing, so it carries a tree stamp and
-#                         no baseline commit.
+#
+# gate/site-text.json WAS THE THIRD, and it is gone. It carried the rendered DOM
+# of a real build of site/, extracted in a headless browser, because the site was
+# a Vite application and the source a reviewer read was not the page a visitor
+# got. site/ is now static HTML that deploy-site.yml uploads unchanged, so the
+# `site` surface's bundle is the FILES and there is no capture to stamp. The
+# lesson it taught is kept below rather than deleted with it.
 #
 # It is a function rather than a literal comparison inside the loop because the
 # guard used to be `[ "$a" = "gate/delta.json" ] || continue`, and the second
 # artifact that needed it — gate/render-diff.json, the cross-release render diff
 # the CHANGELOG agent writes its silent-change entries from — was walked straight
-# past. The third, gate/site-text.json, was walked past for longer still: it
-# carried a node/npm toolchain stamp and no tree at all, so an extraction left
-# over from the previous release recorded cleanly and was hashed into the site
-# surface's key as this release's evidence. The fourth, gate/baseline.json, was
-# walked past longest of all — `record` digested whatever bytes sat there, so a
-# baseline two releases old, with a delta honestly computed over it, recorded
-# under the previous release's ref with every digest true. A fifth one added
-# later is covered by adding a line here and a branch in `record`'s guard loop.
+# past. gate/site-text.json, since removed with the build that produced it, was
+# walked past for longer still: it carried a node/npm toolchain stamp and no tree
+# at all, so an extraction left over from the previous release recorded cleanly
+# and was hashed into the site surface's key as this release's evidence. And
+# gate/baseline.json was walked past longest of all: `record` digested whatever
+# bytes sat there, so a baseline two releases old, with a delta honestly computed
+# over it, recorded under the previous release's ref with every digest true. A
+# fourth one added later is covered by adding a line here and a branch in
+# `record`'s guard loop.
 # ---------------------------------------------------------------------------
 provenance_bearing() {
   case "$1" in
-    gate/baseline.json | gate/delta.json | gate/render-diff.json | gate/site-text.json) return 0 ;;
+    gate/baseline.json | gate/delta.json | gate/render-diff.json) return 0 ;;
   esac
   return 1
 }
@@ -670,15 +673,15 @@ case "$MODE" in
           # THE IDENTITY RULE APPLIED TO WHAT THE FILE SAYS, not just to what
           # the caller said. An artifact that names no tree — `printf '{}' >
           # gate/render-diff.json`, the one-line workaround for a gate that has
-          # been refusing for ten minutes, or a site extraction run without
-          # DOSSIERX_SITE_TEXT_TREE — is refused here rather than stepped over:
+          # been refusing for ten minutes — is refused here rather than stepped
+          # over:
           # downstream it is indistinguishable from a capture of this release,
           # because the manifest is honest about its bytes and its digest
           # matches.
           resolved_object_name "$_dtree" \
             || die "record: $a records tree ${_dtree:-nothing}, which is not a full 40-digit object name. An artifact that cannot say which tree it covers cannot be checked against this run at all, and a file that says nothing hashes into every key exactly as cleanly as one that says the truth." 3
           [ "$_dtree" = "$TREE" ] \
-            || die "record: $a was computed over tree $_dtree and this run covers $TREE. Re-produce it for this tree — the -render-diff-out capture entry point for gate/render-diff.json, the DOSSIERX_SITE_TEXT_OUT extraction for gate/site-text.json; recording it as produced here would hand a surface agent another release's evidence as this one's." 3
+            || die "record: $a was computed over tree $_dtree and this run covers $TREE. Re-produce it for this tree — the -render-diff-out capture entry point for gate/render-diff.json; recording it as produced here would hand a surface agent another release's evidence as this one's." 3
           case "$a" in
             gate/render-diff.json)
               # The render diff is a comparison AGAINST the baseline, so it

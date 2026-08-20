@@ -5,7 +5,7 @@ description: >-
   atomic YAML "claims" into a reviewable HTML viewer, and that an agent
   OPERATES while a human REVIEWS. Load this FIRST and ALWAYS in any repo that
   has a project.config.yaml plus a claims/ directory, before running any
-  DossierX command. It is short on purpose: the seven nouns, the JSON envelope, the
+  DossierX command. It is short on purpose: the eight nouns, the JSON envelope, the
   exit codes, the error.code to recovery table, the dry-run rule, the five rules that
   never bend, how a project whose locks predate the lock ledger crosses onto it (there
   is no migration command), why a corpus that passed check before v0.5.0 can fail it after
@@ -23,21 +23,25 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 19 commands | the viewer, via `dossierx serve` — including its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors` and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
+| Surface | the CLI — all 22 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, and its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The seven nouns, nineteen leaves
+## The eight nouns, twenty-two leaves
 
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
 dossierx claim  show list new lock unlock flag reaudit link
 dossierx comment inbox list add reply
 dossierx build-order propose status lock
+dossierx track list show status            # read-only: the cross-cutting feature axis
 dossierx serve                             # the human's one command
 dossierx skills export [dir]
 dossierx version
 ```
+
+A claim joins a track via `tracks:` in its own YAML, so changing membership on a **locked** claim is
+`unlock → fix → lock`. `track` never edits anything and `track status` never gates a lock.
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.
@@ -180,10 +184,9 @@ human asks you to set integrity up.
 edits to a locked claim's *approved content* that leave a surviving file *disagreeing* — a claim edited, a
 record deleted, a status flipped, a thread erased. It cannot catch what nothing disagrees with: a record's
 `reason`, `at` and `actor` are prose no rule checks, and a claim and its record written **together** in one
-commit leave nothing over to object. So: unlock, rewrite, re-lock, then hand-edit that record's `reason`, `at`
-and `actor` back to the original values — `check` and `check --staged` both return `ok: true` over a ledger
-crediting a human who approved nothing. An illustration, not a list. **Never propose editing a locked claim and
-its record in the same breath; never report `ok: true` as proof nobody did.**
+commit leave nothing over to object — `check` and `check --staged` both return `ok: true` over a ledger
+crediting a human who approved nothing. **Never propose editing a locked claim and its record in the same
+breath; never report `ok: true` as proof nobody did.**
 
 **Moving `claims_dir` needs no ceremony and no flag exempts it.** `git mv claims docs/claims`, edit
 `claims_dir:`, stage claims, config and the unchanged stores, commit together — it passes because every
@@ -195,6 +198,7 @@ locked claim still resolves to its record. A move that **strands** them fails as
 | You are about to… | Load |
 |---|---|
 | write, edit, inspect, lock, unlock or reaudit a claim; run `dossierx check`; find the claim the human meant | `dossierx-claims` |
+| cite the evidence behind a claim (`sources`, `[n]` markers), put a claim on a feature track, or read `dossierx track list/show/status` | `dossierx-claims` |
 | read `dossierx comment inbox`, reply to a review thread, or decide comment vs. `claim flag` | `dossierx-comments` |
 | implement code from a module whose claims are all locked | `dossierx-build-order` |
 | tag finished code with its claim, or report that shipped code no longer matches a locked claim | `dossierx-code-links` |

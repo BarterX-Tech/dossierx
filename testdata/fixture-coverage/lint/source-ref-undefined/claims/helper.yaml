@@ -1,0 +1,10 @@
+id: srcundef.internals.helper
+facet: internals
+module: srcundef
+status: draft
+layout: card
+body: |
+  Helper claim, targeted by the cited claim's rests_on edge.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

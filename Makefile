@@ -27,10 +27,11 @@ test:
 # happens without one is no longer uniform across the module. The original
 # chromedp tests still SKIP when DOSSIERX_TEST_BROWSER is unset
 # (viewer-tests/harness_test.go:85) — the right answer on a laptop that has no
-# browser to drive. The release gate's checks, which moved in here, do NOT: the
-# rendered-DOM extraction (site_dom_test.go:490) and the release dry run
-# (site_toolchain_test.go:968) FAIL when the browser or the `goreleaser` binary
-# is unnamed, because "we did not look" must not read as "nothing is wrong".
+# browser to drive. The release gate's check that moved in here does NOT: the
+# release dry run (release_build_test.go) FAILS when the `goreleaser` binary is
+# unnamed, because "we did not look" must not read as "nothing is wrong".
+# A rendered-DOM extraction of site/ used to live here too and is gone with the
+# site's build step; the site is static HTML and the gate reads the files.
 # So this target's exit status is meaningful only with both tools supplied, and
 # folding it into "test" would put a laptop's legitimate skips and a release
 # gate's refusals behind one green line.

@@ -8,7 +8,7 @@
 // newRootCmd() in main.go and Go forbids importing package main, so the walk has
 // to happen inside this package. The other door — a hidden `dossierx __surface`
 // verb — is worse than inconvenient: it would itself be a twentieth leaf, and
-// TestSurfaceIsNineteenLeavesUnderSevenNouns excludes commands by the
+// TestSurfaceIsTwentyTwoLeavesUnderEightNouns excludes commands by the
 // annotationRetired MARK and deliberately NOT by hidden-ness (see retired.go),
 // so the emitter would break the very count it exists to protect. A generator
 // test has neither problem, and it comes with the staleness check for free:
@@ -290,7 +290,7 @@ func buildSurfaceDoc(t *testing.T, root string) surfaceDoc {
 // ---------------------------------------------------------------------
 
 // surfaceCommandTree walks newRootCmd() the same way
-// TestSurfaceIsNineteenLeavesUnderSevenNouns does, and for the same reason: a
+// TestSurfaceIsTwentyTwoLeavesUnderEightNouns does, and for the same reason: a
 // naive walk yields ~31 leaves against an enforced 19, because cobra's own
 // help/completion furniture and the twelve removal stubs are all in the tree.
 //
@@ -1135,12 +1135,42 @@ func surfaceEnvelopeContract(codes []string) surfaceEnvelope {
 	}
 }
 
+// surfaceRegisteredPayloadTypes holds the payloads registered at init time by
+// the test file belonging to the noun that declares them. See
+// surfacePayloadTypes for why half the table arrives this way.
+var surfaceRegisteredPayloadTypes = map[string]any{}
+
+// registerSurfacePayloadType adds one payload to the table from the file whose
+// noun declares it. Nothing in a tree that predates that noun calls it, which is
+// the entire point — see surfacePayloadTypes.
+func registerSurfacePayloadType(name string, sample any) {
+	surfaceRegisteredPayloadTypes[name] = sample
+}
+
 // surfacePayloadTypes is every envelope payload this package publishes. The list
 // is explicit — reflection cannot enumerate a package's types — and
 // TestSurfacePayloadTableCoversEveryDataType fails the moment a *Data type is
-// declared and not added here, so it cannot go stale in silence.
+// declared and not added to it, so it cannot go stale in silence.
+//
+// IT IS ASSEMBLED FROM TWO HALVES, and the reason has nothing to do with taste.
+// This file is COPIED INTO OLDER TREES AND BUILT THERE: gate_baseline_test.go's
+// gateBaselineEmitterSources re-manufactures the frozen release's link-time
+// surface by compiling HEAD's emitter inside that release's own cmd/dossierx,
+// because the baseline is defined as "what HEAD's emitter says about that tree".
+// A literal here naming a type only HEAD declares does not compile there, and
+// the consequence is worse than a red test: it breaks the ONE method that can
+// ever re-manufacture the frozen artifact, so the gate loses the comparison
+// entirely rather than reporting a difference — a check that cannot execute,
+// which this repository treats as the failure it is.
+//
+// So the literal below is the set every tree the emitter is pointed at has, and
+// a payload belonging to a noun added since is registered at init by that noun's
+// own test file, which no old checkout contains. Both halves are equally pinned:
+// TestSurfacePayloadTableCoversEveryDataType compares the MERGED table against
+// the *Data types the tree actually declares, so forgetting either kind of entry
+// is red.
 func surfacePayloadTypes() map[string]any {
-	return map[string]any{
+	table := map[string]any{
 		"buildOrderLockData":    buildOrderLockData{},
 		"buildOrderPhaseData":   buildOrderPhaseData{},
 		"buildOrderProposeData": buildOrderProposeData{},
@@ -1165,6 +1195,10 @@ func surfacePayloadTypes() map[string]any {
 		"unlockData":            unlockData{},
 		"versionData":           versionData{},
 	}
+	for name, sample := range surfaceRegisteredPayloadTypes {
+		table[name] = sample
+	}
+	return table
 }
 
 // jsonFieldNames is the marshalled key set of a struct type: the json tag name

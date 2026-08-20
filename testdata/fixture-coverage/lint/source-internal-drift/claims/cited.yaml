@@ -1,0 +1,23 @@
+id: srcdrift.internals.cited
+facet: internals
+module: srcdrift
+status: draft
+layout: card
+body: |
+  The ceiling is 100 requests per minute [1].
+
+  The sha256 recorded below is the hash of the decision log as it read when
+  this claim was written. The committed file now says something else, so the
+  claim rests on a sentence its own evidence no longer contains.
+sources:
+  - ref: 1
+    kind: internal
+    title: Rate limit decision log
+    path: sources/decision-log.md
+    sha256: 90246014288268ce223d0abf70fdd014263d0cdbec7120d8978ce003043c9ba6
+    supports: the 100/min ceiling this claim states
+rests_on:
+  - srcdrift.internals.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

@@ -375,8 +375,8 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // reaches the existing per-layout partials without editing any of them.
 //
 // The whole footer ships inside a <details class="claim-links"> whose
-// <summary> is a three-count digest — "N links - N files - N drifted", the
-// drifted segment present only when it is non-zero. A claim's edges are
+// <summary> is a count digest — "N links - N files - N sources - N drifted",
+// the sources and drifted segments present only when they are non-zero. A claim's edges are
 // reference material a reader consults, not something they read on every pass,
 // and expanded on every card they were the bulk of the page. The digest keeps
 // the fact that there ARE edges (and that one of them has drifted) visible
@@ -482,6 +482,18 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 		rows.WriteString(`</li>`)
 	}
 
+	// Sources sit beside migrated_from because they answer the same question
+	// it does — where did this come from — and the pairing is the point: one
+	// names a predecessor document in free text, the other names checkable
+	// evidence. They do NOT count as links, and they are not folded into that
+	// count for a reason the summary line below states: a link is a claim id
+	// a reader can follow inside this corpus, and a source is evidence from
+	// outside it. Counting them together would let a claim with no edges and
+	// four citations report "4 links", which is not true of anything.
+	if len(c.Sources) > 0 {
+		writeSourcesRow(&rows, c)
+	}
+
 	// One condition, two consumers: review_pending is both a link in the
 	// summary and (below) one of the two server-written auto-open signals.
 	// They must stay keyed on the identical test.
@@ -511,18 +523,20 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 
 	var b strings.Builder
 
-	// Zero links and zero files: emit no <details> at all — not an empty
-	// disclosure reading "0 links - 0 files", which would be a control that
-	// opens onto nothing on every claim with no edges yet. The counts DO print
-	// as 0 whenever the other one is non-zero; it is only the both-zero case
-	// that suppresses the whole footer.
+	// Zero links, zero files and zero sources: emit no <details> at all — not
+	// an empty disclosure reading "0 links - 0 files", which would be a control
+	// that opens onto nothing on every claim with no edges yet. The two fixed
+	// counts DO print as 0 whenever anything else is non-zero; it is only the
+	// all-zero case that suppresses the whole footer. Sources join that test
+	// rather than sitting outside it, because a claim whose only footer content
+	// is its evidence must still be able to disclose it.
 	//
 	// Since "governed_by: none" no longer counts (see above), the both-zero
 	// case now covers the claim that states an absence and nothing else, which
 	// is the ordinary shape of an ungoverned claim with no edges yet — this
 	// branch is what makes that claim emit a clean section with no dangling
 	// disclosure triangle under it.
-	if links > 0 || len(files) > 0 {
+	if links > 0 || len(files) > 0 || len(c.Sources) > 0 {
 		// Two auto-open signals, OR'd — either alone opens the footer. Both
 		// read data already in scope (files' Drifted flag, the claim's own
 		// status pair), which is why this needs no new parameter.
@@ -558,6 +572,16 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 		// pluralise there. Separator, term order and the >0 gate on drifted are
 		// exactly as the contract froze them; only the nouns changed.
 		summary := countSegment(links, "link") + " - " + countSegment(len(files), "file")
+		// The sources segment is CONDITIONAL where links and files are fixed,
+		// and that asymmetry is load-bearing rather than an inconsistency: a
+		// project that has never written a source must render byte-identically
+		// to how it did before sources existed, and an unconditional "0
+		// sources" would have changed the single most-read line in the viewer
+		// on every claim in every corpus. It rides ahead of "drifted" because
+		// drifted is an adjective about the FILES count it follows.
+		if len(c.Sources) > 0 {
+			summary += " - " + countSegment(len(c.Sources), "source")
+		}
 		if drifted > 0 {
 			summary += fmt.Sprintf(" - %d drifted", drifted)
 		}
@@ -594,12 +618,13 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 
 // countSegment renders one segment of the <summary> digest — the count and its
 // noun, pluralised with a plain trailing "s" unless the count is exactly 1
-// ("1 link", "0 links", "2 files"). Only "link" and "file" go through here;
-// "drifted" is an adjective and stays invariant at every count.
+// ("1 link", "0 links", "2 files", "3 sources"). Only "link", "file" and
+// "source" go through here; "drifted" is an adjective and stays invariant at
+// every count.
 //
-// English irregulars are deliberately not handled: the two nouns are fixed
+// English irregulars are deliberately not handled: the three nouns are fixed
 // literals in this file's only caller, and a general pluraliser would be
-// machinery for a set of size two.
+// machinery for a set of size three.
 func countSegment(n int, singular string) string {
 	if n == 1 {
 		return fmt.Sprintf("%d %s", n, singular)

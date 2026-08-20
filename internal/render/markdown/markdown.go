@@ -8,13 +8,15 @@
 //   - Render(body string) template.HTML — the block ceiling with images
 //     OFF. Used by every surface that must never render an image: comment
 //     bodies (root and every reply), on every render path that reaches one.
-//   - RenderClaimBody(body string, assets AssetPrefix) template.HTML — the
-//     same block ceiling with images ON. This is what every claim component
-//     (card, table, steps, banner, list, mockup) actually binds for a
-//     claim's own body and steps entries, via the "claimMarkdown" template
-//     func in render/components; see markdown_images.go for the whole
-//     argument for why the capability is a separate entry point rather than
-//     a parameter on Render.
+//   - RenderClaimBody(body string, assets AssetPrefix, cites Citations)
+//     template.HTML — the same block ceiling with images ON and with "[n]"
+//     citation markers resolving against the claim's own sources. This is what
+//     every claim component (card, table, steps, banner, list, mockup)
+//     actually binds for a claim's own body and steps entries, via the
+//     "claimMarkdown" template func in render/components; see
+//     markdown_images.go for the whole argument for why the capabilities are a
+//     separate entry point rather than parameters on Render, and
+//     markdown_cite.go for the citation rules internal/lint mirrors.
 //   - RenderInline(text string) template.HTML — the narrower inline-only
 //     ceiling, images always OFF, used by a layout:table claim's own rows
 //     cells.
@@ -22,8 +24,11 @@
 // A GFM pipe-table cell embedded inside a body rendered by RenderClaimBody
 // is a fourth case worth naming here because it is easy to get wrong by
 // analogy with RenderInline: it goes through the same inline-only renderer,
-// but it inherits the image capability of the body around it rather than
-// always having it off — see markdown_tables.go's writeTable/writeTableRow.
+// but it inherits the CLAIM-BODY capabilities of the body around it — images
+// and citation markers both — rather than always having them off. See
+// markdown_tables.go's writeTable/writeTableRow. That is the right way round:
+// a cell is part of the claim's own prose, so a "[1]" in one cites the same
+// source a "[1]" in the paragraph above it does.
 //
 // This is deliberately not a general Markdown parser. It implements exactly
 // the subset real claim corpora (and FORMAT.md's generic "body: markdown
@@ -170,7 +175,7 @@ import (
 // comment carries the whole argument for which way round the default sits.
 func Render(body string) template.HTML {
 	var b strings.Builder
-	renderBlocks(&b, strings.Split(body, "\n"), true, imagePolicy{})
+	renderBlocks(&b, strings.Split(body, "\n"), true, bodyPolicy{})
 	return template.HTML(b.String())
 }
 
@@ -885,11 +890,12 @@ type itemBlock struct {
 // with no blank line of its own stays tight inside a loose parent, which is
 // the CommonMark shape and the reason looseness is tracked per list rather
 // than per document.
-// img is the image capability, carried unchanged into every container this
-// function opens — a blockquote interior, a list item, a table cell — and into
-// the inline pass. The ZERO VALUE RENDERS NO IMAGES, so a block construct added
-// later that forgets to pass it along refuses images rather than granting them.
-func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img imagePolicy) {
+// pol is the claim-body capability set, carried unchanged into every container
+// this function opens — a blockquote interior, a list item, a table cell — and
+// into the inline pass. ITS ZERO VALUE GRANTS NOTHING, so a block construct
+// added later that forgets to pass it along refuses images and citation markers
+// rather than granting them. See bodyPolicy.
+func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, pol bodyPolicy) {
 	closers := closerRuns(lines)
 
 	// stack is the open list levels, outermost first. stack[0].list is the
@@ -907,7 +913,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 		}
 		text, breaks := joinSegments(paraSegs)
 		b.WriteString("<p>")
-		b.WriteString(renderInline(text, breaks, img))
+		b.WriteString(renderInline(text, breaks, pol))
 		b.WriteString("</p>")
 		paraSegs = nil
 	}
@@ -916,7 +922,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 		if len(stack) == 0 {
 			return
 		}
-		writeList(b, stack[0].list, img)
+		writeList(b, stack[0].list, pol)
 		stack = stack[:0]
 	}
 	// snapToContent pops levels whose content column a line at width w does
@@ -1004,7 +1010,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 					end++
 				}
 				b.WriteString("<blockquote>")
-				renderBlocks(b, inner, false, img)
+				renderBlocks(b, inner, false, pol)
 				b.WriteString("</blockquote>")
 				i = end - 1
 				continue
@@ -1020,7 +1026,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 				flushList()
 				tag := "h" + strconv.Itoa(level)
 				b.WriteString("<" + tag + ">")
-				b.WriteString(renderInline(text, nil, img))
+				b.WriteString(renderInline(text, nil, pol))
 				b.WriteString("</" + tag + ">")
 				continue
 			}
@@ -1073,7 +1079,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 					lst := &listNode{ordered: ordered, start: num}
 					lst.items = append(lst.items, it)
 					if len(stack) == 1 {
-						writeList(b, lv.list, img)
+						writeList(b, lv.list, pol)
 						stack = append(stack[:0], openLevel{list: lst, item: it, markerCol: w, contentCol: cc})
 					} else {
 						parent := &stack[len(stack)-2]
@@ -1123,7 +1129,7 @@ func renderBlocks(b *strings.Builder, lines []string, allowQuote bool, img image
 			if aligns, end, ok := tableAt(lines, i); ok {
 				flushParagraph()
 				flushList()
-				writeTable(b, lines, i, end, aligns, img)
+				writeTable(b, lines, i, end, aligns, pol)
 				i = end
 				continue
 			}
@@ -1188,7 +1194,7 @@ func listMarker(trimmed string) (ordered bool, num int, itemText string, ok bool
 // rule reaches it in a tight list and a loose one alike. Every attribute here
 // is a fixed literal except start's number, which is re-emitted from a parsed
 // int and so can only ever be digits — the escaping boundary is unchanged.
-func writeList(b *strings.Builder, l *listNode, img imagePolicy) {
+func writeList(b *strings.Builder, l *listNode, pol bodyPolicy) {
 	tag := "ul"
 	if l.ordered {
 		tag = "ol"
@@ -1216,7 +1222,7 @@ func writeList(b *strings.Builder, l *listNode, img imagePolicy) {
 				// as addText's old incremental concatenation produced for the
 				// soft case.
 				text, breaks := joinSegments(blk.segs)
-				inline := renderInline(text, breaks, img)
+				inline := renderInline(text, breaks, pol)
 				switch {
 				case !l.loose:
 					b.WriteString(inline)
@@ -1226,7 +1232,7 @@ func writeList(b *strings.Builder, l *listNode, img imagePolicy) {
 			case blockHTML:
 				b.WriteString(blk.html)
 			case blockList:
-				writeList(b, blk.list, img)
+				writeList(b, blk.list, pol)
 			}
 		}
 		b.WriteString("</li>")
@@ -1265,7 +1271,7 @@ func writeList(b *strings.Builder, l *listNode, img imagePolicy) {
 // called with no break offsets, and a trailing backslash in a cell is the
 // literal dangling backslash the inline scan already renders.
 func RenderInline(text string) template.HTML {
-	return template.HTML(renderInline(text, nil, imagePolicy{}))
+	return template.HTML(renderInline(text, nil, bodyPolicy{}))
 }
 
 // isEscapable reports whether c is in the CLOSED backslash-escapable set
@@ -1351,8 +1357,8 @@ func isEscapable(c byte) bool {
 // whose only closer is on the far side of a break is emitted as literal text.
 // The cap is exact rather than approximate because a break offset is always a
 // separator SPACE, so no backtick run can straddle one.
-func renderInline(text string, breaks []int, img imagePolicy) string {
-	return renderInlineCtx(text, breaks, inlineCtx{img: img})
+func renderInline(text string, breaks []int, pol bodyPolicy) string {
+	return renderInlineCtx(text, breaks, inlineCtx{pol: pol})
 }
 
 // findBacktickRun returns the start index of the first run of EXACTLY n

@@ -1,0 +1,10 @@
+schema_version: 1
+facets:
+  - contract
+modules:
+  - trackmod
+claims_dir: claims
+tracks:
+  - id: checkout
+    title: Checkout
+    summary: Two modules cite it; nobody has written the sentence that says what it delivers.

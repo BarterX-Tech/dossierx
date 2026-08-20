@@ -254,16 +254,22 @@ const (
 	// source would be a third thing to keep in step; one source would make a
 	// typo in it indistinguishable from a correct rename.
 	gateDriverChangelogFile = "CHANGELOG.md"
-	gateDriverSiteFile      = "site/src/content.ts"
+	gateDriverSiteFile      = "site/releases.html"
 
-	// gateDriverSiteReleasesDecl and gateDriverSiteLatestDecl bound the array in
-	// that file, and gateDriverSiteLatestDecl is also the reason "the last entry"
-	// is the newest one rather than an assumption this driver makes: the site
-	// itself derives its current release that way, and if that line ever goes,
-	// the ordering this parser depends on has gone with it and the version
-	// becomes unreadable rather than quietly read backwards.
-	gateDriverSiteReleasesDecl = "const releases: Release[] = ["
-	gateDriverSiteLatestDecl   = "releases[releases.length - 1]"
+	// gateDriverSiteCurrentAttr is how the ledger says which of its entries is
+	// the current release. It says so ON THE ENTRY, which is the whole reason
+	// this parser no longer has to know anything about the page's order.
+	//
+	// IT USED TO BE TWO CONSTANTS AND A POSITION. The ledger was a TypeScript
+	// array in site/src/content.ts, this driver read its LAST entry, and it
+	// required the site's own `releases[releases.length - 1]` line to be present
+	// before it would do so: without that line, "the newest entry" was this
+	// driver's guess about somebody else's data structure, and a wrong guess
+	// read a release out of the wrong end of the array and refused (or cleared)
+	// the wrong thing silently. The marker removes the guess rather than
+	// guarding it. Order is presentation now, so there is no ordering
+	// assumption left to be wrong about.
+	gateDriverSiteCurrentAttr = `data-current="true"`
 
 	// gateDriverCIEvidenceEnv names where `make ci-evidence` wrote its verdict
 	// record, and gateDriverCIEvidenceDefault is the path it defaults to.
@@ -1241,9 +1247,26 @@ var errGateVersionMismatch = errors.New("the version being published is not the 
 // backwards is the failure this pair of regexps has to not have.
 var gateDriverChangelogHeadingRE = regexp.MustCompile(`(?m)^## \[v?(\d+\.\d+\.\d+)\]`)
 
-// gateDriverSiteVersionRE is one entry's version field in the site's releases
+// gateDriverSiteArticleRE is one entry's opening tag, and gateDriverSiteVersionRE
+// is the version it carries. The attributes are read out of the tag separately
+// rather than pinned in a fixed order: an attribute reshuffle is a formatting
+// change, and a reader that turned one into a refused release is a reader nobody
+// trusts.
+//
+// gateDriverSiteCommentRE is every HTML comment. Comments are blanked before
+// anything is read, and that is not tidiness: releases.html carries a long
+// comment that names an old release while explaining a deleted field, and the
+// failure this repository has actually shipped twice is live text left standing
+// inside a comment for a raw scan to find.
+//
+// WHAT THE OLD ONE WAS, for the reader comparing this against the array parser:
+// one entry's version field in the site's releases
 // array.
-var gateDriverSiteVersionRE = regexp.MustCompile(`(?m)^\s*version:\s*"v?(\d+\.\d+\.\d+)"`)
+var (
+	gateDriverSiteArticleRE = regexp.MustCompile(`(?s)<article\b[^>]*>`)
+	gateDriverSiteVersionRE = regexp.MustCompile(`data-version="v?(\d+\.\d+\.\d+)"`)
+	gateDriverSiteCommentRE = regexp.MustCompile(`(?s)<!--.*?-->`)
+)
 
 // gateDriverNormalizeVersion strips the leading v, because the two documents
 // spell the same release differently on purpose — the changelog heading is
@@ -1278,37 +1301,52 @@ func gateDriverChangelogVersion(dir, branch string) (string, error) {
 	return m[1], nil
 }
 
-// gateDriverSiteVersion is the release the site's newest releases[] entry names.
+// gateDriverSiteVersion is the release the site's ledger marks as current.
 //
-// It is scoped to the array and it REQUIRES the line the site derives its own
-// current release from. Without that line, "the newest entry" is this driver's
-// guess about somebody else's data structure, and a guess that is wrong reads a
-// release out of the wrong end of the array and refuses (or clears) the wrong
-// thing silently. With it, a site that started prepending its entries makes this
-// unreadable instead, which is the failure-not-guess direction.
+// EVERY WAY OF FAILING TO READ IT REFUSES, and none of them falls back to a
+// position. Nought marked entries is a page that names no current release; two
+// is a page that names two, and whichever this parser picked would be a coin
+// toss. Both are errGateUncheckable rather than a guess, which is the same
+// failure-not-guess direction the array parser had, arrived at with one rule
+// instead of three.
 func gateDriverSiteVersion(dir, branch string) (string, error) {
 	body, err := gateDriverTreeFile(dir, branch, gateDriverSiteFile)
 	if err != nil {
 		return "", fmt.Errorf("%w: %s carries no readable %s, so the site half of the release's own name cannot be read: %w",
 			errGateUncheckable, branch, gateDriverSiteFile, err)
 	}
-	start := strings.Index(body, gateDriverSiteReleasesDecl)
-	if start < 0 {
-		return "", fmt.Errorf("%w: %s in %s no longer declares `%s`, so there is no array to read the current release out of",
-			errGateUncheckable, gateDriverSiteFile, branch, gateDriverSiteReleasesDecl)
+	body = gateDriverSiteCommentRE.ReplaceAllStringFunc(body, func(c string) string {
+		return strings.Repeat(" ", len(c))
+	})
+
+	var entries, current []string
+	for _, tag := range gateDriverSiteArticleRE.FindAllString(body, -1) {
+		m := gateDriverSiteVersionRE.FindStringSubmatch(tag)
+		if m == nil {
+			continue
+		}
+		entries = append(entries, m[1])
+		if strings.Contains(tag, gateDriverSiteCurrentAttr) {
+			current = append(current, m[1])
+		}
 	}
-	end := strings.Index(body[start:], gateDriverSiteLatestDecl)
-	if end < 0 {
-		return "", fmt.Errorf("%w: %s in %s no longer derives its current release as `%s`. "+
-			"This driver reads the LAST entry of that array because the site itself does; without that line, 'the newest release' is a guess about the order somebody else's data structure is written in, and a wrong guess reads the wrong release and says nothing",
-			errGateUncheckable, gateDriverSiteFile, branch, gateDriverSiteLatestDecl)
-	}
-	matches := gateDriverSiteVersionRE.FindAllStringSubmatch(body[start:start+end], -1)
-	if len(matches) == 0 {
-		return "", fmt.Errorf("%w: %s in %s declares a releases array holding no `version: \"vX.Y.Z\"` entry, so the site names no current release",
+
+	if len(entries) == 0 {
+		return "", fmt.Errorf("%w: %s in %s carries no `<article … data-version=\"vX.Y.Z\">` entry outside its comments, so the site names no release at all",
 			errGateUncheckable, gateDriverSiteFile, branch)
 	}
-	return matches[len(matches)-1][1], nil
+	switch len(current) {
+	case 1:
+		return current[0], nil
+	case 0:
+		return "", fmt.Errorf("%w: %s in %s lists %d release entr(ies) and marks none of them `%s`. "+
+			"That attribute is the only thing on the page that says which release is current — the order of the entries deliberately means nothing — so there is no fallback to read and this driver will not invent one",
+			errGateUncheckable, gateDriverSiteFile, branch, len(entries), gateDriverSiteCurrentAttr)
+	default:
+		return "", fmt.Errorf("%w: %s in %s marks %d entries `%s` (%s), and exactly one release can be current. "+
+			"A page naming two current releases renders perfectly and is wrong about the one fact it exists to state; whichever this driver picked would be a coin toss, so it picks none",
+			errGateUncheckable, gateDriverSiteFile, branch, len(current), gateDriverSiteCurrentAttr, strings.Join(current, ", "))
+	}
 }
 
 // requireTheTreeDeclaresThisRelease is clause 5.
@@ -1746,11 +1784,11 @@ func gateDriverDeclareRelease(t *testing.T, repo gateDriverRepo, changelog, site
 		"# Changelog\n\n## [%s] - 2026-08-09\n\nThe release under test.\n\n## [0.0.1] - 2026-07-21\n\nThe one before it.\n",
 		gateDriverNormalizeVersion(changelog)))
 	gateWrite(t, repo.Dir, gateDriverSiteFile, fmt.Sprintf(
-		"type Release = { version: string };\n\n%s\n"+
-			"  {\n    version: \"v0.0.1\",\n  },\n"+
-			"  {\n    version: %q,\n  },\n"+
-			"];\n\nexport const latestRelease: Release = %s;\n",
-		gateDriverSiteReleasesDecl, site, gateDriverSiteLatestDecl))
+		"<div class=\"ledger\">\n"+
+			"  <article class=\"release\" data-version=%q data-current=\"true\"></article>\n"+
+			"  <article class=\"release\" data-version=\"v0.0.1\"></article>\n"+
+			"</div>\n",
+		site))
 	gateTestGit(t, repo.Dir, "add", "-A")
 	gateTestGit(t, repo.Dir, "commit", "-qm", "docs: declare the release this branch is for")
 }
@@ -2644,31 +2682,45 @@ func TestTheDriverRefusesToTagAReleaseTheTreeDoesNotDeclare(t *testing.T) {
 			why:     "a tree that states no release cannot be checked against the version being tagged, and 'could not check' is a failed gate",
 		},
 		{
-			name:     "the site declares no releases array",
+			name:     "the site lists no release entry at all",
 			declares: "v9.9.9",
 			mutate: func(t *testing.T, repo gateDriverRepo) {
-				gateWrite(t, repo.Dir, gateDriverSiteFile, "export const contentSpec = { siteTitle: \"DossierX\" };\n")
+				gateWrite(t, repo.Dir, gateDriverSiteFile, "<h1>DossierX</h1>\n")
 				gateTestGit(t, repo.Dir, "add", "-A")
 				gateTestGit(t, repo.Dir, "commit", "-qm", "refactor: rewrite the site content")
 			},
 			publish: "v9.9.9",
 			want:    errGateUncheckable,
-			names:   []string{gateDriverSiteReleasesDecl},
+			names:   []string{"data-version"},
 			why:     "the site is the other half of what the tree says it is, and half an answer is not one",
 		},
 		{
-			name:     "the site no longer derives its current release from the last entry",
+			name:     "the site marks no entry current",
 			declares: "v9.9.9",
 			mutate: func(t *testing.T, repo gateDriverRepo) {
 				gateWrite(t, repo.Dir, gateDriverSiteFile,
-					gateDriverSiteReleasesDecl+"\n  {\n    version: \"v9.9.9\",\n  },\n  {\n    version: \"v0.0.1\",\n  },\n];\n\nexport const latestRelease = releases[0];\n")
+					"<article data-version=\"v9.9.9\"></article>\n<article data-version=\"v0.0.1\"></article>\n")
 				gateTestGit(t, repo.Dir, "add", "-A")
-				gateTestGit(t, repo.Dir, "commit", "-qm", "refactor: newest release first")
+				gateTestGit(t, repo.Dir, "commit", "-qm", "refactor: drop the current marker")
 			},
 			publish: "v9.9.9",
 			want:    errGateUncheckable,
-			names:   []string{gateDriverSiteLatestDecl},
-			why:     "reading the last entry is right only while the site itself reads the last entry; once it does not, 'newest' is this driver's guess about someone else's array, and a wrong guess would have cleared v0.0.1 here",
+			names:   []string{gateDriverSiteCurrentAttr},
+			why:     "the marker is the only thing that says which release is current; with it gone, any entry this driver picked would be a guess, and picking the first here would have read v9.9.9 off a page that no longer claims it",
+		},
+		{
+			name:     "the site marks two entries current",
+			declares: "v9.9.9",
+			mutate: func(t *testing.T, repo gateDriverRepo) {
+				gateWrite(t, repo.Dir, gateDriverSiteFile,
+					"<article data-version=\"v9.9.9\" data-current=\"true\"></article>\n<article data-version=\"v0.0.1\" data-current=\"true\"></article>\n")
+				gateTestGit(t, repo.Dir, "add", "-A")
+				gateTestGit(t, repo.Dir, "commit", "-qm", "refactor: mark two releases current")
+			},
+			publish: "v9.9.9",
+			want:    errGateUncheckable,
+			names:   []string{gateDriverSiteCurrentAttr},
+			why:     "a page naming two current releases renders perfectly and is wrong about the one fact it exists to state; the correct half being present is exactly what makes picking one dangerous",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

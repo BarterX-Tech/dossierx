@@ -6,7 +6,9 @@ description: >-
   the claim a human described in words, run dossierx check, or lock, unlock,
   flag or reaudit anything under a project's claims/ directory. Covers the
   claim schema and id grammar, dossierx claim new, the read-only authoring loop
-  (dossierx check --validate), dossierx claim show and list, the three
+  (dossierx check --validate), dossierx claim show and list, citing evidence with
+  sources and [n] markers, the cross-cutting track axis and dossierx track
+  list/show/status, the three
   review_pending triggers, and the one rule everything else hangs off — draft
   claims are free, a locked claim only ever changes via unlock, fix, lock.
   Load the DossierX router skill first; it carries the envelope, the exit
@@ -31,6 +33,9 @@ the five rules are there and are not repeated here.
 | freeze a claim, on the human's word | `dossierx claim lock <id> --reason "<their words>"` |
 | change a locked claim | `dossierx claim unlock <id> --reason "..."` → edit → `dossierx claim lock <id> --reason "..."` |
 | a locked claim drifted from a changed dependency | `dossierx claim reaudit <id>` (preview) then `--confirm --reason "..."` |
+| what feature tracks this project declares | `dossierx track list` |
+| read a feature end to end, assembled across modules | `dossierx track show <id>` |
+| is a feature finished? | `dossierx track status <id>` — COMPLETE when every claim it owns and every claim it cites is locked |
 
 ## A claim
 
@@ -46,17 +51,10 @@ it out.
   had passed, and the lock ledger will report it as `integrity_failed` on the next check.
 - `body` (prose) and/or `rows` (a table; every cell must be an authored **string**, so quote
   numbers and booleans). A claim needs at least one. `body` gets the wider **block** ceiling —
-  paragraphs, fenced code (with a language class from the fence's info string), backslash
-  escapes, code spans, `**bold**`/`*italic*`/`_italic_` (CommonMark flanking — intraword
-  underscores never italicize, so `snake_case` tokens are safe), `~~strikethrough~~`, links,
-  autolinks (`<https://...>` and a bare `http`/`https` URL both link on their own — bare URLs
-  *are* autolinked now), GFM pipe tables, images (claim `body`/`steps` only, never in a comment,
-  `src` confined to that claim's own `assets/`), lists (with task items), thematic breaks,
-  headings (`###`–`######` only — `#`/`##` render as literal text), and one level of blockquote.
-  Every `rows` cell gets the narrower **inline-only** ceiling — escapes, code spans, links,
-  emphasis, strikethrough and autolinks, but no block construct and no image. In both,
-  `[text](url)` links render with an allowlisted scheme; `javascript:`/`data:` URLs are
-  neutralized. See FORMAT.md's "`body` and the markdown ceiling" section for the full
+  paragraphs, fenced code, lists, GFM pipe tables, images (claim `body`/`steps` only, `src`
+  confined to that claim's own `assets/`), headings `###`–`######` only, one level of blockquote,
+  and every inline construct. Every `rows` cell gets the narrower **inline-only** ceiling: no block
+  construct and no image. See FORMAT.md's "`body` and the markdown ceiling" section for the full
   construct-by-surface account — do not reach past either ceiling.
 - `layout: card | table | list | steps | tree | banner | mockup` — inferred from shape if omitted.
   Be explicit once a claim is non-trivial.
@@ -74,22 +72,18 @@ it out.
   buys no free back edge when A already rests on B; `mirrors` is exempt. The router's `mixed-cycle`
   section covers why an untouched corpus can start failing this.
 - `kind: orientation-note` (implied by the reserved `overview` facet) marks a claim that tells a
-  reader how to read the *rest* of the module. It renders as a banner and sorts ahead of fact
-  claims, so "read top to bottom" already means "read the orientation notes first".
+  reader how to read the *rest* of the module. It renders as a banner and sorts ahead of fact claims.
+- `sources` — optional, the evidence behind the claim, cited from `body` as `[1]`, `[2]`. See
+  **Citing your evidence** below.
+- `tracks` — optional, cross-cutting feature membership: `- {id: checkout, role: owns|cites}`,
+  role defaulting to `cites`. See **Feature tracks** below.
 
 ## Authoring — `dossierx claim new`, not a text editor
 
 Hand-writing claim YAML is the thing this design gates. Author through the command: it enforces
 the id grammar, the body requirement and the governed-reason rule **before** it writes, then lints
-the project with the new claim in it.
-
-```json
-{"ok": true, "command": "claim new", "data": {
-  "claim_id": "widget.contract.retry-policy", "path": ".../claims/widget.contract.retry-policy.yaml",
-  "facet": "contract", "module": "widget", "status": "draft", "layout": "card",
-  "lint_error_count": 0, "lint_warning_count": 1},
- "warnings": ["[warning] orphan: widget.contract.retry-policy: claim has no mirrors/rests_on edges in either direction"]}
-```
+the project with the new claim in it — an `orphan` warning on a claim with no edges yet is a
+warning, not a refusal.
 
 `--rests-on` / `--mirrors` / `--governed-by` / `--build-role` / `--section` / `--layout` are all
 available at creation time; `--file` may only name a path **inside** `claims_dir` (the loader walks
@@ -99,6 +93,73 @@ the claim is a **draft** — edit its file freely.
 The loop while authoring is `dossierx check --validate`: the same lint gate `check` drives, at the
 same severity, writing **nothing** — no claim files, no lock store, no `.catalog.json`, no viewer.
 Run the full `dossierx check` when you want the viewer rebuilt and code links scanned.
+
+## Citing your evidence — `sources`
+
+`sources` records **what makes this claim true**, in the claim, where `check`, the viewer and the
+lock ledger can all see it. It is a different field from `migrated_from`, which answers *what this
+claim replaced*. Never keep the evidence in a sidecar file instead: nothing checks a sidecar, so
+the evidence behind a locked claim could be rewritten after the human approved it and nothing
+would say so.
+
+```yaml
+sources:
+  - ref: 1
+    kind: external
+    title: SCShareableContent
+    url: https://developer.apple.com/documentation/screencapturekit/scshareablecontent
+    accessed_on: 2026-08-15
+    supports: "the enumeration API returns windows only while the user has granted permission"
+  - ref: 2
+    kind: internal
+    title: Product requirement PVR-010
+    path: migration/product-requirement-map.jsonl
+    record_id: PVR-010
+    sha256: 8afd3c9a...
+```
+
+An `external` source needs `url` **and** `accessed_on` — the date records what the page said on the
+day it was read. An `internal` source needs `path` (relative to `project.config.yaml`) **and**
+`sha256`, and may set `record_id` to pin one JSONL record (matched on its top-level `"id"`) rather
+than the whole file, which churns for reasons unrelated to your claim.
+
+Cite from `body` with `[n]`: *"frames arrive only while the stream is running [1]."* Markers are
+read **in prose only** — never inside a fenced block or an inline `` `code` `` span — and **only on
+a claim that declares `sources`**, so a source-less claim writing `array[0]` is unaffected.
+
+Five lints: `source-shape` (ERROR — `ref` positive and unique, `kind` known, `title` present, no
+field used across kinds, `internal` names a `path`), `source-ref-undefined` (ERROR — the body cites
+`[n]` that no entry declares), `source-external-unanchored` (ERROR — no `url` or no `accessed_on`),
+`source-internal-drift` (ERROR — the hash is missing, the file or record cannot be read, or the
+content no longer matches; **a check that cannot run is a failure, not a pass**), and
+`source-ref-unused` (WARNING — an entry nothing cites).
+
+**`sources` is signed by the lock ledger and is not part of the dependency-drift hash.** Editing a
+citation under a locked claim is `lock-content-drift`, exactly like editing the body — so the path
+is `unlock → fix → lock`. But adding or correcting a citation never flips a dependent to
+`review_pending`: provenance is not contract.
+
+## Feature tracks — the second ownership axis
+
+`module` says **who guarantees this**; a track says **what the user gets, and whether it is
+finished**. Declare the vocabulary in `project.config.yaml` (`tracks: [{id, title, summary}]`),
+then name them from a claim's own `tracks:` list, one `{id, role}` entry each.
+
+**One owner per axis.** Exactly one `module`, and **at most one** track whose role is `owns`; every
+other membership is `cites` — a reference, never a copy. Owning is what lets a feature's trigger,
+failure behaviour and acceptance criteria live in the corpus as a real, lockable claim. Two claims
+owning the same track is `track-multi-owner` (ERROR).
+
+Track membership is **not an edge**: it carries no cycle lint and joins no cycle walk. The other
+lints are `track-shape` (ERROR), `track-unknown` (ERROR — the claim names a track config does not
+declare), `track-empty` (WARNING — a declared track nothing references) and `track-unowned`
+(WARNING — citations but no owner).
+
+**Never treat a track as a gate.** `dossierx track status <id>` REPORTS: COMPLETE when every claim
+the track owns and every claim it cites is locked. It does not block anything, and track membership
+never gates `dossierx claim lock` — a claim locks on its own merits, and the way to change a locked
+claim's `tracks` is `unlock → fix → lock`, since `tracks` is signed by the ledger like every other
+field.
 
 ## Finding the claim the human meant
 
@@ -116,20 +177,14 @@ Prefer it over reading the YAML. It reports status, lock state and `locked_at`, 
 plus **which** trigger caused it, both edge directions (`rests_on`/`mirrors` outgoing,
 `depended_on_by`/`mirrored_by` incoming), `implemented_in[]` with per-file drift, comment counts
 with the open thread ids, and `next_actions` — computed from the *same* gate evaluation the write
-path uses, so it can never disagree with what the command would do. Read it rather than
-re-deriving the lifecycle:
-
-```json
-"next_actions": ["1 open comment thread(s) block locking -> the human resolves them in the viewer; that click is the approval"]
-```
+path uses, so it can never disagree with what the command would do. Read it rather than re-deriving
+the lifecycle yourself.
 
 ## Locked means locked
 
-A draft claim is yours. A locked claim is the human's, and the **only** path through it is:
-
-```
-dossierx claim unlock <id> --reason "<their words>"   →   edit the file   →   dossierx claim lock <id> --reason "<their words>"
-```
+A draft claim is yours. A locked claim is the human's, and the **only** path through it is
+`dossierx claim unlock <id> --reason "<their words>"` → edit the file →
+`dossierx claim lock <id> --reason "<their words>"`.
 
 Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects`
 (locking records a content baseline; unlocking releases it and can flip dependents), get a yes,
@@ -143,10 +198,9 @@ relock; never touch the tag or leave the claim unlocked to silence it.
 `dossierx claim lock` refuses on four gates, each with its own `error.code`: `lint_failed` (fix
 the findings), `unresolved_comments` (reply, and let the human click Resolve),
 `dependency_not_locked` (a doctrine dependency is still draft), and `already_locked` — a claim
-that is *already* `locked` is not re-locked. That last one matters most when a gate has just
-complained: re-locking a drifted or flagged claim would sign whatever the file now says, clear
-`review_pending` with no diff shown, and strand the human's flag where `reaudit` can no longer
-reach it. `unlock` → fix → `lock`, or restore the file from git.
+that is *already* `locked` is not re-locked, because re-locking a drifted or flagged claim would
+sign whatever the file now says and clear `review_pending` with no diff shown. `unlock` → fix →
+`lock`, or restore the file from git.
 
 ## `review_pending` — and why `reaudit` is not the edit tool
 
@@ -160,16 +214,13 @@ three independent triggers stands:
 | an open comment thread on the claim | anyone commenting (see **[`dossierx-comments`](../dossierx-comments/SKILL.md)**) | the **human** resolving it in the viewer |
 
 It is set automatically and never cleared automatically: it clears only once *every* standing
-trigger is gone. `unlock` also clears it, by leaving the locked state entirely. A claim locked
-BEFORE v0.4.0 carries no governance baseline until its next lock or reaudit, so the first
-`governed_by` edit after upgrading does not flag it.
+trigger is gone. `unlock` also clears it, by leaving the locked state entirely.
 
 **`dossierx claim reaudit` is the drift tool, not the general edit tool.** It refuses any claim
 that is not already locked **and** `review_pending` (`not_review_pending`, exit 2), its
 dependency-drift proposal is a no-change stub today (treat any content diff there as
 illustrative), and it rewrites `body` and nothing else. Any other change to a locked claim — new
-information, better wording, a `rows` fix, a structural change — is unlock → fix → lock, and the
-refusal's own `error.hint` spells out both commands with the id substituted.
+information, better wording, a `rows` fix, a structural change — is unlock → fix → lock.
 
 When reaudit *is* right: run it bare first (a preview; writes nothing, renders the before/after as
 a diff), **show the human the diff and wait**, then `--confirm --reason "<their words>"`. On
@@ -179,53 +230,26 @@ resolve the conversation instead.
 
 ## Integrity — the ledger sees hand edits
 
-**DossierX detects; the forge enforces.** The ledger turns a silent edit into a named finding you
-can act on; branch protection and a required CI check are what make anyone obey it. It judges the
-tree in front of it — no git history, same verdict in every clone.
-
 Every legitimate approval records a hash of what was approved. `dossierx check` (and `--validate`,
 and `--staged`, which the pre-commit hook runs) compares the world against that ledger and fails
 with `integrity_failed` on: a locked claim with no record or with a **deleted** one
 (`lock-ledger-deleted`), a locked claim whose content moved, a draft claim still holding a record
 (`locked` → `draft` to dodge review), a locked claim whose **file** was deleted while its record
 stands (no `claim delete` verb exists — `unlock` first), or a comment block changed outside the
-engine.
+engine. **Branch on `rule` inside `data.ledger_findings`, not on the code** — the router's
+`integrity_failed` row says which rule means what, and one of them is not tampering.
 
-**Branch on `rule` inside `data.ledger_findings`, not on the code** — one is not tampering.
-`lock-ledger-pre-ledger` means the project's lock store predates the ledger and it still holds
-something locked: the fix is the ordered crossing — re-propose every locked build order, unlock
-every locked claim, then re-lock what the human stands behind (see **[`dossierx`](../dossierx/SKILL.md)**). There is no
-migration command. Do not confuse it with `lock-ledger-absent`, which means the ledger file is
-**gone** while locked claims remain — the two are told apart by the store itself, not by history.
-To move `claims_dir` legitimately, move the claims and the stores in the **same** commit, claim
-files byte-identical; that passes because every locked claim still resolves to its record.
+The recovery is never "re-lock it so the hashes match" — that launders the edit. Restore from
+version control, or go unlock → fix → lock. CI is the authority; the hook is only fast feedback.
 
-Everywhere else the recovery is never "re-lock it so the hashes match" — that launders the edit.
-Restore from version control, or go unlock → fix → lock. CI is the authority; the hook is only
-fast feedback.
-
-**And know what a clean `check` does and does not prove.** It proves nothing was changed *out of
-step*: the untouched files still agree with the touched one. It cannot prove a claim and its ledger
-record were not rewritten **together** — an in-repo ledger cannot attest anything against the person
-who can write it, and a re-lock mints a record whose hash is correctly that of the new content, while
-`reason`, `at` and `actor` are prose nothing checks. So never report `ok: true` as "nobody tampered",
-and never propose an edit that touches a locked claim and its record in the same breath. FORMAT.md
-states the principle; the diff and a required CI check are where it is caught.
-
-**Three project-root files are tracked, committed artifacts**, beside `project.config.yaml` and
-never `.gitignore`d: `.dossierx-lock-store.json` (the ledger; missing → `lock-ledger-absent`),
-`.dossierx-comment-digest.json` (review history's fingerprint; missing → `comment-digest-absent`),
-`.dossierx-flag-store.json` (each flagged claim's pending `{claim_says, now_does, reason,
-flagged_at}`).
-
-The flag store is the one to watch, because **no gate rule reads it at all**: losing it is silent.
-The claim still arrives `review_pending`, but `reaudit` has no before/after to propose, and
+The three project-root stores are tracked, committed artifacts, never `.gitignore`d, and
+`.dossierx-flag-store.json` is the one to watch: **no gate rule reads it at all**, so losing it is
+silent. The claim still arrives `review_pending`, but `reaudit` has no before/after to propose, and
 confirming that empty proposal clears the human's flag having applied nothing. Commit it with its
 claim, and treat an empty `reaudit` diff on a flagged claim as a missing entry: **stop and say
 so**, do not confirm.
 
 ## Portability
 
-DossierX takes zero project-specific behavior from its own source: facets, modules, claims dir,
-source dirs, doctrine facet and template overrides all come from `project.config.yaml`. Adding
-DossierX to a project is that file plus a `claims/` directory — never patch the engine.
+Facets, modules, claims dir, source dirs, doctrine facet and template overrides all come from
+`project.config.yaml` — never patch the engine.

@@ -91,21 +91,15 @@ import (
 // disagreement. TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward is what
 // keeps the stamp from coming back.
 //
-// gateSiteTextFile — the rendered site text, read out of a real build's DOM per
-// "verify the thing the user sees" — is DELIBERATELY NOT in the shared set any
-// more, and the constant stays here only so the repository keeps one spelling of
-// the path. It is read by the `site` agent alone, so it reaches that one
-// surface's key through the bundle as a per-surface capture
-// (gateStage2Artifacts); as shared evidence it re-keyed all thirteen surfaces
-// whenever the site was re-extracted. Unlike the delta it CANNOT be recomputed
-// at record time — that needs a real build and a real browser — so its freshness
-// is carried by a tree stamp of its own, written by the extraction
-// (viewer-tests/site_dom_test.go) and checked by `record`'s guard loop.
+// gate/site-text.json — the rendered site text, read out of a real build's DOM
+// — used to be a fourth constant here. It is gone: site/ is static HTML with no
+// build, so the `site` surface is read as files and there is nothing to extract.
+// Its two demotions are kept as the cautionary tale below, because the reasoning
+// applies to the next capture somebody is tempted to share.
 const (
 	gateSurfaceInventoryFile = "surface.json"
 	gateBaselineFile         = "gate/baseline.json"
 	gateDeltaFile            = "gate/delta.json"
-	gateSiteTextFile         = "gate/site-text.json"
 )
 
 // gateSharedEvidence is those three, in one place, so a fourth evidence file is
@@ -122,11 +116,12 @@ const (
 // true on the run path.
 //
 // gate/site-text.json used to be the fourth member and is the cautionary tale
-// for the paragraph above: it is read by the `site` agent alone, and folding it
+// for the paragraph above: it was read by the `site` agent alone, and folding it
 // in meant every re-extraction of the site — every release, since the extraction
-// is per-run evidence — re-keyed all thirteen surfaces. It now takes the bundle
-// route like the other single-reader captures (gateStage2Artifacts), and the
-// same test holds it to exactly one key.
+// was per-run evidence — re-keyed all thirteen surfaces. It was demoted to the
+// bundle route like the other single-reader captures, and has since been removed
+// outright with the build that produced it. The lesson is the point, not the
+// file: SHARED means read by EVERY agent, and nothing else belongs here.
 func gateSharedEvidence() []string {
 	return []string{gateSurfaceInventoryFile, gateBaselineFile, gateDeltaFile}
 }

@@ -126,7 +126,7 @@ func TestClaimBodyGoldenRenderConsistency(t *testing.T) {
 			}
 			claimName, commentName := claimBodyGoldenNames(yamlFile)
 
-			claimOut := string(RenderClaimBody(claim.Body, claimBodyGoldenPrefix))
+			claimOut := string(RenderClaimBody(claim.Body, claimBodyGoldenPrefix, Citations{}))
 			commentOut := string(Render(claim.Body))
 
 			assertGoldenMatch(t, dir, claimName, claimOut)
@@ -204,7 +204,7 @@ func regenerateClaimBodyGoldens(t *testing.T) {
 			continue
 		}
 		claimName, commentName := claimBodyGoldenNames(yamlFile)
-		writeGolden(t, dir, claimName, yamlFile, string(RenderClaimBody(claim.Body, claimBodyGoldenPrefix)))
+		writeGolden(t, dir, claimName, yamlFile, string(RenderClaimBody(claim.Body, claimBodyGoldenPrefix, Citations{})))
 		writeGolden(t, dir, commentName, yamlFile, string(Render(claim.Body)))
 		t.Logf("regenerated: %s, %s", claimName, commentName)
 	}

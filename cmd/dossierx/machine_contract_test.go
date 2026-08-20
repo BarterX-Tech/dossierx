@@ -106,6 +106,14 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"build-order", "status", "--module", "widget"},
 		{"build-order", "propose", "--module", "widget", "--dry-run"},
 		{"build-order", "lock", "--module", "widget", "--reason", "r", "--dry-run"},
+		// The track leaves run against the SAME track-less fixture as everything
+		// else here: list answers with an empty registry, and show/status answer
+		// with the unknown-track refusal. All three are envelopes, which is what
+		// this test reads, and the refusal path is worth walking precisely
+		// because a failure envelope carries keys too.
+		{"track", "list"},
+		{"track", "show", "checkout"},
+		{"track", "status", "checkout"},
 	}
 
 	for _, args := range commands {
@@ -184,6 +192,9 @@ func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
 		buildOrderProposeData{},
 		buildOrderStatusData{},
 		buildOrderLockData{},
+		trackListData{},
+		trackShowData{},
+		trackStatusData{},
 		skillsExportData{},
 		cliout.DryRun{},
 		cliout.Envelope{},

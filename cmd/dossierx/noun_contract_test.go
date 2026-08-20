@@ -30,7 +30,7 @@ import (
 // and the process exited 0. An agent that checked the status concluded its call
 // had succeeded and that the empty result was the answer.
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
-	for _, noun := range []string{"claim", "comment", "build-order", "skills"} {
+	for _, noun := range []string{"claim", "comment", "build-order", "track", "skills"} {
 		t.Run(noun, func(t *testing.T) {
 			env, _, err := execCLIJSON(t, noun)
 			if err == nil {
@@ -510,7 +510,7 @@ func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
 // TestRetiredVerbsAreNotSurface: the stubs answer, and they stay invisible.
 //
 // They must not appear in --help, in requireSubcommand's "run one of:" list, or
-// in the nineteen-leaf count TestSurfaceIsNineteenLeavesUnderSevenNouns pins.
+// in the leaf count TestSurfaceIsTwentyTwoLeavesUnderEightNouns pins.
 // A removal explanation that advertises itself is a re-addition.
 func TestRetiredVerbsAreNotSurface(t *testing.T) {
 	env, _, err := execCLIJSON(t, "comment")

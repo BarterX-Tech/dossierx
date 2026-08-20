@@ -158,83 +158,127 @@ func proseNumber(token string) (int, bool) {
 }
 
 // ---------------------------------------------------------------------------
-// C1 — the site's migration table against the binary's retired set
+// C1 — the changelog's migration table against the binary's retired set
 // ---------------------------------------------------------------------------
 
-// siteAddedMarker is the one `cut:` value in the migration table that names no
-// retired command. The table's last row inverts the columns to list what v0.3.0
-// ADDED, and this string sits in the `cut` position to label it. It is skipped
-// by name rather than by a heuristic, so a real command that ever looked like a
-// marker could not slip through the same door.
-const siteAddedMarker = "— added —"
+// WHERE THIS CHECK'S SUBJECT WENT, because it used to read the site and the
+// site no longer carries a migration table.
+//
+// site/ was a Vite application with twelve sections describing the CLI, and one
+// of them tabulated every command v0.3.0 cut against where it went. That whole
+// application was replaced by a two-page static site — a memo on why the project
+// exists, and the release ledger — on the reasoning that a pre-1.0 tool whose
+// direction is not settled should not be maintaining a second, hand-verified
+// account of its command surface alongside the README.
+//
+// THE INVARIANT SURVIVED THE MOVE, and it had to: a reader reaching for a
+// retired command must land somewhere that names its replacement. README.md
+// sends that reader to "the CHANGELOG's full migration table", so the CHANGELOG
+// is the subject now, and it is a better one — it is where the retirement was
+// announced, and it is the file a release cannot be cut without touching.
+//
+// WHAT GOT WEAKER, stated rather than left to be discovered. The site's table
+// was a typed data structure and every `cut:` cell in the file belonged to it.
+// The CHANGELOG is prose with a markdown table in it, so the extraction is
+// anchored on the table's row syntax, and a retirement written as a paragraph
+// instead of a row is invisible to the forward direction. That is exactly what
+// happened to `migrate`, and it is why the exemption below is declared BY NAME
+// with the check that a name-exempt command is still named somewhere in the
+// file — an open-ended "prose is fine" carve-out would have made this check
+// unable to fail.
 
-// siteCutRe extracts the `cut:` cell of every row in site/src/content.ts's
-// migration table. Every occurrence of `cut:` in that file belongs to that table
-// — deliberately not written as a number, in a file whose whole subject is
-// hand-typed counts going stale: the first draft said "all eight", and the same
-// commit added a ninth row. If a second table ever adopts the key, what notices
-// is the unknown-token error below, which fires on any cell naming something
-// `surface.json` does not retire.
-var siteCutRe = regexp.MustCompile(`cut: "([^"]*)"`)
+// clogMigrationRowRE reads the command out of the first cell of a migration
+// table row: `| ` + "`dossierx <invocation>`" + ` | … |`. Anchored at the start
+// of the line and requiring the backtick-wrapped command immediately, so an
+// ordinary table elsewhere in the file whose first cell happens to be prose
+// cannot enter this set.
+var clogMigrationRowRE = regexp.MustCompile("(?m)^\\| `dossierx ([^`]+)` \\|")
 
-func TestTheSiteAccountsForEveryRetiredCommand(t *testing.T) {
+// clogRowsRetiringAFlag are the table rows whose first cell names a LIVE
+// command, because what the row retires is a flag spelling rather than the
+// command. Declared by name and by reason, in the shape surfaces.yaml uses for
+// a path out of scope, so a second one cannot arrive quietly under cover of the
+// first — an unrecognised row is an error, and this map is the only door.
+var clogRowsRetiringAFlag = map[string]string{
+	"comment list --json": "`comment list` is live and JSON is now its default format; " +
+		"the row retires the FLAG, and the binary retires no command by this name.",
+}
+
+// clogRetirementsInProseOnly are retired commands the migration table does not
+// carry a row for, each with the reason. A name here is not excused from the
+// file — it still has to be named in it, checked below — only from the table.
+var clogRetirementsInProseOnly = map[string]string{
+	"migrate": "v0.3.0 wrote the migration table and v0.4.0 removed `dossierx migrate` " +
+		"outright, three releases later. Its account is the v0.4.0 entry's prose, which " +
+		"explains why there is no replacement command rather than naming one — the one " +
+		"retirement in the set whose answer is not a substitution and does not fit a " +
+		"Retired/Replacement row.",
+}
+
+func TestTheChangelogAccountsForEveryRetiredCommand(t *testing.T) {
 	retired, _ := surfacePinsAndRetired(t)
-	content := readRepoFile(t, "site/src/content.ts")
+	content := readRepoFile(t, "CHANGELOG.md")
 
-	if !strings.Contains(content, "migration: {") {
-		t.Fatal("site/src/content.ts no longer declares a `migration:` block, so the retired-command table this test reads has moved or gone. That is not a smaller check, it is a check with no subject")
+	rows := clogMigrationRowRE.FindAllStringSubmatch(content, -1)
+	if len(rows) == 0 {
+		t.Fatal("CHANGELOG.md carries no migration table row matching `| `dossierx <command>` |`, so the retired-command table this test reads has moved or gone. That is not a smaller check, it is a check with no subject")
 	}
 
-	matches := siteCutRe.FindAllStringSubmatch(content, -1)
-	if len(matches) == 0 {
-		t.Fatal("site/src/content.ts declares `migration:` but no `cut:` cells were extracted, so the table is unreadable to this test")
-	}
-
-	// Longest-prefix mapping, not equality: a cell says "implink status" or
-	// "migrate --adopt" because the site names the invocation a reader typed,
-	// while surface.json names the command. Longest match so that a future
-	// retired name which is a prefix of another cannot silently absorb it.
-	onSite := map[string]string{} // retired name -> the cell it was found in
-	for _, m := range matches {
-		for _, token := range strings.Split(m[1], "·") {
-			token = strings.TrimSpace(token)
-			if token == "" || token == siteAddedMarker {
+	// Longest-prefix mapping, not equality: a cell says `implink status` or
+	// `deps <id>` because the table names the invocation a reader typed, while
+	// surface.json names the command. Longest match so that a future retired
+	// name which is a prefix of another cannot silently absorb it.
+	inTable := map[string]string{} // retired name -> the row it was found in
+	for _, row := range rows {
+		token := strings.TrimSpace(row[1])
+		best := ""
+		for _, name := range retired {
+			if token != name && !strings.HasPrefix(token, name+" ") {
 				continue
 			}
-			best := ""
-			for _, name := range retired {
-				if token != name && !strings.HasPrefix(token, name+" ") {
-					continue
-				}
-				if len(name) > len(best) {
-					best = name
-				}
+			if len(name) > len(best) {
+				best = name
 			}
-			if best == "" {
-				t.Errorf("site/src/content.ts's migration table lists %q as cut, and surface.json retires no command by that name.\n"+
-					"The table is the only place on the site that answers an agent reaching for a pre-v0.3.0 command, so a row naming something the binary does not answer sends that reader nowhere.", token)
-				continue
-			}
-			onSite[best] = token
 		}
+		if best == "" {
+			if _, declared := clogRowsRetiringAFlag[token]; declared {
+				continue
+			}
+			t.Errorf("CHANGELOG.md's migration table lists `dossierx %s` as retired, and surface.json retires no command by that name.\n\n"+
+				"README.md sends every reader reaching for a pre-v0.3.0 command to this table, so a row naming something the binary does not answer sends that reader nowhere. Either the row names a command that was never top-level — in which case correct cmd/dossierx/retired.go, because a stub claiming a verb `moved` claims it used to exist — or the row retires a flag rather than a command, in which case declare it in clogRowsRetiringAFlag with the reason.", token)
+			continue
+		}
+		inTable[best] = token
 	}
 
 	var missing []string
 	for _, name := range retired {
-		if _, ok := onSite[name]; !ok {
-			missing = append(missing, name)
+		if _, ok := inTable[name]; ok {
+			continue
 		}
+		if _, prose := clogRetirementsInProseOnly[name]; prose {
+			// Exempt from the TABLE, never from the file. A declared name that
+			// the CHANGELOG does not mention at all is the carve-out swallowing
+			// the defect it was written to describe.
+			if !strings.Contains(content, "`dossierx "+name+"`") {
+				t.Errorf("%q is declared in clogRetirementsInProseOnly as accounted for by CHANGELOG.md's prose rather than by a table row, and CHANGELOG.md does not name `dossierx %s` anywhere.\n\n"+
+					"The exemption is from the table's shape, not from the file. Either write the prose that retires it, or delete the declaration and add a table row.", name, name)
+			}
+			continue
+		}
+		missing = append(missing, name)
 	}
 	sort.Strings(missing)
 
 	if len(missing) > 0 {
-		t.Errorf("surface.json retires %d commands; the site's migration table accounts for %d. Missing: %s.\n\n"+
-			"Each missing name is a command the BINARY answers with a replacement and the SITE does not mention. "+
-			"The binary's answer is a one-line hint at a terminal; the site's table is the page a person reads before "+
-			"they ever install it, and it is what the deployed release carries for as long as that release exists. "+
-			"Add a row naming the cut command and where it went, or — if a name here was never a top-level command — "+
-			"correct cmd/dossierx/retired.go, because a stub claiming a verb `moved` is claiming it used to exist.",
-			len(retired), len(onSite), strings.Join(missing, ", "))
+		t.Errorf("surface.json retires %d commands; CHANGELOG.md's migration table accounts for %d. Missing: %s.\n\n"+
+			"Each missing name is a command the BINARY answers with a replacement and the CHANGELOG does not. "+
+			"The binary's answer is a one-line hint at a terminal that the reader only sees if they still have the old "+
+			"invocation to hand; the migration table is what README.md sends them to, and it is the account that outlives "+
+			"any one release. Add a row naming the retired command and where it went, or — if a name here was never a "+
+			"top-level command — correct cmd/dossierx/retired.go, because a stub claiming a verb `moved` is claiming it "+
+			"used to exist.",
+			len(retired), len(inTable), strings.Join(missing, ", "))
 	}
 }
 
@@ -376,8 +420,8 @@ func TestTheDocumentedPinSweepIsTheOneTheCodeRuns(t *testing.T) {
 
 // treeDeclaredVersion is the version this tree says it is releasing, read from
 // the two places CLAUDE.md names as the declaration the release driver checks
-// the tag against: CHANGELOG.md's newest heading and the site's newest
-// `releases[]` entry. The two are cross-checked here and disagreement is FATAL
+// the tag against: CHANGELOG.md's newest heading and the entry
+// site/releases.html marks `data-current="true"`. The two are cross-checked here and disagreement is FATAL
 // rather than a pick-one, because a tree that cannot agree with itself about
 // its own version gives this test no side to judge the pins against — and that
 // disagreement is itself the defect to report, not to paper over by trusting
@@ -393,29 +437,14 @@ func treeDeclaredVersion(t *testing.T) string {
 	}
 	fromChangelog := "v" + m[1]
 
-	// The site's release ledger is oldest-first and the LAST entry is the
-	// current release (site/src/content.ts says so above the array, and
-	// `latestRelease` is defined as releases[releases.length - 1]). The scan is
-	// bounded to the array's declaration so a `version:` field anywhere else in
-	// the file can never be mistaken for a release entry.
-	content := readRepoFile(t, "site/src/content.ts")
-	start := strings.Index(content, "const releases: Release[] = [")
-	if start < 0 {
-		t.Fatal("site/src/content.ts no longer declares `const releases: Release[]`, so the site's newest release entry cannot be read")
-	}
-	end := strings.Index(content[start:], "export const latestRelease")
-	if end < 0 {
-		t.Fatal("site/src/content.ts no longer defines latestRelease after the releases array, so this test cannot tell where the array ends")
-	}
-	versionRe := regexp.MustCompile(`version: "(v\d+\.\d+\.\d+)"`)
-	entries := versionRe.FindAllStringSubmatch(content[start:start+end], -1)
-	if len(entries) == 0 {
-		t.Fatal("no `version: \"vX.Y.Z\"` entries were extracted from site/src/content.ts's releases array; the extraction is broken, not the site")
-	}
-	fromSite := entries[len(entries)-1][1]
+	// The site's ledger marks its current entry rather than positioning it;
+	// siteCurrentRelease (tests/site_ledger_test.go) is the one reader of that
+	// marker in this package, and every way of failing to read it is fatal
+	// there rather than returning a value this comparison could trust.
+	fromSite := siteCurrentRelease(t)
 
 	if fromChangelog != fromSite {
-		t.Fatalf("CHANGELOG.md's newest heading declares %s and site/src/content.ts's newest releases[] entry declares %s. "+
+		t.Fatalf("CHANGELOG.md's newest heading declares %s and site/releases.html's entry marked current declares %s. "+
 			"These are the two declarations the release driver checks the tag against, and while they disagree there is no version to judge the pins by — fix the declaration before trusting any pin comparison", fromChangelog, fromSite)
 	}
 	return fromChangelog
@@ -429,7 +458,7 @@ func treeDeclaredVersion(t *testing.T) string {
 // sweep expression, and a tree could still declare v0.5.2 in its CHANGELOG
 // while README's `go install` line handed every new user v0.5.1. That is
 // precisely the class this file exists for — the version is a number the tree
-// already derives twice (the CHANGELOG heading and the site's release ledger),
+// already declares twice (the CHANGELOG heading and the site's release ledger),
 // restated by hand at every pin site.
 //
 // The pin set is read from the inventory, never from a file list written here:
@@ -447,7 +476,7 @@ func TestEveryVersionPinCarriesTheVersionThisTreeDeclares(t *testing.T) {
 
 	for _, p := range pins {
 		if p.Version != declared {
-			t.Errorf("%s pins %q at %s, and this tree declares %s (CHANGELOG.md's newest heading, site/src/content.ts's newest releases[] entry).\n\n"+
+			t.Errorf("%s pins %q at %s, and this tree declares %s (CHANGELOG.md's newest heading, site/releases.html's entry marked current).\n\n"+
 				"A pin behind the declaration ships the PREVIOUS release to everyone who follows this document: the `go install` "+
 				"line installs the old binary, a raw URL fetches the old script, and a copied CI template gates other people's "+
 				"merges with the old engine. Move the pin with the release, or — if the declaration itself is the premature side — "+

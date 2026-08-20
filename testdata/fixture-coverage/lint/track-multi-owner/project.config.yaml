@@ -1,0 +1,13 @@
+schema_version: 1
+facets:
+  - contract
+modules:
+  - trackmod
+claims_dir: claims
+tracks:
+  - id: checkout
+    title: Checkout
+    summary: Owned by the greedy claim, which also owns the other track.
+  - id: refunds
+    title: Refunds
+    summary: Owned by the same claim, which is the defect this fixture exists for.

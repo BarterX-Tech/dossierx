@@ -107,7 +107,7 @@ func TestRenderClaimBody_ImageCostAtOneMiBIsBounded(t *testing.T) {
 			runtime.GC()
 			runtime.ReadMemStats(&before)
 			start := time.Now()
-			out := string(RenderClaimBody(body, claimBodyCostPrefix))
+			out := string(RenderClaimBody(body, claimBodyCostPrefix, Citations{}))
 			elapsed := time.Since(start)
 			runtime.ReadMemStats(&after)
 			used := after.TotalAlloc - before.TotalAlloc
@@ -185,7 +185,7 @@ func bestClaimBodyTime(body string) (best time.Duration, ok bool) {
 	// and the growth ratio +Inf. See costTimerFloor in markdown_cost_test.go.
 	for i := 0; i < claimBodyCostRuns; i++ {
 		d, measured := measurePerOp(func() {
-			out := RenderClaimBody(body, claimBodyCostPrefix)
+			out := RenderClaimBody(body, claimBodyCostPrefix, Citations{})
 			runtime.KeepAlive(out)
 		}, costMeasurementCeiling)
 		if !measured {

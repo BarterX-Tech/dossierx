@@ -1,8 +1,17 @@
 name: Deploy site
 
-# Builds the Vite site under site/ and publishes its dist/ output to GitHub
-# Pages using the modern artifact-based deployment (upload-pages-artifact +
-# deploy-pages), not a gh-pages branch push.
+# Publishes the static pages under site/ to GitHub Pages using the modern
+# artifact-based deployment (upload-pages-artifact + deploy-pages), not a
+# gh-pages branch push.
+#
+# THERE IS NO BUILD STEP, AND ITS ABSENCE IS THE POINT. This workflow used to
+# set up Node, run `npm ci` and `npm run build` on a Vite application, and
+# upload site/dist. Every one of those steps was a way for the published page to
+# differ from the page anybody checked: a VITE_* variable added here and not to
+# the extraction that read the result, a Node the runner image moved underneath
+# us, a bundle nobody had seen. site/ is now the artifact — what is uploaded is
+# what is in the tree, byte for byte, so there is no version of this page that
+# exists only on a runner.
 #
 # NOTE: the repository's Pages source must be set to "GitHub Actions"
 # (Settings → Pages → Build and deployment → Source) for deploy-pages to
@@ -32,32 +41,14 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: site
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: site/package-lock.json
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-        env:
-          VITE_BASE: /dossierx/
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: site/dist
+          path: site
 
   deploy:
     name: deploy
