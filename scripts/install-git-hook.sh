@@ -965,6 +965,18 @@ foreign)
 		# DOSSIERX_HOOK_INVOCATION is set, and install-git-hook.ps1 sets it
 		# only after Find-Bash already found one to run this script with.
 		#
+		# BUT IT IS INVOKED BY ITS RESOLVED PATH, NOT BY THE NAME `bash`.
+		# Those are different facts. Find-Bash accepts a bash found on PATH
+		# *or* one found at the Git for Windows install locations, and the
+		# second case is the one the wrapper exists for — Git for Windows
+		# installed, its bin\ not on PATH. A pasted `bash -c ...` is resolved
+		# by PATH, so on exactly that machine the reader's chain-it created
+		# the hook file and then failed with "bash is not recognized",
+		# leaving a file with no exec bit that their own hook invokes
+		# directly: "permission denied" on the next commit, and the claim
+		# gate silently not running. The wrapper hands the resolved path over
+		# in DOSSIERX_HOOK_BASH for this line.
+		#
 		# WHAT THE POWERSHELL LINES CANNOT PROMISE, stated rather than
 		# implied: the hooks path is interpolated into a PowerShell
 		# double-quoted string and, on the chmod line, into single quotes
@@ -975,8 +987,13 @@ foreign)
 		# corpus, and a defence it would keep honest is not pretended here.
 		chain_target=$(sh_quote "$hooks_dir/dossierx-pre-commit")
 		if [ -n "${DOSSIERX_HOOK_INVOCATION:-}" ]; then
+			# A bare `bash` here is PATH-resolved and fails on the machine
+			# this wrapper is for; ${DOSSIERX_HOOK_BASH} is the one Find-Bash
+			# actually ran us with. `&` is PowerShell's call operator, needed
+			# because the path is quoted (it is usually under Program Files).
+			chain_bash=${DOSSIERX_HOOK_BASH:-bash}
 			chain_it_lines="                 [System.IO.File]::WriteAllText(\"$hooks_dir/dossierx-pre-commit\", ((& $self_invocation --print-hook) -join [char]10) + [char]10)
-                 bash -c \"chmod +x '$hooks_dir/dossierx-pre-commit'\""
+                 & '$chain_bash' -c \"chmod +x '$hooks_dir/dossierx-pre-commit'\""
 		else
 			chain_it_lines="                 $self_invocation --print-hook > \\
                      $chain_target

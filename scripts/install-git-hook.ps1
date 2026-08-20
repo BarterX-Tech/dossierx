@@ -168,6 +168,18 @@ Windows; if it does not, no spelling of this command can reach the script):
     # way, so a reader who substitutes it loses nothing).
     $env:DOSSIERX_HOOK_INVOCATION = "powershell -File `"$PSCommandPath`""
 
+    # AND THE BASH WE RESOLVED, because "a bash exists" and "the name bash finds
+    # it" are different facts and the recoveries need the second one. Find-Bash
+    # locates a bash by PATH *or* by the Git for Windows install locations, and
+    # the second case is the one this wrapper exists for — a machine where Git
+    # for Windows is installed and its bin\ is not on PATH. A recovery line that
+    # says `bash -c ...` is resolved by PATH when the reader pastes it, so on
+    # exactly that machine it fails with "bash is not recognized" after having
+    # already created the file it was meant to finish. The script that prints
+    # those lines cannot re-derive this — it is running *under* the bash we
+    # found, with no portable way to ask which one — so we hand it over.
+    $env:DOSSIERX_HOOK_BASH = $bash
+
     & $bash $sh @args
     exit $LASTEXITCODE
 }

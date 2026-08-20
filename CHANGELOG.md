@@ -188,9 +188,9 @@ And the smaller corrections:
 - **`dossierx lock|unlock|flag|reaudit` answer with their replacement, not a bare usage error.**
   The four verbs most likely typed from pre-v0.3.0 memory — each lives on at
   `dossierx claim <verb>` — answered `unknown command "lock"`, because cobra's `legacyArgs`
-  rejects unknown commands before the root's hint-bearing branch runs. Each now returns the same
-  `retired_command` refusal as the other retired spellings, with a `run:` hint that actually
-  runs, and the site's migration table gains the row naming all four.
+  rejects unknown commands before the root's hint-bearing branch runs. Each now refuses with
+  `error.code` `usage` and a `run:` hint that actually runs — `run: dossierx claim lock <id>
+  --reason "..."` — and the site's migration table gains the row naming all four.
 - **A comment sweep: what the code says about itself matches what it does** — no behaviour
   changes. Nine files said `dossierx flag` for what has been `dossierx claim flag` since v0.3.0;
   `MockupModules`' doc (and `structured_layout`'s) kept v0.4.0's mockup-only framing after v0.4.1
