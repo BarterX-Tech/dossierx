@@ -328,6 +328,14 @@ surfaces:
       - cmd/dossierx/gate_integrity_test.go
       - cmd/dossierx/gate_fanout_test.go
       - cmd/dossierx/gate_stage3_test.go
+      # The procedure's step 5 documents rulings — gate/adjudications.json's
+      # schema, the byte-identical-scenario identity check, the whole-file
+      # refusal on an acts-wrongly ruling, and what a stale or mismatched
+      # ruling reports as — and this file is where every one of those rules
+      # lives. Handed over on the round-four lesson: an agent asked to verify
+      # a claim without the file that decides it can only report the missing
+      # byte, and that report costs a round.
+      - cmd/dossierx/gate_adjudication_test.go
       # The procedure states the whole tool grant — SurfaceFinding and
       # SurfaceVerdict, nothing else, passed as an exclusive allow-list — and
       # this file is where that is declared.

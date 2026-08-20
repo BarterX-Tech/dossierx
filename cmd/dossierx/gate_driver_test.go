@@ -660,7 +660,15 @@ type gateDriverRun struct {
 	Merge   string // the merge commit, captured once at D2 and used by value after
 	TagObj  string // the tag object read back at D5 and pushed by value at D6
 	Receipt gateReceipt
-	Err     error
+	// Adjudicated is what the tree's human rulings (gate/adjudications.json)
+	// did to the receipt's findings at D1: cleared pairs (the finding whole,
+	// the ruling beside it), rulings needing re-ruling, rulings gone stale.
+	// It is a field for the receipt's reason — written by exactly one
+	// statement, the one that calls evaluate — and it exists so the run
+	// record can show a ruled finding AS ruled: without it, a cleared
+	// blocker on the receipt reads as a finding the gate published over.
+	Adjudicated gateAdjudicationOutcome
+	Err         error
 
 	// after is fault injection for the tests below, and nil in production. It
 	// lets a test land a commit, or move a tag, in the window between two steps —
@@ -1046,9 +1054,27 @@ func (r *gateDriverRun) precondition(ev gateDriverEvidence) error {
 
 	// (e) Green, RECOMPUTED. Not read, not inferred from an empty findings list —
 	// evaluate makes six separate refusals about coverage that "no findings"
-	// cannot stand in for.
-	verdict, err := r.Receipt.evaluate(declared, current)
+	// cannot stand in for. The human rulings this release carries
+	// (gate/adjudications.json) are read first, OUT OF THE TREE being released
+	// and never off the working copy, for gateDriverTreeFile's reason: an
+	// uncommitted ruling would clear a finding now and be absent from the tag,
+	// and the published release could not account for its own verdict. A
+	// record that cannot be read or parsed is a refusal here — a FAILED gate,
+	// never "no rulings" — while a tree carrying no record is honestly zero
+	// rulings, which only makes the verdict stricter.
+	rulings, err := gateReadAdjudications(r.Repo.Dir, r.Repo.Branch)
+	if err != nil {
+		return err
+	}
+	verdict, adjudicated, err := r.Receipt.evaluate(declared, current, rulings)
 	r.Verdict = verdict
+	// The outcome is kept WHATEVER the verdict, because it is the half of the
+	// record that says what the rulings did: each cleared finding with who
+	// ruled it, when and why, printed beside the finding the receipt keeps in
+	// full; each ruling whose finding has changed and needs re-ruling; each
+	// ruling gone stale. Dropping it on a refusal would hide from the operator
+	// exactly the rulings whose failure to apply is why the release stopped.
+	r.Adjudicated = adjudicated
 	if err != nil {
 		return fmt.Errorf("the gate is %s for %s and nothing is published on a %s gate:\n%w", verdict, r.Plan.Version, verdict, err)
 	}
@@ -1513,16 +1539,23 @@ func (r *gateDriverRun) recheckTag() error {
 // D0…D9" answers it with a list of step names that read like nine things going
 // right.
 type gateDriverRecord struct {
-	Version     string             `json:"version"`
-	Branch      string             `json:"branch"`
-	WrittenBy   string             `json:"written_by"`
-	Completed   []string           `json:"completed"`
-	FailedAt    string             `json:"failed_at,omitempty"`
-	Verdict     string             `json:"verdict,omitempty"`
-	MergeCommit string             `json:"merge_commit,omitempty"`
-	Receipt     gateReceipt        `json:"receipt"`
-	Handoff     *gateDriverHandoff `json:"handoff,omitempty"`
-	Report      string             `json:"report,omitempty"`
+	Version     string      `json:"version"`
+	Branch      string      `json:"branch"`
+	WrittenBy   string      `json:"written_by"`
+	Completed   []string    `json:"completed"`
+	FailedAt    string      `json:"failed_at,omitempty"`
+	Verdict     string      `json:"verdict,omitempty"`
+	MergeCommit string      `json:"merge_commit,omitempty"`
+	Receipt     gateReceipt `json:"receipt"`
+	// Adjudications is the receipt's findings read against the tree's human
+	// rulings — the finding stays on the receipt above IN FULL, and this is
+	// the ruling printed beside it: who ruled, when, why. Present exactly
+	// when a ruling touched something, so a release with no rulings carries
+	// no empty section and a release audited weeks later can tell a cleared
+	// finding from one the gate published over.
+	Adjudications *gateAdjudicationOutcome `json:"adjudications,omitempty"`
+	Handoff       *gateDriverHandoff       `json:"handoff,omitempty"`
+	Report        string                   `json:"report,omitempty"`
 }
 
 func gateDriverWriteRecord(t *testing.T, path string, r *gateDriverRun) {
@@ -1536,6 +1569,9 @@ func gateDriverWriteRecord(t *testing.T, path string, r *gateDriverRun) {
 		Verdict:     r.Verdict,
 		MergeCommit: r.Merge,
 		Receipt:     r.Receipt,
+	}
+	if !r.Adjudicated.empty() {
+		record.Adjudications = &r.Adjudicated
 	}
 	// The report is written for BOTH endings now. It used to be conditional on
 	// there being an error, which was right while every ending that was not a

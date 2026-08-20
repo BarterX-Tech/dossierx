@@ -192,6 +192,11 @@ type gateReceipt struct {
 // blocks the release at every reach, whatever the agent's own blocking
 // judgement says, with no override path. gateFindingBlockers is the whole
 // predicate, and it is a pure function of the finding's recorded fields.
+// One thing sits BESIDE the predicate rather than inside it: a human's
+// recorded ruling (gate/adjudications.json, gate_adjudication_test.go) can
+// clear the agent's-own-judgement clause for a misled or cosmetic finding —
+// at evaluation time only, never by touching this record, and never for
+// acts-wrongly, where a ruling that tries refuses the whole ruling file.
 type gateFinding struct {
 	Surface string `json:"surface"`
 	Rule    string `json:"rule"`
@@ -389,6 +394,9 @@ func gateFindingProblems(f gateFinding) []string {
 //     and neither is a field on this record.
 //  3. blocking == blocks blocks: the agent that read the surface judged it
 //     worth stopping the release for, and no lookup table re-grades that.
+//     This is the ONE clause a human's recorded ruling can clear — see
+//     gateFindingBlockersCleared below — because it is the one clause that IS
+//     a judgement rather than a schema fact or the unconditional rule.
 //  4. Nothing else blocks. A well-formed finding judged deferrable, with any
 //     consequence but acts-wrongly, rides the receipt to the human without
 //     stopping the release.
@@ -396,11 +404,28 @@ func gateFindingProblems(f gateFinding) []string {
 // About is deliberately never consulted — see gateFinding.About: a field that
 // cannot move the rank cannot lower it.
 func gateFindingBlockers(f gateFinding) []string {
+	return gateFindingBlockersCleared(f, false)
+}
+
+// gateFindingBlockersCleared is the predicate above with the one lever a
+// human ruling has: cleared says an applicable ruling from
+// gate/adjudications.json covers this finding (same release, same surface and
+// rule, byte-identical failure_scenario — gateApplyAdjudications is the only
+// thing that decides it), and its whole effect is to withhold clause 3, the
+// agent's own blocking judgement. It is ONE function with a flag rather than
+// two functions because the clauses a ruling can never touch — the malformed
+// clauses and the acts-wrongly clause — must be the same clauses in both
+// readings, and two copies of the list would drift apart in exactly the
+// clause somebody wanted gone. Note the acts-wrongly clause does not read the
+// flag at all: a ruling naming an acts-wrongly finding never gets this far
+// (the whole file is refused at apply time), and even a caller that lied
+// about clearance would change nothing here.
+func gateFindingBlockersCleared(f gateFinding, cleared bool) []string {
 	blockers := gateFindingProblems(f)
 	if f.Consequence == gateConsequenceActsWrongly {
 		blockers = append(blockers, fmt.Sprintf("its consequence is %s: a reader following this surface does the wrong thing. That blocks at every reach with no override — the agent's own %q judgement does not clear it, and neither does any human's signature; the release ships after the tree is fixed, or after the scenario (%q) is shown with evidence to describe no defect", gateConsequenceActsWrongly, f.Blocking, f.FailureScenario))
 	}
-	if f.Blocking == gateBlockingBlocks {
+	if f.Blocking == gateBlockingBlocks && !cleared {
 		blockers = append(blockers, "the agent that read the surface judged it worth stopping the release for, and that judgement is the agent's to make")
 	}
 	return blockers
@@ -725,45 +750,108 @@ func gateAssertMergeMatchesReceipt(r gateReceipt, mergeTree string) error {
 }
 
 // evaluate is the receipt's verdict, recomputed from its own contents plus the
-// surfaces the manifest declares and the fingerprints this tree produces.
+// surfaces the manifest declares, the fingerprints this tree produces, and the
+// human rulings the tree carries (gate/adjudications.json, read by the caller
+// through gateReadAdjudications — a nil slice is honestly "no rulings" and can
+// only make the verdict stricter).
 //
-// PASS requires all three: no BLOCKING finding, and every declared surface
-// holding a PASS, and every one of those PASSes fingerprinted against THIS
-// tree. Anything else is FAILED with an error naming every reason — every
-// blocking finding, every failed clause of the predicate behind it — because
-// a verdict that says only "FAILED" sends the reader back to re-derive what
-// the gate already knew.
+// PASS requires all three: no finding still BLOCKING after the rulings are
+// applied, and every declared surface holding a PASS under the adjudicated
+// view, and every one of those PASSes fingerprinted against THIS tree.
+// Anything else is FAILED with an error naming every reason — every blocking
+// finding, every failed clause of the predicate behind it, every ruling that
+// no longer describes the finding it ruled on — because a verdict that says
+// only "FAILED" sends the reader back to re-derive what the gate already knew.
 //
-// WHAT CHANGED HERE AND WHAT DID NOT. The rule used to be `len(r.Findings) >
-// 0`: any finding at all was FAILED, the human's ruling was the only
-// classification, and the previous release ran ten rounds without ever going
-// green because a cosmetic line blocked exactly as hard as a wrong command.
-// The verdict now reads each finding through gateFindingBlockers — the
-// agent's own recorded judgement, overridden in exactly one direction by the
-// acts-wrongly rule. What did NOT change: every finding, blocking or not,
-// stays on the receipt in full and reaches the human unfiltered. "Does not
-// block" and "was never written down" remain different facts, and this
-// function only ever decides the first one.
+// WHAT THE RULINGS DECIDE, AND WHERE. This is the ONLY place they apply — not
+// at recording, not at fan-out: the answers describe the tree, the rulings
+// decide what blocks. An applicable ruling (gateApplyAdjudications: same
+// release, same surface and rule, byte-identical failure_scenario) withholds
+// exactly the agent's-own-judgement clause; and because the answer schema
+// couples that judgement to the surface verdict — an agent that raised a
+// blocking finding reported its surface FAILED, the recorder refuses the
+// decoupled shapes — the same ruling excuses that surface's FAILED in the
+// green computation. The excusal is COMPUTED, never written back: the receipt
+// keeps the agent's verdict and the agent's finding byte for byte, and it is
+// granted only to a FAILED surface at least one of whose findings a ruling
+// cleared and none of whose findings still blocks. A FAILED surface with no
+// findings at all — a shape the recorder refuses and a hand-edit can produce —
+// is excused by nothing.
 //
-// It is a pure function of (receipt, declared, current): the same tree and
-// the same answers always yield the same verdict AND the same error text,
-// which TestGateEvaluateIsReproducibleOverAnUnchangedReceipt holds — a
-// verdict that depended on anything else would make the receipt's whole
-// reproducibility argument false.
-func (r gateReceipt) evaluate(declared []string, current map[string]string) (string, error) {
+// WHAT CHANGED BEFORE THAT AND WHAT DID NOT. The rule used to be
+// `len(r.Findings) > 0`: any finding at all was FAILED, the human's ruling was
+// the only classification, and the previous release ran ten rounds without
+// ever going green because a cosmetic line blocked exactly as hard as a wrong
+// command. The verdict now reads each finding through the blocking predicate —
+// the agent's own recorded judgement, overridden in one direction by the
+// acts-wrongly rule and clearable in the other by a human's recorded ruling.
+// What did NOT change: every finding, blocking or cleared or neither, stays on
+// the receipt in full and reaches the human unfiltered, with the outcome
+// naming every ruling beside the finding it touched. "Does not block" and
+// "was never written down" remain different facts, and this function only
+// ever decides the first one.
+//
+// It is a pure function of (receipt, declared, current, rulings): the same
+// tree and the same answers always yield the same verdict AND the same error
+// text AND the same outcome, which
+// TestGateEvaluateIsReproducibleOverAnUnchangedReceipt holds — a verdict that
+// depended on anything else would make the receipt's whole reproducibility
+// argument false.
+func (r gateReceipt) evaluate(declared []string, current map[string]string, rulings []gateAdjudication) (string, gateAdjudicationOutcome, error) {
+	outcome, refused := gateApplyAdjudications(r.Version, r.Findings, rulings)
 	var reasons []string
+	if refused != nil {
+		// The whole file is refused: its refusal is a reason of its own, and
+		// no ruling in it applies — the zero outcome below is that suspension,
+		// not a tidied report.
+		reasons = append(reasons, refused.Error())
+		outcome = gateAdjudicationOutcome{}
+	}
+
+	// blocked and clearedIn are the per-surface facts the excusal below needs:
+	// whether any finding of a surface still blocks after the rulings, and
+	// whether any was cleared by one.
+	blocked := map[string]bool{}
+	clearedIn := map[string]bool{}
 	for i, f := range r.Findings {
-		for _, why := range gateFindingBlockers(f) {
+		_, cleared := outcome.cleared[i]
+		blockers := gateFindingBlockersCleared(f, cleared)
+		for _, why := range blockers {
 			reasons = append(reasons, fmt.Sprintf("finding %d (surface %s, rule %s) blocks the release: %s", i, f.Surface, f.Rule, why))
 		}
+		if len(blockers) > 0 {
+			blocked[f.Surface] = true
+			if a, ok := outcome.changed[i]; ok {
+				reasons = append(reasons, fmt.Sprintf("finding %d (surface %s, rule %s): a ruling for this surface and rule exists (%s, %s, for %s) but records a different failure_scenario than the finding now carries. The finding has changed since it was ruled on, so the ruling does not apply and the finding needs re-ruling — it keeps blocking until a human rules on what it says now", i, f.Surface, f.Rule, a.RuledBy, a.RuledAt, a.Version))
+			}
+		}
+		if cleared {
+			clearedIn[f.Surface] = true
+		}
 	}
-	if err := gateIsGreen(declared, r.Surfaces, current); err != nil {
+
+	// The adjudicated view of the surface verdicts, for the green computation
+	// ONLY — r.Surfaces is never written to. gateIsGreen keeps its one meaning
+	// (every declared surface, PASS, fingerprinted against this tree); what
+	// the copy changes is which verdicts count as PASS once a human has ruled
+	// on the findings that justified a FAILED.
+	surfaces := r.Surfaces
+	if len(clearedIn) > 0 {
+		adjudicated := append([]gateSurfaceVerdict(nil), r.Surfaces...)
+		for j, v := range adjudicated {
+			if v.Verdict == gateVerdictFailed && clearedIn[v.Surface] && !blocked[v.Surface] {
+				adjudicated[j].Verdict = gateVerdictPass
+			}
+		}
+		surfaces = adjudicated
+	}
+	if err := gateIsGreen(declared, surfaces, current); err != nil {
 		reasons = append(reasons, err.Error())
 	}
 	if len(reasons) == 0 {
-		return gateVerdictPass, nil
+		return gateVerdictPass, outcome, nil
 	}
-	return gateVerdictFailed, errors.New(strings.Join(reasons, "\n"))
+	return gateVerdictFailed, outcome, errors.New(strings.Join(reasons, "\n"))
 }
 
 // ---------------------------------------------------------------------
@@ -1461,7 +1549,7 @@ func TestGateReceiptVerdictIsDerivedNotStored(t *testing.T) {
 	}
 
 	clean := gateReceipt{Surfaces: green}
-	verdict, err := clean.evaluate(declared, current)
+	verdict, _, err := clean.evaluate(declared, current, nil)
 	if err != nil || verdict != gateVerdictPass {
 		t.Fatalf("a clean, fully covered receipt must evaluate PASS; got %s (%v)", verdict, err)
 	}
@@ -1495,7 +1583,7 @@ func TestGateReceiptVerdictIsDerivedNotStored(t *testing.T) {
 		{"a PASS was fingerprinted against another tree", gateReceipt{Surfaces: []gateSurfaceVerdict{green[0], {Surface: "site", Verdict: gateVerdictPass, Fingerprint: "sha256:stale"}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			verdict, err := tc.receipt.evaluate(declared, current)
+			verdict, _, err := tc.receipt.evaluate(declared, current, nil)
 			if err == nil || verdict != gateVerdictFailed {
 				t.Fatalf("expected FAILED with a reason; got %s (%v)", verdict, err)
 			}
@@ -1552,7 +1640,7 @@ func TestGateActsWronglyBlocksAtEveryReachWithNoOverride(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receipt := gateReceipt{Surfaces: green, Findings: []gateFinding{tc.finding}}
-			verdict, err := receipt.evaluate(declared, current)
+			verdict, _, err := receipt.evaluate(declared, current, nil)
 			if verdict != gateVerdictFailed || err == nil {
 				t.Fatalf("an acts-wrongly finding did not block: got %s (%v). A reader following the surface does the wrong thing, and no judgement of the agent's — and no field on this receipt — clears that", verdict, err)
 			}
@@ -1580,7 +1668,7 @@ func TestGateTheAgentsJudgementDecidesForMisledAndCosmetic(t *testing.T) {
 		t.Run(consequence, func(t *testing.T) {
 			deferrable := gateReceiptFinding("site", "stale-count", consequence, gateBlockingDeferrable, "says 27, the registry holds 28")
 			receipt := gateReceipt{Surfaces: green, Findings: []gateFinding{deferrable}}
-			verdict, err := receipt.evaluate(declared, current)
+			verdict, _, err := receipt.evaluate(declared, current, nil)
 			if verdict != gateVerdictPass || err != nil {
 				t.Fatalf("a %s finding the agent judged deferrable stopped the release anyway: %s (%v). The agent read the surface and the agent rules; overriding it here is the fixed lookup table the design refused", consequence, verdict, err)
 			}
@@ -1590,7 +1678,7 @@ func TestGateTheAgentsJudgementDecidesForMisledAndCosmetic(t *testing.T) {
 
 			blocking := deferrable
 			blocking.Blocking = gateBlockingBlocks
-			verdict, err = gateReceipt{Surfaces: green, Findings: []gateFinding{blocking}}.evaluate(declared, current)
+			verdict, _, err = gateReceipt{Surfaces: green, Findings: []gateFinding{blocking}}.evaluate(declared, current, nil)
 			if verdict != gateVerdictFailed || err == nil {
 				t.Fatalf("a %s finding the agent judged blocking was waved through: %s (%v)", consequence, verdict, err)
 			}
@@ -1710,8 +1798,8 @@ func TestGateEvaluateIsReproducibleOverAnUnchangedReceipt(t *testing.T) {
 		},
 	}
 
-	firstVerdict, firstErr := receipt.evaluate(declared, current)
-	secondVerdict, secondErr := receipt.evaluate(declared, current)
+	firstVerdict, _, firstErr := receipt.evaluate(declared, current, nil)
+	secondVerdict, _, secondErr := receipt.evaluate(declared, current, nil)
 	if firstVerdict != secondVerdict {
 		t.Fatalf("the same receipt evaluated to %s and then %s", firstVerdict, secondVerdict)
 	}

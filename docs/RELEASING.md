@@ -520,7 +520,10 @@ them, and the three post-publish checks that leave this repository entirely.
       would produce and re-recording it is honest — that reuse is the cache
       working, not a step skipped — and when the fix moved `surface.json`,
       `record` refuses it until `delta` is re-run. Repeat until no surface
-      reports a blocking finding.
+      reports a blocking finding — or until every blocking finding that
+      remains is one you have ruled on, which is step 5's mechanism and
+      exists precisely so that a finding you can rule on in a minute does
+      not cost the round a fix would.
 
       **5. Read the findings yourself before you authorize anything.** Nothing
       is filtered, deduplicated away or dropped on the way to you — the
@@ -531,26 +534,70 @@ them, and the three post-publish checks that leave this repository entirely.
       in each direction. A deferrable finding you judge blocking is a fix you
       make before authorizing — the gate will not stop you from shipping over
       it, so this is the one place your reading is the check. A blocking
-      finding you judge mistaken can only be cleared by disproving its own
-      `failure_scenario` — the sentence exists so that it CAN be disproven —
-      and then editing `gate/answers/<surface>.json` by hand, since there is
-      still no override field on the receipt. TWO EDITS, NOT ONE, and the
-      second is easy to miss: delete the finding, AND set that surface's
-      `verdict` to `PASS` if nothing blocking remains in it. An answer is
-      validated for agreement between the two — a PASS listing a blocking
-      finding is refused, and so is a FAILED with nothing left that blocks —
-      by the same function the recorder and the collector both run. Delete
-      the finding alone and the answer holds a FAILED justified by nothing;
-      D1 refuses the release at collection, and you have made the
-      irreversible edit below for no gain. Know what that edit costs before
-      you reach for it: a deleted finding leaves no trace, so an adjudicated finding becomes indistinguishable from one
-      nobody ever raised, and the next reader of that record cannot tell that
-      you looked. And know what it cannot touch at all: an `acts-wrongly`
-      finding is not deferrable and not signable-away by anyone — fix the
-      software, or show with evidence that there was never a defect. Why the
-      classifier that would derive a finding's weight from its evidence was
-      not built, and why no override record was added in its place, is
-      recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
+      finding you judge no reason this release cannot ship is cleared by a
+      RULING: one entry in `gate/adjudications.json`, committed on the
+      release branch, saying so in your own name. You do not touch
+      `gate/answers/` — the old recovery, hand-deleting the finding and
+      re-grading the surface's verdict, is retired, because a deleted finding
+      left an adjudicated finding indistinguishable from one nobody ever
+      raised; a ruling is the same judgement left ON the record. The finding
+      stays in the answer, whole, and on the receipt, whole, and the driver's
+      run record prints the ruling beside it — who ruled, when, why.
+
+      A ruling looks like this, every field mandatory and `reason` refused
+      when empty (a ruling without a stated reason is an assertion, not a
+      judgement):
+
+          {
+            "rulings": [
+              {
+                "version": "vX.Y.Z",
+                "surface": "<the finding's surface>",
+                "rule": "<the finding's rule>",
+                "failure_scenario": "<the finding's failure_scenario, verbatim>",
+                "ruled_by": "<your name>",
+                "ruled_at": "YYYY-MM-DD",
+                "reason": "<why this does not block this release>"
+              }
+            ]
+          }
+
+      What each line is load-bearing for. `version` scopes the ruling to
+      exactly this release — a ruling is never inherited, so next release the
+      finding (if it survives) is re-read and re-ruled or fixed.
+      `failure_scenario` is copied from the finding VERBATIM because
+      `(surface, rule)` alone is unsafe: rules are free-text slugs an agent
+      re-derives every round, and a later round can reuse one for different
+      substance. The ruling applies only while the finding still says, byte
+      for byte, what you read when you ruled; if the finding has changed, the
+      verdict tells you a ruling exists and needs re-ruling, and the finding
+      keeps blocking. A ruling matching no finding at all is reported stale —
+      visibly, in the run record — and fails nothing by itself: usually it
+      means the finding was also fixed in the tree. A malformed or
+      unreadable `gate/adjudications.json` is a FAILED gate, never "no
+      rulings". And `ruled_by` is paper — nothing in this tree authenticates
+      it, the same way the driver cannot authenticate its CI-evidence record;
+      only the forge's signed commits and branch protection make a ruling
+      attributable to a person.
+
+      Committing the ruling moves the tree, so produce step 1's captures and
+      a fresh fan-out once more over the ruled tree — but the ruling file is
+      deliberately outside every surface and outside the gate's own
+      integrity digest, so no surface key moves and that cycle re-reads
+      nothing: re-record the carried answers and you are done. The ruling
+      itself applies at evaluation, inside D1's recomputed verdict, and
+      nowhere else.
+
+      And know what no ruling can touch: an `acts-wrongly` finding is not
+      deferrable and not signable-away by anyone — fix the software, or show
+      with evidence that there was never a defect. A ruling that names one
+      does not get ignored; it refuses the WHOLE file, every other ruling in
+      it suspended, until it is removed — a record that quietly declined to
+      do what it says would be worse than no record. The rules above, each
+      with the test that pins it, live in
+      `cmd/dossierx/gate_adjudication_test.go`; why the classifier that
+      would derive a finding's weight from its evidence was still not built
+      is recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out

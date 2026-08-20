@@ -393,8 +393,8 @@ func TestGateIntegrityEditingTheGateMovesEverySurfaceKey(t *testing.T) {
 		{
 			"the verdict predicate is weakened (gate_receipt_test.go, evaluate)",
 			"cmd/dossierx/gate_receipt_test.go",
-			"if err := gateIsGreen(declared, r.Surfaces, current); err != nil {",
-			"if err := gateIsGreen(declared, r.Surfaces, current); err != nil && false {",
+			"if err := gateIsGreen(declared, surfaces, current); err != nil {",
+			"if err := gateIsGreen(declared, surfaces, current); err != nil && false {",
 		},
 		// Carry-forward stops comparing fingerprints: any previous verdict is
 		// reused whatever the tree now says.
