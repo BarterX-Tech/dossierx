@@ -263,7 +263,24 @@ Describe 'the no-bash remedy' {
             # the branch under test never ran, not WHY. A test that cannot
             # build its own condition must say what it found, or the next
             # reader is left guessing at a runner they cannot see.
+            # ASK THE CHILD, NOT ONLY THIS PROCESS. The parent's answer and the
+            # child's disagreed once already: Find-Bash returned $null here
+            # while a child started from the same environment installed
+            # successfully. Whatever a fresh pwsh reaches that this runspace
+            # does not is the thing this test has to blank, so the probe runs
+            # in a child of the same shape as the one under test.
+            $probe = (& $pwshExe -NoProfile -Command (
+                ". '$script:wrapper'; `$b = Find-Bash; if (`$b) { 'FOUND:' + `$b } else { 'NULL' }"
+            ) 2>&1) -join "`n"
             $stillFound = Find-Bash
+            if ($probe -notmatch 'NULL') {
+                throw ("the no-bash environment is not bash-free IN A CHILD, which is the process " +
+                    "shape under test. A child of this environment answered: " + $probe + "`n" +
+                    "PATH, ProgramFiles, ProgramFiles(x86) and LOCALAPPDATA were all pointed at an " +
+                    "empty directory, so that path names a location Find-Bash consults which this " +
+                    "test does not blank. Blank it here rather than deleting the assertion below: " +
+                    "a remedy nobody can reach is the finding this test pins.")
+            }
             if ($stillFound) {
                 throw ("the no-bash environment is not bash-free: Find-Bash still returned '" +
                     $stillFound + "'. PATH, ProgramFiles, ProgramFiles(x86) and LOCALAPPDATA were " +
