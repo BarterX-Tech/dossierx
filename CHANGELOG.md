@@ -37,7 +37,7 @@ are the first four items under **Changed**.
 
 ### Changed
 
-The three skill-guide corrections behind the callout above:
+The four skill-guide corrections behind the callout above:
 
 - **The review loop no longer schedules a lock the lock gate refuses**
   (`skills/dossierx-comments/SKILL.md`). Step 4 sent a locked claim through unlock → fix → lock

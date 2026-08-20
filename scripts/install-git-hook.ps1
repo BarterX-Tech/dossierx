@@ -135,7 +135,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     # this path is reachable and no line printed from here can fix that. The
     # single-quote doubling is bash's own escape for a ' inside a
     # single-quoted string, for the rare path that contains one. (The
-    # here-string is expandable for those two interpolations; the backtick
+    # here-string is expandable for that one interpolation; the backtick
     # before `$( keeps the command substitution literal text for PowerShell so
     # it reaches bash intact.)
     $bash = Find-Bash
