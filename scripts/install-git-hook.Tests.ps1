@@ -269,8 +269,17 @@ Describe 'the no-bash remedy' {
             # successfully. Whatever a fresh pwsh reaches that this runspace
             # does not is the thing this test has to blank, so the probe runs
             # in a child of the same shape as the one under test.
+            # THE CHILD SETS ITS OWN ENVIRONMENT, because inheriting it does not
+            # work here. Measured on the runner: with all four names blanked in
+            # this process, a child still answered
+            # FOUND:C:\Program Files\Git\bin\bash.exe — the real Program Files,
+            # not the empty directory. Whatever restores it between processes,
+            # the fix is not to guess at the mechanism but to stop depending on
+            # it: the child is handed the blanking as code it runs itself.
+            $blank = "`$env:PATH='$empty'; `$env:ProgramFiles='$empty'; " +
+                "`${env:ProgramFiles(x86)}='$empty'; `$env:LOCALAPPDATA='$empty'; "
             $probe = (& $pwshExe -NoProfile -Command (
-                ". '$script:wrapper'; `$b = Find-Bash; if (`$b) { 'FOUND:' + `$b } else { 'NULL' }"
+                $blank + ". '$script:wrapper'; `$b = Find-Bash; if (`$b) { 'FOUND:' + `$b } else { 'NULL' }"
             ) 2>&1) -join "`n"
             $stillFound = Find-Bash
             if ($probe -notmatch 'NULL') {
@@ -288,7 +297,9 @@ Describe 'the no-bash remedy' {
                     "that this test does not blank. Blank it here rather than deleting the " +
                     "assertion below: a remedy nobody can reach is the finding this test pins.")
             }
-            $out = (& $pwshExe -NoProfile -File $script:wrapper --yes 2>&1) -join "`n"
+            $out = (& $pwshExe -NoProfile -Command (
+                $blank + "& '$script:wrapper' --yes"
+            ) 2>&1) -join "`n"
             $exit = $LASTEXITCODE
         }
         finally {
