@@ -101,22 +101,108 @@ resolved_object_name() {
 }
 
 # ---------------------------------------------------------------------------
+# resolve_baseline_inventory — the baseline's BYTES, derived from its identity.
+#
+# This is the harness's copy of the ONE rule for "which document is this
+# release's baseline", and the rule is gateBaselineFor's in
+# cmd/dossierx/gate_baseline_test.go: the frozen bootstrap is chosen because the
+# baseline commit IS v0.5.0's commit — chosen by identity, never because some
+# other way of getting a baseline returned an error — and every other commit's
+# inventory is read out of that commit's own tree. TestGateStage2DeltaProducer-
+# ResolvesOrFails pins the two constants below to the Go side's, so the copies
+# cannot drift apart in silence.
+#
+# WHY `delta` NO LONGER TAKES A FILE. It used to take --baseline-file, and the
+# flag was the defect: docs/RELEASING.md's staging block hard-coded it to the
+# committed v0.5.0 bootstrap, which was the right file for exactly one release
+# and then silently became two releases old — the v0.6.0 gate run computed its
+# delta against v0.5.0's frozen inventory while recording baseline ref v0.5.1,
+# and thirteen reading agents were handed a comparison spanning two releases as
+# the truth about what that release changed. A file argument is a second answer
+# to a question git already holds the answer to, and a second answer can drift;
+# deriving the bytes from the commit makes the mismatch impossible rather than
+# merely discouraged. The retired flag is refused by name in `delta` below, so
+# an invocation copied from an older revision of docs/RELEASING.md is a loud
+# refusal, never a silent two-release comparison.
+#
+# THE FAILURE ARM SUBSTITUTES NOTHING. In a shallow clone `git show
+# <commit>:surface.json` fails character for character the way it fails for a
+# release that predates the emitter, so an arm that fell back to the bootstrap
+# on that failure would reproduce the exact defect this function removes —
+# full, plausible, and wrong about which past it describes. An unreadable
+# baseline is exit 3, the same "never an empty delta" refusal the identity
+# checks use.
+# ---------------------------------------------------------------------------
+# The frozen release's identity and its only inventory. v0.5.0 shipped before
+# the surface emitter existed, so its tree carries no surface.json and the
+# committed bootstrap is the ONLY record of what its surface was. The commit
+# sha, not the tag name, is the trigger: a tag is a pointer `git tag -f`
+# re-points, and gateBaselineCommit in cmd/dossierx/gate_baseline_test.go pins
+# the same forty digits for the same reason.
+BOOTSTRAP_COMMIT="3217a48b4a123ea4b8b02f93fac6337b985eb7ce"
+BOOTSTRAP_FILE="surface.baseline.json"
+
+resolve_baseline_inventory() {
+  # $1 = the baseline's resolved commit (already a full object name),
+  # $2 = the path to write the inventory's bytes to
+  if [ "$1" = "$BOOTSTRAP_COMMIT" ]; then
+    [ -f "$ROOT/$BOOTSTRAP_FILE" ] || die "the baseline is the frozen release $BOOTSTRAP_COMMIT, whose only inventory is the committed $BOOTSTRAP_FILE — and it is not under $ROOT. That release carries no surface.json of its own, so there is no second way to get its inventory; a run in this state has no past to diff against, which is a FAILED run and never an empty delta." 3
+    cp "$ROOT/$BOOTSTRAP_FILE" "$2"
+    return 0
+  fi
+  command -v git >/dev/null 2>&1 || die "no git on PATH, so the baseline inventory cannot be read out of commit $1. A check that cannot run is a failure, not a pass." 2
+  if ! git -C "$ROOT" show "$1:surface.json" > "$2"; then
+    rm -f "$2"
+    die "the baseline inventory could not be read out of commit $1 (git show $1:surface.json under $ROOT; git's own reason is above). The committed $BOOTSTRAP_FILE is NOT a fallback for this: in a shallow or unfetched clone this failure reads character for character like a release that predates the inventory, and substituting the bootstrap would hand thirteen agents a delta spanning two releases as the truth about the past. Fetch the history — git fetch --tags --force --unshallow — and run this again." 3
+  fi
+}
+
+# require_recorded_baseline_is_resolved is `record`'s use of the same rule:
+# derive the named commit's inventory AGAIN and refuse gate/baseline.json when
+# its bytes are anything else. Both guarded branches call it — gate/baseline.json
+# because those bytes are hashed into all thirteen keys, and gate/delta.json
+# because the recomputation there runs OVER gate/baseline.json, so a stale
+# baseline with a delta honestly computed over it agrees with itself and the
+# recomputation alone waves the pair through.
+require_recorded_baseline_is_resolved() {
+  [ -f "$ROOT/gate/baseline.json" ] \
+    || die "record: gate/baseline.json is not there, so nothing can say whether the baseline this run compared against is the named release's inventory. A check that cannot run is a failure, not a pass." 4
+  _rr="$(mktemp)"
+  resolve_baseline_inventory "$BASELINE_COMMIT" "$_rr"
+  if ! cmp -s "$_rr" "$ROOT/gate/baseline.json"; then
+    rm -f "$_rr"
+    die "record: gate/baseline.json is not the inventory that baseline $BASELINE_REF ($BASELINE_COMMIT) carries. Those bytes are hashed into every surface's key and handed to every agent as the past this release is being compared with — recorded as they are, a delta over them describes some other release's distance from this one (a two-release-old bootstrap under the previous release's ref is exactly how this guard came to exist). Re-run \`delta\` for this checkout and \`record\` again." 3
+  fi
+  rm -f "$_rr"
+}
+
+# ---------------------------------------------------------------------------
 # provenance_bearing — which of the artifacts `record` names it can hold to
 # account at the moment they are recorded, rather than merely digest.
 #
-# Everything else this mode is handed is opaque bytes. These three are documents
+# Everything else this mode is handed is opaque bytes. These four are documents
 # THIS repository produces with a declared shape, so recording one that
 # disagrees with the run is a disagreement that can be caught at the moment it
 # is created rather than several minutes of agent time later. They are held to
-# account in two different ways, and the guard loop in `record` says which is
+# account in three different ways, and the guard loop in `record` says which is
 # which:
 #
+#   gate/baseline.json    is RE-RESOLVED. It is the named baseline commit's own
+#                         inventory (resolve_baseline_inventory), so the guard
+#                         derives the same bytes again from the commit and
+#                         byte-compares. This is the refusal for the state the
+#                         delta recomputation alone cannot see: a stale baseline
+#                         and a delta computed honestly OVER it agree with each
+#                         other perfectly — that pair recorded cleanly once,
+#                         under a ref two releases newer than its bytes.
 #   gate/delta.json       is RECOMPUTED. It is a pure function of surface.json
 #                         and gate/baseline.json, so the guard re-derives the
-#                         whole document and byte-compares. It deliberately
-#                         carries no tree stamp — see emit_delta_document for
-#                         why a stamp there re-keys every surface on every
-#                         commit.
+#                         whole document and byte-compares — after gate/
+#                         baseline.json itself has been re-resolved, since a
+#                         recomputation over stale bytes agrees with the stale
+#                         answer. It deliberately carries no tree stamp — see
+#                         emit_delta_document for why a stamp there re-keys
+#                         every surface on every commit.
 #   gate/render-diff.json states the tree and the baseline commit it compared,
 #                         and cannot be recomputed here (it needs the rendered
 #                         output of two releases), so its stamps are read and
@@ -134,12 +220,15 @@ resolved_object_name() {
 # past. The third, gate/site-text.json, was walked past for longer still: it
 # carried a node/npm toolchain stamp and no tree at all, so an extraction left
 # over from the previous release recorded cleanly and was hashed into the site
-# surface's key as this release's evidence. A fourth one added later is covered
-# by adding a line here and a branch in `record`'s guard loop.
+# surface's key as this release's evidence. The fourth, gate/baseline.json, was
+# walked past longest of all — `record` digested whatever bytes sat there, so a
+# baseline two releases old, with a delta honestly computed over it, recorded
+# under the previous release's ref with every digest true. A fifth one added
+# later is covered by adding a line here and a branch in `record`'s guard loop.
 # ---------------------------------------------------------------------------
 provenance_bearing() {
   case "$1" in
-    gate/delta.json | gate/render-diff.json | gate/site-text.json) return 0 ;;
+    gate/baseline.json | gate/delta.json | gate/render-diff.json | gate/site-text.json) return 0 ;;
   esac
   return 1
 }
@@ -253,10 +342,12 @@ changed_keys() {
 #
 # The baseline ref, commit and sha256 stay in the file because they move only
 # when the PREVIOUS RELEASE moves — which is precisely when every surface should
-# re-run. What this function cannot promise: it ties the delta to whatever bytes
-# sit at gate/baseline.json; whether THOSE bytes are really the named commit's
-# inventory is the caller's resolution step (`git show "$PREV:surface.json"`),
-# which no reader of the file can re-perform after the fact.
+# re-run. What this function alone cannot promise: it ties the delta to whatever
+# bytes sit at gate/baseline.json; whether THOSE bytes are really the named
+# commit's inventory is resolve_baseline_inventory's answer, which `delta` uses
+# to produce the file and `record` re-performs against the file before naming
+# it — so a baseline that is not the named commit's own inventory is refused at
+# both points it could enter a run.
 # ---------------------------------------------------------------------------
 emit_delta_document() {
   # $1 = this tree's inventory, $2 = the resolved baseline inventory,
@@ -324,12 +415,15 @@ usage: run.sh <mode> [options]
   fanout  --tree T               mint this run, write gate/bundles/<surface>.md
                                  for every declared surface and gate/fanout.json,
                                  then print one invocation per surface
-  delta   --baseline-ref R --baseline-commit C --baseline-file F
-                                 resolve the baseline, write gate/baseline.json
-                                 and gate/delta.json (no --tree: the delta is a
-                                 pure function of the two inventories, and its
-                                 freshness is proven by recomputation in
-                                 `record` rather than by a stamp)
+  delta   --baseline-ref R --baseline-commit C
+                                 resolve the baseline out of commit C itself,
+                                 write gate/baseline.json and gate/delta.json
+                                 (no --tree: the delta is a pure function of the
+                                 two inventories, and its freshness is proven by
+                                 recomputation in `record` rather than by a
+                                 stamp; no --baseline-file either: the baseline
+                                 is derived, never handed in — a file argument
+                                 is refused by name)
   record  --tree T --baseline-ref R --baseline-commit C <artifact>...
                                  write gate/run.json over exactly these artifacts
 
@@ -341,7 +435,7 @@ USAGE
 [ $# -ge 1 ] || usage
 MODE="$1"; shift
 
-TREE=""; BASELINE_REF=""; BASELINE_COMMIT=""; BASELINE_FILE=""; SURFACE=""; BUNDLE=""
+TREE=""; BASELINE_REF=""; BASELINE_COMMIT=""; SURFACE=""; BUNDLE=""
 ARTIFACTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -349,7 +443,12 @@ while [ $# -gt 0 ]; do
     --tree)             TREE="$2"; shift 2 ;;
     --baseline-ref)     BASELINE_REF="$2"; shift 2 ;;
     --baseline-commit)  BASELINE_COMMIT="$2"; shift 2 ;;
-    --baseline-file)    BASELINE_FILE="$2"; shift 2 ;;
+    # RETIRED, AND REFUSED HERE RATHER THAN IN ONE MODE. The refusal used to
+    # live in `delta`, because `delta` was the only mode the old procedure
+    # passed it to — so `record --baseline-file X` accepted the flag and
+    # ignored it, which is the silent half of the very defect the retirement
+    # exists to close. A flag nobody honours must say so wherever it is typed.
+    --baseline-file)    die "--baseline-file is retired and refused. The baseline inventory is derived from --baseline-commit itself — the committed $BOOTSTRAP_FILE when that commit IS the frozen $BOOTSTRAP_COMMIT, and \`git show <commit>:surface.json\` for every later release — because a file argument is a second answer that can drift: hard-coded to the bootstrap, it computed one release's delta against an inventory two releases old. Drop the flag and run the command again." 1 ;;
     --surface)          SURFACE="$2"; shift 2 ;;
     --bundle)           BUNDLE="$2"; shift 2 ;;
     -*)                 die "unknown option: $1" 1 ;;
@@ -466,12 +565,23 @@ case "$MODE" in
     resolved_object_name "$BASELINE_COMMIT" \
       || die "delta: the baseline could not be resolved — --baseline-commit is ${BASELINE_COMMIT:-empty} and must be a full 40-digit object name. A tag is a mutable pointer, an abbreviation is a prefix, and forty characters of something else is neither. An unresolvable baseline is a FAILED run; it is never an empty delta." 3
     [ -n "$BASELINE_REF" ] || die "delta: --baseline-ref is required (the human-readable name of what --baseline-commit resolved from)" 1
-    [ -n "$BASELINE_FILE" ] || die "delta: --baseline-file is required" 1
-    [ -f "$BASELINE_FILE" ] || die "delta: the baseline inventory $BASELINE_FILE cannot be read; the baseline could not be resolved" 3
+    # THE RETIRED FLAG IS A REFUSAL WITH ITS HISTORY, not an unknown option. An
+    # invocation carrying it was copied from a revision of docs/RELEASING.md
+    # that hard-coded the v0.5.0 bootstrap — the exact invocation that computed
+    # the v0.6.0 gate's delta against a two-release-old inventory while
+    # recording it under ref v0.5.1 — so the operator typing it believes they
+    # are choosing the baseline's bytes, and silently ignoring the flag would
+    # leave that belief standing over different bytes.
     [ -f "$ROOT/surface.json" ] || die "delta: no surface.json under $ROOT to diff against the baseline" 2
 
+    # Resolved into a private file first, so a refusal partway through `git
+    # show` cannot leave a truncated gate/baseline.json behind looking like a
+    # short inventory.
+    _resolved="$(mktemp)"
+    resolve_baseline_inventory "$BASELINE_COMMIT" "$_resolved"
     mkdir -p "$ROOT/gate"
-    cp "$BASELINE_FILE" "$ROOT/gate/baseline.json"
+    cp "$_resolved" "$ROOT/gate/baseline.json"
+    rm -f "$_resolved"
     emit_delta_document "$ROOT/surface.json" "$ROOT/gate/baseline.json" "$BASELINE_REF" "$BASELINE_COMMIT" > "$ROOT/gate/delta.json"
     printf 'gate-stage2: wrote gate/baseline.json and gate/delta.json against %s (%s)\n' "$BASELINE_REF" "$BASELINE_COMMIT" >&2
     ;;
@@ -494,12 +604,14 @@ case "$MODE" in
     # whatever is on disk would launder the stale one into a manifest that is
     # honest about every byte it names.
     #
-    # TWO KINDS OF ACCOUNT, per provenance_bearing above. The delta is
-    # recomputed outright, because it is a pure function of two files this
-    # checkout holds; a recomputation that agrees makes the file fresh BY
-    # CONSTRUCTION, however long it has sat on disk. The two captures cannot be
-    # recomputed here — one needs the rendered output of two releases, the
-    # other a real build in a real browser — so their own stamps are read and
+    # THREE KINDS OF ACCOUNT, per provenance_bearing above. The baseline is
+    # re-resolved outright — it IS the named commit's inventory, so the guard
+    # derives the same bytes again from the commit. The delta is recomputed
+    # outright, because it is a pure function of two files this checkout holds;
+    # a recomputation that agrees makes the file fresh BY CONSTRUCTION, however
+    # long it has sat on disk. The two captures cannot be recomputed here — one
+    # needs the rendered output of two releases, the other a real build in a
+    # real browser — so their own stamps are read and
     # checked against the run's. Those stamped documents are read with
     # json_scalar, which takes the FIRST match on any line and exits; that is
     # correct only because both put "tree" (and, for the render diff,
@@ -516,6 +628,15 @@ case "$MODE" in
       # below.
       [ -f "$ROOT/$a" ] || die "record: $a was named as produced by this run and is not there" 4
       case "$a" in
+        gate/baseline.json)
+          # FRESHNESS BY RE-RESOLUTION. The baseline is not a comparison and
+          # not a capture; it IS the named commit's inventory, so the guard is
+          # to derive that inventory again and require byte equality. This is
+          # the branch that refuses the two-release-old baseline recorded
+          # under the previous release's ref — a state in which every digest
+          # below is honest and the delta recomputation agrees with itself.
+          require_recorded_baseline_is_resolved
+          ;;
         gate/delta.json)
           # FRESHNESS BY RECOMPUTATION. The delta is emit_delta_document over
           # surface.json, gate/baseline.json and this run's baseline flags;
@@ -530,6 +651,12 @@ case "$MODE" in
             || die "record: gate/delta.json is named as produced and there is no surface.json under $ROOT, so the delta cannot be recomputed and its freshness cannot be checked. A check that cannot run is a failure, not a pass." 2
           [ -f "$ROOT/gate/baseline.json" ] \
             || die "record: gate/delta.json is named as produced and gate/baseline.json is not there. The delta is a comparison against those bytes; without them nothing can say whether the comparison on disk is the one this tree would make." 2
+          # The baseline is re-resolved FIRST, because the recomputation below
+          # runs over gate/baseline.json's bytes: recomputed over a stale
+          # baseline, a delta honestly computed over that same stale baseline
+          # byte-agrees, and the pair records cleanly — which is exactly the
+          # laundering that shipped a two-release comparison once.
+          require_recorded_baseline_is_resolved
           _expected="$(mktemp)"
           emit_delta_document "$ROOT/surface.json" "$ROOT/gate/baseline.json" "$BASELINE_REF" "$BASELINE_COMMIT" > "$_expected"
           if ! cmp -s "$_expected" "$ROOT/$a"; then

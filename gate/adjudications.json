@@ -1,0 +1,13 @@
+{
+  "rulings": [
+    {
+      "version": "v0.6.0",
+      "surface": "changelog",
+      "rule": "evidence-not-handed-over-readme",
+      "failure_scenario": "A maintainer reads a PASS on the changelog surface and believes the v0.6.0 entry's four README.md claims were compared against README.md, when no byte of README.md was in this bundle, so a \"Fixed\" bullet describing a README repair that never landed would have been reported by nobody.",
+      "ruled_by": "Nitin Khanna",
+      "ruled_at": "2026-08-20",
+      "reason": "This is a gap in the gate's own coverage, not a defect in the release. The changelog surface is asked whether this entry's claims are true, and four of them are about README.md, which surfaces.yaml does not hand it \u2014 so the agent reported the byte it needed rather than guessing, which is what the frame asks for. The risk it names is real in general: a Fixed bullet describing a README repair that never landed would go unreported by this surface. It has not materialised here. All four claims were checked before this ruling was written, each by a test that EXECUTES the documented procedure rather than reading it: TestPasteBlockYesToHookStillEndsWithCI and its No sibling, TestPasteBlockExportRunsRootedAndTeachesTheHarness, TestREADME_DigestStoreCommitTimingMatchesTheEngine, and TestPreLedgerCrossing. All pass against this tree. The durable fix is a reads: entry for README.md on the changelog surface; it is not taken now because the edit would move the tree and cost a full thirteen-agent round to re-earn a receipt this release already holds, for a gap that verifiably cost nothing this time. It is owed to the next release, and this ruling is the record of the debt."
+    }
+  ]
+}

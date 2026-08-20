@@ -1509,7 +1509,7 @@ func TestGateIsGreenRefusesAPassAttachedToNoTree(t *testing.T) {
 			}
 			// And through the receipt, because that is the path a release
 			// verdict actually takes.
-			if got, err := (gateReceipt{Surfaces: verdicts}).evaluate(declared, current); got != gateVerdictFailed || err == nil {
+			if got, _, err := (gateReceipt{Surfaces: verdicts}).evaluate(declared, current, nil); got != gateVerdictFailed || err == nil {
 				t.Errorf("a receipt holding a PASS with no fingerprint for this tree evaluated %s (%v)", got, err)
 			}
 		})
@@ -1560,7 +1560,7 @@ func TestGateRefusesASurfaceReportedTwice(t *testing.T) {
 			if err := gateIsGreen(declared, tc.verdicts, current); !errors.Is(err, errGateDuplicateVerdict) {
 				t.Errorf("gateIsGreen resolved a surface reported twice by position instead of refusing it; got %v", err)
 			}
-			verdict, err := gateReceipt{Surfaces: tc.verdicts}.evaluate(declared, current)
+			verdict, _, err := gateReceipt{Surfaces: tc.verdicts}.evaluate(declared, current, nil)
 			if verdict != gateVerdictFailed || err == nil {
 				t.Errorf("a receipt holding two verdicts for one surface evaluated %s (%v)", verdict, err)
 			}

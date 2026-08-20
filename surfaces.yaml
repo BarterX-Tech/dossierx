@@ -280,12 +280,62 @@ surfaces:
       # It prints the -answer-record invocation an operator types once per
       # agent; nothing else says whether those flags exist.
       - cmd/dossierx/gate_answer_test.go
-      # The three G1 capture invocations the procedure spells out, flag by
-      # flag: the cross-release render diff, the skills export capture, and
-      # the release-notes prediction.
+      # The document describes the driver at every reach — "a nine-step driver
+      # whose preconditions include the gate below", D1's nine questions and
+      # its worktree refusal with the printed `switch --detach` recovery, D2's
+      # `--no-ff` merge carried by value into D4's tag, D7's archive check
+      # between the two pushes, the D9 handoff that checks nothing — and the
+      # driver IS TestReleaseDriverPublishes in this file. Its own reviewing
+      # agent had to report that none of those claims could be verified
+      # because the one authority for them was never handed over.
+      - cmd/dossierx/gate_driver_test.go
+      # "the driver's D1 asks the forge for an active tag ruleset covering
+      # `refs/tags/v*` that restricts creation and update, and refuses the
+      # release ... when the rule is absent" — and the whole of **The forge
+      # restricts who can create release tags**: active-not-evaluate, tag
+      # target, creation AND update required, deletion deliberately not,
+      # covering include and no covering exclude, the fnmatch refusal, the
+      # token-scope refusals, and what the check cannot promise. This file is
+      # where every one of those lives or does not; a maintainer trusting the
+      # sentence without it might configure no ruleset, expecting
+      # `make release-publish` to stop them.
+      - cmd/dossierx/gate_tagrules_test.go
+      # The G1 capture invocations the procedure spells out, flag by flag: the
+      # cross-release render diff, the skills export capture, the release-notes
+      # prediction, and the rendered-site extraction. The fourth was missing
+      # and the count above it said three, so the release-procedure agent was
+      # asked to check the site-text invocation and its three stated
+      # behaviours — that DOSSIERX_SITE_TEXT_OUT and _TREE imply each other,
+      # that the tree must be a full 40-digit object name, that the stamp is
+      # the document's first field — with no file that names any of them. It
+      # reported the missing byte rather than guessing, which is the answer
+      # the frame asks for; this is the entry that answer names.
       - tests/render_diff_capture_test.go
       - tests/skills_export_capture_test.go
       - tests/release_notes_predict_test.go
+      - viewer-tests/site_dom_test.go
+      # The authorities for the OTHER claims this procedure invites a reader to
+      # check, added together rather than one per round. Two consecutive gate
+      # rounds each blocked on a single missing borrow here — one entry fixed,
+      # the next gap surfaced — because a reading agent can only name the byte
+      # it needed for the sentence in front of it. These five are the files the
+      # round-four finding itself enumerated: the inventory emitter behind the
+      # -regenerate-goldens command line, the two functions whose contents this
+      # document restates in prose, the fan-out's one implementation, and the
+      # file a line-range citation points at.
+      - cmd/dossierx/surface_test.go
+      - cmd/dossierx/gate_fingerprint_test.go
+      - cmd/dossierx/gate_integrity_test.go
+      - cmd/dossierx/gate_fanout_test.go
+      - cmd/dossierx/gate_stage3_test.go
+      # The procedure's step 5 documents rulings — gate/adjudications.json's
+      # schema, the byte-identical-scenario identity check, the whole-file
+      # refusal on an acts-wrongly ruling, and what a stale or mismatched
+      # ruling reports as — and this file is where every one of those rules
+      # lives. Handed over on the round-four lesson: an agent asked to verify
+      # a claim without the file that decides it can only report the missing
+      # byte, and that report costs a round.
+      - cmd/dossierx/gate_adjudication_test.go
       # The procedure states the whole tool grant — SurfaceFinding and
       # SurfaceVerdict, nothing else, passed as an exclusive allow-list — and
       # this file is where that is declared.
@@ -495,6 +545,10 @@ out_of_scope:
       - gate-cost-model.yaml
       - gate-cost-ledger.json
       - scripts/gate-stage2/
+      # The stage-2 agent harness — the runner that enforces the tool grant on
+      # the reading agents. Gate machinery like scripts/gate-stage2/, not a
+      # surface a client of the binary can observe.
+      - scripts/gate-agent/
       # No testdata/ entries here: out_of_scope tests-and-fixtures already claims
       # testdata/ wholesale, and the manifest rule is EXACTLY one entry per file.
       # Declaring the gate's fixture directories again double-claimed them.

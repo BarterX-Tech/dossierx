@@ -16,8 +16,17 @@
 # not list ignored files but does list unignored ones and exits 2 rather than
 # widening a write set — so an artifact that is not ignored here refuses the next
 # lane's landing, whoever it belongs to.
+# adjudications.json is the third kind, and it is TRACKED although a release
+# gate writes nothing into it: it is a HUMAN's decision record — rulings that a
+# named finding does not block a named release, with who ruled, when and why.
+# It is not per-run evidence (no run produces it, and re-producing it from
+# scratch would erase the judgement it exists to keep), and it must reach the
+# tag: the driver reads it out of the tree being released, so an ignored copy
+# would be a ruling the published release could not account for.
+
 *
 !.gitignore
+!adjudications.json
 !method.yaml
 !prompts/
 !prompts/*.md

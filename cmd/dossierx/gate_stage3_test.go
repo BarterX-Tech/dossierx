@@ -54,17 +54,18 @@
 //     them — with the one exception that is not anyone's to judge: a finding
 //     whose consequence is acts-wrongly blocks at every reach, whatever its
 //     agent ruled (gateFindingBlockers).
-//   - THE OVERRIDE RECORD. gateReceipt still has no field for a human waving a
-//     finding through with a rationale. The routine pressure on it is gone —
-//     a finding the AGENT judges deferrable no longer blocks, so most
-//     non-blocking findings never need a ruling at all — but the hard case is
-//     unchanged and now deliberate: an acts-wrongly finding, or one its agent
-//     judged blocking, can be cleared only by fixing the tree or by showing
-//     the finding's own failure_scenario describes no defect, which for a
-//     mistaken finding still means deleting it from the record by hand — and
-//     a deleted finding leaves an adjudicated finding indistinguishable from
-//     one nobody raised. For acts-wrongly that absence is the second ruling
-//     itself: not deferrable, not signable-away, no override BY DESIGN. The
+//   - THE OVERRIDE RECORD — built since this note first refused it, as
+//     gate/adjudications.json (gate_adjudication_test.go), and still
+//     deliberately NOT a field on gateReceipt: the answers describe the tree,
+//     the rulings decide what blocks, and they meet only inside
+//     gateReceipt.evaluate. A human's ruling — version-scoped, quoting the
+//     finding's failure_scenario verbatim, with a stated reason — clears a
+//     finding its agent judged blocking WITHOUT deleting it: the finding
+//     stays on the receipt whole and the ruling rides beside it, which
+//     retires the hand-deletion recovery that left an adjudicated finding
+//     indistinguishable from one nobody raised. What did NOT move: an
+//     acts-wrongly finding has no override BY DESIGN — not deferrable, not
+//     signable-away — and a ruling naming one refuses the whole file. The
 //     join's findings keep their routine cost: a subject no surface claims is
 //     raised blocking (gateStage3JoinFindings), so the first release with a
 //     quiet subject stops until a human answers the subject or removes it
@@ -1059,9 +1060,17 @@ func TestGateStage3RefusesAnUnusableVocabulary(t *testing.T) {
 			want:  "carries no",
 		},
 		{
-			name:  "the section lists nothing",
-			frame: gateStage3SubjectsHeading + "\n\nThere are no subjects.\n\n## The material\n\n<<PARTS>>\n<<SURFACE>>\n",
-			want:  "lists no subject",
+			name: "the section lists nothing",
+			// The markers are built from the constants rather than spelled,
+			// and not only because a literal is a second answer to what the
+			// marker IS. This file is borrowed by the release-procedure
+			// surface, so its bytes land inside that surface's bundle — and
+			// a literal here is an unreplaced placeholder as far as the
+			// assembler's own check can tell, which refuses the whole
+			// fan-out. Spelling it out reds the gate from inside a fixture.
+			frame: gateStage3SubjectsHeading + "\n\nThere are no subjects.\n\n## The material\n\n" +
+				gateBundlePartsMarker + "\n" + gateBundleSurfaceMarker + "\n",
+			want: "lists no subject",
 		},
 		{
 			name:  "a subject with no value form",
@@ -1919,7 +1928,7 @@ func TestGateStage3TheJoinsFindingsReachTheReceipt(t *testing.T) {
 	// The verdict the driver recomputes, which is the thing that actually stops a
 	// release. A finding in a receipt nobody evaluates would be a longer document
 	// and the same published tag.
-	verdict, err := receipt.evaluate(declared, current)
+	verdict, _, err := receipt.evaluate(declared, current, nil)
 	if verdict != gateVerdictFailed {
 		t.Fatalf("the recomputed verdict is %q over a receipt carrying a cross-surface disagreement; the driver publishes on PASS", verdict)
 	}

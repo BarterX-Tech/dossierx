@@ -9,14 +9,18 @@
 // project this repository will never see, and every sentence in it is an
 // instruction rather than a description. A reading agent judging it can decide
 // the words are plausible; only executing them decides whether the state they
-// leave behind is the state the rest of README assumes. The specific gap this
-// suite exists to catch was found by reading and is pinned by running: the
-// block's step 4 fetches the CI workflow ONLY on the branch where the human
-// DECLINES the hook, so the nudged answer — yes to the hook — ends the
-// transcript with the local, skippable gate installed and the authority never
-// set up, while the sentence "CI is the authority either way" sits inside the
-// branch that was not taken. README's own "Where the gate runs" section says of
-// CI: "If you adopt only one of the two, adopt this one."
+// leave behind is the state the rest of README assumes. Two gaps found by
+// reading are pinned here by running. First: the block's step 4 fetched the CI
+// workflow ONLY on the branch where the human DECLINED the hook, so the nudged
+// answer — yes to the hook — ended the transcript with the local, skippable
+// gate installed and the authority never set up, while the sentence "CI is the
+// authority either way" sat inside the branch that was not taken. README's own
+// "Where the gate runs" section says of CI: "If you adopt only one of the two,
+// adopt this one." Second: the block ordered the skills export BEFORE the step
+// that writes project.config.yaml, so the export ran rootless — exit 0, no
+// AGENTS.md section maintained, the agent guide dropped beside the bundles —
+// and nothing later in the block exported again; the postcondition test at the
+// bottom judges the order by the state it leaves behind.
 //
 // WHAT IS REPLAYED AND WHAT IS SUBSTITUTED. The steps run in order, against a
 // git-initialized temp repo, with two substitutions both forced by "no network
@@ -170,8 +174,11 @@ func gitInConsumer(t *testing.T, consumer string, args ...string) {
 // rawFetchRE matches the raw.githubusercontent.com URLs the paste block tells
 // the agent to fetch, capturing the repo-relative path after the version
 // segment — which is what lets the network fetch be substituted with this
-// tree's own copy of the same file.
-var rawFetchRE = regexp.MustCompile(`https://raw\.githubusercontent\.com/[^/\s]+/[^/\s]+/v\d+\.\d+\.\d+/(\S+)`)
+// tree's own copy of the same file. The capture stops at whitespace, backticks
+// and commas because the two documents this interpreter reads punctuate the
+// URL differently: README writes it bare at end of line, the router skill's
+// bootstrap wraps it in backticks and follows it with a comma.
+var rawFetchRE = regexp.MustCompile("https://raw\\.githubusercontent\\.com/[^/\\s]+/[^/\\s]+/v\\d+\\.\\d+\\.\\d+/([^\\s`,]+)")
 
 // shCommandRE matches an inline `sh <script> <flags>` command the block tells
 // the agent to run after a fetch.
@@ -254,10 +261,18 @@ func replayDecisionBranch(t *testing.T, consumer, branchText string) {
 	}
 }
 
+// preexistingAgentsMD is the AGENTS.md every fixture consumer starts with —
+// the repository population the export's "maintained only when AGENTS.md
+// already exists" rule was written for, and the population the paste block's
+// export-ordering defect silently failed: a rootless export maintains no
+// section in it, so the harness reading it is never taught DossierX.
+const preexistingAgentsMD = "# this repo\n\nHouse instructions that predate DossierX.\n"
+
 // replayPasteBlock runs the block's numbered steps, in order, in a fresh
-// git-initialized repo, answering the step-4 question with sayYes. It returns
-// the consumer repo's root with the transcript's terminal state on disk, for
-// the caller to assert postconditions against.
+// git-initialized repo that already carries its own AGENTS.md, answering the
+// step-4 question with sayYes. It returns the consumer repo's root with the
+// transcript's terminal state on disk, for the caller to assert postconditions
+// against.
 func replayPasteBlock(t *testing.T, module string, sayYes bool) string {
 	t.Helper()
 	block := readmePasteBlock(t)
@@ -266,6 +281,9 @@ func replayPasteBlock(t *testing.T, module string, sayYes bool) string {
 	gitInConsumer(t, consumer, "init")
 	gitInConsumer(t, consumer, "config", "user.email", "replay@example.invalid")
 	gitInConsumer(t, consumer, "config", "user.name", "Paste Block Replay")
+	if err := os.WriteFile(filepath.Join(consumer, "AGENTS.md"), []byte(preexistingAgentsMD), 0o644); err != nil {
+		t.Fatalf("write the fixture repo's pre-existing AGENTS.md: %v", err)
+	}
 
 	// STEP 1 — install the binary, then run `dossierx version`. The install is
 	// the substituted half (see the package comment: binPath is built from this
@@ -274,22 +292,42 @@ func replayPasteBlock(t *testing.T, module string, sayYes bool) string {
 		t.Fatalf("step 1's `dossierx version` exited %d: %s", code, stderr)
 	}
 
-	// STEP 2 — the skills export, with the directory read from the block rather
-	// than assumed, because the block's whole argument for naming one ("it runs
-	// before the config exists") is a behavior worth replaying as written.
+	// STEPS 2 AND 3 — the config proposal and the skills export. WHICH COMES
+	// FIRST IS THE DOCUMENT'S CALL, AND THE REPLAY TAKES THE DOCUMENT'S ORDER
+	// rather than asserting one here: the replay executes whichever of the two
+	// each step gives, and TestPasteBlockExportRunsRootedAndTeachesTheHarness
+	// judges the result by its terminal state — a rootless export exits 0
+	// either way, so the ORDER is only visible in what it leaves behind. (The
+	// block used to export at step 2, before step 3 had written the config; the
+	// old replay hardcoded that order, so the swap that fixed it was invisible
+	// to this suite until the postcondition test below existed.)
+	//
+	// The export's directory is read from the block rather than assumed —
+	// naming one explicitly is the block's own instruction (the harness, not
+	// DossierX, decides where skills are read from). The proposal step has the
+	// agent PROPOSE and WAIT; the test plays both parties: the proposal is a
+	// minimal valid project, and the human said yes.
 	exportRE := regexp.MustCompile("`dossierx skills export ([^`\\s]+)`")
-	m := exportRE.FindStringSubmatch(pasteBlockStep(t, block, 2))
-	if m == nil {
-		t.Fatal("step 2 of the paste block no longer names a `dossierx skills export <dir>` command; the replay cannot follow it")
+	sawExport, sawConfig := false, false
+	for _, n := range []int{2, 3} {
+		step := pasteBlockStep(t, block, n)
+		switch {
+		case exportRE.MatchString(step):
+			dir := exportRE.FindStringSubmatch(step)[1]
+			if _, stderr, code := run(t, consumer, "skills", "export", dir); code != 0 {
+				t.Fatalf("step %d's `dossierx skills export %s` exited %d: %s", n, dir, code, stderr)
+			}
+			sawExport = true
+		case strings.Contains(step, "propose a title"):
+			writeFixtureProject(t, consumer, module)
+			sawConfig = true
+		default:
+			t.Fatalf("step %d of the paste block is neither the `dossierx skills export <dir>` command nor the \"propose a title\" config step; the replay cannot follow it:\n%s", n, step)
+		}
 	}
-	if _, stderr, code := run(t, consumer, "skills", "export", m[1]); code != 0 {
-		t.Fatalf("step 2's `dossierx skills export %s` exited %d in a repo with no project yet: %s", m[1], code, stderr)
+	if !sawExport || !sawConfig {
+		t.Fatalf("the paste block's steps 2 and 3 no longer carry one skills export and one config proposal between them (export=%v, config=%v); the replay has lost one of the two actions the rest of the transcript depends on", sawExport, sawConfig)
 	}
-
-	// STEP 3 — the block has the agent PROPOSE a config and WAIT for the human.
-	// The test plays both parties: the proposal is a minimal valid project, and
-	// the human said yes.
-	writeFixtureProject(t, consumer, module)
 
 	// STEP 4 — the decision point. The two branches are located by their own
 	// phrasing; losing either one means the decision point this suite exists to
@@ -359,25 +397,27 @@ func requireCIPostconditionStated(t *testing.T) {
 }
 
 // assertCIWorkflowArrived is the terminal postcondition for BOTH answers to
-// step 4, and the sentence that makes it the requirement is the paste block's
-// own: "CI is the authority either way." README's "Where the gate runs" section
-// says the same thing at length — git never runs pre-commit for a clean merge,
-// a rebase, a cherry-pick or a revert, `--no-verify` is one keystroke away —
-// and concludes: "If you adopt only one of the two, adopt this one." A
-// transcript that ends without the CI workflow has therefore ended without the
-// one gate README says a consumer must not be without, whatever they answered
-// about the hook.
-func assertCIWorkflowArrived(t *testing.T, consumer, answered string) {
+// the hook question, in BOTH documents that pose it (README's paste block and
+// the router skill's bootstrap — the same procedure given twice, which is why
+// doc names which transcript failed). The sentence that makes it the
+// requirement is each document's own: "CI is the authority either way."
+// README's "Where the gate runs" section says the same thing at length — git
+// never runs pre-commit for a clean merge, a rebase, a cherry-pick or a
+// revert, `--no-verify` is one keystroke away — and concludes: "If you adopt
+// only one of the two, adopt this one." A transcript that ends without the CI
+// workflow has therefore ended without the one gate the documents say a
+// consumer must not be without, whatever they answered about the hook.
+func assertCIWorkflowArrived(t *testing.T, consumer, doc, answered string) {
 	t.Helper()
 	dst := ciWorkflowDestination(t)
 	if _, err := os.Stat(filepath.Join(consumer, filepath.FromSlash(dst))); err != nil {
-		t.Errorf("the paste block's transcript ended with no CI workflow at %s after the human answered %q to the hook question.\n\n"+
-			"The block says \"CI is the authority either way\", and README's \"Where the gate runs\" section says of the CI "+
-			"workflow: \"If you adopt only one of the two, adopt this one.\" A consumer who takes this branch of step 4 ends "+
+		t.Errorf("%s's transcript ended with no CI workflow at %s after the human answered %q to the hook question.\n\n"+
+			"The document says \"CI is the authority either way\", and README's \"Where the gate runs\" section says of the CI "+
+			"workflow: \"If you adopt only one of the two, adopt this one.\" A consumer who takes this branch of the hook step ends "+
 			"setup with only the local, skippable gate — the exact configuration those sentences exist to warn against — and "+
-			"the sentence promising otherwise sits inside the branch they did not take. Fix the block so BOTH answers leave "+
+			"the sentence promising otherwise governs a branch they did not take. Fix the document so BOTH answers leave "+
 			"the workflow installed; the hook question should decide whether the hook is added, never whether CI is.",
-			dst, answered)
+			doc, dst, answered)
 	}
 }
 
@@ -396,7 +436,7 @@ func TestPasteBlockYesToHookStillEndsWithCI(t *testing.T) {
 	if !hookInstalled(t, consumer) {
 		t.Fatal("the yes branch ran to completion and the pre-commit hook is not installed; the replay of `sh install-git-hook.sh --yes` did not do what the block says it does, so nothing below this can be trusted")
 	}
-	assertCIWorkflowArrived(t, consumer, "yes")
+	assertCIWorkflowArrived(t, consumer, "README's paste block", "yes")
 }
 
 // TestPasteBlockNoToHookEndsWithCI replays the declining transcript, which is
@@ -414,7 +454,57 @@ func TestPasteBlockNoToHookEndsWithCI(t *testing.T) {
 	if hookInstalled(t, consumer) {
 		t.Error("the human answered no to the hook question and the transcript installed the pre-commit hook anyway")
 	}
-	assertCIWorkflowArrived(t, consumer, "no")
+	assertCIWorkflowArrived(t, consumer, "README's paste block", "no")
+}
+
+// requireRootedExportPostconditionStated fails the suite fatally if README no
+// longer states the requirement the rooted-export test enforces. Same
+// discipline as requireCIPostconditionStated: the postcondition is README's
+// own, stated in the paste block's step ordering rationale ("only a rooted
+// export maintains its section in an `AGENTS.md` that already exists") and in
+// the three-forms table ("an existing `AGENTS.md` only — never created"). If
+// both statements vanish, the test below would be enforcing a sentence nobody
+// wrote.
+func requireRootedExportPostconditionStated(t *testing.T) {
+	t.Helper()
+	readme := readRepoFile(t, "README.md")
+	const inBlock = "only a rooted export maintains its section"
+	const inTable = "an existing `AGENTS.md` only — never created"
+	if !strings.Contains(readme, inBlock) && !strings.Contains(readme, inTable) {
+		t.Fatalf("README no longer states what a rooted export produces (%q / %q are both gone), so the postcondition this replay asserts has lost its written source; re-derive the requirement before trusting the result", inBlock, inTable)
+	}
+}
+
+// TestPasteBlockExportRunsRootedAndTeachesTheHarness replays the whole paste
+// block and asserts the terminal state the export's ORDER is responsible for.
+// The export resolves its project root from `project.config.yaml`; run before
+// the config exists it exits 0 all the same, maintains no section in the
+// repository's existing AGENTS.md, drops `dossierx-agent-guide.md` beside the
+// bundles instead of at docs/, and nothing later in the block exports again —
+// so a harness that reads AGENTS.md is never taught DossierX at all, silently.
+// The replay follows whatever order the document gives (see replayPasteBlock),
+// which is what lets this test judge the order by its consequences: with the
+// export ordered before the config, both assertions below go red; ordered
+// after, both hold. tests/procedures/bootstrap_test.go pins the same
+// postconditions for the router skill's bootstrap — the same procedure's other
+// home — and this test exists because that one covered only that home while
+// README's block still carried the defective order.
+func TestPasteBlockExportRunsRootedAndTeachesTheHarness(t *testing.T) {
+	requireRootedExportPostconditionStated(t)
+	consumer := replayPasteBlock(t, "pasteroot", false)
+
+	after, err := os.ReadFile(filepath.Join(consumer, "AGENTS.md"))
+	if err != nil {
+		t.Fatalf("read the fixture repo's AGENTS.md after the transcript: %v", err)
+	}
+	if string(after) == preexistingAgentsMD {
+		t.Errorf("after the whole paste-block transcript, the pre-existing AGENTS.md is byte-for-byte untouched: the export ran with no project root to find (or never ran), wrote no section, and nothing in the block exports again. A harness that reads AGENTS.md is never taught DossierX — order the export AFTER the step that writes project.config.yaml")
+	}
+
+	guide := filepath.Join(consumer, "docs", "dossierx-agent-guide.md")
+	if _, err := os.Stat(guide); err != nil {
+		t.Errorf("after the whole paste-block transcript, docs/dossierx-agent-guide.md does not exist under the project root (%v): a rootless export drops the guide beside the skill bundles instead, where nothing documented ever looks for it — order the export AFTER the step that writes project.config.yaml", err)
+	}
 }
 
 // ---------------------------------------------------------------------------

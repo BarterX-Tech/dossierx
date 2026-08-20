@@ -112,8 +112,19 @@ failure on purpose: the next undeclared surface should cost a compile, not an au
 golangci-lint run
 ```
 
-CI runs this with the pinned version in `.github/workflows/ci.yml`; install the same version
-locally to avoid surprises.
+CI runs this with the version pinned in `.github/workflows/ci.yml`. Install that same version,
+and install it **from source with your own toolchain**:
+
+```sh
+go install github.com/golangci/golangci-lint/cmd/golangci-lint@<the pinned version>
+```
+
+Not the prebuilt release binary the upstream site documents. Upstream compiles those at release
+time with whatever Go was current then — the pinned version's binary was built with go1.24, older
+than this module's `go.mod` floor — and golangci-lint refuses to run against a module declaring a
+newer Go than the one it was built with. You would get a refusal instead of a lint run, and find
+out on CI. `go install` builds it with the toolchain you already have, which sidesteps that
+entirely; it is the same thing CI does (`install-mode: goinstall`), for the same reason.
 
 ## Running the CLI locally
 

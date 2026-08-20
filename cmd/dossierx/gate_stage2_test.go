@@ -1088,6 +1088,44 @@ func gateStage2Lines(s string) []string {
 	return strings.Split(s, "\n")
 }
 
+// gateStage2GitCommit commits the given inventory as surface.json in root's
+// repository — initializing the repository on first use — and returns the
+// commit's full object name.
+//
+// The fixtures need real history because the producer reads the baseline
+// inventory OUT OF the baseline commit (`git show <commit>:surface.json`)
+// rather than taking a file argument; a synthetic forty-hex string can be
+// refused but never resolved. The identities and dates are pinned so that two
+// fixtures built from the same bytes agree about the commit sha: the purity
+// row in TestGateStage2DeltaProducerResolvesOrFails compares two checkouts'
+// deltas byte for byte, and the baseline commit is embedded in the document.
+func gateStage2GitCommit(t *testing.T, root, inventory string) string {
+	t.Helper()
+	gateWrite(t, root, gateSurfaceInventoryFile, inventory)
+	git := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=gate", "GIT_AUTHOR_EMAIL=gate@dossierx.invalid",
+			"GIT_COMMITTER_NAME=gate", "GIT_COMMITTER_EMAIL=gate@dossierx.invalid",
+			"GIT_AUTHOR_DATE=2026-01-01T00:00:00Z", "GIT_COMMITTER_DATE=2026-01-01T00:00:00Z",
+			"GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
+		git("init", "-q")
+	}
+	git("add", "--", gateSurfaceInventoryFile)
+	git("-c", "commit.gpgsign=false", "commit", "-q", "--no-verify", "-m", "inventory")
+	return git("rev-parse", "HEAD")
+}
+
 // gateStage2Overlay builds a working root that IS the real repository for every
 // tracked document, and holds this run's per-run evidence in a directory of its
 // own.
@@ -2874,24 +2912,40 @@ func TestGateStage2ATreeMoveAloneCarriesEverySurfaceForward(t *testing.T) {
 // Before it existed, gate/delta.json was a named component of all thirteen keys
 // that nothing in the repository wrote — so the freshness half of the invariant
 // could only ever be demonstrated against a stub of the lane's own invention.
+//
+// THE BASELINE IS DERIVED, NEVER HANDED IN. `delta` used to take
+// --baseline-file, and the flag was a defect these rows now hold shut:
+// docs/RELEASING.md's staging block hard-coded it to the committed v0.5.0
+// bootstrap, which was the right file for exactly one release — the v0.6.0
+// gate run computed its delta against v0.5.0's frozen inventory while
+// recording baseline ref v0.5.1, and thirteen reading agents were handed a
+// comparison spanning two releases as the truth about what that release
+// changed. The producer now reads the inventory out of the baseline commit
+// itself (resolve_baseline_inventory, mirroring gateBaselineFor's rule), so
+// these fixtures are real repositories whose history holds the baseline.
 func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
-	commit := strings.Repeat("b", 40)
 	tree := gateStage2FixtureTree
 
-	fixture := func(t *testing.T) string {
+	const (
+		inventory28 = "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n"
+		inventory29 = "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 29\n  }\n}\n"
+	)
+
+	// fixture is a checkout whose single commit carries inventory28 as
+	// surface.json — the previous release — and whose working tree still holds
+	// the same bytes, so the true delta is empty until a row moves one of them.
+	fixture := func(t *testing.T) (root, commit string) {
 		t.Helper()
-		root := t.TempDir()
+		root = t.TempDir()
 		gateWrite(t, root, gateManifestFile, "surfaces:\n  - name: readme\n    paths: [README.md]\n")
-		gateWrite(t, root, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n")
-		gateWrite(t, root, "baseline-source.json", "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n")
-		return root
+		commit = gateStage2GitCommit(t, root, inventory28)
+		return root, commit
 	}
 
 	t.Run("an unchanged tree produces an EMPTY delta against a resolved baseline", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer refused an unchanged tree: %v", err)
 		}
 		delta, err := gateStage2ReadDelta(root)
@@ -2905,9 +2959,14 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 			t.Errorf("the delta records baseline %q, want %q", delta.Baseline.Commit, commit)
 		}
 		// The baseline's BYTES are written out, because a projection never
-		// stands in for its source inside the key.
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gateBaselineFile))); err != nil {
-			t.Errorf("the producer did not write the resolved baseline's bytes: %v", err)
+		// stands in for its source inside the key — and they are the COMMIT's
+		// bytes, which is the whole point of deriving them.
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateBaselineFile)))
+		if err != nil {
+			t.Fatalf("the producer did not write the resolved baseline's bytes: %v", err)
+		}
+		if string(raw) != inventory28 {
+			t.Errorf("%s does not hold the baseline commit's own inventory:\n%s", gateBaselineFile, raw)
 		}
 	})
 
@@ -2918,10 +2977,9 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	// once fired. The stamp's freshness job moved to recomputation in `record`;
 	// this row is what goes red if anyone puts a per-commit value back.
 	t.Run("the delta carries no tree stamp, and no other per-commit value", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
 		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateDeltaFile)))
@@ -2936,14 +2994,16 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 		}
 		// And the whole document is a pure function of its inputs: producing it
 		// twice yields identical bytes, which is what lets an unchanged pair of
-		// inventories carry every surface's key across a tree move.
-		again := t.TempDir()
-		gateWrite(t, again, gateManifestFile, "surfaces:\n  - name: readme\n    paths: [README.md]\n")
-		gateWrite(t, again, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n")
-		gateWrite(t, again, "baseline-source.json", "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 28\n  }\n}\n")
+		// inventories carry every surface's key across a tree move. The two
+		// fixtures agree about the baseline commit because gateStage2GitCommit
+		// pins the identities and dates the sha is a function of; if this
+		// fatals, that determinism broke before anything about the delta did.
+		again, againCommit := fixture(t)
+		if againCommit != commit {
+			t.Fatalf("two fixtures built from the same bytes disagree about the baseline commit (%s vs %s); gateStage2GitCommit's pinned identities and dates are no longer pinning the sha", commit, againCommit)
+		}
 		if _, err := gateStage2Harness(t, "delta", "--root", again,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(again, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", againCommit); err != nil {
 			t.Fatalf("the producer failed on the second checkout: %v", err)
 		}
 		other, err := os.ReadFile(filepath.Join(again, filepath.FromSlash(gateDeltaFile)))
@@ -2957,11 +3017,10 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	})
 
 	t.Run("a moved inventory names the field that moved", func(t *testing.T) {
-		root := fixture(t)
-		gateWrite(t, root, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 29\n  }\n}\n")
+		root, commit := fixture(t)
+		gateWrite(t, root, gateSurfaceInventoryFile, inventory29)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
 		delta, err := gateStage2ReadDelta(root)
@@ -2996,10 +3055,9 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 			name = "(empty)"
 		}
 		t.Run("delta refuses baseline "+name, func(t *testing.T) {
-			root := fixture(t)
+			root, _ := fixture(t)
 			if _, err := gateStage2Harness(t, "delta", "--root", root,
-				"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-				"--baseline-file", filepath.Join(root, "baseline-source.json")); err == nil {
+				"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err == nil {
 				t.Fatal("the producer accepted a baseline it had not resolved; an unresolvable baseline is a FAILED run, never an empty delta")
 			}
 			for _, rel := range []string{gateDeltaFile, gateBaselineFile} {
@@ -3010,7 +3068,7 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 		})
 
 		t.Run("record refuses baseline "+name, func(t *testing.T) {
-			root := fixture(t)
+			root, _ := fixture(t)
 			gateWrite(t, root, gateSiteTextFile, "{\"/\":\"DossierX\"}\n")
 			if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
 				"--baseline-ref", "v0.5.0", "--baseline-commit", commit, gateSiteTextFile); err == nil {
@@ -3026,10 +3084,9 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	// a summary and gate/baseline.json is a file, and nothing says they are
 	// about each other.
 	t.Run("the delta records the digest of the baseline it read", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
 		delta, err := gateStage2ReadDelta(root)
@@ -3055,17 +3112,16 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	// says so the less of the run is wasted. The reading side
 	// (gateStage2CheckDeltaCovers) re-derives the same answer field by field.
 	t.Run("record refuses a delta the inventory has moved out from under", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
 		// The fix lands: surface.json moves, and the delta is not recomputed.
 		// Every digest `record` is about to take is honest about the bytes on
 		// disk; the only thing wrong is that the comparison those bytes hold
 		// was made against an inventory this checkout no longer has.
-		gateWrite(t, root, gateSurfaceInventoryFile, "{\n  \"commands\": [\n    \"claim new\"\n  ],\n  \"counts\": {\n    \"lint_rules\": 29\n  }\n}\n")
+		gateWrite(t, root, gateSurfaceInventoryFile, inventory29)
 		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			gateBaselineFile, gateDeltaFile); err == nil {
@@ -3079,8 +3135,7 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 		// otherwise the row above would pass on a `record` that refuses
 		// everything.
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("re-running the producer failed: %v", err)
 		}
 		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
@@ -3096,10 +3151,9 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	// key forward, and it is the row that would have failed for every release
 	// under the stamped design — `record` used to refuse this exact state.
 	t.Run("record accepts an earlier delta when the inventories have not moved", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
 		// The docs-only fix: the tree moves, neither inventory does.
@@ -3116,33 +3170,159 @@ func TestGateStage2DeltaProducerResolvesOrFails(t *testing.T) {
 	})
 
 	t.Run("record refuses a delta computed against another baseline", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "delta", "--root", root,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "baseline-source.json")); err != nil {
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit); err != nil {
 			t.Fatalf("the producer failed: %v", err)
 		}
+		// The other baseline is a REAL later release — a second commit whose
+		// inventory differs — so this row reaches the byte comparisons rather
+		// than the could-not-resolve refusal an unheld commit earns.
+		other := gateStage2GitCommit(t, root, inventory29)
 		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
-			"--baseline-ref", "v0.5.0", "--baseline-commit", strings.Repeat("e", 40),
+			"--baseline-ref", "v0.5.1", "--baseline-commit", other,
 			gateBaselineFile, gateDeltaFile); err == nil {
 			t.Fatal("a delta computed against one baseline was recorded under a run that resolved another")
 		}
 	})
 
-	t.Run("a baseline document that cannot be read is a FAILED run", func(t *testing.T) {
-		root := fixture(t)
-		if _, err := gateStage2Harness(t, "delta", "--root", root,
+	// THE STATE THE v0.6.0 GATE RUN WAS ACTUALLY IN, refused at the point it is
+	// created. gate/baseline.json holds an OLDER release's inventory, and
+	// gate/delta.json was honestly computed OVER those stale bytes under the
+	// newer release's name — so the pair agrees with itself perfectly: every
+	// digest is true and the delta recomputation byte-agrees, which is exactly
+	// why the old guard waved it through and thirteen agents read a comparison
+	// spanning two releases as the truth about one. Only re-resolving the
+	// baseline from the named commit itself can see it.
+	t.Run("record refuses a stale baseline even when the delta agrees with it", func(t *testing.T) {
+		root, commit := fixture(t)
+		// The two-release-old inventory, and a delta whose every claim about it
+		// is honest: right digest, right changed list, the run's own ref and
+		// commit. This is what `delta --baseline-file <bootstrap>` used to
+		// produce when the flag's hard-coded file had gone stale.
+		gateWrite(t, root, gateBaselineFile, inventory29)
+		staleDigest, err := gateStage2FileDigest(root, gateBaselineFile)
+		if err != nil {
+			t.Fatalf("digest the stale baseline: %v", err)
+		}
+		gateWrite(t, root, gateDeltaFile, fmt.Sprintf(
+			"{\n  \"baseline\": {\"ref\": %q, \"commit\": %q, \"sha256\": %q},\n  \"changed\": [\"counts\"]\n}\n",
+			"v0.5.0", commit, staleDigest))
+		out, code := gateFanoutRunHarness(t, "", "record", "--root", root, "--tree", tree,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
-			"--baseline-file", filepath.Join(root, "there-is-no-such-file.json")); err == nil {
-			t.Fatal("the producer accepted a baseline document it could not read")
+			gateBaselineFile, gateDeltaFile)
+		if code == 0 {
+			t.Fatalf("a baseline that is not the named commit's inventory was recorded, with a delta honestly computed over it; every surface key now carries a past this release was never compared against:\n%s", out)
+		}
+		if code != 3 {
+			t.Errorf("record exited %d, want 3 — the baseline-could-not-be-attributed refusal:\n%s", code, out)
+		}
+		if !strings.Contains(out, "is not the inventory that baseline") {
+			t.Errorf("the refusal does not say the baseline's bytes are not the named commit's:\n%s", out)
+		}
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gateStage2RunFile))); err == nil {
+			t.Error("a run manifest was written anyway")
+		}
+	})
+
+	t.Run("the retired --baseline-file flag is refused by name", func(t *testing.T) {
+		root, commit := fixture(t)
+		gateWrite(t, root, "baseline-source.json", inventory28)
+		out, code := gateFanoutRunHarness(t, "", "delta", "--root", root,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
+			"--baseline-file", filepath.Join(root, "baseline-source.json"))
+		if code == 0 {
+			t.Fatal("the producer accepted --baseline-file; a file argument is a second answer to a question git already holds the answer to, and hard-coded in a procedure it computed one release's delta against an inventory two releases old")
+		}
+		if !strings.Contains(out, "--baseline-file is retired") {
+			t.Errorf("the refusal does not name the retired flag; an operator following an older docs/RELEASING.md is left with a bare usage error and no idea the baseline is now derived:\n%s", out)
+		}
+		for _, rel := range []string{gateDeltaFile, gateBaselineFile} {
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+				t.Errorf("%s was written under a refused invocation", rel)
+			}
+		}
+	})
+
+	// The two arms of resolve_baseline_inventory that are not the happy path,
+	// against the same rule gateBaselineFor pins on the Go side: the bootstrap
+	// is chosen because the commit IS the frozen release's, and a failure to
+	// read substitutes NOTHING.
+	t.Run("the frozen commit resolves to the committed bootstrap, by identity", func(t *testing.T) {
+		root, _ := fixture(t)
+		// The bootstrap's bytes differ from the working inventory so the delta
+		// has something true to say about the distance.
+		gateWrite(t, root, gateBaselineBootstrapFile, inventory29)
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", gateBaselineCommit); err != nil {
+			t.Fatalf("the producer refused the frozen release: %v\nIts inventory is the committed %s and nothing else can serve — that release carries no surface.json of its own", err, gateBaselineBootstrapFile)
+		}
+		raw, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(gateBaselineFile)))
+		if err != nil {
+			t.Fatalf("read the resolved baseline: %v", err)
+		}
+		if string(raw) != inventory29 {
+			t.Errorf("the frozen release resolved to something other than the committed bootstrap:\n%s", raw)
+		}
+		delta, err := gateStage2ReadDelta(root)
+		if err != nil {
+			t.Fatalf("read the produced delta: %v", err)
+		}
+		if !gateEqualStrings(*delta.Changed, []string{"counts"}) {
+			t.Errorf("the delta over the bootstrap reports %v changed, want [counts]", *delta.Changed)
+		}
+		// And the shell's copy of the identity is the Go side's, byte for byte
+		// — gateBaselineCommit is pinned to the tag by
+		// TestGateBaselineTagStillNamesTheFrozenCommit, and this is what keeps
+		// the harness's copy from drifting away from that pin.
+		script, err := os.ReadFile(filepath.Join(surfaceRepoRoot(t), filepath.FromSlash(gateStage2HarnessFile)))
+		if err != nil {
+			t.Fatalf("read the harness: %v", err)
+		}
+		if !strings.Contains(string(script), gateBaselineCommit) {
+			t.Errorf("%s does not name the frozen commit %s; its bootstrap arm is keyed to some other identity than gateBaselineFor's", gateStage2HarnessFile, gateBaselineCommit)
+		}
+	})
+
+	t.Run("the frozen commit with no bootstrap on disk is a FAILED run", func(t *testing.T) {
+		root, _ := fixture(t)
+		if _, err := gateStage2Harness(t, "delta", "--root", root,
+			"--baseline-ref", "v0.5.0", "--baseline-commit", gateBaselineCommit); err == nil {
+			t.Fatal("the producer resolved the frozen release with no bootstrap to read; there is no second way to get that inventory, and a run in this state has no past to diff against")
 		}
 		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(gateDeltaFile))); err == nil {
 			t.Error("a delta was written with no baseline document to compare against")
 		}
 	})
 
+	// FAILURE SCENARIO 2, AT THE PRODUCER. A commit this clone does not hold
+	// fails `git show` character for character the way a pre-emitter release
+	// does, and the committed bootstrap sits right there — the bait. An arm
+	// keyed on the failure would hand thirteen agents a two-release delta,
+	// full, plausible and wrong; the arm keyed on identity refuses.
+	t.Run("a commit this clone does not hold is a refusal, never the bootstrap", func(t *testing.T) {
+		root, _ := fixture(t)
+		gateWrite(t, root, gateBaselineBootstrapFile, inventory29)
+		out, code := gateFanoutRunHarness(t, "", "delta", "--root", root,
+			"--baseline-ref", "v0.6.0", "--baseline-commit", strings.Repeat("b", 40))
+		if code == 0 {
+			t.Fatal("the producer resolved a commit this clone has never fetched")
+		}
+		if code != 3 {
+			t.Errorf("the producer exited %d, want 3 — an unresolvable baseline is a FAILED run, never an empty delta:\n%s", code, out)
+		}
+		if !strings.Contains(out, "NOT a fallback") {
+			t.Errorf("the refusal does not warn against the bootstrap substitution, which is the exact move a shallow clone invites here:\n%s", out)
+		}
+		for _, rel := range []string{gateDeltaFile, gateBaselineFile} {
+			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err == nil {
+				t.Errorf("%s was written for a baseline that could not be read; downstream it is indistinguishable from a clean comparison", rel)
+			}
+		}
+	})
+
 	t.Run("the run manifest refuses to record an artifact that is not there", func(t *testing.T) {
-		root := fixture(t)
+		root, commit := fixture(t)
 		if _, err := gateStage2Harness(t, "record", "--root", root, "--tree", tree,
 			"--baseline-ref", "v0.5.0", "--baseline-commit", commit,
 			"gate/delta.json"); err == nil {

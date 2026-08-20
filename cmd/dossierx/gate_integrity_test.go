@@ -25,8 +25,12 @@
 // re-read: the previous verdicts were produced under rules that no longer
 // exist, and a verdict is a function of the rules as much as of the evidence.
 //
-// WHAT IS IN THE SET, and where the boundary is. Four patterns, resolved
-// against `git ls-files` (the tracked set every caller already carries):
+// WHAT IS IN THE SET, and where the boundary is. The patterns below, resolved
+// against `git ls-files` (the tracked set every caller already carries). They
+// are not counted here: the list is directly underneath, a count would be a
+// second answer to a question the list already answers, and this file has
+// already been wrong about it once — scripts/gate-agent/ joined the set and the
+// number did not move.
 //
 //	cmd/dossierx/gate_*_test.go   — the gate's implementation: the fingerprint,
 //	                                the verdict predicate, carry-forward, the
@@ -49,6 +53,15 @@
 //	                                borrow re-keys one surface; an edit to the
 //	                                harness changes the machinery every verdict
 //	                                rests on, so it must re-key all of them.
+//	scripts/gate-agent/           — the runner that WITHHOLDS every tool outside
+//	                                the grant. gate-stage2 asks for the grant;
+//	                                this is what makes the asking true, and it
+//	                                is where the property every key rests on is
+//	                                either enforced or quietly lost. Measured on
+//	                                the machine that built it: a runner that
+//	                                merely pre-approves the two report-only tools
+//	                                let Read execute, undenied, returning a
+//	                                canary the bundle never held.
 //	surfaces.yaml                 — the inventory of what the gate covers.
 //	                                Most edits to it already move keys through
 //	                                the document resolution, but not all:
@@ -140,6 +153,28 @@ var gateIntegrityPatterns = []string{
 	"cmd/dossierx/gate_*_test.go",
 	"cmd/dossierx/surface*_test.go",
 	"scripts/gate-stage2/",
+	// scripts/gate-agent/ is the runner that makes "the assembled bundle is the
+	// agent's whole evidence set" TRUE rather than hoped for, and it is
+	// therefore the file whose weakening costs the most and shows the least. It
+	// was outside this digest for exactly as long as it existed, because it was
+	// written after this list was, which is the failure mode the paragraph above
+	// names: the file that joins is the file nobody remembers to add.
+	//
+	// WHAT IT WOULD HAVE COST. The runner reaches the fence through three
+	// lockdown flags. Strip `--tools ""` from it and every built-in tool returns
+	// — measured, on this machine: under a grant that merely PRE-APPROVES the
+	// two report-only tools, Read executed with no permission denial and handed
+	// back a canary the bundle never contained. That is the v0.5.2 defect, whose
+	// two adjudicated rounds are indistinguishable from honest ones. Before this
+	// entry, that edit moved no surface key: every verdict would have carried
+	// forward, and thirteen agents would have read under a leaky grant with
+	// nothing in the system noticing.
+	//
+	// The runner's own per-invocation self-check is the other half and neither
+	// replaces the other: the self-check proves the grant HELD on the run that
+	// just happened, and this digest makes CHANGING what the grant is cost a
+	// full re-read under the changed rules.
+	"scripts/gate-agent/",
 	"surfaces.yaml",
 }
 
@@ -221,10 +256,12 @@ func gateIntegrityStandIns(t *testing.T, root string) []string {
 	gateWrite(t, root, "cmd/dossierx/gate_rules_test.go", "package main\n\n// a stand-in for the gate's own rules\n")
 	gateWrite(t, root, "cmd/dossierx/surface_test.go", "package main\n\n// a stand-in for the inventory emitter\n")
 	gateWrite(t, root, "scripts/gate-stage2/run.sh", "#!/usr/bin/env bash\n# a stand-in for the harness\n")
+	gateWrite(t, root, "scripts/gate-agent/run.sh", "#!/usr/bin/env bash\n# a stand-in for the runner that withholds every ungranted tool\n")
 	return []string{
 		"cmd/dossierx/gate_rules_test.go",
 		"cmd/dossierx/surface_test.go",
 		"scripts/gate-stage2/run.sh",
+		"scripts/gate-agent/run.sh",
 		gateManifestFile,
 	}
 }
@@ -356,8 +393,8 @@ func TestGateIntegrityEditingTheGateMovesEverySurfaceKey(t *testing.T) {
 		{
 			"the verdict predicate is weakened (gate_receipt_test.go, evaluate)",
 			"cmd/dossierx/gate_receipt_test.go",
-			"if err := gateIsGreen(declared, r.Surfaces, current); err != nil {",
-			"if err := gateIsGreen(declared, r.Surfaces, current); err != nil && false {",
+			"if err := gateIsGreen(declared, surfaces, current); err != nil {",
+			"if err := gateIsGreen(declared, surfaces, current); err != nil && false {",
 		},
 		// Carry-forward stops comparing fingerprints: any previous verdict is
 		// reused whatever the tree now says.
@@ -601,6 +638,12 @@ func TestGateIntegrityCoversEveryTrackedGateFile(t *testing.T) {
 			return true
 		case strings.HasPrefix(file, "scripts/gate-stage2/"):
 			return true
+		case strings.HasPrefix(file, "scripts/gate-agent/"):
+			// The runner that withholds every tool outside the grant. Spelled
+			// here as its own case, in this function's own words, because that
+			// is what makes this list a SECOND authority: if it read the
+			// patterns it is checking, a widened pattern would certify itself.
+			return true
 		case file == "surfaces.yaml":
 			return true
 		}
@@ -639,6 +682,12 @@ func TestGateIntegrityCoversEveryTrackedGateFile(t *testing.T) {
 		"cmd/dossierx/surface_test.go",
 		"cmd/dossierx/surface_meta_test.go",
 		"scripts/gate-stage2/run.sh",
+		// The two halves of the runner. Named, not left to the pattern, because
+		// these are the files that decide whether the agents can reach a byte
+		// the assembler did not hand them — the property every key in this
+		// system is a digest over.
+		"scripts/gate-agent/run.sh",
+		"scripts/gate-agent/mcp_server.py",
 		"surfaces.yaml",
 	} {
 		if !inSet[want] {

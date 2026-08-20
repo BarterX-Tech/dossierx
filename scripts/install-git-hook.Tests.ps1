@@ -23,11 +23,13 @@
 # this suite goes green while the guard misses it — the guard is keyed to the
 # directory, because the directory is the only stable, testable handle.
 #
-# The end-to-end block at the bottom is the complementary half: it executes
-# the wrapper AS A SCRIPT, for real, against a throwaway repository, so the
-# main body (path resolution, argument pass-through, exit-code propagation) is
-# run by a machine and not only read by one. It needs a real git and a real
-# bash, both of which every runner in the hooks matrix has.
+# The end-to-end blocks at the bottom are the complementary half: they execute
+# the wrapper AS A SCRIPT, for real, so the main body (path resolution,
+# argument pass-through, exit-code propagation, the no-bash remedy) is run by
+# a machine and not only read by one. The install block needs a real git and a
+# real bash, both of which every runner in the hooks matrix has; the no-bash
+# block needs the opposite and manufactures it, by starting a child process
+# whose environment can find neither.
 #
 # Pester v5 syntax; Pester ships preinstalled on windows-latest.
 
@@ -211,5 +213,125 @@ Describe 'install-git-hook.ps1 executed as a script' {
             $LASTEXITCODE | Should -Be 1
         }
         finally { Pop-Location }
+    }
+}
+
+Describe 'the no-bash remedy' {
+    # The finding this pins (wsl-remedy-names-a-windows-path): the message
+    # whose first sentence explains that WSL's bash cannot open a C:\ path
+    # used to end by offering `bash "C:\...\install-git-hook.sh" --yes` — the
+    # resolved WINDOWS path, i.e. the exact command that sentence rules out.
+    # The remedy must translate the path where it is used, with wslpath inside
+    # the WSL invocation, because only the distro knows its own mounts.
+    #
+    # This is a real execution of the wrapper's no-bash branch, not a mock:
+    # the child process is handed a PATH that resolves neither bash nor git
+    # and Program Files roots pointing at an empty directory, so Find-Bash
+    # returns $null for real and the branch that prints the remedy runs.
+    # What this CANNOT prove is that the printed line succeeds inside an
+    # actual WSL distro — GitHub-hosted Windows runners cannot run one (the
+    # header above says why), and the wrapper's own message states the same
+    # limit (a drive the distro does not mount). What it proves is the shape:
+    # the line bash is handed is a wslpath translation carrying the real
+    # resolved installer path, and never the bare Windows spelling the
+    # message itself rules out.
+    It 'hands WSL a wslpath translation, not the Windows spelling of the path' {
+        # The running PowerShell, by absolute path, so the child starts even
+        # though the PATH it inherits resolves nothing.
+        $pwshExe = (Get-Process -Id $PID).Path
+        $empty = Join-Path ([System.IO.Path]::GetTempPath()) ("dossierx-nobash-" + [guid]::NewGuid().ToString('n'))
+        New-Item -ItemType Directory -Path $empty | Out-Null
+        $saved = @{
+            PATH                = $env:PATH
+            ProgramFiles        = $env:ProgramFiles
+            'ProgramFiles(x86)' = ${env:ProgramFiles(x86)}
+            LOCALAPPDATA        = $env:LOCALAPPDATA
+        }
+        try {
+            # Every location Find-Bash consults, emptied: PATH for the
+            # Get-Command lookups (bash AND git, so the exec-path branch is
+            # skipped too), the three install roots for the candidate list.
+            $env:PATH = $empty
+            $env:ProgramFiles = $empty
+            ${env:ProgramFiles(x86)} = $empty
+            $env:LOCALAPPDATA = $empty
+            # ASSERT THE PRECONDITION BEFORE TRUSTING THE RUN. Find-Bash is
+            # dot-sourced in BeforeAll, so it can be asked, in this very
+            # environment, whether it still finds a bash. The first CI run of
+            # this test failed as `Expected 1, but got 0` — the wrapper
+            # installed instead of refusing — and that message says only that
+            # the branch under test never ran, not WHY. A test that cannot
+            # build its own condition must say what it found, or the next
+            # reader is left guessing at a runner they cannot see.
+            # ASK THE CHILD, NOT ONLY THIS PROCESS. The parent's answer and the
+            # child's disagreed once already: Find-Bash returned $null here
+            # while a child started from the same environment installed
+            # successfully. Whatever a fresh pwsh reaches that this runspace
+            # does not is the thing this test has to blank, so the probe runs
+            # in a child of the same shape as the one under test.
+            # THE CHILD SETS ITS OWN ENVIRONMENT, because inheriting it does not
+            # work here. Measured on the runner: with all four names blanked in
+            # this process, a child still answered
+            # FOUND:C:\Program Files\Git\bin\bash.exe — the real Program Files,
+            # not the empty directory. Whatever restores it between processes,
+            # the fix is not to guess at the mechanism but to stop depending on
+            # it: the child is handed the blanking as code it runs itself.
+            $blank = "`$env:PATH='$empty'; `$env:ProgramFiles='$empty'; " +
+                "`${env:ProgramFiles(x86)}='$empty'; `$env:LOCALAPPDATA='$empty'; "
+            $probe = (& $pwshExe -NoProfile -Command (
+                $blank + ". '$script:wrapper'; `$b = Find-Bash; if (`$b) { 'FOUND:' + `$b } else { 'NULL' }"
+            ) 2>&1) -join "`n"
+            $stillFound = Find-Bash
+            if ($probe -notmatch 'NULL') {
+                throw ("the no-bash environment is not bash-free IN A CHILD, which is the process " +
+                    "shape under test. A child of this environment answered: " + $probe + "`n" +
+                    "PATH, ProgramFiles, ProgramFiles(x86) and LOCALAPPDATA were all pointed at an " +
+                    "empty directory, so that path names a location Find-Bash consults which this " +
+                    "test does not blank. Blank it here rather than deleting the assertion below: " +
+                    "a remedy nobody can reach is the finding this test pins.")
+            }
+            if ($stillFound) {
+                throw ("the no-bash environment is not bash-free: Find-Bash still returned '" +
+                    $stillFound + "'. PATH, ProgramFiles, ProgramFiles(x86) and LOCALAPPDATA were " +
+                    "all pointed at an empty directory, so this is a location Find-Bash consults " +
+                    "that this test does not blank. Blank it here rather than deleting the " +
+                    "assertion below: a remedy nobody can reach is the finding this test pins.")
+            }
+            $out = (& $pwshExe -NoProfile -Command (
+                $blank + "& '$script:wrapper' --yes"
+            ) 2>&1) -join "`n"
+            $exit = $LASTEXITCODE
+        }
+        finally {
+            $env:PATH = $saved.PATH
+            $env:ProgramFiles = $saved.ProgramFiles
+            ${env:ProgramFiles(x86)} = $saved.'ProgramFiles(x86)'
+            $env:LOCALAPPDATA = $saved.LOCALAPPDATA
+            Remove-Item -LiteralPath $empty -Recurse -Force
+        }
+
+        # No bash means no install: the branch under test is the failing one,
+        # and a 0 here would mean the child found a bash and this test proved
+        # nothing about the remedy — a pass over the wrong branch, not a pass.
+        #
+        # THE CHILD'S OUTPUT IS IN THE FAILURE, because the parent's Find-Bash
+        # already answered $null above and the child still installed: the two
+        # processes disagree about what is reachable, and only the child can
+        # say what it found. Without this the message is `Expected 1, but got
+        # 0` twice over, which names the symptom and hides the cause.
+        if ($exit -ne 1) {
+            throw ("the wrapper exited $exit, not 1, though Find-Bash answered `$null in this " +
+                "very environment moments earlier — so the child process reaches a bash the " +
+                "parent does not. What the child printed:`n" + $out)
+        }
+
+        # The remedy's bash argument is a command substitution over wslpath,
+        # carrying the same resolved installer path the wrapper computed...
+        $out | Should -Match ([regex]::Escape('bash "$(wslpath '''))
+        $out | Should -Match ([regex]::Escape("wslpath '$script:shInstaller'"))
+        # ...and nowhere does bash get a bare drive-letter path as its direct
+        # argument — the exact shape the finding's reader pasted into WSL and
+        # watched fail with "No such file or directory".
+        $out | Should -Not -Match 'bash\s+"[A-Za-z]:[\\/]'
     }
 }

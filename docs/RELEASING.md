@@ -2,13 +2,21 @@
 
 A `v*` tag no longer publishes anything on its own. `.github/workflows/release.yml`
 opens with a `gate` job that the publishing job `needs:`, so a tag that does not
-get past it produces no archives at all. The gate establishes two facts about the
-tagged **tree** rather than about whoever pushed: that the tagged commit is
-reachable from `origin/main`, and that the tree at that commit carries the release
-stamp for exactly this version — `site/src/content.ts`'s last `releases[]` entry
-names the tag being pushed. Every exit path that is not a pass is a refusal; there
-is deliberately no branch that reports "could not check" and exits 0. Only once
-that job passes does GoReleaser run, building the six platform archives, stamping
+get past it produces no archives at all. The gate establishes two facts about
+what was tagged rather than about whoever pushed: that the tagged commit **is a
+merge** — it has two or more parents, which refuses the ordinary mistake of
+tagging the release branch instead of the merge — and that the tree at that
+commit carries the release stamp for exactly this version —
+`site/src/content.ts`'s last `releases[]` entry names the tag being pushed. Every
+exit path that is not a pass is a refusal; there is deliberately no branch that
+reports "could not check" and exits 0. The gate used to establish something
+stronger — that the tagged commit is reachable from `origin/main` — and that
+check deadlocked against the driver's own order, which pushes the tag at D6 and
+`main` not until D8: v0.5.1 stalled with a public tag and no archives behind it.
+The full account is under *Tagging* below, along with the one case merge-ness
+deliberately does NOT refuse — a merge commit created locally and never pushed —
+so do not lean on the forge to catch that case; nothing does. Only once that job
+passes does GoReleaser run, building the six platform archives, stamping
 `main.version` / `main.commit` / `main.date` via ldflags, generating the GitHub
 release notes from Conventional Commit subjects, and publishing.
 
@@ -231,9 +239,10 @@ them, and the three post-publish checks that leave this repository entirely.
       difference is worth knowing rather than discovering: none of the six has a
       committed form (`gate/.gitignore` ignores every one), so whatever happens to
       be at those paths on the day of the run is what the agents read. `record`
-      can hold three of the six to account — the delta by recomputing it, the
+      can hold four of the six to account — the resolved baseline by deriving
+      the named commit's inventory again, the delta by recomputing it, the
       two stamped captures by reading the tree each names on its own face — and
-      the other three it can only digest, so a hand-written
+      the other two it can only digest, so a hand-written
       `gate/export-output.json` is recorded exactly as cleanly as a real one.
       Produce them:
 
@@ -260,10 +269,10 @@ them, and the three post-publish checks that leave this repository entirely.
             -release-notes-range="$PREV..HEAD" \
             -release-notes-predict-out="$ROOT/gate/release-notes-prediction.json"
 
-          # the resolved baseline inventory, and the surface delta over it
+          # the resolved baseline inventory, and the surface delta over it —
+          # the baseline is read out of $PREV_COMMIT itself, never handed in
           scripts/gate-stage2/run.sh delta \
-            --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT" \
-            --baseline-file "$ROOT/surface.baseline.json"
+            --baseline-ref "$PREV" --baseline-commit "$PREV_COMMIT"
 
           # the run manifest: this tree, this baseline, these exact bytes
           scripts/gate-stage2/run.sh record --tree "$TREE" \
@@ -373,29 +382,48 @@ them, and the three post-publish checks that leave this repository entirely.
       forward, instead of re-keying every surface over twelve documents
       nothing touched.
 
-      **`--baseline-file` names v0.5.0's committed inventory only while v0.5.0 is
-      the previous release.** That release shipped before the surface emitter
-      existed and carries no `surface.json` of its own, which is the only reason
-      `surface.baseline.json` is in this tree. Every later release carries its
-      own, and the baseline is then read out of the tag —
-      `git show "$PREV:surface.json" > "$ROOT/gate/baseline-input.json"`, and
-      that path is what `--baseline-file` gets. Falling back on the committed
-      bootstrap because a tag could not be read is the one move never to make: in
-      a shallow clone that failure reads character for character like an absent
-      tag, and the delta would then span two releases — full, plausible, and
-      handed to thirteen agents as the truth about the past.
+      **`delta` resolves the baseline inventory itself, from `$PREV_COMMIT` and
+      nothing else — there is no file argument, and its absence is the fix for
+      a defect rather than a convenience.** The command used to take
+      `--baseline-file`, and this document hard-coded it to
+      `surface.baseline.json` — right for exactly one release and stale forever
+      after: the first v0.6.0 gate run computed its delta against v0.5.0's
+      frozen inventory while recording baseline ref v0.5.1, and handed thirteen
+      agents a comparison spanning two releases as the truth about what the
+      release changed. The previous release's inventory is a fact git already
+      holds, and a file handed in beside the commit is a second answer that can
+      drift from the first, so the harness now derives the bytes from the
+      commit's identity: the frozen v0.5.0 commit — the one release that
+      shipped before the surface emitter existed and carries no `surface.json`
+      of its own, which is the only reason `surface.baseline.json` is in this
+      tree — resolves to that committed bootstrap, and every other commit
+      resolves to `git show "$PREV_COMMIT:surface.json"`. A clone that cannot
+      read that — shallow, or one that never fetched the commit — is a refusal,
+      never a fallback to the bootstrap: that failure reads character for
+      character like a pre-emitter release, and the substituted delta would be
+      full, plausible, and wrong about which past it describes. An invocation
+      still carrying `--baseline-file` is refused by name, and `record` derives
+      the same bytes from the same commit again and refuses a
+      `gate/baseline.json` holding anything else — so a mismatch between the
+      baseline the run names and the bytes the agents read is refused at both
+      ends, never recorded.
 
       Skipping any of this does not produce a smaller gate, it produces a failed
       one. The freshness check refuses with "it was found on disk rather than
       produced, and found on disk is not produced", and `record` holds every
-      guarded artifact to account before it will name one — in one of two ways.
-      The two captures it cannot recompute, the render diff and the site
+      guarded artifact to account before it will name one — in one of three
+      ways. The two captures it cannot recompute, the render diff and the site
       extraction, are refused when the stamp on their own face names another
       tree or another baseline. `gate/delta.json` carries no stamp to read:
       `record` re-derives it outright from `surface.json` and
       `gate/baseline.json` and refuses on any byte of disagreement — a delta
       computed before a fix moved the inventory, one computed against another
-      baseline, and one written by hand all fail the same comparison.
+      baseline, and one written by hand all fail the same comparison. And
+      `gate/baseline.json` is re-resolved outright from the commit the run
+      names, which is the refusal the recomputation alone cannot make: a stale
+      baseline with a delta honestly computed over it agrees with itself on
+      every byte, and only deriving the named release's inventory again can say
+      the pair is about the wrong past.
 
       **2. Produce the fan-out.**
 
@@ -492,7 +520,10 @@ them, and the three post-publish checks that leave this repository entirely.
       would produce and re-recording it is honest — that reuse is the cache
       working, not a step skipped — and when the fix moved `surface.json`,
       `record` refuses it until `delta` is re-run. Repeat until no surface
-      reports a blocking finding.
+      reports a blocking finding — or until every blocking finding that
+      remains is one you have ruled on, which is step 5's mechanism and
+      exists precisely so that a finding you can rule on in a minute does
+      not cost the round a fix would.
 
       **5. Read the findings yourself before you authorize anything.** Nothing
       is filtered, deduplicated away or dropped on the way to you — the
@@ -503,19 +534,70 @@ them, and the three post-publish checks that leave this repository entirely.
       in each direction. A deferrable finding you judge blocking is a fix you
       make before authorizing — the gate will not stop you from shipping over
       it, so this is the one place your reading is the check. A blocking
-      finding you judge mistaken can only be cleared by disproving its own
-      `failure_scenario` — the sentence exists so that it CAN be disproven —
-      and then deleting the finding from `gate/answers/<surface>.json` by
-      hand, since there is still no override field on the receipt. Know what
-      that deletion costs before you reach for it: a deleted finding leaves no
-      trace, so an adjudicated finding becomes indistinguishable from one
-      nobody ever raised, and the next reader of that record cannot tell that
-      you looked. And know what it cannot touch at all: an `acts-wrongly`
-      finding is not deferrable and not signable-away by anyone — fix the
-      software, or show with evidence that there was never a defect. Why the
-      classifier that would derive a finding's weight from its evidence was
-      not built, and why no override record was added in its place, is
-      recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
+      finding you judge no reason this release cannot ship is cleared by a
+      RULING: one entry in `gate/adjudications.json`, committed on the
+      release branch, saying so in your own name. You do not touch
+      `gate/answers/` — the old recovery, hand-deleting the finding and
+      re-grading the surface's verdict, is retired, because a deleted finding
+      left an adjudicated finding indistinguishable from one nobody ever
+      raised; a ruling is the same judgement left ON the record. The finding
+      stays in the answer, whole, and on the receipt, whole, and the driver's
+      run record prints the ruling beside it — who ruled, when, why.
+
+      A ruling looks like this, every field mandatory and `reason` refused
+      when empty (a ruling without a stated reason is an assertion, not a
+      judgement):
+
+          {
+            "rulings": [
+              {
+                "version": "vX.Y.Z",
+                "surface": "<the finding's surface>",
+                "rule": "<the finding's rule>",
+                "failure_scenario": "<the finding's failure_scenario, verbatim>",
+                "ruled_by": "<your name>",
+                "ruled_at": "YYYY-MM-DD",
+                "reason": "<why this does not block this release>"
+              }
+            ]
+          }
+
+      What each line is load-bearing for. `version` scopes the ruling to
+      exactly this release — a ruling is never inherited, so next release the
+      finding (if it survives) is re-read and re-ruled or fixed.
+      `failure_scenario` is copied from the finding VERBATIM because
+      `(surface, rule)` alone is unsafe: rules are free-text slugs an agent
+      re-derives every round, and a later round can reuse one for different
+      substance. The ruling applies only while the finding still says, byte
+      for byte, what you read when you ruled; if the finding has changed, the
+      verdict tells you a ruling exists and needs re-ruling, and the finding
+      keeps blocking. A ruling matching no finding at all is reported stale —
+      visibly, in the run record — and fails nothing by itself: usually it
+      means the finding was also fixed in the tree. A malformed or
+      unreadable `gate/adjudications.json` is a FAILED gate, never "no
+      rulings". And `ruled_by` is paper — nothing in this tree authenticates
+      it, the same way the driver cannot authenticate its CI-evidence record;
+      only the forge's signed commits and branch protection make a ruling
+      attributable to a person.
+
+      Committing the ruling moves the tree, so produce step 1's captures and
+      a fresh fan-out once more over the ruled tree — but the ruling file is
+      deliberately outside every surface and outside the gate's own
+      integrity digest, so no surface key moves and that cycle re-reads
+      nothing: re-record the carried answers and you are done. The ruling
+      itself applies at evaluation, inside D1's recomputed verdict, and
+      nowhere else.
+
+      And know what no ruling can touch: an `acts-wrongly` finding is not
+      deferrable and not signable-away by anyone — fix the software, or show
+      with evidence that there was never a defect. A ruling that names one
+      does not get ignored; it refuses the WHOLE file, every other ruling in
+      it suspended, until it is removed — a record that quietly declined to
+      do what it says would be worse than no record. The rules above, each
+      with the test that pins it, live in
+      `cmd/dossierx/gate_adjudication_test.go`; why the classifier that
+      would derive a finding's weight from its evidence was still not built
+      is recorded at `cmd/dossierx/gate_stage3_test.go:42-57`.
 
       **This does not stand in for the driver's own check, and is not meant to.**
       D1 recomputes all of it inside its own process — it re-reads the fan-out

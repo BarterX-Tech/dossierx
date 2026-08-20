@@ -5,15 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.6.0] - 2026-08-20
 
 **SILENT: three shipped skill guides changed, and the skills are embedded in the binary — anyone
 who has run `dossierx skills export` must re-run it after upgrading, or their agents keep
 following procedures that do not work:** a review loop that wedges on a refusal whose recovery is
-the step scheduled after it, a bootstrap that ends silently uninstructed, and a build-order
-recovery whose advice fails every claim it touches at the next `check`. In all three the engine
-was right and the guide was wrong — no command, flag, `error.code`, lint rule or gate behaves
-differently. The corrections are the first three items under **Changed**.
+the step scheduled after it, a bootstrap that ends silently uninstructed, a bootstrap whose
+yes-to-the-hook answer ends with no CI gate at all, and a build-order recovery whose advice fails
+every claim it touches at the next `check`. In all four the engine was right and the guide was
+wrong — no command, flag, `error.code`, lint rule or gate behaves differently. The corrections
+are the first four items under **Changed**.
 
 ### Added
 
@@ -36,7 +37,7 @@ differently. The corrections are the first three items under **Changed**.
 
 ### Changed
 
-The three skill-guide corrections behind the callout above:
+The four skill-guide corrections behind the callout above:
 
 - **The review loop no longer schedules a lock the lock gate refuses**
   (`skills/dossierx-comments/SKILL.md`). Step 4 sent a locked claim through unlock → fix → lock
@@ -46,6 +47,14 @@ The three skill-guide corrections behind the callout above:
   The export resolves its root from `project.config.yaml`, which the old ordering had not written
   yet — rootless, it exits 0, maintains no `AGENTS.md` section, drops the agent guide in the
   wrong place, and nothing later exported again. Steps 2 and 3 are swapped.
+- **The bootstrap installs the CI workflow on both answers to the hook question**
+  (`skills/dossierx/SKILL.md`). Step 4 fetched `scripts/ci/dossierx-check.yml` only when the human
+  *declined* the pre-commit hook — the identical defect this release fixes in README's paste
+  block (under **Fixed** below), standing uncorrected in the procedure's other home, so the
+  nudged answer — yes — ended the bootstrap with only the local gate git skips on merges,
+  rebases, cherry-picks and reverts, and that `--no-verify` bypasses. The hook question now
+  decides the hook alone, both answers end with the workflow installed, and "CI is the authority
+  either way" governs both branches from the step's shared preface.
 - **The build-order recovery for a missing `build_role` routes through the approval path**
   (`skills/dossierx-build-order/SKILL.md`). "Set it, then re-propose" could only mean hand-editing
   a locked file — no verb sets `build_role` after creation — and the next `check` failed
@@ -58,6 +67,23 @@ The three skill-guide corrections behind the callout above:
   and the SHARED evidence files are three, not four — `gate/site-text.json` is the `site`
   surface's own capture, so a site change re-keys one surface, not thirteen. The pin paragraph's
   counts are now derived from `surface.json` and test-pinned; the hand-list had gone stale twice.
+- **The stage-2 baseline is derived from the previous release itself, never handed in as a
+  file.** `scripts/gate-stage2/run.sh delta` now reads the baseline inventory out of
+  `--baseline-commit`'s own tree (`git show <commit>:surface.json`; the frozen v0.5.0 commit —
+  the one release with no `surface.json` of its own — resolves to the committed
+  `surface.baseline.json`, chosen by identity and never as a fallback for a failed read) and
+  refuses the retired `--baseline-file` flag by name; `record` derives the same bytes again and
+  refuses a `gate/baseline.json` holding anything else. What forced it: the first v0.6.0 gate
+  run computed its delta against v0.5.0's frozen inventory while recording baseline ref v0.5.1 —
+  thirteen reading agents were handed a two-release comparison as this release's, and every
+  digest in that run's manifest was honest — because `docs/RELEASING.md`'s staging block
+  hard-coded `--baseline-file "$ROOT/surface.baseline.json"`, an invocation that was right for
+  exactly one release. The staging block now passes only the ref and the commit.
+- `docs/RELEASING.md`'s opening describes the forge gate that actually ships: the tagged commit
+  must be a merge and its tree must carry the release stamp. The old text still promised the
+  `origin/main` reachability check that was replaced after it deadlocked the v0.5.1 release — a
+  maintainer reading it would conclude a locally created, never-pushed merge cannot be
+  published, and take no care over exactly the case nothing refuses.
 - The viewer templates say the truth about themselves: `graph.css` no longer describes a backdrop
   dim and drop shadow the opaque pane does not have, z-index band 80 is named as the pane root it
   is, the zero-thread comment chip is dated v0.3.0 (not v0.2.1), and `comments.html` names
@@ -71,6 +97,14 @@ In the documents client teams follow, each a procedure that failed a reader foll
 - **README's setup paste block installs the CI workflow on both answers to the hook question.**
   It fetched the workflow only when the human *declined* the pre-commit hook, so the nudged
   answer — yes — ended setup with only the local, skippable gate.
+- **README's setup paste block creates the project before exporting the skills.** Step 2 ran
+  `dossierx skills export .claude/skills` before step 3 had written `project.config.yaml` — the
+  identical defect this release fixes in the router skill's bootstrap (under **Changed** above),
+  standing uncorrected in the procedure's other home. Rootless, the export exits 0, maintains no
+  section in an existing `AGENTS.md`, drops the agent guide beside the bundles instead of at
+  `docs/`, and nothing later in the block exports again — a harness that reads `AGENTS.md` was
+  never taught DossierX at all. Steps 2 and 3 are swapped, and the two documents now give the
+  bootstrap in the same order.
 - **README says to commit the comment digest store with the first lock, not "once anyone
   comments".** The engine creates `.dossierx-comment-digest.json` empty at the first lock; a
   reader who waited staged the lock store without it and was stopped by the hook's own
@@ -113,6 +147,12 @@ replace an installed v7:
   died "No such file or directory", and because a bash HAD been found, neither remedy printed.
   The wrapper falls through to the Git for Windows candidates, and now runs under Pester on
   `windows-latest` — it had shipped for releases while no CI job ever started pwsh.
+- **The wrapper's no-bash remedy hands WSL a path WSL can open.** The message whose first
+  sentence explains that WSL's bash cannot run a script on a `C:\` path went on to offer exactly
+  that command — `bash "C:\...\install-git-hook.sh" --yes`, the path resolved on the Windows
+  side. The WSL line now translates it with `wslpath` inside the WSL invocation, where the
+  distro's mounts are known; whether a distro mounts that drive at all is more than the wrapper
+  can check from Windows, and the message says so instead of implying the line always works.
 - **`--help` no longer stops mid-sentence.** A sed range ends AT its closing match, so the last
   thing a reader saw was `1 declined, refused,`. Extraction now closes on an explicit
   `# END USAGE` sentinel, and the usage line swaps in the reader's own invocation by literal
@@ -148,9 +188,9 @@ And the smaller corrections:
 - **`dossierx lock|unlock|flag|reaudit` answer with their replacement, not a bare usage error.**
   The four verbs most likely typed from pre-v0.3.0 memory — each lives on at
   `dossierx claim <verb>` — answered `unknown command "lock"`, because cobra's `legacyArgs`
-  rejects unknown commands before the root's hint-bearing branch runs. Each now returns the same
-  `retired_command` refusal as the other retired spellings, with a `run:` hint that actually
-  runs, and the site's migration table gains the row naming all four.
+  rejects unknown commands before the root's hint-bearing branch runs. Each now refuses with
+  `error.code` `usage` and a `run:` hint that actually runs — `run: dossierx claim lock <id>
+  --reason "..."` — and the site's migration table gains the row naming all four.
 - **A comment sweep: what the code says about itself matches what it does** — no behaviour
   changes. Nine files said `dossierx flag` for what has been `dossierx claim flag` since v0.3.0;
   `MockupModules`' doc (and `structured_layout`'s) kept v0.4.0's mockup-only framing after v0.4.1
@@ -1785,7 +1825,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.0...v0.4.1
