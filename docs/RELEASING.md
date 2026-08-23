@@ -860,9 +860,9 @@ them, and the three post-publish checks that leave this repository entirely.
       and performs the steps in **this order**:
 
       git tag -a vX.Y.Z -m "vX.Y.Z — <title>" <merge-commit>
-      git push origin vX.Y.Z
+      git push origin refs/tags/vX.Y.Z:refs/tags/vX.Y.Z
       # Verify the archives — see the section below — and only then:
-      git push origin main
+      git push origin <merge-commit>:refs/heads/main
 
       **The tag goes first and `main` goes last, and the order is not
       interchangeable.** The release branch edits `site/releases.html`, so
@@ -901,6 +901,27 @@ them, and the three post-publish checks that leave this repository entirely.
       HEAD, which is only right when nothing has landed since the merge; the
       driver carries the merge commit by value from the merge to the tag and
       re-reads `<tag>^{tree}` immediately before pushing it.
+
+      **Both refspecs are fully qualified, and that is not tidiness.** A release
+      developed on a branch named `vX.Y.Z` gives that name two referents, and
+      git resolves the ambiguity by search order rather than by intent. The
+      short forms fail in two different ways over the same tree. `git push
+      origin vX.Y.Z` refuses outright — *src refspec vX.Y.Z matches more than
+      one* — so it is at least loud. `git rev-parse --short vX.Y.Z^{commit}`
+      does not: it warns, then answers, and it answers from `refs/tags` by a
+      convention nothing enforces, while the branch of the same name points at a
+      different commit. A release stamped from the wrong one of those two is
+      wrong about which commit it shipped, and nothing downstream can tell.
+      `refs/tags/…` and `refs/heads/…` have exactly one referent each, so the
+      commands above are correct no matter what branches exist. The driver has
+      always pushed this way (`gate_driver_test.go`'s `git push <remote>
+      <sha>:refs/tags/…`); until this release the written procedure did not, and
+      a maintainer following the document by hand after a driver refusal got the
+      form that breaks.
+
+      Naming release branches so they cannot collide — `release/vX.Y.Z` — is
+      worth doing and is **not** a substitute for the above. It relies on
+      everyone remembering; a qualified refspec relies on nothing.
 
       **Those commands are the driver's; you type none of them.** They are
       written out so the order is readable, not as a procedure to follow — D2

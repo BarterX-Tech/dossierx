@@ -1272,6 +1272,27 @@ func newCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Run lint, catalog, render and the lock-ledger gate in one shot, stopping at first failure; --validate for a read-only run, --staged to judge the git index",
+		// THERE IS NO PER-CLAIM CHECK, AND THAT IS WHY A POSITIONAL IS REFUSED
+		// RATHER THAN IGNORED. Without an Args declaration cobra falls back to
+		// legacyArgs, which accepts any positional on a leaf command and
+		// silently discards it. The invocation that costs someone is
+		// `dossierx check --validate <claim-id>` — what an agent types when it
+		// means "check this one claim". It lints the WHOLE project, exits 0 on
+		// a clean corpus, and reports a lint error from an unrelated module as
+		// though it were a problem with the claim that was named. The
+		// whole-project run IS the check; there is nothing to narrow it to, so
+		// the honest answer to a narrowing argument is a usage error.
+		//
+		// This moves an invocation that previously exited 0 to exit 1, which is
+		// why it did not ship in v0.5.2: that release's CHANGELOG promised no
+		// command behaviour changed, and `check` is what CI runs, what the
+		// pre-commit hook runs, and what README's paste block hands a client's
+		// agent. It ships here as an announced change. The repository-internal
+		// sweep is clean — hook, CI template, skills, site, tests, Makefile and
+		// workflows pass no positional to this command — so the exposure is
+		// entirely to callers outside this tree, which is what the CHANGELOG
+		// entry is for.
+		Args: cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			// Both read-only modes exist, and they answer DIFFERENT questions:
 			// --validate judges the working tree, --staged judges what the
