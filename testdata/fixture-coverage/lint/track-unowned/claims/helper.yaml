@@ -1,0 +1,14 @@
+id: trackmod.contract.helper
+facet: contract
+module: trackmod
+status: draft
+layout: card
+body: |
+  A second citing claim, and the target of the other claim's rests_on edge so
+  neither trips the orphan warning. Its membership omits the role, which means
+  cites -- so the track still has no owner.
+tracks:
+  - id: checkout
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

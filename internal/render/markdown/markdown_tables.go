@@ -403,14 +403,14 @@ func tableAt(lines []string, start int) (aligns []cellAlign, end int, ok bool) {
 // writeTable renders the table occupying lines[start:end+1], whose delimiter
 // row is lines[start+1]. Every tag and attribute it writes is a fixed literal
 // in this package; the only author bytes it emits go through renderInline.
-func writeTable(b *strings.Builder, lines []string, start, end int, aligns []cellAlign, img imagePolicy) {
+func writeTable(b *strings.Builder, lines []string, start, end int, aligns []cellAlign, pol bodyPolicy) {
 	b.WriteString(`<table class="md-table"><thead>`)
-	writeTableRow(b, splitRow(lines[start]), aligns, true, img)
+	writeTableRow(b, splitRow(lines[start]), aligns, true, pol)
 	b.WriteString("</thead>")
 	if end > start+1 {
 		b.WriteString("<tbody>")
 		for j := start + 2; j <= end; j++ {
-			writeTableRow(b, splitRow(lines[j]), aligns, false, img)
+			writeTableRow(b, splitRow(lines[j]), aligns, false, pol)
 		}
 		b.WriteString("</tbody>")
 	}
@@ -430,7 +430,7 @@ func writeTable(b *strings.Builder, lines []string, start, end int, aligns []cel
 // A cell runs renderInline with no break offsets — a cell is single-line by
 // construction, so there is nothing for a hard break to break to and a trailing
 // backslash stays the literal dangling backslash the inline scan renders.
-func writeTableRow(b *strings.Builder, cells []string, aligns []cellAlign, header bool, img imagePolicy) {
+func writeTableRow(b *strings.Builder, cells []string, aligns []cellAlign, header bool, pol bodyPolicy) {
 	openTag, closeTag := "<td", "</td>"
 	if header {
 		openTag, closeTag = "<th", "</th>"
@@ -444,7 +444,7 @@ func writeTableRow(b *strings.Builder, cells []string, aligns []cellAlign, heade
 		b.WriteString(openTag)
 		b.WriteString(alignClass(aligns[i]))
 		b.WriteString(">")
-		b.WriteString(renderInline(cell, nil, img))
+		b.WriteString(renderInline(cell, nil, pol))
 		b.WriteString(closeTag)
 	}
 	b.WriteString("</tr>")

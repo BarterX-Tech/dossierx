@@ -10,7 +10,7 @@ DossierX turns a directory of YAML "claims" — atomic, reviewable facts about a
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 19 commands under 7 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
+| **Surface** | the CLI: 22 commands under 8 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
 | **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
@@ -24,7 +24,7 @@ Paste this into Claude Code, Codex, or any other coding agent working in the rep
 Set up DossierX in this repository.
 
 1. If the `dossierx` binary is missing, install it with
-   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.6.0`,
+   `go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.0`,
    then run `dossierx version` and show me the output.
 2. If `project.config.yaml` and the claims directory do not exist yet,
    propose a title, the facets, and the modules, and WAIT for me to confirm
@@ -39,7 +39,7 @@ Set up DossierX in this repository.
    not this message, are the contract.
 4. ASK ME before installing the git pre-commit hook. My answer decides the
    hook alone, never CI — CI is the authority either way. If I say yes, fetch
-   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.6.0/scripts/install-git-hook.sh
+   https://raw.githubusercontent.com/BarterX-Tech/dossierx/v0.7.0/scripts/install-git-hook.sh
    to a file, show me what it does, run `sh install-git-hook.sh --yes`, then
    add the CI workflow as well. If I say no, skip the hook and
    add the CI workflow alone, and tell me so. Either answer ends with the
@@ -101,7 +101,7 @@ A static `file://` export of the viewer is read-only by design — comments need
 
 ## The CLI surface
 
-Nineteen leaf commands under seven nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
+Twenty-two leaf commands under eight nouns. This is a *machine* surface: a human is not expected to run any of it. Use `dossierx <noun> --help` for flags, and `--format text` when you want prose.
 
 ```text
 check                    lint, catalog, render and the lock-ledger gate in one shot
@@ -112,6 +112,7 @@ check                    lint, catalog, render and the lock-ledger gate in one s
 claim        show · list · new · lock · unlock · flag · reaudit · link
 comment      inbox · list · add · reply
 build-order  propose · status · lock
+track        list · show · status
 
 serve                    the human's viewer + comment API
 skills export [dir]      write the embedded agent skills into a project
@@ -282,15 +283,26 @@ module: widget
 status: draft                    # draft | locked
 layout: card
 body: |
-  A widget is the smallest unit this project documents.
+  A widget is the smallest unit this project documents [1].
 rests_on:
   - widget.internals.storage     # this claim is true only while that one is
 governed_by:
   type: none
   reason: no doctrine facet configured yet
+sources:                         # optional: the evidence, cited from body as [n]
+  - ref: 1
+    kind: external               # external | internal
+    title: Widget specification
+    url: https://example.com/widget-spec
+    accessed_on: 2026-08-15      # what makes an external citation falsifiable
+tracks:                          # optional: cross-cutting membership
+  - id: widget-setup
+    role: cites                  # owns | cites
 ```
 
 Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`, a `layout` (`card`, `table`, `list`, `steps`, `tree`, `banner`, `mockup`), and a `governed_by` block naming what backs its truth (a doctrine claim, or `none` with a reason). Claims name other claims they `rests_on` or `mirrors` — and a claim-valued `governed_by.type` is the same kind of edge for drift purposes — forming a graph the engine walks and validates. The full schema is in [FORMAT.md](FORMAT.md).
+
+**Sources and tracks** are the two optional axes, both added in v0.6.0 and both no-ops for a project that does not use them. `sources` carries a claim's evidence *inside* the claim — cited from the body with `[n]` markers, anchored by an access date when the source is a page that can change under you and by a content hash when it is a file the engine can read, and signed by the lock ledger so a citation cannot be rewritten after approval. `tracks` is a second ownership axis: `module` answers "who guarantees this?", and a track answers "what does the user get, and is it finished?" — a feature assembled from claims across many modules, with `dossierx track status <id>` reporting whether every claim it owns and cites is locked.
 
 **`check` is the pipeline.** One command runs lint → catalog → render → the ledger gate and stops at the first failure. `--validate` is the read-only form for the authoring loop: it runs the lint gate and the ledger gate in memory and writes nothing — no claim files, no lock store, no `.catalog.json`, no viewer. It also does not reconcile `review_pending`, rebuild the catalog or the viewer, or scan source for code links; run plain `check` before trusting what the viewer shows.
 
@@ -320,7 +332,7 @@ Config loading is strict: an unknown top-level or `viewer.theme` field is a hard
 
 ## The skills
 
-DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the seven nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
+DossierX ships embedded [Claude Code](https://claude.com/claude-code) skills that teach an agent working in a *consuming* project how to operate it. `dossierx` is the router, loaded first and always: the eight nouns, the envelope, the exit codes, the error-code-to-recovery table, and which companion to load next. The companions are `dossierx-claims` (author, find, and move claims through their lifecycle), `dossierx-build-order` (derive a locked module's implementation order), `dossierx-code-links` (ground finished code in the claims it implements), and `dossierx-comments` (run review threads, and when to comment versus `flag`). See [`skills/`](skills/) for what each covers.
 
 `dossierx skills export [dir]` writes them into a project, creating parent directories and overwriting in place, so re-running it is how you pick up a new release's guidance. Step 3 of the paste block above does this — after step 2 has written `project.config.yaml`, never before, because the export resolves the project root through the config: only a rooted export maintains its section in an `AGENTS.md` that already exists and writes `docs/dossierx-agent-guide.md` under the root, while a rootless one exits 0 having written the bundles and dropped the guide beside them instead, and nothing later in the block exports again. `[dir]` is optional only *inside* an existing project — with neither a directory nor a `project.config.yaml` to root the write in there is nowhere to install to, and the command refuses with `write_failed`. Step 3 still names `.claude/skills` explicitly because the harness, not DossierX, decides where skills are read from. Add a project-specific overlay skill alongside them for anything local to your repo — house style, module conventions — that the generic skills cannot know.
 

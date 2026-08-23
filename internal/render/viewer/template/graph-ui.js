@@ -299,7 +299,14 @@
       edges: Array.isArray(raw.edges) ? raw.edges : [],
       groups: {
         modules: Array.isArray(groups.modules) ? groups.modules : [],
-        facets: Array.isArray(groups.facets) ? groups.facets : []
+        facets: Array.isArray(groups.facets) ? groups.facets : [],
+        // ABSENT is the normal case, not a defect: internal/graph omits this
+        // key entirely for a project that declares no tracks, which is what
+        // keeps such a project's payload byte-identical to what it was before
+        // the axis existed. It normalises to the empty list so every reader
+        // downstream asks one question — "are there any?" — instead of
+        // asking whether the key is there and then whether it is empty.
+        tracks: Array.isArray(groups.tracks) ? groups.tracks : []
       },
       dropped: { unresolved_edges: num(dropped.unresolved_edges) }
     };
@@ -496,10 +503,10 @@
   }
 
   // ------------------------------------------------------------------
-  // The control bar — six groups, in the frozen prototype order
+  // The control bar — six groups, seven with a track axis
   // ------------------------------------------------------------------
   //
-  //   Module · Facet · Granularity · Highlight overlay · Edge types · View
+  //   Module · Facet · [Track] · Granularity · Highlight overlay · Edge types · View
   //
   // The prototype froze this order as Scope · Granularity · Highlight overlay
   // · Edge types · View. Scope has since become two independent controls, and
@@ -507,9 +514,21 @@
   // convenient — the order is what a reader's hand has learnt, and splitting a
   // control is not a licence to rearrange its neighbours.
   //
-  // Built ONCE at mount; its option lists are refilled from the payload on
+  // TRACK IS IN BRACKETS BECAUSE IT IS OFTEN NOT THERE. Tracks are optional
+  // (config.Config.Tracks), and a project that declares none gets a bar with
+  // exactly the six groups it had before the axis existed — the control is
+  // ABSENT, not present-and-disabled. A disabled select is a promise that
+  // something could be selected, and for a project with no tracks nothing
+  // could; it would be a permanent question a reader has no way to answer.
+  // Where it does appear it sits with its scope siblings rather than at the
+  // end, because it is a third scope axis and a reader looking for "narrow
+  // this" should find all of them together. The four groups after it keep
+  // their order and their neighbours.
+  //
+  // Built ONCE at mount, EXCEPT the track group — see ensureTrackControl for
+  // why that one cannot be. Every option list is refilled from the payload on
   // every open and on every refresh, because a refreshed payload can carry a
-  // module or facet that did not exist a minute ago.
+  // module, facet or track that did not exist a minute ago.
 
   function controlGroup(labelText) {
     var group = h('div', 'dxg-ctl');
@@ -575,6 +594,10 @@
       onControlChange(true);
     });
     facetGroup.appendChild(el.scopeFacet);
+    // Kept so the track group, which is built later and only sometimes, can
+    // be inserted immediately after this one instead of appended wherever it
+    // happens to be created.
+    el.facetGroup = facetGroup;
 
     var granGroup = controlGroup('Granularity');
     el.granularity = selectControl('dxgGranularity', function () {
@@ -642,6 +665,59 @@
     el.controls.appendChild(viewGroup);
   }
 
+  // hasTracks is the single question "does this project have a track axis at
+  // all?". Everything track-shaped in this file asks it rather than testing
+  // the payload key, so "no tracks" means the same thing in the control bar,
+  // the legend, the detail panel and the notices.
+  function hasTracks() {
+    return !!payload && payload.groups.tracks.length > 0;
+  }
+
+  // ensureTrackControl creates the Track group the first time a payload with
+  // tracks is seen, and REMOVES it if a later payload has none.
+  //
+  // IT CANNOT BE BUILT IN buildControls, AND THAT IS AN ORDERING FACT RATHER
+  // THAN A PREFERENCE. openPane mounts the pane — which is what runs
+  // buildControls — BEFORE it reads the payload, because the payload is parsed
+  // at first open and the mount is what creates the place to put it. So at
+  // buildControls time `payload` is still null and "does this project declare
+  // tracks?" has no answer yet. Deciding there would mean either building a
+  // control no project may need or guessing.
+  //
+  // Doing it here also covers the case that made the option lists refresh in
+  // the first place: a live "dossierx serve" session where the reader adds a
+  // track to project.config.yaml and hits refresh. The axis appears, and if
+  // they take it away again the control leaves with it rather than sitting
+  // there offering a vocabulary the project no longer has.
+  function ensureTrackControl() {
+    if (!hasTracks()) {
+      if (el.trackGroup && el.trackGroup.parentNode) {
+        el.trackGroup.parentNode.removeChild(el.trackGroup);
+      }
+      el.trackGroup = null;
+      el.scopeTrack = null;
+      // The selection goes with the control. Leaving it set would filter the
+      // graph by a track nothing on screen can name or clear.
+      state.scopeTrack = '';
+      return;
+    }
+    if (el.trackGroup) {
+      return;
+    }
+    var group = controlGroup('Track');
+    el.scopeTrack = selectControl('dxgTrack', function () {
+      state.scopeTrack = el.scopeTrack.value;
+      // Like module and facet, and for the same reason: this changes WHICH
+      // graph is drawn, not how it is painted, and one feature's subgraph
+      // left at the previous camera is a handful of dots in a corner.
+      requestFit();
+      onControlChange(true);
+    });
+    group.appendChild(el.scopeTrack);
+    el.trackGroup = group;
+    el.controls.insertBefore(group, el.facetGroup.nextSibling);
+  }
+
   function toggleType(type) {
     var next = [];
     var had = false;
@@ -665,7 +741,11 @@
   // pasted hash and one arriving from a click take the same path.
   function refreshControls() {
     var c = core();
-    var groups = payload ? payload.groups : { modules: [], facets: [] };
+    var groups = payload ? payload.groups : { modules: [], facets: [], tracks: [] };
+
+    // Before the option lists are filled, because this is what decides
+    // whether there is a third list to fill at all.
+    ensureTrackControl();
 
     clear(el.scopeModule);
     el.scopeModule.appendChild(option('', 'all modules'));
@@ -678,6 +758,33 @@
     el.scopeFacet.appendChild(option('', 'all facets'));
     for (i = 0; i < groups.facets.length; i++) {
       el.scopeFacet.appendChild(option(groups.facets[i], groups.facets[i]));
+    }
+
+    // The track list is entries rather than names: a track HAS a title and a
+    // module does not, so the option shows the title the project wrote and
+    // selects on the id claims cite. A track the config never declared has no
+    // title, and internal/graph fills the id in as one — so the raw id in
+    // this list is the visible evidence that track-unknown has something to
+    // say about it, rather than a blank row.
+    //
+    // ITS "ALL" OPTION DOES NOT SAY "all tracks", where the other two say
+    // "all modules" and "all facets". Every claim has a module and a facet,
+    // so "all modules" and "no module filter" pick out the same set. Most
+    // claims are in NO track, so "all tracks" would name the union of the
+    // tracks — a strictly smaller set than this option selects — and a reader
+    // who read it that way would think the untracked claims on screen were a
+    // bug. It says what it does instead.
+    if (el.scopeTrack) {
+      clear(el.scopeTrack);
+      el.scopeTrack.appendChild(option('', 'every claim'));
+      for (i = 0; i < groups.tracks.length; i++) {
+        var entry = groups.tracks[i] || {};
+        var tid = str(entry.id);
+        if (tid === '') {
+          continue;
+        }
+        el.scopeTrack.appendChild(option(tid, str(entry.title) || tid));
+      }
     }
 
     // A selection naming a module or facet the payload does not have would
@@ -700,6 +807,13 @@
       state.scopeFacet = '';
       el.scopeFacet.value = '';
     }
+    if (el.scopeTrack) {
+      el.scopeTrack.value = state.scopeTrack;
+      if (el.scopeTrack.selectedIndex < 0) {
+        state.scopeTrack = '';
+        el.scopeTrack.value = '';
+      }
+    }
 
     el.granularity.value = state.granularity;
     el.overlay.value = state.overlay;
@@ -716,8 +830,8 @@
 
   // onControlChange is the single funnel every control passes through:
   // recompute the scene, write the hash, redraw. reheat is true for the
-  // changes that move nodes (module, facet, granularity, edge types) and false
-  // for the ones that only repaint (overlay, labels).
+  // changes that move nodes (module, facet, track, granularity, edge types)
+  // and false for the ones that only repaint (overlay, labels).
   function onControlChange(reheat) {
     refreshControls();
     recompute();
@@ -812,6 +926,28 @@
     ]
   };
 
+  // TRACK_SAMPLES draws exactly what the canvas draws for the two roles: the
+  // owner's inner ruling inside the node's own outline, and the plain outline
+  // a citing claim keeps. Constant strings with no interpolation of any kind,
+  // like EDGE_SAMPLES — no payload value reaches either of them, so assigning
+  // one as markup cannot carry project data into the document.
+  //
+  // THE "cites" ROW EXISTS EVEN THOUGH IT MARKS NOTHING. Without it the strip
+  // would say what a marked node means and leave "no marker" to be inferred,
+  // and an absence a reader has to infer is exactly the kind of encoding that
+  // reads as "I have not found the marker yet".
+  var TRACK_SAMPLES = {
+    owns:
+      '<svg viewBox="0 0 14 14" aria-hidden="true" focusable="false" width="14" height="14">' +
+      '<circle cx="7" cy="7" r="5.4" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
+      '<circle cx="7" cy="7" r="2.3" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
+      '</svg>',
+    cites:
+      '<svg viewBox="0 0 14 14" aria-hidden="true" focusable="false" width="14" height="14">' +
+      '<circle cx="7" cy="7" r="5.4" fill="none" stroke="currentColor" stroke-width="1.3"/>' +
+      '</svg>'
+  };
+
   function legendGroupLabel(text) {
     return h('li', 'dxg-legend-group', text);
   }
@@ -825,9 +961,53 @@
     } else {
       appendFacetRows(list);
     }
+    appendTrackRows(list);
     appendEdgeRows(list);
 
     el.legend.appendChild(list);
+  }
+
+  // The two track rows, present only while a track is selected — the one
+  // condition under which the canvas draws the owner marker at all. A legend
+  // row for a marker nothing on screen wears is a caption that is confidently
+  // wrong, which is the same failure OVERLAY_LEGENDS exists to prevent.
+  //
+  // The group label names the TRACK, by its own title, so the strip answers
+  // "one feature's subgraph — which feature?" without the reader looking back
+  // up at the control.
+  function appendTrackRows(list) {
+    if (!state || state.scopeTrack === '' || !hasTracks()) {
+      return;
+    }
+    list.appendChild(legendGroupLabel('track: ' + trackTitle(state.scopeTrack)));
+    var rows = [
+      ['owns', 'owns this track'],
+      ['cites', 'cites it — its module still guarantees it']
+    ];
+    for (var i = 0; i < rows.length; i++) {
+      var item = h('li', 'dxg-legend-item dxg-legend-item--track');
+      item.setAttribute('data-dxg-track-role', rows[i][0]);
+      var sample = h('span', 'dxg-legend-mark');
+      sample.innerHTML = TRACK_SAMPLES[rows[i][0]];
+      item.appendChild(sample);
+      item.appendChild(h('span', 'dxg-legend-name', rows[i][1]));
+      list.appendChild(item);
+    }
+  }
+
+  // trackTitle resolves a track id to the title the project gave it, falling
+  // back to the id. internal/graph already fills an undeclared track's title
+  // in with its id, so the fallback here covers only a payload that has been
+  // hand-edited or truncated — never the ordinary undeclared-track case.
+  function trackTitle(id) {
+    var list = payload ? payload.groups.tracks : [];
+    for (var i = 0; i < list.length; i++) {
+      var entry = list[i] || {};
+      if (str(entry.id) === id) {
+        return str(entry.title) || id;
+      }
+    }
+    return id;
   }
 
   // The facet rows: every facet the PROJECT declared, by its own name,
@@ -1173,8 +1353,8 @@
     if (!scene || scene.scoped.length > 0) {
       return;
     }
-    if (state.scopeModule === '' && state.scopeFacet === '') {
-      // Neither axis is filtering, so an empty result is the PROJECT's own
+    if (state.scopeModule === '' && state.scopeFacet === '' && state.scopeTrack === '') {
+      // No axis is filtering, so an empty result is the PROJECT's own
       // emptiness, not this control's doing. Blaming a filter that is not
       // running would send a reader to fix the wrong thing.
       return;
@@ -1189,6 +1369,7 @@
         function () {
           state.scopeModule = '';
           state.scopeFacet = '';
+          state.scopeTrack = '';
           requestFit();
           onControlChange(true);
         }
@@ -1197,16 +1378,38 @@
   }
 
   // scopeSelectionPhrase names whichever axes are actually narrowed, so the
-  // notice above reads as a sentence in all three of the shapes that can
-  // produce an empty set: both axes chosen, a module with no claims at all,
-  // and a facet the project declares but no claim uses.
+  // notice above reads as a sentence in every shape that can produce an empty
+  // set: any combination of the three axes, a module with no claims at all, a
+  // facet the project declares but no claim uses, and a track that has been
+  // declared and not yet joined.
+  //
+  // It names ONLY the axes that are filtering. Listing the ones set to "all"
+  // would pad the sentence with the parts that cannot be the cause, and the
+  // reader has to be able to see which selections to undo.
   function scopeSelectionPhrase() {
-    var mod = state.scopeModule === '' ? '' : 'module "' + state.scopeModule + '"';
-    var fac = state.scopeFacet === '' ? '' : 'facet "' + state.scopeFacet + '"';
-    if (mod !== '' && fac !== '') {
-      return 'both ' + mod + ' and ' + fac;
+    var parts = [];
+    if (state.scopeModule !== '') {
+      parts.push('module "' + state.scopeModule + '"');
     }
-    return mod !== '' ? mod : fac;
+    if (state.scopeFacet !== '') {
+      parts.push('facet "' + state.scopeFacet + '"');
+    }
+    if (state.scopeTrack !== '') {
+      parts.push('track "' + trackTitle(state.scopeTrack) + '"');
+    }
+    if (parts.length === 0) {
+      return '';
+    }
+    if (parts.length === 1) {
+      return parts[0];
+    }
+    // "both" for two and "all of" for three, rather than one phrasing that
+    // covers both awkwardly: the two-axis sentence is the one a reader meets
+    // most, and it reads the way it did before there was a third axis.
+    if (parts.length === 2) {
+      return 'both ' + parts[0] + ' and ' + parts[1];
+    }
+    return 'all of ' + parts.slice(0, parts.length - 1).join(', ') + ' and ' + parts[parts.length - 1];
   }
 
   // AN OVERLAY THAT MATCHES NOTHING SAYS SO.
@@ -1402,12 +1605,17 @@
     }
 
     var i;
-    // The two scope axes compose as an intersection inside scopeFilter, and
+    // The three scope axes compose as an intersection inside scopeFilter, and
     // everything downstream — representatives, ghosts, the gaps rail — reads
-    // only `scoped`. So none of it needs to know that scope became two fields:
-    // each of them already sees whatever set of claims the reader selected,
-    // including the empty one.
-    var scoped = c.scopeFilter(payload.nodes, state.scopeModule, state.scopeFacet);
+    // only `scoped`. So none of it needs to know that scope became three
+    // fields: each of them already sees whatever set of claims the reader
+    // selected, including the empty one.
+    //
+    // A track narrows the corpus exactly like the other two, and everything
+    // computed below is therefore already track-relative: a claim isolated
+    // inside one feature's subgraph is reported isolated, which is the same
+    // reason the gap rules were never precomputed in Go.
+    var scoped = c.scopeFilter(payload.nodes, state.scopeModule, state.scopeFacet, state.scopeTrack);
     var inScopeIds = Object.create(null);
     for (i = 0; i < scoped.length; i++) {
       inScopeIds[str(scoped[i].id)] = true;
@@ -1539,6 +1747,27 @@
       facetsOfNode[rep][str(scoped[i].facet)] = true;
     }
 
+    // The claims that OWN the selected track. Normally exactly one — but a
+    // SET, deliberately, because nothing guarantees it. track-multi-owner
+    // refuses a CLAIM that owns two tracks; no rule refuses two claims that
+    // each own the same track, and track-unowned only warns when a track has
+    // none. So a corpus can genuinely have two, and drawing both is the
+    // honest answer: picking one would hide a defect exactly where a reader
+    // came looking for the feature's single statement.
+    //
+    // Empty when no track is selected. The owns/cites distinction answers
+    // "which claim is this feature's own statement?", and that question only
+    // exists once a feature has been chosen — so an unfiltered view of a
+    // track-using project looks exactly like it did before the axis existed.
+    var trackOwnerIds = Object.create(null);
+    if (state.scopeTrack !== '') {
+      for (i = 0; i < scoped.length; i++) {
+        if (c.trackRole(scoped[i], state.scopeTrack) === 'owns') {
+          trackOwnerIds[str(scoped[i].id)] = true;
+        }
+      }
+    }
+
     scene = {
       scoped: scoped,
       nodes: nodes,
@@ -1553,6 +1782,7 @@
       govNodeIds: govNodeIds,
       govEdgeKeys: govEdgeKeys,
       facetsOfNode: facetsOfNode,
+      trackOwnerIds: trackOwnerIds,
       repByClaim: reps.repByClaim,
       qualifier: qualifiers(nodes),
       overlayEmpty: false
@@ -1708,6 +1938,8 @@
   //           because a halo is reserved for engine-managed states that
   //           demand a human and two of them stacked says nothing extra
   //   wedge   this node governs at least one other claim
+  //   core    this node OWNS the selected track — drawn only while a track is
+  //           selected, so it costs the unfiltered view nothing
   //   ghost   an endpoint outside the current scope: hollow and unlabeled
 
   function facetSlotOf(node) {
@@ -1909,8 +2141,44 @@
       }
 
       drawWedge(ctx, pal, node, pos, r);
+      drawTrackOwner(ctx, pal, node, pos, r);
     }
     ctx.globalAlpha = 1;
+  }
+
+  // drawTrackOwner marks every claim that OWNS the currently selected track —
+  // normally exactly one — with an inner ruling, concentric with the node's
+  // own silhouette.
+  //
+  // WHY THE INSIDE. Everything a node already wears is drawn outside its rim —
+  // the moat at r+1, the halo at r+4, the selection ring at r+7, the
+  // governance wedge from r+1 outward. The interior is the one region no
+  // channel has claimed, so a marker there cannot be confused with any of them
+  // and cannot be crowded out by them on a node wearing three at once.
+  //
+  // WHY NOT A COLOUR. Owns-vs-cites is exactly the kind of distinction that
+  // must survive a reader who cannot separate two hues, a printed page and
+  // both themes — this project's own corpus argues it under
+  // viewer.decision.colour-is-not-the-only-channel. So this borrows the ONE
+  // ink-on-fill pairing the canvas has already proved legible at every radius
+  // in both themes: the status ring's. Same colour, same weight, one radius
+  // in. Nothing here reads a hue, and the marker survives every overlay, which
+  // swaps fills wholesale.
+  //
+  // A COLLAPSED GROUP ANSWERS FOR ITS MEMBERS, through the same coversAny the
+  // cycle ring uses, so folding a module never hides where the feature's own
+  // statement lives. nodePath draws it in the node's own silhouette — a disc
+  // inside a disc, a rounded square inside a rounded square — so the marker
+  // never contradicts the shape channel that says "this is a group".
+  function drawTrackOwner(ctx, pal, node, pos, r) {
+    if (node.kind === 'ghost' || !coversAny(node, scene.trackOwnerIds)) {
+      return;
+    }
+    nodePath(ctx, node, pos, Math.max(1.5, r - 3.2));
+    ctx.strokeStyle = pal.ink;
+    ctx.lineWidth = 1.4;
+    ctx.setLineDash([]);
+    ctx.stroke();
   }
 
   function haloKind(node) {
@@ -3287,6 +3555,19 @@
       'degree (project)',
       num(claim.in_degree) + num(claim.out_degree) + ' — ' + num(claim.in_degree) + ' in, ' + num(claim.out_degree) + ' out'
     );
+    // Tracks BY NAME AND ROLE, in words — the third channel on the owns/cites
+    // distinction, after the canvas marker and the legend, and the only one
+    // that works with no track selected and no marker drawn. It is also the
+    // only place a reader can see the OTHER tracks a claim is in while looking
+    // at one of them, which is the question "is this claim shared?" and one
+    // the subgraph on screen cannot answer.
+    //
+    // Omitted entirely for a claim in no track, like every other row here is
+    // omitted for a node kind that cannot answer it: a project without tracks
+    // gets the panel it had before the axis existed.
+    if (Array.isArray(claim.tracks) && claim.tracks.length > 0) {
+      detailRow(rows, 'tracks', trackMembershipPhrase(claim));
+    }
     detailRow(rows, 'review pending', claim.review_pending === true ? 'yes' : 'no');
     detailRow(rows, 'open threads', num(claim.open_comments));
     detailRow(rows, 'governed by', governorsOf(id).join(', ') || 'nothing');
@@ -3306,6 +3587,27 @@
       root.location.hash = '#' + id + HASH_MARK + HASH_PREFIX + c.encodeState(state);
     });
     el.detail.appendChild(open);
+  }
+
+  // trackMembershipPhrase renders one claim's memberships as text: the
+  // track's own title, then the role spelled out.
+  //
+  // The role is NEVER dropped for being the common case. "cites" is the
+  // default a claim falls into by writing nothing, and a row that printed
+  // bare titles would make the one claim that OWNS the track — the feature's
+  // own statement, the thing a reviewer opened this pane to find — look
+  // exactly like the dozen that merely reference it.
+  function trackMembershipPhrase(claim) {
+    var out = [];
+    for (var i = 0; i < claim.tracks.length; i++) {
+      var m = claim.tracks[i] || {};
+      var id = str(m.id);
+      if (id === '') {
+        continue;
+      }
+      out.push(trackTitle(id) + ' (' + (str(m.role) === 'owns' ? 'owns' : 'cites') + ')');
+    }
+    return out.join(', ');
   }
 
   // degreeValue renders the scope-relative degree AND NAMES WHOSE IT IS.

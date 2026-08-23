@@ -2,16 +2,292 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
     <meta
       name="description"
-      content="DossierX release history — every tagged release, what changed, and why."
+      content="DossierX release history. Every tagged release, what changed, and why."
     />
-    <title>Release history — DossierX</title>
+    <title>DossierX release history</title>
   </head>
+
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/releases-main.tsx"></script>
+    <header class="masthead">
+      <div class="wrap masthead__inner">
+        <span class="masthead__name"><a href="./index.html">DossierX</a></span>
+        <nav class="masthead__nav">
+          <a href="./index.html">Memo</a>
+          <a href="https://github.com/BarterX-Tech/dossierx">GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="wrap doc">
+      <p class="doc__kicker">Release history</p>
+      <h1>What has shipped</h1>
+
+      <p class="lede">
+        Every tagged release, newest first. The full account of each one, every
+        changed command, flag, error code and schema field, is in
+        <a href="https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md">CHANGELOG.md</a>.
+        That file is the authority. This is the ledger.
+      </p>
+
+      <!--
+        THIS LEDGER IS A RELEASE PRECONDITION, NOT DECORATION.
+
+        The release driver refuses to publish unless the TREE declares the
+        release being tagged, and it establishes that from two independent
+        statements that have to agree. CHANGELOG.md's newest version heading is
+        one. The entry below carrying data-current="true" is the other.
+        Disagreement is a refusal, not a warning. tests/derived_facts_test.go
+        reads this file.
+
+        THE CURRENT RELEASE IS MARKED, NOT POSITIONED. The previous ledger lived
+        in a TypeScript array that ran oldest-first, where "the current release"
+        meant "the last element". A prepended entry silently demoted the new
+        release and promoted the previous one, on a page that still looked
+        correct, and two separate expressions in two files had to agree about
+        what "last" meant. Here the entry says so about itself, and exactly one
+        entry may. Order is presentation. Re-sorting the page cannot change which
+        release it names as current.
+
+        NO ENTRY CARRIES A COMMIT SHA, and none may be given one. That field
+        existed and was deleted because it could not converge. Writing the sha is
+        itself a commit, so the value went stale as it landed. v0.4.1 shipped
+        naming 5327923 while refs/tags/v0.4.1 pointed at 206b4a4.
+
+        TO ADD A RELEASE, move data-current and the "Latest" badge off the entry
+        that has them, then add the new entry at the top. docs/RELEASING.md
+        carries this as a checklist item.
+      -->
+      <div class="ledger">
+        <article class="release release--current" data-version="v0.7.0" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.0</span>
+            <time datetime="2026-08-23">2026-08-23</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              A claim can carry its evidence, and a feature can be read as one thing<span class="release__badge">Latest</span>
+            </h2>
+            <p class="release__note">
+              Claims gain <code>sources</code>, so the evidence behind a sentence
+              lives in the claim and is signed when the claim locks. They gain
+              <code>tracks</code>, so a feature spread across many modules can be
+              read as one document and asked whether it is finished. The release
+              gate pipeline is gone: DossierX is alpha and releases are cut by a
+              maintainer. One behaviour change to check for in your scripts:
+              <code>dossierx check &lt;anything&gt;</code> now exits 1 instead of
+              silently discarding the argument.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.6.0">
+          <p class="release__meta">
+            <span class="release__version">v0.6.0</span>
+            <time datetime="2026-08-20">2026-08-20</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              The guides match the engine, and every install prints the tag
+            </h2>
+            <p class="release__note">
+              Four shipped skill guides described procedures that do not work,
+              and the skills are embedded in the binary. Re-run
+              <code>dossierx skills export</code> after upgrading, or your agents
+              keep following the old ones. No command, flag, error code, lint
+              rule or gate behaves differently.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.5.1">
+          <p class="release__meta">
+            <span class="release__version">v0.5.1</span>
+            <time datetime="2026-08-10">2026-08-10</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              The release pipeline itself, gated end to end
+            </h2>
+            <p class="release__note">
+              Every client-facing surface is declared and read by its own agent
+              at release time. Publishing became a driver that refuses an ungated
+              or half-published tag instead of a sequence somebody types. Re-run
+              <code>dossierx skills export</code> after upgrading.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.5.0">
+          <p class="release__meta">
+            <span class="release__version">v0.5.0</span>
+            <time datetime="2026-08-07">2026-08-07</time>
+          </p>
+          <div>
+            <h2 class="release__title">A claims graph in the viewer</h2>
+            <p class="release__note">
+              A reviewer can see and navigate the dependency structure between
+              claims instead of inferring it.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.4.1">
+          <p class="release__meta">
+            <span class="release__version">v0.4.1</span>
+            <time datetime="2026-08-04">2026-08-04</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              raw_html becomes an attachment, and the edges footer folds away
+            </h2>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.4.0">
+          <p class="release__meta">
+            <span class="release__version">v0.4.0</span>
+            <time datetime="2026-08-03">2026-08-03</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              Migration removed, and governed_by becomes a drift edge
+            </h2>
+            <p class="release__note">
+              The <code>migrate</code> command is gone with no replacement.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.3.1">
+          <p class="release__meta">
+            <span class="release__version">v0.3.1</span>
+            <time datetime="2026-07-30">2026-07-30</time>
+          </p>
+          <div>
+            <h2 class="release__title">A documentation-grade renderer</h2>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.3.0">
+          <p class="release__meta">
+            <span class="release__version">v0.3.0</span>
+            <time datetime="2026-07-28">2026-07-28</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              Agent-first restructure, two surfaces and one gate
+            </h2>
+            <p class="release__note">
+              The machine contract became the spine. JSON by default, one
+              envelope per invocation, stable error codes, and a dry run on
+              everything that writes. The command surface shrank and got more
+              capable.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.2.0">
+          <p class="release__meta">
+            <span class="release__version">v0.2.0</span>
+            <time datetime="2026-07-26">2026-07-26</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              Comments on claims, so a human can argue before locking
+            </h2>
+            <p class="release__note">
+              The reviewer's half of the loop arrives. A claim with an open
+              thread cannot lock.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.1.2">
+          <p class="release__meta">
+            <span class="release__version">v0.1.2</span>
+            <time datetime="2026-07-25">2026-07-25</time>
+          </p>
+          <div>
+            <h2 class="release__title">Consolidated audit-fix release</h2>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.1.1">
+          <p class="release__meta">
+            <span class="release__version">v0.1.1</span>
+            <time datetime="2026-07-24">2026-07-24</time>
+          </p>
+          <div>
+            <h2 class="release__title">Steps number and text alignment fix</h2>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.1.0">
+          <p class="release__meta">
+            <span class="release__version">v0.1.0</span>
+            <time datetime="2026-07-23">2026-07-23</time>
+          </p>
+          <div>
+            <h2 class="release__title">Renamed docs to dossierx</h2>
+            <p class="release__note">
+              Breaking, with no migration. The on-disk lock and flag stores are
+              renamed, so an existing project's stores are not found after
+              upgrading past this release.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.0.3">
+          <p class="release__meta">
+            <span class="release__version">v0.0.3</span>
+            <time datetime="2026-07-22">2026-07-22</time>
+          </p>
+          <div>
+            <h2 class="release__title">Viewer freshness cue</h2>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.0.2">
+          <p class="release__meta">
+            <span class="release__version">v0.0.2</span>
+            <time datetime="2026-07-22">2026-07-22</time>
+          </p>
+          <div>
+            <h2 class="release__title">Cross-platform hardening</h2>
+            <p class="release__note">
+              Concurrent locking against the same claims directory could fail on
+              Windows with a transient sharing error. Both paths now retry.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.0.1">
+          <p class="release__meta">
+            <span class="release__version">v0.0.1</span>
+            <time datetime="2026-07-21">2026-07-21</time>
+          </p>
+          <div>
+            <h2 class="release__title">Initial public release</h2>
+            <p class="release__note">
+              The proven internal engine, extracted into its own repository with
+              every project-specific name removed.
+            </p>
+          </div>
+        </article>
+      </div>
+
+      <footer class="footer">
+        <p>
+          <a href="https://github.com/BarterX-Tech/dossierx">github.com/BarterX-Tech/dossierx</a>
+          &middot; <a href="./index.html">Why it exists</a>
+        </p>
+        <p>Open source, Apache-2.0.</p>
+      </footer>
+    </main>
   </body>
 </html>

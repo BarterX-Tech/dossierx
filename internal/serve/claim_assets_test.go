@@ -81,8 +81,8 @@ func writeBytes(t *testing.T, path string, content []byte) {
 // the file because it is being used by another process" — whenever the poll
 // happens to be inside this directory at the moment the test asks for it, and on
 // a half-second tick that is often enough to red the job. It reds the whole
-// windows-latest matrix leg, which then reds CI on main, which then refuses the
-// release: `make ci-evidence` fails on any failed test, by design.
+// windows-latest matrix leg, which then reds CI on main, which is the signal a
+// maintainer reads before tagging.
 //
 // The race is between the test and the server the test itself started. Nothing
 // about it touches the defence under test, which is that a symlinked assets

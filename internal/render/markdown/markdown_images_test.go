@@ -85,7 +85,7 @@ func TestRender_IncompleteImageRunIsUnchanged(t *testing.T) {
 func TestRenderClaimBody_EmitsAnImage(t *testing.T) {
 	const body = "![Sequence diagram](assets/seq.svg)"
 	want := `<p><img class="md-img" src="/claim-assets/widget.contract.demo/assets/seq.svg" alt="Sequence diagram"></p>`
-	if got := string(RenderClaimBody(body, testAssets)); got != want {
+	if got := string(RenderClaimBody(body, testAssets, Citations{})); got != want {
 		t.Errorf("RenderClaimBody(%q) = %q, want %q", body, got, want)
 	}
 	if got := string(Render(body)); strings.Contains(got, "<img") {
@@ -97,7 +97,7 @@ func TestRenderClaimBody_EmitsAnImage(t *testing.T) {
 // level down: an AssetPrefix that was never set is not "serve it relative", it
 // is "this claim has no image capability at all".
 func TestRenderClaimBody_ZeroPrefixRendersNoImage(t *testing.T) {
-	out := string(RenderClaimBody("![Alt](assets/a.png)", ""))
+	out := string(RenderClaimBody("![Alt](assets/a.png)", "", Citations{}))
 	if strings.Contains(out, "<img") {
 		t.Errorf("a zero AssetPrefix must render no image: %q", out)
 	}
@@ -120,7 +120,7 @@ func TestRenderClaimBody_ImagesInEveryClaimBodyContainer(t *testing.T) {
 	}
 	const want = `<img class="md-img" src="/claim-assets/widget.contract.demo/assets/a.png" alt="A">`
 	for _, c := range cases {
-		got := string(RenderClaimBody(c.body, testAssets))
+		got := string(RenderClaimBody(c.body, testAssets, Citations{}))
 		if !strings.Contains(got, want) {
 			t.Errorf("%s: RenderClaimBody(%q) = %q, want it to contain %q", c.name, c.body, got, want)
 		}
@@ -132,7 +132,7 @@ func TestRenderClaimBody_ImagesInEveryClaimBodyContainer(t *testing.T) {
 // ABOUT the syntax, not a reference.
 func TestRenderClaimBody_FenceContentIsNotAnImage(t *testing.T) {
 	body := "```\n![A](assets/a.png)\n```"
-	out := string(RenderClaimBody(body, testAssets))
+	out := string(RenderClaimBody(body, testAssets, Citations{}))
 	if strings.Contains(out, "<img") {
 		t.Errorf("a fenced example must not become an image: %q", out)
 	}
@@ -175,7 +175,7 @@ func TestRenderClaimBody_RefusedSrcIsEscapedLiteralText(t *testing.T) {
 	}
 	for _, c := range cases {
 		body := "![Alt](" + c.src + ")"
-		got := string(RenderClaimBody(body, testAssets))
+		got := string(RenderClaimBody(body, testAssets, Citations{}))
 		if strings.Contains(got, "<img") {
 			t.Errorf("%s: src %q produced an image: %q", c.name, c.src, got)
 		}
@@ -206,7 +206,7 @@ func TestRenderClaimBody_AcceptedSrcShapes(t *testing.T) {
 	for _, c := range cases {
 		body := "![A](" + c.src + ")"
 		want := `<img class="md-img" src="` + string(testAssets) + c.wantRel + `" alt="A">`
-		got := string(RenderClaimBody(body, testAssets))
+		got := string(RenderClaimBody(body, testAssets, Citations{}))
 		if !strings.Contains(got, want) {
 			t.Errorf("src %q: got %q, want it to contain %q", c.src, got, want)
 		}
@@ -309,7 +309,7 @@ func TestRenderClaimBody_AltIsEscapedInAttributeContext(t *testing.T) {
 		},
 	}
 	for _, c := range cases {
-		got := string(RenderClaimBody(c.body, testAssets))
+		got := string(RenderClaimBody(c.body, testAssets, Citations{}))
 		if !strings.Contains(got, c.want) {
 			t.Errorf("RenderClaimBody(%q) = %q, want it to contain %q", c.body, got, c.want)
 		}
@@ -328,7 +328,7 @@ func TestRenderClaimBody_AltIsEscapedInAttributeContext(t *testing.T) {
 // direction is refusal.
 func TestRenderClaimBody_LinkGrammarCeilingAppliesToImages(t *testing.T) {
 	const body = "![**bold** [t](https://x.example)](assets/a.png)"
-	got := string(RenderClaimBody(body, testAssets))
+	got := string(RenderClaimBody(body, testAssets, Citations{}))
 	if strings.Contains(got, "<img") || strings.Contains(got, "<a ") {
 		t.Errorf("a bracket inside an alt must degrade to literal text, got %q", got)
 	}
@@ -338,7 +338,7 @@ func TestRenderClaimBody_LinkGrammarCeilingAppliesToImages(t *testing.T) {
 // reaches this construct for free: "!" is in the closed escapable set, and an
 // escaped byte is written straight out and can never open anything.
 func TestRenderClaimBody_EscapedBangIsNotAnImage(t *testing.T) {
-	out := string(RenderClaimBody(`\![A](assets/a.png)`, testAssets))
+	out := string(RenderClaimBody(`\![A](assets/a.png)`, testAssets, Citations{}))
 	if strings.Contains(out, "<img") {
 		t.Errorf(`an escaped "!" must not open an image: %q`, out)
 	}
@@ -350,7 +350,7 @@ func TestRenderClaimBody_EscapedBangIsNotAnImage(t *testing.T) {
 // TestRenderClaimBody_PrefixIsTheOnlyInterpolationPoint pins that the emitted
 // tag is a fixed literal in this package plus exactly two escaped values.
 func TestRenderClaimBody_PrefixIsTheOnlyInterpolationPoint(t *testing.T) {
-	out := string(RenderClaimBody("![A](assets/a.png)", `"><script>`))
+	out := string(RenderClaimBody("![A](assets/a.png)", `"><script>`, Citations{}))
 	if strings.Contains(out, "<script>") {
 		t.Errorf("a hostile prefix must be escaped in attribute context: %q", out)
 	}
@@ -421,7 +421,7 @@ func TestClaimBodyImages_ReportsExactlyWhatWouldBeEmitted(t *testing.T) {
 	// The agreement property, asserted rather than assumed: every reported
 	// path appears in the rendered document behind the prefix, and the
 	// document contains no other src.
-	out := string(RenderClaimBody(body, testAssets))
+	out := string(RenderClaimBody(body, testAssets, Citations{}))
 	if n := strings.Count(out, "<img"); n != len(want) {
 		t.Fatalf("rendered %d images, ClaimBodyImages reported %d", n, len(want))
 	}

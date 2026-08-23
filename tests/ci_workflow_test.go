@@ -190,19 +190,11 @@ const (
 // same helpers below, so the two files cannot disagree about what wiring means.
 const ciViewerModule = "viewer-tests"
 
-// setupNodeAction is the action that installs Node. Matched as a `uses:` VALUE
-// on a parsed step, so the prose in either workflow that names it cannot be
-// mistaken for a step that runs it.
-const setupNodeAction = "actions/setup-node@"
-
-// nodeVersionKey is the `with:` key that carries the pin.
-const nodeVersionKey = "node-version"
-
 // goreleaserAction is the action that installs and runs GoReleaser, and
 // goreleaserVersionKey is the `with:` key carrying the version it installs.
-// Matched as a `uses:` VALUE on a parsed step, for the reason setupNodeAction is:
-// the prose in release.yml that explains this pin at length names the action
-// several times, and a comment is not a step.
+// Matched as a `uses:` VALUE on a parsed step, never as text: the prose in
+// release.yml that explains this pin at length names the action several times,
+// and a comment is not a step.
 const (
 	goreleaserAction     = "goreleaser/goreleaser-action@"
 	goreleaserVersionKey = "version"
@@ -353,46 +345,6 @@ func ciScalar(v any) string {
 // ciNodePins returns every Node version pinned by a step in the given list,
 // alongside how many setup-node steps were seen at all.
 //
-// The two numbers are returned separately because they name different defects: a
-// setup-node step with no `node-version` is an UNPINNED setup — it installs
-// whatever the action defaults to — and reporting that as "no pin found" would
-// send a maintainer looking for a step that is right there.
-func ciNodePins(steps []ciStep) (pins []string, setups int) {
-	for _, step := range steps {
-		if !strings.Contains(step.Uses, setupNodeAction) {
-			continue
-		}
-		setups++
-		if pin := ciScalar(step.With[nodeVersionKey]); pin != "" {
-			pins = append(pins, pin)
-		}
-	}
-	return pins, setups
-}
-
-// ciOnePin collapses a step list's pins to the single version it names, or
-// explains which of the three ways it failed to.
-func ciOnePin(steps []ciStep, where string) (string, error) {
-	pins, setups := ciNodePins(steps)
-	switch {
-	case setups == 0:
-		return "", fmt.Errorf("%s declares no %s step", where, strings.TrimSuffix(setupNodeAction, "@"))
-	case len(pins) == 0:
-		return "", fmt.Errorf("%s declares %d %s step(s), none of which sets `%s`. An unpinned setup installs whatever the action defaults to, which moves on its own schedule under nobody's review",
-			where, setups, strings.TrimSuffix(setupNodeAction, "@"), nodeVersionKey)
-	}
-	for _, pin := range pins[1:] {
-		if pin != pins[0] {
-			return "", fmt.Errorf("%s pins more than one Node version (%v). Which one is in force is then a question about step order rather than about the workflow, and a later step silently wins over an earlier one",
-				where, pins)
-		}
-	}
-	if strings.Contains(pins[0], "${{") {
-		return "", fmt.Errorf("%s pins Node to the expression %q, which resolves at run time. A pin nothing can read before the job starts is not a pin this check can hold the publish build to",
-			where, pins[0])
-	}
-	return pins[0], nil
-}
 
 // ciArgv splits one command line into arguments the way a runner's shell would
 // for the forms a workflow uses: runs of whitespace separate, single and double
@@ -750,56 +702,92 @@ func ciViewerSuiteJob(t *testing.T, wf ciWorkflow) (string, ciJob) {
 	return "", ciJob{}
 }
 
-// TestTheViewerJobsNodePinAgreesWithThePublishWorkflow is a claim about two
-// documents and is named for exactly that.
+// WHAT REPLACED TestTheViewerJobsNodePinAgreesWithThePublishWorkflow.
 //
-// IT DOES NOT CLAIM THE JOB BUILDS site/ WITH THAT NODE. It used to be named as
-// though it did, and the name was a lie a parse cannot support: move the
-// actions/setup-node step BELOW the suite step in ci.yml and both pins still
-// agree, this test is still green, and the npm build inside the suite has
-// already run on the runner image's default Node. Step order, and whether the
-// step ran at all, are facts about a run — see the header for where those are
-// answered. What is checked here is that ci.yml's viewer job and
-// deploy-site.yml name the SAME Node major, which is a fact about the files and
-// goes red the moment either pin moves.
+// That test held ci.yml's viewer job and deploy-site.yml to the SAME Node
+// major. The reasoning was that the DOM viewer-tests/site_dom_test.go read was
+// evidence about the page a visitor is served only while the toolchain that
+// produced it was the toolchain that serves it — and that the drift was silent
+// in the direction that mattered, since a newer Node which merely emitted a
+// slightly different tree failed nothing.
 //
-// WHY THAT AGREEMENT IS WORTH PINNING. The DOM that viewer-tests/site_dom_test.go
-// reads is evidence about the page a visitor is served only for as long as it was
-// produced by the toolchain that serves it, and the drift is silent in the
-// direction that matters: a newer Node that BROKE vite or tsc fails the build
-// loudly and gets noticed, while one that merely emits a slightly different tree
-// does not fail at all.
-func TestTheViewerJobsNodePinAgreesWithThePublishWorkflow(t *testing.T) {
+// Both sides of that comparison are gone. site/ was a Vite + React application
+// and is now two static HTML pages with no build; deploy-site.yml declares no
+// Node, no npm and no build step, and site_dom_test.go — the suite that built
+// the app in CI to read its output — was deleted with the app.
+//
+// The invariant did not weaken so much as become trivial, and the check below
+// is what it collapses into. "The published page was built by the same
+// toolchain the gate read" is a comparison you need only while there IS a
+// toolchain; when the artifact is the tree, the property to pin is that nothing
+// stands between them. That is a stronger statement than the one it replaces
+// and a cheaper one to keep true — but it is only true while the publish
+// workflow stays a copy, which is precisely what can be reintroduced by
+// somebody adding a "quick" build step, and precisely what this refuses.
+
+// ciBuildToolTokens are the tokens that mean a publish step transformed the
+// tree rather than copying it. A `run:` naming any of them is what this check
+// exists to catch.
+var ciBuildToolTokens = []string{"npm ", "npx ", "yarn ", "pnpm ", "vite", "tsc ", "esbuild", "webpack", "rollup"}
+
+// TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt pins that what GitHub
+// Pages serves is what is in site/, byte for byte.
+//
+// WHY THIS IS THE CHECK AND NOT A STYLE PREFERENCE. Every review of the site in
+// this repository reads files in the worktree. That reading is evidence about the deployed page only while the
+// deployed page IS those files. A build step re-opens the exact gap the old
+// Node-pin test was written to narrow, and re-opens it silently: a bundler that
+// rewrote, minified, inlined or dropped something would produce a page nobody
+// in this repository has ever looked at, while every check over site/ stayed
+// green.
+func TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt(t *testing.T) {
 	publish := ciLoadWorkflow(t, deployWorkflowPath)
-	ci := ciLoadWorkflow(t, ciWorkflowPath)
 
-	// The publish pin, read across the WHOLE publish workflow. Unlike ci.yml this
-	// is a workflow whose only purpose is to build and publish site/, so every
-	// setup-node in it is a setup-node on the publish path and they must agree.
-	var publishSteps []ciStep
-	for _, name := range ciJobNames(publish) {
-		publishSteps = append(publishSteps, publish.Jobs[name].Steps...)
-	}
-	publishPin, err := ciOnePin(publishSteps, deployWorkflowPath)
-	if err != nil {
-		t.Fatalf("%v.\nThat workflow is the build a visitor's page actually comes from, so it is the source of truth here: until it names one Node version there is nothing for the suite's own job to match against",
-			err)
+	jobs := ciJobNames(publish)
+	if len(jobs) == 0 {
+		t.Fatalf("%s declares no jobs, so there is no publish path to check. This test has lost its subject rather than passed", deployWorkflowPath)
 	}
 
-	jobKey, job := ciViewerSuiteJob(t, ci)
-	t.Logf("the job declaring a run of %s is %s (name: %q); %s publishes with Node %s", ciViewerModule, jobKey, job.Name, deployWorkflowPath, publishPin)
-
-	suitePin, err := ciOnePin(job.Steps, fmt.Sprintf("%s's `%s` job — the one that declares a run of %s", ciWorkflowPath, jobKey, ciViewerModule))
-	if err != nil {
-		t.Fatalf("%v.\nThat job's suite builds site/ with npm and reads the result as rendered DOM. With no pin declared, nothing in this repository names the Node it would be built under, and every assertion in the browser suite can stay green while describing a page no visitor is served.\n"+
-			"The step is looked for in THAT JOB and nowhere else in %s, on purpose: a setup-node in another job is another runner with another Node and says nothing about this one. Add the step there, pinned to %s.",
-			err, ciWorkflowPath, publishPin)
+	uploadsSite := false
+	for _, name := range jobs {
+		for _, step := range publish.Jobs[name].Steps {
+			if strings.Contains(step.Uses, "setup-node") {
+				t.Errorf("%s's `%s` job declares %s.\n\n"+
+					"site/ is static: two HTML pages and a stylesheet, with no build. A Node on the publish path means something is transforming the tree on its way to Pages, and every check in this repository reads the tree.",
+					deployWorkflowPath, name, step.Uses)
+			}
+			run := strings.ToLower(step.Run)
+			for _, tok := range ciBuildToolTokens {
+				if strings.Contains(run, tok) {
+					t.Errorf("%s's `%s` job runs %q, which names the build tool %q.\n\n"+
+						"What Pages serves must be what site/ contains. A build step means the published page is one nobody has read, not a reviewer and not this suite, while every assertion over site/ stays green.",
+						deployWorkflowPath, name, strings.TrimSpace(step.Run), strings.TrimSpace(tok))
+					break
+				}
+			}
+			if strings.Contains(step.Uses, "upload-pages-artifact") {
+				uploadsSite = true
+				// The comma-ok is READ rather than discarded. A `path:` that is
+				// not a string — a list, a mapping, a bare number — is a step
+				// this check cannot judge, and coercing it to "" would report
+				// it as an upload of the empty path: a true-sounding sentence
+				// about a value nobody wrote.
+				got, ok := step.With["path"].(string)
+				if !ok {
+					t.Errorf("%s's Pages upload declares `path: %v`, which is not a string.\n\n"+
+						"This check compares that value against %q, and a non-string cannot be compared. Whatever is published is then decided by something this suite did not read.",
+						deployWorkflowPath, step.With["path"], "site")
+				} else if got = strings.TrimSpace(got); got != "site" {
+					t.Errorf("%s uploads %q to Pages, and the tree it must publish is %q.\n\n"+
+						"A path naming a generated directory is the build this check refuses, arriving as an upload target rather than as a step.",
+						deployWorkflowPath, got, "site")
+				}
+			}
+		}
 	}
 
-	if suitePin != publishPin {
-		t.Fatalf("%s's `%s` job pins Node %s, but %s publishes the site with Node %s.\n"+
-			"The DOM that job's suite reads is evidence about the page a visitor gets only while the two toolchains are the same one. Move the job's pin to %s — a pin elsewhere in %s belongs to a different runner and is not read here.",
-			ciWorkflowPath, jobKey, suitePin, deployWorkflowPath, publishPin, publishPin, ciWorkflowPath)
+	if !uploadsSite {
+		t.Fatalf("%s declares no `upload-pages-artifact` step, so nothing in it publishes site/ at all and the assertions above passed over a workflow that does not do the thing they are about", deployWorkflowPath)
 	}
 }
 
@@ -970,7 +958,7 @@ func ciOneDeclaredEnv(wf ciWorkflow, rel, name string) (string, error) {
 	return values[0], nil
 }
 
-// TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests is a claim
+// TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneCITests is a claim
 // about two documents, and is named for exactly that.
 //
 // WHAT IT IS FOR. Two suites in this repository model GoReleaser's behaviour
@@ -999,7 +987,7 @@ func ciOneDeclaredEnv(wf ciWorkflow, rel, name string) (string, error) {
 // workflow that builds the page a visitor is served; the GoReleaser pin's truth
 // lives in the workflow whose suites were written against a named version, because
 // that is the pin that has citations hanging off it.
-func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests(t *testing.T) {
+func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneCITests(t *testing.T) {
 	ci := ciLoadWorkflow(t, ciWorkflowPath)
 	release := ciLoadWorkflow(t, releaseWorkflowPath)
 
@@ -1219,33 +1207,30 @@ func TestTheReleasePageHasAFooterPointingAtTheChangelog(t *testing.T) {
 	}
 }
 
-// TestTheReleaseGateDoesNotAskTheForgeForOriginMain pins the shape of the forge's
-// own precondition, because nothing else in this repository did.
+// TestTheReleaseWorkflowDoesNotAskTheForgeForOriginMain refuses one idiom in
+// release.yml by name, because adding it back is a deadlock rather than a
+// regression anything else would catch.
 //
-// WHY THIS TEST EXISTS AT ALL. Through v0.5.1 the gate job required the tagged
-// commit to be reachable from origin/main, and that requirement DEADLOCKED with
-// the release driver. The driver's order is D6 push the tag, D7 verify the six
-// archives, D8 push main — tag first, deliberately, so main never publishes a
-// site announcing a release whose archives do not exist. The gate job fires on
-// the tag push, at D6, and asked there for a branch the driver pushes at D8: it
-// refused, no archives were built, D7 waited for archives that could never
-// exist, D8 was never reached and origin/main never moved. Nothing in that ring
-// can move first, so no timeout resolves it. It stopped the v0.5.1 release with
-// the tag public and nothing else done.
+// WHAT HAPPENED. Through v0.5.1 that workflow required the tagged commit to be
+// reachable from origin/main, and the release pushes the TAG first, on purpose,
+// so that main never publishes a site announcing a release whose archives do not
+// exist yet. The job fires on the tag push and asked there for a branch that is
+// pushed two steps later: it refused, so no archives built, so there was nothing
+// to verify, so main never moved. Nothing in that ring moves first, so no timeout
+// resolves it. It stopped the v0.5.1 release with the tag public and nothing else
+// done, and a human finished it by hand.
 //
-// The guard was replaced with a fact about the tagged commit alone — that it is
-// a merge — and the reasoning was written into release.yml's header and
-// docs/RELEASING.md. THAT WAS THE WHOLE RECORD, and prose is not a check: the
-// deletion was invisible to `go test ./...`, and so is restoring it. A future
-// reader who finds merge-ness weaker than reachability, which it is, would be
+// The requirement was removed and the reasoning was written into release.yml's
+// header and docs/RELEASING.md. THAT WAS THE WHOLE RECORD, and prose is not a
+// check: restoring the idiom is invisible to `go test ./...`. A future reader who
+// finds a reachability check obviously correct, which in isolation it is, would be
 // right about the strength and wrong about the consequence, and the symptom
-// arrives only at the next release — a public tag with no archives behind it.
+// arrives only at the next release.
 //
-// So this test refuses the restoration by name and says why, and it reads the
-// workflow AS TEXT on purpose: the guards live inside a shell `run:` block, so a
-// YAML-shaped read would see one opaque string and could not tell which check it
-// contains.
-func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
+// It reads the workflow AS TEXT on purpose: the idiom would live inside a shell
+// `run:` block, so a YAML-shaped read would see one opaque string and could not
+// tell which check it contains.
+func TestTheReleaseWorkflowDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	path := filepath.Join(ciRepoRoot(t), filepath.FromSlash(releaseWorkflowPath))
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1253,11 +1238,10 @@ func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	}
 	// COMMENT LINES ARE DROPPED, and that is not a convenience. release.yml's
 	// header explains at length why the origin/main check went, and explaining
-	// it requires NAMING it — as does the recovery note inside the gate script
-	// itself. Scanning the raw file would fail on its own documentation and
-	// leave a maintainer with one bad choice: delete the explanation to make the
-	// test green, which throws away the only account of why the guard must not
-	// come back. So the subject is the executable lines.
+	// it requires NAMING it. Scanning the raw file would fail on its own
+	// documentation and leave a maintainer with one bad choice: delete the
+	// explanation to make the test green, which throws away the only account of
+	// why the guard must not come back. So the subject is the executable lines.
 	//
 	// A whole-line reader is the right shape here and its residual is stated
 	// rather than hidden: an idiom placed after a `#` on a line that also
@@ -1277,28 +1261,17 @@ func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	// Both spellings, because either one alone reintroduces the wait. The fetch
 	// refspec is how the branch is obtained and the ancestry test is how it is
 	// used; a restoration that reached for only one of the two would still be a
-	// job blocking on a ref the driver has not pushed.
+	// job blocking on a ref the release has not pushed.
 	for _, banned := range []struct{ idiom, why string }{
 		{"merge-base --is-ancestor", "the ancestry test itself"},
 		{"refs/remotes/origin/main", "the branch it compares against"},
 	} {
 		if strings.Contains(body, banned.idiom) {
 			t.Fatalf("%s contains %q — %s.\n\n"+
-				"THIS DEADLOCKS THE RELEASE. The gate job fires on the TAG push, which is the driver's D6. The driver pushes main at D8, two steps later, with D7 (verify the six archives) in between. So this job refuses, no archives are built, D7 waits for archives that can never exist, D8 is never reached, and origin/main never moves. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: D7 polled twenty minutes, this job refused every run, and the release stopped with the tag public and nothing else done.\n\n"+
-				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, the DRIVER has to push main before the tag, and that trade is a real one — deploy-site fires on the main push, so the site can announce a release whose archives are still building. Move the driver's order in cmd/dossierx/gate_driver_test.go first, then this test, then the guard, in that order and in one change.\n\n"+
-				"What the gate checks instead is that the tagged commit is a merge, which is a fact about the commit alone and so holds at D6. Its limits are written out in %s's own header.",
+				"THIS DEADLOCKS THE RELEASE. This workflow fires on the TAG push, and docs/RELEASING.md pushes the tag BEFORE main so that deploy-site cannot announce a release whose archives are still building. So the job would refuse, no archives would be built, the maintainer would wait for archives that can never exist, and origin/main would never move. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: twenty minutes of polling, every run refused, and the release stopped with the tag public and nothing else done.\n\n"+
+				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, docs/RELEASING.md has to push main before the tag, and that trade is a real one: deploy-site fires on the main push. Move the documented order first, then this test, then the guard, in that order and in one change.\n\n"+
+				"What this workflow asks of a tag instead is nothing at all — see %s's own header for the mistakes that leaves uncaught, and docs/RELEASING.md for where each one is checked by hand.",
 				releaseWorkflowPath, banned.idiom, banned.why, releaseWorkflowPath)
 		}
-	}
-
-	// And the replacement is present. Without this half the test passes over a
-	// gate job whose (a) check was deleted outright rather than substituted,
-	// which is a weaker forge than either design intended and reads identically
-	// from here.
-	if !strings.Contains(body, "rev-list --parents") {
-		t.Fatalf("%s no longer reads the tagged commit's parent count, so nothing in the gate establishes that the tag names a MERGE.\n\n"+
-			"That check is what replaced the origin/main reachability test, and it is the only thing standing between a release and a tag on the release branch as it stood BEFORE it was merged — which already carries this release's stamp and so gets past the stamp check unnoticed.\n\n"+
-			"If it moved to a different idiom, move this assertion with it in the same change. If it was deleted, the gate now refuses nothing about which commit was tagged.",
-			releaseWorkflowPath)
 	}
 }

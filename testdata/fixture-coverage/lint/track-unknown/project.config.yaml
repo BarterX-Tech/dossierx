@@ -1,0 +1,10 @@
+schema_version: 1
+facets:
+  - contract
+modules:
+  - trackmod
+claims_dir: claims
+tracks:
+  - id: checkout
+    title: Checkout
+    summary: The one declared track; the fixture's second claim misspells it.

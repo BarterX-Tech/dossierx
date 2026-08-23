@@ -173,6 +173,13 @@ type shellData struct {
 	// module/facet nav ordering logic in buildGroups stays the single source
 	// of truth without being duplicated here.
 	ModuleGroups []ModuleGroup
+
+	// Tracks is the project's declared cross-cutting tracks, one section each,
+	// rendered after every module section and listed after every module in the
+	// sidebar. NIL FOR A PROJECT THAT DECLARES NONE, and shell.html guards
+	// every byte of track markup on that — a corpus with no tracks must render
+	// exactly as it did before the axis existed. See track_view.go.
+	Tracks []TrackSection
 }
 
 // Group is one module/facet section of the sidebar nav + content area, as
@@ -704,6 +711,10 @@ func buildShellData(in shellInputs) shellData {
 		GraphCoreJS:  template.JS(in.graphCoreJS),
 		GraphUIJS:    template.JS(in.graphUIJS),
 		ModuleGroups: moduleGroups,
+		// Built from the SAME renderedByID the module groups read, so a claim
+		// a track owns is rendered exactly once no matter how many sections
+		// point at it — the property newGroup's own lookup exists to hold.
+		Tracks: buildTrackSections(cat, cfg, in.renderedByID),
 	}
 }
 
@@ -874,9 +885,50 @@ func stripOverviewIDs(canonical []template.HTML, overview []model.Claim) []templ
 	}
 	out := make([]template.HTML, len(canonical))
 	for i, h := range canonical {
-		out[i] = template.HTML(strings.Replace(string(h), ` id="`+overview[i].ID+`"`, "", 1))
+		out[i] = stripDuplicateClaimIDs(h, overview[i])
 	}
 	return out
+}
+
+// stripDuplicateClaimIDs returns one already-rendered claim with every element
+// id it carries removed, for use as a NON-CANONICAL copy: the same claim is
+// also rendered somewhere else on the page, and that copy keeps the ids.
+//
+// It exists because two features now inject a second copy of a claim — a
+// module's overview note, repeated on each of that module's facet tabs, and a
+// track section, which renders the claims the track owns inline while their
+// modules keep guaranteeing them. Both need exactly this, and a claim id may
+// appear only once in a valid document.
+//
+// TWO KINDS OF ID, BOTH FROM THE SAME PLACE THAT WROTE THEM. The root
+// <section>'s ` id="<claim-id>"` is matched with its leading space and its
+// closing quote, so the .k header's data-claim-id and title — which are not
+// preceded by a space before `id="` and are not document-unique anyway — are
+// untouched and survive on every copy, exactly as they did before. The source
+// footer's row ids are enumerated from the claim's own Sources through
+// components.ClaimSourceAnchorID rather than pattern-matched, so this function
+// cannot disagree with the function that emitted them.
+//
+// The consequence for the duplicate copy is a degraded, never wrong, landing:
+// its citation markers still name the canonical copy's rows, so a reader
+// clicking one is taken to the same evidence in the claim's own module. That
+// is the same trade the overview note has always made with `#<claim-id>`.
+//
+// Claim ids are constrained to [A-Za-z0-9_.-] (internal/lint's id-shape lint),
+// none of which html/template escapes in a double-quoted attribute value, so
+// the literal match is exact; components refuses to emit a source anchor at all
+// for an id outside that set (see ClaimSourceAnchorPrefix), so an unlinted
+// claim has nothing here to miss.
+func stripDuplicateClaimIDs(h template.HTML, c model.Claim) template.HTML {
+	s := strings.Replace(string(h), ` id="`+c.ID+`"`, "", 1)
+	for _, src := range c.Sources {
+		id := components.ClaimSourceAnchorID(c, src.Ref)
+		if id == "" {
+			continue
+		}
+		s = strings.Replace(s, ` id="`+id+`"`, "", 1)
+	}
+	return template.HTML(s)
 }
 
 // newMembershipPredicates builds the knownModule/knownFacet predicates used

@@ -1,0 +1,15 @@
+id: trackmod.contract.anchor
+facet: contract
+module: trackmod
+status: draft
+layout: card
+body: |
+  The owning claim for the declared track. It exists so the track has both a
+  member and an owner, which keeps the track-empty and track-unowned warnings
+  quiet and leaves the malformed membership next door as the only finding.
+tracks:
+  - id: checkout
+    role: owns
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

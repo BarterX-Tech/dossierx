@@ -1853,8 +1853,7 @@ func TestPredictReleaseNotesForRange_G1Capture_MismatchFailsTheGate(t *testing.T
 		// the fresh prediction. Body is byte-identical on both sides (a dropped
 		// commit by definition never appears in Body), so ONLY PublishedEqual's
 		// Dropped comparison can catch it. If this passes while the Body case
-		// above fails, the gate is blind to exactly the hazard surfaces.yaml's
-		// release-notes entry names.
+		// above fails, this suite is blind to exactly that hazard.
 		recorded := recordAs(t, ReleaseNotesPrediction{
 			Body: emptyRangeBody,
 			Dropped: []DroppedCommit{{

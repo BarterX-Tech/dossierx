@@ -12,7 +12,7 @@ permissions:
 env:
   # THE GORELEASER PIN, in one place because the version is read from more than
   # one file and a version written down twice is a version that drifts. `latest`
-  # is deliberately not used: viewer-tests/site_toolchain_test.go and
+  # is deliberately not used: viewer-tests/release_build_test.go and
   # tests/release_notes_predict_test.go reimplement this tool's changelog and
   # archive behaviour against a NAMED version — release_notes_predict_lib_test.go
   # cites goreleaser/goreleaser/v2@v2.17.1's own changelog.go by line — so a
@@ -168,8 +168,8 @@ jobs:
       #
       # THE COST, measured rather than assumed: this step's output goes from a
       # couple of dozen lines to roughly 14,500 (~3.4 MB) per cell. That is a
-      # machine's account and it is not a thing a person skims — docs/RELEASING.md's
-      # CI item says so, and points at `make ci-evidence` instead.
+      # machine's account and it is not a thing a person skims. Read the job's
+      # conclusion, and open this log only when something in it went red.
       - name: Test (race)
         run: go test -race -json ./...
 
@@ -319,53 +319,22 @@ jobs:
             go.sum
             viewer-tests/go.sum
 
-      # This suite does not only drive a browser; it BUILDS site/ with npm and
-      # then reads the result as rendered DOM. That DOM is evidence about the
-      # page a visitor gets only for as long as it was produced by the toolchain
-      # that publishes the page, and deploy-site.yml publishes it under a pinned
-      # Node 20. Without this step the job builds under whatever ubuntu-latest
-      # happens to ship that week — a version that moves on its own schedule,
-      # under nobody's review, in a file nobody edited.
+      # NO NODE HERE ANY MORE, and the removal is the note.
       #
-      # The risk is that the drift is SILENT in the direction that matters. A
-      # newer Node that actually broke vite or tsc would fail loudly and be
-      # noticed. A newer Node that merely emits a slightly different tree does
-      # not fail at all: every assertion in viewer-tests/site_dom_test.go stays
-      # green while describing a page no visitor is served, which is the exact
-      # shape of "a check that ran over the wrong thing and reads as a pass".
+      # This step used to set up a Node pinned to the same major
+      # deploy-site.yml published the site with, because the suite built site/
+      # with npm and read the result as rendered DOM — evidence about a
+      # visitor's page only for as long as the two toolchains were the same one.
+      # site/ is now two static HTML pages with no build, the suite that read
+      # them is deleted, and deploy-site.yml uploads the directory as it stands.
+      # There is no toolchain left for this job to match, and
+      # tests/ci_workflow_test.go's TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt
+      # refuses the reintroduction of one.
       #
-      # So it is pinned to the SAME major deploy-site.yml pins, and what holds the
-      # two together is OUTSIDE this file: tests/ci_workflow_test.go parses both
-      # workflows, finds the job that runs viewer-tests by the step that enters
-      # that directory, and requires this step's node-version to equal the one
-      # deploy-site.yml publishes with.
-      #
-      # It lives out there because the previous arrangement lived in HERE, as a
-      # `run:` guard step directly below this one, and a guard inside the job it
-      # guards can travel with what it guards: moving this step and that guard
-      # together into another job left the guard slicing out THAT job, finding the
-      # pin it had moved with, printing "site toolchain pinned" and exiting 0.
-      # Nothing that reads this file as text can close that — the durable form is
-      # a reader that is not part of the workflow, keyed to the step that runs the
-      # suite rather than to any name.
-      #
-      # viewer-tests/site_toolchain_test.go's checkNodeFloor is still the other
-      # half and is still blind in one direction: it compares deploy-site.yml's pin
-      # against the RUNNING process's Node and never opens this file, so it catches
-      # the publish workflow drifting UP and cannot see this step being deleted.
-      #
-      # `cache: npm` for a plainer reason: the suite runs `npm ci` in a copy of
-      # site/ on every run, and the key is site/package-lock.json — the same
-      # dependency path deploy-site.yml caches on, because it is the same
-      # install.
-      - name: Set up Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '20'
-          cache: npm
-          cache-dependency-path: site/package-lock.json
+      # This job still drives a browser, against the RENDERED VIEWER, which the
+      # engine produces in Go. That is why the job survives its Node.
 
-      # PINNED, not latest. viewer-tests/site_toolchain_test.go and
+      # PINNED, not latest. viewer-tests/release_build_test.go and
       # tests/release_notes_predict_test.go reimplement this tool's changelog and
       # archive behaviour against a NAMED version, so a moving one would drift out
       # from under them on somebody else's release day.

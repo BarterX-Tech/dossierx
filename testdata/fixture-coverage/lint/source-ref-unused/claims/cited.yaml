@@ -1,0 +1,24 @@
+id: srcunused.internals.cited
+facet: internals
+module: srcunused
+status: draft
+layout: card
+body: |
+  The vendor caps requests at 100 per minute [1]. Ref 2 below is declared,
+  fully anchored, and cited by no marker anywhere in this prose.
+sources:
+  - ref: 1
+    kind: external
+    title: Vendor rate limit reference
+    url: https://example.com/docs/rate-limits
+    accessed_on: "2026-08-01"
+  - ref: 2
+    kind: external
+    title: Vendor burst ceiling note
+    url: https://example.com/docs/burst
+    accessed_on: "2026-08-01"
+rests_on:
+  - srcunused.internals.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

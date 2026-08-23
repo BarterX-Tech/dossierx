@@ -73,39 +73,6 @@ scripts/install-git-hook.Tests.ps1` yourself if you have PowerShell and Pester).
 `tests/nested_module_coverage_test.go` fails the build if a nested module is ever added
 without a CI job *and* a Makefile target, so this list cannot quietly go stale.
 
-### Adding a file is two steps: `surfaces.yaml` has to claim it
-
-`go test ./...` also fails when a tracked file matches **no** entry in `surfaces.yaml`, so a
-green tree needs that file edited in the same commit that adds the file. This is new in v0.5.1
-and it applies to every kind of file — a script, a doc, a workflow, a package — not just to Go.
-
-`surfaces.yaml` lists every client-facing surface this project has (the README, the changelog,
-the skills, the install scripts, the site, the binary) and, beside them, the paths that are
-deliberately out of scope with the reason each is. `tests/surfaces_manifest_test.go` requires
-every tracked file to be claimed by **exactly one** of the two — exactly one, not at least one,
-because an out-of-scope entry that quietly swallowed a path a surface also claims would shrink
-what the release gate reads without anyone deciding to. Both entries get named and the build
-goes red.
-
-So when you add a file, say which it is:
-
-- **It extends a surface that already exists.** `binary-and-viewer` claims `cmd/dossierx/` and
-  `internal/` by directory (its `not:` list hands the `_test.go` files and the golden generator
-  to `tests-and-fixtures`), so a new engine package needs nothing here. A new file under
-  `scripts/`, under `docs/`, or at the repository root almost certainly does: those are claimed
-  path by path, not by directory.
-- **It is not client-facing at all** — a test, a fixture, a build or CI file. Add it to the
-  matching `out_of_scope` entry (`tests-and-fixtures`, `repository-automation`,
-  `toolchain-config`, …) and write the reason it makes no claim a release could falsify.
-- **It is a surface nobody has declared yet.** Write a new entry with `what` and `reach` filled
-  in. Those two fields are read by a human at release time, when one agent per surface reads
-  that surface's prose against this repository's code, so "who is hurt if this goes stale"
-  belongs in `reach` in plain words.
-
-The pattern grammar (`dir/`, `**/`, `*`, exact paths, and per-entry `not:` exceptions) is
-documented in the comment at the top of `surfaces.yaml`. A file matching nothing is a build
-failure on purpose: the next undeclared surface should cost a compile, not an audit.
-
 ## Linting
 
 ```sh
@@ -146,13 +113,12 @@ go run ./cmd/dossierx check --config testdata/fixture-basic/project.config.yaml
 
 ## Cutting a release
 
-Maintainers only: [docs/RELEASING.md](docs/RELEASING.md). Releasing is a driver,
-`make release-publish`, not a list somebody works through: it refuses to tag unless
-the tree already declares the release being cut, and it verifies the published
-archives itself before `main` moves. What that document is for is the half no
-program does — reading the release gate's findings and ruling on them, and the
-three post-publish checks (the deployed site, the workflow run, the CDN) that the
-driver hands back to a person because they leave this repository.
+Maintainers only: [docs/RELEASING.md](docs/RELEASING.md). DossierX is alpha and a
+release is a maintainer reading the change, running the suites, and tagging.
+Nothing stands between a `v*` tag and a published release: pushing the tag runs
+GoReleaser and GoReleaser publishes. Every precondition is a person's, including
+the three post-publish checks — the workflow run, the deployed site, the published
+archive — which leave this repository and so cannot be checked from inside it.
 
 ## Package boundaries
 

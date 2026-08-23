@@ -204,7 +204,7 @@ jobs:
       # you adopt on purpose, in a commit someone reviewed — not something that
       # arrives on a Tuesday and starts failing everyone's builds.
       - name: Install dossierx
-        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.6.0
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.0
 
       # The full pipeline: lint, catalog, render, and the lock-ledger gate.
       # --format text because the audience here is a human reading a failed

@@ -34,21 +34,24 @@ import (
 const AssetRoutePrefix = "/claim-assets/"
 
 // claimMarkdown renders one of a claim's own prose fields — Body, or one entry
-// of Steps — with images enabled for that claim.
+// of Steps — with the two claim-scoped constructs enabled for that claim:
+// images, and the "[n]" citation markers that address its own sources.
 //
-// It is bound into funcMap as "claimMarkdown" and is the ONLY image-permitting
-// binding in this package. It takes the whole claim rather than just the text
-// because the image capability is a property of the claim (where its assets
-// live, and whether it can be addressed at all), not of the string.
+// It is bound into funcMap as "claimMarkdown" and is the ONLY binding in this
+// package that permits either. It takes the whole claim rather than just the
+// text because both capabilities are properties of the claim — where its
+// assets live, which refs its footer answers to, and whether it can be
+// addressed at all — not of the string.
 //
-// A claim ClaimAssetURLPrefix refuses gets the zero AssetPrefix, and
-// markdown.RenderClaimBody renders every image in it as escaped literal text
-// under that — the same degradation a refused src gets and the same one a
-// comment body gets. There is no branch here that could produce a third
-// outcome.
+// A claim ClaimAssetURLPrefix refuses gets the zero AssetPrefix, and a claim
+// with no sources (or an id ClaimSourceAnchorPrefix refuses) gets the zero
+// Citations; markdown.RenderClaimBody renders the corresponding construct as
+// escaped literal text under either — the same degradation a refused src gets
+// and the same one a comment body gets. There is no branch here that could
+// produce a third outcome.
 func claimMarkdown(c model.Claim, text string) template.HTML {
 	prefix, _ := ClaimAssetURLPrefix(c)
-	return markdown.RenderClaimBody(text, prefix)
+	return markdown.RenderClaimBody(text, prefix, claimCitations(c))
 }
 
 // ClaimAssetURLPrefix returns the URL prefix under which claim c's images are

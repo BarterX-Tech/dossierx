@@ -202,16 +202,16 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsNineteenLeavesUnderSevenNouns treats the leaf count.
+// TestSurfaceIsTwentyTwoLeavesUnderEightNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
-		"nouns":       7,
-		"commands":    19,
-		"lint_rules":  28,
-		"error_codes": 44,
+		"nouns":       8,
+		"commands":    22,
+		"lint_rules":  38,
+		"error_codes": 45,
 		"http_routes": 14,
 	}
 	for name, expected := range want {
@@ -445,8 +445,8 @@ func TestSurfaceRenderFingerprintHashesEveryRenderSource(t *testing.T) {
 // behaviourRoots — which is how skills/ came to be missing, one line — leaves
 // its packages in neither column and this test red.
 var behaviourExclusions = map[string]string{
-	"scripts/normalize-claims": "a one-off repository maintenance tool. It is in nobody's binary, is not embedded, and surfaces.yaml declares it out of scope as repository automation.",
-	"tests/procedures":         "the procedure replay suite: it EXECUTES the documented procedures against a fixture project and asserts the outcome each one promises. Nothing here is compiled into the shipped binary, and surfaces.yaml declares tests/ out of scope. It is excluded for the same reason the rest of tests/ is, and named here rather than left absent so that deleting the suite is a deliberate edit a human reviews rather than a package quietly leaving both columns.",
+	"scripts/normalize-claims": "a one-off repository maintenance tool. It is in nobody's binary and is not embedded, so nothing it does can reach a client.",
+	"tests/procedures":         "the procedure replay suite: it EXECUTES the documented procedures against a fixture project and asserts the outcome each one promises. Nothing here is compiled into the shipped binary. It is excluded for the same reason the rest of tests/ is, and named here rather than left absent so that deleting the suite is a deliberate edit a human reviews rather than a package quietly leaving both columns.",
 }
 
 // TestSurfaceBehaviourFingerprintCoversEveryPackage requires an entry for every

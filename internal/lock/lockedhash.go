@@ -108,6 +108,45 @@ var lockedClaimHashExcluded = map[string]bool{
 	"comments":       true,
 }
 
+// lockedClaimHashOmitWhenEmpty is the COMPATIBILITY GATE, and it is a
+// different thing from the deny-list above. A field named here is fully
+// signed when the claim carries it, and contributes NOTHING to the hash when
+// it does not — so a claim that has never used the field hashes to exactly
+// the bytes it hashed before the field existed.
+//
+// It exists because the deny-list's "new fields are covered automatically"
+// property has a migration cost nobody had had to pay yet. This hash writes a
+// line for every persisted field, empty or not, so ADDING a field to
+// model.Claim moves the hash of EVERY claim in EVERY project — and unlike a
+// deliberate lockedClaimHashVersion bump, which is a documented
+// unlock-everything/re-lock event, it does so silently: the first `check`
+// after upgrading reports lock-content-drift on every locked claim in the
+// project. That is a gate crying tamper about a release note. A gate that
+// fires on everything teaches its readers to wave it through, which costs
+// more than the field is worth.
+//
+// The exact precedent is ContentHash's raw_html stanza (see lock.go), which
+// takes a field into a hash under a non-empty conditional for the same
+// reason and pins both halves against a captured constant. This is that
+// mechanism, generalised, for the other hash.
+//
+// It does NOT weaken the signature, and the asymmetry is worth being precise
+// about. Adding sources to a locked claim moves the hash (drift caught).
+// Editing them moves it (caught). Deleting them moves it too — the RECORDED
+// hash was computed while they were present, so the claim now hashes to
+// something else (caught). The only case that hashes identically is a claim
+// that had none when it was approved and has none now, which is not an edit.
+//
+// A field belongs here ONLY when it is optional, author-written, and new to
+// the schema. An engine-managed field belongs on the deny-list instead, and a
+// field that has always existed must never be added here — that would change
+// the hash of every claim NOT carrying it, which is the exact churn this
+// prevents.
+var lockedClaimHashOmitWhenEmpty = map[string]bool{
+	"sources": true,
+	"tracks":  true,
+}
+
 // LockedClaimHash returns a deterministic hash over every persisted field of c
 // except the three in lockedClaimHashExcluded. It is what a lock-ledger record
 // stores, and what the ledger gate re-computes to decide whether a locked claim
@@ -128,7 +167,7 @@ func LockedClaimHash(c model.Claim) string {
 	// Domain separation: the version prefix means a future algorithm change
 	// cannot accidentally collide with a hash produced by this one.
 	fmt.Fprintf(h, "dossierx-locked-claim/v%d\n", lockedClaimHashVersion)
-	hashStructFields(h, reflect.ValueOf(c), lockedClaimHashExcluded)
+	hashStructFields(h, reflect.ValueOf(c), lockedClaimHashExcluded, lockedClaimHashOmitWhenEmpty)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -151,9 +190,10 @@ func LockedClaimHash(c model.Claim) string {
 // from the filesystem) is genuinely not on disk, and it is the only thing
 // skipped here.
 //
-// exclude applies only at this level; nested structs (model.Governed) hash all
-// of their own fields, since the deny-list names top-level claim fields.
-func hashStructFields(h io.Writer, v reflect.Value, exclude map[string]bool) {
+// exclude and omitWhenEmpty apply only at this level; nested structs
+// (model.Governed, model.Source, model.TrackRef) are called with both nil and
+// hash all of their own fields, since both maps name top-level claim fields.
+func hashStructFields(h io.Writer, v reflect.Value, exclude, omitWhenEmpty map[string]bool) {
 	t := v.Type()
 	type taggedField struct {
 		tag string
@@ -167,6 +207,13 @@ func hashStructFields(h io.Writer, v reflect.Value, exclude map[string]bool) {
 			continue
 		}
 		if exclude[tag] {
+			continue
+		}
+		// The compatibility gate, and it skips a field only when that field
+		// is actually empty — a claim carrying it is signed in full. Like
+		// exclude, omitWhenEmpty is nil for nested structs, since both name
+		// TOP-LEVEL claim fields. See lockedClaimHashOmitWhenEmpty.
+		if omitWhenEmpty[tag] && isEmptyValue(v.Field(i)) {
 			continue
 		}
 		fields = append(fields, taggedField{tag: tag, val: v.Field(i)})
@@ -250,7 +297,7 @@ func hashValue(h io.Writer, v reflect.Value) {
 
 	case reflect.Struct:
 		fmt.Fprint(h, "{")
-		hashStructFields(h, v, nil)
+		hashStructFields(h, v, nil, nil)
 		fmt.Fprint(h, "}")
 
 	default:
@@ -260,6 +307,38 @@ func hashValue(h io.Writer, v reflect.Value) {
 		// rather than silently hashing nothing, so even an unanticipated kind
 		// is signed rather than becoming a hole in the signature.
 		fmt.Fprintf(h, "x:%#v", v.Interface())
+	}
+}
+
+// isEmptyValue reports whether v is the "the author did not write this field"
+// value — the same question `omitempty` answers when yaml.v3 decides whether
+// to write the key at all, which is deliberate: a field omitted from the file
+// is exactly the field that must contribute nothing to the hash for
+// lockedClaimHashOmitWhenEmpty to preserve compatibility.
+//
+// It is written to FAIL CLOSED, matching PersistedYAMLName. Anything this
+// function is not certain is empty is reported NON-empty, so the field is
+// hashed. Wrongly hashing a field costs a spurious drift report on one claim,
+// which is loud and recoverable; wrongly skipping one silently drops it from
+// the signature, which is a blessed tamper.
+func isEmptyValue(v reflect.Value) bool {
+	switch v.Kind() {
+	case reflect.Slice, reflect.Map, reflect.Array, reflect.String:
+		return v.Len() == 0
+	case reflect.Pointer, reflect.Interface:
+		return v.IsNil()
+	case reflect.Bool:
+		return !v.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v.Int() == 0
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return v.Uint() == 0
+	case reflect.Float32, reflect.Float64:
+		return v.Float() == 0
+	default:
+		// A struct, a channel, anything unanticipated: not provably empty,
+		// so it is hashed. See the fail-closed note above.
+		return false
 	}
 }
 

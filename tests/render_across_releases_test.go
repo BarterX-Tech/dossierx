@@ -71,9 +71,8 @@ var regenerateGoldens = flag.Bool("regenerate-goldens", false, "rewrite this pac
 
 const (
 	// renderAcrossReleasesFile is the committed report, relative to the
-	// repository root. It sits under testdata/ so surfaces.yaml's existing
-	// out-of-scope entry claims it: it is a record of how a surface moved, not
-	// a surface.
+	// repository root. It sits under testdata/ because it is a record of how
+	// the rendered output moved, not a document a client reads.
 	renderAcrossReleasesFile = "testdata/render-across-releases.golden.txt"
 
 	// prevReleaseTagEnv names the baseline explicitly, for the same reason
@@ -276,15 +275,13 @@ type renderMove struct {
 // renderComparison is ONE cross-release comparison, held apart from the two
 // documents that render it.
 //
-// There are two readers of "what rendered differently since the last release"
-// and they need different documents: testdata/render-across-releases.golden.txt
-// is committed, goes red when it drifts, and is read by a human; gate/render-diff.json
-// is produced per run, is never committed, and is read by the CHANGELOG agent.
-// They must not be two COMPARISONS. A second implementation of this would be the
-// second release procedure CLAUDE.md forbids, one directory over — and the two
-// would diverge in silence, because only one of them has a committed golden that
-// goes red. So the comparison is a function with two callers, and this struct is
-// its answer.
+// "What rendered differently since the last release" has exactly one
+// implementation, and testdata/render-across-releases.golden.txt is its
+// committed answer: it goes red when it drifts and it is read by a human before
+// a release. A second implementation of the comparison would be the second
+// release procedure CLAUDE.md forbids, and the two would diverge in silence
+// because only one of them has a golden that goes red. So the comparison is a
+// function, and this struct is its answer.
 type renderComparison struct {
 	// compared is every rendered artifact present at BOTH revisions. It is the
 	// coverage witness: an empty artifacts list means something completely

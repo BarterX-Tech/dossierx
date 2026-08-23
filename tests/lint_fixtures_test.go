@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 )
 
 // lintFinding is one entry of the check envelope's data.lint_findings.
@@ -94,13 +96,17 @@ var coFiresWith = map[string][]string{
 }
 
 // lintFixtureExpectedExit is the exit code "dossierx check --validate" must
-// produce for a given rule's fixture: 0 for the three WARNING-severity rules (orphan,
-// body-edge-hint, comments-unresolved -- see their own doc comments in
-// internal/lint), 1 (a lint failure) for every ERROR-severity rule.
+// produce for a given rule's fixture: 0 for the six WARNING-severity rules (orphan,
+// body-edge-hint, comments-unresolved, source-ref-unused, track-empty,
+// track-unowned -- see their own doc comments in internal/lint), 1 (a lint
+// failure) for every ERROR-severity rule.
 var lintFixtureExpectedExit = map[string]int{
 	"orphan":              0,
 	"body-edge-hint":      0,
 	"comments-unresolved": 0,
+	"source-ref-unused":   0,
+	"track-empty":         0,
+	"track-unowned":       0,
 }
 
 func TestLintRuleCoverageFixtures(t *testing.T) {
@@ -110,8 +116,17 @@ func TestLintRuleCoverageFixtures(t *testing.T) {
 		t.Fatalf("read %s: %v", root, err)
 	}
 
-	if len(entries) != 28 {
-		t.Fatalf("expected exactly 28 lint fixture directories (one per registered lint rule), found %d: %v", len(entries), entries)
+	// The expected count is READ FROM THE LIVE REGISTRY rather than written
+	// here as a literal. It was a literal until the release that added the
+	// source-* and track-* families, and that made "one fixture per registered
+	// rule" a fact two files had to keep in step by hand — with the number in
+	// THIS file being the half nobody is reminded to update. Deriving it means
+	// the assertion states the invariant it is named for (the corpus and the
+	// registry are the same size) instead of restating a count that goes stale
+	// one commit later, and it matches how lint_coverage_meta_test.go has
+	// always discovered the rule set.
+	if len(entries) != len(lint.Registry) {
+		t.Fatalf("expected exactly one lint fixture directory per registered lint rule (%d registered), found %d: %v", len(lint.Registry), len(entries), entries)
 	}
 
 	for _, e := range entries {

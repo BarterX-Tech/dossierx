@@ -1,0 +1,6 @@
+schema_version: 1
+facets:
+  - internals
+modules:
+  - srcshape
+claims_dir: claims

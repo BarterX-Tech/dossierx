@@ -44,7 +44,24 @@
         <button id="dxgOpen" type="button" data-dxg-open aria-expanded="false">Claims graph</button>
         {{range .ModuleGroups}}
           <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
-        {{end}}
+        {{end}}{{if .Tracks}}
+        <!-- The Tracks group. It is guarded on .Tracks and the guard opens on
+             the same line as the module loop's closing action, with no newline
+             between them, so a project that declares no track emits not one
+             byte here — the zero-cost contract
+             tests/fixture_staleness_test.go holds this file to. Keep them on
+             one line: a newline before the guard is a newline in the output of
+             every project that has no tracks.
+             Tracks come AFTER every module because the module axis is the one
+             a reader navigates by default: a claim has exactly one module and
+             that is who guarantees it, while a track is the second, optional
+             view over the same claims. The buttons are ordinary .sec-tab
+             elements — a track section is a .module-section to all the
+             show/hide machinery below, deliberately (see track_view.go). -->
+        <div class="nav-group-label">Tracks</div>
+        {{range .Tracks}}
+          <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
+        {{end}}{{end}}
       </nav>
       <button id="expandAllToggle" type="button" aria-pressed="false">Expand all links/files</button>
       {{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
@@ -71,7 +88,37 @@
         {{end}}
       {{else}}
         <p class="claims-empty">No claims.</p>
-      {{end}}
+      {{end}}{{if .Tracks}}
+      <!-- Track sections, siblings of the module sections and switched by the
+           same machinery: each carries .module-section (what a sidebar tab
+           reveals) and holds exactly one .claim-group (what a deep link
+           resolves to), so every lookup map, hash rule and fragment-swap
+           re-init below picks them up by query with nothing new to maintain.
+           A track has no facets, hence no .sub-nav and exactly one group.
+           The claims a track OWNS render as whole cards; the ones it CITES
+           render as pointer rows inside .CitedHTML and never as bodies — a
+           second copy of a claim's prose is the drift this tool exists to
+           catch. The owned cards' element ids were stripped on the way in
+           (render.stripDuplicateClaimIDs): the id-bearing copy stays in the
+           claim's own module, because its module is still what guarantees it.
+           Guarded and hugged to the preceding action for the same reason the
+           sidebar group is — a project with no tracks must render byte for
+           byte as it did before this existed. -->
+      {{range .Tracks}}
+        <section class="module-section track-section" id="{{.ID}}" hidden>
+          <header class="track-head">
+            <h2 class="track-title">{{.Title}}</h2>
+            <span class="pill {{.StateClass}}">{{.StateLabel}}</span>
+            {{if .Summary}}<p class="track-summary">{{.Summary}}</p>{{end}}
+          </header>
+          <section class="claim-group" id="{{.ClaimsID}}" hidden>
+            {{range .OwnedClaims}}{{.}}
+            {{end}}
+            {{if .CitedHTML}}<h4 class="section-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
+            {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
+          </section>
+        </section>
+      {{end}}{{end}}
     </main>
   </div>
 
@@ -168,7 +215,7 @@
       // top) precisely so a later SSE fragment swap can replace <main> + <nav>
       // and then call initViewer() again to re-point them at the fresh DOM.
       var moduleSections, moduleTabs;
-      var facetToModule, moduleDefaultFacet, firstModuleID, claimToFacet, buildOrderToModule;
+      var facetToModule, moduleDefaultFacet, firstModuleID, claimToFacet, buildOrderToModule, sourceToFacet;
 
       // initViewer re-queries the section/tab NodeLists and rebuilds every
       // lookup map from the CURRENT DOM. Called once at load and (Phase 5c) after
@@ -211,6 +258,24 @@
           });
         });
 
+        // sourceToFacet maps every SOURCE ROW's anchor id
+        // ("<claim-id>-source-<n>", components.ClaimSourceAnchorID) to its
+        // owning .claim-group. A "[n]" citation marker in a claim body links
+        // straight at one of these, and resolve() falls back to the FIRST
+        // MODULE for any hash it does not recognize — so without this index a
+        // reader clicking a citation would be moved to a different module
+        // entirely, which is both wrong and hard to attribute to the click.
+        // Only the canonical copy of a claim carries these ids
+        // (render.stripDuplicateClaimIDs removes them from an overview note's
+        // repeated copies and from a track's inline copy), so this map is
+        // one-to-one for the same reason claimToFacet is.
+        sourceToFacet = {};
+        document.querySelectorAll('.claim-group').forEach(function (g) {
+          g.querySelectorAll('.claim-source[id]').forEach(function (s) {
+            sourceToFacet[s.id] = g.id;
+          });
+        });
+
         // buildOrderToModule maps each Build Order section's own id — and each of
         // its claim-card ids — to its owning module-section id. The Build Order
         // section is deliberately NOT a facet .claim-group (it renders below the
@@ -232,17 +297,38 @@
         // DOM is current — on first load `mounted` is still false and this is a
         // no-op, after a fragment swap it re-reveals the fresh chips.
         syncEmptyChips();
+
+        // Re-arm the source-note clamps over the current DOM. This is the one
+        // thing initViewer does that owns a resource rather than a lookup map,
+        // which is exactly why it belongs here: the call disconnects the single
+        // observer before re-observing, so the nodes a fragment swap discarded
+        // are released in the same pass that adopts their replacements. The
+        // delegated click that works the control is still attached once, below.
+        mountSourceNoteClamps();
       }
 
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
       // triple. Checked in order: a claim id -> its own card's facet + module; a
-      // Build Order section/card id -> its owning module + default facet; a facet
-      // id -> its own module + itself; a bare module id -> that module + its
+      // source row's anchor id -> the same, but scrolled to the row rather than
+      // to the card; a Build Order section/card id -> its owning module +
+      // default facet; a facet id -> its own module + itself; a bare module id
+      // (which a TRACK section also is — see track_view.go) -> that module + its
       // default facet; anything else -> the first module + its default facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
           return { module: facetToModule[facetID], facet: facetID, claim: id };
+        }
+        // A source row is returned as the `claim` so showModuleFacet scrolls to
+        // and highlights the ROW the citation named, not merely the card it
+        // sits in — the whole point of a citation marker is the specific line.
+        // The collapsed footer around it is opened by the
+        // `.claim-links:has(.claim-source:target)` rule in style.css, never
+        // from here: a URL fragment is unknowable server-side and the disclosure
+        // has to open on a static file:// export too.
+        if (Object.prototype.hasOwnProperty.call(sourceToFacet, id)) {
+          var srcFacet = sourceToFacet[id];
+          return { module: facetToModule[srcFacet], facet: srcFacet, claim: id };
         }
         if (Object.prototype.hasOwnProperty.call(buildOrderToModule, id)) {
           var boModule = buildOrderToModule[id];
@@ -1247,6 +1333,119 @@
         });
       }
 
+      // ---- source-note three-line clamp ---------------------------------
+      // A source's supports/does_not_support line is authored prose with no
+      // natural length, and a claim carrying several long ones buries the
+      // evidence it was meant to present. Each note is therefore clamped to
+      // three lines with a show more/show less control — but ONLY the notes
+      // that actually run past three lines get one, because a control on a
+      // one-line note is the clutter the clamp exists to remove.
+      //
+      // "Actually runs past three lines" is not knowable when the HTML is
+      // written: it moves with the viewport, the font and the reader's zoom. So
+      // the server ships every note WHOLE with its button hidden (see
+      // components/sources.go), and this block applies the clamp, measures, and
+      // reveals the control where it is earned. Two consequences, both wanted:
+      //
+      //   - With no script — or on an engine without ResizeObserver — every
+      //     note stays whole and no button appears. A clamp whose control
+      //     cannot run would hide a citation's stated LIMIT behind dead chrome,
+      //     and the limit is the half of a citation most worth reading.
+      //   - Measurement waits for a real box. A note inside a closed <details>
+      //     or a hidden facet has zero width and is not judged then; the
+      //     observer fires when it gains one, which is the same event as the
+      //     reader opening the footer, switching tabs, resizing the window, or
+      //     a webfont landing late. One mechanism covers all four.
+      //
+      // NO LOOP, and this is the part to read before editing. Applying the
+      // clamp changes the note's HEIGHT, which re-fires the observer; the guard
+      // is that a decision is keyed on the note's WIDTH, which the clamp does
+      // not touch. Same width, already judged, return.
+      var noteObserver = null;
+      var noteState = (typeof WeakMap === 'function') ? new WeakMap() : null;
+
+      // sourceNoteParts resolves an observed body back to the three elements a
+      // decision needs, or null if the markup is not the shape sources.go
+      // writes. Nothing here repairs an unexpected shape — it declines it, and
+      // the note keeps the whole text it already had.
+      function sourceNoteParts(body) {
+        var note = body.parentNode;
+        if (!note || !note.classList || !note.classList.contains('claim-source-note')) { return null; }
+        var btn = note.querySelector('.claim-source-note-toggle');
+        if (!btn) { return null; }
+        return { note: note, body: body, btn: btn };
+      }
+
+      // judgeSourceNote is only ever called with .is-clamped applied, so the
+      // ordinary scrollHeight-beats-clientHeight overflow test is the whole
+      // question. The 1px slack absorbs sub-pixel line heights, which otherwise
+      // report a three-line note as overflowing its own three lines.
+      function judgeSourceNote(p) {
+        if (p.body.scrollHeight > p.body.clientHeight + 1) {
+          p.btn.hidden = false;
+          return;
+        }
+        p.note.classList.remove('is-clamped');
+        p.btn.hidden = true;
+        p.btn.setAttribute('aria-expanded', 'false');
+      }
+
+      function onSourceNoteResize(entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var p = sourceNoteParts(entries[i].target);
+          if (!p) { continue; }
+          // A reader who opened this note owns it until they close it again.
+          // Re-judging here would either yank it shut or force a flash of the
+          // clamp to measure behind their back.
+          if (p.btn.getAttribute('aria-expanded') === 'true') { continue; }
+          // A BOX THAT HAS WIDTH IS NOT YET A BOX THAT HAS BEEN LAID OUT, and
+          // judging one is how this went wrong before the guard existed. A note
+          // inside a closed <details> — content-visibility: hidden — can report
+          // the containing block's width while its own contents have no
+          // geometry at all, and the pair that comes back then is scrollHeight
+          // from the content and clientHeight of zero. That reads as "overflows
+          // by 19px" for a note of a single short line, so every one-line note
+          // in the document was handed a "show more" that did nothing when
+          // pressed: precisely the clutter the clamp exists to remove, applied
+          // to precisely the notes that never needed it.
+          //
+          // Requiring BOTH dimensions is the whole fix, and it needs no timer:
+          // a laid-out note is at least one line tall, and skipping without
+          // recording the width leaves the next delivery — the one with real
+          // geometry — free to decide.
+          var w = Math.round(p.body.clientWidth);
+          if (w === 0 || p.body.clientHeight === 0) { continue; }
+          var st = noteState.get(p.note);
+          if (!st || st.width === w) { continue; }
+          st.width = w;
+          // Re-apply before measuring: a previous judgement at a wider box may
+          // have removed the clamp, and the test above assumes it is on.
+          p.note.classList.add('is-clamped');
+          judgeSourceNote(p);
+        }
+      }
+
+      // mountSourceNoteClamps is idempotent and re-armed from initViewer(): the
+      // observer is disconnected first, so an SSE fragment swap can never leave
+      // it holding detached nodes from the document it replaced.
+      function mountSourceNoteClamps() {
+        if (typeof window.ResizeObserver !== 'function' || !noteState) { return; }
+        if (!noteObserver) { noteObserver = new window.ResizeObserver(onSourceNoteResize); }
+        noteObserver.disconnect();
+        var bodies = document.querySelectorAll('.claim-source-note > .claim-source-note-body');
+        for (var i = 0; i < bodies.length; i++) {
+          var p = sourceNoteParts(bodies[i]);
+          if (!p) { continue; }
+          // width -1 means "never judged", so the first observation at any real
+          // width decides. The expand label is captured from the server's own
+          // button text, so the two states have one author (sources.go) and
+          // this script invents neither.
+          noteState.set(p.note, { width: -1, expandLabel: p.btn.textContent });
+          p.note.classList.add('is-clamped');
+          noteObserver.observe(p.body);
+        }
+      }
+
       // ---- reachability probe -----------------------------------------
       // A relative fetch('/api/ping') with a ~1s AbortController timeout, wrapped
       // so its rejection can NEVER abort the rest of init. Success requires
@@ -1503,6 +1702,22 @@
           } else {
             openCommentPanel(chipClaim);
           }
+          return;
+        }
+        // The source-note show more/show less control. It carries no id (a
+        // claim is rendered a second time inside any track that owns it, and
+        // ids may not be), so its handle on the note it governs is the parent
+        // it sits in — which is what makes both copies work independently.
+        var noteToggle = e.target.closest('.claim-source-note-toggle');
+        if (noteToggle) {
+          var noteEl = noteToggle.parentNode;
+          var opening = noteToggle.getAttribute('aria-expanded') !== 'true';
+          noteToggle.setAttribute('aria-expanded', String(opening));
+          noteEl.classList.toggle('is-clamped', !opening);
+          var noteSt = noteState ? noteState.get(noteEl) : null;
+          noteToggle.textContent = opening
+            ? (noteToggle.getAttribute('data-collapse-label') || 'show less')
+            : ((noteSt && noteSt.expandLabel) || 'show more');
           return;
         }
         var secTab = e.target.closest('.sec-tab');

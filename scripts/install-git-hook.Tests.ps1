@@ -18,8 +18,7 @@
 # really resolves a C:\ path inside the Linux filesystem and fails. It does,
 # but GitHub-hosted Windows runners cannot run WSL distros, so no test in this
 # repository can observe it; that boundary is stated here rather than implied
-# away, the same way gate/method.yaml states what a file cannot promise about
-# the harness that reads it. If WSL's launcher ever moves out of System32,
+# away rather than implied away. If WSL's launcher ever moves out of System32,
 # this suite goes green while the guard misses it — the guard is keyed to the
 # directory, because the directory is the only stable, testable handle.
 #

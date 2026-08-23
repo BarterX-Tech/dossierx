@@ -5,6 +5,172 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-08-23
+
+### Added
+
+- **A claim can carry the sources behind it, and locking a claim now signs its evidence too**
+  (`sources`, issue #49). Each entry is `{ref, kind, title, …}` and a `body` cites it from prose as
+  `[1]`, `[2]` — the Perplexity/Wikipedia convention — recognized in prose only, never inside a
+  fenced block or an inline code span, and only on a claim that declares `sources`, so a
+  source-less claim writing `array[0]` renders exactly as it did before. The two kinds require
+  different anchors because they are falsifiable in different ways: `kind: external` requires `url`
+  and `accessed_on`, because a page can be rewritten under you and the honest record is what it
+  said on the day it was read; `kind: internal` requires `path` and `sha256`, because the engine
+  can open the file, so drift is detectable rather than merely possible. An optional `record_id`
+  pins one JSONL record by its top-level `"id"` instead of a shared registry's whole file — a
+  registry churns for reasons unrelated to any one claim, and whole-file drift findings train
+  readers to wave them through. **What this replaces:** a claim could record *which* sources it
+  came from (`migrated_from`, one free-text string) but not *what they were*, so a reader had to
+  already know which external registry to open before they could check one sentence — and the
+  sidecar file that was the workaround is invisible to `check`, to the viewer and to
+  `lock-content-drift`, which left the evidence behind a **locked** claim freely rewritable after
+  a human approved it. Five lints: `source-shape`, `source-ref-undefined`,
+  `source-external-unanchored` and `source-internal-drift` at ERROR — an internal source whose
+  hash is missing, whose file cannot be read, or whose content moved is a failure, never a silent
+  pass — plus `source-ref-unused` at WARNING, since an uncited entry is clutter and not falsehood.
+  `sources` **is** signed by the lock ledger's `LockedClaimHash`, so editing a citation under a
+  locked claim is `lock-content-drift` exactly like editing the body; it is deliberately **not**
+  part of the dependency-drift `ContentHash`, because correcting a citation does not change what a
+  claim promises and must not flip every dependent to `review_pending` — provenance is not
+  contract. A claim carrying no `sources` serializes byte-for-byte as it did before the field
+  existed, so upgrading an existing project reports drift on nothing. `migrated_from` is unchanged
+  and **not** deprecated: it answers what a claim replaced, `sources` answers what backs it.
+  In the viewer, a `supports`/`does_not_support` line longer than **three lines** is clamped to
+  three with a `show more`/`show less` control — but only where it actually runs past them, which
+  is a fact about the rendered box and not about the string, so the page ships every note WHOLE
+  with the control hidden and the viewer's script measures and reveals. That direction is the
+  guarantee worth knowing: with no script — a printout, a text browser, a reader who blocks it —
+  a citation's stated limit is shown in full rather than cut off behind a button that cannot run.
+- **`tracks` — a cross-cutting feature axis, and the `track` noun that reads it** (issue #50).
+  `module` answers "who guarantees this?" and takes exactly one value per claim, which is the right
+  partition for writing and reviewing contracts. It cannot answer "what does the user get, and is
+  it finished?": a user-facing feature is assembled from claims across many modules and a module
+  serves many features, so that relationship is many-to-many where the schema allowed one. The
+  workaround was generating feature documents outside the tool — true by regeneration, but unable
+  to reach the lock ledger, `check`, review threads or the claims graph, and a second copy of the
+  corpus by construction. A project declares the vocabulary in `project.config.yaml`
+  (`tracks: [{id, title, summary}]`) and a claim names tracks as `- {id, role}` with `role` one of
+  `owns`/`cites`, defaulting to `cites`. **The invariant that keeps this from being tagging: every
+  claim has exactly one owner on each axis** — one `module`, and at most one track it `owns`.
+  Everything else is a citation: a reference, never a copy. Owning is what lets a feature's
+  trigger, failure behaviour and acceptance criteria — statements belonging to no single module —
+  live in the corpus as a lockable claim. Track membership is **not an edge**: `rests_on`,
+  `mirrors` and `governed_by` are semantic dependencies and carry cycle lints, and a set has no
+  direction to run in a circle, so track membership joins no cycle walk. Five lints: `track-shape`,
+  `track-unknown` and `track-multi-owner` at ERROR, `track-empty` and `track-unowned` at WARNING.
+  **An explicit non-goal, stated so nobody adds it later by accident:** track membership never
+  gates `dossierx claim lock`, and `dossierx track status` only reports — a track is COMPLETE when
+  every claim it owns and every claim it cites is locked, and a claim still locks on its own merits
+  through `unlock → fix → lock`. In the viewer, tracks are a sidebar group with a page per track
+  rendering the assembled document, and the claims graph gains a track filter; a **cited** claim
+  renders there as a reference carrying its owning module and lock state, never as an inlined
+  duplicate body. `tracks` is `omitempty` and, like `sources`, outside `ContentHash`: adding a claim
+  to a track flips no dependent to `review_pending`.
+- **The CLI surface is twenty-two leaves under eight nouns**, up from nineteen under seven. The new
+  noun is `track`, and it is the only one whose every leaf is read-only: `track list`, `track show
+  <id>`, `track status <id>` write no claim, no store and no artifact. A claim joins a track by
+  carrying `tracks:` in its own YAML, so membership on a locked claim changes through the ordinary
+  approval path and never through a `track` command.
+
+### Changed
+
+- **The website is a two-page memo, and the twelve-section application that was there is
+  deleted.** `site/` was a Vite + React + TypeScript build — twelve sections, fifteen components,
+  and a 1,509-line content spec that restated the command surface, the error-code reference, the
+  claim lifecycle and a terminal transcript for each. All of it was prose about a pre-1.0 tool
+  whose direction is not settled, and all of it had to be re-verified against the binary at every
+  release. It went stale in front of users anyway: the meta description advertised a 20-command
+  CLI from v0.3.0 until v0.5.0 found it — two minor releases after the surface changed — and four
+  separate version strings drifted before they were made to derive from one literal. What ships
+  now is `site/index.html`, a memo on why the project exists, and `site/releases.html`, the
+  release ledger. **Nothing on the memo is counted and nothing on it names a version**, so it has
+  no way to go stale; the counts that must be right live in `README.md`, next to the binary that
+  settles them. **This is a narrowing of what the site tells a reader, chosen deliberately** —
+  `README.md` is the client-facing account now, and the site makes the argument for the project
+  and stops.
+- **There is no site build, and the publish workflow uploads the tree.** `.github/workflows/deploy-site.yml`
+  no longer sets up Node, runs `npm ci` or builds anything; it uploads `site/` to GitHub Pages as
+  it stands, and `package.json`, `package-lock.json`, `vite.config.ts` and the three `tsconfig`
+  files are gone. **What this buys is not a faster deploy, it is that the reviewed bytes and the
+  served bytes are the same bytes.** Every check in this repository — the release gate's site
+  agent included — reads files in the worktree, and that reading was evidence about the deployed
+  page only for as long as the toolchain that produced the page was the toolchain that published
+  it. `TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt` refuses the reintroduction of a
+  build step, because a bundler that rewrote, inlined or dropped something would publish a page
+  nobody in this repository has ever looked at while every assertion over `site/` stayed green.
+- **The release stamp moved, and the current release is now MARKED rather than positioned.** The
+  ledger the release driver checks the tag against was the last element of an oldest-first
+  TypeScript array; it is now the entry in `site/releases.html` carrying `data-current="true"`.
+  The old arrangement needed three expressions in two files to agree about what "last" meant, and
+  a prepended entry silently demoted the new release and promoted the previous one on a page that
+  went on rendering perfectly. Exactly one entry may be marked — nought is a page that names no
+  current release, two is a page that names two — and re-sorting the page cannot change which
+  release it names. `CHANGELOG.md`'s newest heading must still agree with it, and the driver
+  still refuses to publish while they disagree.
+- **The `site` surface is read as files, and `gate/site-text.json` is gone with the build that
+  produced it.** `surfaces.yaml` defined the surface as "the RENDERED DOM of a real build ... not
+  the component source", so the gate had to be handed an extraction produced by a headless browser
+  — the sixth staged artifact, and the one whose freshness could not be recomputed at record time.
+  With no build, the file IS the page: the surface is `site/`'s tracked files, the release
+  procedure stages five artifacts rather than six, and "verify the thing the user sees" is
+  satisfied directly instead of by proxy. Two consequences worth knowing: the site's
+  `document_basis` in `gate-cost-model.yaml` is **decided** (`manifest.tracked_files`) where it had
+  been undecided because the right bytes were not extractable from the tree at all; and the
+  stale-capture guard the extraction's own failure bought is re-aimed at `gate/render-diff.json`,
+  the one stamped capture left, rather than deleted with its old subject.
+- **Coverage narrowed in two places, recorded rather than absorbed.** The site depicted a
+  `reaudit` transcript and an error-code reference, and two audits pinned them against the binary:
+  the reaudit success line must carry a claim id, and `write_conflict` must not be described as
+  `claim_file_changed`'s meaning. Both were real shipped defects and both assertions now have no
+  subject, because no document in this repository depicts either any more. The skills' half of the
+  `write_conflict` rule — the one an agent branches on — is still pinned. `tests/docs_site_audit_test.go`
+  carries the note saying what stopped being checked and what would restore it.
+
+### Removed
+
+- **The release gate pipeline is gone, and a release is a maintainer's again.** DossierX is alpha,
+  and the multi-agent gate cost more to operate than the releases it was guarding were worth. What
+  went: `surfaces.yaml` and the thirteen per-surface reading agents; `gate/` in full (the prompts,
+  `method.yaml`, `adjudications.json`); the stage-2 and stage-3 fan-out, bundle, fingerprint,
+  receipt, evidence and cost-ledger machinery in `cmd/dossierx/gate_*_test.go`;
+  `surface.baseline.json` and `gate-cost-model.yaml`; `scripts/gate-agent/` and
+  `scripts/gate-stage2/`; and the two Makefile targets the pipeline ran through, `make ci-evidence`
+  and `make release-publish`. The release driver went with them: with no gate receipt to check, its
+  first clause could never be satisfied, so it was a program that could only refuse.
+  `docs/RELEASING.md` is now a two-page procedure a person works through, and it is still the only
+  description of how this project releases.
+- **What did NOT go, because none of it depended on the pipeline.** `make test`, `make hook-test`,
+  `make viewer-test` and `make viewer-lint` are unchanged and are what a release is now read
+  against. `surface.json` is still emitted and still goes red when it is stale, so a command, flag
+  or exit code that moved without a CHANGELOG entry is still a failed build. The pre-commit hook
+  and the lock-ledger gate are product features and are untouched.
+- **`.github/workflows/release.yml` no longer refuses anything.** Its `gate` job checked that the
+  tagged commit was a merge and that the tree stamped the version being tagged; both went with the
+  rest of the pipeline. A `v*` tag now runs GoReleaser and GoReleaser publishes, which is what this
+  file did before the gate existed. The three mistakes that leaves uncaught — tagging the release
+  branch instead of the merge, tagging a tree whose site announces a different release, and tagging
+  the wrong commit — are named in the workflow's own header and asked for by hand in
+  `docs/RELEASING.md`. One guard survives as a test rather than as a job:
+  `tests/ci_workflow_test.go` still refuses a `merge-base --is-ancestor` check in that workflow by
+  name, because the tag is pushed before `main` and such a check deadlocks against that order — it
+  stopped v0.5.1 with a public tag and no archives.
+
+### Fixed
+
+- **`dossierx check` and the three `build-order` leaves refuse a positional argument** instead of
+  discarding it (#47). Without an `Args` declaration cobra falls back to `legacyArgs`, which accepts
+  any positional on a leaf command and throws it away, so `dossierx check --validate <claim-id>`
+  linted the whole project and reported an unrelated module's lint error as though it were about the
+  claim that was named. There is no per-claim check to narrow to, so the honest answer is a usage
+  error. This moves those invocations from exit 0 to exit 1; the repository-internal sweep is clean,
+  so the exposure is to callers outside this tree.
+- **`docs/RELEASING.md` pushes with fully qualified refspecs** (#40). A release developed on a
+  branch named `vX.Y.Z` gives that name two referents, and the short forms resolve it by search
+  order rather than by intent: `git push origin vX.Y.Z` refuses outright, and `git rev-parse
+  --short vX.Y.Z` warns and then answers from `refs/tags` by a convention nothing enforces. The
+  procedure now writes `refs/tags/…` and `refs/heads/…`, which have exactly one referent each.
+
 ## [0.6.0] - 2026-08-20
 
 **SILENT: three shipped skill guides changed, and the skills are embedded in the binary — anyone
@@ -1825,7 +1991,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.4.1...v0.5.0

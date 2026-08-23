@@ -1,17 +1,15 @@
-// skills_export_capture_helpers_test.go is the capture behind surfaces.yaml's
-// `agent-skills` surface: what `dossierx skills export` actually WRITES, not
-// what skills/*/SKILL.md says. That surface's own reach clause names this
-// exact transform ("go:embed-ed into the binary and installed into OTHER
-// people's repositories by `dossierx skills export`"), which is the output
-// captured here; the neighbouring `exported-skills` surface is the narrower
-// thing — this repository's own checked-in `.claude/skills/` symlinks.
+// skills_export_capture_helpers_test.go captures what `dossierx skills export`
+// actually WRITES, not what skills/*/SKILL.md says. The transform is the thing
+// that matters: the bundles are go:embed-ed into the binary and installed into
+// OTHER people's repositories, where they are unfixable after the tag. This
+// repository's own checked-in `.claude/skills/` symlinks are the narrower,
+// separate thing.
 //
-// Surfaces are named, not numbered. An earlier version of this header called
-// this "Surface 12's capture", and two sibling files carried the same style of
-// label; surfaces.yaml defines no numbering at all, and counting its entries
-// puts `exported-skills` at position 8 and `release-notes` at 12 — so every
-// one of those labels pointed a reader at the wrong manifest entry. Positions
-// also move the moment a surface is inserted, which is why the fix is to cite
+// Things are named, not numbered. An earlier version of this header called this
+// "Surface 12's capture", and two sibling files carried the same style of
+// label; nothing defined that numbering, so every one of those labels pointed a
+// reader at the wrong entry. Positions also move the moment something is
+// inserted, which is why the fix is to cite
 // the `name:` key rather than to correct the arithmetic.
 //
 // WHY A CAPTURE AND NOT A SOURCE READ. cmd/dossierx/skills_embed.go's

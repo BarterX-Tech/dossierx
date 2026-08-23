@@ -1,7 +1,6 @@
-node_modules
-dist
-dist-ssr
-*.local
-*.tsbuildinfo
-.DS_Store
-*.log
+# The site is static: no build step, no bundler, nothing generated. Nothing
+# under site/ is produced by a tool, so nothing under site/ is ignored — a file
+# here is a file somebody wrote and a reviewer should see.
+#
+# This file exists to say that deliberately. It replaced a .gitignore covering
+# node_modules/ and dist/, both of which are gone with the Vite build.

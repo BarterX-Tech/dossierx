@@ -1,0 +1,6 @@
+schema_version: 1
+facets:
+  - internals
+modules:
+  - srcextern
+claims_dir: claims

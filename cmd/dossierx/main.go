@@ -97,7 +97,7 @@ func newRootCmd() *cobra.Command {
 		// under --format text and emits a failure envelope under --format json.
 		SilenceErrors: true,
 	}
-	// The ROOT gets the same treatment as the four nouns (see
+	// The ROOT gets the same treatment as the nouns (see
 	// requireSubcommand): without a RunE, cobra's default for a parent is to
 	// print help prose on STDOUT and return nil, so a bare "dossierx" — or
 	// "dossierx $NOUN" where the variable is empty, which is how an agent
@@ -109,7 +109,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the seven nouns the way the noun
+	// The message is inlined instead, naming the eight nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -122,11 +122,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, version>")
+				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, version>")
+			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -164,12 +164,13 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: seven nouns, nineteen leaves, and not one more.
+	// The whole surface: eight nouns, twenty-two leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock                                   3
+	//	track   list show status                                          3
 	//	serve · skills export · version                                   3
 	//
 	// The count is a design constraint, not a coincidence. Every verb here is
@@ -179,8 +180,17 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsNineteenLeavesUnderSevenNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentyTwoLeavesUnderEightNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
+	//
+	// "track" is the eighth noun, and it is the first addition since v0.3.0
+	// built the seven. It earns its place by answering a question none of the
+	// other seven can be asked: every one of them is organized on the MODULE
+	// axis, which says who guarantees a claim, and no arrangement of them says
+	// what a user gets or whether that thing is finished. Its three leaves are
+	// all READ-ONLY by design — see track.go's package comment for why a track
+	// must never gate a lock — so the eighth noun adds a way to look at the
+	// corpus and no new way to change it.
 	//
 	// The migration verb was the twentieth leaf, added by v0.3.0 and REMOVED by
 	// v0.4.0. It was the one door into ledger adoption, and v0.4.0 removes
@@ -196,6 +206,7 @@ func newRootCmd() *cobra.Command {
 		newClaimCmd(),
 		newCommentCmd(),
 		newBuildOrderCmd(),
+		newTrackCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
 
@@ -225,10 +236,10 @@ func newRootCmd() *cobra.Command {
 	// one permanent exemption, and widening that annotation is exactly the drift
 	// it exists to prevent.
 	//
-	// The GROUP itself gets the same requireSubcommand treatment as the six
-	// nouns, because bare "dossierx completion" is the identical hole: cobra
+	// The GROUP itself gets the same requireSubcommand treatment as the product's
+	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsNineteenLeavesUnderSevenNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentyTwoLeavesUnderEightNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -339,6 +350,33 @@ func requireKnownModule(cfg *config.Config, module string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown module %q; known: %s", module, strings.Join(cfg.Modules, ", "))
+}
+
+// requireKnownTrack validates a track id against the tracks this project
+// declares (cfg.Tracks). It is requireKnownModule's twin, and it exists for a
+// sharper version of the same reason.
+//
+// An unchecked module filter reports an empty result for a typo, which at least
+// looks unusual. An unchecked TRACK id reports the empty document that a real,
+// declared, not-yet-joined track reports — and a track declared before any claim
+// joins it is the ORDINARY state at the start of a feature, not an anomaly. So
+// the two responses would be identical, at exit 0, with nothing in either for a
+// reader to notice. See cliout.CodeUnknownTrack, which the callers attach.
+//
+// The message for a project with no tracks at all says so in words rather than
+// printing "known: " with nothing after it. That project has not adopted the
+// second axis, which is a legitimate way to use this engine (see
+// trackListData), and "you named a track in a project that declares none" is a
+// different mistake from "you misspelled one of these three".
+func requireKnownTrack(cfg *config.Config, id string) error {
+	if cfg.HasTrack(id) {
+		return nil
+	}
+	known := cfg.TrackIDs()
+	if len(known) == 0 {
+		return fmt.Errorf("unknown track %q; this project declares no tracks", id)
+	}
+	return fmt.Errorf("unknown track %q; known: %s", id, strings.Join(known, ", "))
 }
 
 // ---------------------------------------------------------------------
@@ -1234,6 +1272,27 @@ func newCheckCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "check",
 		Short: "Run lint, catalog, render and the lock-ledger gate in one shot, stopping at first failure; --validate for a read-only run, --staged to judge the git index",
+		// THERE IS NO PER-CLAIM CHECK, AND THAT IS WHY A POSITIONAL IS REFUSED
+		// RATHER THAN IGNORED. Without an Args declaration cobra falls back to
+		// legacyArgs, which accepts any positional on a leaf command and
+		// silently discards it. The invocation that costs someone is
+		// `dossierx check --validate <claim-id>` — what an agent types when it
+		// means "check this one claim". It lints the WHOLE project, exits 0 on
+		// a clean corpus, and reports a lint error from an unrelated module as
+		// though it were a problem with the claim that was named. The
+		// whole-project run IS the check; there is nothing to narrow it to, so
+		// the honest answer to a narrowing argument is a usage error.
+		//
+		// This moves an invocation that previously exited 0 to exit 1, which is
+		// why it did not ship in v0.5.2: that release's CHANGELOG promised no
+		// command behaviour changed, and `check` is what CI runs, what the
+		// pre-commit hook runs, and what README's paste block hands a client's
+		// agent. It ships here as an announced change. The repository-internal
+		// sweep is clean — hook, CI template, skills, site, tests, Makefile and
+		// workflows pass no positional to this command — so the exposure is
+		// entirely to callers outside this tree, which is what the CHANGELOG
+		// entry is for.
+		Args: cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			// Both read-only modes exist, and they answer DIFFERENT questions:
 			// --validate judges the working tree, --staged judges what the

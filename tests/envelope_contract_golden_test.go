@@ -88,13 +88,12 @@ import (
 
 // envelopeGoldenFile is the committed snapshot, relative to the repository
 // root. It sits beside the corpora under testdata/ rather than next to this
-// file so that surfaces.yaml's `testdata/` out-of-scope entry already claims it
-// — it is a fixture, not a client-facing surface.
+// file, because it is a fixture rather than a client-facing document.
 const envelopeGoldenFile = "testdata/envelope-contract.golden.txt"
 
 // envelopeGoldenHeader is prose carried INSIDE the committed file, because the
-// file is read by the release gate and by whoever is writing a CHANGELOG entry,
-// neither of whom is reading this source.
+// file is read by whoever is writing a CHANGELOG entry, who is not reading this
+// source.
 const envelopeGoldenHeader = `# envelope-contract.golden.txt — what each pinned invocation of the dossierx CLI
 # actually emitted: the envelope's keys, the keys of data WITH THE JSON TYPE OF
 # EACH, the error block and its code, stopped_at, and the process exit status.
@@ -172,6 +171,57 @@ func envLocked(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	writeFixtureProject(t, dir, "widget")
 	envMustRun(t, dir, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
+	return nil
+}
+
+// envTracked is a project that has adopted the SECOND axis: two declared
+// tracks, one of them assembled from a claim it owns plus two it cites — one of
+// those in another module and still draft.
+//
+// It exists because the track payloads' whole contract lives inside lists, and
+// this file says so in its own header: an empty list is honest about the
+// invocation and silent about the type. A track fixture with nothing in it would
+// pin `owned_claims:[]` and hold nothing about what an entry in that list looks
+// like. The cross-module draft citation is what makes `blocking` non-empty for
+// the same reason.
+func envTracked(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	claimsDir := filepath.Join(dir, "claims")
+	if err := os.MkdirAll(claimsDir, 0o755); err != nil {
+		t.Fatalf("mkdir claims dir: %v", err)
+	}
+	cfg := "schema_version: 1\n" +
+		"facets:\n  - contract\n" +
+		"modules:\n  - checkout\n  - payments\n" +
+		"claims_dir: claims\n" +
+		"tracks:\n" +
+		"  - id: guest-checkout\n    title: Guest Checkout\n    summary: buying without an account\n" +
+		"  - id: refunds\n    title: Refunds\n"
+	if err := os.WriteFile(filepath.Join(dir, "project.config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write project.config.yaml: %v", err)
+	}
+	claims := map[string]string{
+		"owned.yaml": "id: checkout.contract.guest-flow\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"body: |\n  a guest completes a purchase without creating an account.\n" +
+			"tracks:\n  - id: guest-checkout\n    role: owns\n" +
+			"governed_by:\n  type: none\n  reason: fixture claim\n",
+		"cited-locked.yaml": "id: checkout.contract.session-ttl\n" +
+			"facet: contract\nmodule: checkout\nstatus: locked\nlayout: card\n" +
+			"body: |\n  a guest session expires after thirty minutes.\n" +
+			"tracks:\n  - id: guest-checkout\n    role: cites\n" +
+			"governed_by:\n  type: none\n  reason: fixture claim\n",
+		"cited-draft.yaml": "id: payments.contract.card-capture\n" +
+			"facet: contract\nmodule: payments\nstatus: draft\nlayout: card\n" +
+			"body: |\n  a card is captured at authorization time.\n" +
+			"tracks:\n  - id: guest-checkout\n" +
+			"governed_by:\n  type: none\n  reason: fixture claim\n",
+	}
+	for name, body := range claims {
+		if err := os.WriteFile(filepath.Join(claimsDir, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
 	return nil
 }
 
@@ -393,6 +443,18 @@ func envelopeCases() []envelopeCase {
 		{"build-order status / nothing proposed yet", envLocked, []string{"build-order", "status", "--module", "widget"}},
 		{"build-order lock / a fresh proposal", envProposedOrder, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
 		{"build-order lock / nothing proposed yet", envLocked, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
+
+		// The track leaves, against a project that has adopted the axis and one
+		// that has not. Both matter: the adopted project is where the lists have
+		// entries to pin, and the unadopted one is where "count:0 at exit 0" is
+		// pinned as a SUCCESS — a corpus that never declared a track must behave
+		// exactly as it did before the axis existed.
+		{"track list / two declared tracks", envTracked, []string{"track", "list"}},
+		{"track list / a project that declares none", envFresh, []string{"track", "list"}},
+		{"track show / one owned claim and two cited", envTracked, []string{"track", "show", "guest-checkout"}},
+		{"track show / a track nothing has joined", envTracked, []string{"track", "show", "refunds"}},
+		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
+		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
 
 		{"skills export / into an explicit directory", envFresh, []string{"skills", "export", "skills-out"}},
 

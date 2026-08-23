@@ -269,7 +269,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsNineteenLeavesUnderSevenNouns pins the headline of the v0.3.0
+// TestSurfaceIsTwentyTwoLeavesUnderEightNouns pins the headline of the v0.3.0
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
@@ -279,15 +279,25 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 //
 // It moved from nineteen-under-six to twenty-under-seven exactly once, for the
 // migration verb v0.3.0 added when ledger adoption became fail-closed — and
-// v0.4.0 takes it straight back out, which is why this reads nineteen again.
-// Removal is the same kind of decision as addition and is recorded the same way:
-// v0.4.0 removes adoption itself, so a project that predates the lock ledger
-// crosses onto it by holding nothing that predates it (lock.CrossPreLedger)
-// rather than by running a command that records content nobody approved. With
-// nothing left to adopt there is nothing for the verb to do. It survives as a
-// hidden retired stub, counted by TestRetiredInvocationsNameTheirReplacement
-// rather than here.
-func TestSurfaceIsNineteenLeavesUnderSevenNouns(t *testing.T) {
+// v0.4.0 took it straight back out. Removal is the same kind of decision as
+// addition and was recorded the same way: v0.4.0 removes adoption itself, so a
+// project that predates the lock ledger crosses onto it by holding nothing that
+// predates it (lock.CrossPreLedger) rather than by running a command that
+// records content nobody approved. With nothing left to adopt there was nothing
+// for the verb to do. It survives as a hidden retired stub, counted by
+// TestRetiredInvocationsNameTheirReplacement rather than here.
+//
+// THE THIRD MOVE IS THE TRACK NOUN, and it is an ADDITION — the first since the
+// restructure — taking nineteen-under-seven to twenty-two-under-eight. The
+// argument for it is not that the surface should grow but that every one of the
+// other seven nouns is organized on the MODULE axis, which answers "who
+// guarantees this claim?" and structurally cannot answer "what does the user
+// get, and is it finished?". No arrangement of the existing leaves gets there,
+// because the corpus itself did not carry the relationship until the tracks
+// field existed. Its three leaves are all read-only: this adds a way to LOOK at
+// the corpus and no new way to change it, which is why the addition does not
+// touch any lifecycle guarantee the other nineteen make.
+func TestSurfaceIsTwentyTwoLeavesUnderEightNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -308,6 +318,10 @@ func TestSurfaceIsNineteenLeavesUnderSevenNouns(t *testing.T) {
 		"build-order propose": true,
 		"build-order status":  true,
 		"build-order lock":    true,
+
+		"track list":   true,
+		"track show":   true,
+		"track status": true,
 
 		"serve":         true,
 		"skills export": true,
@@ -357,8 +371,8 @@ func TestSurfaceIsNineteenLeavesUnderSevenNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 19 {
-		t.Errorf("the surface is 19 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 22 {
+		t.Errorf("the surface is 22 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -455,18 +469,40 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsNineteenLeavesUnderSevenNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyTwoLeavesUnderEightNouns
 // walks the same tree. Change the surface and this fails until the site follows.
+//
+// THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It
+// used to regex the whole file, which is a different check wearing this one's
+// name: index.html now carries a comment explaining why nothing on the page
+// states a count, and that comment quotes the stale "19-command" string it
+// exists to warn about. A whole-file scan read the warning as the defect. A
+// check that goes red on the note describing its own history is a check people
+// learn to route around.
+//
+// AND THE NO-COUNT CASE IS A PASS THAT SAYS SO, not a t.Skip. Phrasing that
+// carries no number cannot go stale, so there is genuinely nothing to compare —
+// but a skip reads in a run log as "we did not check", and this repository does
+// not have a result that means that (CLAUDE.md; viewer-tests/harness_test.go:47).
+// The description is asserted to exist either way, because a page with no
+// description at all is the one state that would make every branch below vacuous.
 func TestSiteMetaDescriptionNamesTheRealLeafCount(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "site", "index.html"))
 	if err != nil {
 		t.Fatalf("read site/index.html: %v", err)
 	}
 
-	m := regexp.MustCompile(`(\d+)-command`).FindSubmatch(raw)
+	descRE := regexp.MustCompile(`(?s)<meta\s+name="description"\s+content="(.*?)"`)
+	desc := descRE.FindSubmatch(raw)
+	if desc == nil {
+		t.Fatal("site/index.html carries no `<meta name=\"description\" content=\"…\">`.\n" +
+			"That tag is what search engines and link previews quote, so a page without one is not a smaller version of this check's subject, it is the absence of it. This is a failure rather than a skip: every branch below would otherwise pass over nothing.")
+	}
+
+	m := regexp.MustCompile(`(\d+)-command`).FindSubmatch(desc[1])
 	if m == nil {
-		// Phrasing that carries no count cannot go stale, so this is a pass.
-		t.Skip("site/index.html's description states no command count")
+		t.Logf("site/index.html's description states no command count, which is what the page intends: %q", desc[1])
+		return
 	}
 	claimed, err := strconv.Atoi(string(m[1]))
 	if err != nil {

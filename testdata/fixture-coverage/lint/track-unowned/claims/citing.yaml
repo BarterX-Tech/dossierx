@@ -1,0 +1,20 @@
+id: trackmod.contract.citing
+facet: contract
+module: trackmod
+status: draft
+layout: card
+body: |
+  A claim citing the declared track. Its membership is well formed and names a
+  declared id, and the track is not empty -- what is missing is any claim
+  declaring role: owns for it, so the track's page would render a list of parts
+  with no statement of what the feature delivers. That is the track-unowned
+  WARNING, and this fixture exits 0: writing the citing claims before the owning
+  one is ordinary mid-development state, not a defect.
+tracks:
+  - id: checkout
+    role: cites
+rests_on:
+  - trackmod.contract.helper
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

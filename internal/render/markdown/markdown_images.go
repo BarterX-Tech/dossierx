@@ -99,19 +99,26 @@ var assetExtensions = map[string]bool{
 	".svg":  true,
 }
 
-// RenderClaimBody converts a CLAIM's body markdown into safe HTML with images
-// enabled. It is Render plus exactly one construct, and it is the only entry
-// point in this package that has it.
+// RenderClaimBody converts a CLAIM's body markdown into safe HTML with the two
+// claim-body constructs enabled: images, and the "[n]" citation markers that
+// address the claim's own sources. It is Render plus exactly those two, and it
+// is the only entry point in this package that has either.
 //
 // assets is where this claim's images are served from; a zero AssetPrefix
-// renders every image as literal text, exactly as Render does. See this file's
-// doc comment for why the capability is spelled as a separate entry point
-// rather than as a parameter on Render.
-func RenderClaimBody(body string, assets AssetPrefix) template.HTML {
+// renders every image as literal text, exactly as Render does. cites is the
+// claim's declared source refs and the anchor they resolve to; the zero value
+// renders every "[n]" as the literal text it has always been. See this file's
+// doc comment for why the capabilities are spelled as a separate entry point
+// rather than as parameters on Render, and markdown_cite.go for why a claim
+// with no sources must render byte-identically to before citations existed.
+func RenderClaimBody(body string, assets AssetPrefix, cites Citations) template.HTML {
 	var b strings.Builder
-	renderBlocks(&b, strings.Split(body, "\n"), true, imagePolicy{
-		enabled: assets != "",
-		prefix:  string(assets),
+	renderBlocks(&b, strings.Split(body, "\n"), true, bodyPolicy{
+		img: imagePolicy{
+			enabled: assets != "",
+			prefix:  string(assets),
+		},
+		cite: cites,
 	})
 	return template.HTML(b.String())
 }
@@ -134,7 +141,9 @@ func RenderClaimBody(body string, assets AssetPrefix) template.HTML {
 func ClaimBodyImages(body string) []string {
 	var refs []string
 	var b strings.Builder
-	renderBlocks(&b, strings.Split(body, "\n"), true, imagePolicy{enabled: true, refs: &refs})
+	renderBlocks(&b, strings.Split(body, "\n"), true, bodyPolicy{
+		img: imagePolicy{enabled: true, refs: &refs},
+	})
 	return refs
 }
 

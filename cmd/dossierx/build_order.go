@@ -116,6 +116,17 @@ func newBuildOrderProposeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "propose",
 		Short: "Propose (and write) a build-order artifact for --module (refused unless every claim in it is locked)",
+		// EVERY BUILD-ORDER LEAF SELECTS WITH --module AND NOTHING ELSE, so a
+		// positional names nothing this command could act on. Left undeclared,
+		// cobra's legacyArgs accepts one on a leaf and throws it away, and
+		// `dossierx build-order propose my-module` then proposes for whatever
+		// --module happened to hold — or fails "missing --module" while the
+		// module the caller named sits ignored on the same line. Declaring
+		// NoArgs turns both into a usage error naming the flag.
+		//
+		// See `check`'s Args in main.go for why this class of change waited for
+		// an announced release: it moves an invocation from exit 0 to exit 1.
+		Args: cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			if err := requireModuleFlag(module); err != nil {
 				return cmdResult{}, err
@@ -366,6 +377,10 @@ func newBuildOrderStatusCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show --module's build-order artifact state: proposed/locked/stale and coverage",
+		// Selection is --module only; see `newBuildOrderProposeCmd`'s Args for
+		// what a discarded positional costs and why this shipped as an
+		// announced change rather than quietly.
+		Args: cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			if err := requireModuleFlag(module); err != nil {
 				return cmdResult{}, err
@@ -458,6 +473,10 @@ func newBuildOrderLockCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "lock",
 		Short: "Lock --module's proposed build-order artifact, snapshotting a content-hash baseline",
+		// Selection is --module only; see `newBuildOrderProposeCmd`'s Args for
+		// what a discarded positional costs and why this shipped as an
+		// announced change rather than quietly.
+		Args: cobra.NoArgs,
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
 			if err := requireModuleFlag(module); err != nil {
 				return cmdResult{}, err

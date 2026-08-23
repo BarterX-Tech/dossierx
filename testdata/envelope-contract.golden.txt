@@ -155,8 +155,10 @@ claim show / a draft claim
                   review_pending:bool
                   review_pending_trigger:string
                   source_path:string
+                  sources:[]
                   status:string
                   title:string
+                  tracks:[]
 
 claim show / an id no claim carries
     argv          claim show widget.contract.ghost
@@ -174,7 +176,7 @@ claim list / every claim
     ok            true
     envelope      command data ok
     command       claim list
-    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,review_pending:bool,status:string,title:string}]
+    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,review_pending:bool,sources:number,status:string,title:string}]
                   count:number
                   filters:{drifted:bool,migrated:bool,review_pending:bool}
                   percent_of_total:number
@@ -462,6 +464,77 @@ build-order lock / nothing proposed yet
                   message:string
     error.code    not_proposed
 
+track list / two declared tracks
+    argv          track list
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       track list
+    data          count:number
+                  tracks:[{cited_claims:number,complete:bool,locked_claims:number,owned_claims:number,summary:string,title:string,total_claims:number,track_id:string}|{cited_claims:number,complete:bool,locked_claims:number,owned_claims:number,title:string,total_claims:number,track_id:string}]
+
+track list / a project that declares none
+    argv          track list
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       track list
+    data          count:number
+                  tracks:[]
+
+track show / one owned claim and two cited
+    argv          track show guest-checkout
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       track show
+    data          cited_claims:[{claim_id:string,facet:string,locked:bool,module:string,review_pending:bool,status:string,title:string}]
+                  complete:bool
+                  locked_claims:number
+                  owned_claims:[{body:string,claim_id:string,facet:string,locked:bool,module:string,review_pending:bool,status:string,title:string}]
+                  summary:string
+                  title:string
+                  total_claims:number
+                  track_id:string
+
+track show / a track nothing has joined
+    argv          track show refunds
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       track show
+    data          cited_claims:[]
+                  complete:bool
+                  locked_claims:number
+                  owned_claims:[]
+                  title:string
+                  total_claims:number
+                  track_id:string
+
+track status / blocked by a cited draft claim in another module
+    argv          track status guest-checkout
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       track status
+    data          blocking:[{claim_id:string,facet:string,module:string,review_pending:bool,role:string,status:string}]
+                  cited:{locked:number,total:number}
+                  complete:bool
+                  owned:{locked:number,total:number}
+                  title:string
+                  total_claims:number
+                  track_id:string
+
+track status / an id the config does not declare
+    argv          track status guest-chekout
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       track status
+    error         code:string
+                  message:string
+    error.code    unknown_track
+
 skills export / into an explicit directory
     argv          skills export skills-out
     exit          0
@@ -498,7 +571,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (11 of 44)
+    pinned by an invocation above (12 of 45)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -507,6 +580,7 @@ ERROR-CODE COVERAGE
         not_locked                exit 2
         not_proposed              exit 1
         not_review_pending        exit 2
+        unknown_track             exit 1
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1

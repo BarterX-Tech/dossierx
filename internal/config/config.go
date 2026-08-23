@@ -37,6 +37,29 @@ const ReservedOverviewFacet = "overview"
 // load failures and react accordingly (e.g. a distinct exit code).
 var ErrNotFound = errors.New("config file not found")
 
+// Track is one declared cross-cutting concern: a named grouping claims may
+// join from any module. See Config.Tracks for why the registry is explicit,
+// and model.TrackRef for the claim-side membership this declares the
+// vocabulary for.
+type Track struct {
+	// ID is the stable identifier claims cite in their `tracks:` list and
+	// the CLI takes as an argument ("dossierx track show <id>"). Required,
+	// unique within the project.
+	ID string `yaml:"id"`
+
+	// Title is the human-readable name rendered in the viewer's sidebar and
+	// at the head of the track's page. Required: a track exists to be read
+	// about by someone asking "what does the user get", and an id is not an
+	// answer to that question.
+	Title string `yaml:"title"`
+
+	// Summary is an optional one-line description of what the track covers,
+	// rendered under the Title. Optional because a well-named track with an
+	// owned claim already says what it is — the owned claim's body IS the
+	// long form.
+	Summary string `yaml:"summary,omitempty"`
+}
+
 // Viewer holds viewer/render related configuration.
 type Viewer struct {
 	// TemplateOverrides is a directory of partial template overrides,
@@ -124,6 +147,21 @@ type Config struct {
 	ClaimsDir     string   `yaml:"claims_dir"`
 	DoctrineFacet string   `yaml:"doctrine_facet,omitempty"`
 	Viewer        Viewer   `yaml:"viewer,omitempty"`
+
+	// Tracks is the project's declared registry of cross-cutting concerns —
+	// the second axis claims may join, orthogonal to Modules. See
+	// model.TrackRef for the axis itself.
+	//
+	// It is declared here, and not inferred from whatever ids claims happen
+	// to mention, for the same reason Modules is: a vocabulary that creates
+	// itself on first use cannot catch a typo, and "checkout" vs "check-out"
+	// would silently become two features nobody notices are one. A claim
+	// naming a track absent from this list is a lint error (track-unknown).
+	//
+	// Optional. A project that declares none behaves exactly as it did
+	// before tracks existed — every track-* lint is a no-op, and the viewer
+	// renders no Tracks group.
+	Tracks []Track `yaml:"tracks,omitempty"`
 
 	// SourceDirs is the optional list of directories (relative to this
 	// config file's own directory, like ClaimsDir) the engine scans for
@@ -331,11 +369,62 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// tracks is optional, but each declared entry must be usable: an id to
+	// cite, a title to read, and no two entries competing for the same id.
+	// Same reasoning as modules above — this is the registry a claim's
+	// membership is checked against, so a malformed entry would weaken every
+	// track-* lint rather than just itself.
+	trackIDs := make([]string, 0, len(c.Tracks))
+	for i, t := range c.Tracks {
+		if strings.TrimSpace(t.ID) == "" {
+			return fmt.Errorf("tracks[%d].id is empty", i)
+		}
+		if strings.TrimSpace(t.Title) == "" {
+			return fmt.Errorf("tracks[%d] (%q) has no title", i, t.ID)
+		}
+		trackIDs = append(trackIDs, t.ID)
+	}
+	if dup, ok := firstDuplicate(trackIDs); ok {
+		return fmt.Errorf("tracks contains duplicate id %q", dup)
+	}
+
 	if err := validateTheme(c.Viewer.Theme); err != nil {
 		return fmt.Errorf("viewer.theme: %w", err)
 	}
 
 	return nil
+}
+
+// TrackIDs returns every declared track id, in declaration order. Callers
+// that need to test membership of a claim-supplied id (the track-unknown
+// lint, the CLI's track leaves) use HasTrack instead.
+func (c *Config) TrackIDs() []string {
+	ids := make([]string, 0, len(c.Tracks))
+	for _, t := range c.Tracks {
+		ids = append(ids, t.ID)
+	}
+	return ids
+}
+
+// HasTrack reports whether id names a track this project declares.
+func (c *Config) HasTrack(id string) bool {
+	for _, t := range c.Tracks {
+		if t.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// TrackByID returns the declared track with the given id and whether it was
+// found. The zero Track is returned when it was not.
+func (c *Config) TrackByID(id string) (Track, bool) {
+	for _, t := range c.Tracks {
+		if t.ID == id {
+			return t, true
+		}
+	}
+	return Track{}, false
 }
 
 // dangerousThemeChars are rejected outright from any theme token value

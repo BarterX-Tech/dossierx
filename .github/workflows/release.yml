@@ -1,79 +1,48 @@
-# Release — what a `v*` tag is allowed to publish.
+# Release — what a `v*` tag publishes.
 #
-# WHAT THIS FILE USED TO BE. `on: push: tags: ['v*']` and, one job later, six
-# archives and a GitHub release. There was no condition of any kind between the
-# two: any commit, on any branch, tagged anything beginning with `v`, by anyone
-# who could push a tag, published a release of this project. Nothing downstream
-# rechecked it, because publishing is where the pipeline ends.
+# WHAT THIS FILE DOES, IN FULL. A `v*` tag runs GoReleaser and GoReleaser
+# publishes: six archives, `checksums.txt`, and a GitHub release whose notes come
+# from the Conventional Commit subjects since the previous tag. There is no
+# condition of any kind in front of it. Any commit, on any branch, tagged
+# anything beginning with `v`, by anyone who can push a tag, publishes a release
+# of this project, and nothing downstream rechecks it, because publishing is
+# where this ends.
 #
-# WHAT IT IS NOW. The `gate` job below runs first and the publishing job `needs:`
-# it, so a tag that does not get past the gate produces no archives at all. Two
-# facts have to hold, and both are about the TAGGED TREE rather than about
-# whoever pushed:
+# THAT IS DELIBERATE AND IT IS STATED HERE RATHER THAN IMPLIED. A `gate` job used
+# to stand in front of this one, refusing a tag whose commit was not a merge or
+# whose tree did not stamp the version being tagged. It was removed with the rest
+# of the release gate: this project is alpha, releases are cut by a maintainer
+# who reads the tree first, and docs/RELEASING.md is where that reading lives.
 #
-#   (a) the tagged commit is a MERGE — a release is the merge of a reviewed
-#       branch into main, and the driver tags that merge commit by value (D2
-#       creates it with `--no-ff`, D4 tags it, never HEAD). A branch head tagged
-#       before it was merged has one parent and is refused here;
-#   (b) the tree at that commit carries the release stamp for exactly this
-#       version — site/src/content.ts's last `releases[]` entry names the tag
-#       being pushed. That stamp is what the whole site derives its version
-#       strings from (the hero, the release history, the `dossierx version`
-#       transcript), so a tag whose tree disagrees with it publishes a binary
-#       that the project's own site describes as a different release.
+# SO THESE ARE THE MISTAKES NOTHING CATCHES ANY MORE, and they are the reason
+# docs/RELEASING.md asks for each one by hand:
 #
-# WHY (a) IS MERGE-NESS AND NOT REACHABILITY FROM origin/main, WHICH IS WHAT IT
-# USED TO BE. The stronger check DEADLOCKED against the release driver, and the
-# deadlock is structural rather than a timing accident. The driver's order is D6
-# push the tag, D7 verify the six archives, D8 push main — tag first,
-# deliberately, so that main never publishes a site announcing a release whose
-# archives do not exist yet. This job fires on the tag push, at D6. Asking it for
-# origin/main there asks for something the driver pushes two steps later: the job
-# refuses, so no archives build, so D7 waits for archives that will never exist,
-# so D8 is never reached and origin/main never moves. Measured in the v0.5.1
-# release — D7 polled for twenty minutes, this job refused every run, and the
-# driver stopped with the tag public and nothing else done. A human finished that
-# release by hand, following the driver's own printed recovery.
+#   - tagging the release branch instead of the merge. The branch head already
+#     carries this release's stamp, so it looks right from every angle except the
+#     one that matters — the tag names a commit that was never merged.
+#   - tagging a tree whose site announces a different release. site/releases.html's
+#     `data-current="true"` entry is what a visitor is shown; a tag that disagrees
+#     with it ships a binary the project's own page calls another version.
+#   - tagging the wrong commit outright.
 #
-# Neither side was wrong alone and each is proven by its own mutation test, so
-# the fix had to GIVE UP a property rather than reconcile the two. What was given
-# up is the part of (a) that has to read a branch. Merge-ness is a fact about the
-# tagged commit by itself, so this job can establish it at D6 holding nothing but
-# the tag.
+# DO NOT ADD A REACHABILITY CHECK HERE WITHOUT MOVING THE DOCUMENTED PUSH ORDER
+# FIRST. `merge-base --is-ancestor <tag> origin/main` in this workflow deadlocks:
+# it fires on the tag push, and docs/RELEASING.md pushes the tag BEFORE main, so
+# that main never publishes a site announcing a release whose archives do not
+# exist yet. The job would refuse, so no archives build, so there is nothing to
+# verify, so main is never pushed. Nothing in that ring moves first and no timeout
+# resolves it. Measured in v0.5.1: twenty minutes of polling, every run refused,
+# and the release stopped with the tag public and nothing else done, finished by
+# hand. tests/ci_workflow_test.go refuses that idiom by name.
 #
-# WHAT THAT COSTS, STATED PLAINLY RATHER THAN DESCRIBED AS FIXED. Reachability
-# refused a tag on any commit not on main. Merge-ness refuses a tag on a commit
-# with one parent. So this still closes the ordinary failure the old check was
-# written for — tagging the release branch instead of the merge, which is tagging
-# before the merge — and it no longer closes a merge commit created locally and
-# never pushed to main. The stamp does not cover that residual either: a release
-# branch carries the release's own stamp by the time it is ready to merge, which
-# is exactly when it would be mistagged.
-#
-# AND THE RECEIPT CANNOT COVER IT FROM HERE, which is worth writing down because
-# it is the first thing a reader will reach for. The driver refuses to act unless
-# a gate receipt accounts for the tree it is about to publish, but that receipt is
-# never committed: gate/.gitignore ignores every run-produced artifact on purpose,
-# so that a copy left on disk cannot look authoritative. There is nothing in the
-# tagged tree for this job to read. A forge-side tag protection rule on `v*` is
-# what would close the residual, and it is the same accepted residual the section
-# below already records.
-#
-# DO NOT RESTORE THE origin/main CHECK WITHOUT MOVING THE DRIVER FIRST. Added
-# back on its own it re-creates the deadlock exactly, and the symptom is a
-# release that stops with a public tag and no archives behind it.
-#
-# RESIDUAL, ACCEPTED. This gate lives in the repository, and the workflow GitHub
-# runs for a tag is the one in the tagged tree — so anyone with push rights can
-# push a commit that weakens or deletes this job and tag that commit, and the
-# weakened gate is the one that runs. Nothing inside this repository can close
-# that: a check cannot be its own enforcement. Only a forge-side setting can —
-# a tag protection rule on `v*`, or a deployment environment with required
-# reviewers attached to the publishing job — and neither is expressible here or
-# assertable by any test in this tree. It is recorded as an accepted residual,
-# not described as fixed. What this file does close is the ordinary failure:
-# tagging the wrong commit, tagging before the merge, and tagging a tree whose
-# own stamp names another version.
+# WHAT WOULD ACTUALLY RESTRAIN THIS, and it cannot be written here. The workflow
+# GitHub runs for a tag is the one in the tagged tree, so any check in this file
+# can be weakened in a copy of it by the same person who pushes the tag. Only a
+# forge-side setting closes that — a tag ruleset on `refs/tags/v*` restricting
+# who may create one, or a deployment environment with required reviewers on the
+# job below. Neither is expressible in this file and neither is assertable by any
+# test in this tree, so both are recorded here as absent rather than described as
+# handled.
 
 name: Release
 
@@ -86,120 +55,8 @@ permissions:
   contents: write
 
 jobs:
-  gate:
-    name: refuse an ungated tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: The tag names a merge, and its tree stamps this release
-        env:
-          TAG: ${{ github.ref_name }}
-          STAMP_FILE: site/src/content.ts
-          LANDMARK: 'const releases: Release[] = ['
-        run: |
-          set -euo pipefail
-
-          # Every exit path out of this script that is not a pass is a REFUSAL.
-          # There is deliberately no branch that reports "could not check" and
-          # exits 0: an unresolvable ref, a missing file and an unreadable stamp
-          # all end here, because a publish step guarded by a check that did not
-          # run is a publish step with no guard (CLAUDE.md).
-          refuse() {
-            printf '\nRELEASE REFUSED — %s\n\n' "$1" >&2
-            exit 1
-          }
-
-          [ -n "${TAG:-}" ] || refuse "this workflow was reached with no tag name. It publishes on \`push: tags\` and nothing else, so a run without one is a run whose subject is unknown."
-
-          case "$TAG" in
-            v[0-9]*) ;;
-            *) refuse "the tag is \"$TAG\", which does not name a version. The release stamp this gate compares against is written as \`v<major>.<minor>.<patch>\`, so a tag outside that shape can never match one and must not be allowed to try." ;;
-          esac
-
-          # `^{commit}` peels an annotated tag: the tag OBJECT's sha is not a
-          # tree, and every check below reads the tree.
-          COMMIT="$(git rev-parse --verify --quiet "refs/tags/${TAG}^{commit}")" || COMMIT=""
-          [ -n "$COMMIT" ] || refuse "refs/tags/${TAG} resolves to no commit in this checkout. This job checks out with fetch-depth: 0 precisely so the tag and the full history are present; if they are not, this gate has read nothing."
-
-          # (a) THE TAGGED COMMIT IS A MERGE. Read from the commit alone, with no
-          # branch involved — see the header for why this is not
-          # `merge-base --is-ancestor "$COMMIT" origin/main`, which deadlocks
-          # against the driver's D6/D7/D8 order and stopped the v0.5.1 release.
-          #
-          # `rev-list --parents -n 1` prints the commit followed by each parent
-          # on one line, so the parent count is NF - 1. The driver's D2 makes the
-          # merge with `--no-ff`, which always yields exactly two; this accepts
-          # two OR MORE because the fact being established is merge-ness, not a
-          # parent arity, and an octopus merge is still a merge.
-          NPARENTS="$(git rev-list --parents -n 1 "$COMMIT" | awk 'NR == 1 { print NF - 1 }')"
-          [ -n "$NPARENTS" ] || refuse "the parent count of ${COMMIT} could not be read, so it is not known whether ${TAG} names a merge. That is a failed check, not a skipped one."
-
-          if [ "$NPARENTS" -lt 2 ]; then
-            refuse "${TAG} names ${COMMIT}, which has ${NPARENTS} parent(s) and so is NOT a merge commit.
-          A release is the merge of a reviewed branch into main, and the driver tags THAT commit (D2 merges with --no-ff, D4 tags the merge by value, never HEAD). A tag on a single-parent commit is a tag on a branch head — the release branch as it stood BEFORE it was merged, which already carries this release's stamp and would therefore get past check (b) unnoticed.
-          Merge first, then tag the merge."
-          fi
-
-          # (b) THE TREE AT THE TAG STAMPS THIS VERSION. Read out of the tagged
-          # commit with `git show <commit>:<path>`, not out of the working
-          # directory: a working tree can be edited after the tag is written and
-          # the thing being published is the tree, not the checkout.
-          git cat-file -e "${COMMIT}:${STAMP_FILE}" 2>/dev/null \
-            || refuse "the tree at ${TAG} has no ${STAMP_FILE}. That file carries the release stamp — the \`releases[]\` entry every version string on the site is derived from — so there is nothing to compare the tag against."
-
-          # A deliberately small structural read of one array, not a second model
-          # of the site. Whole-line comments are dropped so that a commented-out
-          # entry stamps nothing; the authoritative comment-stripping read of
-          # these declarations is TestSiteSelectsTheReleaseThisTreeModels in
-          # cmd/dossierx/gate_release_stamp_test.go, which runs in CI on every
-          # push. RESIDUAL: this reader is line-based, so a block comment opened
-          # mid-line could hide an entry from it. It refuses when the array's
-          # landmark is missing or duplicated rather than reporting an empty
-          # read, which is the failure that would otherwise pass quietly.
-          READ="$(git show "${COMMIT}:${STAMP_FILE}" | awk -v landmark="$LANDMARK" '
-            {
-              s = $0
-              sub(/^[ \t]+/, "", s)
-              if (incomment) { if (s ~ /\*\//) incomment = 0; next }
-              if (s ~ /^\/\*/) { if (s !~ /\*\//) incomment = 1; next }
-              if (s ~ /^\/\//) next
-              if (s ~ /^\*/) next
-              if (index($0, landmark) > 0) { landmarks++; block = 1; next }
-              if (block && s ~ /^\];/) { block = 0; next }
-              if (block && match($0, /version:[ \t]*"[^"]*"/)) {
-                v = substr($0, RSTART, RLENGTH)
-                sub(/^version:[ \t]*"/, "", v)
-                sub(/"$/, "", v)
-                stamp = v
-                entries++
-              }
-            }
-            END { printf "%d %d %s\n", landmarks + 0, entries + 0, (entries > 0 ? stamp : "-") }
-          ')"
-          # Defaults on every field: an awk that produced nothing at all must
-          # arrive at the refusals below with a readable message, not as an
-          # unbound-variable exit whose text says nothing about the release.
-          set -- $READ
-          LANDMARKS="${1:-0}"; ENTRIES="${2:-0}"; STAMP="${3:--}"
-
-          [ "$LANDMARKS" = 1 ] || refuse "${STAMP_FILE} at ${TAG} carries ${LANDMARKS} occurrences of \`${LANDMARK}\` outside its comments, and this gate reads exactly one. None means the release stamp has moved and this check has lost its subject; more than one means two arrays, only one of which the site renders, and this gate cannot say which."
-          [ "$ENTRIES" != 0 ] || refuse "${STAMP_FILE} at ${TAG} declares the releases array but no \`version:\` entry inside it. The tree names no release at all, so it cannot name this one."
-
-          if [ "$STAMP" != "$TAG" ]; then
-            refuse "the tag is ${TAG} but the tree at ${COMMIT} stamps ${STAMP}.
-          The last \`releases[]\` entry in ${STAMP_FILE} is what the site derives every version string from — the hero badge, the release history, and the \`dossierx version\` transcript. Publishing this tag would ship ${TAG}'s binary beside a site that calls the current release ${STAMP}.
-          Either the release stamp was not moved before tagging, or the tag was cut from the wrong commit."
-          fi
-
-          printf '%s names the merge %s (%s parents) and its tree stamps %s. Publishing may proceed.\n' "$TAG" "$COMMIT" "$NPARENTS" "$STAMP"
-
   goreleaser:
     name: goreleaser
-    needs: gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -213,7 +70,7 @@ jobs:
           go-version: '1.26.x'
           cache: true
 
-      # PINNED, AND PINNED TO THE VERSION THE GATE ACTUALLY TESTED. This said
+      # PINNED, AND PINNED TO THE VERSION THE SUITES ACTUALLY TEST. This said
       # `version: latest`, and that is the one-version-tests-another-version-ships
       # gap this repository refuses everywhere else, sitting on the publish path
       # itself. Two suites model this tool's behaviour against a NAMED version —
@@ -222,11 +79,10 @@ jobs:
       # reimplements its changelog rules, citing goreleaser/goreleaser/v2@v2.17.1's
       # own changelog.go by line — and the version those suites run under is the
       # one ci.yml installs. With `latest` here, every archive and changelog claim
-      # the gate makes was measured against one binary and every archive a
+      # those suites make was measured against one binary while every archive a
       # consumer downloads is produced by whichever binary GoReleaser had shipped
       # by tag day. Nothing goes red when the two diverge. The archives are simply
-      # built by a tool nothing in this repository has ever run, and the gate goes
-      # on reporting on the tool it did run.
+      # built by a tool nothing in this repository has ever run.
       #
       # THE SIBLING PIN is ci.yml's `DOSSIERX_GORELEASER_VERSION`, in that file's
       # top-level `env:` block, and there are deliberately exactly two spellings
@@ -234,7 +90,7 @@ jobs:
       # another workflow's `env:`, so the alternative to a second literal is an
       # expression resolved at run time, which no test can read before the job
       # starts. The two are held EQUAL by
-      # TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests in
+      # TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneCITests in
       # tests/ci_workflow_test.go, so moving one alone is a red run rather than a
       # silent drift — and moving both together is the whole of the recovery.
       - name: Run GoReleaser

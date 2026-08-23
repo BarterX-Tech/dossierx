@@ -169,6 +169,87 @@ type claimLinkView struct {
 	Drifted bool   `json:"drifted"`
 }
 
+// claimSourceView is one cited source in snake_case — model.Source projected
+// into the machine contract.
+//
+// It is a projection rather than the model type embedded directly, and that is
+// forced rather than stylistic: model.Source is a PERSISTENCE shape carrying
+// yaml tags only, so embedding it would marshal every field under its Go name
+// (AccessedOn, DoesNotSupport) into an envelope whose whole grammar is
+// snake_case. TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags refuses that at
+// declaration time for exactly this class of leak, and claimLinkView is the
+// existing precedent for the same fix.
+//
+// Every authored field is carried, including the anchors. A caller looking at a
+// citation is usually deciding whether to trust it, and the two things that
+// answer that — an external source's AccessedOn, an internal source's SHA256 —
+// are precisely the fields a summary would drop. Supports and DoesNotSupport
+// come with them because an overread citation is the common defect and
+// DoesNotSupport is the author's own statement of the limit.
+type claimSourceView struct {
+	Ref            int    `json:"ref"`
+	Kind           string `json:"kind"`
+	Title          string `json:"title"`
+	URL            string `json:"url,omitempty"`
+	AccessedOn     string `json:"accessed_on,omitempty"`
+	Path           string `json:"path,omitempty"`
+	RecordID       string `json:"record_id,omitempty"`
+	SHA256         string `json:"sha256,omitempty"`
+	Supports       string `json:"supports,omitempty"`
+	DoesNotSupport string `json:"does_not_support,omitempty"`
+}
+
+// claimSourceViews projects a claim's sources into the payload shape, in the
+// order they were authored.
+//
+// Authored order, not sorted by Ref: Ref is author-assigned rather than derived
+// from position (see model.Source.Ref), so the two can legitimately disagree,
+// and the file's own order is the one a reader comparing the envelope against
+// the YAML will be looking at. It is equally deterministic — a claim's Sources
+// slice is loaded once from one file — and the duplicate-Ref case that would
+// make a Ref sort ambiguous is a lint finding (source-shape), not something to
+// resolve silently here.
+func claimSourceViews(sources []model.Source) []claimSourceView {
+	out := make([]claimSourceView, 0, len(sources))
+	for _, s := range sources {
+		out = append(out, claimSourceView{
+			Ref:            s.Ref,
+			Kind:           string(s.Kind),
+			Title:          s.Title,
+			URL:            s.URL,
+			AccessedOn:     s.AccessedOn,
+			Path:           s.Path,
+			RecordID:       s.RecordID,
+			SHA256:         s.SHA256,
+			Supports:       s.Supports,
+			DoesNotSupport: s.DoesNotSupport,
+		})
+	}
+	return out
+}
+
+// claimTrackView is one of a claim's track memberships, with the role resolved.
+//
+// Role is the EFFECTIVE role (model.TrackRef.EffectiveRole), never the raw
+// field. An omitted role means cites, and a payload that echoed the empty
+// string would make a consumer re-implement that default — which is the one
+// place it could be re-implemented differently from the engine.
+type claimTrackView struct {
+	TrackID string `json:"track_id"`
+	Role    string `json:"role"`
+}
+
+// claimTrackViews projects a claim's memberships into the payload shape, in
+// authored order — the same reasoning as claimSourceViews: the claim file's own
+// order is what a reader comparing the two will see, and it is total.
+func claimTrackViews(refs []model.TrackRef) []claimTrackView {
+	out := make([]claimTrackView, 0, len(refs))
+	for _, r := range refs {
+		out = append(out, claimTrackView{TrackID: r.ID, Role: string(r.EffectiveRole())})
+	}
+	return out
+}
+
 // claimEdgesData is a claim's graph position in BOTH directions. Outgoing edges
 // are authored on the claim; incoming ones are derived by scanning every other
 // claim, and are the half an agent could never see without a second call.
@@ -235,17 +316,36 @@ type claimLedgerView struct {
 // release is built around starts with an agent orienting itself on one card
 // and it should not cost four round trips.
 type claimShowData struct {
-	ClaimID       string             `json:"claim_id"`
-	Title         string             `json:"title"`
-	Facet         string             `json:"facet"`
-	Module        string             `json:"module"`
-	Status        string             `json:"status"`
-	Layout        string             `json:"layout"`
-	Kind          string             `json:"kind"`
-	BuildRole     string             `json:"build_role,omitempty"`
-	Section       string             `json:"section,omitempty"`
-	MigratedFrom  string             `json:"migrated_from,omitempty"`
-	SourcePath    string             `json:"source_path"`
+	ClaimID      string `json:"claim_id"`
+	Title        string `json:"title"`
+	Facet        string `json:"facet"`
+	Module       string `json:"module"`
+	Status       string `json:"status"`
+	Layout       string `json:"layout"`
+	Kind         string `json:"kind"`
+	BuildRole    string `json:"build_role,omitempty"`
+	Section      string `json:"section,omitempty"`
+	MigratedFrom string `json:"migrated_from,omitempty"`
+	SourcePath   string `json:"source_path"`
+	// Sources is the claim's own evidence — what it rests on, not where its
+	// text came from. It sits beside MigratedFrom deliberately, because
+	// MigratedFrom is the impoverished thing this replaces: a single free-text
+	// note saying WHICH registry a claim came out of, which a reader had to know
+	// how to open before they could verify one sentence. See model.Source.
+	//
+	// It is always present, as [] for a claim with none, rather than omitted.
+	// The absent case and the empty case mean the same thing here — this claim
+	// cites nothing — and a consumer that has to test for null before ranging is
+	// being asked to encode a distinction the data does not make.
+	Sources []claimSourceView `json:"sources"`
+	// Tracks is this claim's membership in the cross-cutting axis, in either
+	// role. It is the inverse of "dossierx track show", and it is here because
+	// show is where an agent orients itself on one card: without it, a claim
+	// that OWNS a track — whose body is therefore a feature's own prose rather
+	// than one module's contract — reads here exactly like any other claim, and
+	// the agent about to unlock it cannot see that a track's completeness turns
+	// on it. Always present, as [] for a claim in no track.
+	Tracks        []claimTrackView   `json:"tracks"`
 	Locked        bool               `json:"locked"`
 	LockedAt      string             `json:"locked_at,omitempty"`
 	ReviewPending bool               `json:"review_pending"`
@@ -476,6 +576,8 @@ func newClaimShowCmd() *cobra.Command {
 				Section:       claim.Section,
 				MigratedFrom:  claim.MigratedFrom,
 				SourcePath:    claim.SourcePath,
+				Sources:       claimSourceViews(claim.Sources),
+				Tracks:        claimTrackViews(claim.Tracks),
 				Locked:        claim.Status == model.StatusLocked,
 				LockedAt:      lockedAt,
 				ReviewPending: claim.ReviewPending,
@@ -553,6 +655,48 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 			fmt.Fprintf(out, "  implemented in:     %s%s\n", target, drift)
 		}
 	}
+	// Sources print one line per citation, led by the "[n]" marker the body
+	// cites it as, so a reader scanning the prose and a reader scanning this
+	// block are looking at the same handle. The ANCHOR is on the line — the date
+	// for an external source, the hash for an internal one — because the anchor
+	// is what makes the citation checkable rather than merely locatable, and a
+	// list that showed only titles would read as complete while omitting the one
+	// field a sceptic needs. Nothing prints for a claim that cites nothing: a
+	// "sources: (none)" line on every card in a corpus that has not adopted
+	// citations is noise on every card.
+	for _, s := range d.Sources {
+		anchor := s.AccessedOn
+		if anchor == "" {
+			anchor = s.SHA256
+		}
+		target := s.URL
+		if target == "" {
+			target = s.Path
+			if s.RecordID != "" {
+				target += "#" + s.RecordID
+			}
+		}
+		fmt.Fprintf(out, "  source [%d]:         %s — %s", s.Ref, s.Title, s.Kind)
+		if target != "" {
+			fmt.Fprintf(out, " %s", target)
+		}
+		if anchor != "" {
+			fmt.Fprintf(out, " (%s)", anchor)
+		}
+		fmt.Fprintln(out)
+		if s.Supports != "" {
+			fmt.Fprintf(out, "    supports:         %s\n", s.Supports)
+		}
+		// The limit is printed whenever the author stated one, and it is the half
+		// of a citation a hurried reader most needs put in front of them: the
+		// common defect is not a fabricated source but an overread one.
+		if s.DoesNotSupport != "" {
+			fmt.Fprintf(out, "    does not support: %s\n", s.DoesNotSupport)
+		}
+	}
+	for _, tr := range d.Tracks {
+		fmt.Fprintf(out, "  track:              %s (%s)\n", tr.TrackID, tr.Role)
+	}
 	fmt.Fprintf(out, "  comments:           %d thread(s), %d open, %d reply(ies)\n",
 		d.Comments.Threads, d.Comments.Open, d.Comments.Replies)
 	for _, tid := range d.Comments.OpenThreadIDs {
@@ -584,6 +728,21 @@ type claimListEntry struct {
 	MigratedFrom  string `json:"migrated_from,omitempty"`
 	Drifted       bool   `json:"drifted"`
 	OpenThreads   int    `json:"open_threads"`
+	// Sources is the COUNT of this claim's citations, not the citations.
+	//
+	// A count is what a list can honestly carry: the citations themselves are
+	// ten fields each and would make a list of two hundred claims unreadable in
+	// both formats, and "claim show" already answers them in full. What the
+	// count buys is the one question a list is asked about evidence — which
+	// claims have none — which is otherwise unanswerable without one call per
+	// claim.
+	//
+	// No matching --sources FILTER is added. Every existing filter here replaces
+	// a verb v0.3.0 retired (stale, coverage) or resolves a card for a human;
+	// "claims with no citations" is not a lifecycle state, nothing gates on it,
+	// and a filter nothing acts on is surface that has to be maintained forever.
+	// The count is on every row, so a caller that wants that set has it already.
+	Sources int `json:"sources"`
 	// Score is populated only under --match: the fuzzy relevance the row was
 	// ranked by. It is exposed rather than hidden so an agent resolving "the
 	// retry card" can tell a confident single hit from a three-way tie it
@@ -705,6 +864,7 @@ func newClaimListCmd() *cobra.Command {
 					MigratedFrom:  c.MigratedFrom,
 					Drifted:       driftedIDs[c.ID],
 					OpenThreads:   len(c.OpenThreadIDs()),
+					Sources:       len(c.Sources),
 					Score:         score,
 				})
 			}
@@ -769,6 +929,12 @@ func writeClaimListText(cmd *cobra.Command, d claimListData) {
 		}
 		if e.OpenThreads > 0 {
 			flags = append(flags, fmt.Sprintf("open_threads=%d", e.OpenThreads))
+		}
+		// Printed only when there are some, exactly like open_threads: a
+		// "sources=0" token on every line of a corpus that cites nothing is a
+		// column of zeroes a reader learns to skip past.
+		if e.Sources > 0 {
+			flags = append(flags, fmt.Sprintf("sources=%d", e.Sources))
 		}
 		if e.MigratedFrom != "" {
 			flags = append(flags, "migrated_from="+e.MigratedFrom)

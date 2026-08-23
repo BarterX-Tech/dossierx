@@ -161,49 +161,33 @@ func TestREADME_ReplyRightsNotOvergated(t *testing.T) {
 	}
 }
 
-// TestSiteContent_ReauditExampleIncludesClaimID asserts the website's reaudit
-// example depicts the success line exactly as the binary prints it:
-// "reaudit: <id> applied, review_pending cleared" — carrying the claim id.
-// Source of truth: cmd/dossierx/main.go's
+// WHERE TestSiteContent_ReauditExampleIncludesClaimID WENT, AND WHAT IS NO
+// LONGER CHECKED BECAUSE OF IT.
 //
-//	fmt.Fprintf(out, "reaudit: %s applied, review_pending cleared\n", id)
-func TestSiteContent_ReauditExampleIncludesClaimID(t *testing.T) {
-	content := readRepoFile(t, filepath.Join("site", "src", "content.ts"))
-
-	const bare = "reaudit: applied, review_pending cleared"
-	if strings.Contains(content, bare) {
-		t.Fatalf("site content depicts the reaudit success line without a claim id (%q); the binary prints \"reaudit: <id> applied, review_pending cleared\"", bare)
-	}
-
-	re := regexp.MustCompile(`reaudit: (\S+) applied, review_pending cleared`)
-	m := re.FindStringSubmatch(content)
-	if m == nil {
-		t.Fatal(`site content no longer depicts a reaudit success line of the form "reaudit: <id> applied, review_pending cleared"`)
-	}
-	id := m[1]
-
-	// The depicted output id must match the depicted command's id, so the
-	// example is internally consistent with what the binary would print.
-	//
-	// The verb is "claim reaudit", not the bare "reaudit" this test pinned
-	// before v0.3.0: the restructure moved lock, unlock, flag and reaudit
-	// under the claim noun, so a site example showing "dossierx reaudit" is
-	// now depicting a command that does not exist. Asserting the noun here is
-	// what makes that a test failure rather than a plausible-looking snippet
-	// a reader would paste and watch fail.
-	wantCmd := "dossierx claim reaudit " + id + " --confirm"
-	if !strings.Contains(content, wantCmd) {
-		t.Fatalf("reaudit success line shows id %q but no matching %q command precedes it", id, wantCmd)
-	}
-
-	// The retired top-level form must not reappear anywhere in the copy. The
-	// check above only proves the shaped example is right; this one catches a
-	// stale invocation elsewhere on the page, which is the failure mode that
-	// actually shipped in v0.2.x copy.
-	if strings.Contains(content, "dossierx reaudit ") {
-		t.Fatal(`site content still depicts the retired top-level "dossierx reaudit"; the verb moved under the claim noun in v0.3.0 ("dossierx claim reaudit")`)
-	}
-}
+// That test read site/src/content.ts and pinned the reaudit transcript depicted
+// there against the line cmd/dossierx/main.go actually prints — "reaudit: <id>
+// applied, review_pending cleared", carrying the claim id. It was written for a
+// confirmed defect: the site depicted the line with no id at all, and a reader
+// comparing their terminal against the page would have concluded their run had
+// gone wrong.
+//
+// The site no longer depicts any terminal output. site/ was replaced by two
+// static pages — a memo on why the project exists, and the release ledger —
+// which carry no transcript, no command table and no error-code reference, so
+// there is nothing left for this assertion to read.
+//
+// THIS IS A NARROWING OF COVERAGE AND IT IS RECORDED RATHER THAN ABSORBED. No
+// other document in this repository depicts that line: README.md does not show
+// the reaudit success output, and neither does FORMAT.md or any exported skill.
+// So the class of defect — shipped prose depicting output the binary does not
+// produce — is unchecked for this one line, and will stay unchecked until some
+// document depicts it again. If one does, restore this test against that
+// document; the extraction was five lines and the value was entirely in having
+// a subject to point it at.
+//
+// The rest of this file's site assertions moved the same way, with the same
+// reasoning, and the one in TestWriteConflictRecoveryNamesTheStaleSentinel
+// below records its own half.
 
 // TestViewerHarness_CIScopeCommentAccurate asserts the browser-harness comment
 // tells the truth about who runs the chromedp suite.
@@ -801,21 +785,20 @@ func TestWriteConflictRecoveryNamesTheStaleSentinel(t *testing.T) {
 		t.Errorf("skills/dossierx/SKILL.md's write_conflict row does not explain that a stale lock means a dead holder, so an agent cannot tell it apart from genuine contention with `dossierx serve`:\n%s", recovery)
 	}
 
-	site := readRepoFile(t, filepath.Join("site", "src", "content.ts"))
-	i := strings.Index(site, `code: "write_conflict"`)
-	if i < 0 {
-		t.Fatal("site/src/content.ts no longer carries a write_conflict entry in its error-code reference")
-	}
-	entry := site[i:]
-	if end := strings.Index(entry, "},"); end > 0 {
-		entry = entry[:end]
-	}
-	if strings.Contains(strings.ToLower(entry), "claim file changed") {
-		t.Errorf("site/src/content.ts describes write_conflict as a changed claim file; that is claim_file_changed, and the two take opposite recoveries (re-read vs. retry):\n%s", entry)
-	}
-	if !strings.Contains(strings.ToLower(entry), ".lock") {
-		t.Errorf("site/src/content.ts's write_conflict recovery never names the sentinel file left behind by a killed process:\n%s", entry)
-	}
+	// THE SITE HALF OF THIS TEST IS GONE, and what it checked is now checked
+	// nowhere. It read site/src/content.ts's error-code reference and refused
+	// two things there: describing write_conflict as "the claim file changed
+	// under you" (which is claim_file_changed's meaning, and the two take
+	// opposite recoveries — re-read the claim vs. retry the write), and a
+	// recovery that never names the `.lock` sentinel a killed process leaves
+	// behind. Both were real, shipped defects.
+	//
+	// The site carries no error-code reference any more; it is two static pages
+	// that make the case for the project and list what has shipped. The skills'
+	// row is the one an agent branches on and it is still pinned above, which is
+	// the half that decides behaviour — but the half a HUMAN read is unchecked
+	// because it no longer exists, and if an error-code reference is ever
+	// written for people again, this pair of assertions belongs against it.
 }
 
 // TestREADMENamesEveryLedgerRule is FORMAT.md's bidirectional pin, extended to

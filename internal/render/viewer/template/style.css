@@ -458,6 +458,47 @@ code {
   margin-bottom: 0;
 }
 
+/* ---- inline citation markers (a.claim-cite) -------------------------
+
+   THE SAME THREE CONTEXTS THE IMAGE RULES USE, AND THE SAME MISSING FOURTH.
+   A citation marker is produced only by markdown.RenderClaimBody, so a
+   comment body can never carry one and a `.comment-body .claim-cite` rule
+   would assert a capability the renderer refuses.
+
+   THE SUPERSCRIPT IS CSS AND NOT MARKUP, which is why this rule exists at
+   all: components emits a plain <a class="claim-cite">, so a project that
+   overrides this stylesheet can render its citations inline, raised, or as
+   anything else without the engine having baked a <sup> into the HTML it
+   cannot reach. vertical-align + the reduced size are what a reader has
+   recognized as a footnote reference since long before the web; line-height:
+   0 keeps a raised marker from opening up the line it sits on, which is the
+   one visible cost of doing it this way rather than with <sup>.
+
+   No new token: the marker takes --link like every other anchor in a body,
+   because it IS a link and a reader must be able to tell at a glance that it
+   goes somewhere. The padding is horizontal only and deliberately small — it
+   widens the click target on touch without moving the surrounding prose. */
+.claim-body .claim-cite,
+.claim-list-items .claim-cite,
+.sbody .claim-cite {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 0;
+  padding: 0 0.08em;
+  color: var(--link);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.claim-body .claim-cite:hover,
+.claim-list-items .claim-cite:hover,
+.sbody .claim-cite:hover,
+.claim-body .claim-cite:focus-visible,
+.claim-list-items .claim-cite:focus-visible,
+.sbody .claim-cite:focus-visible {
+  text-decoration: underline;
+}
+
 
 /* The scroll wrapper components/table.html puts around a layout: table claim's
    table element, and the two cell declarations scoped to it. Both halves are one
@@ -751,6 +792,217 @@ th {
   font-family: var(--font-mono);
   font-size: 0.95em;
   font-weight: 400;
+}
+
+/* ---- the sources row (components/sources.go) -------------------------
+
+   claim-source-list is the nested <ul> under the footer's "sources:" <li>,
+   and it is deliberately NOT claim-edge-id-list: an id list is one anchor per
+   line, while a source entry is a title, an anchor, a date or a hash, and up
+   to two authored sub-lines. It needs vertical rhythm between entries that a
+   one-line id list must not have, which is the whole difference between the
+   two rules. The "–" marker convention is shared, so a reader sees one kind
+   of sub-list under a footer row rather than two. */
+.claim-source-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0;
+}
+
+.claim-source {
+  padding-left: 0.9rem;
+  position: relative;
+  line-height: 1.5;
+  margin-bottom: 0.35rem;
+}
+
+.claim-source:last-child {
+  margin-bottom: 0;
+}
+
+.claim-source::before {
+  content: "–";
+  position: absolute;
+  left: 0;
+  opacity: 0.6;
+}
+
+/* The ref is the one thing on the row that must be findable by eye, because
+   it is what the reader followed a "[n]" marker to get to. Tabular figures
+   keep a column of refs aligned as the numbers gain digits; --accent is the
+   same "this is the anchor point" colour the locked pill and the active nav
+   entry use, so the row a deep link landed on reads as arrived-at rather
+   than merely present. */
+.claim-source-ref {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.claim-edges .claim-source-title {
+  font-weight: 500;
+}
+
+/* The title is an anchor for an external source and a plain span for an
+   internal one (or for an external URL urlsafe refused). Only the anchor
+   should read as clickable, so the link colour is scoped to the element that
+   actually is one — a bare .claim-source-title rule would colour the internal
+   case identically and promise a link that is not there. */
+.claim-edges a.claim-source-title {
+  color: var(--link);
+}
+
+/* claim-source-anchor is the machine string that pins the source: a path (with
+   its optional #record_id) for an internal one, or a URL the href gate refused
+   for an external one. It renders exactly as the .claim-implemented-in row's file
+   does — mono, slightly smaller than the prose around it — because a reader
+   does the same thing with both: paste it somewhere. */
+.claim-source-anchor {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+}
+
+/* The hash prefix is recognition, not verification (see sourceHashPrefixLen),
+   so it takes --faint: present for a reader comparing two rows, subordinate to
+   everything that answers "what is this source". The full hash is on the
+   element's title attribute for anyone who wants it. */
+.claim-source-hash {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--faint);
+}
+
+.claim-source-meta {
+  color: var(--faint);
+}
+
+/* The two authored boundary lines (supports / does_not_support). They are
+   prose a human wrote about the citation rather than facts about the source,
+   so they sit dimmed on their own lines under the entry — visible without
+   opening anything, but never competing with the title for the eye. Their
+   label keeps the mono, uppercase register every field caption in this
+   stylesheet uses, so "does_not_support" reads as the schema field it is
+   rather than as a sentence fragment. */
+.claim-source-note {
+  color: var(--faint);
+  margin-top: 0.15rem;
+}
+
+.claim-source-note-label {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  letter-spacing: .03em;
+  opacity: 0.85;
+}
+
+/* The three-line clamp on a source note, and the control that lifts it.
+
+   THIS RULE IS APPLIED BY SCRIPT, NEVER STATICALLY, and the class name says so.
+   Whether a note runs past three lines is a fact about the rendered box — it
+   moves with the viewport, the font and the reader's zoom — so the decision
+   belongs to the only party that can measure it. Writing the clamp as a plain
+   .claim-source-note rule would truncate the note on a page whose script never
+   ran, leaving a citation's stated limit cut off behind a button that cannot
+   work. See components/sources.go's writeSourceNote for the same argument from
+   the markup's side.
+
+   -webkit-line-clamp is the form every current engine implements and
+   line-clamp is the standardised spelling now shipping beside it; both are
+   declared so this rule outlives the prefix. An engine that honours neither
+   drops the clamp and shows the whole note — the same degraded-not-wrong
+   landing the deep-link reveal above settles for. */
+.claim-source-note.is-clamped .claim-source-note-body {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+
+/* The control reads as the subordinate thing it is: the footer's own faint
+   prose size, the accent only on interaction, and no button chrome at all —
+   a bordered box here would out-weigh the source title two lines above it.
+   It is a real <button> rather than a styled <a> because it performs an action
+   on this page and navigates nowhere; that is also what gives it keyboard
+   focus and a name for free. */
+.claim-source-note-toggle {
+  display: inline-block;
+  margin-top: 0.1rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9em;
+  color: var(--link);
+  cursor: pointer;
+}
+
+/* THE RULE ABOVE BREAKS `hidden` UNLESS THIS ONE FOLLOWS IT, and the failure is
+   silent in the worst direction. The HTML `hidden` attribute is not a paint
+   flag: it is implemented as a user-agent stylesheet rule, [hidden] { display:
+   none }, and any AUTHOR rule that sets `display` on the same element beats the
+   UA origin outright. So `display: inline-block` above quietly re-showed every
+   button this feature ships hidden — the one-line notes that were correctly
+   judged not to need a control still painted one, which is exactly the clutter
+   the measurement exists to prevent.
+
+   Nothing in scripting or in the DOM reports this. `button.hidden` reads true,
+   the attribute is on the element, and only the pixels disagree — which is why
+   viewer-tests asserts the COMPUTED DISPLAY of these controls and never the
+   property. Any future declaration of `display` on a [hidden]-bearing element
+   in this stylesheet needs the same companion. */
+.claim-source-note-toggle[hidden] {
+  display: none;
+}
+
+.claim-source-note-toggle:hover,
+.claim-source-note-toggle:focus-visible {
+  text-decoration: underline;
+}
+
+/* Paper has no button to press, so the clamp must not reach it: print shows
+   every note whole and hides the control, the same bargain @media print
+   already strikes with the collapsed footer. */
+@media print {
+  .claim-source-note.is-clamped .claim-source-note-body {
+    display: block;
+    overflow: visible;
+  }
+
+  .claim-source-note-toggle {
+    display: none;
+  }
+}
+
+/* Deep-link auto-open for a SOURCE row, the companion to the .claim:target
+   rules above. A citation marker's href names the row, not the claim, so the
+   claim is not :target and those rules do not fire — yet the row the reader
+   asked for is inside the collapsed footer. :has() is what lets a closed
+   <details> react to a descendant's :target state; CSS cannot write the `open`
+   attribute, so as with the .claim:target pair the UA marker still reads
+   closed while the contents show. That is cosmetic, not a defect to fix in JS.
+   Both forms are declared for the same reason and in the same order as the
+   .claim:target pair: the child-selector form is the fallback for engines that
+   predate ::details-content, and the pseudo-element form is written last
+   because equal specificity leaves source order as the only tiebreak.
+   An engine without :has() support drops both rules and simply shows the
+   reader a collapsed footer they can open by hand — a degraded landing, never
+   a wrong one. */
+.claim-links:has(.claim-source:target) > *:not(summary) {
+  content-visibility: visible;
+}
+
+.claim-links:has(.claim-source:target)::details-content {
+  content-visibility: visible;
+}
+
+/* The landed-on row itself. It borrows the same accent tint the active nav
+   entry uses rather than introducing a highlight colour, so "you are here"
+   means one thing across the whole viewer. */
+.claim-source:target {
+  background: var(--accent-bg);
+  border-radius: 4px;
 }
 
 .claim-review-pending {
@@ -1889,6 +2141,25 @@ body.shell-body {
   padding-left: 18px;
 }
 
+/* nav-group-label separates the Tracks run from the modules above it. The
+   sidebar is otherwise a flat list of .sec-tab buttons, and a track tab looks
+   exactly like a module tab because mechanically it IS one — so without a
+   caption a reader would have no way to tell that the axis changed halfway
+   down. It borrows the .eyebrow register (mono, uppercase, --faint) rather
+   than inventing one, because it is the same kind of thing: a quiet caption
+   over the content beneath it, never a control. The top border and margin are
+   what make it read as a division rather than as a first entry in the run. */
+.nav-group-label {
+  margin: 14px 0 4px;
+  padding: 10px 20px 0;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
 /* Secondary horizontal facet tab strip inside a module's content area,
    ported verbatim (selector + declarations) from the reference docs
    stylesheet's .sub-nav/.subtab. Rendered only for a module with more than
@@ -1950,6 +2221,105 @@ body.shell-body {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;
+}
+
+/* ---- track sections (render/track_view.go) ---------------------------
+
+   A track section is a .module-section in every way the show/hide machinery
+   can see, so it needs no layout rules of its own — only a head, because a
+   track states something a module never has to: what it is for, and how far
+   along it is. The .sub-nav a multi-facet module would carry has no analogue
+   here (a track has no facets), which is why this head sits directly against
+   the claim group with the same 16px gap .sub-nav leaves behind it. */
+.track-head {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+  margin: 0 0 16px;
+}
+
+.track-title {
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  color: var(--ink);
+}
+
+/* The completion pill is one of the existing .pill family and takes no new
+   token; only its margin is corrected here, since .pill's own margin-bottom
+   is tuned for sitting inline beside a claim label rather than under a
+   heading. It REPORTS and gates nothing — see trackCompletion. */
+.track-head > .pill {
+  margin-bottom: 0;
+}
+
+.track-summary {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* track-cites is the list of claims a track cites but does not own: pointers,
+   never bodies (see components/tracks.go). It is styled as a list of rows
+   rather than as cards precisely so it cannot be mistaken for the owned
+   claims above it — the visual difference IS the statement that these live
+   somewhere else.
+
+   Specificity note, the same one .claim-edges makes: the .claim-ref-prefix
+   and .claim-ref-label spans are styled under .claim-edges, which does not
+   scope this list, so both tiers are re-declared below. Rather than widening
+   those selectors — which would silently restyle every footer — the track
+   list states its own, and the two stay independently readable. */
+.track-cites {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.track-cite {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+
+.track-cite:last-child {
+  border-bottom: 0;
+}
+
+.track-cite a.claim-ref {
+  color: var(--link);
+  text-decoration: none;
+}
+
+.track-cite a.claim-ref:hover,
+.track-cite a.claim-ref:focus-visible {
+  text-decoration: underline;
+}
+
+.track-cite .claim-ref-prefix {
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.track-cite .claim-ref-label {
+  font-weight: 500;
+}
+
+.track-cite .claim-ref-raw {
+  font-family: var(--font-mono);
+  font-size: 0.95em;
+  font-weight: 400;
+}
+
+/* The pill is pushed to the trailing edge so a column of rows reads as two
+   columns — what the claim is on the left, what state it is in on the right —
+   which is the scan a reader does on a track page. */
+.track-cite > .pill {
+  margin-left: auto;
+  margin-bottom: 0;
+  flex: none;
 }
 
 @media (max-width: 860px) {

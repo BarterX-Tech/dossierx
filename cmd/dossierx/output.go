@@ -181,7 +181,7 @@ func emit(cmd *cobra.Command, res cmdResult, runErr error) error {
 
 // envelopeRunE adapts a print-free command body to cobra's RunE signature. A
 // converted command's wiring is therefore always the same one line, which is
-// what keeps the contract uniform across nineteen leaves.
+// what keeps the contract uniform across twenty-two leaves.
 func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error)) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		res, err := body(cmd, args)
@@ -190,7 +190,7 @@ func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error
 }
 
 // requireSubcommand is the RunE every NOUN carries — the command groups (claim,
-// comment, build-order, skills) that exist only to hold leaves and do no work of
+// comment, build-order, track, skills) that exist only to hold leaves and do no work of
 // their own.
 //
 // Without it, cobra's default for a parent with no Run/RunE is to print its help

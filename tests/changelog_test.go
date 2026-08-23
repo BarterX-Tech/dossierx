@@ -62,19 +62,6 @@ const (
 	// clogFile is the logbook, relative to the repository root.
 	clogFile = "CHANGELOG.md"
 
-	// clogSiteFile is the release stamp: the file the deployed site derives
-	// every version string on it from. It is read here for ONE value — which
-	// release the page calls current — and never written.
-	clogSiteFile = "site/src/content.ts"
-
-	// clogSiteLandmark opens the array of releases, and clogSiteSelection is the
-	// expression that picks the current one out of it. Both are required to
-	// appear exactly once outside the file's comments, for different reasons:
-	// the landmark is what this file reads, and the selection is what makes
-	// reading the LAST entry the right answer. See clogSiteCurrentVersion.
-	clogSiteLandmark  = "const releases: Release[] = ["
-	clogSiteSelection = "releases[releases.length - 1]"
-
 	// clogUnreleasedHeading is the one level-2 heading Keep a Changelog blesses
 	// that is not a release. It is skipped rather than refused — but a release
 	// cannot hide in it, because the newest DATED entry still has to name what
@@ -98,9 +85,6 @@ var clogHeadingRE = regexp.MustCompile(`^## \[(\d+)\.(\d+)\.(\d+)\] - (\d{4}-\d{
 // sometimes takes (`### BREAKING — …`). Which of the two it is depends on the
 // title, which is clogCalloutMarker's job.
 var clogSectionRE = regexp.MustCompile(`^(#{3,6})\s+(.*)$`)
-
-// clogVersionLiteralRE reads one `version: "…"` out of the site's releases array.
-var clogVersionLiteralRE = regexp.MustCompile(`version:\s*"([^"]*)"`)
 
 // clogCalloutMarkers is the CLOSED vocabulary of words that make an item a
 // callout — a change a consumer's own gate cannot detect for them, which
@@ -310,111 +294,11 @@ func clogSiteProblem(newest clogEntry, siteVersion string) string {
 		return ""
 	}
 	return fmt.Sprintf("%s's newest entry is %s (line %d), and %s says the current release is %s.\n"+
-		"These are two halves of one release announcement and they name different releases. The site's entry is where the hero badge, the release history and the `dossierx version` transcript all get their version from, so whichever of the two is stale, a reader is being told two things:\n"+
+		"These are two halves of one release announcement and they name different releases. The site's marked entry is the whole of what the deployed site says about which release is current, so whichever of the two is stale, a reader is being told two things:\n"+
 		"  - if the CHANGELOG is behind, the release ships describing the PREVIOUS release's changes, and the one change this project cannot detect for a consumer — a silent behaviour change — is the one that goes unannounced.\n"+
 		"  - if the SITE is behind, the release stamp does not name the tag, and .github/workflows/release.yml's gate job refuses to publish it at all.\n"+
 		"Move whichever one was not moved",
-		clogFile, newest.version, newest.line, clogSiteFile, siteVersion)
-}
-
-// clogSiteCurrentVersion reads which release the site calls current: the LAST
-// entry in content.ts's `releases` array.
-//
-// WHY THE LAST ONE, and why that is asserted rather than assumed. The page
-// selects its current release with `releases[releases.length - 1]`, so taking
-// the last literal is only the right answer while that expression is what the
-// file says. This file therefore requires the expression to be present, exactly
-// once, outside the comments — not as an opinion about how the site should be
-// written, but because a site that selected differently would leave this reader
-// silently modelling the wrong entry. The full three-declaration model of that
-// file (the selection, the timeline's latest index, and the derivation that
-// strips the `v`) is held by TestSiteSelectsTheReleaseThisTreeModels in
-// cmd/dossierx/gate_release_stamp_test.go; this is the one part of it this
-// file's own answer depends on.
-//
-// Every way of failing to read it is a t.Fatal, in CLAUDE.md's words: an
-// unreadable stamp means the release the site claims is current was never
-// established, and a comparison against a value that was not read is not a
-// comparison.
-func clogSiteCurrentVersion(t *testing.T, root string) string {
-	t.Helper()
-
-	raw := clogRead(t, root, clogSiteFile)
-	code := strings.Join(clogStripLineComments(raw), "\n")
-
-	// A stripper self-check, not an assertion about the site: if the landmark
-	// did not survive, the strip is what is wrong, and a maintainer sent to look
-	// at a correct file is a maintainer who stops believing this check.
-	if !strings.Contains(code, clogSiteLandmark) {
-		t.Fatalf("stripping whole-line comments from %s removed %q, which is not a comment. This file's stripper has mis-read the source, so everything below would be running over a truncated file. Fix clogStripLineComments; the site is not what is wrong here",
-			clogSiteFile, clogSiteLandmark)
-	}
-	if n := strings.Count(code, clogSiteLandmark); n != 1 {
-		t.Fatalf("%s carries %d live declarations of %q. This file reads exactly one: with two, only one of them is the array the page renders and this file cannot say which, and the version it compared the CHANGELOG against would be a coin toss",
-			clogSiteFile, n, clogSiteLandmark)
-	}
-	if n := strings.Count(code, clogSiteSelection); n != 1 {
-		t.Fatalf("%s carries %d live occurrences of %q, and this file needs exactly one.\n"+
-			"That expression is what makes the LAST entry in the releases array the release the page calls current, which is the entry this file reads and compares %s against. If the site now selects some other entry, this reader is not stale in a way anybody would notice — it would go on comparing the CHANGELOG against an entry the page does not render. Update this file to model whatever the site now does, or put the selection back",
-			clogSiteFile, n, clogSiteSelection, clogFile)
-	}
-
-	var versions []string
-	inBlock := false
-	for _, line := range strings.Split(code, "\n") {
-		switch {
-		case strings.Contains(line, clogSiteLandmark):
-			inBlock = true
-		case inBlock && strings.HasPrefix(strings.TrimSpace(line), "];"):
-			inBlock = false
-		case inBlock:
-			if m := clogVersionLiteralRE.FindStringSubmatch(line); m != nil {
-				versions = append(versions, m[1])
-			}
-		}
-	}
-
-	if len(versions) == 0 {
-		t.Fatalf("%s declares the releases array and no `version:` entry inside it outside the comments. The site names no release at all, so there is nothing for %s's newest entry to agree or disagree with",
-			clogSiteFile, clogFile)
-	}
-	return versions[len(versions)-1]
-}
-
-// clogStripLineComments blanks whole-line `//` comments and whole-line `/* … */`
-// blocks in TypeScript source, keeping the line count so that everything read
-// afterwards still lines up with the file.
-//
-// It is LINE-BASED on purpose and that is a stated limit, not an oversight. A
-// block comment opened part-way along a line of code would not be seen, so a
-// declaration hidden that way would still be read as live. What it does close is
-// the failure that has actually happened in this repository twice (see
-// gate_release_stamp_test.go's corrections FIVE and SIX): a pinned line commented
-// out with the wrong one written underneath it, which leaves the original text in
-// the file for any check that searches the raw source. Whole-line comments are
-// how that is spelled both times.
-func clogStripLineComments(src string) []string {
-	lines := strings.Split(src, "\n")
-	out := make([]string, len(lines))
-	inBlock := false
-	for i, line := range lines {
-		s := strings.TrimSpace(line)
-		switch {
-		case inBlock:
-			if strings.Contains(s, "*/") {
-				inBlock = false
-			}
-		case strings.HasPrefix(s, "/*"):
-			if !strings.Contains(strings.TrimPrefix(s, "/*"), "*/") {
-				inBlock = true
-			}
-		case strings.HasPrefix(s, "//"), strings.HasPrefix(s, "*"):
-			// a comment line, or a continuation line of a doc block
-		default:
-			out[i] = line
-		}
-	}
-	return out
+		clogFile, newest.version, newest.line, siteLedgerFile, siteVersion)
 }
 
 // ---------------------------------------------------------------------
@@ -512,7 +396,7 @@ func clogAudit(doc, siteVersion string) []string {
 // file and the real release stamp.
 func TestChangelogHoldsTheReleaseItDescribes(t *testing.T) {
 	root := clogRepoRoot(t)
-	site := clogSiteCurrentVersion(t, root)
+	site := siteCurrentRelease(t)
 
 	for _, problem := range clogAudit(clogRead(t, root, clogFile), site) {
 		t.Errorf("%s\n", problem)
