@@ -29,8 +29,7 @@ import (
 // opens on it with a composer, and the first comment posts without a reload.
 // ---------------------------------------------------------------------
 
-// TestEmptyClaimChipOpensRailAndPostsFirstComment is the release gate for
-// v0.2.1: "first comment openable, and the chip survives the click".
+// TestEmptyClaimChipOpensRailAndPostsFirstComment is what v0.2.1 promised: "first comment openable, and the chip survives the click".
 func TestEmptyClaimChipOpensRailAndPostsFirstComment(t *testing.T) {
 	p := newProject(t) // one claim, deliberately NOT seeded with any comment
 	ctx := newLiveTab(t, p)

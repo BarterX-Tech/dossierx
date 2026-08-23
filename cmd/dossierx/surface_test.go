@@ -1,8 +1,7 @@
 // surface_test.go emits surface.json: the mechanically derived inventory of
-// everything a client of this project can observe. The release gate diffs it
-// against the previous release to answer "did this release change something a
-// client must know about", and hands it to the agents that read this project's
-// prose against its code.
+// everything a client of this project can observe. Diffed against the previous
+// release's copy it answers "did this release change something a client must
+// know about", which is the question docs/RELEASING.md's pre-tag reading is for.
 //
 // WHY IT IS A TEST AND NOT A COMMAND. The cobra tree is built by unexported
 // newRootCmd() in main.go and Go forbids importing package main, so the walk has
@@ -68,8 +67,8 @@ import (
 var regenerateGoldens = flag.Bool("regenerate-goldens", false, "rewrite the committed surface.json instead of asserting the committed copy matches")
 
 // surfaceFileName is the committed document's path, relative to the repository
-// root. The release gate reads the previous release's copy as
-// `git show <prev-tag>:surface.json`, so it lives at the top level.
+// root. The previous release's copy is read as `git show <prev-tag>:surface.json`,
+// so it lives at the top level.
 const surfaceFileName = "surface.json"
 
 // surfaceModulePath is this module's import path. The AST extractions below use
@@ -1007,8 +1006,8 @@ func expandEmbedPattern(root, dir, pattern string) ([]string, error) {
 //
 // skills/ is one of them and was missing. It is a real Go package — one source
 // and a go:embed of the five SKILL.md bundles — and `dossierx skills export`
-// installs those bundles into OTHER people's repositories, which surfaces.yaml
-// calls unfixable after the tag. While it was outside this walk, a bundle could
+// installs those bundles into OTHER people's repositories, where they are
+// unfixable after the tag. While it was outside this walk, a bundle could
 // be rewritten, or the reading Order re-sequenced, with surface.json coming out
 // byte-identical: the field whose whole job is to make every code change move
 // this document had a shipped package outside it.
@@ -1153,15 +1152,13 @@ func registerSurfacePayloadType(name string, sample any) {
 // declared and not added to it, so it cannot go stale in silence.
 //
 // IT IS ASSEMBLED FROM TWO HALVES, and the reason has nothing to do with taste.
-// This file is COPIED INTO OLDER TREES AND BUILT THERE: gate_baseline_test.go's
-// gateBaselineEmitterSources re-manufactures the frozen release's link-time
-// surface by compiling HEAD's emitter inside that release's own cmd/dossierx,
-// because the baseline is defined as "what HEAD's emitter says about that tree".
-// A literal here naming a type only HEAD declares does not compile there, and
-// the consequence is worse than a red test: it breaks the ONE method that can
-// ever re-manufacture the frozen artifact, so the gate loses the comparison
-// entirely rather than reporting a difference — a check that cannot execute,
-// which this repository treats as the failure it is.
+// This file is meant to be COPIED INTO AN OLDER TREE AND BUILT THERE: asking
+// "what would this inventory have said about release X" means compiling HEAD's
+// emitter inside X's own cmd/dossierx, which is the only way to answer it for a
+// release that predates the emitter. A literal here naming a type only HEAD
+// declares does not compile there, and the comparison is then not available at
+// all rather than reporting a difference: a check that cannot execute, which
+// this repository treats as the failure it is.
 //
 // So the literal below is the set every tree the emitter is pointed at has, and
 // a payload belonging to a noun added since is registered at init by that noun's
@@ -1251,40 +1248,20 @@ var surfacePinVersionRE = regexp.MustCompile(`v\d+\.\d+\.\d+$`)
 // checklist's hard-coded list of pin sites went stale twice, so a pin appearing
 // in a fourth place has to show up here on its own.
 //
-// Four paths are excluded and each for its own reason. CHANGELOG.md and
-// docs/RELEASING.md are RELEASING.md's own exclusions (both are full of
-// historical version strings that are correct precisely because they are old).
-// surface.json is excluded because this field WRITES pin tokens into it: without
+// Three paths are excluded and each for its own reason. CHANGELOG.md and
+// docs/RELEASING.md are RELEASING.md's own exclusions: both are full of
+// historical version strings that are correct precisely because they are old.
+// surface.json is excluded because this field WRITES pin tokens into it; without
 // the exclusion the next sweep would find its own output and the document would
-// never converge. surface.baseline.json is excluded for CHANGELOG.md's reason
-// exactly: it is a frozen copy of THIS document as of v0.5.0, so it carries that
-// release's four pin tokens forever and they are correct precisely because they
-// are old. The surface.json exclusion does not reach it — that one keeps the
-// field from finding its own output, and this is a copy of that output under
-// another name — so without this line the live pin inventory grows entries
-// pointing at a historical record, and the release checklist then tells a
-// maintainer to move them. See gate_baseline_test.go for what moving them costs.
+// never converge.
 //
-// That path is spelled out here rather than taken from gate_baseline_test.go's
-// gateBaselineBootstrapFile, and the reason is a property of THIS FILE that is
-// easy to break by accident: surface_test.go has to compile on its own inside an
-// OLD tree, because manufacturing a baseline for a release that predates the
-// emitter means copying this file (and surface_meta_test.go) into a detached
-// worktree of that release and running it there. A reference to an identifier
-// declared in any other file of this package makes that copy fail to build, and
-// the failure appears years later in the hands of whoever is trying to
-// reconstruct a baseline. The two spellings cannot drift in silence:
-// TestGateBaselineIsExcludedFromTheVersionPinSweep writes a file named by the
-// constant into a fixture repository and requires this sweep not to report it.
-//
-// The exclusions are spelled out here rather than read from surfaces.yaml, and
-// that is deliberate: "not reviewed as prose" and "carries no release pin" are
-// different questions with different answers. .github/ is out of scope for the
-// gate's prose agents and is exactly where the old checklist's ugrep-based sweep
-// went blind, so it must stay IN this search.
+// The exclusions are spelled out here rather than read from a manifest, and that
+// is deliberate: "not reviewed as prose" and "carries no release pin" are
+// different questions with different answers. .github/ is exactly where the old
+// checklist's ugrep-based sweep went blind, so it must stay IN this search.
 func surfaceVersionPins(root string) ([]surfacePin, error) {
 	cmd := exec.Command("git", "grep", "-nE", surfacePinSweep, "--",
-		".", ":!"+surfaceFileName, ":!CHANGELOG.md", ":!docs/RELEASING.md", ":!surface.baseline.json")
+		".", ":!"+surfaceFileName, ":!CHANGELOG.md", ":!docs/RELEASING.md")
 	cmd.Dir = root
 	out, err := cmd.Output()
 	if err != nil {

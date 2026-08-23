@@ -127,6 +127,49 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `write_conflict` rule — the one an agent branches on — is still pinned. `tests/docs_site_audit_test.go`
   carries the note saying what stopped being checked and what would restore it.
 
+### Removed
+
+- **The release gate pipeline is gone, and a release is a maintainer's again.** DossierX is alpha,
+  and the multi-agent gate cost more to operate than the releases it was guarding were worth. What
+  went: `surfaces.yaml` and the thirteen per-surface reading agents; `gate/` in full (the prompts,
+  `method.yaml`, `adjudications.json`); the stage-2 and stage-3 fan-out, bundle, fingerprint,
+  receipt, evidence and cost-ledger machinery in `cmd/dossierx/gate_*_test.go`;
+  `surface.baseline.json` and `gate-cost-model.yaml`; `scripts/gate-agent/` and
+  `scripts/gate-stage2/`; and the two Makefile targets the pipeline ran through, `make ci-evidence`
+  and `make release-publish`. The release driver went with them: with no gate receipt to check, its
+  first clause could never be satisfied, so it was a program that could only refuse.
+  `docs/RELEASING.md` is now a two-page procedure a person works through, and it is still the only
+  description of how this project releases.
+- **What did NOT go, because none of it depended on the pipeline.** `make test`, `make hook-test`,
+  `make viewer-test` and `make viewer-lint` are unchanged and are what a release is now read
+  against. `surface.json` is still emitted and still goes red when it is stale, so a command, flag
+  or exit code that moved without a CHANGELOG entry is still a failed build. The pre-commit hook
+  and the lock-ledger gate are product features and are untouched. `.github/workflows/release.yml`
+  still refuses a tag whose commit is not a merge or whose tree does not stamp the version being
+  tagged — one shell job, no agents — so the ordinary mistake of tagging the release branch is
+  still caught by the forge rather than by memory.
+
+### Fixed
+
+- **The forge's release check reads the site that actually ships.** It was still reading
+  `site/src/content.ts`'s last `releases[]` entry, a file the static-site rewrite deleted, so every
+  tag after that rewrite would have been refused with "the tree at vX.Y.Z has no
+  site/src/content.ts". It now reads `site/releases.html`'s `data-current="true"` entry and its
+  `data-version`, which is the entry a visitor is actually shown, and strips HTML comments first so
+  that the two commented-out mentions of the marker in that file stamp nothing.
+- **`dossierx check` and the three `build-order` leaves refuse a positional argument** instead of
+  discarding it (#47). Without an `Args` declaration cobra falls back to `legacyArgs`, which accepts
+  any positional on a leaf command and throws it away, so `dossierx check --validate <claim-id>`
+  linted the whole project and reported an unrelated module's lint error as though it were about the
+  claim that was named. There is no per-claim check to narrow to, so the honest answer is a usage
+  error. This moves those invocations from exit 0 to exit 1; the repository-internal sweep is clean,
+  so the exposure is to callers outside this tree.
+- **`docs/RELEASING.md` pushes with fully qualified refspecs** (#40). A release developed on a
+  branch named `vX.Y.Z` gives that name two referents, and the short forms resolve it by search
+  order rather than by intent: `git push origin vX.Y.Z` refuses outright, and `git rev-parse
+  --short vX.Y.Z` warns and then answers from `refs/tags` by a convention nothing enforces. The
+  procedure now writes `refs/tags/…` and `refs/heads/…`, which have exactly one referent each.
+
 ## [0.6.0] - 2026-08-20
 
 **SILENT: three shipped skill guides changed, and the skills are embedded in the binary — anyone

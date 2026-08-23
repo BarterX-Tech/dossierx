@@ -1,15 +1,8 @@
-// release_notes_predict_lib_test.go is the `release-notes` surface's
-// predictor: the reusable machinery that answers "what will the published
-// GitHub release body say", BEFORE the tag that generates it exists. That is
-// surfaces.yaml's entry whose only path is .goreleaser.yaml — "the config file
-// IS the reviewable surface", because the notes themselves do not exist until
-// the tag.
-//
-// The surface is cited by NAME. This header used to say "Surface 13's
-// predictor"; surfaces.yaml defines no numbering, and by position
-// `release-notes` is entry 12 while entry 13 is `binary-and-viewer` — the
-// label pointed at the code surface, i.e. at the wrong thing entirely. See
-// skills_export_capture_helpers_test.go's header for the same correction.
+// release_notes_predict_lib_test.go is the release-notes predictor: the
+// reusable machinery that answers "what will the published GitHub release body
+// say", BEFORE the tag that generates it exists. `.goreleaser.yaml` is the only
+// thing there is to review, because the notes themselves do not exist until the
+// tag.
 //
 // This is a _test.go file rather than a plain package file so that adding it
 // does not turn `tests` into a real, importable Go package: cmd/dossierx's
@@ -529,10 +522,9 @@ type ReleaseNotesCommit struct {
 
 // DroppedCommit is a commit filters.exclude removed before grouping — the
 // half of the prediction that a name-only "what got published" view cannot
-// see, and that surfaces.yaml's release-notes entry calls out by name: a
-// user-visible change landing under a `docs:` or `chore:` subject (or now, a
-// merge commit's own subject) is dropped here and invisible on the release
-// page.
+// see: a user-visible change landing under a `docs:` or `chore:` subject (or
+// now, a merge commit's own subject) is dropped here and invisible on the
+// release page.
 type DroppedCommit struct {
 	ReleaseNotesCommit
 	ExcludedBy string `json:"excluded_by"` // the filters.exclude pattern that matched
@@ -645,10 +637,9 @@ func withoutMergeDrops(dropped []DroppedCommit) []DroppedCommit {
 // just ones where something is actually wrong.
 //
 // EVERY OTHER Dropped entry IS compared. A "^chore:" or "^docs:" commit that
-// lands between G1 and G2 — the exact case surfaces.yaml's release-notes
-// entry warns about, a user-visible change going missing from the published
-// page while its Body-level footprint is zero, because a dropped commit by
-// definition never appears in Body — must still fail this check, or G2's
+// lands between G1 and G2 — a user-visible change going missing from the
+// published page while its Body-level footprint is zero, because a dropped
+// commit by definition never appears in Body — must still fail this check, or G2's
 // entire reason to inspect Dropped in the first place is defeated. See
 // TestPublishedEqual_CatchesNewlyDroppedCommit for the regression this
 // guards: an earlier version of this method excluded Dropped ENTIRELY

@@ -38,8 +38,8 @@
 //     tree. NOT VERIFIED, therefore: that the published module path resolves,
 //     that the pinned tag exists, or that what `go install` would fetch matches
 //     this tree. The pin's coherence with the release the tree declares is
-//     derived_facts_test.go's C4; the published artifact is the release gate's
-//     subject, not a test's.
+//     derived_facts_test.go's C4; the published artifact is verified by hand
+//     after the tag (docs/RELEASING.md), not by a test.
 //   - every https://raw.githubusercontent.com/... fetch is replaced by the
 //     file at the same repo-relative path in THIS tree (the URL's path names
 //     it: scripts/install-git-hook.sh), and "add the CI workflow" is realized

@@ -168,8 +168,8 @@ jobs:
       #
       # THE COST, measured rather than assumed: this step's output goes from a
       # couple of dozen lines to roughly 14,500 (~3.4 MB) per cell. That is a
-      # machine's account and it is not a thing a person skims — docs/RELEASING.md's
-      # CI item says so, and points at `make ci-evidence` instead.
+      # machine's account and it is not a thing a person skims. Read the job's
+      # conclusion, and open this log only when something in it went red.
       - name: Test (race)
         run: go test -race -json ./...
 

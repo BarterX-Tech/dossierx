@@ -782,8 +782,7 @@ var ciBuildToolTokens = []string{"npm ", "npx ", "yarn ", "pnpm ", "vite", "tsc 
 // Pages serves is what is in site/, byte for byte.
 //
 // WHY THIS IS THE CHECK AND NOT A STYLE PREFERENCE. Every review of the site in
-// this repository — the release gate's site agent included — reads files in the
-// worktree. That reading is evidence about the deployed page only while the
+// this repository reads files in the worktree. That reading is evidence about the deployed page only while the
 // deployed page IS those files. A build step re-opens the exact gap the old
 // Node-pin test was written to narrow, and re-opens it silently: a bundler that
 // rewrote, minified, inlined or dropped something would produce a page nobody
@@ -809,7 +808,7 @@ func TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt(t *testing.T) {
 			for _, tok := range ciBuildToolTokens {
 				if strings.Contains(run, tok) {
 					t.Errorf("%s's `%s` job runs %q, which names the build tool %q.\n\n"+
-						"What Pages serves must be what site/ contains. A build step means the published page is one nobody has read — not the release gate, not a reviewer, not this suite — while every assertion over site/ stays green.",
+						"What Pages serves must be what site/ contains. A build step means the published page is one nobody has read, not a reviewer and not this suite, while every assertion over site/ stays green.",
 						deployWorkflowPath, name, strings.TrimSpace(step.Run), strings.TrimSpace(tok))
 					break
 				}
@@ -1312,9 +1311,9 @@ func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	} {
 		if strings.Contains(body, banned.idiom) {
 			t.Fatalf("%s contains %q — %s.\n\n"+
-				"THIS DEADLOCKS THE RELEASE. The gate job fires on the TAG push, which is the driver's D6. The driver pushes main at D8, two steps later, with D7 (verify the six archives) in between. So this job refuses, no archives are built, D7 waits for archives that can never exist, D8 is never reached, and origin/main never moves. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: D7 polled twenty minutes, this job refused every run, and the release stopped with the tag public and nothing else done.\n\n"+
-				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, the DRIVER has to push main before the tag, and that trade is a real one — deploy-site fires on the main push, so the site can announce a release whose archives are still building. Move the driver's order in cmd/dossierx/gate_driver_test.go first, then this test, then the guard, in that order and in one change.\n\n"+
-				"What the gate checks instead is that the tagged commit is a merge, which is a fact about the commit alone and so holds at D6. Its limits are written out in %s's own header.",
+				"THIS DEADLOCKS THE RELEASE. This job fires on the TAG push, and docs/RELEASING.md pushes the tag BEFORE main so that deploy-site cannot announce a release whose archives are still building. So this job would refuse, no archives would be built, the maintainer would wait for archives that can never exist, and origin/main would never move. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: twenty minutes of polling, every run refused, and the release stopped with the tag public and nothing else done.\n\n"+
+				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, docs/RELEASING.md has to push main before the tag, and that trade is a real one: deploy-site fires on the main push. Move the documented order first, then this test, then the guard, in that order and in one change.\n\n"+
+				"What this job checks instead is that the tagged commit is a merge, which is a fact about the commit alone and so holds at tag-push time. Its limits are written out in %s's own header.",
 				releaseWorkflowPath, banned.idiom, banned.why, releaseWorkflowPath)
 		}
 	}

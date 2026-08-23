@@ -333,9 +333,8 @@ var gateSiteVersionRE = regexp.MustCompile(`(?:^|[^\w.])(v?\d+\.\d+\.\d+)`)
 
 // gateSitePages are the pages a visitor can reach, relative to the repository
 // root. Named rather than globbed: a page added to site/ and not added here is
-// a page this check does not read, and the surfaces.yaml entry for site/ is
-// what catches that — but naming them means the failure is "the list is stale"
-// rather than a glob quietly matching nothing.
+// a page this check does not read. Naming them means the failure is "the list is
+// stale" rather than a glob quietly matching nothing.
 var gateSitePages = []string{"site/index.html", "site/releases.html"}
 
 // TestSiteDeclaresNoSecondVersionSpelling holds the project to one version
@@ -1690,4 +1689,32 @@ func gateReadRepoFile(t *testing.T, root, rel string) string {
 		t.Fatalf("%s is empty", rel)
 	}
 	return string(raw)
+}
+
+// gateArchivesOneFormat resolves the singular `format:` and the plural
+// `formats:` spellings — GoReleaser v2 accepts both — down to the ONE format a
+// target is packaged in.
+//
+// More than one is refused rather than modelled. A `formats: [tar.gz, zip]`
+// publishes TWO files per target, so the expected set the caller builds would
+// name half of what the release contains and the "every name was checked"
+// direction would report the other half as extra. Refusing says which edit
+// happened; guessing produces a report about the wrong release.
+func gateArchivesOneFormat(where, single string, plural []string, fallback string) (string, error) {
+	switch {
+	case single != "" && len(plural) > 0:
+		return "", fmt.Errorf("%s declares both `format: %s` and `formats: %v` for %s. Which one packages the release is then a question about GoReleaser's precedence rather than about this file, and the expected asset names differ between the two answers",
+			gateGoreleaserFile, single, plural, where)
+	case len(plural) > 1:
+		return "", fmt.Errorf("%s declares %d formats (%v) for %s, so each target publishes %d files. This check derives ONE expected name per target, so it would name a fraction of what the release contains and report the rest as names nobody checked",
+			gateGoreleaserFile, len(plural), plural, where, len(plural))
+	case len(plural) == 1:
+		return plural[0], nil
+	case single != "":
+		return single, nil
+	case fallback != "":
+		return fallback, nil
+	}
+	return "", fmt.Errorf("%s declares no archive format for %s, so this check cannot say what the published file is called",
+		gateGoreleaserFile, where)
 }

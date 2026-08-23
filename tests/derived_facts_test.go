@@ -196,9 +196,9 @@ var clogMigrationRowRE = regexp.MustCompile("(?m)^\\| `dossierx ([^`]+)` \\|")
 
 // clogRowsRetiringAFlag are the table rows whose first cell names a LIVE
 // command, because what the row retires is a flag spelling rather than the
-// command. Declared by name and by reason, in the shape surfaces.yaml uses for
-// a path out of scope, so a second one cannot arrive quietly under cover of the
-// first — an unrecognised row is an error, and this map is the only door.
+// command. Declared by name and by reason, so a second one cannot arrive
+// quietly under cover of the first: an unrecognised row is an error, and this
+// map is the only door.
 var clogRowsRetiringAFlag = map[string]string{
 	"comment list --json": "`comment list` is live and JSON is now its default format; " +
 		"the row retires the FLAG, and the binary retires no command by this name.",
@@ -468,8 +468,8 @@ func treeDeclaredVersion(t *testing.T) string {
 // WHAT THIS CANNOT REACH. It proves the pins agree with the declaration, not
 // that the declared version is releasable: whether the tag exists, whether the
 // pinned raw URLs resolve, and whether the published artifact matches this tree
-// are the release gate's and driver's questions (docs/RELEASING.md), answered
-// against the published archive, which no test over the worktree can see.
+// are docs/RELEASING.md's questions, answered by hand against the published
+// archive, which no test over the worktree can see.
 func TestEveryVersionPinCarriesTheVersionThisTreeDeclares(t *testing.T) {
 	_, pins := surfacePinsAndRetired(t)
 	declared := treeDeclaredVersion(t)

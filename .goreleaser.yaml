@@ -36,8 +36,8 @@ archives:
       {{ .ProjectName }}_{{ .Os }}_{{ .Arch }}
     format_overrides:
       # `formats` (plural), not the deprecated `format`: GoReleaser's own
-      # `check` fails a configuration that uses the singular spelling, and the
-      # release gate reads that check's exit status. See
+      # `check` fails a configuration that uses the singular spelling, and CI's
+      # release dry run reads that check's exit status. See
       # https://goreleaser.com/deprecations#archivesformat_overridesformat
       - goos: windows
         formats: [zip]
@@ -97,7 +97,7 @@ release:
   # on the publish path, after the tag is public. `goreleaser check` and
   # `--skip=publish` both pass over a template naming a field that does not exist.
   header: |
-    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md)** — if it is not there yet, this release is still publishing: the entry lands when the driver pushes `main`, which it does after verifying the archives.
+    **Before you upgrade, read this release's entry in [CHANGELOG.md](https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md)** — if it is not there yet, this release is still publishing: the entry lands when `main` is pushed, which happens after the archives are verified.
     The bullets below are commit subjects. Any change your own tooling cannot
     detect for you — a re-export you must run, a string your scripts compare
     against — is called out at the TOP of that entry, and only there.

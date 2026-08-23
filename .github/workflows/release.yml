@@ -12,34 +12,31 @@
 # whoever pushed:
 #
 #   (a) the tagged commit is a MERGE — a release is the merge of a reviewed
-#       branch into main, and the driver tags that merge commit by value (D2
-#       creates it with `--no-ff`, D4 tags it, never HEAD). A branch head tagged
-#       before it was merged has one parent and is refused here;
+#       branch into main, and docs/RELEASING.md tags that merge commit by value,
+#       never HEAD. A branch head tagged before it was merged has one parent and
+#       is refused here;
 #   (b) the tree at that commit carries the release stamp for exactly this
-#       version — site/src/content.ts's last `releases[]` entry names the tag
+#       version — site/releases.html's `data-current="true"` entry names the tag
 #       being pushed. That stamp is what the whole site derives its version
 #       strings from (the hero, the release history, the `dossierx version`
 #       transcript), so a tag whose tree disagrees with it publishes a binary
 #       that the project's own site describes as a different release.
 #
 # WHY (a) IS MERGE-NESS AND NOT REACHABILITY FROM origin/main, WHICH IS WHAT IT
-# USED TO BE. The stronger check DEADLOCKED against the release driver, and the
-# deadlock is structural rather than a timing accident. The driver's order is D6
-# push the tag, D7 verify the six archives, D8 push main — tag first,
-# deliberately, so that main never publishes a site announcing a release whose
-# archives do not exist yet. This job fires on the tag push, at D6. Asking it for
-# origin/main there asks for something the driver pushes two steps later: the job
-# refuses, so no archives build, so D7 waits for archives that will never exist,
-# so D8 is never reached and origin/main never moves. Measured in the v0.5.1
-# release — D7 polled for twenty minutes, this job refused every run, and the
-# driver stopped with the tag public and nothing else done. A human finished that
-# release by hand, following the driver's own printed recovery.
+# USED TO BE. The stronger check DEADLOCKED against the documented push order,
+# and the deadlock is structural rather than a timing accident. The order is: push
+# the tag, verify the six archives, push main — tag first, deliberately, so that
+# main never publishes a site announcing a release whose archives do not exist
+# yet. This job fires on the tag push. Asking it for origin/main there asks for
+# something that is pushed two steps later: the job refuses, so no archives build,
+# so there is nothing to verify, so main is never pushed. Measured in the v0.5.1
+# release — twenty minutes of polling, every run refused, and the release stopped
+# with the tag public and nothing else done, finished by hand.
 #
-# Neither side was wrong alone and each is proven by its own mutation test, so
-# the fix had to GIVE UP a property rather than reconcile the two. What was given
-# up is the part of (a) that has to read a branch. Merge-ness is a fact about the
-# tagged commit by itself, so this job can establish it at D6 holding nothing but
-# the tag.
+# Neither side was wrong alone, so the fix had to GIVE UP a property rather than
+# reconcile the two. What was given up is the part of (a) that has to read a
+# branch. Merge-ness is a fact about the tagged commit by itself, so this job can
+# establish it at tag-push time holding nothing but the tag.
 #
 # WHAT THAT COSTS, STATED PLAINLY RATHER THAN DESCRIBED AS FIXED. Reachability
 # refused a tag on any commit not on main. Merge-ness refuses a tag on a commit
@@ -50,18 +47,12 @@
 # branch carries the release's own stamp by the time it is ready to merge, which
 # is exactly when it would be mistagged.
 #
-# AND THE RECEIPT CANNOT COVER IT FROM HERE, which is worth writing down because
-# it is the first thing a reader will reach for. The driver refuses to act unless
-# a gate receipt accounts for the tree it is about to publish, but that receipt is
-# never committed: gate/.gitignore ignores every run-produced artifact on purpose,
-# so that a copy left on disk cannot look authoritative. There is nothing in the
-# tagged tree for this job to read. A forge-side tag protection rule on `v*` is
-# what would close the residual, and it is the same accepted residual the section
-# below already records.
+# A forge-side tag protection rule on `v*` is what would close that residual, and
+# it is the same accepted residual the section below records.
 #
-# DO NOT RESTORE THE origin/main CHECK WITHOUT MOVING THE DRIVER FIRST. Added
-# back on its own it re-creates the deadlock exactly, and the symptom is a
-# release that stops with a public tag and no archives behind it.
+# DO NOT RESTORE THE origin/main CHECK WITHOUT MOVING THE DOCUMENTED PUSH ORDER
+# FIRST. Added back on its own it re-creates the deadlock exactly, and the
+# symptom is a release that stops with a public tag and no archives behind it.
 #
 # RESIDUAL, ACCEPTED. This gate lives in the repository, and the workflow GitHub
 # runs for a tag is the one in the tagged tree — so anyone with push rights can
@@ -98,8 +89,8 @@ jobs:
       - name: The tag names a merge, and its tree stamps this release
         env:
           TAG: ${{ github.ref_name }}
-          STAMP_FILE: site/src/content.ts
-          LANDMARK: 'const releases: Release[] = ['
+          STAMP_FILE: site/releases.html
+          LANDMARK: 'data-current="true"'
         run: |
           set -euo pipefail
 
@@ -128,11 +119,11 @@ jobs:
           # (a) THE TAGGED COMMIT IS A MERGE. Read from the commit alone, with no
           # branch involved — see the header for why this is not
           # `merge-base --is-ancestor "$COMMIT" origin/main`, which deadlocks
-          # against the driver's D6/D7/D8 order and stopped the v0.5.1 release.
+          # against the documented tag-before-main order and stopped v0.5.1.
           #
           # `rev-list --parents -n 1` prints the commit followed by each parent
-          # on one line, so the parent count is NF - 1. The driver's D2 makes the
-          # merge with `--no-ff`, which always yields exactly two; this accepts
+          # on one line, so the parent count is NF - 1. `git merge --no-ff`
+          # always yields exactly two; this accepts
           # two OR MORE because the fact being established is merge-ness, not a
           # parent arity, and an octopus merge is still a merge.
           NPARENTS="$(git rev-list --parents -n 1 "$COMMIT" | awk 'NR == 1 { print NF - 1 }')"
@@ -140,7 +131,7 @@ jobs:
 
           if [ "$NPARENTS" -lt 2 ]; then
             refuse "${TAG} names ${COMMIT}, which has ${NPARENTS} parent(s) and so is NOT a merge commit.
-          A release is the merge of a reviewed branch into main, and the driver tags THAT commit (D2 merges with --no-ff, D4 tags the merge by value, never HEAD). A tag on a single-parent commit is a tag on a branch head — the release branch as it stood BEFORE it was merged, which already carries this release's stamp and would therefore get past check (b) unnoticed.
+          A release is the merge of a reviewed branch into main, and docs/RELEASING.md tags THAT commit by value, never HEAD. A tag on a single-parent commit is a tag on a branch head — the release branch as it stood BEFORE it was merged, which already carries this release's stamp and would therefore get past check (b) unnoticed.
           Merge first, then tag the merge."
           fi
 
@@ -149,30 +140,39 @@ jobs:
           # directory: a working tree can be edited after the tag is written and
           # the thing being published is the tree, not the checkout.
           git cat-file -e "${COMMIT}:${STAMP_FILE}" 2>/dev/null \
-            || refuse "the tree at ${TAG} has no ${STAMP_FILE}. That file carries the release stamp — the \`releases[]\` entry every version string on the site is derived from — so there is nothing to compare the tag against."
+            || refuse "the tree at ${TAG} has no ${STAMP_FILE}. That file carries the release stamp — the entry marked \`${LANDMARK}\` — so there is nothing to compare the tag against."
 
-          # A deliberately small structural read of one array, not a second model
-          # of the site. Whole-line comments are dropped so that a commented-out
-          # entry stamps nothing; the authoritative comment-stripping read of
-          # these declarations is TestSiteSelectsTheReleaseThisTreeModels in
-          # cmd/dossierx/gate_release_stamp_test.go, which runs in CI on every
-          # push. RESIDUAL: this reader is line-based, so a block comment opened
-          # mid-line could hide an entry from it. It refuses when the array's
-          # landmark is missing or duplicated rather than reporting an empty
-          # read, which is the failure that would otherwise pass quietly.
+          # A deliberately small structural read of one attribute pair, not a
+          # second model of the site. The site is static HTML, so the entry
+          # marked data-current="true" IS what a visitor is shown; its sibling
+          # data-version attribute is the version it claims. HTML comments are
+          # stripped first so that a commented-out entry stamps nothing. It
+          # refuses when the marker is missing or appears more than once rather
+          # than reporting an empty read, which is the failure that would
+          # otherwise pass quietly.
           READ="$(git show "${COMMIT}:${STAMP_FILE}" | awk -v landmark="$LANDMARK" '
             {
-              s = $0
-              sub(/^[ \t]+/, "", s)
-              if (incomment) { if (s ~ /\*\//) incomment = 0; next }
-              if (s ~ /^\/\*/) { if (s !~ /\*\//) incomment = 1; next }
-              if (s ~ /^\/\//) next
-              if (s ~ /^\*/) next
-              if (index($0, landmark) > 0) { landmarks++; block = 1; next }
-              if (block && s ~ /^\];/) { block = 0; next }
-              if (block && match($0, /version:[ \t]*"[^"]*"/)) {
-                v = substr($0, RSTART, RLENGTH)
-                sub(/^version:[ \t]*"/, "", v)
+              line = $0
+              # Strip HTML comments, including ones spanning lines.
+              while (1) {
+                if (incomment) {
+                  e = index(line, "-->")
+                  if (e == 0) { line = ""; break }
+                  line = substr(line, e + 3); incomment = 0
+                  continue
+                }
+                b = index(line, "<!--")
+                if (b == 0) break
+                rest = substr(line, b + 4)
+                e = index(rest, "-->")
+                if (e == 0) { line = substr(line, 1, b - 1); incomment = 1; break }
+                line = substr(line, 1, b - 1) substr(rest, e + 3)
+              }
+              if (index(line, landmark) == 0) next
+              landmarks++
+              if (match(line, /data-version="[^"]*"/)) {
+                v = substr(line, RSTART, RLENGTH)
+                sub(/^data-version="/, "", v)
                 sub(/"$/, "", v)
                 stamp = v
                 entries++
@@ -186,12 +186,12 @@ jobs:
           set -- $READ
           LANDMARKS="${1:-0}"; ENTRIES="${2:-0}"; STAMP="${3:--}"
 
-          [ "$LANDMARKS" = 1 ] || refuse "${STAMP_FILE} at ${TAG} carries ${LANDMARKS} occurrences of \`${LANDMARK}\` outside its comments, and this gate reads exactly one. None means the release stamp has moved and this check has lost its subject; more than one means two arrays, only one of which the site renders, and this gate cannot say which."
-          [ "$ENTRIES" != 0 ] || refuse "${STAMP_FILE} at ${TAG} declares the releases array but no \`version:\` entry inside it. The tree names no release at all, so it cannot name this one."
+          [ "$LANDMARKS" = 1 ] || refuse "${STAMP_FILE} at ${TAG} carries ${LANDMARKS} occurrences of \`${LANDMARK}\` outside its comments, and this check reads exactly one. None means the release stamp has moved and this check has lost its subject; more than one means two entries claim to be current, and this check cannot say which one the visitor is shown."
+          [ "$ENTRIES" != 0 ] || refuse "${STAMP_FILE} at ${TAG} marks an entry current but that entry carries no \`data-version\` attribute. The tree names no release at all, so it cannot name this one."
 
           if [ "$STAMP" != "$TAG" ]; then
             refuse "the tag is ${TAG} but the tree at ${COMMIT} stamps ${STAMP}.
-          The last \`releases[]\` entry in ${STAMP_FILE} is what the site derives every version string from — the hero badge, the release history, and the \`dossierx version\` transcript. Publishing this tag would ship ${TAG}'s binary beside a site that calls the current release ${STAMP}.
+          The entry marked \`${LANDMARK}\` in ${STAMP_FILE} is the release the site tells a visitor is current. Publishing this tag would ship ${TAG}'s binary beside a page that calls the current release ${STAMP}.
           Either the release stamp was not moved before tagging, or the tag was cut from the wrong commit."
           fi
 

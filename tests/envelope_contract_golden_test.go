@@ -88,13 +88,12 @@ import (
 
 // envelopeGoldenFile is the committed snapshot, relative to the repository
 // root. It sits beside the corpora under testdata/ rather than next to this
-// file so that surfaces.yaml's `testdata/` out-of-scope entry already claims it
-// — it is a fixture, not a client-facing surface.
+// file, because it is a fixture rather than a client-facing document.
 const envelopeGoldenFile = "testdata/envelope-contract.golden.txt"
 
 // envelopeGoldenHeader is prose carried INSIDE the committed file, because the
-// file is read by the release gate and by whoever is writing a CHANGELOG entry,
-// neither of whom is reading this source.
+// file is read by whoever is writing a CHANGELOG entry, who is not reading this
+// source.
 const envelopeGoldenHeader = `# envelope-contract.golden.txt — what each pinned invocation of the dossierx CLI
 # actually emitted: the envelope's keys, the keys of data WITH THE JSON TYPE OF
 # EACH, the error block and its code, stopped_at, and the process exit status.
