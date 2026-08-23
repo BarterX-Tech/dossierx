@@ -4,20 +4,26 @@ DossierX is alpha. A release is a maintainer reading the change, running the
 suites, and tagging. There is no gate pipeline in front of it any more, and this
 file is the whole procedure.
 
-Two things still run without being asked, and both are cheap:
+`.github/workflows/ci.yml` runs the suites on every push and pull request, and
+that is the only thing that runs without being asked.
 
-- `.github/workflows/ci.yml` runs the suites on every push and pull request.
-- `.github/workflows/release.yml` opens with a job the publishing job `needs:`,
-  so a tag that does not get past it produces no archives. It asks two questions
-  about the tagged commit and nothing else: that the commit is a **merge**, which
-  refuses the ordinary mistake of tagging the release branch instead of the merge,
-  and that the tree at that commit carries the release stamp for this version, the
-  entry in `site/releases.html` marked `data-current="true"`. Once it passes,
-  GoReleaser builds the six platform archives, stamps `main.version`,
-  `main.commit` and `main.date` through ldflags, and publishes.
+**Nothing stands between a `v*` tag and a published release.** Pushing the tag
+runs GoReleaser, which builds the six platform archives, stamps `main.version`,
+`main.commit` and `main.date` through ldflags, generates the release notes from
+the Conventional Commit subjects, and publishes. Any commit, on any branch, tagged
+anything beginning with `v` publishes a release of this project.
 
-One case that job deliberately does not refuse: a merge commit created locally and
-never pushed. Nothing catches that, so do not lean on the forge for it.
+So these three are yours, every time, and there is no second reader:
+
+- the tag names the **merge commit**, not the release branch head. The branch head
+  carries this release's stamp too, so it looks right from every angle except the
+  one that matters.
+- `site/releases.html`'s `data-current="true"` entry names the version being
+  tagged. A tag that disagrees ships a binary the project's own page calls another
+  release.
+- the tag names the commit you meant.
+
+The checklist below asks for each one.
 
 ## Before tagging
 
@@ -40,9 +46,10 @@ never pushed. Nothing catches that, so do not lean on the forge for it.
       the file.
 
 - [ ] **`site/releases.html` carries this version** as the entry marked
-      `data-current="true"`. The release workflow reads exactly this and refuses a
-      tag it does not match, so a mismatch stops the release at the forge rather
-      than shipping a site that announces the wrong version.
+      `data-current="true"`, and the previous release's entry no longer is. That
+      entry is what a visitor is shown. Nothing checks it against the tag, so a
+      release tagged over a stale stamp publishes archives beside a page calling
+      another version current.
 
 - [ ] **`surface.json` is current.** It is the mechanically derived inventory of
       everything a client can observe, and a stale copy is a red build.
@@ -107,8 +114,8 @@ reviewed, and the merge carries it in.
       git merge --no-ff --no-edit <branch>
 
       `--no-ff` is what produces the merge commit the tag needs. A squash or a
-      rebase leaves `main` with no merge commit at the tip, and the release
-      workflow's first job refuses that tag.
+      rebase leaves `main` with no merge commit at the tip, and the tag then names
+      a branch head that was never merged. Nothing refuses that; check it.
 
 - [ ] **Tag the merge commit and push the tag, in this order.**
 

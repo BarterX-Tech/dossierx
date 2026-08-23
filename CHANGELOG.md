@@ -144,19 +144,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `make viewer-test` and `make viewer-lint` are unchanged and are what a release is now read
   against. `surface.json` is still emitted and still goes red when it is stale, so a command, flag
   or exit code that moved without a CHANGELOG entry is still a failed build. The pre-commit hook
-  and the lock-ledger gate are product features and are untouched. `.github/workflows/release.yml`
-  still refuses a tag whose commit is not a merge or whose tree does not stamp the version being
-  tagged — one shell job, no agents — so the ordinary mistake of tagging the release branch is
-  still caught by the forge rather than by memory.
+  and the lock-ledger gate are product features and are untouched.
+- **`.github/workflows/release.yml` no longer refuses anything.** Its `gate` job checked that the
+  tagged commit was a merge and that the tree stamped the version being tagged; both went with the
+  rest of the pipeline. A `v*` tag now runs GoReleaser and GoReleaser publishes, which is what this
+  file did before the gate existed. The three mistakes that leaves uncaught — tagging the release
+  branch instead of the merge, tagging a tree whose site announces a different release, and tagging
+  the wrong commit — are named in the workflow's own header and asked for by hand in
+  `docs/RELEASING.md`. One guard survives as a test rather than as a job:
+  `tests/ci_workflow_test.go` still refuses a `merge-base --is-ancestor` check in that workflow by
+  name, because the tag is pushed before `main` and such a check deadlocks against that order — it
+  stopped v0.5.1 with a public tag and no archives.
 
 ### Fixed
 
-- **The forge's release check reads the site that actually ships.** It was still reading
-  `site/src/content.ts`'s last `releases[]` entry, a file the static-site rewrite deleted, so every
-  tag after that rewrite would have been refused with "the tree at vX.Y.Z has no
-  site/src/content.ts". It now reads `site/releases.html`'s `data-current="true"` entry and its
-  `data-version`, which is the entry a visitor is actually shown, and strips HTML comments first so
-  that the two commented-out mentions of the marker in that file stamp nothing.
 - **`dossierx check` and the three `build-order` leaves refuse a positional argument** instead of
   discarding it (#47). Without an `Args` declaration cobra falls back to `legacyArgs`, which accepts
   any positional on a leaf command and throws it away, so `dossierx check --validate <claim-id>`

@@ -997,7 +997,7 @@ func ciOneDeclaredEnv(wf ciWorkflow, rel, name string) (string, error) {
 	return values[0], nil
 }
 
-// TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests is a claim
+// TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneCITests is a claim
 // about two documents, and is named for exactly that.
 //
 // WHAT IT IS FOR. Two suites in this repository model GoReleaser's behaviour
@@ -1026,7 +1026,7 @@ func ciOneDeclaredEnv(wf ciWorkflow, rel, name string) (string, error) {
 // workflow that builds the page a visitor is served; the GoReleaser pin's truth
 // lives in the workflow whose suites were written against a named version, because
 // that is the pin that has citations hanging off it.
-func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneTheGateTests(t *testing.T) {
+func TestTheReleaseWorkflowsGoReleaserPinAgreesWithTheOneCITests(t *testing.T) {
 	ci := ciLoadWorkflow(t, ciWorkflowPath)
 	release := ciLoadWorkflow(t, releaseWorkflowPath)
 
@@ -1246,33 +1246,30 @@ func TestTheReleasePageHasAFooterPointingAtTheChangelog(t *testing.T) {
 	}
 }
 
-// TestTheReleaseGateDoesNotAskTheForgeForOriginMain pins the shape of the forge's
-// own precondition, because nothing else in this repository did.
+// TestTheReleaseWorkflowDoesNotAskTheForgeForOriginMain refuses one idiom in
+// release.yml by name, because adding it back is a deadlock rather than a
+// regression anything else would catch.
 //
-// WHY THIS TEST EXISTS AT ALL. Through v0.5.1 the gate job required the tagged
-// commit to be reachable from origin/main, and that requirement DEADLOCKED with
-// the release driver. The driver's order is D6 push the tag, D7 verify the six
-// archives, D8 push main — tag first, deliberately, so main never publishes a
-// site announcing a release whose archives do not exist. The gate job fires on
-// the tag push, at D6, and asked there for a branch the driver pushes at D8: it
-// refused, no archives were built, D7 waited for archives that could never
-// exist, D8 was never reached and origin/main never moved. Nothing in that ring
-// can move first, so no timeout resolves it. It stopped the v0.5.1 release with
-// the tag public and nothing else done.
+// WHAT HAPPENED. Through v0.5.1 that workflow required the tagged commit to be
+// reachable from origin/main, and the release pushes the TAG first, on purpose,
+// so that main never publishes a site announcing a release whose archives do not
+// exist yet. The job fires on the tag push and asked there for a branch that is
+// pushed two steps later: it refused, so no archives built, so there was nothing
+// to verify, so main never moved. Nothing in that ring moves first, so no timeout
+// resolves it. It stopped the v0.5.1 release with the tag public and nothing else
+// done, and a human finished it by hand.
 //
-// The guard was replaced with a fact about the tagged commit alone — that it is
-// a merge — and the reasoning was written into release.yml's header and
-// docs/RELEASING.md. THAT WAS THE WHOLE RECORD, and prose is not a check: the
-// deletion was invisible to `go test ./...`, and so is restoring it. A future
-// reader who finds merge-ness weaker than reachability, which it is, would be
+// The requirement was removed and the reasoning was written into release.yml's
+// header and docs/RELEASING.md. THAT WAS THE WHOLE RECORD, and prose is not a
+// check: restoring the idiom is invisible to `go test ./...`. A future reader who
+// finds a reachability check obviously correct, which in isolation it is, would be
 // right about the strength and wrong about the consequence, and the symptom
-// arrives only at the next release — a public tag with no archives behind it.
+// arrives only at the next release.
 //
-// So this test refuses the restoration by name and says why, and it reads the
-// workflow AS TEXT on purpose: the guards live inside a shell `run:` block, so a
-// YAML-shaped read would see one opaque string and could not tell which check it
-// contains.
-func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
+// It reads the workflow AS TEXT on purpose: the idiom would live inside a shell
+// `run:` block, so a YAML-shaped read would see one opaque string and could not
+// tell which check it contains.
+func TestTheReleaseWorkflowDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	path := filepath.Join(ciRepoRoot(t), filepath.FromSlash(releaseWorkflowPath))
 	raw, err := os.ReadFile(path)
 	if err != nil {
@@ -1280,11 +1277,10 @@ func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	}
 	// COMMENT LINES ARE DROPPED, and that is not a convenience. release.yml's
 	// header explains at length why the origin/main check went, and explaining
-	// it requires NAMING it — as does the recovery note inside the gate script
-	// itself. Scanning the raw file would fail on its own documentation and
-	// leave a maintainer with one bad choice: delete the explanation to make the
-	// test green, which throws away the only account of why the guard must not
-	// come back. So the subject is the executable lines.
+	// it requires NAMING it. Scanning the raw file would fail on its own
+	// documentation and leave a maintainer with one bad choice: delete the
+	// explanation to make the test green, which throws away the only account of
+	// why the guard must not come back. So the subject is the executable lines.
 	//
 	// A whole-line reader is the right shape here and its residual is stated
 	// rather than hidden: an idiom placed after a `#` on a line that also
@@ -1304,28 +1300,17 @@ func TestTheReleaseGateDoesNotAskTheForgeForOriginMain(t *testing.T) {
 	// Both spellings, because either one alone reintroduces the wait. The fetch
 	// refspec is how the branch is obtained and the ancestry test is how it is
 	// used; a restoration that reached for only one of the two would still be a
-	// job blocking on a ref the driver has not pushed.
+	// job blocking on a ref the release has not pushed.
 	for _, banned := range []struct{ idiom, why string }{
 		{"merge-base --is-ancestor", "the ancestry test itself"},
 		{"refs/remotes/origin/main", "the branch it compares against"},
 	} {
 		if strings.Contains(body, banned.idiom) {
 			t.Fatalf("%s contains %q — %s.\n\n"+
-				"THIS DEADLOCKS THE RELEASE. This job fires on the TAG push, and docs/RELEASING.md pushes the tag BEFORE main so that deploy-site cannot announce a release whose archives are still building. So this job would refuse, no archives would be built, the maintainer would wait for archives that can never exist, and origin/main would never move. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: twenty minutes of polling, every run refused, and the release stopped with the tag public and nothing else done.\n\n"+
+				"THIS DEADLOCKS THE RELEASE. This workflow fires on the TAG push, and docs/RELEASING.md pushes the tag BEFORE main so that deploy-site cannot announce a release whose archives are still building. So the job would refuse, no archives would be built, the maintainer would wait for archives that can never exist, and origin/main would never move. Nothing in that ring moves first and no timeout resolves it. Measured in v0.5.1: twenty minutes of polling, every run refused, and the release stopped with the tag public and nothing else done.\n\n"+
 				"THE RECOVERY IS NOT TO DELETE THIS TEST. If the forge must know the tag is on main, docs/RELEASING.md has to push main before the tag, and that trade is a real one: deploy-site fires on the main push. Move the documented order first, then this test, then the guard, in that order and in one change.\n\n"+
-				"What this job checks instead is that the tagged commit is a merge, which is a fact about the commit alone and so holds at tag-push time. Its limits are written out in %s's own header.",
+				"What this workflow asks of a tag instead is nothing at all — see %s's own header for the mistakes that leaves uncaught, and docs/RELEASING.md for where each one is checked by hand.",
 				releaseWorkflowPath, banned.idiom, banned.why, releaseWorkflowPath)
 		}
-	}
-
-	// And the replacement is present. Without this half the test passes over a
-	// gate job whose (a) check was deleted outright rather than substituted,
-	// which is a weaker forge than either design intended and reads identically
-	// from here.
-	if !strings.Contains(body, "rev-list --parents") {
-		t.Fatalf("%s no longer reads the tagged commit's parent count, so nothing in the gate establishes that the tag names a MERGE.\n\n"+
-			"That check is what replaced the origin/main reachability test, and it is the only thing standing between a release and a tag on the release branch as it stood BEFORE it was merged — which already carries this release's stamp and so gets past the stamp check unnoticed.\n\n"+
-			"If it moved to a different idiom, move this assertion with it in the same change. If it was deleted, the gate now refuses nothing about which commit was tagged.",
-			releaseWorkflowPath)
 	}
 }

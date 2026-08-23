@@ -114,13 +114,11 @@ go run ./cmd/dossierx check --config testdata/fixture-basic/project.config.yaml
 ## Cutting a release
 
 Maintainers only: [docs/RELEASING.md](docs/RELEASING.md). DossierX is alpha and a
-release is a maintainer reading the change, running the suites, and tagging. The
-tag itself is guarded by one cheap forge-side job: the tagged commit has to be a
-merge, and the tree at it has to carry the release stamp for the version being
-tagged, or no archives are built. Everything else in that document is a person's,
-including the three post-publish checks — the workflow run, the deployed site, the
-published archive — which leave this repository and so cannot be checked from
-inside it.
+release is a maintainer reading the change, running the suites, and tagging.
+Nothing stands between a `v*` tag and a published release: pushing the tag runs
+GoReleaser and GoReleaser publishes. Every precondition is a person's, including
+the three post-publish checks — the workflow run, the deployed site, the published
+archive — which leave this repository and so cannot be checked from inside it.
 
 ## Package boundaries
 
