@@ -151,7 +151,7 @@ func (p citePolicy) match(text string, i int) (n, ref int, ok bool) {
 		j++
 	}
 	digits := text[i+1 : j]
-	if len(digits) == 0 || len(digits) > maxCiteDigits {
+	if digits == "" || len(digits) > maxCiteDigits {
 		return 0, 0, false
 	}
 	// No leading zero, so one citation has exactly one spelling. "[0]" is

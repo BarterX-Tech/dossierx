@@ -50,10 +50,23 @@ tracks:
     title: Checkout
 `
 
-// longNote needs to exceed three lines at the desktop viewport this suite uses
-// and to keep exceeding them if someone widens that viewport a little, so it is
-// written well past the boundary rather than just over it.
-const longNote = "The provider documents at-least-once delivery for transactional mail, with de-duplication keyed on an idempotency header the sender supplies, retained for twenty-four hours after the first accepted submission; messages submitted with the same key inside that window are accepted and discarded rather than rejected, so a caller that retries after a timeout cannot tell from the response whether the first attempt landed."
+// longNote is the note that must overflow. It is written to need EIGHT lines or
+// so rather than four, and the margin is the whole point of the rewrite.
+//
+// WHAT WENT WRONG WITH THE FIRST VERSION, because the failure was expensive to
+// read. It needed exactly four lines against a three-line clamp: one line of
+// slack. Font metrics are not portable — this suite's stack starts at
+// -apple-system/system-ui, which resolves to a different face on every OS the
+// CI matrix runs — and on the Linux runner the same string fit in three. The
+// script then did exactly the right thing (no overflow, so no clamp and no
+// control) and all four tests in this file failed, reporting the FEATURE as
+// broken when the fixture was.
+//
+// So the number to keep is the ratio, not the character count: whatever this
+// string is, it must need enough lines that no plausible font drops it to
+// three. requireOverflowingFixture below asserts that on every run, so the next
+// person to shorten it gets told which thing broke.
+const longNote = "The provider documents at-least-once delivery for transactional mail, with de-duplication keyed on an idempotency header the sender supplies, retained for twenty-four hours after the first accepted submission; messages submitted with the same key inside that window are accepted and discarded rather than rejected, so a caller that retries after a timeout cannot tell from the response whether the first attempt landed. The same page describes the retry schedule as exponential with jitter, bounded at six attempts over roughly seventy-two hours, after which the message is recorded as permanently failed and surfaced on the delivery webhook rather than in the submission response. It says nothing about ordering between distinct keys, and nothing about what happens to a key reused after the retention window has closed, which are the two questions this claim would most like answered."
 
 // newClampProject writes one claim carrying two sources: the first has a note
 // that overflows and a second note that does not, the second has one short note.
@@ -147,6 +160,33 @@ func noteOverflows(t *testing.T, ctx context.Context, note string) bool {
 	})()`, note))
 }
 
+// requireOverflowingFixture asserts the premise every test here rests on: the
+// note this suite calls "long" really does run past three lines in THIS
+// browser. Without it, a fixture that stops overflowing — a shorter string, a
+// wider box, a narrower font — reports as four failures about a working clamp,
+// which is what sent the first version of this suite red on Linux while it
+// passed on macOS.
+//
+// It measures with the clamp forced on and restores whatever was there, so it
+// can be called before the assertions without deciding them.
+func requireOverflowingFixture(t *testing.T, ctx context.Context, note string) {
+	t.Helper()
+	var lines int
+	runCDP(t, ctx, chromedp.Evaluate(`(function () {
+		var n = `+note+`;
+		var b = n.querySelector('.claim-source-note-body');
+		var was = n.classList.contains('is-clamped');
+		n.classList.remove('is-clamped');
+		var need = Math.round(b.scrollHeight / parseFloat(getComputedStyle(b).lineHeight));
+		if (was) { n.classList.add('is-clamped'); }
+		return need;
+	})()`, &lines))
+	if lines <= 3 {
+		t.Fatalf("the fixture note renders in %d line(s) in this browser, so it does not overflow the three-line clamp and there is nothing here to test.\n\n"+
+			"This is a defect in longNote, NOT in the clamp: the script is correct to leave a note that fits unclamped and uncontrolled. Lengthen longNote until it needs well more than three lines on every font the matrix runs.", lines)
+	}
+}
+
 // TestSourceNoteClampControlsOnlyTheNotesThatNeedOne is the whole point of the
 // feature: the long note is cut and offers a way out, and the two short ones are
 // left exactly as they were. A build that clamped everything, or that offered
@@ -156,6 +196,7 @@ func TestSourceNoteClampControlsOnlyTheNotesThatNeedOne(t *testing.T) {
 	doc := "document"
 
 	long := noteAt(doc, 0)
+	requireOverflowingFixture(t, ctx, long)
 	if !evalBool(t, ctx, long+`.classList.contains('is-clamped')`) {
 		t.Error("the overflowing note is not clamped")
 	}
@@ -184,6 +225,7 @@ func TestSourceNoteClampControlsOnlyTheNotesThatNeedOne(t *testing.T) {
 // than a pixel height keeps this true on any machine's fonts.
 func TestSourceNoteClampIsThreeLines(t *testing.T) {
 	ctx := clampTab(t, newClampProject(t))
+	requireOverflowingFixture(t, ctx, noteAt("document", 0))
 	got := evalString(t, ctx, `getComputedStyle(`+noteAt("document", 0)+`.querySelector('.claim-source-note-body')).webkitLineClamp`)
 	if got != "3" {
 		t.Fatalf("line clamp = %q, want \"3\"", got)
@@ -197,6 +239,7 @@ func TestSourceNoteClampIsThreeLines(t *testing.T) {
 func TestSourceNoteControlExpandsAndCollapses(t *testing.T) {
 	ctx := clampTab(t, newClampProject(t))
 	long := noteAt("document", 0)
+	requireOverflowingFixture(t, ctx, long)
 
 	clamped := evalInt(t, ctx, long+`.querySelector('.claim-source-note-body').clientHeight`)
 
@@ -253,6 +296,8 @@ func TestSourceNoteClampWorksInATrackCopy(t *testing.T) {
 
 	canonical := noteAt(`document.querySelector('.module-section:not(.track-section)')`, 0)
 	copied := noteAt(`document.querySelector('.track-section')`, 0)
+
+	requireOverflowingFixture(t, ctx, canonical)
 
 	// The canonical card is the one on screen, so it has been judged.
 	if !controlPaints(t, ctx, canonical) {

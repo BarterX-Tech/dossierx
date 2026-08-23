@@ -46,10 +46,25 @@ linters-settings:
       # runs the other way (lock imports lint, gating a lock operation on a
       # clean lint run). It also must not import render, reaudit, or
       # buildorder, none of which lint has any business depending on.
+      #
+      # ONE FILE IS EXEMPTED BY NAME, and by name is the whole point: a pattern
+      # like "!**_test.go" would exempt every test in the package, and a real
+      # violation would then land in a _test.go and never be seen. What the rule
+      # protects is the SHIPPED dependency graph — what the binary links — and
+      # citation_grammar_test.go links neither package into anything a client
+      # runs. It exists because the "[n]" citation marker is recognized by two
+      # independent scanners, internal/lint's (which decides what the lints
+      # report) and internal/render/markdown's (which decides what the reader
+      # sees), and nothing but agreement between them makes either meaningful.
+      # A test proving they agree has to be able to see both. Moving it out of
+      # this package is not the cheaper answer either: it reads citedSourceRefs,
+      # which is unexported, so the move would mean widening lint's API to
+      # satisfy a lint rule about lint's API.
       lint-must-not-import-lock-and-friends:
         list-mode: lax
         files:
           - "**/internal/lint/**"
+          - "!**/internal/lint/citation_grammar_test.go"
         deny:
           - pkg: github.com/BarterX-Tech/dossierx/internal/lock
             desc: "internal/lint must never import internal/lock — lock imports lint, not the other way around"
@@ -63,10 +78,16 @@ linters-settings:
       # render is a top-of-stack sink: it may import other internal/...
       # packages, but nothing under internal/{lint,catalog,lock,loader,
       # implink} may import render in return.
+      # citation_grammar_test.go is exempted here for the reason given at
+      # lint-must-not-import-lock-and-friends above: it is the cross-check that
+      # the lint's citation scanner and the renderer's agree, so it has to see
+      # both, and it links neither into anything shipped. Both rules deny the
+      # same import, so exempting one and not the other exempts nothing.
       render-is-top-of-stack:
         list-mode: lax
         files:
           - "**/internal/lint/**"
+          - "!**/internal/lint/citation_grammar_test.go"
           - "**/internal/catalog/**"
           - "**/internal/lock/**"
           - "**/internal/loader/**"

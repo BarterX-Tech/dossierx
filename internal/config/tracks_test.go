@@ -163,19 +163,29 @@ tracks:
 // TestLoadConfig_TracksAreStrictlyDecoded confirms the tracks block is
 // covered by the config's strict decode like everything else: an unknown key
 // inside a track entry is a load error, not a silently ignored typo. Without
-// this, `sumary:` would be dropped on the floor and the track would render
-// with no summary and no complaint.
+// this, a misspelled summary key would be dropped on the floor and the track
+// would render with no summary and no complaint.
+//
+// The fixture below misspells `summary` ON PURPOSE, which is why the three
+// lines that carry the typo are exempted from the spell checker: it is the
+// input, not a mistake in the test.
 func TestLoadConfig_TracksAreStrictlyDecoded(t *testing.T) {
+	// Spelled as a constant rather than inline so the one occurrence of the
+	// typo sits on a line the spell checker can be told about; inside the raw
+	// string below there is nowhere to put the directive that would not become
+	// part of the fixture.
+	const typoKey = "sumary" //nolint:misspell // the misspelling IS the fixture
+
 	_, err := trackConfig(t, `
 tracks:
   - id: checkout
     title: Checkout
-    sumary: a typo
+    `+typoKey+`: a typo
 `)
 	if err == nil {
 		t.Fatal("expected an unknown field inside a track entry to be rejected")
 	}
-	if !strings.Contains(err.Error(), "sumary") {
+	if !strings.Contains(err.Error(), typoKey) {
 		t.Errorf("error %q does not name the unknown field", err)
 	}
 }

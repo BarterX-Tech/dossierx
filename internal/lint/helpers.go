@@ -88,7 +88,7 @@ func splitFencedAndProse(body string) (fenced, prose string) {
 // ref 1 and "[0000000001]" as ref 1, so a body citing either would satisfy
 // source-ref-unused — no warning — while the viewer rendered plain text and
 // the reader saw a source nothing pointed at.
-var citationMarker = regexp.MustCompile(`\[([0-9]+)\]`)
+var citationMarker = regexp.MustCompile(`\[(\d+)\]`)
 
 // maxCitationDigits mirrors maxCiteDigits in
 // internal/render/markdown/markdown_cite.go. A citation number is a position
@@ -113,7 +113,7 @@ const maxCitationDigits = 9
 // the whole job; reporting a defect with no visible consequence is how a lint
 // suite teaches people to stop reading it.
 func citationRef(digits string) (int, bool) {
-	if len(digits) == 0 || len(digits) > maxCitationDigits {
+	if digits == "" || len(digits) > maxCitationDigits {
 		return 0, false
 	}
 	if len(digits) > 1 && digits[0] == '0' {

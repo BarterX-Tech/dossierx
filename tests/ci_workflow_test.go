@@ -190,19 +190,11 @@ const (
 // same helpers below, so the two files cannot disagree about what wiring means.
 const ciViewerModule = "viewer-tests"
 
-// setupNodeAction is the action that installs Node. Matched as a `uses:` VALUE
-// on a parsed step, so the prose in either workflow that names it cannot be
-// mistaken for a step that runs it.
-const setupNodeAction = "actions/setup-node@"
-
-// nodeVersionKey is the `with:` key that carries the pin.
-const nodeVersionKey = "node-version"
-
 // goreleaserAction is the action that installs and runs GoReleaser, and
 // goreleaserVersionKey is the `with:` key carrying the version it installs.
-// Matched as a `uses:` VALUE on a parsed step, for the reason setupNodeAction is:
-// the prose in release.yml that explains this pin at length names the action
-// several times, and a comment is not a step.
+// Matched as a `uses:` VALUE on a parsed step, never as text: the prose in
+// release.yml that explains this pin at length names the action several times,
+// and a comment is not a step.
 const (
 	goreleaserAction     = "goreleaser/goreleaser-action@"
 	goreleaserVersionKey = "version"
@@ -353,46 +345,6 @@ func ciScalar(v any) string {
 // ciNodePins returns every Node version pinned by a step in the given list,
 // alongside how many setup-node steps were seen at all.
 //
-// The two numbers are returned separately because they name different defects: a
-// setup-node step with no `node-version` is an UNPINNED setup — it installs
-// whatever the action defaults to — and reporting that as "no pin found" would
-// send a maintainer looking for a step that is right there.
-func ciNodePins(steps []ciStep) (pins []string, setups int) {
-	for _, step := range steps {
-		if !strings.Contains(step.Uses, setupNodeAction) {
-			continue
-		}
-		setups++
-		if pin := ciScalar(step.With[nodeVersionKey]); pin != "" {
-			pins = append(pins, pin)
-		}
-	}
-	return pins, setups
-}
-
-// ciOnePin collapses a step list's pins to the single version it names, or
-// explains which of the three ways it failed to.
-func ciOnePin(steps []ciStep, where string) (string, error) {
-	pins, setups := ciNodePins(steps)
-	switch {
-	case setups == 0:
-		return "", fmt.Errorf("%s declares no %s step", where, strings.TrimSuffix(setupNodeAction, "@"))
-	case len(pins) == 0:
-		return "", fmt.Errorf("%s declares %d %s step(s), none of which sets `%s`. An unpinned setup installs whatever the action defaults to, which moves on its own schedule under nobody's review",
-			where, setups, strings.TrimSuffix(setupNodeAction, "@"), nodeVersionKey)
-	}
-	for _, pin := range pins[1:] {
-		if pin != pins[0] {
-			return "", fmt.Errorf("%s pins more than one Node version (%v). Which one is in force is then a question about step order rather than about the workflow, and a later step silently wins over an earlier one",
-				where, pins)
-		}
-	}
-	if strings.Contains(pins[0], "${{") {
-		return "", fmt.Errorf("%s pins Node to the expression %q, which resolves at run time. A pin nothing can read before the job starts is not a pin this check can hold the publish build to",
-			where, pins[0])
-	}
-	return pins[0], nil
-}
 
 // ciArgv splits one command line into arguments the way a runner's shell would
 // for the forms a workflow uses: runs of whitespace separate, single and double
@@ -815,8 +767,17 @@ func TestThePublishWorkflowUploadsTheTreeWithoutBuildingIt(t *testing.T) {
 			}
 			if strings.Contains(step.Uses, "upload-pages-artifact") {
 				uploadsSite = true
-				got, _ := step.With["path"].(string)
-				if got = strings.TrimSpace(got); got != "site" {
+				// The comma-ok is READ rather than discarded. A `path:` that is
+				// not a string — a list, a mapping, a bare number — is a step
+				// this check cannot judge, and coercing it to "" would report
+				// it as an upload of the empty path: a true-sounding sentence
+				// about a value nobody wrote.
+				got, ok := step.With["path"].(string)
+				if !ok {
+					t.Errorf("%s's Pages upload declares `path: %v`, which is not a string.\n\n"+
+						"This check compares that value against %q, and a non-string cannot be compared. Whatever is published is then decided by something this suite did not read.",
+						deployWorkflowPath, step.With["path"], "site")
+				} else if got = strings.TrimSpace(got); got != "site" {
 					t.Errorf("%s uploads %q to Pages, and the tree it must publish is %q.\n\n"+
 						"A path naming a generated directory is the build this check refuses, arriving as an upload target rather than as a step.",
 						deployWorkflowPath, got, "site")

@@ -63,7 +63,7 @@ tracks:
 // trackClaimYAML is railClaim plus a memberships block. The role is written
 // out for the owner and OMITTED for the citing claim, so this fixture also
 // proves the unset role arrives as "cites" rather than as nothing.
-func trackClaimYAML(id, facet, module string, memberships string) string {
+func trackClaimYAML(id, facet, module, memberships string) string {
 	body := "id: " + id + `
 facet: ` + facet + `
 module: ` + module + `
