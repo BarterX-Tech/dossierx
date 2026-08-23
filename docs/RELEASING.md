@@ -72,7 +72,7 @@ The checklist below asks for each one.
       `surface.json` records the pins the sweep finds, so an unexcluded sweep
       finds its own output.
 
-      As of v0.6.0 that is FOUR pins across THREE files: `README.md` (the `go
+      As of v0.7.0 that is FOUR pins across THREE files: `README.md` (the `go
       install` line and the `install-git-hook.sh` raw URL),
       `skills/dossierx/SKILL.md` (the same raw URL), and
       `scripts/ci/dossierx-check.yml` (the `go install` line, which is a template
