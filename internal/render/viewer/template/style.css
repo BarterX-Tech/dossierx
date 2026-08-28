@@ -3035,7 +3035,7 @@ body.shell-body {
   line-height: 1.68;
 }
 
-.claim-body { max-width: 75ch; margin: 0; }
+.claim-body { width: 100%; max-width: none; margin: 0; }
 .claim-body p { margin: .8em 0; }
 
 .claim-body strong,
