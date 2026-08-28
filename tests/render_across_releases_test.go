@@ -892,7 +892,11 @@ func writeHunk(b *strings.Builder, ops []diffOp) {
 	for _, op := range ops {
 		switch op.kind {
 		case opEqual:
-			b.WriteString(" " + op.text + "\n")
+			if op.text == "" {
+				b.WriteString("\n")
+			} else {
+				b.WriteString(" " + op.text + "\n")
+			}
 		case opDel:
 			b.WriteString("-" + op.text + "\n")
 		case opAdd:
