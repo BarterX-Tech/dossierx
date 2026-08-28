@@ -421,8 +421,8 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 			}
 
 			groups := legendGroups(t, ctx)
-			if len(groups) != 2 || groups[0] != tc.group || groups[1] != "edges" {
-				t.Fatalf("legend captions under overlay %q = %v, want [%q edges]", tc.overlay, groups, tc.group)
+			if len(groups) != 2 || groups[0] != tc.group || groups[1] != "Relationships" {
+				t.Fatalf("legend captions under overlay %q = %v, want [%q Relationships]", tc.overlay, groups, tc.group)
 			}
 
 			facets := legendFacetNames(t, ctx)

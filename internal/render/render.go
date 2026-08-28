@@ -40,7 +40,7 @@ import (
 // exactly the same mistake — a client file deleted, renamed or never
 // written — into a silently empty pane.
 //
-//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css
+//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css
 var shellFS embed.FS
 
 // shellFileName and styleFileName are the override-lookup names for the
@@ -56,11 +56,12 @@ var shellFS embed.FS
 // the package doc comment), so their only two uses are the embed directive
 // and the ReadFile below.
 const (
-	shellFileName     = "shell.html"
-	styleFileName     = "style.css"
-	graphCoreFileName = "graph-core.js"
-	graphUIFileName   = "graph-ui.js"
-	graphCSSFileName  = "graph.css"
+	shellFileName        = "shell.html"
+	styleFileName        = "style.css"
+	graphCoreFileName    = "graph-core.js"
+	graphUIFileName      = "graph-ui.js"
+	graphCSSFileName     = "graph.css"
+	systemRecordFileName = "system-record.js"
 )
 
 // shellTemplatePath and styleTemplatePath are the embedded paths backing
@@ -68,11 +69,12 @@ const (
 // reference these constants (viewer/template/ + the corresponding
 // *FileName constant) instead of repeating the path as a separate literal.
 const (
-	shellTemplatePath     = "viewer/template/" + shellFileName
-	styleTemplatePath     = "viewer/template/" + styleFileName
-	graphCoreTemplatePath = "viewer/template/" + graphCoreFileName
-	graphUITemplatePath   = "viewer/template/" + graphUIFileName
-	graphCSSTemplatePath  = "viewer/template/" + graphCSSFileName
+	shellTemplatePath        = "viewer/template/" + shellFileName
+	styleTemplatePath        = "viewer/template/" + styleFileName
+	graphCoreTemplatePath    = "viewer/template/" + graphCoreFileName
+	graphUITemplatePath      = "viewer/template/" + graphUIFileName
+	graphCSSTemplatePath     = "viewer/template/" + graphCSSFileName
+	systemRecordTemplatePath = "viewer/template/" + systemRecordFileName
 )
 
 // generatedHeader returns the comment prepended to every rendered document
@@ -160,8 +162,9 @@ type shellData struct {
 	// GraphCoreJS and GraphUIJS are the pane's two script files, injected in
 	// that order (core exports the namespace ui consumes) after the shell's
 	// own inline runtime.
-	GraphCoreJS template.JS
-	GraphUIJS   template.JS
+	GraphCoreJS    template.JS
+	GraphUIJS      template.JS
+	SystemRecordJS template.JS
 
 	// ModuleGroups is cat.Claims folded into the two-level Module -> []Facet
 	// shape fix 5 describes (one sidebar entry per module, a nested
@@ -459,6 +462,7 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 		graphCSS:       tmpl.graphCSS,
 		graphCoreJS:    tmpl.graphCore,
 		graphUIJS:      tmpl.graphUI,
+		systemRecordJS: tmpl.systemRecord,
 		graphPayload:   graphPayload,
 		renderedByID:   renderedByID,
 		buildOrderTmpl: tmpl.buildOrder,
@@ -493,9 +497,10 @@ type loadedTemplates struct {
 	// no override branch at all — see the package doc comment. They are kept
 	// as raw []byte here and typed (template.JS / template.CSS) only at the
 	// shellData boundary, which is the one place the typing is load-bearing.
-	graphCore []byte
-	graphUI   []byte
-	graphCSS  []byte
+	graphCore    []byte
+	graphUI      []byte
+	graphCSS     []byte
+	systemRecord []byte
 }
 
 // loadTemplates resolves all of Render's template and CSS inputs, applying
@@ -558,15 +563,20 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", graphCSSFileName, err)
 	}
+	systemRecord, err := shellFS.ReadFile(systemRecordTemplatePath)
+	if err != nil {
+		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", systemRecordFileName, err)
+	}
 
 	return loadedTemplates{
-		partials:   partials,
-		css:        css,
-		shell:      shell,
-		buildOrder: buildOrderTmpl,
-		graphCore:  graphCore,
-		graphUI:    graphUI,
-		graphCSS:   graphCSS,
+		partials:     partials,
+		css:          css,
+		shell:        shell,
+		buildOrder:   buildOrderTmpl,
+		graphCore:    graphCore,
+		graphUI:      graphUI,
+		graphCSS:     graphCSS,
+		systemRecord: systemRecord,
 	}, nil
 }
 
@@ -648,10 +658,11 @@ type shellInputs struct {
 	// backing the graph pane, always the engine's own copies — they carry no
 	// override branch (design section 7.2). graphPayload is the JSON graph
 	// payload for cat, already stamped and encoded by graphPayloadJSON.
-	graphCSS     []byte
-	graphCoreJS  []byte
-	graphUIJS    []byte
-	graphPayload template.JS
+	graphCSS       []byte
+	graphCoreJS    []byte
+	graphUIJS      []byte
+	systemRecordJS []byte
+	graphPayload   template.JS
 
 	renderedByID   map[string]template.HTML
 	buildOrderTmpl *template.Template
@@ -701,16 +712,17 @@ func buildShellData(in shellInputs) shellData {
 	}
 
 	return shellData{
-		Title:        title,
-		Eyebrow:      eyebrow,
-		CSS:          template.CSS(in.css),
-		ThemeCSS:     themeOverrideCSS(theme),
-		GeneratedAt:  in.generatedAt.Format("2006-01-02 15:04 UTC"),
-		GraphCSS:     template.CSS(in.graphCSS),
-		GraphPayload: in.graphPayload,
-		GraphCoreJS:  template.JS(in.graphCoreJS),
-		GraphUIJS:    template.JS(in.graphUIJS),
-		ModuleGroups: moduleGroups,
+		Title:          title,
+		Eyebrow:        eyebrow,
+		CSS:            template.CSS(in.css),
+		ThemeCSS:       themeOverrideCSS(theme),
+		GeneratedAt:    in.generatedAt.Format("2006-01-02 15:04 UTC"),
+		GraphCSS:       template.CSS(in.graphCSS),
+		GraphPayload:   in.graphPayload,
+		GraphCoreJS:    template.JS(in.graphCoreJS),
+		GraphUIJS:      template.JS(in.graphUIJS),
+		SystemRecordJS: template.JS(in.systemRecordJS),
+		ModuleGroups:   moduleGroups,
 		// Built from the SAME renderedByID the module groups read, so a claim
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.

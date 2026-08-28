@@ -100,6 +100,11 @@
   // overridable from it — a threshold a reader cannot see and cannot cross is
   // a threshold nobody can report as wrong.
   var AUTO_COLLAPSE_ABOVE = 300;
+  var RELATIONSHIP_LABELS = {
+    rests_on: 'Rests On',
+    mirrors: 'Mirrors',
+    governed_by: 'Governed By',
+  };
 
   // ---- Labels ------------------------------------------------------------
   //
@@ -625,12 +630,12 @@
     // cluttered graph can be read one relation at a time. The list comes from
     // graph-core.js's EDGE_TYPES, not from a literal here, so the two cannot
     // drift.
-    var typeGroup = controlGroup('Edge types');
+    var typeGroup = controlGroup('Relationships');
     el.typeButtons = {};
     var types = c ? c.EDGE_TYPES : [];
     for (var t = 0; t < types.length; t++) {
       (function (type) {
-        var btn = toggleButton(type, true, function () {
+        var btn = toggleButton(RELATIONSHIP_LABELS[type] || type, true, function () {
           toggleType(type);
         });
         btn.setAttribute('data-dxg-type', type);
@@ -1063,7 +1068,7 @@
   function appendEdgeRows(list) {
     var c = core();
     var types = c ? c.EDGE_TYPES : ['rests_on', 'mirrors', 'governed_by'];
-    list.appendChild(legendGroupLabel('edges'));
+    list.appendChild(legendGroupLabel('Relationships'));
     for (var i = 0; i < types.length; i++) {
       var type = str(types[i]);
       if (!EDGE_SAMPLES[type]) {
@@ -1078,7 +1083,7 @@
       var sample = h('span', 'dxg-legend-edge');
       sample.innerHTML = EDGE_SAMPLES[type];
       item.appendChild(sample);
-      item.appendChild(h('span', 'dxg-legend-name', type));
+      item.appendChild(h('span', 'dxg-legend-name', RELATIONSHIP_LABELS[type] || type));
       // An edge type the reader has toggled off is not on the canvas, and the
       // strip says so rather than describing a line that is not there.
       if (state && state.types.indexOf(type) < 0) {
@@ -3722,13 +3727,9 @@
 
   function applyAutoCollapse(fromHash) {
     autoCollapsed = false;
-    if (!payload || fromHash) {
-      return;
-    }
-    if (payload.nodes.length > AUTO_COLLAPSE_ABOVE && state.granularity === 'claims') {
-      state.granularity = 'module';
-      autoCollapsed = true;
-    }
+    // The graph now opens at claim granularity for every corpus. Module and
+    // facet aggregation remain explicit reader choices in the Granularity
+    // control; opening the pane never changes that choice on their behalf.
   }
 
   // noteManualGranularity runs when the reader changes the granularity

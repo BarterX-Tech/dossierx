@@ -534,7 +534,7 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// sat — and their order relative to everything else is unchanged.
 	labels := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-controls .dxg-ctl .dxg-ctl-label'))
 		.map(function (e) { return e.textContent; })`)
-	wantLabels := []string{"Module", "Facet", "Granularity", "Highlight overlay", "Edge types", "View"}
+	wantLabels := []string{"Module", "Facet", "Granularity", "Highlight overlay", "Relationships", "View"}
 	if fmt.Sprint(labels) != fmt.Sprint(wantLabels) {
 		t.Fatalf("control groups = %v, want %v", labels, wantLabels)
 	}
@@ -570,7 +570,7 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// Selecting a node fills the detail panel — facet identity's THIRD
 	// channel, which names the facet in TEXT so a reader never has to resolve
 	// a colour to answer "which facet is this?".
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-jump="widget.design.thing"]`, chromedp.ByQuery))
+	clickJump(t, ctx, "widget.design.thing")
 	if got := evalString(t, ctx, `document.querySelector('.dxg-detail-id').textContent`); got != "widget.design.thing" {
 		t.Fatalf("detail panel id = %q, want widget.design.thing", got)
 	}
@@ -610,19 +610,12 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	}
 }
 
-// TestGraphPaneInertUntilOpenedAutoCollapse is the same step's large-corpus
-// half, split into its own func (and its own page load) because it needs a
-// project on the other side of AUTO_COLLAPSE_ABOVE. It shares the prefix so
-// one -run pattern still runs both.
-func TestGraphPaneInertUntilOpenedAutoCollapse(t *testing.T) {
-	// autoCollapseAbove mirrors graph-ui.js's AUTO_COLLAPSE_ABOVE. It is a
-	// literal here because the constant lives inside an IIFE and is not
-	// reachable from the page, so the two are coupled by this comment and by
-	// the notice assertion below, which requires the page to say the same
-	// number back. Changing the constant without changing this fails loudly
-	// rather than silently testing the wrong threshold.
-	const autoCollapseAbove = 300
-	const total = autoCollapseAbove + 1
+// TestGraphPaneLargeCorpusDefaultsToClaims locks the opening contract for a
+// corpus large enough that the viewer used to override the reader's default
+// and collapse it to modules. Every claim is now the default at every size;
+// aggregation remains available as an explicit Granularity choice.
+func TestGraphPaneLargeCorpusDefaultsToClaims(t *testing.T) {
+	const total = 301
 	p := newProjectRaw(t, `schema_version: 1
 facets:
   - contract
@@ -650,29 +643,11 @@ governed_by:
 	ctx := staticGraphTab(t, p)
 	openGraphPane(t, ctx)
 
-	// Above the threshold the pane opens COLLAPSED and says so, naming the
-	// real numbers rather than a plausible-sounding one.
-	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "module" {
-		t.Fatalf("granularity above the threshold = %q, want module", got)
+	if got := evalString(t, ctx, `document.getElementById('dxgGranularity').value`); got != "claims" {
+		t.Fatalf("large-corpus default granularity = %q, want claims", got)
 	}
-	notice := evalString(t, ctx, `document.querySelector('.dxg-notices').textContent`)
-	for _, want := range []string{
-		fmt.Sprintf("%d", total),
-		"3 modules",
-		fmt.Sprintf("%d-claim threshold", autoCollapseAbove),
-	} {
-		if !strings.Contains(notice, want) {
-			t.Fatalf("auto-collapse notice %q does not name %q", notice, want)
-		}
-	}
-
-	// The override WARNS RATHER THAN BLOCKS: a reader who wants every node
-	// gets every node, and is told first what it costs.
-	runCDP(t, ctx, chromedp.Click(`.dxg-notices .dxg-notice-action`, chromedp.ByQuery))
-	pollTrue(t, ctx, `document.getElementById('dxgGranularity').value === 'claims'`)
-	pollTrue(t, ctx, `!!document.querySelector('.dxg-notices .dxg-notice--warn')`)
-	if !strings.Contains(evalString(t, ctx, `document.querySelector('.dxg-notice--warn').textContent`), fmt.Sprintf("%d", total)) {
-		t.Fatal("the override warning must name the real claim count")
+	if notice := strings.TrimSpace(evalString(t, ctx, `document.querySelector('.dxg-notices').textContent`)); notice != "" {
+		t.Fatalf("large-corpus default emitted an unsolicited collapse notice: %q", notice)
 	}
 }
 

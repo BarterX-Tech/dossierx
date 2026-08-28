@@ -42,9 +42,15 @@
              re-created by every fragment swap, which is why graph-ui.js binds
              one delegated listener on document rather than a listener here. -->
         <button id="dxgOpen" type="button" data-dxg-open aria-expanded="false">Claims graph</button>
-        {{range .ModuleGroups}}
-          <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
-        {{end}}{{if .Tracks}}
+        <div class="system-nav-groups">
+          <details class="system-nav-group" open>
+            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <div class="system-nav-group__body">
+              {{- range .ModuleGroups}}
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+              {{- end}}
+            </div>
+          </details>{{if .Tracks}}
         <!-- The Tracks group. It is guarded on .Tracks and the guard opens on
              the same line as the module loop's closing action, with no newline
              between them, so a project that declares no track emits not one
@@ -58,13 +64,19 @@
              view over the same claims. The buttons are ordinary .sec-tab
              elements — a track section is a .module-section to all the
              show/hide machinery below, deliberately (see track_view.go). -->
-        <div class="nav-group-label">Tracks</div>
-        {{range .Tracks}}
-          <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
-        {{end}}{{end}}
+          <details class="system-nav-group" open>
+            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <div class="system-nav-group__body">
+              {{- range .Tracks}}
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
+              {{- end}}
+            </div>
+          </details>{{end}}
+        </div>
       </nav>
-      <button id="expandAllToggle" type="button" aria-pressed="false">Expand all links/files</button>
+      <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
       {{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
+      <div id="sidebarResizer" class="system-sidebar-resizer" tabindex="0" role="separator" aria-label="Resize navigation drawer" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="420" aria-valuenow="270" title="Drag to resize · Double-click to reset"></div>
     </aside>
     <main class="content-area">
       {{if .ModuleGroups}}
@@ -1329,7 +1341,7 @@
           footers.forEach(function (d) { if (!d.open) { anyClosed = true; } });
           footers.forEach(function (d) { d.open = anyClosed; });
           expandAllToggle.setAttribute('aria-pressed', String(anyClosed));
-          expandAllToggle.textContent = anyClosed ? 'Collapse all links/files' : 'Expand all links/files';
+          expandAllToggle.textContent = anyClosed ? 'Collapse all evidence' : 'Expand all evidence';
         });
       }
 
@@ -1789,6 +1801,7 @@
        here becomes a quoted literal with no error anywhere and a pane that
        never initializes. graph-ui.js registers ONE delegated listener at
        parse time and does nothing else until a reader opens the pane. -->
+  <script>{{.SystemRecordJS}}</script>
   <script>{{.GraphCoreJS}}</script>
   <script>{{.GraphUIJS}}</script>
 </body>

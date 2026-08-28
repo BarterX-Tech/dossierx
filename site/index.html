@@ -4,176 +4,205 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css" />
-
-    <!--
-      NOTHING ON THIS PAGE IS COUNTED, AND NOTHING NAMES A VERSION.
-
-      Both rules are scar tissue. The site this page replaced advertised a
-      "19-command JSON CLI" in exactly this meta description. The surface had
-      been nineteen commands for two minor releases by the time anybody noticed,
-      because it was the one count nothing on the page derived and the one
-      string search engines quote back. Four version strings went stale the same
-      way before they were made to derive from a single literal.
-
-      A memo about why a project exists needs neither. The counts that have to be
-      right live in README.md, next to the binary that settles them. The version
-      that has to be right lives in releases.html, which is checked against
-      CHANGELOG.md before a release can be tagged. This page states the argument
-      and nothing that can rot underneath it.
-    -->
+    <link rel="stylesheet" href="./proposal.css" />
     <meta
       name="description"
-      content="Why DossierX exists. Documentation goes wrong without emitting a signal. DossierX replaces pages you have to trust with atomic claims a machine can check and a human can lock."
+      content="DossierX keeps the rules behind your software in one plain-English record. Review the rules, then give them to coding agents before every change."
     />
-    <title>Why DossierX exists</title>
+    <title>DossierX — Know what your software does</title>
   </head>
 
-  <body>
-    <header class="masthead">
-      <div class="wrap masthead__inner">
-        <span class="masthead__name">DossierX</span>
-        <nav class="masthead__nav">
-          <a href="./releases.html">Releases</a>
-          <a href="https://github.com/BarterX-Tech/dossierx">GitHub</a>
-        </nav>
-      </div>
-    </header>
+  <body class="proposal-mode">
+    <div class="proposal-shell">
+      <a class="skip-link" href="#main">Skip to content</a>
 
-    <main class="wrap doc">
-      <p class="doc__kicker">Memo</p>
-      <h1>Why DossierX exists</h1>
+      <header class="proposal-nav">
+        <div class="proposal-nav__inner">
+          <a class="proposal-nav__brand" href="./index.html">
+            <span class="proposal-nav__brand-mark" aria-hidden="true">Dx</span>
+            <span>DossierX</span>
+          </a>
+          <div class="proposal-nav__menu proposal-nav__menu--static">
+            <nav class="proposal-nav__sections" aria-label="Main navigation">
+              <a class="proposal-nav__link" href="./index.html">Overview</a>
+              <a class="proposal-nav__link" href="./system-record.html">The system record</a>
+              <a class="proposal-nav__link" href="./where-to-start.html">Where to start</a>
+              <a class="proposal-nav__link" href="./real-example.html">Viewer example</a>
+            </nav>
+            <nav class="proposal-nav__utilities" aria-label="Related links">
+              <a class="proposal-nav__utility-link" href="./releases.html">Releases</a>
+              <a class="proposal-nav__utility-link" href="https://github.com/BarterX-Tech/dossierx">GitHub ↗</a>
+            </nav>
+          </div>
+        </div>
+      </header>
 
-      <p class="lede">
-        Documentation does not fail loudly. It fails by staying up, staying
-        readable, and slowly becoming false. DossierX tries to make that failure
-        produce a signal.
-      </p>
+      <main id="main">
+        <div class="proposal-page proposal-home">
+          <section class="proposal-home-hero" id="overview">
+            <div class="proposal-home-hero__copy">
+              <p class="proposal-eyebrow">For people building with coding agents</p>
+              <h1>Know what your software does. <span>Even when an agent wrote it.</span></h1>
+              <p>
+                DossierX keeps the rules behind your software in one plain-English
+                record. Review the rules, then give them to your coding agents
+                before every change.
+              </p>
+              <div class="proposal-hero__actions">
+                <a class="proposal-button proposal-button--primary" href="#claim-in-use">See the system record</a>
+                <a class="proposal-button" href="https://github.com/BarterX-Tech/dossierx">GitHub ↗</a>
+              </div>
+            </div>
 
-      <h2>The problem</h2>
+            <figure class="proposal-record-window">
+              <header class="proposal-record-window__bar">
+                <span>checkout-recovery</span>
+                <span class="proposal-record-window__status">approved</span>
+              </header>
+              <div class="proposal-record-window__body">
+                <p class="proposal-record-window__id">Rule / DX-042</p>
+                <h2>A failed charge is retried three times before manual review.</h2>
+                <dl>
+                  <div><dt>Where in code</dt><dd>payments / retry_policy.go</dd></div>
+                  <div><dt>Connected rule</dt><dd>Which failed payments can be retried</dd></div>
+                  <div><dt>Review</dt><dd>Read and approved by a person</dd></div>
+                </dl>
+              </div>
+              <figcaption>Given to the coding agent before it changes <code>retry_policy.go</code></figcaption>
+            </figure>
+          </section>
 
-      <p>
-        A wiki page, an architecture decision record, a <code>docs/</code>
-        folder. They all fail the same way. Prose can become wrong without
-        emitting anything a machine notices. No build breaks. No test goes red.
-        The page renders exactly as it did the day it was correct, and people
-        keep reading it and acting on it.
-      </p>
+          <section class="proposal-story" id="problem">
+            <div class="proposal-story__intro">
+              <p class="proposal-meta proposal-meta--blue">Where understanding breaks</p>
+              <h2>The agent changed the code. What else did it change?</h2>
+              <p>A small request can leave the product with two different answers.</p>
+            </div>
+            <ol class="proposal-story__steps">
+              <li><span>01</span><div><strong>You ask for five retries.</strong><p>The request sounds simple.</p></div></li>
+              <li><span>02</span><div><strong>The agent edits the code.</strong><p>The tests pass, so the task looks finished.</p></div></li>
+              <li><span>03</span><div><strong>The old rule still says three.</strong><p>Now the code and the product record disagree.</p></div></li>
+              <li class="proposal-story__resolution"><span>DX</span><div><strong>DossierX returns DX-042 to you.</strong><p>You decide whether the rule should change before it is approved again.</p></div></li>
+            </ol>
+          </section>
 
-      <p>
-        That was survivable while people wrote documentation slowly, by hand,
-        alongside the code it described. It is much less survivable now. An agent
-        can write more documentation in an afternoon than a team reads in a week.
-        The volume went up and the review capacity did not. What gets written
-        stopped being the constraint. What anyone has actually approved is the
-        constraint.
-      </p>
+          <section class="proposal-claim-use" id="claim-in-use">
+            <header class="proposal-claim-use__intro">
+              <p class="proposal-meta proposal-meta--blue">The record in use</p>
+              <h2>The agent starts with the rule, not another guess.</h2>
+              <p>DossierX puts the approved rule and its sources into the coding task.</p>
+            </header>
 
-      <h2>The idea</h2>
+            <section class="proposal-agent-snapshot" aria-labelledby="agent-task-title">
+              <header class="proposal-agent-snapshot__header">
+                <p class="proposal-agent-snapshot__label">Example coding task</p>
+                <p class="proposal-agent-snapshot__state">DX-042 · approved rule loaded</p>
+              </header>
+              <div class="proposal-agent-snapshot__layout">
+                <aside class="proposal-agent-context">
+                  <p class="proposal-agent-context__eyebrow">DossierX system record</p>
+                  <h3 class="proposal-agent-context__title" id="agent-task-title">The agent gets the rule before it writes.</h3>
+                  <blockquote class="proposal-agent-context__claim">A failed charge is retried three times before manual review.</blockquote>
+                  <dl class="proposal-agent-context__facts">
+                    <div class="proposal-agent-context__fact"><dt class="proposal-agent-context__term">Rule</dt><dd class="proposal-agent-context__value">payments.retry.limit · approved</dd></div>
+                    <div class="proposal-agent-context__fact"><dt class="proposal-agent-context__term">Code</dt><dd class="proposal-agent-context__value">retry_policy.go · linked source</dd></div>
+                    <div class="proposal-agent-context__fact"><dt class="proposal-agent-context__term">Rests on</dt><dd class="proposal-agent-context__value">payments.failure.classification</dd></div>
+                  </dl>
+                  <p class="proposal-agent-context__handoff">The rule guides the patch →</p>
+                </aside>
+                <figure class="proposal-ide">
+                  <div class="proposal-ide__toolbar">
+                    <span class="proposal-ide__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="proposal-ide__path">checkout-service / internal / payments</span>
+                  </div>
+                  <div class="proposal-ide__workspace">
+                    <nav class="proposal-ide__explorer" aria-label="Example files">
+                      <strong class="proposal-ide__explorer-title">Explorer</strong>
+                      <span class="proposal-ide__folder">internal/</span>
+                      <span class="proposal-ide__folder">payments/</span>
+                      <span class="proposal-ide__file proposal-ide__file--active">retry_policy.go</span>
+                      <span class="proposal-ide__file">retry_policy_test.go</span>
+                      <span class="proposal-ide__file">routes.go</span>
+                    </nav>
+                    <div class="proposal-ide__editor">
+                      <div class="proposal-ide__tab">retry_policy.go</div>
+                      <pre class="proposal-ide__code" aria-label="Example Go implementation of failed-charge retry behavior"><code>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">1</span><span class="proposal-ide__line-content">package payments</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">2</span><span class="proposal-ide__line-content"> </span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">3</span><span class="proposal-ide__line-content">const retryLimit = 3</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">4</span><span class="proposal-ide__line-content"> </span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">5</span><span class="proposal-ide__line-content">func RouteFailedCharge(retries int) RecoveryRoute {</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">6</span><span class="proposal-ide__line-content">    if retries &gt;= retryLimit {</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">7</span><span class="proposal-ide__line-content">        return ManualReview</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">8</span><span class="proposal-ide__line-content">    }</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">9</span><span class="proposal-ide__line-content"> </span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">10</span><span class="proposal-ide__line-content">    return RetryCharge</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">11</span><span class="proposal-ide__line-content">}</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">12</span><span class="proposal-ide__line-content"> </span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">13</span><span class="proposal-ide__line-content">// DX-042: 3 retries -&gt; review.</span></span></code></pre>
+                    </div>
+                  </div>
+                  <figcaption class="proposal-ide__status"><span>DX-042 bound · source open</span><span>Tests 2 passing · ready for human review</span></figcaption>
+                </figure>
+              </div>
+              <footer class="proposal-agent-snapshot__note">
+                <strong class="proposal-agent-snapshot__note-label">You keep control of the behaviour</strong>
+                <p class="proposal-agent-snapshot__note-copy">The agent handles the implementation. You review the rule, the patch, and the tests before accepting the change.</p>
+              </footer>
+            </section>
 
-      <p>
-        Stop asking people to trust pages. Give them facts instead. A
-        <strong>claim</strong> is one reviewable statement, a single fact in
-        YAML, with its dependencies declared. You can lint facts at that grain,
-        cross-check them against each other, and tie them to the code that
-        implements them. You cannot do any of that to a page.
-      </p>
+            <a class="proposal-text-link" href="./system-record.html">See how the record works →</a>
+          </section>
 
-      <p>
-        Once a human approves a claim, it <strong>locks</strong>. After that it
-        cannot change quietly. Edit a locked claim, move a dependency underneath
-        it, or write code that no longer matches it, and DossierX emits a named
-        finding. The finding says which rule fired, which claim it fired on, and
-        which command puts it right.
-      </p>
+          <section class="proposal-proof" id="real-output">
+            <header>
+              <p class="proposal-meta proposal-meta--blue">Viewer example</p>
+              <h2>See the rules as a system, not a pile of docs.</h2>
+              <p>These screenshots use synthetic public claims, so no project names, source paths, or private decisions are exposed.</p>
+            </header>
+            <div class="proposal-evidence" aria-label="DossierX viewer with public example data">
+              <div class="proposal-evidence__grid">
+                <figure class="proposal-evidence__figure">
+                  <div class="proposal-evidence__frame"><img class="proposal-evidence__image" src="./assets/example-system/claims-overview.jpg" alt="DossierX System Record viewer with grouped module navigation, claim cards, and a facet table of contents" loading="lazy" /></div>
+                  <figcaption class="proposal-evidence__caption"><span class="proposal-evidence__index">01</span><span class="proposal-evidence__copy"><strong class="proposal-evidence__title">Rules grouped by part of the product.</strong> Open one area and review its rules without reading the whole codebase.</span></figcaption>
+                </figure>
+                <figure class="proposal-evidence__figure">
+                  <div class="proposal-evidence__frame"><img class="proposal-evidence__image" src="./assets/example-system/claim-detail.jpg" alt="DossierX claim list with status and evidence relationship counts" loading="lazy" /></div>
+                  <figcaption class="proposal-evidence__caption"><span class="proposal-evidence__index">02</span><span class="proposal-evidence__copy"><strong class="proposal-evidence__title">One small list at a time.</strong> Focus on the rules that matter to the change you are making.</span></figcaption>
+                </figure>
+              </div>
+            </div>
+            <a class="proposal-text-link" href="./real-example.html">Open the viewer example →</a>
+          </section>
 
-      <h2>Two users, two surfaces</h2>
+          <section class="proposal-start" id="start">
+            <header>
+              <p class="proposal-meta proposal-meta--blue">Start small</p>
+              <h2>Start with one part of the product you cannot afford to misunderstand.</h2>
+            </header>
+            <div class="proposal-start__grid">
+              <article><span>Existing app</span><h3>Find out what the app already does</h3><p>The next agent starts with the rules instead of researching the feature again.</p></article>
+              <article><span>New app</span><h3>Write the rules before the agent writes the code</h3><p>The product decisions survive after the coding chat is gone.</p></article>
+              <article><span>Next agent</span><h3>Continue the work without starting from zero</h3><p>The handoff is smaller and easier for you to check.</p></article>
+            </div>
+            <a class="proposal-text-link" href="./where-to-start.html">See where to start →</a>
+          </section>
+        </div>
+      </main>
 
-      <p>
-        An agent cannot operate a tool that answers in English sentences. So the
-        agent gets the CLI. It returns JSON by default, one response envelope per
-        invocation, stable error codes to branch on, and a dry run on everything
-        that writes.
-      </p>
-
-      <p>
-        You get a browser. Run <code>dossierx serve</code>, read the claims,
-        comment on any card, resolve the threads you opened. That Resolve click
-        is the approval, and it carries real weight. A claim with an open thread
-        cannot lock.
-      </p>
-
-      <p>
-        The gate is narrower than it sounds, and I think that narrowness is the
-        best decision in the tool. Draft claims are the agent's workshop and stay
-        unfrictioned. Friction there would defeat the point. The invariant is
-        only this. <strong>Nothing already locked changes without your approval
-        on the record.</strong>
-      </p>
-
-      <h2>DossierX detects, the forge enforces</h2>
-
-      <p>
-        The lock ledger rides in git, so DossierX can turn a quiet edit into a
-        specific named finding. It cannot make anyone obey that finding. Branch
-        protection with a required CI check does that. The pre-commit hook in
-        front of it gives fast feedback and no authority.
-      </p>
-
-      <p>
-        I like this split. A red check here means something concrete enough to
-        act on, and the tool never claims a power it does not have.
-      </p>
-
-      <h2>Where it came from</h2>
-
-      <p>
-        DossierX started as internal tooling inside a private production
-        application that silent documentation drift had already burned. The
-        public tool keeps what worked there, the claim schema, the check
-        pipeline, the lock lifecycle, and reads every project-specific structure
-        from one <code>project.config.yaml</code>. Point the same binary at
-        another project's config and it becomes that project's documentation
-        engine.
-      </p>
-
-      <h2>What is still open</h2>
-
-      <p>
-        This is the honest part. DossierX is pre-1.0 and its shape has moved
-        every few releases. The command surface has been cut and rebuilt once
-        already, and it may move again. The right unit of review is not settled
-        either. A claim belongs to a module, but the thing a user actually
-        receives cuts across many modules, and the current attempt at that middle
-        layer is young.
-      </p>
-
-      <p>
-        Whether any of this generalises is genuinely open. It might be a tool
-        other teams want. It might be one project's answer to one project's
-        problem. I do not know yet, and this page is short because the broader
-        direction is not worth a long one.
-      </p>
-
-      <hr />
-
-      <p>
-        The details that have to be correct live where someone can check them
-        against the binary.
-        <a href="https://github.com/BarterX-Tech/dossierx#readme">The README</a>
-        covers what the tool does and how to set it up.
-        <a href="https://github.com/BarterX-Tech/dossierx/blob/main/CHANGELOG.md">The
-        changelog</a> covers what each release changed.
-        <a href="./releases.html">The release history</a> lists what has shipped.
-      </p>
-
-      <footer class="footer">
-        <p>
-          <a href="https://github.com/BarterX-Tech/dossierx">github.com/BarterX-Tech/dossierx</a>
-          &middot; <a href="./releases.html">Releases</a>
-        </p>
-        <p>Open source, Apache-2.0.</p>
+      <footer class="proposal-footer">
+        <div class="proposal-footer__inner">
+          <div class="proposal-footer__statement">
+            <div><p class="proposal-footer__eyebrow">The system record</p><strong>Maintain the rules.<span>Let agents maintain the code.</span></strong></div>
+            <a class="proposal-footer__cta" href="https://github.com/BarterX-Tech/dossierx">Build with DossierX <span aria-hidden="true">↗</span></a>
+          </div>
+          <div class="proposal-footer__bottom">
+            <a class="proposal-footer__brand" href="./index.html"><span aria-hidden="true">Dx</span>DossierX</a>
+            <nav aria-label="Footer links"><a href="./index.html">Overview</a><a href="./system-record.html">The system record</a><a href="./where-to-start.html">Where to start</a><a href="./real-example.html">Viewer example</a><a href="./releases.html">Releases</a></nav>
+            <p>Open source. Your records stay in your repo.</p>
+          </div>
+        </div>
       </footer>
-    </main>
+    </div>
   </body>
 </html>

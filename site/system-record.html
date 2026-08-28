@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./proposal.css" />
+    <meta name="description" content="How DossierX keeps plain-English software rules, code sources, connections, review, and approval in one system record." />
+    <title>DossierX — The system record</title>
+  </head>
+  <body class="proposal-mode">
+    <div class="proposal-shell">
+      <a class="skip-link" href="#main">Skip to content</a>
+      <header class="proposal-nav">
+        <div class="proposal-nav__inner">
+          <a class="proposal-nav__brand" href="./index.html"><span class="proposal-nav__brand-mark" aria-hidden="true">Dx</span><span>DossierX</span></a>
+          <div class="proposal-nav__menu proposal-nav__menu--static">
+            <nav class="proposal-nav__sections" aria-label="Main navigation"><a class="proposal-nav__link" href="./index.html">Overview</a><a class="proposal-nav__link" href="./system-record.html" aria-current="page">The system record</a><a class="proposal-nav__link" href="./where-to-start.html">Where to start</a><a class="proposal-nav__link" href="./real-example.html">Viewer example</a></nav>
+            <nav class="proposal-nav__utilities" aria-label="Related links"><a class="proposal-nav__utility-link" href="./releases.html">Releases</a><a class="proposal-nav__utility-link" href="https://github.com/BarterX-Tech/dossierx">GitHub ↗</a></nav>
+          </div>
+        </div>
+      </header>
+
+      <main id="main">
+        <header class="proposal-subpage-intro">
+          <a href="./index.html">← DossierX</a>
+          <p class="proposal-eyebrow">The system record</p>
+          <h1>One plain-English list of how your software works.</h1>
+          <p>Each rule points to the code behind it and keeps a record of who approved it.</p>
+        </header>
+
+        <div class="proposal-page proposal-guide">
+          <section class="proposal-guide__record" id="record">
+            <figure class="proposal-record-window">
+              <header class="proposal-record-window__bar"><span>checkout-recovery</span><span class="proposal-record-window__status">approved</span></header>
+              <div class="proposal-record-window__body">
+                <p class="proposal-record-window__id">Rule / DX-042</p>
+                <h2>A failed charge is retried three times before manual review.</h2>
+                <dl><div><dt>Where in code</dt><dd>payments / retry_policy.go</dd></div><div><dt>Connected rule</dt><dd>Which failed payments can be retried</dd></div><div><dt>Review</dt><dd>Read and approved by a person</dd></div></dl>
+              </div>
+              <figcaption>Given to the coding agent before it changes <code>retry_policy.go</code></figcaption>
+            </figure>
+            <div class="proposal-guide__anatomy">
+              <p class="proposal-meta proposal-meta--blue">What stays with each rule</p>
+              <dl><div><dt>Code</dt><dd>The file or test where the rule is implemented.</dd></div><div><dt>Links</dt><dd>The other rules this one depends on.</dd></div><div><dt>Questions</dt><dd>Review notes stay beside the rule.</dd></div><div><dt>Approval</dt><dd>A record of who accepted it and why.</dd></div></dl>
+            </div>
+          </section>
+
+          <section class="proposal-guide__code">
+            <header><p class="proposal-meta proposal-meta--blue">Rule to code</p><h2>The approved rule becomes part of the coding task.</h2></header>
+            <section class="proposal-agent-snapshot" aria-labelledby="system-agent-title">
+              <header class="proposal-agent-snapshot__header"><p class="proposal-agent-snapshot__label">Example coding task</p><p class="proposal-agent-snapshot__state">DX-042 · approved rule loaded</p></header>
+              <div class="proposal-agent-snapshot__layout">
+                <aside class="proposal-agent-context">
+                  <p class="proposal-agent-context__eyebrow">DossierX system record</p>
+                  <h3 class="proposal-agent-context__title" id="system-agent-title">The agent gets the rule before it writes.</h3>
+                  <blockquote class="proposal-agent-context__claim">A failed charge is retried three times before manual review.</blockquote>
+                  <dl class="proposal-agent-context__facts"><div class="proposal-agent-context__fact"><dt class="proposal-agent-context__term">Rule</dt><dd class="proposal-agent-context__value">payments.retry.limit · approved</dd></div><div class="proposal-agent-context__fact"><dt class="proposal-agent-context__term">Code</dt><dd class="proposal-agent-context__value">retry_policy.go · linked source</dd></div><div class="proposal-agent-context__fact"><dt class="proposal-agent-context__term">Rests on</dt><dd class="proposal-agent-context__value">payments.failure.classification</dd></div></dl>
+                  <p class="proposal-agent-context__handoff">The rule guides the patch →</p>
+                </aside>
+                <figure class="proposal-ide">
+                  <div class="proposal-ide__toolbar"><span class="proposal-ide__dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="proposal-ide__path">checkout-service / internal / payments</span></div>
+                  <div class="proposal-ide__workspace">
+                    <nav class="proposal-ide__explorer" aria-label="Example files"><strong class="proposal-ide__explorer-title">Explorer</strong><span class="proposal-ide__folder">internal/</span><span class="proposal-ide__folder">payments/</span><span class="proposal-ide__file proposal-ide__file--active">retry_policy.go</span><span class="proposal-ide__file">retry_policy_test.go</span><span class="proposal-ide__file">routes.go</span></nav>
+                    <div class="proposal-ide__editor"><div class="proposal-ide__tab">retry_policy.go</div><pre class="proposal-ide__code" aria-label="Example Go implementation"><code>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">1</span><span class="proposal-ide__line-content">package payments</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">2</span><span class="proposal-ide__line-content">const retryLimit = 3</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">3</span><span class="proposal-ide__line-content">func RouteFailedCharge(retries int) RecoveryRoute {</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">4</span><span class="proposal-ide__line-content">    if retries &gt;= retryLimit {</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">5</span><span class="proposal-ide__line-content">        return ManualReview</span></span>
+<span class="proposal-ide__code-line proposal-ide__code-line--governed"><span class="proposal-ide__line-number">6</span><span class="proposal-ide__line-content">    }</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">7</span><span class="proposal-ide__line-content">    return RetryCharge</span></span>
+<span class="proposal-ide__code-line"><span class="proposal-ide__line-number">8</span><span class="proposal-ide__line-content">}</span></span></code></pre></div>
+                  </div>
+                  <figcaption class="proposal-ide__status"><span>DX-042 bound · source open</span><span>Tests 2 passing · ready for human review</span></figcaption>
+                </figure>
+              </div>
+              <footer class="proposal-agent-snapshot__note"><strong class="proposal-agent-snapshot__note-label">You keep control of the behaviour</strong><p class="proposal-agent-snapshot__note-copy">The agent handles the implementation. You review the rule, the patch, and the tests before accepting the change.</p></footer>
+            </section>
+          </section>
+
+          <section class="proposal-operating-loop" id="workflow" aria-labelledby="loop-title">
+            <div class="proposal-operating-loop__intro"><p class="proposal-operating-loop__eyebrow">How the work moves</p><h2 class="proposal-operating-loop__title" id="loop-title">You maintain the rules. Agents work from them.</h2><p class="proposal-operating-loop__summary">When the code and a covered rule may disagree, the rule comes back to you.</p></div>
+            <ol class="proposal-operating-loop__steps">
+              <li class="proposal-operating-loop__step proposal-operating-loop__step--agent"><div class="proposal-operating-loop__step-head"><span class="proposal-operating-loop__number">01</span><span class="proposal-operating-loop__actor">Agent</span></div><h3 class="proposal-operating-loop__action">Draft</h3><p class="proposal-operating-loop__detail">Turn the code or your request into short rules.</p><span class="proposal-operating-loop__arrow">→</span></li>
+              <li class="proposal-operating-loop__step proposal-operating-loop__step--human"><div class="proposal-operating-loop__step-head"><span class="proposal-operating-loop__number">02</span><span class="proposal-operating-loop__actor">Human</span></div><h3 class="proposal-operating-loop__action">Review</h3><p class="proposal-operating-loop__detail">Read the rules in plain English and question them.</p><span class="proposal-operating-loop__arrow">→</span></li>
+              <li class="proposal-operating-loop__step proposal-operating-loop__step--human"><div class="proposal-operating-loop__step-head"><span class="proposal-operating-loop__number">03</span><span class="proposal-operating-loop__actor">Human</span></div><h3 class="proposal-operating-loop__action">Approve</h3><p class="proposal-operating-loop__detail">Accept the rules that describe the product correctly.</p><span class="proposal-operating-loop__arrow">→</span></li>
+              <li class="proposal-operating-loop__step proposal-operating-loop__step--agent"><div class="proposal-operating-loop__step-head"><span class="proposal-operating-loop__number">04</span><span class="proposal-operating-loop__actor">Agent</span></div><h3 class="proposal-operating-loop__action">Build</h3><p class="proposal-operating-loop__detail">Use the approved rules while changing the code.</p><span class="proposal-operating-loop__arrow">→</span></li>
+              <li class="proposal-operating-loop__step proposal-operating-loop__step--system"><div class="proposal-operating-loop__step-head"><span class="proposal-operating-loop__number">05</span><span class="proposal-operating-loop__actor">System</span></div><h3 class="proposal-operating-loop__action">Check</h3><p class="proposal-operating-loop__detail">Report covered changes that may have made a rule stale.</p><span class="proposal-operating-loop__arrow">→</span></li>
+              <li class="proposal-operating-loop__step proposal-operating-loop__step--human"><div class="proposal-operating-loop__step-head"><span class="proposal-operating-loop__number">06</span><span class="proposal-operating-loop__actor">Human</span></div><h3 class="proposal-operating-loop__action">Decide again</h3><p class="proposal-operating-loop__detail">Update the rule or send the code back for another change.</p></li>
+            </ol>
+          </section>
+
+          <aside class="proposal-limit"><strong>What this record cannot promise</strong><p>DossierX cannot prove that every rule matches every line of code. It keeps reviewed rules linked to their sources and reports covered changes that may have made them stale. Tests and code review still matter.</p></aside>
+        </div>
+      </main>
+
+      <footer class="proposal-footer"><div class="proposal-footer__inner"><div class="proposal-footer__statement"><div><p class="proposal-footer__eyebrow">The system record</p><strong>Maintain the rules.<span>Let agents maintain the code.</span></strong></div><a class="proposal-footer__cta" href="https://github.com/BarterX-Tech/dossierx">Build with DossierX <span aria-hidden="true">↗</span></a></div><div class="proposal-footer__bottom"><a class="proposal-footer__brand" href="./index.html"><span aria-hidden="true">Dx</span>DossierX</a><nav aria-label="Footer links"><a href="./index.html">Overview</a><a href="./system-record.html">The system record</a><a href="./where-to-start.html">Where to start</a><a href="./real-example.html">Viewer example</a><a href="./releases.html">Releases</a></nav><p>Open source. Your records stay in your repo.</p></div></div></footer>
+    </div>
+  </body>
+</html>

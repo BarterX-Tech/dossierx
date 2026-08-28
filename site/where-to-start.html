@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./proposal.css" />
+    <meta name="description" content="Three small ways to start using DossierX with an existing app, a new app, or the next coding agent." />
+    <title>DossierX — Where to start</title>
+  </head>
+  <body class="proposal-mode">
+    <div class="proposal-shell">
+      <a class="skip-link" href="#main">Skip to content</a>
+      <header class="proposal-nav"><div class="proposal-nav__inner"><a class="proposal-nav__brand" href="./index.html"><span class="proposal-nav__brand-mark" aria-hidden="true">Dx</span><span>DossierX</span></a><div class="proposal-nav__menu proposal-nav__menu--static"><nav class="proposal-nav__sections" aria-label="Main navigation"><a class="proposal-nav__link" href="./index.html">Overview</a><a class="proposal-nav__link" href="./system-record.html">The system record</a><a class="proposal-nav__link" href="./where-to-start.html" aria-current="page">Where to start</a><a class="proposal-nav__link" href="./real-example.html">Viewer example</a></nav><nav class="proposal-nav__utilities" aria-label="Related links"><a class="proposal-nav__utility-link" href="./releases.html">Releases</a><a class="proposal-nav__utility-link" href="https://github.com/BarterX-Tech/dossierx">GitHub ↗</a></nav></div></div></header>
+
+      <main id="main">
+        <header class="proposal-subpage-intro"><a href="./index.html">← DossierX</a><p class="proposal-eyebrow">Where to start</p><h1>Do not explain the whole codebase.</h1><p>Start with one feature that is expensive to misunderstand.</p></header>
+        <div class="proposal-page proposal-cases">
+          <article class="proposal-case">
+            <header><span>01</span><div><p class="proposal-meta proposal-meta--blue">Existing app</p><h2>Find out what the app already does</h2><p>Start with one part of the product that is hard to change without breaking something.</p></div></header>
+            <ol><li>Choose one feature or workflow.</li><li>Ask an agent to draft its rules from the code and docs.</li><li>Review those rules in plain English.</li><li>Approve the useful rules and keep them with the code.</li></ol>
+            <p class="proposal-case__result">The next agent starts with the rules instead of researching the feature again.</p>
+          </article>
+          <article class="proposal-case">
+            <header><span>02</span><div><p class="proposal-meta proposal-meta--blue">New app</p><h2>Write the rules before the agent writes the code</h2><p>Decide how the product should behave while the implementation is still easy to change.</p></div></header>
+            <ol><li>Write each important behavior as a short rule.</li><li>Add the decision or requirement behind it.</li><li>Review and approve the rule.</li><li>Give it to the agent and link the finished code back to it.</li></ol>
+            <p class="proposal-case__result">The product decisions survive after the coding chat is gone.</p>
+          </article>
+          <article class="proposal-case">
+            <header><span>03</span><div><p class="proposal-meta proposal-meta--blue">Next agent</p><h2>Continue the work without starting from zero</h2><p>Give the next agent the rules for the task instead of the whole project history.</p></div></header>
+            <ol><li>Load the rules for the feature.</li><li>Include their sources and connected rules.</li><li>Keep open questions with the rule they affect.</li><li>Review only the rules touched by the change.</li></ol>
+            <p class="proposal-case__result">The handoff is smaller and easier for you to check.</p>
+          </article>
+        </div>
+      </main>
+
+      <footer class="proposal-footer"><div class="proposal-footer__inner"><div class="proposal-footer__statement"><div><p class="proposal-footer__eyebrow">The system record</p><strong>Maintain the rules.<span>Let agents maintain the code.</span></strong></div><a class="proposal-footer__cta" href="https://github.com/BarterX-Tech/dossierx">Build with DossierX <span aria-hidden="true">↗</span></a></div><div class="proposal-footer__bottom"><a class="proposal-footer__brand" href="./index.html"><span aria-hidden="true">Dx</span>DossierX</a><nav aria-label="Footer links"><a href="./index.html">Overview</a><a href="./system-record.html">The system record</a><a href="./where-to-start.html">Where to start</a><a href="./real-example.html">Viewer example</a><a href="./releases.html">Releases</a></nav><p>Open source. Your records stay in your repo.</p></div></div></footer>
+    </div>
+  </body>
+</html>
