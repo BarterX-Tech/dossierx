@@ -458,7 +458,17 @@
     new MutationObserver(function () { requestAnimationFrame(enhanceGraphLabels); })
       .observe(graphPane, { childList: true, subtree: true });
   }
-  document.addEventListener('click', function () { setTimeout(function () { syncNavigation(); renderToc(); }, 0); });
+  document.addEventListener('click', function (event) {
+    // Keep the selected tab's group visible when navigation itself changes,
+    // but respect a reader explicitly closing that group. Running
+    // syncNavigation after every click used to close a <details> and reopen it
+    // in the same event cycle whenever it contained the active tab.
+    var navigationChanged = !!event.target.closest('.sec-tab');
+    setTimeout(function () {
+      if (navigationChanged) { syncNavigation(); }
+      renderToc();
+    }, 0);
+  });
   window.addEventListener('hashchange', function () { setTimeout(function () { revealHashTarget(); syncNavigation(); renderToc(); }, 0); });
   window.addEventListener('scroll', updateTocActive, { passive: true });
   window.dossierxEnhanceSystemRecord = enhance;

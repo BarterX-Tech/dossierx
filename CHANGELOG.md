@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.4] - 2026-08-29
+
+### Fixed
+
+- The generated System Record viewer now respects an explicit collapse of the active Modules or
+  Tracks navigation group. Navigation still opens the group that contains a newly selected item,
+  but it no longer reopens the same group immediately after the reader closes it. Large projects
+  can therefore collapse Modules and reach Tracks without scrolling through the full module list.
+  This changes rendered output for unchanged claims; run `dossierx check` after upgrading to
+  regenerate an existing viewer.
+
 ## [0.7.3] - 2026-08-29
 
 ### Added
@@ -2030,7 +2041,9 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.2...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...HEAD
+[0.7.4]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.3...v0.7.4
+[0.7.3]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.6.0...v0.7.0

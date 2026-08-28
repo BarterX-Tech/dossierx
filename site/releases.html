@@ -50,14 +50,33 @@
         carries this as a checklist item.
       -->
       <div class="ledger">
-        <article class="release release--current" data-version="v0.7.3" data-current="true">
+        <article class="release release--current" data-version="v0.7.4" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.4</span>
+            <time datetime="2026-08-29">2026-08-29</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              Navigation groups stay where readers leave them<span class="release__badge">Latest</span>
+            </h2>
+            <p class="release__note">
+              Modules and Tracks now remain collapsed when a reader closes them,
+              including when the group contains the selected item. Selecting a
+              new navigation item still opens its group, and large records can
+              reach Tracks without scrolling through every module. No claim
+              schema, command, lint, or lock behaviour changes in this release.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.7.3">
           <p class="release__meta">
             <span class="release__version">v0.7.3</span>
             <time datetime="2026-08-29">2026-08-29</time>
           </p>
           <div>
             <h2 class="release__title">
-              Individual claims fold without losing their place<span class="release__badge">Latest</span>
+              Individual claims fold without losing their place
             </h2>
             <p class="release__note">
               Every claim in the generated System Record viewer can now collapse
