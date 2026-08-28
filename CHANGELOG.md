@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-08-28
+
+### Changed
+
+- **The generated viewer now reads as a responsive System Record instead of a raw claim dump.**
+  Navigation is grouped into collapsible Modules and Tracks, the desktop drawer can be resized
+  from 220–420px (with keyboard controls and a reset gesture), generation time is shown in the
+  reader's local format, and every facet gains an always-available claim table of contents.
+  Claim cards use the same typography, spacing, color, and focus system throughout; their
+  evidence footer now presents full-width vertical records with human labels such as **Governed
+  By**, **Rests On**, **Depended On By**, and **Sources**, removing the old snake-case rows and
+  marker-alignment failures. Build Order and Orientation are peer tabs rather than content mixed
+  into the claims list. The claims graph uses the same visual system, removes the unused gaps
+  rail, gives module groups an intentional blue treatment, and opens with every claim visible;
+  module and facet aggregation remain explicit choices in the Granularity control.
+- **The website's viewer gallery now shows the shipped design with synthetic public data.** The
+  four legacy Curtainly captures are replaced by fresh overview, claim-detail, expanded-evidence,
+  and all-claims graph screenshots generated from a 12-claim public example. No customer name,
+  private wording, repository path, internal source, or review text is present in the images, and
+  the surrounding copy now says exactly that instead of describing blurred private material.
+
 ## [0.7.0] - 2026-08-23
 
 ### Added
@@ -75,22 +96,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **The generated viewer now reads as a responsive System Record instead of a raw claim dump.**
-  Navigation is grouped into collapsible Modules and Tracks, the desktop drawer can be resized
-  from 220–420px (with keyboard controls and a reset gesture), generation time is shown in the
-  reader's local format, and every facet gains an always-available claim table of contents.
-  Claim cards use the same typography, spacing, color, and focus system throughout; their
-  evidence footer now presents full-width vertical records with human labels such as **Governed
-  By**, **Rests On**, **Depended On By**, and **Sources**, removing the old snake-case rows and
-  marker-alignment failures. Build Order and Orientation are peer tabs rather than content mixed
-  into the claims list. The claims graph uses the same visual system, removes the unused gaps
-  rail, gives module groups an intentional blue treatment, and opens with every claim visible;
-  module and facet aggregation remain explicit choices in the Granularity control.
-- **The website's viewer gallery now shows the shipped design with synthetic public data.** The
-  four legacy Curtainly captures are replaced by fresh overview, claim-detail, expanded-evidence,
-  and all-claims graph screenshots generated from a 12-claim public example. No customer name,
-  private wording, repository path, internal source, or review text is present in the images, and
-  the surrounding copy now says exactly that instead of describing blurred private material.
 - **The website is a two-page memo, and the twelve-section application that was there is
   deleted.** `site/` was a Vite + React + TypeScript build — twelve sections, fifteen components,
   and a 1,509-line content spec that restated the command surface, the error-code reference, the
@@ -2007,7 +2012,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.1...v0.6.0
 [0.5.1]: https://github.com/BarterX-Tech/dossierx/compare/v0.5.0...v0.5.1
