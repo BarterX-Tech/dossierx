@@ -2978,6 +2978,7 @@ body.shell-body {
 
 .k {
   display: flex;
+  position: relative;
   justify-content: space-between;
   align-items: flex-start;
   gap: 10px;
@@ -2997,6 +2998,74 @@ body.shell-body {
   align-items: baseline;
   overflow-wrap: anywhere;
 }
+
+.claim-collapse-toggle {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  width: 100%;
+  margin: -6px 0 -6px -7px;
+  padding: 6px 32px 6px 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.k:has(> .claim-comments-slot:not([hidden])) .claim-collapse-toggle {
+  padding-inline-end: 88px;
+}
+
+.k > .claim-comments-slot:not([hidden]) {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  inset-inline-end: 32px;
+  margin: 0;
+  transform: translateY(-50%);
+}
+
+.claim-collapse-toggle:hover { background: rgba(125, 137, 154, .08); }
+
+.claim-collapse-toggle > .label {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  gap: 7px;
+  align-items: baseline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.claim-collapse-chevron {
+  position: absolute;
+  top: 50%;
+  inset-inline-end: 8px;
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  margin: -6px 0 0;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--faint);
+  transform: rotate(45deg);
+  transition: transform 150ms ease-out;
+}
+
+.claim--collapsed .claim-collapse-chevron {
+  margin-top: -4px;
+  transform: rotate(-45deg);
+}
+
+.claim--collapsed > .k { margin-bottom: 0; }
+.claim-collapse-content[hidden] { display: none; }
 
 .pill {
   margin: 0;
@@ -3699,7 +3768,7 @@ code {
 
   .k > .claim-comments-slot:not([hidden]) {
     display: inline-block;
-    margin: 10px 0 0;
+    margin: 0;
   }
 
   .pill { display: inline-flex; }
@@ -3743,4 +3812,7 @@ code {
   .content-area { padding: 0; }
   .card,
   .claim-tree { break-inside: avoid; }
+  .claim-collapse-toggle { pointer-events: none; }
+  .claim-collapse-chevron { display: none; }
+  .claim-collapse-content[hidden] { display: block !important; }
 }

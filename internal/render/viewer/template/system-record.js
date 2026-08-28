@@ -130,6 +130,72 @@
     });
   }
 
+  var claimDisclosureSequence = 0;
+
+  function setClaimExpanded(claim, expanded) {
+    var toggle = claim && claim.querySelector(':scope > .k > .claim-collapse-toggle');
+    var content = claim && claim.querySelector(':scope > .claim-collapse-content');
+    if (!toggle || !content) { return; }
+    claim.classList.toggle('claim--collapsed', !expanded);
+    content.hidden = !expanded;
+    toggle.setAttribute('aria-expanded', String(expanded));
+    var title = toggle.dataset.claimTitle || 'claim';
+    toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + title);
+  }
+
+  function enhanceClaimDisclosures() {
+    document.querySelectorAll('.claim').forEach(function (claim) {
+      if (claim.dataset.claimDisclosure === 'true') { return; }
+      var head = claim.querySelector(':scope > .k');
+      if (!head) { return; }
+
+      var title = cleanTitle(claim) || 'claim';
+      var content = document.createElement('div');
+      content.className = 'claim-collapse-content';
+      content.id = 'claim-content-' + (++claimDisclosureSequence);
+      while (head.nextSibling) { content.appendChild(head.nextSibling); }
+
+      var toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'claim-collapse-toggle';
+      toggle.dataset.claimTitle = title;
+      toggle.setAttribute('aria-controls', content.id);
+      toggle.setAttribute('aria-expanded', 'true');
+      toggle.setAttribute('aria-label', 'Collapse ' + title);
+
+      var label = head.querySelector(':scope > .label');
+      if (label) {
+        toggle.appendChild(label);
+      } else {
+        Array.prototype.slice.call(head.childNodes).forEach(function (node) {
+          if (!(node.nodeType === 1 && node.classList.contains('claim-comments-slot'))) {
+            toggle.appendChild(node);
+          }
+        });
+      }
+      var chevron = document.createElement('span');
+      chevron.className = 'claim-collapse-chevron';
+      chevron.setAttribute('aria-hidden', 'true');
+      toggle.appendChild(chevron);
+      head.insertBefore(toggle, head.firstChild);
+      claim.appendChild(content);
+      claim.dataset.claimDisclosure = 'true';
+      toggle.addEventListener('click', function () {
+        setClaimExpanded(claim, toggle.getAttribute('aria-expanded') !== 'true');
+      });
+    });
+  }
+
+  function revealHashTarget() {
+    var raw = (window.location.hash || '').replace(/^#/, '').split('!')[0];
+    if (!raw) { return; }
+    var target;
+    try { target = document.getElementById(decodeURIComponent(raw)); }
+    catch (_) { return; }
+    var claim = target && target.closest('.claim');
+    if (claim) { setClaimExpanded(claim, true); }
+  }
+
   function cleanTitle(claim) {
     var title = claim.querySelector(':scope > .k');
     if (!title) { return (claim.id || '').replace(/^build-order-/, '').replace(/[.-]/g, ' '); }
@@ -370,6 +436,8 @@
     bindResizer();
     enhanceFooters();
     enhanceFieldLabels();
+    enhanceClaimDisclosures();
+    revealHashTarget();
     addModuleHeaders();
     enhanceFacetNavigation();
     syncNavigation();
@@ -391,7 +459,7 @@
       .observe(graphPane, { childList: true, subtree: true });
   }
   document.addEventListener('click', function () { setTimeout(function () { syncNavigation(); renderToc(); }, 0); });
-  window.addEventListener('hashchange', function () { setTimeout(function () { syncNavigation(); renderToc(); }, 0); });
+  window.addEventListener('hashchange', function () { setTimeout(function () { revealHashTarget(); syncNavigation(); renderToc(); }, 0); });
   window.addEventListener('scroll', updateTocActive, { passive: true });
   window.dossierxEnhanceSystemRecord = enhance;
   enhance();
