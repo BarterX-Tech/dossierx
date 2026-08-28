@@ -350,7 +350,9 @@ func selectedNode(t *testing.T, f canvasFrame, id string) frameNode {
 // centres the canvas on it.
 func clickJump(t *testing.T, ctx context.Context, id string) {
 	t.Helper()
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-jump=`+jsQuote(id)+`]`, chromedp.ByQuery))
+	evalVoid(t, ctx, `Array.from(document.querySelectorAll('[data-dxg-jump]')).find(function (button) {
+		return button.getAttribute('data-dxg-jump') === `+jsQuote(id)+`;
+	}).click()`)
 	pollTrue(t, ctx, `document.querySelector('.dxg-detail-id') && document.querySelector('.dxg-detail-id').textContent === `+jsQuote(id))
 }
 

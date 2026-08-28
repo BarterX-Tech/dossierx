@@ -97,7 +97,7 @@ func TestRender_NoTracksEmitsNoTrackMarkup(t *testing.T) {
 	// newline and indentation on every render, so every project's page grows a
 	// blank line and every committed fixture goes stale for nothing. These are
 	// the exact bytes the template produced before tracks existed.
-	if !strings.Contains(out, "</button>\n        \n      </nav>") {
+	if !strings.Contains(out, "</details>\n        </div>\n      </nav>") {
 		t.Errorf("the sidebar's track guard left markup behind ahead of </nav>")
 	}
 	if !strings.Contains(out, "</section>\n        \n      \n    </main>") {

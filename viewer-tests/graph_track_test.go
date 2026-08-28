@@ -37,8 +37,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-
-	"github.com/chromedp/chromedp"
 )
 
 // The fixture declares two tracks and gives each an owner, so `check` passes:
@@ -150,7 +148,7 @@ func TestGraphTrackFilterDrawsOneFeaturesSubgraph(t *testing.T) {
 	// groups after it keep the order a reader's hand has learnt.
 	labels := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-controls .dxg-ctl .dxg-ctl-label'))
 		.map(function (e) { return e.textContent; })`)
-	want := []string{"Module", "Facet", "Track", "Granularity", "Highlight overlay", "Edge types", "View"}
+	want := []string{"Module", "Facet", "Track", "Granularity", "Highlight overlay", "Relationships", "View"}
 	if fmt.Sprint(labels) != fmt.Sprint(want) {
 		t.Fatalf("control groups = %v, want %v", labels, want)
 	}
@@ -239,11 +237,11 @@ func TestGraphTrackFilterDrawsOneFeaturesSubgraph(t *testing.T) {
 	//    selected and nothing marked. The owner says owns; the claim that
 	//    wrote no role at all says cites, because an unset role MEANS cites
 	//    and Go resolves it before it reaches the wire.
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-jump="widget.contract.base"]`, chromedp.ByQuery))
+	clickJump(t, ctx, "widget.contract.base")
 	if got := detailRowText(t, ctx, "tracks"); got != "Checkout (owns)" {
 		t.Fatalf("owner's tracks row = %q, want Checkout (owns)", got)
 	}
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-jump="widget.design.thing"]`, chromedp.ByQuery))
+	clickJump(t, ctx, "widget.design.thing")
 	if got := detailRowText(t, ctx, "tracks"); got != "Checkout (cites)" {
 		t.Fatalf("citing claim's tracks row = %q, want Checkout (cites)", got)
 	}

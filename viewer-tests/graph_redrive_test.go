@@ -495,7 +495,7 @@ func TestGraphPaneControlsMeetContrastAA(t *testing.T) {
 	// The open-claim button only exists once a claim is selected, so select
 	// one. The edge-type toggles start pressed, which is the ON state whose
 	// rule is under test.
-	runCDP(t, ctx, chromedp.Click(`[data-dxg-jump="widget.design.thing"]`, chromedp.ByQuery))
+	clickJump(t, ctx, "widget.design.thing")
 	waitVisible(t, ctx, `[data-dxg-open-claim]`)
 	if got := evalString(t, ctx, `document.querySelector('[data-dxg-type="rests_on"]').getAttribute('aria-pressed')`); got != "true" {
 		t.Fatalf("the rests_on toggle is aria-pressed=%q, want true — the ON state is the state this measures", got)
