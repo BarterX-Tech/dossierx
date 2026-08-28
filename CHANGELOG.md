@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.3] - 2026-08-29
+
+### Added
+
+- Individual claims in the generated System Record viewer can now be collapsed from their
+  title row. The title, status, and comment control remain visible; direct links reopen the
+  target claim, and print output always includes the full content. The disclosure arrow stays
+  pinned to the far right edge at every viewport, after the comment control. This intentionally
+  changes rendered output for unchanged claims; run `dossierx check` after upgrading to
+  regenerate an existing viewer.
+
 ## [0.7.2] - 2026-08-29
 
 ### Fixed
