@@ -61,10 +61,44 @@
     });
   }
 
-  function syncNavigation() {
+  function bindSidebarCollapse() {
+    var toggle = document.getElementById('sidebarCollapseToggle');
+    if (!toggle || toggle.dataset.bound === 'true') { return; }
+    toggle.dataset.bound = 'true';
+    toggle.addEventListener('click', function () {
+      var collapsed = !document.body.classList.contains('system-sidebar-collapsed');
+      document.body.classList.toggle('system-sidebar-collapsed', collapsed);
+      toggle.setAttribute('aria-expanded', String(!collapsed));
+      toggle.setAttribute('aria-label', collapsed ? 'Show navigation' : 'Hide navigation');
+      toggle.title = collapsed ? 'Show navigation' : 'Hide navigation';
+    });
+  }
+
+  function bindNavigationGroupPreferences() {
+    document.querySelectorAll('.system-nav-group').forEach(function (group) {
+      if (group.dataset.readerPreferenceBound === 'true') { return; }
+      group.dataset.readerPreferenceBound = 'true';
+      var summary = group.querySelector(':scope > summary');
+      if (summary) {
+        summary.addEventListener('click', function (event) {
+          event.preventDefault();
+          var willOpen = !group.open;
+          group.dataset.readerClosed = String(!willOpen);
+          group.open = willOpen;
+        });
+      }
+      group.addEventListener('toggle', function () {
+        group.dataset.readerClosed = group.open ? 'false' : 'true';
+      });
+    });
+  }
+
+  function syncNavigation(force) {
     var active = document.querySelector('.system-nav-group .sec-tab.on');
     var group = active && active.closest('.system-nav-group');
-    if (group) { group.open = true; }
+    if (!group || (!force && group.dataset.readerClosed === 'true')) { return; }
+    group.dataset.readerClosed = 'false';
+    group.open = true;
   }
 
   function enhanceFooters() {
@@ -141,6 +175,7 @@
     toggle.setAttribute('aria-expanded', String(expanded));
     var title = toggle.dataset.claimTitle || 'claim';
     toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + title);
+    updateFacetClaimControl();
   }
 
   function enhanceClaimDisclosures() {
@@ -230,6 +265,45 @@
     return { module: module, view: group, label: tab ? tab.textContent.replace(/🔒/g, '').trim() : 'Claims' };
   }
 
+  function updateFacetClaimControl(active, claims) {
+    active = active || activeFacet();
+    if (!active) { return; }
+    claims = claims || visibleClaims(active.view);
+    var control = active.view.querySelector(':scope > .facet-claim-controls');
+    if (!control) { return; }
+    var toggle = control.querySelector('.facet-claims-toggle');
+    if (!toggle) { return; }
+    var allCollapsed = claims.length > 0 && claims.every(function (claim) {
+      var disclosure = claim.querySelector(':scope > .k > .claim-collapse-toggle');
+      return disclosure && disclosure.getAttribute('aria-expanded') === 'false';
+    });
+    toggle.disabled = claims.length === 0;
+    toggle.setAttribute('aria-pressed', String(allCollapsed));
+    toggle.querySelector('.facet-claims-toggle__label').textContent = allCollapsed ? 'Expand all claims' : 'Collapse all claims';
+  }
+
+  function renderFacetClaimControl(active, claims) {
+    var control = active.view.querySelector(':scope > .facet-claim-controls');
+    if (!control) {
+      control = document.createElement('div');
+      control.className = 'facet-claim-controls';
+      control.innerHTML = '<button class="facet-claims-toggle" type="button" aria-pressed="false"><span class="facet-claims-toggle__icon" aria-hidden="true"></span><span class="facet-claims-toggle__label">Collapse all claims</span></button>';
+      active.view.insertBefore(control, active.view.firstChild);
+      control.querySelector('.facet-claims-toggle').addEventListener('click', function () {
+        var current = activeFacet();
+        if (!current) { return; }
+        var currentClaims = visibleClaims(current.view);
+        var shouldExpand = currentClaims.length > 0 && currentClaims.every(function (claim) {
+          var disclosure = claim.querySelector(':scope > .k > .claim-collapse-toggle');
+          return disclosure && disclosure.getAttribute('aria-expanded') === 'false';
+        });
+        currentClaims.forEach(function (claim) { setClaimExpanded(claim, shouldExpand); });
+        updateFacetClaimControl(current, currentClaims);
+      });
+    }
+    updateFacetClaimControl(active, claims);
+  }
+
   function updateTocActive() {
     var toc = document.getElementById('systemFacetToc');
     if (!toc || toc.hidden) { return; }
@@ -252,10 +326,17 @@
       toc.id = 'systemFacetToc';
       toc.className = 'facet-toc';
       toc.setAttribute('aria-label', 'Claims in this facet');
-      toc.innerHTML = '<div class="facet-toc__head"><span><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>';
+      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span><button class="system-panel-toggle system-panel-toggle--toc" type="button" aria-controls="systemFacetToc" aria-expanded="true" aria-label="Hide table of contents" title="Hide table of contents"><span class="system-panel-toggle__chevron" aria-hidden="true"></span></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>';
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
         var claim = document.getElementById(event.target.value);
         if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+      });
+      toc.querySelector('.system-panel-toggle--toc').addEventListener('click', function (event) {
+        var collapsed = !document.body.classList.contains('system-toc-collapsed');
+        document.body.classList.toggle('system-toc-collapsed', collapsed);
+        event.currentTarget.setAttribute('aria-expanded', String(!collapsed));
+        event.currentTarget.setAttribute('aria-label', collapsed ? 'Show table of contents' : 'Hide table of contents');
+        event.currentTarget.title = collapsed ? 'Show table of contents' : 'Hide table of contents';
       });
       document.body.appendChild(toc);
     }
@@ -265,6 +346,7 @@
     var claims = visibleClaims(active.view);
     toc.querySelector('.facet-toc__name').textContent = active.label;
     toc.querySelector('.facet-toc__total').textContent = claims.length + (claims.length === 1 ? ' claim' : ' claims');
+    renderFacetClaimControl(active, claims);
     var list = toc.querySelector('.facet-toc__list');
     var select = toc.querySelector('.facet-toc__select');
     list.replaceChildren();
@@ -434,11 +516,16 @@
     running = true;
     enhanceTimestamp();
     bindResizer();
+    bindSidebarCollapse();
+    bindNavigationGroupPreferences();
     enhanceFooters();
     enhanceFieldLabels();
     enhanceClaimDisclosures();
     revealHashTarget();
     addModuleHeaders();
+    if (typeof window.dossierxPositionStatusStrip === 'function') {
+      window.dossierxPositionStatusStrip();
+    }
     enhanceFacetNavigation();
     syncNavigation();
     renderToc();
@@ -465,11 +552,11 @@
     // in the same event cycle whenever it contained the active tab.
     var navigationChanged = !!event.target.closest('.sec-tab');
     setTimeout(function () {
-      if (navigationChanged) { syncNavigation(); }
+      if (navigationChanged) { syncNavigation(true); }
       renderToc();
     }, 0);
   });
-  window.addEventListener('hashchange', function () { setTimeout(function () { revealHashTarget(); syncNavigation(); renderToc(); }, 0); });
+  window.addEventListener('hashchange', function () { setTimeout(function () { revealHashTarget(); syncNavigation(true); renderToc(); }, 0); });
   window.addEventListener('scroll', updateTocActive, { passive: true });
   window.dossierxEnhanceSystemRecord = enhance;
   enhance();

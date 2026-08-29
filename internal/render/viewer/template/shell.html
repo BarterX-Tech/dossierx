@@ -32,6 +32,9 @@
           <div class="logo"><span></span></div>
           <div><h1>{{.Title}}</h1>{{if .Eyebrow}}<div class="eyebrow">{{.Eyebrow}}</div>{{end}}</div>
         </div>
+        <button id="sidebarCollapseToggle" class="system-panel-toggle system-panel-toggle--sidebar" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Hide navigation" title="Hide navigation">
+          <span class="system-panel-toggle__chevron" aria-hidden="true"></span>
+        </button>
       </div>
       <nav id="nav">
         <!-- The graph trigger. It carries data-dxg-open as an ATTRIBUTE and
@@ -166,10 +169,11 @@
        about whether it was ever approved — so integrity is rendered first, in
        its own group, and it alone turns the strip red.
 
-       It lives OUTSIDE .layout for the same reason the comment chrome does: an
-       SSE fragment swap replaces only <main class="content-area"> and
-       <nav id="nav">, and the one banner that must survive a re-render is the
-       one saying this project's lock ledger is in dispute.
+       Its stable mount lives OUTSIDE .layout so the DOM node survives an SSE
+       fragment swap. Once live status arrives, the client moves that same node
+       into the active module, immediately after its record header and before
+       the facet tabs. The warning therefore reads as project context inside
+       the document rather than unrelated floating chrome.
 
        It exists ONLY against a live serve. The reachability probe reveals it,
        exactly as it reveals the composer; a static file:// viewer has no
@@ -178,8 +182,12 @@
        because a stale green strip is an assurance nobody checked. -->
   <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
     <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
-      <span id="statusStripSummary" class="status-strip-summary"></span>
-      <span class="status-strip-caret" aria-hidden="true">▾</span>
+      <span id="statusStripSummary" class="status-strip-summary">
+        <strong id="statusStripTitle" class="status-strip-title"></strong>
+        <span id="statusStripNote" class="status-strip-note"></span>
+      </span>
+      <span id="statusStripAction" class="status-strip-action">Show issues</span>
+      <span class="status-strip-caret" aria-hidden="true"></span>
     </button>
     <div id="statusStripBody" class="status-strip-body" hidden></div>
   </section>
@@ -376,6 +384,12 @@
           activeSection.querySelectorAll('.subtab').forEach(function (b) {
             b.classList.toggle('on', b.dataset.target === '#' + facetID);
           });
+        }
+
+        if (lastStatusData) {
+          renderStatusStrip(lastStatusData);
+        } else {
+          positionStatusStrip();
         }
 
         // A resolved claim id keeps the full claim id as the hash target (not
@@ -1215,7 +1229,11 @@
       var stripEl = document.getElementById('statusStrip');
       var stripToggle = document.getElementById('statusStripToggle');
       var stripSummary = document.getElementById('statusStripSummary');
+      var stripTitle = document.getElementById('statusStripTitle');
+      var stripNote = document.getElementById('statusStripNote');
+      var stripAction = document.getElementById('statusStripAction');
       var stripBody = document.getElementById('statusStripBody');
+      var lastStatusData = null;
       // stripExpanded is sticky across refreshes so a poll (or an SSE tick) never
       // collapses a list the reader is in the middle of. stripUserToggled records
       // that the reader has taken control of it: until then an INTEGRITY verdict
@@ -1228,6 +1246,55 @@
       function countLabel(n, word) {
         return n + ' ' + word + (n === 1 ? '' : 's');
       }
+
+      function humanRule(name) {
+        return String(name || '').split('-').filter(Boolean).map(function (part) {
+          return part.charAt(0).toUpperCase() + part.slice(1);
+        }).join(' ');
+      }
+
+      function activeFacetClaimIDs() {
+        var ids = Object.create(null);
+        var section = document.querySelector('.module-section:not([hidden])');
+        var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
+        if (!group) { return ids; }
+        group.querySelectorAll('.claim').forEach(function (claim) {
+          var id = claim.dataset.claimId || claim.id;
+          if (id) { ids[id] = true; }
+        });
+        return ids;
+      }
+
+      function findingsForActiveFacet(findings, claimIDs) {
+        return findings.filter(function (finding) {
+// A finding without a claim id is project-wide and therefore applies
+// in every facet. Claim-specific findings belong only beside the
+// facet that contains that claim.
+          return !finding.claim_id || claimIDs[finding.claim_id] === true;
+        });
+      }
+
+// The status endpoint is project-wide, but the reader's orientation is
+// module-local. Place the notice between the active record header and its
+// facet controls, where it can be seen before reading without competing
+// with either navigation rail. The section fallback covers the brief
+// interval before system-record.js has enhanced a fresh SSE fragment.
+      function positionStatusStrip() {
+        if (!stripEl) { return; }
+        var section = document.querySelector('.module-section:not([hidden])');
+        if (!section) {
+          var content = document.querySelector('.content-area');
+          if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
+          return;
+        }
+        var header = section.querySelector(':scope > .system-record-head, :scope > .track-head');
+        if (header) {
+          if (header.nextElementSibling !== stripEl) { header.insertAdjacentElement('afterend', stripEl); }
+        } else if (section.firstElementChild !== stripEl) {
+          section.insertBefore(stripEl, section.firstChild);
+        }
+      }
+      window.dossierxPositionStatusStrip = positionStatusStrip;
 
       // findingRow renders one finding. EVERY value here is server data about a
       // claim (rule names, claim ids, gate messages) and every one of them goes
@@ -1257,9 +1324,11 @@
       // reads as "fine" by default, and a persistent all-clear chip would be one
       // more thing to stop noticing.
       function renderStatusStrip(data) {
-        if (!stripEl || !stripBody || !stripSummary) { return; }
-        var ledger = (data && data.ledger_findings) || [];
-        var lintErrors = (data && data.lint_errors) || [];
+        if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
+        lastStatusData = data || {};
+        var claimIDs = activeFacetClaimIDs();
+        var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
+        var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
 
         if (!ledger.length && !lintErrors.length) {
           stripEl.hidden = true;
@@ -1271,31 +1340,36 @@
         stripBody.textContent = '';
         if (ledger.length) {
           stripBody.appendChild(findingGroup(
-            'Lock ledger — these claims were changed without an approval record',
-            ledger.map(function (f) { return findingRow(f.rule, f.claim_id, f.message); })
+            'Approval record issues',
+            ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
           ));
         }
         if (lintErrors.length) {
           stripBody.appendChild(findingGroup(
-            'Lint errors',
-            lintErrors.map(function (f) { return findingRow(f.lint, f.claim_id, f.message); })
+            'Issues to resolve',
+            lintErrors.map(function (f) { return findingRow(humanRule(f.lint), f.claim_id, f.message); })
           ));
         }
 
         // The summary leads with integrity whenever there is any, however many
         // lint errors sit behind it — the reader needs the worst fact first.
-        var summary = ledger.length
-          ? 'Integrity: ' + countLabel(ledger.length, 'lock-ledger finding')
-          : 'Lint: ' + countLabel(lintErrors.length, 'error');
-        if (ledger.length && lintErrors.length) {
-          summary += ' · ' + countLabel(lintErrors.length, 'lint error');
+        if (ledger.length) {
+          stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
+          stripNote.textContent = lintErrors.length
+            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
+            : 'Review these locked claims before relying on their approved state.';
+        } else {
+          stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
+          stripNote.textContent = lintErrors.length === 1
+            ? 'This issue blocks the next successful DossierX check.'
+            : 'These issues block the next successful DossierX check.';
         }
-        stripSummary.textContent = summary; // textContent — never markup
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        if (ledger.length && !stripUserToggled) { stripExpanded = true; }
+        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
         setStripExpanded(stripExpanded);
+        positionStatusStrip();
         stripEl.hidden = false;
       }
 
@@ -1303,6 +1377,7 @@
         stripExpanded = !!expanded;
         if (stripBody) { stripBody.hidden = !stripExpanded; }
         if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
+        if (stripAction) { stripAction.textContent = stripExpanded ? 'Hide issues' : 'Show issues'; }
         if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
       }
 
