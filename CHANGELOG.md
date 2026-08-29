@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.5] - 2026-08-30
+
+### Added
+
+- The generated System Record viewer can collapse its desktop module navigation and active-facet
+  table of contents into narrow recovery rails. Each facet also has one control to collapse or
+  expand all of its claims, while individual claim disclosures remain available and keep the
+  bulk control in sync.
+
+### Changed
+
+- Live lint and lock-ledger issues now appear inline below the affected module header instead of
+  floating over the viewer. The notice follows the System Record typography and disclosure
+  patterns, lists only findings for the active facet, hides in every unrelated facet or module,
+  and restores the same findings when the reader returns. Static generated viewers remain free of
+  live status data. These viewer changes alter rendered output for unchanged claims; run
+  `dossierx check` after upgrading to regenerate an existing viewer.
+
 ## [0.7.4] - 2026-08-29
 
 ### Fixed
