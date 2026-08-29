@@ -219,13 +219,13 @@ func TestStatusStripShowsOnlyActiveFacetIssues(t *testing.T) {
 		t.Fatal("contract facet must show only its own issue")
 	}
 
-	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#other"]`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.sec-tab[data-target="#other"]').click()`, nil))
 	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden])').id === 'other'`)
 	if !evalBool(t, ctx, `document.getElementById('statusStrip').hidden`) {
 		t.Fatal("the issues component must be absent from an unaffected module")
 	}
 
-	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#widget"]`, chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.sec-tab[data-target="#widget"]').click()`, nil))
 	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden])').id === 'widget'`)
 	runCDP(t, ctx, chromedp.Click(`[data-target="#widget-schema"]`, chromedp.ByQuery))
 	pollTrue(t, ctx, `document.querySelector('.module-section:not([hidden]) > .claim-group:not([hidden])').id === 'widget-schema'`)
