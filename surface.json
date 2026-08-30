@@ -81,7 +81,7 @@
     },
     {
       "path": "claim lock",
-      "short": "Lock a draft claim (refused if lint fails); --reason records the human approval it executes",
+      "short": "Lock one or more draft claims (refused if lint fails); --reason records the human approval it executes",
       "flags": [
         "--config",
         "--dry-run",
@@ -493,7 +493,7 @@
   ],
   "render_fingerprint": "sha256:b532dae1ce5f2a1ec9d10280f8f10f28c802abcc5bcd4bd76cc16ce46f69485a",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:e0abf5c7464a480737638bfccb1b80f0dde780070a4696019dc44f78e9e23383",
+    "cmd/dossierx": "sha256:a26288ab4d654fd0b9195f4e84b045bd7e4fb5f03bfaefc4f000b696147c4239",
     "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
     "internal/catalog": "sha256:78c8667bfb35c4fc35ec786814028978eac107fde4f06aade4541ce8baee4380",
     "internal/check": "sha256:202896d4373112a54cb8e14542d70101a11ca5f2c1d989bf83039228a881a3d6",
@@ -573,6 +573,17 @@
       "wrong_state": 2
     },
     "payloads": {
+      "batchLockData": [
+        "claim_ids",
+        "locked",
+        "reason"
+      ],
+      "batchLockRefusedData": [
+        "lint_errors",
+        "lint_findings",
+        "offenders",
+        "requested_ids"
+      ],
       "buildOrderLockData": [
         "locked_at",
         "module",

@@ -2090,16 +2090,27 @@ func newLockCmd() *cobra.Command {
 	var reason string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "lock <id>",
-		Short: "Lock a draft claim (refused if lint fails); --reason records the human approval it executes",
-		Args:  cobra.ExactArgs(1),
+		Use:   "lock <id> [id...]",
+		Short: "Lock one or more draft claims (refused if lint fails); --reason records the human approval it executes",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
-			id := args[0]
-
 			// --dry-run answers a question; it never writes and never takes a
 			// sentinel, so it runs entirely off a plain read here, before the
-			// write path below is entered at all.
+			// write path below is entered at all. It previews exactly ONE
+			// claim's gates (lockDryRun's shape is one transition, one set of
+			// preconditions) — a batch's whole point is that its gates are not
+			// the sum of N single-claim previews (see runBatchLock's WHY
+			// comment), so a multi-id preview would either lie by reusing the
+			// single-claim shape or require a second, batch-shaped preview
+			// format for a flag no caller in this release's Part 2 workflow
+			// actually needs. Refusing cleanly is honest; approximating is not.
+			if dryRun && len(args) > 1 {
+				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
+					"lock: --dry-run previews exactly one claim at a time; run it once per id (dossierx claim lock <id> --dry-run), then run the batch itself without --dry-run")
+			}
+
 			if dryRun {
+				id := args[0]
 				cfg, claims, err := loadConfigAndClaims()
 				if err != nil {
 					return cmdResult{}, err
@@ -2122,6 +2133,18 @@ func newLockCmd() *cobra.Command {
 			if err := requireReason("claim lock", reason); err != nil {
 				return cmdResult{}, err
 			}
+
+			// TWO OR MORE IDS is the batch path — a genuinely different write,
+			// not this function looped. See runBatchLock's WHY comment for the
+			// deadlock it exists to break. Single-id behavior below this branch
+			// is completely untouched by its existence: the branch is taken
+			// before any of the single-lock code runs, so len(args) == 1 always
+			// falls straight through to exactly the code that ran before batch
+			// locking existed.
+			if len(args) > 1 {
+				return runBatchLock(cmd, args, reason)
+			}
+			id := args[0]
 
 			cfg, err := loadConfig()
 			if err != nil {
