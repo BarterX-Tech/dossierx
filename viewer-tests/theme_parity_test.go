@@ -1015,7 +1015,8 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		pollTrue(t, ctx, `document.readyState === 'complete'`)
 		waitVisible(t, ctx, ".content-area")
 		emulateColorScheme(t, ctx, "light")
-		// FREEZE THE ANIMATIONS, identically in both documents, and say so.
+		// FREEZE THE ANIMATIONS AND HIDE THE FACET TOC, identically in both
+		// documents, and say what that costs.
 		//
 		// The sidebar's panel toggles transition their colour, so two captures
 		// taken at different points in that transition differ by a unit or two
@@ -1029,9 +1030,22 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		// seen — and that bound is the price of the comparison being
 		// deterministic at all. The computed-style probes above are unaffected;
 		// they read final values, which is what a transition transitions TO.
+		//
+		// The facet TOC is hidden for a second and worse reason: the viewer
+		// rebuilds it continuously (system-record.js replaces its whole list on
+		// every scroll-spy pass, measured at ~120 rebuilds a second on a large
+		// corpus with the page idle), so the 28x28 box its panel toggle occupies
+		// is not the same two frames running. Two captures of the SAME document
+		// differ there. That region is therefore OUTSIDE the pixel comparison,
+		// and the exclusion is deliberate rather than a tolerance: probes 22, 23
+		// and 24 read .facet-toc, .facet-toc__select and .facet-toc__item
+		// through computed style, which is not affected by how often the nodes
+		// are recreated.
 		evalVoid(t, ctx, `(function(){
 			var st = document.createElement('style');
-			st.textContent = '*,*::before,*::after{transition:none !important;animation:none !important;caret-color:transparent !important;}';
+			st.textContent =
+				'*,*::before,*::after{transition:none !important;animation:none !important;caret-color:transparent !important;}' +
+				'.facet-toc{visibility:hidden !important;}';
 			document.head.appendChild(st);
 		})()`)
 		pollTrue(t, ctx, `document.getAnimations().every(function(a){return a.playState !== 'running';})`)
