@@ -2,44 +2,38 @@
    a project's own template_overrides CSS; a project can restyle any of
    this by overriding component partials via viewer.template_overrides.
 
-   Token names below (--accent, --accent-bg, --ink, --muted, --faint, --paper,
-   --card-bg, --border, --link, --warn, --warn-bg, --font-sans, --font-mono,
-   --radius) are the engine's fixed viewer.theme allowlist (see
-   internal/config/config.go). Defaults here mirror the reference docs
-   palette this engine's authoring project uses, so an unconfigured project
-   still renders with a sane look;
-   render.go injects a second <style> block after this one (and after the
-   dark-mode media query below) so any project-supplied theme token wins in
-   both OS color modes without disturbing tokens the project left unset. */
+   COLOUR MECHANISM, in cascade order. shell.html emits three <style> blocks:
+   graph.css, then this file, then the generated theme block.
 
-:root {
-  color-scheme: light dark;
-  --accent: #3fb950;
-  --accent-bg: rgba(63, 185, 80, .14);
-  --ink: #e6ece8;
-  --muted: #9aa6a0;
-  --faint: #6f7a74;
-  --paper: #0f1311;
-  --card-bg: #1b211d;
-  --border: #2a322c;
-  --link: #4c9bf5;
-  --warn: #e0623f;
-  --warn-bg: rgba(224, 98, 63, .15);
-  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius: 12px;
-}
+   1. One unconditional `:root` holds the palette, and it is LIGHT-FIRST:
+      every value in it is both the light-OS value and the printed value.
+      There is exactly one such block in this file.
+   2. `@media screen and (prefers-color-scheme: dark)` re-points the handful
+      of tokens that invert. The `screen and` prefix is load-bearing: it is
+      what keeps a dark-mode OS from dragging dark ink onto paper.
+   3. The single `@media print` block is the LAST block in this file. It has
+      to be last, because it overrides screen layout rules at equal
+      specificity (`.content-area { padding: 0 }` beats the padded screen
+      rule only on source order), and it pins `color-scheme: light`.
+   4. internal/render appends the project's theme as the third <style>: an
+      optional @font-face run, a shared `:root`, then
+      `@media (prefers-color-scheme: light), print` and
+      `@media screen and (prefers-color-scheme: dark)`. The project's light
+      block deliberately also matches `print` and its dark block deliberately
+      cannot, so a token a project sets only under `dark:` prints the engine's
+      light value rather than its dark one.
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --paper: #f3f6f4;
-    --card-bg: #fafcfb;
-    --border: #e2e8e4;
-    --ink: #1d2622;
-    --muted: #5d6862;
-    --faint: #8a948e;
-  }
-}
+   The names a project may set are the 28-entry allowlist in
+   internal/config/config.go (ThemeTokenAllowlist). Every consumer in this
+   file spells the token as `var(--token, <the literal that was there before
+   the allowlist grew>)`, so an unset token renders byte-identically to the
+   pre-theme viewer. internal/render/theme_tokens_test.go fails if an
+   allowlisted token has no consumer in this file or in graph.css, and pins
+   the structural invariants listed above.
+
+   graph.css keeps the OPPOSITE convention for its own --dxg-* ramp (dark
+   base, light override) and says so in its own header; the two files differ
+   deliberately. */
 
 * {
   box-sizing: border-box;
@@ -83,14 +77,11 @@ body {
   background: var(--card-bg);
 }
 
-/* status-draft/status-locked map to the pill family below: draft -> amber
-   (engine's own draft concept, not part of the fixed color allowlist),
-   locked -> accent, review_pending -> warn. */
-.status-draft {
-  color: #d6a128;
-  background: rgba(214, 161, 40, .16);
-}
-
+/* status-draft/status-locked map to the pill family below: locked -> accent,
+   review_pending -> warn. draft -> amber is the engine's own concept and not
+   part of the fixed color allowlist; its one live rule sits with the pills in
+   the System Record layer further down (`.pill.pv, .status-draft`), which is
+   why there is no .status-draft rule here. */
 .status-locked {
   color: var(--accent);
   background: var(--accent-bg);
@@ -1005,9 +996,10 @@ th {
   border-radius: 4px;
 }
 
+/* Colour and background are NOT set here: `.pill.pw, .claim-review-pending`
+   in the System Record layer sets both at equal specificity and later in the
+   file, so anything declared here would be dead. */
 .claim-review-pending {
-  color: var(--warn);
-  background: var(--warn-bg);
   padding: 0.1rem 0.4rem;
   border-radius: 4px;
   font-weight: 600;
@@ -1054,9 +1046,9 @@ th {
    which is why a `.claim-comments { list-style: none; }` rule lived here —
    it is deleted in v0.4.1 along with that <li>, since the slot is a <span>
    and never carried a marker. Every color below is one of the inverting
-   theme tokens declared in :root above (and re-pointed in the
-   prefers-color-scheme: light block), so the whole surface tracks the OS
-   theme with no separate dark rule — the one genuinely per-mode value, the
+   theme tokens (declared in this file's single :root and re-pointed in the
+   prefers-color-scheme: dark query beside it), so the whole surface tracks
+   the OS theme with no separate dark rule — the one genuinely per-mode value, the
    panel's drop shadow, gets its light value in the media query at the end of
    this block. claim-card--commented is a distinct accent marker,
    deliberately NOT the --warn boundary family. */
@@ -1232,8 +1224,10 @@ th {
   }
 }
 
-/* The panel shadow is the one genuinely per-mode value here: softer on a
-   light background than the deeper shadow the dark base above uses. */
+/* The panel shadow is the one genuinely per-mode value here: the
+   .comments-panel rule above carries the dark value and this query softens it
+   for a light OS. The palette itself is light-first (see this file's single
+   :root); this declaration is the exception, not the convention. */
 @media (prefers-color-scheme: light) {
   .comments-panel {
     box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
@@ -1247,10 +1241,12 @@ th {
    half, so they are scoped to the <= 860px bottom-sheet breakpoint (in the media
    query below) — above it the desktop rail shows neither. They stay deliberately
    distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
-   closes the other. Colours are the inverting theme tokens from :root; the few
-   genuinely per-mode values (shadows, backdrop dim) get their light values in the
-   media query at the end of this block, matching the dark-base / light-override
-   convention the rest of this stylesheet uses. */
+   closes the other. Colours are the inverting theme tokens from this file's
+   single :root; the per-mode values that remain (the backdrop dim and the
+   toast shadow) get their light values in the media query at the end of this
+   block. The rail's own shadow is deliberately NOT per-mode: the
+   `.comments-rail` rule in the System Record layer further down sets one
+   shadow for both modes and wins on source order. */
 
 /* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
    the media query below); it stays a plain open-state marker on desktop. Never
@@ -1282,7 +1278,6 @@ th {
   flex-direction: column;
   background: var(--paper);
   border-left: 1px solid var(--border);
-  box-shadow: -2px 0 18px rgba(0, 0, 0, .38);
 }
 
 .comments-rail[hidden] {
@@ -1701,7 +1696,6 @@ th {
     border-left: 0;
     border-top: 1px solid var(--border);
     border-radius: 14px 14px 0 0;
-    box-shadow: 0 -2px 18px rgba(0, 0, 0, .38);
   }
   .status-strip {
     margin-top: -4px;
@@ -1727,24 +1721,16 @@ th {
   }
 }
 
-/* Per-mode values: softer shadows and a lighter backdrop dim on a light OS. */
+/* Per-mode values: a lighter backdrop dim and a softer toast shadow on a
+   light OS. The rail is absent on purpose — its shadow is set once, for both
+   modes, by the later `.comments-rail` rule in the System Record layer. */
 @media (prefers-color-scheme: light) {
-  .comments-rail {
-    box-shadow: -2px 0 18px rgba(0, 0, 0, .14);
-  }
-
   .comments-overlay {
     background: rgba(0, 0, 0, .22);
   }
 
   .comments-toast {
     box-shadow: 0 4px 18px rgba(0, 0, 0, .14);
-  }
-}
-
-@media (prefers-color-scheme: light) and (max-width: 860px) {
-  .comments-rail {
-    box-shadow: 0 -2px 18px rgba(0, 0, 0, .14);
   }
 }
 
@@ -1795,10 +1781,9 @@ th {
   color: var(--accent);
 }
 
-.pill.pv {
-  background: rgba(214, 161, 40, .16);
-  color: #d6a128;
-}
+/* .pill.pv is NOT declared here: `.pill.pv, .status-draft` in the System
+   Record layer sets its background and colour at equal specificity and later
+   in the file, so anything declared here would be dead. */
 
 .pill.pw {
   background: var(--warn-bg);
@@ -1882,8 +1867,9 @@ th {
    internal/lint/raw_html_scope.go's img allowlist entry). Styling ported
    from docs/tabs/llm-internals.html's inline img style for its health-
    state-machine diagram: a plain white card so an SVG/PNG diagram (often
-   drawn on a transparent or light background) reads consistently in both
-   light and dark viewer themes, same as it did in docs/. */
+   drawn on a transparent or light background) reads consistently. The card
+   is deliberately mode-INVARIANT — it does not follow the OS appearance,
+   because the artwork it frames usually cannot — same as it did in docs/. */
 .mockup-diagram {
   display: block;
   max-width: 100%;
@@ -2230,7 +2216,6 @@ body.shell-body {
 .content-area {
   flex: 1;
   min-width: 0;
-  max-width: 880px;
   margin: 0 auto;
 }
 
@@ -2412,7 +2397,6 @@ body.shell-body {
     padding: 6px 10px;
     font: 600 12px var(--font-sans);
     cursor: pointer;
-    box-shadow: 0 3px 12px rgba(0, 0, 0, .18);
   }
 
   .nav-overlay {
@@ -2476,7 +2460,7 @@ body.shell-body {
 }
 
 /* ---- print -------------------------------------------------------------
-   The first and only @media print block in this stylesheet. It exists for
+   One of the three @media print blocks in this stylesheet today. It exists for
    one reason (Q4): paper has no disclosure widget, so a printed viewer that
    honoured the collapsed <details> would silently drop every claim's
    governed_by/rests_on/implemented-in footer — the exact facts a reviewer
