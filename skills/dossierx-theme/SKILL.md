@@ -190,9 +190,14 @@ viewer:
 
 Work through this in order and report step 4's numbers back to the human.
 
-1. Run `dossierx check`. A theme that does not resolve fails here — `invalid_config`,
-   `stopped_at: render` — and `check --validate` and `check --staged` refuse the same input, so a
-   hook or CI run is not a way to skip the theme rules.
+1. Run `dossierx check`. A theme that does not resolve fails here, always as `invalid_config`, and
+   `stopped_at` says which half of the rules caught it: **`stopped_at: config`** for anything
+   readable from the config text alone (an unknown token, a value the grammar refuses, a duplicate
+   key, an `extends` pointing outside the project), **`stopped_at: render`** for anything that
+   needed a file read (an unknown `preset`, a missing or unstaged `extends`, a font whose bytes are
+   not its extension, a family nothing names, the 2 MiB cap). `check --validate` and `check
+   --staged` report the identical code and step, so a hook or CI run is not a way to skip the theme
+   rules.
 2. Open the rendered `viewer/index.html` and confirm the colour you set is the colour you see. The
    engine's sheet declares defaults for all twenty-eight tokens, so a *typo'd value* is a load
    error but a *right value in the wrong layer* renders as the untouched default.
@@ -228,8 +233,9 @@ itself, and an override `shell.html` that drops `{{.ThemeCSS}}` gets no theme an
 
 `viewer.theme` grew per-mode keys, presets, `extends` and `fonts` in this release. A binary that
 predates it **fails the whole config load** rather than ignoring the new keys, at
-`stopped_at: config`, `invalid_config`. Two shapes. Both are fragments the `message` **contains** —
-it is prefixed with `load config: config: <path>: ` in each case, so match on the fragment:
+`stopped_at: config`, `invalid_config`. Two shapes. Both are fragments the `message` **contains**,
+never the whole of it: each is prefixed `load config: config: `, and the second also carries
+`parse <path>: yaml: unmarshal errors:` and a `line N:` preamble. Match on the fragment.
 
 ```
 viewer.theme: unknown theme token "preset" (must be one of accent, accent-bg, ink, muted, faint,

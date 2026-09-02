@@ -677,11 +677,14 @@ func TestThemeSkillVerificationProcedureReplays(t *testing.T) {
 		t.Fatalf("write themed config: %v", err)
 	}
 
-	// Step 1 — "Run `dossierx check`."
+	// Step 1 — "Run `dossierx check`." Two halves: the skill's own theme shape
+	// must PASS, and the two failure shapes step 1 promises must be the two the
+	// binary actually produces.
 	requireStepMentions(t, steps[1], "dossierx check")
 	if _, stderr, code := run(t, root, "check"); code != 0 {
 		t.Fatalf("step 1: the skill's own theme shape does not pass check: exit %d\n%s", code, stderr)
 	}
+	replayStep1FailureShapes(t, steps[1])
 
 	// Step 2 — "Open the rendered viewer/index.html". Not opened; asserted to
 	// exist and to carry what the theme set.
@@ -758,4 +761,101 @@ func readFileOrFail(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(raw)
+}
+
+// replayStep1FailureShapes executes step 1's claim about how a broken theme is
+// reported, against two scratch projects chosen to fall on either side of the
+// split the step describes.
+//
+// The step used to name only one shape (stopped_at: render) and the binary has
+// two, because the theme rules run in two phases and which one catches a defect
+// is visible to the caller. A grammar or allowlist failure is decided while the
+// config is being DECODED and never reaches the render step; everything that
+// needs a FILE — the preset registry, the extends file, a font's bytes — is
+// resolved later and reports render. An agent told to expect one shape and
+// handed the other cannot tell the failure the skill described from an
+// unrelated one.
+//
+// The expected values are PARSED OUT OF THE STEP rather than restated here.
+// That is the discipline the rest of this file uses and it is what makes this a
+// replay: rewriting the step to promise something else moves what is asserted,
+// and deleting the promise fails loudly instead of leaving a hardcoded pair
+// behind to keep passing over a document that no longer says it.
+func replayStep1FailureShapes(t *testing.T, step string) {
+	t.Helper()
+
+	promised := map[string]bool{}
+	for _, m := range regexp.MustCompile("`stopped_at: ([a-z]+)`").FindAllStringSubmatch(step, -1) {
+		promised[m[1]] = true
+	}
+	if !promised["config"] || !promised["render"] {
+		t.Fatalf("verification step 1 no longer promises both `stopped_at: config` and `stopped_at: render`; the two failure shapes this replay executes have lost their written source:\n%s", step)
+	}
+	if !strings.Contains(step, "invalid_config") {
+		t.Fatalf("verification step 1 no longer names the error code it promises:\n%s", step)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		theme string
+		// setup writes anything the theme block refers to. Nil means the defect
+		// is in the config text alone, which is the whole point of the first
+		// case: nothing on disk can be blamed for it.
+		setup     func(t *testing.T, root string)
+		stoppedAt string
+	}{
+		{
+			name:      "an unknown token, caught while the config is decoded",
+			theme:     "viewer:\n  theme:\n    accnt: '#123456'\n",
+			stoppedAt: "config",
+		},
+		{
+			name:  "a font whose bytes are not its extension, caught when the file is read",
+			theme: "viewer:\n  theme:\n    font-sans: '\"Probe Face\", sans-serif'\n    fonts:\n      - family: Probe Face\n        src: fonts/probe.woff2\n",
+			setup: func(t *testing.T, root string) {
+				t.Helper()
+				if err := os.MkdirAll(filepath.Join(root, "fonts"), 0o755); err != nil {
+					t.Fatalf("mkdir fonts: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(root, "fonts", "probe.woff2"), []byte("NOPE-not-a-woff2"), 0o644); err != nil {
+					t.Fatalf("write bad font: %v", err)
+				}
+			},
+			stoppedAt: "render",
+		},
+	} {
+		t.Run("step1/"+tc.name, func(t *testing.T) {
+			root := newThemeSkillSkeleton(t)
+			if tc.setup != nil {
+				tc.setup(t, root)
+			}
+			cfgPath := filepath.Join(root, "project.config.yaml")
+			if err := os.WriteFile(cfgPath, []byte(readFileOrFail(t, cfgPath)+tc.theme), 0o644); err != nil {
+				t.Fatalf("write themed config: %v", err)
+			}
+
+			stdout, stderr, exit := run(t, root, "--format", "json", "check")
+			if exit == 0 {
+				t.Fatalf("step 1 promises this is a failure and it exited 0\nstdout:\n%s", stdout)
+			}
+			var env struct {
+				Error *struct {
+					Code string `json:"code"`
+				} `json:"error"`
+				StoppedAt string `json:"stopped_at"`
+			}
+			if err := json.Unmarshal([]byte(stdout), &env); err != nil {
+				t.Fatalf("envelope: %v\nstdout:\n%s\nstderr:\n%s", err, stdout, stderr)
+			}
+			if env.Error == nil || env.Error.Code != "invalid_config" {
+				t.Errorf("step 1 promises invalid_config; got %+v", env.Error)
+			}
+			if env.StoppedAt != tc.stoppedAt {
+				t.Errorf("step 1 promises stopped_at %q for this shape; got %q — a reader told to expect one step and handed the other cannot tell this failure from an unrelated one", tc.stoppedAt, env.StoppedAt)
+			}
+			if !promised[env.StoppedAt] {
+				t.Errorf("the binary reports stopped_at %q, which verification step 1 does not mention at all", env.StoppedAt)
+			}
+		})
+	}
 }

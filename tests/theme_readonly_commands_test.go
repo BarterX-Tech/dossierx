@@ -59,6 +59,13 @@ func newBadPresetProject(t *testing.T) string {
 	return newThemedProject(t, "badpreset", "viewer:\n  theme:\n    preset: clode\n")
 }
 
+// newBadTokenProject misspells a token name, which the decoder refuses without
+// reading anything.
+func newBadTokenProject(t *testing.T) string {
+	t.Helper()
+	return newThemedProject(t, "badtoken", "viewer:\n  theme:\n    accnt: '#123456'\n")
+}
+
 // newBadFontProject builds a project that is otherwise clean and whose only
 // fault is one font file whose bytes do not match its extension.
 func newBadFontProject(t *testing.T) string {
@@ -129,7 +136,20 @@ func TestBrokenThemeRefusesTheSameWayInAllThreeCheckModes(t *testing.T) {
 	for _, fixture := range []struct {
 		name  string
 		build func(*testing.T) string
+		// stoppedAt is which of the theme rules' two phases catches this
+		// fixture. It is per-fixture and not a constant because the split is
+		// observable and the theme skill documents it: a defect readable from
+		// the config text alone is caught while the config is decoded and never
+		// reaches the render step, where anything needing a FILE — the preset
+		// registry, an extends file, a font's bytes — is resolved later. What
+		// the three MODES must agree on is the code and the step for a given
+		// input, which is what this table asserts.
+		stoppedAt string
 	}{
+		// The config-text half. No file is read, so this is the fixture that
+		// would break if a mode started resolving the theme at a different
+		// point in its pipeline.
+		{"an unknown token, caught while the config is decoded", newBadTokenProject, "config"},
 		// Two shapes of the same defect class, and the second is here to pin a
 		// decision rather than a mechanism: a preset this binary does not carry
 		// reports invalid_config from every check mode, NOT unknown_preset.
@@ -137,16 +157,16 @@ func TestBrokenThemeRefusesTheSameWayInAllThreeCheckModes(t *testing.T) {
 		// argument, which loads no project and whose recovery is "run theme
 		// list", where this one's recovery is "edit the config" — the same
 		// recovery every other theme failure has.
-		{"a font whose bytes are not its extension", newBadFontProject},
-		{"a preset this binary does not carry", newBadPresetProject},
+		{"a font whose bytes are not its extension", newBadFontProject, "render"},
+		{"a preset this binary does not carry", newBadPresetProject, "render"},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
-			runBrokenThemeModes(t, fixture.build(t))
+			runBrokenThemeModes(t, fixture.build(t), fixture.stoppedAt)
 		})
 	}
 }
 
-func runBrokenThemeModes(t *testing.T, root string) {
+func runBrokenThemeModes(t *testing.T, root, wantStoppedAt string) {
 	t.Helper()
 	gitInitAndAddAll(t, root)
 
@@ -164,12 +184,27 @@ func runBrokenThemeModes(t *testing.T, root string) {
 			if errCode != "invalid_config" {
 				t.Errorf("%s: error.code = %q, want %q — all three modes run one theme rule set and must name the same recovery", name, errCode, "invalid_config")
 			}
-			if stoppedAt != "render" {
-				t.Errorf("%s: stopped_at = %q, want %q", name, stoppedAt, "render")
+			if stoppedAt != wantStoppedAt {
+				t.Errorf("%s: stopped_at = %q, want %q — the three modes must agree on which phase caught a given defect, or an agent's expectation depends on which door it came through", name, stoppedAt, wantStoppedAt)
 			}
+			// data.theme_error exists only for the RENDER phase, and that is a
+			// property of where each failure happens rather than an
+			// inconsistency. A config-phase defect is refused by the config
+			// LOADER, before check.Run or check.Status is called at all, so
+			// there is no check.Result to carry the field and the envelope's
+			// data is whatever the loader failure produced. The message names
+			// the offending key in both cases, which is what the theme skill
+			// tells a reader to read.
 			themeErr, isString := data["theme_error"].(string)
-			if !isString || themeErr == "" {
-				t.Errorf("%s: data.theme_error is empty; the field that names the offending declaration is the only place a caller can read WHICH font failed", name)
+			switch wantStoppedAt {
+			case "render":
+				if !isString || themeErr == "" {
+					t.Errorf("%s: data.theme_error is empty on a render-phase refusal; the field naming the offending declaration is the only place a caller can read WHICH declaration failed", name)
+				}
+			default:
+				if isString && themeErr != "" {
+					t.Errorf("%s: data.theme_error is set (%q) on a %s-phase refusal, where the config never loaded; if the field is now populated here the skill and this comment both need re-deriving", name, themeErr, wantStoppedAt)
+				}
 			}
 			// Nothing was accepted, so the two counters must not report a face
 			// the run refused.
