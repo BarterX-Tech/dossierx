@@ -13,8 +13,12 @@
 
   Two guards in the test assert that this really is the pre-change render, and
   they are what makes a green parity run mean anything:
-    - it MUST contain "color-scheme: light;"  (the old unconditional pin)
-    - it MUST NOT contain "--code-bg"         (one of the fourteen new tokens)
+    - it MUST contain "color-scheme: light;" (the old unconditional pin)
+    - it MUST NOT contain the custom-property spelling of the code-bg token
+      (one of the fourteen the theme work added). That string is deliberately
+      not written out anywhere in this header: the guard is a substring search
+      over the whole file, so spelling it here would make the guard fire on
+      this comment instead of on the stylesheet.
 
   Regenerating it legitimately means checking out 01b70d0, building, copying
   the fixture to a scratch dir, deleting viewer/ and .catalog.json, running
