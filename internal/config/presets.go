@@ -44,15 +44,21 @@ var claudePreset = Theme{
 		"font-sans": `"Anthropic Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif`, // claude.css:112
 		"font-mono": `"Anthropic Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`,                                          // claude.css:114
 
-		// The source carries three radii (6/10/14px, claude.css:125-127)
-		// for controls, cards and sheets; this engine has one token, so
-		// the card radius rounded to the nearest even value is used.
-		"radius": "8px", // claude.css:126
+		// The source carries three radii for three purposes —
+		// --radius-sm 6px (claude.css:125), --radius-md 10px
+		// (claude.css:126), --radius-lg 14px (claude.css:127) — and this
+		// engine has a single --radius that rounds everything from a pill
+		// to a panel. 8px is an ENGINE CHOICE between the small and
+		// medium radii because the token's four consumers span both
+		// roles. No source line carries it and no arithmetic on a source
+		// value produces it.
+		"radius": "8px", // engine choice between --radius-sm 6px (claude.css:125) and --radius-md 10px (claude.css:126); no source line
 
-		// Mockup diagrams are drawn as light-mode artwork in both
-		// schemes (they are screenshots of a product, not chrome), so
-		// this one is deliberately mode-invariant.
-		"mockup-bg": "#ffffff",
+		// The source theme has no counterpart for this: mockup diagrams
+		// are light-drawn artwork (they depict a product, they are not
+		// chrome), so a dark ground would leave their own strokes
+		// unreadable. Deliberately mode-invariant.
+		"mockup-bg": "#ffffff", // engine choice; #fff in both modes so light-drawn mockups stay readable
 	},
 
 	Light: map[string]string{

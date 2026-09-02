@@ -143,14 +143,46 @@ func resolveThemePaths(t *Theme, dir string) error {
 
 // wrapThemeFileErr prefixes a file error with the config field it came from,
 // without repeating a path the error already names. os.ReadFile's *PathError
-// and the staged reader's "not staged" message both carry the path already;
-// a reader that returns a bare error does not, and there the absolute path is
-// added so the reader still learns which file failed.
+// carries the absolute path; the staged reader's "not staged" message carries
+// the repo-relative one. A reader that returns a bare error carries neither,
+// and there the absolute path is added so the reader still learns which file
+// failed.
 func wrapThemeFileErr(field, path string, err error) error {
-	if strings.Contains(err.Error(), filepath.Base(path)) {
+	if errNamesPath(err.Error(), path) {
 		return fmt.Errorf("%s: %w", field, err)
 	}
 	return fmt.Errorf("%s: %s: %w", field, path, err)
+}
+
+// errNamesPath reports whether msg already identifies path well enough that
+// repeating it would be noise: the whole absolute path, or a trailing run of
+// AT LEAST TWO of its components — which is the repo-relative form a staged
+// reader prints.
+//
+// A bare base name deliberately does not count. Two fonts named regular.woff2
+// in different directories are a normal thing for a project to have, and
+// suppressing the path on a base-name match would leave the author with an
+// error that names a file they have several of.
+func errNamesPath(msg, path string) bool {
+	if path == "" {
+		return false
+	}
+	if strings.Contains(msg, path) {
+		return true
+	}
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	// i stops at 1, and the shortest suffix tried has two components, so
+	// the base name alone is never matched on its own.
+	for i := len(parts) - 2; i >= 1; i-- {
+		suffix := strings.Join(parts[i:], "/")
+		if strings.Contains(msg, suffix) {
+			return true
+		}
+		if native := filepath.FromSlash(suffix); native != suffix && strings.Contains(msg, native) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateTheme applies every theme rule that needs to look at a file: the

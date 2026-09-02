@@ -3,8 +3,10 @@ package config
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -1411,4 +1413,190 @@ func TestThemeFileErr_DoesNotRepeatThePath(t *testing.T) {
 			t.Errorf("message = %q names the absolute path %d times, want 1", err, n)
 		}
 	})
+}
+
+// TestPresets_EveryValueIsSourcedOrMarkedEngineChoice is the guard behind the
+// F5/D1 round: a preset's job is to be auditable against the theme it was
+// taken from, and a value whose provenance is not written down cannot be
+// checked by anyone. Every value line must therefore either cite a source
+// line or say in as many words that it is an engine choice.
+//
+// It reads presets.go as text rather than the Theme value, because the claim
+// under test is about the comments, and the comments are exactly what a test
+// over the parsed value would not see.
+func TestPresets_EveryValueIsSourcedOrMarkedEngineChoice(t *testing.T) {
+	raw, err := os.ReadFile("presets.go")
+	if err != nil {
+		t.Fatalf("read presets.go: %v", err)
+	}
+	citation := regexp.MustCompile(`claude(-dark)?\.css:\d+`)
+	// A value line is one that assigns a quoted value to a quoted token
+	// key, which is every line inside the three maps and nothing else.
+	valueLine := regexp.MustCompile("^\\s*\"[a-z-]+\":\\s*[\"`]")
+
+	var found, bad int
+	for i, line := range strings.Split(string(raw), "\n") {
+		if !valueLine.MatchString(line) {
+			continue
+		}
+		found++
+		if citation.MatchString(line) || strings.Contains(line, "engine choice") {
+			continue
+		}
+		bad++
+		t.Errorf("presets.go:%d has no source citation and is not marked an engine choice:\n\t%s",
+			i+1, strings.TrimSpace(line))
+	}
+
+	// Vacuity guard. A regex that matched nothing would report zero
+	// unsourced values and read as a pass over no assertions, which is
+	// the failure mode this repo treats as a failure. The claude preset
+	// alone covers the whole 28-token allowlist across three maps, so the
+	// floor is 28 even before a second preset exists.
+	if found < 28 {
+		t.Fatalf("matched only %d value lines in presets.go, want at least 28 — "+
+			"the pattern has stopped matching and this test is proving nothing", found)
+	}
+	if bad == 0 {
+		t.Logf("checked %d preset value lines, all sourced or marked", found)
+	}
+}
+
+// TestNoConfigLiteralOutsideTests pins the assumption that lets
+// escapesDirThroughSymlink treat an empty Config.dir as "no anchor, skip the
+// containment check": a Config with no directory can only come from an
+// in-process literal, and nothing shipped builds one. Every Config the binary
+// ever sees comes from DecodeConfig, which has already applied the lexical
+// half of the check.
+//
+// If that stops being true, a future caller would silently lose font and
+// theme-file containment. This test fails at the moment the first such
+// literal is written, rather than at the moment someone notices a font from
+// outside the project embedded in a published viewer.
+func TestNoConfigLiteralOutsideTests(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "go.mod")); err != nil {
+		t.Fatalf("expected the module root at %s: %v", root, err)
+	}
+
+	// `config.Config{` from outside this package, `Config{` from inside
+	// it. The negative lookbehind Go's regexp lacks is done by hand below.
+	external := regexp.MustCompile(`\bconfig\.Config\{`)
+	internal := regexp.MustCompile(`(^|[^.\w])Config\{`)
+
+	var scanned int
+	var offenders []string
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", "testdata", "node_modules", "vendor", "dist", "site":
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		body, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		scanned++
+		inConfigPkg := filepath.Dir(path) == filepath.Join(root, "internal", "config")
+		for i, line := range strings.Split(string(body), "\n") {
+			code := line
+			if idx := strings.Index(code, "//"); idx >= 0 {
+				code = code[:idx]
+			}
+			hit := external.MatchString(code)
+			if inConfigPkg {
+				hit = hit || internal.MatchString(code)
+			}
+			if hit {
+				rel, relErr := filepath.Rel(root, path)
+				if relErr != nil {
+					rel = path
+				}
+				offenders = append(offenders, fmt.Sprintf("%s:%d: %s", rel, i+1, strings.TrimSpace(line)))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+
+	// Vacuity guard: a walk that found no files would report no offenders
+	// and read as a pass.
+	if scanned < 50 {
+		t.Fatalf("scanned only %d non-test .go files under %s, want at least 50 — "+
+			"the walk is not reaching the source and this test is proving nothing", scanned, root)
+	}
+	if len(offenders) > 0 {
+		t.Errorf("a Config is being constructed as a literal outside a test, so its dir is empty "+
+			"and theme path containment is silently skipped for it.\n"+
+			"Either build it through DecodeConfig, or make escapesDirThroughSymlink refuse "+
+			"absolute theme paths when dir == \"\".\nFound:\n\t%s", strings.Join(offenders, "\n\t"))
+	}
+}
+
+// TestThemeFileErr_SameNamedFilesInDifferentDirsKeepTheirPaths is D3: the
+// suppression must key on enough of the path to identify the file. Two fonts
+// called regular.woff2 in different directories are ordinary, and an error
+// that named only the base name would not tell the author which one failed.
+func TestThemeFileErr_SameNamedFilesInDifferentDirsKeepTheirPaths(t *testing.T) {
+	dir := t.TempDir()
+	for _, sub := range []string{"sans", "mono"} {
+		writeFontFixture(t, filepath.Join(dir, sub, "regular.woff2"), woff2Signature)
+	}
+	cfg, err := loadTheme(t, dir, "    font-sans: 'Sans, sans-serif'\n    font-mono: 'Mono, monospace'\n    fonts:\n"+
+		"      - {family: Sans, src: sans/regular.woff2}\n"+
+		"      - {family: Mono, src: mono/regular.woff2}\n")
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	// A reader that names only the base name must NOT suppress the path:
+	// "regular.woff2" alone does not say which of the two failed.
+	_, err = ResolveTheme(cfg, func(string) ([]byte, error) {
+		return nil, errors.New("cannot read regular.woff2")
+	})
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	want := filepath.Join(dir, "sans", "regular.woff2")
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %v\nwant it to keep the full path %q; a base-name match would have hidden it", err, want)
+	}
+}
+
+func TestErrNamesPath(t *testing.T) {
+	abs := filepath.Join(string(filepath.Separator)+"tmp", "proj", "themes", "house.yaml")
+	cases := []struct {
+		name string
+		msg  string
+		want bool
+	}{
+		{"absolute path", "open " + abs + ": no such file or directory", true},
+		{"repo-relative path, two components", `"themes/house.yaml" is not staged (git add it)`, true},
+		{"repo-relative path, three components", `"proj/themes/house.yaml" is not staged`, true},
+		{"base name only", "cannot read house.yaml", false},
+		{"no path at all", "permission denied", false},
+		{"a different file entirely", "open /tmp/other/thing.yaml: no such file", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := errNamesPath(tc.msg, abs); got != tc.want {
+				t.Errorf("errNamesPath(%q, %q) = %v, want %v", tc.msg, abs, got, tc.want)
+			}
+		})
+	}
+	if errNamesPath("anything", "") {
+		t.Error(`errNamesPath with an empty path must be false`)
+	}
 }
