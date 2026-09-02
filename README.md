@@ -325,11 +325,15 @@ Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`
 | `source_dirs` | []string | no | Directories (relative to the config file) scanned for `dossierx-claim: <id>` source comments — the code side of claim-to-code linking. Unset means "do not scan." |
 | `mockup_modules` | []string | no | The allowlist of modules permitted to author `raw_html` (on any layout, including `layout: mockup`). Every entry must also appear in `modules`. Unset/empty means no module may. |
 | `viewer.template_overrides` | string | no | A directory of partial-template overrides, resolved relative to the config file. Missing individual partials fall back to engine defaults; a configured-but-missing directory is a hard error. |
-| `viewer.theme` | map[string]string | no | CSS custom-property overrides. Keys must be drawn from the fixed allowlist below (without the leading `--`); values are validated defensively before being injected into a generated stylesheet. |
+| `viewer.theme` | mapping (see FORMAT.md) | no | An optional preset, an optional theme file to extend, and CSS custom-property token overrides. Token names must be drawn from the fixed allowlist below (without the leading `--`); values are validated defensively before being injected into a generated stylesheet. |
 
-`viewer.theme`'s 14 allowed keys: `accent`, `accent-bg`, `ink`, `muted`, `faint`, `paper`, `card-bg`, `border`, `link`, `warn`, `warn-bg`, `font-sans`, `font-mono`, `radius`.
+`viewer.theme`'s 28 allowed token names: `accent`, `accent-bg`, `ink`, `muted`, `faint`, `paper`, `card-bg`, `border`, `link`, `warn`, `warn-bg`, `font-sans`, `font-mono`, `radius`, `code-inline-bg`, `code-bg`, `table-head-bg`, `image-bg`, `hover-bg`, `border-strong`, `shadow`, `shadow-strong`, `shadow-cast`, `scrim`, `selection-bg`, `status-draft`, `status-draft-bg`, `mockup-bg`.
 
-Config loading is strict: an unknown top-level or `viewer.theme` field is a hard error, not silently ignored.
+Config loading is strict: an unknown top-level field, or a `viewer.theme` key that is none of the five structural keys (`preset`, `extends`, `light`, `dark`, `fonts`) and none of the 28 tokens above, is a hard error, not silently ignored. A `project.config.yaml` written for the per-mode/preset/font shape of `viewer.theme` fails to load on a DossierX binary built before this release — see "Theming the viewer" below.
+
+### Theming the viewer
+
+`viewer.theme` restyles the shipped viewer's colors, fonts, and corner radius: a preset, a theme file (`extends`), inline token values (flat or split `light:`/`dark:`), and the project's own local font files. [`docs/theming.md`](docs/theming.md) is a worked, copy-pasteable guide — start there. [`FORMAT.md`](FORMAT.md#viewertheme) has the full token table, the validation rules, and how `check`/`--validate`/`--staged`/`serve` apply them. The embedded `dossierx-theme` skill (below) teaches an agent the same ground.
 
 ## The skills
 

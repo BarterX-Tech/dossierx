@@ -1356,7 +1356,9 @@ viewer:
                                     # to engine defaults per-file; a
                                     # configured-and-missing directory itself
                                     # is a hard load-time error.
-  theme:                          # optional CSS token overrides; see below.
+  theme:                          # optional; a preset, a theme file, and/or
+                                    # inline CSS token overrides — see below.
+    preset: claude
     accent: "#3fb950"
 ```
 
@@ -1429,67 +1431,189 @@ the engine does not infer one from directory naming.
 
 ### `viewer.theme`
 
-`viewer.theme` maps a fixed set of CSS custom-property token names (without
-the leading `--`) to their values, letting a project restyle the shipped
-viewer's colors, fonts, and corner radius without writing any CSS or
-touching `viewer.template_overrides`.
+`viewer.theme` restyles the shipped viewer's colors, fonts, and corner
+radius without writing any CSS and without touching
+`viewer.template_overrides`. It is a mapping, not a flat list of keys, and
+it decodes with its own hand-written walker (`internal/config/theme.go`) so
+that a mistake gets a message naming the line, not a generic YAML error.
 
-The allowlist is intentionally fixed and engine-owned — an unrecognized key
-is a load-time error (typo protection), not a silently-ignored field:
-
+```yaml
+viewer:
+  theme:                                # every key here is optional
+    preset: claude                      # a built-in palette; see below
+    extends: themes/house.yaml          # a theme file layered on the preset
+    font-sans: '"Inter", -apple-system, sans-serif'   # a flat key: both modes
+    radius: 10px
+    light:
+      paper: '#FAF9F5'                  # applies to the light scheme (and print)
+    dark:
+      paper: '#151515'                  # applies to the dark scheme only
+    fonts:
+      - family: Inter
+        src: fonts/Inter-Roman.woff2    # relative to the file that declares it
+        weight: "400 700"               # default "400"
+        style: normal                   # normal|italic, default normal
 ```
-accent, accent-bg, ink, muted, faint, paper, card-bg, border, link,
-warn, warn-bg, font-sans, font-mono, radius
-```
 
-Rules:
+Five keys are structure, not token names: `preset`, `extends`, `light`,
+`dark`, `fonts`. Every other key directly under `theme:` is a token name,
+applying to both color schemes. Anything else is a load-time error naming
+the whole allowlist.
 
-- Every present key's value must be non-empty.
-- No value may contain `;`, `{`, `}`, `<`, or `>` — theme values are
-  interpolated verbatim into a generated `<style>` block, so this is
-  rejected outright as the actual injection-safety concern, independent of
-  whether the value is otherwise a valid color or font-family.
-- The color-shaped keys (every key above except `font-sans`, `font-mono`,
-  and `radius`) additionally get a light format sanity check: the value
-  must look like `#hex` (3/4/6/8 digits), `rgb(...)`/`rgba(...)`, or a bare
-  CSS named color (e.g. `forestgreen`).
-- A project may set none, some, or all of the allowlisted keys. Any key
-  left unset keeps the engine's own default for that token (see
-  `internal/render/viewer/template/style.css`'s `:root` block) — this is a
-  per-token fallback, not an all-or-nothing swap, and it holds in both the
-  light and dark `prefers-color-scheme` variants of the default stylesheet.
+#### Layers and precedence
 
-`viewer.theme` and `viewer.template_overrides` are orthogonal: a project
-can use either, both, or neither. Theme tokens are plain CSS custom
-properties, so they cascade into markup produced by any template —
-including markup from a fully custom `template_overrides` partial, shell,
-or stylesheet — with no extra wiring required on the override's part.
+A theme is built from up to three layers, lowest priority first:
 
-#### Mode-invariant vs. mode-varying tokens
+1. `preset` — a built-in palette (see "Presets" below). Optional.
+2. `extends` — a theme file, resolved relative to `project.config.yaml`'s
+   own directory and refused if it resolves outside the project directory.
+   A theme file uses the same shape as `theme:` itself, minus `preset` and
+   `extends` — a theme file cannot chain to another one.
+3. Inline keys directly under `viewer.theme` — the values written in
+   `project.config.yaml` itself.
 
-The allowlisted tokens split into two groups, and the two groups should
-usually be treated differently by a project's config:
+Within a single layer, a `light:`/`dark:` value for a token beats that
+layer's flat value for the same token. Across layers, a later layer's value
+— flat or per-mode — always beats an earlier layer's, for the same token
+and the same mode. A token two layers never mention keeps the engine's own
+default, per-token, not as an all-or-nothing swap.
 
-- **Mode-invariant** — `accent`, `accent-bg`, `link`, `warn`, `warn-bg`,
-  `font-sans`, `font-mono`, `radius`. These don't change between light and
-  dark mode in the shipped default stylesheet (a brand color, a link color,
-  and typography/radius choices read the same regardless of OS theme), so
-  it's safe for a project to always set these — there is no light/dark
-  variant to accidentally clobber.
-- **Mode-varying** — `ink`, `muted`, `faint`, `paper`, `card-bg`, `border`.
-  These are the ones `style.css`'s `@media (prefers-color-scheme: light)`
-  block flips to different values than its dark defaults. The engine emits
-  every configured token into one unconditional `<style>:root{...}</style>`
-  block, and an unconditional rule always wins over a `@media`-scoped one —
-  so setting any of these six pins the viewer to a single mode for every
-  visitor, permanently overriding their OS/browser preference, regardless
-  of which value you picked.
+After the three layers are merged, a token whose light and dark values end
+up equal is emitted once, unconditionally; the rest are emitted only in the
+scheme they apply to. This is why a theme that sets only flat keys — every
+project written before per-mode values existed, including this engine's own
+fixtures — renders identically to before: nothing about the emitted CSS
+changed shape for that case.
 
-A project that deliberately wants to force one mode (e.g. a dark-only
-brand site) can still set some or all of the six mode-varying tokens — that
-is a supported, intentional use of the allowlist. But it should be a
-deliberate choice: leave them unset by default and let the engine's own
-`@media` defaults handle both OS themes, and only set them when forcing a
-single mode is actually the goal. Setting all fourteen tokens out of habit
-(e.g. by copying a fixed dark palette wholesale into `viewer.theme`) is the
-most common way this trap gets hit by accident.
+#### The tokens
+
+Twenty-eight tokens, and there are no others. Fourteen have a different
+default in dark mode ("mode-varying" below); the other fourteen render the
+same value regardless of scheme ("mode-invariant"). "Consumer" names what
+the token paints in the shipped stylesheet — the same surface an override
+stylesheet or a preset targets.
+
+| token | role | light default | dark default | consumer |
+|---|---|---|---|---|
+| `accent` | brand color | `#287052` | `#70c99c` | locked state, active tabs |
+| `accent-bg` | accent as a fill | `rgba(40,112,82,.12)` | `rgba(112,201,156,.12)` | accent-tinted backgrounds |
+| `ink` | body text | `#091426` | `#e8eef8` | primary text color |
+| `muted` | secondary text | `#536179` | `#a9b5c8` | metadata, secondary labels |
+| `faint` | quiet labels | `#7d899a` | `#75839a` | the quietest labels |
+| `paper` | page background | `#f6f8fc` | `#0a1220` | the page behind everything |
+| `card-bg` | surface background | `#ffffff` | `#0f1b2e` | claim cards, panels, the sidebar |
+| `border` | ordinary rule | `#d8deea` | `#263754` | card edges, dividers |
+| `link` | hyperlink | `#205b78` | `#8ab7ff` | hyperlinks |
+| `warn` | warning text | `#a2433d` | `#ff8b94` | warnings and refusals |
+| `warn-bg` | warning fill | `rgba(162,67,61,.10)` | `rgba(255,139,148,.10)` | the warning fill |
+| `font-sans` | body font stack | `"Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif` | same | all body text |
+| `font-mono` | code font stack | `ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace` | same | code and ids |
+| `radius` | corner radius | `6px` | same | every rounded corner |
+| `code-inline-bg` | inline code fill | `color-mix(in srgb, var(--paper) 72%, var(--card-bg))` | same | `` `inline code` `` |
+| `code-bg` | block code fill | `color-mix(in srgb, var(--paper) 82%, var(--card-bg))` | same | fenced blocks, claim trees |
+| `table-head-bg` | table header fill | `rgba(127,127,127,.10)` | same | table header rows |
+| `image-bg` | image mat | `rgba(127,127,127,.06)` | same | the mat behind images |
+| `hover-bg` | hover highlight | `rgba(125,137,154,.08)` | same | hover on rows and tabs |
+| `border-strong` | emphasized rule | `#aab5c7` | same | emphasized edges |
+| `shadow` | light shadow | `rgba(0,0,0,.08)` | `rgba(0,0,0,.28)` | the comments panel |
+| `shadow-strong` | heavier shadow | `rgba(0,0,0,.14)` | `rgba(0,0,0,.34)` | the toast |
+| `shadow-cast` | cast shadow | `rgba(9,20,38,.12)` | same | the rail, the nav toggle, the facet ToC |
+| `scrim` | modal dim | `rgba(0,0,0,.22)` | `rgba(0,0,0,.42)` | the dim behind a modal |
+| `selection-bg` | text selection | `rgba(40,112,82,.20)` | same | selected text |
+| `status-draft` | draft pill text | `#976600` | same | `.pill.pv`, `.status-draft` |
+| `status-draft-bg` | draft pill fill | `rgba(151,102,0,.12)` | same | the draft pill's fill |
+| `mockup-bg` | mockup canvas | `#fff` | same | mockup diagrams (light artwork in both modes, on purpose) |
+
+**Mode-varying (14)**: `accent`, `accent-bg`, `ink`, `muted`, `faint`,
+`paper`, `card-bg`, `border`, `link`, `warn`, `warn-bg`, `shadow`,
+`shadow-strong`, `scrim`. **Mode-invariant (14)**: every other token in the
+table above, including `font-sans`, `font-mono`, and `radius`.
+
+Setting a mode-varying token as a flat key pins it to that value in **both**
+color schemes — sometimes exactly right, never warned about. See "The trap:
+a flat colour key pins both modes" in `docs/theming.md` before doing this on
+purpose or by accident.
+
+#### Validation
+
+Values are validated as hostile input, not trusted as safe CSS, because
+they are interpolated verbatim into a generated `<style>` block:
+
+- Every present value must be non-empty and free of control characters,
+  `;`, `{`, `}`, `<`, `>`, a CSS comment delimiter, or an unbalanced quote.
+- Colors (every token above except `font-sans`, `font-mono`, and `radius`)
+  must be `#hex` (3/4/6/8 digits), a CSS named color, or a call to
+  `rgb()`/`rgba()`/`hsl()`/`hsla()`/`lab()`/`lch()`/`oklab()`/`oklch()`/
+  `color()`/`color-mix()` — this is a **shape check, not a CSS parser**:
+  `rgb(1)` passes here and is then dropped by the browser as an invalid
+  declaration, silently leaving the reader on the engine default.
+- `font-sans`/`font-mono` are comma-separated font-family stacks; each item
+  is either unquoted (letters, digits, spaces, `_`, `-`) or quoted without
+  the same quote character or a backslash inside it.
+- `radius` must carry a unit (`10px`, `0.5rem`, `50%`) or be a bare `0`; a
+  unitless non-zero number is refused, because CSS drops it silently rather
+  than rendering the engine default.
+
+`viewer.theme` and `viewer.template_overrides` are orthogonal: a project can
+use either, both, or neither. Theme tokens are plain CSS custom properties,
+so they cascade into markup produced by any template. But an override
+`style.css` **replaces** the engine's stylesheet wholesale, so it must
+declare or consume the tokens itself, and an override `shell.html` that
+omits `{{.ThemeCSS}}` gets no theme and no fonts at all — this is a
+deliberate bound, not a gap to file.
+
+#### Presets
+
+`preset: claude` is the lowest layer of the merge and needs no file: it
+sets every color token, `font-sans`/`font-mono` (stacks that fall through
+to system fonts — a preset carries no font files), and `radius`. Presets
+may change between minor releases: they track a palette this project does
+not own, and every change to one is a CHANGELOG "Changed" line. A project
+that needs a value frozen writes it inline (where it always wins) or
+exports the preset first.
+
+`dossierx theme list` reports every built-in preset and the token names it
+sets. `dossierx theme export <preset> [path]` writes the whole preset as an
+editable theme file — with no path, the YAML comes back in the envelope's
+`data.yaml`; with a path, it writes the file and refuses
+(`write_conflict`) to overwrite one that already exists unless `--force` is
+given. The exported file carries no `extends:` of its own (theme files do
+not chain) and no version stamp, so re-exporting the same preset from the
+same binary is byte-for-byte identical. `unknown_preset` is the error code
+for a preset name the binary does not carry.
+
+The claims graph's facet color ramp is generated to stay distinguishable
+and does not follow a preset or any theme token.
+
+#### Fonts
+
+A theme may inline the project's own local font files as base64 `data:`
+URLs — there is no network fetch, ever, and the viewer stays one
+self-contained file. `fonts[].src` must end in `.woff2`, `.woff`, `.ttf`,
+or `.otf`, and its bytes must match that extension's signature; a
+mismatched or truncated file is refused rather than silently rendered with
+a fallback face. `weight` is `"400"` or a variable range like `"100 900"`;
+`style` is `normal` or `italic`; both default. Every declared `family` must
+appear in the merged `font-sans` or `font-mono`, or the theme is refused —
+a face nothing names is downloaded by every reader and used by none. This
+family-consistency check is **skipped when `viewer.template_overrides` is
+set**, since an override stylesheet may reference the family itself and
+this package cannot read that sheet. Total raw font bytes across every
+face are capped at 2 MiB; over it is a load-time error, never a silent
+drop.
+
+#### `check`, `--validate`, `--staged`, and `serve`
+
+`dossierx check`, `dossierx check --validate`, and `dossierx check --staged`
+apply the identical theme rule set, through the same validation function
+with a different byte source: plain `check` and `--validate` read the
+working tree, `--staged` reads `extends` and every font from the **git
+index** instead — so a theme file or font that is edited but not staged is
+judged by what the commit will actually carry, and a signature or size-cap
+failure in an unstaged font still fails `--staged`. A theme file or font
+that is not staged at all is a named error telling the author to `git add`
+it.
+
+`dossierx serve` resolves the theme once, at startup. It does not watch
+`project.config.yaml`, a theme file, or a font for changes — restart
+`dossierx serve` after editing any of them.

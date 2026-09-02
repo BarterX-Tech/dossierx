@@ -5,6 +5,85 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- The viewer can now be restyled with a project's own colours and fonts through `viewer.theme`:
+  an optional built-in `preset` (`claude` today), an optional theme file (`extends`) a project can
+  layer on top of a preset, per-colour-scheme overrides (`light:`/`dark:` alongside flat keys that
+  apply to both), and the project's own local font files inlined as base64 `data:` URLs. The token
+  vocabulary grows from 14 to 28 — 14 new tokens (`code-inline-bg`, `code-bg`, `table-head-bg`,
+  `image-bg`, `hover-bg`, `border-strong`, `shadow`, `shadow-strong`, `shadow-cast`, `scrim`,
+  `selection-bg`, `status-draft`, `status-draft-bg`, `mockup-bg`) cover consumers the original 14
+  never reached. See [`docs/theming.md`](docs/theming.md), [FORMAT.md](FORMAT.md#viewertheme), and
+  the embedded `dossierx-theme` skill.
+- `dossierx theme list` reports every built-in preset and the token names it sets; `dossierx theme
+  export <preset> [path]` writes one out as an editable theme file (or returns its YAML in the
+  envelope when no path is given), refusing to overwrite an existing file unless `--force` is
+  passed.
+- A new error code, `unknown_preset`, for a `viewer.theme.preset` name the binary does not carry.
+- `dossierx check`'s envelope data gains `theme_font_count` and `theme_font_bytes`, reporting how
+  many project-supplied font files a theme inlines and their combined raw byte size — what a
+  reader downloads before the page renders anything. Both are zero when the theme declares no
+  fonts, and when `theme_error` is set (nothing was accepted).
+- Under `dossierx serve`, the Content-Security-Policy now includes `font-src data:`, so a themed
+  project's inlined fonts render under `serve` the same way they do in a statically rendered
+  viewer. No other CSP directive changed.
+- Built with a per-mode/preset/font `viewer.theme` and opened with a DossierX binary older than
+  this release, a project's config fails to load rather than being partially understood. The
+  error is verbatim one of two shapes: `viewer.theme: unknown theme token "preset" (must be one of
+  accent, accent-bg, ink, muted, faint, paper, card-bg, border, link, warn, warn-bg, font-sans,
+  font-mono, radius)` for a scalar key (`preset`, `extends`), or a YAML-level `... cannot unmarshal
+  !!map into string` (`!!seq` for `fonts:`) for `light:`, `dark:`, and `fonts:`. Failing closed is
+  deliberate: a viewer rendered with half a theme applied is worse than one that refuses to build.
+- Built-in preset values may change between minor releases, since they track a palette this
+  project does not own; every such change from now on gets its own **Changed** entry here. A
+  project that needs a value frozen writes it inline, or exports the preset to a file it then
+  owns.
+
+### Fixed
+
+- The viewer's `:root` now declares `color-scheme: light dark` instead of only `light`, so a
+  reader in OS dark mode gets UA-native dark rendering for the surfaces the stylesheet never drew
+  itself. Concretely, in dark mode: native form controls — every `<button>`, `<details>`/
+  `<summary>` disclosure markers, and task-list checkboxes — now paint dark instead of a bright
+  light-mode chrome showing through; the mobile facet table-of-contents `<select>` and the native
+  popup it opens render dark; the comment composer's input and its placeholder text render dark;
+  the scrollbar on an overflowing code block tracks the OS theme instead of staying light; and the
+  claims graph canvas's backdrop and overscroll area render dark instead of white. A project
+  supplying its own stylesheet through `viewer.template_overrides` is unaffected unless that
+  stylesheet also sets `color-scheme`.
+- Printing the viewer now always uses the light palette, regardless of the reader's OS colour
+  scheme at print time and regardless of any `dark:` theme override the project configured. A
+  `dark:`-only token — one with no `light:`/flat counterpart at all — previously had no defined
+  print behaviour; it now resolves to the engine's light default under print, the same as every
+  other token.
+- FORMAT.md's "Mode-invariant vs. mode-varying tokens" table was wrong: it listed `accent`,
+  `accent-bg`, `link`, `warn`, and `warn-bg` as mode-invariant, but the shipped stylesheet's dark
+  `@media` block has always re-pointed all five. The table is corrected: the mode-varying set is
+  the eleven original colour tokens (`ink`, `muted`, `faint`, `paper`, `card-bg`, `border`,
+  `accent`, `accent-bg`, `link`, `warn`, `warn-bg`) plus `shadow`, `shadow-strong`, and `scrim` —
+  14 of 28 tokens in total; the other 14, including `font-sans`, `font-mono`, and `radius`, are
+  mode-invariant by design.
+
+### Changed
+
+- `internal/render/viewer/template/style.css` now reads its colour, shadow, and shape values
+  through `var(--token, <the previous literal>)` instead of writing the literal directly, which is
+  what makes `viewer.theme` tokens take effect. The emitted default CSS is unchanged for a project
+  with no theme configured; a project that used to reach into `viewer.template_overrides` to
+  restyle a value this list now covers can drop that override in favour of a token. Run
+  `dossierx check` to regenerate an existing viewer, since generated `viewer/index.html` output
+  changes shape (a `var()` call in place of a literal) even where it renders identically.
+- Every fixture and cross-release-golden viewer under `testdata/` and `viewer-tests/testdata/` was
+  regenerated against the updated stylesheet, CLI, and skill; the newly added theme fixtures
+  (`testdata/fixture-theme-flat`, `testdata/fixture-theme-preset`) are new to this release's
+  cross-release golden and are therefore uncompared this time, not silently passing a comparison
+  that ran.
+- After upgrading, re-run `dossierx skills export` to refresh `AGENTS.md`/the embedded agent guide
+  with the updated `dossierx-theme` skill.
+
 ## [0.7.5] - 2026-08-30
 
 ### Added
