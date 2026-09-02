@@ -29,7 +29,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
@@ -619,20 +618,19 @@ func TestDarkOnlyTokenDoesNotApplyToPrint(t *testing.T) {
 
 	// Under print in a dark OS scheme, it must not.
 	//
-	// ONE emulation call carrying both dimensions: Emulation.setEmulatedMedia
-	// replaces the whole override, so a separate colour-scheme call followed by
-	// a bare WithMedia("print") silently tests print-in-light — the case that
-	// cannot fail.
-	runCDP(t, ctx, emulation.SetEmulatedMedia().
-		WithMedia("print").
-		WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "dark"}}))
-	if !evalBool(t, ctx, `window.matchMedia('print').matches`) {
-		t.Fatal("print emulation did not take effect")
-	}
-	if !evalBool(t, ctx, `window.matchMedia('(prefers-color-scheme: dark)').matches`) {
-		t.Fatal("the dark feature did not survive the print emulation; this would have measured " +
-			"print in LIGHT, which cannot fail")
-	}
+	// emulatePrintWithScheme issues ONE Emulation.setEmulatedMedia call carrying
+	// both dimensions, having first put the tab in the OPPOSITE scheme and
+	// asserted that. The two-call mutation this guards against —
+	// emulateColorScheme(dark) then a bare WithMedia("print") — clears the
+	// colour-scheme feature and falls back to the HOST's scheme, so on a machine
+	// whose OS is dark a bare "is it dark?" check passes over a page that was
+	// never emulated. Coming from light makes the answer about the emulation.
+	//
+	// Transitions are suppressed first for the same reason the parity print
+	// passes do it: a computed read taken while a transition is running is the
+	// interpolated value, not the one the rule sets.
+	suppressTransitions(t, ctx, "")
+	emulatePrintWithScheme(t, ctx, "dark", "dark-only")
 	got := evalString(t, ctx, `window.__dxTheme.rootToken("ink")`)
 	if got == "#eeeeee" {
 		t.Fatalf("under print in a dark OS scheme --ink is still the project's DARK value %q. "+

@@ -52,6 +52,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -404,6 +405,12 @@ func renderFixtureFresh(t *testing.T, fixture string) string {
 	return "file://" + out
 }
 
+// unscopedDarkMediaQuery matches a dark colour-scheme @media block that is NOT
+// prefixed with `screen and`. Exactly one exists in each frozen baseline and
+// none in anything the current engine renders, which is what makes it usable as
+// proof of which engine produced a file.
+var unscopedDarkMediaQuery = regexp.MustCompile(`@media\s*\(prefers-color-scheme:\s*dark\)`)
+
 // baselinePath returns the frozen pre-change render for a fixture and asserts
 // the two guards that make it evidence: it must carry the OLD unconditional
 // colour-scheme pin, and it must not carry any of the fourteen new tokens.
@@ -428,9 +435,22 @@ func baselinePath(t *testing.T, fixture string) string {
 		t.Fatalf("read frozen baseline %s: %v", p, err)
 	}
 	body := string(b)
-	if !strings.Contains(body, "color-scheme: light;") {
-		t.Fatalf("%s does not contain \"color-scheme: light;\" — it is not the pre-change render, "+
-			"so every comparison in this file would be against the engine under test", p)
+	// GUARD 1: an UNSCOPED dark colour-scheme media query.
+	//
+	// This used to look for "color-scheme: light;" and was inert: the current
+	// engine's consolidated print block contains that string too, so a baseline
+	// accidentally regenerated with the engine under test passed it. What only
+	// the old sheet has is a dark block with no `screen and` prefix — scoping it
+	// to screen is the change, and it is why a dark-mode page no longer prints
+	// dark. Counted here as one occurrence in the baseline against zero in the
+	// current sheet (the current viewer's remaining unscoped mention is a
+	// matchMedia STRING in the runtime script, which is why this matches on the
+	// `@media` keyword rather than on the feature alone).
+	if n := len(unscopedDarkMediaQuery.FindAllString(body, -1)); n == 0 {
+		t.Fatalf("%s contains no unscoped dark colour-scheme @media block. Only the PRE-CHANGE "+
+			"sheet has one — the engine under test scopes every dark block to `screen and` — so "+
+			"this file is not the pre-change render, and every comparison against it would be a "+
+			"comparison of the current engine with itself", p)
 	}
 	if strings.Contains(body, "--code-bg") {
 		t.Fatalf("%s contains \"--code-bg\", one of the fourteen tokens the theme work ADDED — "+
@@ -513,6 +533,18 @@ func describeDiff(a, b map[string]string, keys []string, beforeLabel, afterLabel
 // flat viewer.theme block copied from a real client project and instantiates
 // every themed construct; fixture-basic carries no theme at all, which is the
 // case the whole no-op claim is about.
+//
+// DECLARED DEVIATION FROM THE PLAN, so the gap is on the page rather than in
+// someone's memory: testdata/fixture-theme-preset appears in NO browser test.
+// plan §6.2 put it in the print pass so a project with a dark block would be
+// exercised there. It is not needed for that any more — plan-v4 A1 made a dark
+// block unable to reach print at all, and the case is covered directly by
+// TestDarkOnlyTokenDoesNotApplyToPrint in theme_modes_test.go, which builds a
+// dark-only project with newProjectRaw and asserts --ink computes to the
+// engine's light value under print. What fixture-theme-preset still covers is
+// the COMMITTED artifact: it is the only viewer in the repository carrying a
+// preset, a two-mode override and a data:-inlined @font-face, and
+// tests/fixture_staleness_test.go re-renders it on every run.
 var parityFixtures = []string{"fixture-theme-flat", "fixture-basic"}
 
 var parityWidths = []struct {
@@ -909,6 +941,80 @@ func clearEmulatedMedia(t *testing.T, ctx context.Context, label string) {
 	}
 }
 
+// transitionSuppressionCSS stops every CSS transition and animation on a page.
+//
+// It exists because a computed style read during a transition is the
+// INTERPOLATED value, not the value the rule sets — and `.content-area` carries
+// `transition: padding 180ms ease-out`. Under print emulation the printed
+// padding (0) is transitioned to from the screen padding, so a probe that
+// arrives mid-flight reads some fraction of the SCREEN value and calls it the
+// printed one. Measured factors between 0.86 and 0.92 of the screen padding,
+// and the pass failed 2 out of 2 runs under concurrent load while passing on an
+// idle machine — which is the worst shape a check can have: green when nothing
+// else is happening, and reading the wrong number when it is green.
+//
+// Suppressing transitions makes the read land on the final value. Both
+// documents get the identical sheet, so it changes what is measured, never
+// which side of the comparison is favoured.
+const transitionSuppressionCSS = "*,*::before,*::after{transition:none !important;" +
+	"animation:none !important;caret-color:transparent !important;}"
+
+// suppressTransitions injects transitionSuppressionCSS (plus any extra rules)
+// and waits for the page to have no running animation left.
+func suppressTransitions(t *testing.T, ctx context.Context, extraCSS string) {
+	t.Helper()
+	evalVoid(t, ctx, `(function(){
+		var st = document.createElement('style');
+		st.textContent = `+jsQuote(transitionSuppressionCSS+extraCSS)+`;
+		document.head.appendChild(st);
+	})()`)
+	pollTrue(t, ctx, `document.getAnimations().every(function(a){return a.playState !== 'running';})`)
+}
+
+// emulatePrintWithScheme issues plan-v4 A5's ONE combined
+// Emulation.setEmulatedMedia call and proves it landed.
+//
+// The proof needs care. setEmulatedMedia REPLACES the whole override, so the
+// mutation this guards against — emulateColorScheme(scheme) followed by a bare
+// WithMedia("print") — clears the colour-scheme feature and silently tests
+// print in the HOST's scheme. Asserting `matchMedia(scheme).matches` after the
+// fact does not catch that on a host whose OS is already in `scheme`: the
+// cleared override falls back to the host, and the check passes over a page
+// that was never emulated.
+//
+// So the override is first set to the OPPOSITE feature and that is asserted, in
+// the same tab, immediately before. Now the host's own scheme is not the
+// expected answer, and "the feature survived" is a statement about the
+// emulation rather than about the machine the suite happens to run on. Verified
+// by re-applying the two-call mutation in a scratch copy: with this ordering
+// the guard fires; without it, it did not.
+func emulatePrintWithScheme(t *testing.T, ctx context.Context, scheme, label string) {
+	t.Helper()
+	opposite := "light"
+	if scheme == "light" {
+		opposite = "dark"
+	}
+	runCDP(t, ctx, emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{
+		{Name: "prefers-color-scheme", Value: opposite},
+	}))
+	if !evalBool(t, ctx, fmt.Sprintf(`window.matchMedia('(prefers-color-scheme: %s)').matches`, opposite)) {
+		t.Fatalf("%s document: could not put the tab in %s before the print pass, so the guard "+
+			"below could not tell an emulated %s from this host's own scheme", label, opposite, scheme)
+	}
+
+	runCDP(t, ctx, emulation.SetEmulatedMedia().
+		WithMedia("print").
+		WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: scheme}}))
+	if !evalBool(t, ctx, `window.matchMedia('print').matches`) {
+		t.Fatalf("%s document: print emulation did not take effect", label)
+	}
+	if !evalBool(t, ctx, fmt.Sprintf(`window.matchMedia('(prefers-color-scheme: %s)').matches`, scheme)) {
+		t.Fatalf("%s document: the %s feature did not survive the print emulation — the tab is "+
+			"still in %s, so this pass would have measured print in the wrong scheme, which is "+
+			"exactly the case that cannot fail", label, scheme, opposite)
+	}
+}
+
 // runPrintDarkPass is plan-v4 A5's single combined emulation call.
 //
 // Emulation.setEmulatedMedia REPLACES the whole override, so issuing
@@ -917,20 +1023,12 @@ func clearEmulatedMedia(t *testing.T, ctx context.Context, label string) {
 // that cannot fail. One call, both dimensions, and both matchMedia checks
 // before a single value is read.
 func runPrintDarkPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture string) {
-	setPrintDark := func(ctx context.Context, label string) {
-		runCDP(t, ctx, emulation.SetEmulatedMedia().
-			WithMedia("print").
-			WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "dark"}}))
-		if !evalBool(t, ctx, `window.matchMedia('print').matches`) {
-			t.Fatalf("%s document: print emulation did not take effect", label)
-		}
-		if !evalBool(t, ctx, `window.matchMedia('(prefers-color-scheme: dark)').matches`) {
-			t.Fatalf("%s document: the dark feature did not survive the print emulation — "+
-				"this pass would have measured print in LIGHT, which cannot fail", label)
-		}
-	}
-	setPrintDark(ctxBefore, "before")
-	setPrintDark(ctxAfter, "after")
+	// Transitions off BEFORE the media switch, or the values read below are the
+	// browser interpolating from the screen state towards the printed one.
+	suppressTransitions(t, ctxBefore, "")
+	suppressTransitions(t, ctxAfter, "")
+	emulatePrintWithScheme(t, ctxBefore, "dark", "before")
+	emulatePrintWithScheme(t, ctxAfter, "dark", "after")
 	t.Cleanup(func() {
 		clearEmulatedMedia(t, ctxBefore, "before")
 		clearEmulatedMedia(t, ctxAfter, "after")
@@ -971,19 +1069,10 @@ func runPrintDarkPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 // nothing about the palette is supposed to move, every difference here is a
 // layout difference and nothing else.
 func runPrintLightPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture string) {
-	setPrintLight := func(ctx context.Context, label string) {
-		runCDP(t, ctx, emulation.SetEmulatedMedia().
-			WithMedia("print").
-			WithFeatures([]*emulation.MediaFeature{{Name: "prefers-color-scheme", Value: "light"}}))
-		if !evalBool(t, ctx, `window.matchMedia('print').matches`) {
-			t.Fatalf("%s document: print emulation did not take effect", label)
-		}
-		if !evalBool(t, ctx, `window.matchMedia('(prefers-color-scheme: light)').matches`) {
-			t.Fatalf("%s document: the light feature did not survive the print emulation", label)
-		}
-	}
-	setPrintLight(ctxBefore, "before")
-	setPrintLight(ctxAfter, "after")
+	suppressTransitions(t, ctxBefore, "")
+	suppressTransitions(t, ctxAfter, "")
+	emulatePrintWithScheme(t, ctxBefore, "light", "before")
+	emulatePrintWithScheme(t, ctxAfter, "light", "after")
 	t.Cleanup(func() {
 		clearEmulatedMedia(t, ctxBefore, "before")
 		clearEmulatedMedia(t, ctxAfter, "after")
@@ -995,16 +1084,18 @@ func runPrintLightPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixtur
 	if len(layoutAfter) == 0 {
 		t.Fatal("the print layout probe returned nothing")
 	}
-	compared := 0
+	compared, mismatched := 0, 0
 	for sel, propsBefore := range layoutBefore {
 		propsAfter := layoutAfter[sel]
 		if propsBefore == nil || propsAfter == nil {
 			t.Errorf("print layout probe %s matched no element (before=%v, after=%v)", sel, propsBefore, propsAfter)
+			mismatched++
 			continue
 		}
 		for prop, want := range propsBefore {
 			compared++
 			if got := propsAfter[prop]; got != want {
+				mismatched++
 				t.Errorf("%s: printed layout changed — %s { %s } is %q, was %q. The consolidated "+
 					"@media print block must be the LAST block in style.css so it still beats the "+
 					"screen rules it used to beat at equal specificity.", fixture, sel, prop, got, want)
@@ -1014,7 +1105,51 @@ func runPrintLightPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixtur
 	if compared == 0 {
 		t.Fatal("the print layout probe compared nothing")
 	}
-	t.Logf("%s print x light: %d layout value(s) compared, unchanged", fixture, compared)
+
+	// THE PRINTED VALUES THEMSELVES, not only "the two agree".
+	//
+	// Equality between two renders is satisfied just as well by both of them
+	// being wrong, and there is a specific way for both to be wrong here: read
+	// mid-transition, both report a fraction of the SCREEN padding and match
+	// each other to the decimal. Naming what printing is supposed to produce —
+	// the print block's `padding: 0`, `padding-top: 0`, and a sidebar that does
+	// not print — is what makes a green run mean "this is the printed layout"
+	// rather than "these two numbers were equal".
+	wantPrinted := map[string]map[string]string{
+		"content-area": {
+			"paddingTop": "0px", "paddingRight": "0px",
+			"paddingBottom": "0px", "paddingLeft": "0px",
+		},
+		"system-record-head": {"paddingTop": "0px"},
+		"sidebar":            {"display": "none"},
+	}
+	for _, side := range []struct {
+		label  string
+		layout map[string]map[string]string
+	}{{"pre-change", layoutBefore}, {"current", layoutAfter}} {
+		for sel, props := range wantPrinted {
+			got := side.layout[sel]
+			if got == nil {
+				t.Errorf("%s: the %s render's print layout probe has no reading for %s", fixture, side.label, sel)
+				mismatched++
+				continue
+			}
+			for prop, want := range props {
+				if got[prop] != want {
+					mismatched++
+					t.Errorf("%s: under print, the %s render computes %s { %s } = %q, want %q. "+
+						"Either the @media print block is not winning, or this value was read "+
+						"while a transition was still running towards it.",
+						fixture, side.label, sel, prop, got[prop], want)
+				}
+			}
+		}
+	}
+
+	if mismatched == 0 {
+		t.Logf("%s print x light: %d layout value(s) compared, unchanged and equal to the printed "+
+			"values the print block sets", fixture, compared)
+	}
 }
 
 // runScreenshotPass compares the painted content area of the two renders.
@@ -1059,14 +1194,7 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		// and 24 read .facet-toc, .facet-toc__select and .facet-toc__item
 		// through computed style, which is not affected by how often the nodes
 		// are recreated.
-		evalVoid(t, ctx, `(function(){
-			var st = document.createElement('style');
-			st.textContent =
-				'*,*::before,*::after{transition:none !important;animation:none !important;caret-color:transparent !important;}' +
-				'.facet-toc{visibility:hidden !important;}';
-			document.head.appendChild(st);
-		})()`)
-		pollTrue(t, ctx, `document.getAnimations().every(function(a){return a.playState !== 'running';})`)
+		suppressTransitions(t, ctx, ".facet-toc{visibility:hidden !important;}")
 
 		var rect struct{ X, Y, W, H float64 }
 		evalInto(t, ctx, `(function(){var r=document.querySelector('.content-area').getBoundingClientRect();`+
