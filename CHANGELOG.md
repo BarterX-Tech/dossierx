@@ -106,10 +106,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regenerated against the updated stylesheet, CLI, and skill; the newly added theme fixtures
   (`testdata/fixture-theme-flat`, `testdata/fixture-theme-preset`) are new to this release's
   cross-release golden and are therefore uncompared this time, not silently passing a comparison
-  that ran. The regenerated golden's SILENT RENDER CHANGES list also carries three entries that
-  predate this feature and are not part of it — the `.status-strip` relocation across
-  `fixture-basic`, `graph-demo`, and `portability`, held over from v0.7.5 — so the maintainer does
-  not need to attribute those three to theming when reading the diff.
+  that ran. Against a v0.7.5 baseline, the golden's SILENT RENDER CHANGES list carries exactly the
+  three entries this feature causes — `fixture-basic`, `fixture-graph-demo`, and
+  `fixture-portability`, each from the `var()`-token conversion in `style.css` and the print
+  `color-scheme: light` fix — with byte-identical inputs at both revisions, which is what makes
+  them silent rather than explained. The `.status-strip` relocation that showed up here against
+  older baselines is a v0.7.5-era change already folded into that baseline and no longer appears.
 - After upgrading, re-run `dossierx skills export` to refresh `AGENTS.md`/the embedded agent guide
   with the updated `dossierx-theme` skill.
 
