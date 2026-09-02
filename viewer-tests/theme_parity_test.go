@@ -46,9 +46,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"image"
 	_ "image/png"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -891,6 +891,24 @@ func forceHoverInto(t *testing.T, ctx context.Context, vals map[string]string, l
 	}
 }
 
+// clearEmulatedMedia drops a tab's print/colour-scheme override and REPORTS a
+// failure to do so.
+//
+// Discarding the error here is not harmless tidying. Emulation.setEmulatedMedia
+// is per-tab state that outlives the pass that set it, and these tabs are read
+// again afterwards; a reset that silently did not land leaves the tab in
+// print — in the dark case, print AND dark — so the next reader measures the
+// printed palette and calls it the screen one. That is a wrong reading dressed
+// as a right one, which is exactly what this file exists to prevent, so it is
+// an error rather than a log line.
+func clearEmulatedMedia(t *testing.T, ctx context.Context, label string) {
+	t.Helper()
+	if err := chromedp.Run(ctx, emulation.SetEmulatedMedia()); err != nil {
+		t.Errorf("clearing the emulated media on the %s document: %v — that tab is still in the "+
+			"emulated mode, so any later read of it reports the wrong scheme", label, err)
+	}
+}
+
 // runPrintDarkPass is plan-v4 A5's single combined emulation call.
 //
 // Emulation.setEmulatedMedia REPLACES the whole override, so issuing
@@ -914,8 +932,8 @@ func runPrintDarkPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 	setPrintDark(ctxBefore, "before")
 	setPrintDark(ctxAfter, "after")
 	t.Cleanup(func() {
-		_ = chromedp.Run(ctxBefore, emulation.SetEmulatedMedia())
-		_ = chromedp.Run(ctxAfter, emulation.SetEmulatedMedia())
+		clearEmulatedMedia(t, ctxBefore, "before")
+		clearEmulatedMedia(t, ctxAfter, "after")
 	})
 
 	var palBefore, palAfter map[string]string
@@ -967,8 +985,8 @@ func runPrintLightPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixtur
 	setPrintLight(ctxBefore, "before")
 	setPrintLight(ctxAfter, "after")
 	t.Cleanup(func() {
-		_ = chromedp.Run(ctxBefore, emulation.SetEmulatedMedia())
-		_ = chromedp.Run(ctxAfter, emulation.SetEmulatedMedia())
+		clearEmulatedMedia(t, ctxBefore, "before")
+		clearEmulatedMedia(t, ctxAfter, "after")
 	})
 
 	var layoutBefore, layoutAfter map[string]map[string]string
@@ -1172,7 +1190,7 @@ func comparePNGs(t *testing.T, a, b []byte) (diff, maxDelta, firstX, firstY int)
 	return diff, maxDelta, firstX, firstY
 }
 
-func firstDifferingParityLine(a, b string) (int, string, string) {
+func firstDifferingParityLine(a, b string) (line int, aLine, bLine string) {
 	as, bs := strings.Split(a, "\n"), strings.Split(b, "\n")
 	n := len(as)
 	if len(bs) < n {
