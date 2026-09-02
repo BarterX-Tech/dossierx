@@ -202,8 +202,8 @@ through this in order:
 
    | what failed | `stopped_at` | `data.theme_error` |
    |---|---|---|
-   | a grammar/allowlist/shape problem in the inline `viewer.theme` block itself — an unknown token, a malformed colour, length or font-family value, a control character, or stray whitespace | `config` | absent — no `data` exists yet; only `error.message` names it |
-   | an unknown `preset` name, a missing or escaping `extends` file (including a grammar problem inside that file's own content), a font that does not exist, fails its signature check, or blows the 2 MiB cap, or a font family nothing names | `render` | present, naming the failure |
+   | a grammar/allowlist/shape problem in the inline `viewer.theme` block itself — an unknown token, a malformed colour, length or font-family value, a control character, stray whitespace, or an `extends` path that resolves outside the project | `config` | absent — no `data` exists yet; only `error.message` names it |
+   | an unknown `preset` name, a missing or unstaged `extends` file (including a grammar problem inside that file's own content), a font that does not exist, fails its signature check, or blows the 2 MiB cap, or a font family nothing names | `render` | present, naming the failure |
 
    `check --validate` and `check --staged` apply the identical rule set, so
    a hook or CI run is not a way around either failure.
