@@ -125,22 +125,35 @@
    in the same metric the ramp is solved in rather than in degrees of hue: the
    ramp solver treats --dxg-governed, --dxg-cycle, --dxg-halo and
    --dxg-facet-other as members of the already-chosen set with a hard floor of
-   CIEDE2000 20, so no slot it picks can land near any of them. Measured over
-   the shipped values, the closest any of the twenty slots comes to a reserved
-   colour is 14.4 in dark and 11.1 in light — and the light 11.1 is frozen
-   slot 5 (#67717E) against --dxg-facet-other (#7D8C85), two greys this file
-   inherited rather than chose. Against --dxg-governed itself, every slot in
-   both themes is at least 20 away. A governance edge cannot be mistaken for a
-   facet's colour at any facet count in either theme.
+   CIEDE2000 20, so no slot it picks can land near any of them. Measured
+   against the values DECLARED IN THIS FILE, the closest any of the twenty
+   slots comes to a reserved colour is 14.4 in dark and 11.1 in light — and
+   the light 11.1 is frozen slot 5 (#67717E) against this file's
+   --dxg-facet-other (#7D8C85), two greys this file inherited rather than
+   chose. Read that figure as a bound on this file alone: shell.html emits
+   style.css after graph.css, and style.css re-declares --dxg-facet-other
+   (blue, not grey) for the shipped viewer, so the only project that sees the
+   grey — and therefore that 11.1 — is one whose viewer.template_overrides
+   replaces style.css. Against --dxg-governed itself, which style.css does not
+   re-declare, every slot in both themes is at least 20 away. A governance
+   edge cannot be mistaken for a facet's colour at any facet count in either
+   theme.
 
    --dxg-cycle and --dxg-halo are STATE colours, not identity colours. They
    are drawn as a ring and a halo — never as a plain node fill — except under
    the one overlay that is specifically about that state, where every
    non-matching node is dimmed and there is nothing to confuse them with. */
 
-/* DARK IS THE BASE, light is the override — the same convention the base
-   stylesheet uses, so the two files move together rather than fighting over
-   which one a reader's OS appearance reaches first. Both sets are complete:
+/* DARK IS THE BASE, light is the override. This file keeps that convention
+   DELIBERATELY, and it is now the opposite of style.css, which is light-first
+   (one unconditional :root plus a `screen and (prefers-color-scheme: dark)`
+   query). The two files differ on purpose: this ramp was solved dark-first and
+   renumbering it to light-first would mean re-solving both sets, which changes
+   every existing project's facet colours for no reader-visible gain. What the
+   two files DO share is the print outcome — the light query below carries
+   `, print`, so paper gets the light ramp whatever the OS appearance is, the
+   same result style.css reaches by scoping its dark query to `screen`.
+   Both sets are complete:
    a categorical ramp has to move in BOTH directions, because the dark values
    are lifted and desaturated to stay legible on --paper's near-black and the
    light values are darkened to stay legible on its near-white. Neither set
@@ -174,7 +187,11 @@
   --dxg-facet-19: #B6B994;
   --dxg-facet-20: #A9D6C0;
 
-  /* No facet, an unlisted facet, or a collapsed module group. */
+  /* No facet, an unlisted facet, or a collapsed module group.
+     KEPT AS A FALLBACK, NOT AS THE SHIPPED VALUE: style.css declares
+     --dxg-facet-other too and is emitted after this file, so this grey only
+     reaches a project whose viewer.template_overrides replaces style.css.
+     Do not delete it — for such a project it is the only declaration. */
   --dxg-facet-other: #6C7F75;
 
   /* State colours. Ring, halo and the two structural overlays only. */
@@ -185,7 +202,10 @@
   --dxg-governed: #F06A9C;
 }
 
-@media (prefers-color-scheme: light) {
+/* `, print`: paper is light, whatever the OS says. A printed graph pane with
+   the dark ramp on white would be the same defect style.css's `screen and`
+   dark query prevents for the base palette. */
+@media (prefers-color-scheme: light), print {
   :root {
     --dxg-facet-1: #4257C4;
     --dxg-facet-2: #12897F;
@@ -213,6 +233,8 @@
     --dxg-facet-19: #6F4D37;
     --dxg-facet-20: #8782A8;
 
+    /* Light fallback, same standing as the dark one above: style.css's own
+       light value wins for the shipped sheet. */
     --dxg-facet-other: #7D8C85;
 
     --dxg-cycle: #D1201A;

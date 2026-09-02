@@ -114,6 +114,13 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"track", "list"},
 		{"track", "show", "checkout"},
 		{"track", "status", "checkout"},
+		// The theme leaves load no project at all, so they answer identically
+		// here and anywhere else; they are walked for the same reason as the
+		// rest — every leaf's stdout is one envelope — plus the unknown-preset
+		// refusal, which is this noun's only failure envelope.
+		{"theme", "list"},
+		{"theme", "export", "claude"},
+		{"theme", "export", "clode"},
 	}
 
 	for _, args := range commands {
@@ -195,6 +202,8 @@ func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
 		trackListData{},
 		trackShowData{},
 		trackStatusData{},
+		themeListData{},
+		themeExportData{},
 		skillsExportData{},
 		cliout.DryRun{},
 		cliout.Envelope{},

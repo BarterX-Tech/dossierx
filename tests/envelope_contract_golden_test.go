@@ -80,6 +80,7 @@ package tests
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -162,6 +163,75 @@ func envNoProject(_ *testing.T, _ string) map[string]string { return nil }
 func envFresh(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	writeFixtureProject(t, dir, "widget")
+	return nil
+}
+
+// envBadFont is envFresh plus a viewer.theme naming a font file whose bytes are
+// not the format its extension claims, staged in a git work tree so --staged
+// has an index to judge.
+//
+// It is the only fixture here whose defect is in the VIEWER rather than in the
+// corpus, and it earns three pinned invocations because the three check modes
+// reach it by three different code paths — the writing pipeline's render step,
+// check.Status, and check.StatusStaged reading the index — and used to disagree
+// about the code they reported. A skill branches on error.code and nothing
+// else, so a defect that is invalid_config through two doors and write_failed
+// through the third is a broken contract even though every door refuses.
+//
+// A mislabelled font is the defect chosen because a browser handles it worst:
+// handed one it drops the face silently and renders a fallback nobody chose.
+// It is also the one theme defect unreachable by reading project.config.yaml,
+// so pinning a mistyped token name instead would not exercise the rule that
+// needs the file's bytes.
+func envBadFont(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	writeFixtureProject(t, dir, "widget")
+	if err := os.MkdirAll(filepath.Join(dir, "fonts"), 0o755); err != nil {
+		t.Fatalf("mkdir fonts: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "fonts", "probe.woff2"), []byte("NOPE-not-a-woff2"), 0o644); err != nil {
+		t.Fatalf("write bad font: %v", err)
+	}
+	cfgPath := filepath.Join(dir, "project.config.yaml")
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	themed := string(raw) + "viewer:\n  theme:\n    font-sans: '\"Probe Face\", sans-serif'\n" +
+		"    fonts:\n      - family: Probe Face\n        src: fonts/probe.woff2\n"
+	if err := os.WriteFile(cfgPath, []byte(themed), 0o644); err != nil {
+		t.Fatalf("write themed config: %v", err)
+	}
+	for _, args := range [][]string{
+		{"init", "-q", "."},
+		{"config", "user.email", "fixture@example.invalid"},
+		{"config", "user.name", "Fixture"},
+		{"add", "-A"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, gitErr := cmd.CombinedOutput(); gitErr != nil {
+			// Fatal rather than a skip: --staged with no index answers
+			// skipped:true at exit 0, and pinning THAT as this fixture's
+			// contract would record the opposite of what the case is for.
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), gitErr, out)
+		}
+	}
+	return nil
+}
+
+// envGoodFont is envBadFont's twin with a font the engine ACCEPTS, and it
+// exists so the golden pins the shape of a SUCCESSFUL theme and not only the
+// refusal. theme_font_count and theme_font_bytes are omitempty, so the only
+// invocation that can record them as part of the contract is one where a face
+// was actually accepted — without this case a consumer could read the whole
+// snapshot and never learn the two keys exist.
+func envGoodFont(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envBadFont(t, dir)
+	if err := os.WriteFile(filepath.Join(dir, "fonts", "probe.woff2"), []byte("wOF2-fixture-payload"), 0o644); err != nil {
+		t.Fatalf("write good font: %v", err)
+	}
 	return nil
 }
 
@@ -455,6 +525,29 @@ func envelopeCases() []envelopeCase {
 		{"track show / a track nothing has joined", envTracked, []string{"track", "show", "refunds"}},
 		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
 		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
+
+		// The theme leaves, against the plainest fixture there is, because
+		// neither of them loads a project at all: both answer identically in
+		// every environment, which is itself part of what is pinned. Three
+		// blocks, because the noun has three shapes — a list, the no-path
+		// export whose CONTENT rides in data.yaml, and the refusal, which is
+		// the only failure envelope this noun can produce.
+		// One defect, three doors. The pinned rows are what a skill branches
+		// on: the same error.code and the same stopped_at from the writing
+		// pipeline, from check.Status and from check.StatusStaged reading the
+		// git index — plus data.theme_error, which is where the offending
+		// declaration is named. The two font counters are absent here on
+		// purpose (omitempty, and nothing was accepted); the accepted case's
+		// keys ride on the ordinary check rows above.
+		{"check / a theme naming a font whose bytes are not its extension, writing", envBadFont, []string{"check"}},
+		{"check --validate / the same broken theme, read-only", envBadFont, []string{"check", "--validate"}},
+		{"check --staged / the same broken theme, judged from the git index", envBadFont, []string{"check", "--staged"}},
+
+		{"check / a theme whose font is accepted", envGoodFont, []string{"check"}},
+
+		{"theme list / the built-in presets", envFresh, []string{"theme", "list"}},
+		{"theme export / no path, the YAML in the envelope", envFresh, []string{"theme", "export", "claude"}},
+		{"theme export / a preset this binary does not carry", envFresh, []string{"theme", "export", "clode"}},
 
 		{"skills export / into an explicit directory", envFresh, []string{"skills", "export", "skills-out"}},
 

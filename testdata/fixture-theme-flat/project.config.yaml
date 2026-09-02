@@ -1,0 +1,42 @@
+# The custom-theme parity corpus.
+#
+# WHAT THIS FIXTURE IS FOR. The theme work turned ~14 hard-coded literals in
+# style.css into var(--token, <the same literal>) reads. The claim that makes
+# is a NEGATIVE one: a project that sets no token must render byte-identically
+# to the engine that predates the tokens. viewer-tests/theme_parity_test.go
+# proves that by probing computed style, and a probe can only see a construct
+# that is on the page — so this fixture exists to put every themed construct
+# on one page at once. See claims/README.md for the exact inventory, including
+# what it deliberately does NOT instantiate.
+#
+# The `viewer.theme` block below is copied verbatim from a real client
+# project's config (the flat, mode-less shape every project that predates
+# per-mode values writes). It is the shape that must merge to exactly the
+# single :root{...} block the engine emitted before `light:`/`dark:` existed.
+schema_version: 1
+title: Theme Parity Corpus
+eyebrow: every themed construct, on one page
+facets:
+  - contract
+  - internals
+  - decision
+modules:
+  - widget
+  - panel
+tracks:
+  - id: checkout
+    title: Checkout
+    summary: The cross-cutting track this corpus uses to put a .track-head on the page.
+claims_dir: claims
+mockup_modules:
+  - panel
+viewer:
+  theme:
+    accent: "#287052"
+    accent-bg: "rgba(40, 112, 82, .14)"
+    link: "#205b78"
+    warn: "#a2433d"
+    warn-bg: "rgba(162, 67, 61, .13)"
+    font-sans: "Avenir Next, ui-sans-serif, sans-serif"
+    font-mono: "SFMono-Regular, Menlo, monospace"
+    radius: "12px"

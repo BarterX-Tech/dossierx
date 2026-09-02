@@ -20,8 +20,10 @@ package render
 import (
 	"bytes"
 	"embed"
+	"encoding/base64"
 	"fmt"
 	"html/template"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -417,6 +419,26 @@ const ungroupedModuleName = "ungrouped"
 // final template execution, so a future fourth input or grouping level only
 // has to touch the stage it belongs to.
 func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
+	rt, err := config.ResolveTheme(cfg, os.ReadFile)
+	if err != nil {
+		return "", err
+	}
+	return RenderWithTheme(cat, cfg, rt)
+}
+
+// RenderWithTheme is Render with the theme already resolved. It is the real
+// entry point; Render is the convenience wrapper that resolves against the
+// working tree with os.ReadFile.
+//
+// The split exists because two callers must NOT read the working tree.
+// "dossierx check --staged" evaluates the index's bytes, through a reader
+// built on git plumbing, and "dossierx serve" resolves once at startup so
+// that every rebuild in a long-running server emits the same theme rather
+// than re-reading font files that may be half-written under the user's
+// editor. Both call config.ResolveTheme themselves with the reader they
+// need and hand the result here. Keeping Render's signature unchanged keeps
+// every other caller — and every existing test — untouched.
+func RenderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme) (string, error) {
 	if cat == nil {
 		cat = &catalog.Catalog{}
 	}
@@ -467,6 +489,7 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 		renderedByID:   renderedByID,
 		buildOrderTmpl: tmpl.buildOrder,
 		generatedAt:    generatedAt,
+		theme:          rt,
 	})
 
 	var out bytes.Buffer
@@ -667,6 +690,8 @@ type shellInputs struct {
 	renderedByID   map[string]template.HTML
 	buildOrderTmpl *template.Template
 	generatedAt    time.Time
+	// theme is the already-resolved viewer.theme, never re-read here.
+	theme *config.ResolvedTheme
 }
 
 // buildShellData assembles the shellData passed to shell.Execute: cfg's
@@ -690,11 +715,6 @@ type shellInputs struct {
 func buildShellData(in shellInputs) shellData {
 	cat, cfg := in.cat, in.cfg
 
-	var theme map[string]string
-	if cfg != nil {
-		theme = cfg.Viewer.Theme
-	}
-
 	// groups is buildModuleGroups' input only — the flat, facet-level
 	// grouping is not exposed on shellData (shell.html renders exclusively
 	// via ModuleGroups below).
@@ -715,7 +735,7 @@ func buildShellData(in shellInputs) shellData {
 		Title:          title,
 		Eyebrow:        eyebrow,
 		CSS:            template.CSS(in.css),
-		ThemeCSS:       themeOverrideCSS(theme),
+		ThemeCSS:       themeOverrideCSS(in.theme),
 		GeneratedAt:    in.generatedAt.Format("2006-01-02 15:04 UTC"),
 		GraphCSS:       template.CSS(in.graphCSS),
 		GraphPayload:   in.graphPayload,
@@ -730,42 +750,110 @@ func buildShellData(in shellInputs) shellData {
 	}
 }
 
-// themeOverrideCSS builds a single ":root{...}" block from theme, one
-// "--<key>:<value>;" declaration per present, allowlisted key. Keys are
-// iterated in config.ThemeTokenAllowlist's fixed order — not theme's own
-// map iteration order, which Go randomizes — so output is deterministic
-// across runs for the same input. An empty or nil theme (or one with no
-// allowlisted keys, which validateTheme should never actually allow through
-// but this stays defensive) returns "" rather than an empty ":root{}" rule:
-// there is nothing useful to emit, so nothing is emitted.
-func themeOverrideCSS(theme map[string]string) template.CSS {
-	if len(theme) == 0 {
+// themeOverrideCSS builds the project's theme stylesheet from an already
+// resolved theme: the @font-face rules for its inlined fonts, then up to
+// three token blocks. Parts are omitted entirely when they would be empty,
+// and a wholly empty theme returns "" rather than an empty ":root{}" rule,
+// so the shell's <style></style> element still exists (an override sheet
+// that expects the element does not break) with nothing in it.
+//
+//  1. one @font-face per font, in the resolved slice's order;
+//  2. ":root{...}" for tokens whose value is the same in both colour schemes;
+//  3. "@media (prefers-color-scheme: light), print{:root{...}}";
+//  4. "@media screen and (prefers-color-scheme: dark){:root{...}}".
+//
+// The two media lists are the whole of the print story (plan v4 A1). A
+// project's light values apply to print as well as to the light scheme; its
+// dark values are scoped to `screen`, so no dark override can reach a
+// printed page even for a token the project only declared under `dark:`.
+// That is why nothing restates the light palette inside an @media print
+// block: under print the dark block simply does not match.
+//
+// Token order inside every block is config.ThemeTokenAllowlist's fixed
+// order, which config.ResolveTheme has already imposed on the slices — not
+// map iteration order, which Go randomizes — so two runs of the same engine
+// over the same config produce byte-identical output.
+func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
+	if rt.IsZero() {
 		return ""
 	}
 
 	var b strings.Builder
-	wrote := false
-	for _, key := range config.ThemeTokenAllowlist {
-		val, ok := theme[key]
-		if !ok {
+	for _, f := range rt.Fonts {
+		mime, format := fontFormat(f.Ext)
+		if mime == "" {
+			// config.ResolveTheme rejects any other extension; a font that
+			// reached here with one is an engine bug, and emitting a rule
+			// with an empty format() would be a silent one.
 			continue
 		}
-		if !wrote {
-			b.WriteString(":root{")
-			wrote = true
-		}
-		b.WriteString("--")
-		b.WriteString(key)
-		b.WriteString(":")
-		b.WriteString(val)
-		b.WriteString(";")
+		b.WriteString(`@font-face{font-family:"`)
+		b.WriteString(f.Family)
+		b.WriteString(`";src:url(data:`)
+		b.WriteString(mime)
+		b.WriteString(";base64,")
+		b.WriteString(base64.StdEncoding.EncodeToString(f.Data))
+		b.WriteString(`) format("`)
+		b.WriteString(format)
+		b.WriteString(`");font-weight:`)
+		b.WriteString(f.Weight)
+		b.WriteString(";font-style:")
+		b.WriteString(f.Style)
+		b.WriteString(";font-display:swap;}")
 	}
-	if !wrote {
-		return ""
-	}
-	b.WriteString("}")
+
+	writeBlock(&b, "", rt.Shared)
+	writeBlock(&b, "@media (prefers-color-scheme: light), print", rt.Light)
+	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", rt.Dark)
 
 	return template.CSS(b.String())
+}
+
+// writeBlock emits ":root{...}" for decls, wrapped in the media query at
+// media when that is non-empty. An empty decls list writes nothing at all,
+// which is what keeps a flat-only theme's output byte-identical to what
+// this engine emitted before per-mode values existed.
+func writeBlock(b *strings.Builder, media string, decls []config.ThemeDecl) {
+	if len(decls) == 0 {
+		return
+	}
+	if media != "" {
+		b.WriteString(media)
+		b.WriteString("{")
+	}
+	b.WriteString(":root{")
+	for _, d := range decls {
+		b.WriteString("--")
+		b.WriteString(d.Token)
+		b.WriteString(":")
+		b.WriteString(d.Value)
+		b.WriteString(";")
+	}
+	b.WriteString("}")
+	if media != "" {
+		b.WriteString("}")
+	}
+}
+
+// fontFormat maps a lower-cased font file extension (including the dot) to
+// the MIME type its data: URL carries and the string CSS's format() wants.
+// Note that the two disagree for the sfnt formats — ".ttf" is font/ttf but
+// format("truetype") — which is exactly the kind of pair that is wrong for
+// years without anyone noticing, so both directions are pinned by test.
+// An unknown extension returns two empty strings; config rejects those
+// before emission ever sees them.
+func fontFormat(ext string) (mime, format string) {
+	switch ext {
+	case ".woff2":
+		return "font/woff2", "woff2"
+	case ".woff":
+		return "font/woff", "woff"
+	case ".ttf":
+		return "font/ttf", "truetype"
+	case ".otf":
+		return "font/otf", "opentype"
+	}
+	return "", ""
 }
 
 // buildGroups computes the module -> facet grouping described in NAV_SPEC.

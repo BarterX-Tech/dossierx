@@ -109,7 +109,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the eight nouns the way the noun
+	// The message is inlined instead, naming the nine nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -122,11 +122,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
+				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, theme, track, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
+			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, theme, track, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -164,13 +164,14 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: eight nouns, twenty-two leaves, and not one more.
+	// The whole surface: nine nouns, twenty-four leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock                                   3
 	//	track   list show status                                          3
+	//	theme   list export                                               2
 	//	serve · skills export · version                                   3
 	//
 	// The count is a design constraint, not a coincidence. Every verb here is
@@ -180,10 +181,10 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyTwoLeavesUnderEightNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentyFourLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
-	// "track" is the eighth noun, and it is the first addition since v0.3.0
+	// "track" is the eighth noun, and it was the first addition since v0.3.0
 	// built the seven. It earns its place by answering a question none of the
 	// other seven can be asked: every one of them is organized on the MODULE
 	// axis, which says who guarantees a claim, and no arrangement of them says
@@ -191,6 +192,17 @@ func newRootCmd() *cobra.Command {
 	// all READ-ONLY by design — see track.go's package comment for why a track
 	// must never gate a lock — so the eighth noun adds a way to look at the
 	// corpus and no new way to change it.
+	//
+	// "theme" is the ninth, and it is the first noun whose subject is not the
+	// corpus at all: the viewer's palette is a presentation choice a project
+	// makes once, and `viewer.theme` was until now a config block with no way
+	// to see what the engine would accept short of reading FORMAT.md's table.
+	// Its two leaves are the discovery half of that block — what palettes ship,
+	// and what one of them actually contains — and like track they change
+	// nothing a gate reads. "theme export <preset> <path>" is the one leaf in
+	// this surface that writes a file outside the project's stores, and the
+	// file it writes is inert until a human points viewer.theme.extends at it;
+	// see theme.go for why that is not a project mutation.
 	//
 	// The migration verb was the twentieth leaf, added by v0.3.0 and REMOVED by
 	// v0.4.0. It was the one door into ledger adoption, and v0.4.0 removes
@@ -207,6 +219,7 @@ func newRootCmd() *cobra.Command {
 		newCommentCmd(),
 		newBuildOrderCmd(),
 		newTrackCmd(),
+		newThemeCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
 
@@ -239,7 +252,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyTwoLeavesUnderEightNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentyFourLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -1076,6 +1089,28 @@ type checkData struct {
 	// See lock.Store.CommentDigestsAdopted.
 	CommentDigestsAdopted []string `json:"comment_digests_adopted,omitempty"`
 
+	// ThemeError is viewer.theme's refusal — an unreadable or unstaged theme
+	// file, a font whose bytes are not the format its extension claims, a
+	// family nothing names, an unknown preset, the total font cap — and it is
+	// in the payload because the alternative was what shipped before it: the
+	// read-only modes computed it (check.Result.ThemeError, whose own doc
+	// comment says "a non-empty ThemeError clears OK") and the envelope
+	// dropped it on the floor, so `check --validate` and `check --staged`
+	// answered ok:true for a project whose viewer plain `check` cannot render.
+	// A pre-commit hook and a CI run stayed green on a document nobody can
+	// produce, which is the exact shape of failure this project treats as
+	// worse than no gate at all.
+	//
+	// It is its own field rather than a lint finding for check.Result's reason:
+	// no claim is at fault and no lint rule ran. ThemeFontCount/ThemeFontBytes
+	// are how much of a reader's download the project's own fonts account for —
+	// the RAW bytes; base64 expands them by a third in the emitted viewer — and
+	// they are the number the theme skill's verification step reads. Both are
+	// zero when ThemeError is set, because nothing was accepted.
+	ThemeError     string `json:"theme_error,omitempty"`
+	ThemeFontCount int    `json:"theme_font_count,omitempty"`
+	ThemeFontBytes int64  `json:"theme_font_bytes,omitempty"`
+
 	CatalogPath      string          `json:"catalog_path,omitempty"`
 	CatalogCount     int             `json:"catalog_count,omitempty"`
 	ViewerPath       string          `json:"viewer_path,omitempty"`
@@ -1105,6 +1140,9 @@ func newCheckData(res check.Result) checkData {
 		scanErrors = append(scanErrors, scanErrorData{File: e.File, Line: e.Line, ClaimID: e.ClaimID, Message: e.Message})
 	}
 	return checkData{
+		ThemeError:         res.ThemeError,
+		ThemeFontCount:     res.ThemeFontCount,
+		ThemeFontBytes:     res.ThemeFontBytes,
 		LintFindings:       findings,
 		LintErrorCount:     len(res.LintErrors),
 		LintWarningCount:   len(res.LintWarnings),
@@ -1158,7 +1196,21 @@ func checkStoppedAt(res check.Result, err error) string {
 // exit status 1 (cliout.ExitCode), which is not incidental: tests/check_exit_test.go
 // pins "a lint error exits 1, NOT 2 — check failures must never be mistaken for
 // a missing claim or config", and that stays true for every step.
-func checkFailureCode(stoppedAt string) cliout.Code {
+//
+// It takes the Result and not only the step name because ONE step has two
+// unrelated failures under it. "render" is reached both by a genuine write
+// failure — an unwritable viewer/ directory, a full disk — and by a theme that
+// does not resolve, and those have opposite recoveries. Classifying the theme
+// case as write_failed is what the router skill teaches an agent to escalate as
+// a filesystem problem, so it would send somebody to check disk permissions for
+// a mistyped preset name. Worse, the two READ-ONLY modes already answered
+// invalid_config for the identical input, so the same defect carried a
+// different code depending on which door the caller came through — which is
+// exactly what a stable code is supposed to make impossible.
+func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
+	if res.ThemeError != "" {
+		return cliout.CodeInvalidConfig
+	}
 	switch stoppedAt {
 	case "lint":
 		return cliout.CodeLintFailed
@@ -1372,7 +1424,7 @@ func newCheckCmd() *cobra.Command {
 				// check_parity_test.go / tests/check_exit_test.go. cliout.Errorf
 				// reproduces fmt.Errorf's string precisely, so attaching the
 				// code costs nothing on the text side.
-				failure := cliout.Errorf(checkFailureCode(stoppedAt), "check: %w", runErr)
+				failure := cliout.Errorf(checkFailureCode(res, stoppedAt), "check: %w", runErr)
 				if stoppedAt == "ledger" {
 					// The one failure family whose WRONG recovery is
 					// destructive, so it is the one that must not arrive with
@@ -1456,6 +1508,14 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "lint"
 		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
 	}
+	if res.ThemeError != "" {
+		// Same enforcement as --validate, and it is sharper here: --staged runs
+		// the theme rules against the INDEX's bytes, so this is the refusal
+		// that catches a commit staging a config that names a theme file or a
+		// font the commit does not carry.
+		out.StoppedAt = "render"
+		return out, cliout.Errorf(cliout.CodeInvalidConfig, "check: %s", res.ThemeError)
+	}
 	if len(res.LedgerFindings) > 0 {
 		out.StoppedAt = "ledger"
 		return out, cliout.Errorf(cliout.CodeIntegrityFailed, "check: ledger: %d integrity finding(s)", len(res.LedgerFindings)).
@@ -1492,10 +1552,11 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 	// outcome from res and returns the coded error.
 	reportLintFindings(cmd, res.LintFindings) //nolint:errcheck // intentionally discarded (see comment above)
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportThemeError(cmd, res)
 	for _, step := range res.NextSteps {
 		fmt.Fprintf(out, "  next: %s\n", step)
 	}
-	if len(res.LintErrors) > 0 || len(res.LedgerFindings) > 0 {
+	if len(res.LintErrors) > 0 || len(res.LedgerFindings) > 0 || res.ThemeError != "" {
 		return
 	}
 	fmt.Fprintln(out, "check --staged: OK (read-only: nothing written)")
@@ -1556,6 +1617,23 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "lint"
 		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
 	}
+	if res.ThemeError != "" {
+		// The read-only modes ENFORCE the theme rules, for the reason they
+		// enforce the ledger gate two paragraphs down: a mode that quietly
+		// passed what the writing mode refuses is the easiest possible bypass.
+		// A theme that does not resolve means `dossierx check` cannot render
+		// the viewer, so a --validate that answered OK would be describing a
+		// document nobody can produce.
+		//
+		// stopped_at is "render" because that is where plain `check` stops on
+		// the same input, and a consumer should not have to know which door it
+		// came through. invalid_config is the code because the fault is in what
+		// project.config.yaml declares — a preset this binary does not carry, a
+		// theme file it cannot read, a font whose bytes are not what its
+		// extension claims — and the recovery is editing that declaration.
+		out.StoppedAt = "render"
+		return out, cliout.Errorf(cliout.CodeInvalidConfig, "check: %s", res.ThemeError)
+	}
 	if len(res.LedgerFindings) > 0 {
 		// check.Status REPORTS the ledger gate and leaves the decision to its
 		// caller (so serve's status strip keeps rendering a disputed project);
@@ -1567,6 +1645,20 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 			WithHint(ledgerRecoveryHint(res.LedgerFindings))
 	}
 	return out, nil
+}
+
+// reportThemeError prints the viewer theme's refusal on the read-only paths.
+//
+// It prints NOTHING when the theme is fine or absent, which is almost every
+// project, so the clean output of every existing fixture is unchanged. It
+// exists because the two read-only formatters stop before their "OK" line when
+// res.OK is false, and a theme refusal is one of the things that clears it: a
+// text-mode reader would otherwise get findings, no verdict, and no reason.
+func reportThemeError(cmd *cobra.Command, res check.Result) {
+	if res.ThemeError == "" {
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "  [error] viewer.theme: %s\n", res.ThemeError)
 }
 
 // formatCheckValidateResult is --validate's terminal rendering.
@@ -1591,6 +1683,7 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 	// decided by whether something unrelated failed to lint. Integrity findings
 	// are the ones a reader must not have to run a second command to see.
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportThemeError(cmd, res)
 	if !res.OK || len(res.LedgerFindings) > 0 {
 		return
 	}
@@ -2090,16 +2183,27 @@ func newLockCmd() *cobra.Command {
 	var reason string
 	var dryRun bool
 	cmd := &cobra.Command{
-		Use:   "lock <id>",
-		Short: "Lock a draft claim (refused if lint fails); --reason records the human approval it executes",
-		Args:  cobra.ExactArgs(1),
+		Use:   "lock <id> [id...]",
+		Short: "Lock one or more draft claims (refused if lint fails); --reason records the human approval it executes",
+		Args:  cobra.MinimumNArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
-			id := args[0]
-
 			// --dry-run answers a question; it never writes and never takes a
 			// sentinel, so it runs entirely off a plain read here, before the
-			// write path below is entered at all.
+			// write path below is entered at all. It previews exactly ONE
+			// claim's gates (lockDryRun's shape is one transition, one set of
+			// preconditions) — a batch's whole point is that its gates are not
+			// the sum of N single-claim previews (see runBatchLock's WHY
+			// comment), so a multi-id preview would either lie by reusing the
+			// single-claim shape or require a second, batch-shaped preview
+			// format for a flag no caller in this release's Part 2 workflow
+			// actually needs. Refusing cleanly is honest; approximating is not.
+			if dryRun && len(args) > 1 {
+				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
+					"lock: --dry-run previews exactly one claim at a time; run it once per id (dossierx claim lock <id> --dry-run), then run the batch itself without --dry-run")
+			}
+
 			if dryRun {
+				id := args[0]
 				cfg, claims, err := loadConfigAndClaims()
 				if err != nil {
 					return cmdResult{}, err
@@ -2122,6 +2226,18 @@ func newLockCmd() *cobra.Command {
 			if err := requireReason("claim lock", reason); err != nil {
 				return cmdResult{}, err
 			}
+
+			// TWO OR MORE IDS is the batch path — a genuinely different write,
+			// not this function looped. See runBatchLock's WHY comment for the
+			// deadlock it exists to break. Single-id behavior below this branch
+			// is completely untouched by its existence: the branch is taken
+			// before any of the single-lock code runs, so len(args) == 1 always
+			// falls straight through to exactly the code that ran before batch
+			// locking existed.
+			if len(args) > 1 {
+				return runBatchLock(cmd, args, reason)
+			}
+			id := args[0]
 
 			cfg, err := loadConfig()
 			if err != nil {

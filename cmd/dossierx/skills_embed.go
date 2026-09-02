@@ -85,7 +85,7 @@ const (
 func newSkillsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "skills",
-		Short: "Install the embedded DossierX agent skills (dossierx router, claims, comments, build-order, code-links) in whatever form this repo's harness reads",
+		Short: "Install the embedded DossierX agent skills (dossierx router, claims, comments, theme, build-order, code-links) in whatever form this repo's harness reads",
 	}
 	cmd.AddCommand(newSkillsExportCmd())
 	return commandGroup(cmd)
@@ -343,7 +343,7 @@ type skillDoc struct {
 // disagree, in BOTH directions: a name in Order with no directory is a typo that
 // would otherwise silently drop a skill from the guide, and a directory absent
 // from Order is a new bundle whose place in the reading order nobody decided. The
-// error names the offender rather than quietly exporting four of five skills,
+// error names the offender rather than quietly exporting five of six skills,
 // because a guide missing a section reads as complete.
 func loadSkillDocs(embedded fs.FS) ([]skillDoc, error) {
 	entries, err := fs.ReadDir(embedded, ".")
@@ -462,7 +462,7 @@ func buildAgentGuide(embedded fs.FS) (string, error) {
 // or not DossierX is what the agent is working on, so the budget is far tighter
 // than a skill file's — and the router is precisely the part that must always be
 // resident (the contract, the two roles, the rules that never bend, and where to
-// read the rest). Inlining all five would pay for four skills' worth of context
+// read the rest). Inlining all six would pay for five skills' worth of context
 // on every unrelated turn.
 func buildAgentsSection(embedded fs.FS) (string, error) {
 	docs, err := loadSkillDocs(embedded)

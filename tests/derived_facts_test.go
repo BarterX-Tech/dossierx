@@ -59,6 +59,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/config"
 )
 
 // ---------------------------------------------------------------------------
@@ -564,5 +566,85 @@ func TestREADMECountedClaimsMatchTheSurfaceInventory(t *testing.T) {
 	// broken extraction and must fail rather than pass over zero assertions.
 	if found == 0 {
 		t.Fatal("no counted surface claims were extracted from README.md; either README genuinely no longer states any count (update this test deliberately) or the sentence shapes moved out from under readmeCountedClaimPatterns — in both cases a silent zero-assertion pass is the wrong answer")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// C6 — README's viewer.theme token list against the engine's own allowlist
+// ---------------------------------------------------------------------------
+
+// readmeThemeTokenListRe finds the sentence README states the full token
+// vocabulary in: "`viewer.theme`'s 28 allowed token names: `a`, `b`, ..., `z`."
+// The count in the middle is not captured or checked here — it is prose, not
+// a mechanical count, and TestREADMECountedClaimsMatchTheSurfaceInventory's
+// bound is that a current inventory can confirm it; ThemeTokenAllowlist's own
+// length is what the token LIST is checked against, which is the fact this
+// sentence would actually go stale by.
+var readmeThemeTokenListRe = regexp.MustCompile("`viewer\\.theme`'s \\d+ allowed token names: ((?:`[a-z0-9-]+`(?:, )?)+)\\.")
+
+// readmeBacktickTokenRe pulls each backtick-quoted token name out of the
+// captured list in the order README wrote them.
+var readmeBacktickTokenRe = regexp.MustCompile("`([a-z0-9-]+)`")
+
+// TestREADMEThemeTokenListIsDerivedFromThemeTokenAllowlist pins README's
+// stated viewer.theme token vocabulary to config.ThemeTokenAllowlist, in
+// ORDER as well as membership. Order matters here beyond the usual "two
+// renderings of one sequence" argument other engine-order comparisons in this
+// file make: internal/render emits every theme declaration in
+// ThemeTokenAllowlist's order, so this list is also, incidentally, the order
+// a project's exported theme file and every emitted <style> block declare
+// these tokens in. A README that lists the right 28 names in the wrong order
+// would still describe a different engine than the one shipping.
+//
+// This is the derived-facts pattern the rest of this file uses: the engine
+// side (config.ThemeTokenAllowlist) is a Go slice under test elsewhere in
+// this tree (internal/config's own tests, and internal/render's
+// theme_tokens_test.go, both fail independently if it drifts from what
+// style.css and the validator actually recognise), so comparing README's
+// prose against it is a comparison against a fact, not against another piece
+// of prose.
+func TestREADMEThemeTokenListIsDerivedFromThemeTokenAllowlist(t *testing.T) {
+	readme := readRepoFile(t, "README.md")
+
+	m := readmeThemeTokenListRe.FindStringSubmatch(readme)
+	if m == nil {
+		t.Fatal("README.md carries no sentence matching `viewer.theme`'s N allowed token names: `a`, `b`, ....\" — " +
+			"either the sentence was reworded (update readmeThemeTokenListRe deliberately) or it was deleted, and " +
+			"in both cases a silent zero-assertion pass over config.ThemeTokenAllowlist is the wrong answer")
+	}
+
+	tokenMatches := readmeBacktickTokenRe.FindAllStringSubmatch(m[1], -1)
+	if len(tokenMatches) == 0 {
+		t.Fatal("the token-list sentence matched but no backtick-quoted token name was extracted from it; " +
+			"the capture group is empty, which is a broken regex, not an empty README claim")
+	}
+	got := make([]string, 0, len(tokenMatches))
+	for _, tm := range tokenMatches {
+		got = append(got, tm[1])
+	}
+
+	want := config.ThemeTokenAllowlist
+	if len(want) == 0 {
+		t.Fatal("config.ThemeTokenAllowlist is empty; the engine side of this comparison has nothing to compare README " +
+			"against, which would make a pass here mean nothing")
+	}
+
+	if len(got) != len(want) {
+		t.Fatalf("README's viewer.theme token list names %d token(s); config.ThemeTokenAllowlist carries %d.\n\n"+
+			"README:   %s\nengine:   %s\n\n"+
+			"The allowlist is the engine's own theme vocabulary (internal/config/config.go); when the two counts "+
+			"disagree, README is describing a different token set than the one that actually loads.",
+			len(got), len(want), strings.Join(got, ", "), strings.Join(want, ", "))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("README's viewer.theme token list disagrees with config.ThemeTokenAllowlist at position %d: "+
+				"README says %q, the engine says %q.\n\nREADME:   %s\nengine:   %s\n\n"+
+				"internal/render emits theme declarations in ThemeTokenAllowlist's order (it is documented as load-bearing "+
+				"in config.go), so this is not just a cosmetic reordering — README would be describing a different "+
+				"emission order than the one the engine actually produces.",
+				i, got[i], want[i], strings.Join(got, ", "), strings.Join(want, ", "))
+			break
+		}
 	}
 }

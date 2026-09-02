@@ -5,6 +5,114 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.6] - 2026-09-02
+
+### Added
+
+- The viewer can now be restyled with a project's own colours and fonts through `viewer.theme`:
+  an optional built-in `preset` (`claude` today), an optional theme file (`extends`) a project can
+  layer on top of a preset, per-colour-scheme overrides (`light:`/`dark:` alongside flat keys that
+  apply to both), and the project's own local font files inlined as base64 `data:` URLs. The token
+  vocabulary grows from 14 to 28 — 14 new tokens (`code-inline-bg`, `code-bg`, `table-head-bg`,
+  `image-bg`, `hover-bg`, `border-strong`, `shadow`, `shadow-strong`, `shadow-cast`, `scrim`,
+  `selection-bg`, `status-draft`, `status-draft-bg`, `mockup-bg`) cover consumers the original 14
+  never reached. See [`docs/theming.md`](docs/theming.md), [FORMAT.md](FORMAT.md#viewertheme), and
+  the embedded `dossierx-theme` skill.
+- `dossierx theme list` reports every built-in preset and the token names it sets; `dossierx theme
+  export <preset> [path]` writes one out as an editable theme file (or returns its YAML in the
+  envelope when no path is given), refusing to overwrite an existing file unless `--force` is
+  passed.
+- A new error code, `unknown_preset`, for a `viewer.theme.preset` name the binary does not carry.
+- `dossierx check`'s envelope data gains `theme_font_count` and `theme_font_bytes`, reporting how
+  many project-supplied font files a theme inlines and their combined raw byte size — what a
+  reader downloads before the page renders anything. Both are `omitempty`: they are absent from
+  `data` (not present as `0`) when the theme declares no fonts, and when a render-phase theme
+  failure sets `data.theme_error` instead (nothing was accepted). A config-phase theme failure —
+  an unknown token, a bad value, a duplicate key, an `extends` outside the project — carries no
+  `data` at all; only `error.message` names it.
+- Under `dossierx serve`, the Content-Security-Policy now includes `font-src data:`, so a themed
+  project's inlined fonts render under `serve` the same way they do in a statically rendered
+  viewer. No other CSP directive changed.
+- Built with a per-mode/preset/font `viewer.theme` and opened with a DossierX binary older than
+  this release, a project's config fails to load rather than being partially understood. The
+  error is verbatim one of two shapes: `viewer.theme: unknown theme token "preset" (must be one of
+  accent, accent-bg, ink, muted, faint, paper, card-bg, border, link, warn, warn-bg, font-sans,
+  font-mono, radius)` for a scalar key (`preset`, `extends`), or a YAML-level `... cannot unmarshal
+  !!map into string` (`!!seq` for `fonts:`) for `light:`, `dark:`, and `fonts:`. Failing closed is
+  deliberate: a viewer rendered with half a theme applied is worse than one that refuses to build.
+- Built-in preset values may change between minor releases, since they track a palette this
+  project does not own; every such change from now on gets its own **Changed** entry here. A
+  project that needs a value frozen writes it inline, or exports the preset to a file it then
+  owns.
+
+### Fixed
+
+- A faint 1px horizontal seam was drawn between every pair of lines of a multi-line fenced code
+  block in a claim body, in both colour schemes. The reader saw a hairline in `--border` splitting
+  the code block into per-line boxes. The cause: the stylesheet's inline-code pill rule gives every
+  `code` element a `1px solid var(--border)` border, and the `.claim-body pre code` reset cancelled
+  the pill's background, padding and radius but not that border — and a fenced block's `<code>` is
+  a single *inline* box, so it fragments across line boxes and the initial `box-decoration-break:
+  slice` repaints the border's top and bottom edge on every fragment. The reset now includes
+  `border: 0`. A single-line fenced block was unaffected (one fragment, one ring, drawn flush
+  inside the block's own border); a block of *n* lines showed *n*-1 seams.
+- A fenced code block written in a step body, a comment, or a list item is now painted as a code
+  block, the same as one written in a claim body. Those three bodies were never in the
+  fenced-block rule's selector list, so their `<pre>` had no background, no border and no padding
+  at all, and the block reached the reader as a run of inline-code *pills*: measured in a browser,
+  `pre` computed `background rgba(0,0,0,0)`, `border 0`, `padding 0`, while its `<code>` kept the
+  pill's `1px 5px` padding, `--code-inline-bg` background and the sliced border above. They now
+  get `--code-bg`, the `1px solid var(--border)` block border and the `13px 14px` padding a claim
+  body's fenced block has always had, with the pill reset applied inside. This changes pixels for
+  any project that wrote a fence in one of those three places; it is a deliberate consistency fix,
+  not a no-op. `.claim-tree-body` is unchanged — the template writes that `<pre>` directly, with no
+  inner `<code>`.
+- The viewer's `:root` now declares `color-scheme: light dark` instead of only `light`, so a
+  reader in OS dark mode gets UA-native dark rendering for the surfaces the stylesheet never drew
+  itself. Concretely, in dark mode: native form controls — every `<button>`, `<details>`/
+  `<summary>` disclosure markers, and task-list checkboxes — now paint dark instead of a bright
+  light-mode chrome showing through; the mobile facet table-of-contents `<select>` and the native
+  popup it opens render dark; the comment composer's input and its placeholder text render dark;
+  the scrollbar on an overflowing code block tracks the OS theme instead of staying light; and the
+  claims graph canvas's backdrop and overscroll area render dark instead of white. A project
+  supplying its own stylesheet through `viewer.template_overrides` is unaffected unless that
+  stylesheet also sets `color-scheme`.
+- Printing the viewer now always uses the light palette, regardless of the reader's OS colour
+  scheme at print time and regardless of any `dark:` theme override the project configured. A
+  `dark:`-only token — one with no `light:`/flat counterpart at all — previously had no defined
+  print behaviour; it now resolves to the engine's light default under print, the same as every
+  other token.
+- FORMAT.md's "Mode-invariant vs. mode-varying tokens" table was wrong in two ways: it listed
+  `accent`, `accent-bg`, `link`, `warn`, and `warn-bg` as mode-invariant, but the shipped
+  stylesheet's dark `@media` block has always re-pointed all five; and it had no third category for
+  `code-inline-bg`/`code-bg`, whose default is a `color-mix()` of `paper` and `card-bg` rather than
+  a fixed colour, so they compute a different value per scheme without being re-declared in the
+  dark block at all. The table is corrected to three groups: 14 mode-varying tokens re-declared in
+  the dark block (the eleven original colour tokens `ink`, `muted`, `faint`, `paper`, `card-bg`,
+  `border`, `accent`, `accent-bg`, `link`, `warn`, `warn-bg` plus `shadow`, `shadow-strong`, and
+  `scrim`), 2 derived tokens (`code-inline-bg`, `code-bg`), and 12 mode-invariant tokens, including
+  `font-sans`, `font-mono`, and `radius`.
+
+### Changed
+
+- Every colour, shadow, and shape value the generated stylesheet emits is now themeable through a
+  `viewer.theme` token — this is the mechanism that makes the theming feature above take effect. A
+  project with no theme configured sees identical rendered output; a project that reached into
+  `viewer.template_overrides` to restyle a value this list now covers can drop that override in
+  favour of a token. Run `dossierx check` to regenerate an existing viewer regardless: the
+  generated `viewer/index.html` output changes shape (a `var()` call in place of a literal) even
+  where it renders identically.
+- This release silently changes rendered output for some existing projects: three fixtures with
+  byte-identical inputs to a v0.7.5 baseline — `fixture-basic`, `fixture-graph-demo`, and
+  `fixture-portability` — render differently, from the stylesheet's `var()`-token conversion and
+  the print `color-scheme: light` fix above. Two new theme fixtures
+  (`testdata/fixture-theme-flat`, `testdata/fixture-theme-preset`) are new to this release's
+  cross-release golden and are therefore uncompared this time, not silently passing a comparison
+  that ran. The `.status-strip` relocation that showed up here against older baselines is a
+  v0.7.5-era change already folded into that baseline and no longer appears.
+- After upgrading, re-run `dossierx skills export` to refresh `AGENTS.md`/the embedded agent guide
+  with the updated `dossierx-theme` skill.
+
 ## [0.7.5] - 2026-08-30
 
 ### Added
@@ -2059,7 +2167,7 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...HEAD
+[0.7.6]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.5...v0.7.6
 [0.7.4]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.1...v0.7.2

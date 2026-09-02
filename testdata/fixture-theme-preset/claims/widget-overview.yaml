@@ -1,0 +1,15 @@
+id: widget.contract.overview
+facet: contract
+module: widget
+status: draft
+layout: card
+section: What this fixture is
+body: |
+  This claim exists so the fixture renders. What is under test is the
+  stylesheet the shell emits around it: a preset, a two-mode override, and one
+  `@font-face` whose `src` is a data: URL.
+
+  The body font is `DossierX Probe`, whose single glyph is two ems wide.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine

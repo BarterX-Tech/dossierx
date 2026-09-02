@@ -1186,6 +1186,8 @@ func surfacePayloadTypes() map[string]any {
 		"lintFindingData":       lintFindingData{},
 		"lockData":              lockData{},
 		"lockRefusedData":       lockRefusedData{},
+		"batchLockData":         batchLockData{},
+		"batchLockRefusedData":  batchLockRefusedData{},
 		"reauditData":           reauditData{},
 		"scanErrorData":         scanErrorData{},
 		"skillsExportData":      skillsExportData{},

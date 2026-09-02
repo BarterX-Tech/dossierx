@@ -27,6 +27,13 @@ coverage.html
 # its own.
 !testdata/fixture-graph-demo/.dossierx-comment-digest.json
 
+# testdata/fixture-theme-flat is the second: it carries locked claims and one
+# open comment thread (that thread is what makes .claim-review-pending render,
+# and the theme parity suite probes that element), so its digest store is a
+# tracked input for the same reason. Without it a fresh clone's "dossierx check"
+# exits 1 with integrity_failed, and CI did exactly that on PR #60.
+!testdata/fixture-theme-flat/.dossierx-comment-digest.json
+
 # That fixture's .dossierx-lock-store.json is tracked too, and needs no negation
 # here because no pattern in this file ever ignored a lock store. Between the
 # two, testdata/fixture-graph-demo is the only path under which a .dossierx-*

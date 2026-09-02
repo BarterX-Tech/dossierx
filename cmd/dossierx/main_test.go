@@ -269,7 +269,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyTwoLeavesUnderEightNouns pins the headline of the v0.3.0
+// TestSurfaceIsTwentyFourLeavesUnderNineNouns pins the headline of the v0.3.0
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
@@ -297,7 +297,18 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // field existed. Its three leaves are all read-only: this adds a way to LOOK at
 // the corpus and no new way to change it, which is why the addition does not
 // touch any lifecycle guarantee the other nineteen make.
-func TestSurfaceIsTwentyTwoLeavesUnderEightNouns(t *testing.T) {
+//
+// THE FOURTH MOVE IS THE THEME NOUN, taking twenty-two-under-eight to
+// twenty-four-under-nine. It is the first noun whose subject is not the corpus:
+// `viewer.theme` had a twenty-eight-token vocabulary and built-in presets with
+// no way to see either from the CLI, so "which palettes ship?" and "what does
+// the claude preset actually set?" were questions answerable only by reading
+// FORMAT.md or this binary's source. `theme list` and `theme export` answer
+// them. Neither loads a project, neither reads claims_dir, and neither can fail
+// a gate; `theme export <preset> <path>` writes a file, and that file is inert
+// until a human points viewer.theme.extends at it. Same argument as track: a
+// way to LOOK, and no new way to change what the project treats as approved.
+func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -322,6 +333,9 @@ func TestSurfaceIsTwentyTwoLeavesUnderEightNouns(t *testing.T) {
 		"track list":   true,
 		"track show":   true,
 		"track status": true,
+
+		"theme list":   true,
+		"theme export": true,
 
 		"serve":         true,
 		"skills export": true,
@@ -371,8 +385,8 @@ func TestSurfaceIsTwentyTwoLeavesUnderEightNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 22 {
-		t.Errorf("the surface is 22 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 24 {
+		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -469,7 +483,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyTwoLeavesUnderEightNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

@@ -1,0 +1,73 @@
+{
+  "module": "panel",
+  "locked": true,
+  "locked_at": "2026-09-02T13:54:13.818421Z",
+  "stale": false,
+  "excluded": [],
+  "phases": [
+    {
+      "phase": "orientation",
+      "claims": [
+        {
+          "id": "panel.decision.mockup",
+          "file": "claims/panel-mockup.yaml"
+        }
+      ]
+    },
+    {
+      "phase": "schema",
+      "claims": [
+        {
+          "id": "panel.internals.state",
+          "file": "claims/panel-state.yaml",
+          "rests_on": [
+            "panel.decision.mockup"
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "behavior",
+      "claims": [
+        {
+          "id": "panel.contract.behavior",
+          "file": "claims/panel-behavior.yaml",
+          "rests_on": [
+            "panel.internals.state"
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "api",
+      "claims": [
+        {
+          "id": "panel.contract.api",
+          "file": "claims/panel-api.yaml",
+          "rests_on": [
+            "panel.contract.behavior"
+          ]
+        }
+      ]
+    },
+    {
+      "phase": "verification",
+      "claims": [
+        {
+          "id": "panel.internals.verification",
+          "file": "claims/panel-verify.yaml",
+          "rests_on": [
+            "panel.contract.api"
+          ]
+        }
+      ]
+    }
+  ],
+  "hashes": {
+    "panel.contract.api": "ffe2363d8d6524b8f2a2c9c4fce540c1e391a6ac847bab2bba192e4241db4854",
+    "panel.contract.behavior": "8799c05e90f414682aa59283cd5c88fd7657abd0e8a4ff36eaeb88fb0a0d0278",
+    "panel.decision.mockup": "4ee4abab4f1c655a0fe5f9a8865dc9b3cd99f3121572299ce61afe0ac26a0e21",
+    "panel.internals.state": "eb9e5ece4506258aa04cfb2b21d71696af4051bcf718fd0038ab71a52e7e7b95",
+    "panel.internals.verification": "b08419427a86a0d52dd52a5e8e66d96c5b2945d2b7d144085f041922766929f8"
+  }
+}

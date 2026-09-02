@@ -535,6 +535,113 @@ track status / an id the config does not declare
                   message:string
     error.code    unknown_track
 
+check / a theme naming a font whose bytes are not its extension, writing
+    argv          check
+    exit          1
+    ok            false
+    envelope      command data error ok stopped_at warnings
+    command       check
+    data          catalog_count:number
+                  catalog_path:string
+                  ledger_finding_count:number
+                  lint_error_count:number
+                  lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
+                  lint_warning_count:number
+                  scan_errors:[]
+                  scan_files_scanned:number
+                  theme_error:string
+    error         code:string
+                  message:string
+    error.code    invalid_config
+    stopped_at    render
+
+check --validate / the same broken theme, read-only
+    argv          check --validate
+    exit          1
+    ok            false
+    envelope      command data error ok stopped_at warnings
+    command       check
+    data          ledger_finding_count:number
+                  lint_error_count:number
+                  lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
+                  lint_warning_count:number
+                  read_only:bool
+                  scan_errors:[]
+                  scan_files_scanned:number
+                  theme_error:string
+    error         code:string
+                  message:string
+    error.code    invalid_config
+    stopped_at    render
+
+check --staged / the same broken theme, judged from the git index
+    argv          check --staged
+    exit          1
+    ok            false
+    envelope      command data error ok stopped_at warnings
+    command       check
+    data          ledger_finding_count:number
+                  lint_error_count:number
+                  lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
+                  lint_warning_count:number
+                  read_only:bool
+                  scan_errors:[]
+                  scan_files_scanned:number
+                  staged:bool
+                  theme_error:string
+    error         code:string
+                  message:string
+    error.code    invalid_config
+    stopped_at    render
+
+check / a theme whose font is accepted
+    argv          check
+    exit          0
+    ok            true
+    envelope      command data ok warnings
+    command       check
+    data          catalog_count:number
+                  catalog_path:string
+                  ledger_finding_count:number
+                  lint_error_count:number
+                  lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
+                  lint_warning_count:number
+                  next_steps:[string]
+                  scan_errors:[]
+                  scan_files_scanned:number
+                  theme_font_bytes:number
+                  theme_font_count:number
+                  viewer_path:string
+
+theme list / the built-in presets
+    argv          theme list
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       theme list
+    data          count:number
+                  presets:[{description:string,name:string,tokens:[string]}]
+
+theme export / no path, the YAML in the envelope
+    argv          theme export claude
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       theme export
+    data          preset:string
+                  yaml:string
+
+theme export / a preset this binary does not carry
+    argv          theme export clode
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       theme export
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    unknown_preset
+
 skills export / into an explicit directory
     argv          skills export skills-out
     exit          0
@@ -571,20 +678,22 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (12 of 45)
+    pinned by an invocation above (14 of 46)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
         invalid_actor             exit 1
+        invalid_config            exit 1
         lint_failed               exit 1
         not_locked                exit 2
         not_proposed              exit 1
         not_review_pending        exit 2
+        unknown_preset            exit 1
         unknown_track             exit 1
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (33)
+    reachable only from states no fixture here builds (32)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
         bad_request
@@ -602,7 +711,6 @@ ERROR-CODE COVERAGE
         integrity_failed
         internal
         invalid_claim
-        invalid_config
         missing_flag
         no_artifact
         pre_ledger_unadopted

@@ -31,9 +31,9 @@
 //
 // They are HIDDEN (absent from --help, from the completion script, and from
 // requireSubcommand's "run one of:" list) because they are not surface: nothing
-// should discover them, and the eight-noun/twenty-two-leaf contract is a design
+// should discover them, and the nine-noun/twenty-four-leaf contract is a design
 // constraint the release argues for. annotationRetired is what keeps
-// TestSurfaceIsTwentyTwoLeavesUnderEightNouns honest about that — it excludes these
+// TestSurfaceIsTwentyFourLeavesUnderNineNouns honest about that — it excludes these
 // by MARK, not by hidden-ness, so a real leaf can never be smuggled past the
 // count by hiding it.
 package main

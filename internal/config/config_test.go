@@ -439,13 +439,20 @@ viewer:
 		"font-sans": "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 		"radius":    "12px",
 	}
-	if len(cfg.Viewer.Theme) != len(want) {
-		t.Fatalf("Theme = %v, want %v", cfg.Viewer.Theme, want)
+	// Flat keys land in Shared: they apply in both colour schemes, which
+	// is what every theme written before per-mode values existed meant.
+	got := cfg.Viewer.Theme.Shared
+	if len(got) != len(want) {
+		t.Fatalf("Theme.Shared = %v, want %v", got, want)
 	}
 	for k, v := range want {
-		if cfg.Viewer.Theme[k] != v {
-			t.Errorf("Theme[%q] = %q, want %q", k, cfg.Viewer.Theme[k], v)
+		if got[k] != v {
+			t.Errorf("Theme.Shared[%q] = %q, want %q", k, got[k], v)
 		}
+	}
+	if len(cfg.Viewer.Theme.Light) != 0 || len(cfg.Viewer.Theme.Dark) != 0 {
+		t.Errorf("a flat theme must produce no per-mode keys, got light=%v dark=%v",
+			cfg.Viewer.Theme.Light, cfg.Viewer.Theme.Dark)
 	}
 }
 
@@ -461,8 +468,8 @@ claims_dir: claims
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if len(cfg.Viewer.Theme) != 0 {
-		t.Errorf("Theme = %v, want empty/nil when viewer.theme is unset", cfg.Viewer.Theme)
+	if !cfg.Viewer.Theme.IsZero() {
+		t.Errorf("Theme = %+v, want the zero theme when viewer.theme is unset", cfg.Viewer.Theme)
 	}
 }
 

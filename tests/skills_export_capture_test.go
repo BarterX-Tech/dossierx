@@ -21,7 +21,7 @@ import (
 )
 
 // rawWikilinkPattern matches ANY unresolved "[[text]]" wikilink, not just the
-// five bundle names this repo happens to embed today. This is deliberately
+// six bundle names this repo happens to embed today. This is deliberately
 // broader than "does the bundle's own name still appear in brackets": a
 // rewritten link never contains the bare "[[" + "]]" bracket pair at all
 // (rewriteWikilinks turns it into "[`name`](...)", cmd/dossierx/skills_embed.go),
@@ -43,7 +43,7 @@ var rawWikilinkPattern = regexp.MustCompile(`\[\[[^\]\n]+\]\]`)
 // resolve to a bundle that ships. In either DERIVED form it must be gone,
 // because "one directory up, then sideways" reaches nothing from a single
 // concatenated guide or from a section spliced into a repo-root AGENTS.md.
-// Matching on the shape rather than on the five embedded names is deliberate,
+// Matching on the shape rather than on the six embedded names is deliberate,
 // for the same reason rawWikilinkPattern is broad: rewriteSkillLinks
 // (cmd/dossierx/skills_embed.go) only retargets names it actually loaded, so a
 // renamed or typo'd target — the realistic failure — is by construction not a
@@ -52,7 +52,7 @@ var siblingSkillLinkPattern = regexp.MustCompile(`\]\(\.\./([^/)\n]+)/SKILL\.md\
 
 var skillsExportCaptureOut = flag.String("skills-export-capture-out", "", "write the captured `dossierx skills export` output (surfaces.yaml's `agent-skills` surface) to this path as export-output.json")
 
-// The five bundles this repo ships, in their embedded directory names. Kept
+// The six bundles this repo ships, in their embedded directory names. Kept
 // as a local literal (rather than importing skills.Order from package tests,
 // which has no dependency on the skills module) so this test has no coupling
 // beyond what captureSkillsExport already has to the compiled binary's
@@ -61,6 +61,7 @@ var wantSkillsExportNames = []string{
 	"dossierx",
 	"dossierx-claims",
 	"dossierx-comments",
+	"dossierx-theme",
 	"dossierx-build-order",
 	"dossierx-code-links",
 }
@@ -182,7 +183,7 @@ func TestCaptureSkillsExport_AllThreeFormsPresent(t *testing.T) {
 // rewriteWikilinks silently failed to resolve a real cross-reference.
 //
 // This asserts against rawWikilinkPattern (ANY "[[...]]" pair), not against
-// the five known bundle names. The finding this closes: rewriteWikilinks
+// the six known bundle names. The finding this closes: rewriteWikilinks
 // (cmd/dossierx/skills_embed.go) unconditionally rewrites every name in
 // `names` — the loaded bundles — so a needle built from those same names can
 // only ever find something if rewriteWikilinks is deleted outright. The
@@ -228,7 +229,7 @@ func TestCaptureSkillsExport_NoRawWikilinksSurvive(t *testing.T) {
 	// document and the AGENTS.md section sits at the client's repo root, and
 	// neither has a sibling directory to reach. So a surviving "](../" in either
 	// is the same defect a surviving "[[" is, and it is checked the same broad
-	// way — on the SHAPE, not on the five names — because rewriteSkillLinks only
+	// way — on the SHAPE, not on the six names — because rewriteSkillLinks only
 	// retargets names it loaded, so a typo'd or renamed target is precisely what
 	// a name-scoped needle cannot see.
 	for _, form := range []struct{ what, text string }{

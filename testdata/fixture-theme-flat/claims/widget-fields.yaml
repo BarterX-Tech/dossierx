@@ -1,0 +1,20 @@
+id: widget.internals.fields
+facet: internals
+module: widget
+status: draft
+layout: table
+section: Field meta
+rows:
+  - field: id
+    type: string
+    enum: uuid-v4
+    example: 9f1c...
+  - field: state
+    type: string
+    enum: draft | locked
+    example: draft
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - widget.contract.overview

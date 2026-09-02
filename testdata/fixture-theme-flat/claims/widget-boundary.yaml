@@ -1,0 +1,14 @@
+id: widget.decision.boundary
+facet: decision
+module: widget
+status: draft
+layout: banner
+emphasis: true
+body: |
+  A widget never writes outside its own module. This is the hard-boundary
+  card the `warn` and `warn-bg` tokens paint.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+rests_on:
+  - widget.contract.overview

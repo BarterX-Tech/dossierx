@@ -242,20 +242,28 @@ func TestRender_OverrideMissingPartialFallsBack(t *testing.T) {
 
 // ---- themeOverrideCSS ------------------------------------------------
 
+// sharedTheme is the resolved shape a flat-only viewer.theme merges to:
+// every token identical in both colour schemes, so everything lands in the
+// unconditional :root block and nothing is scoped to a media query.
+func sharedTheme(pairs ...string) *config.ResolvedTheme {
+	rt := &config.ResolvedTheme{}
+	for i := 0; i < len(pairs); i += 2 {
+		rt.Shared = append(rt.Shared, config.ThemeDecl{Token: pairs[i], Value: pairs[i+1]})
+	}
+	return rt
+}
+
 func TestThemeOverrideCSS_EmptyMapIsNoOp(t *testing.T) {
 	if got := themeOverrideCSS(nil); got != "" {
 		t.Errorf("themeOverrideCSS(nil) = %q, want empty string", got)
 	}
-	if got := themeOverrideCSS(map[string]string{}); got != "" {
-		t.Errorf("themeOverrideCSS({}) = %q, want empty string", got)
+	if got := themeOverrideCSS(&config.ResolvedTheme{}); got != "" {
+		t.Errorf("themeOverrideCSS(empty) = %q, want empty string", got)
 	}
 }
 
 func TestThemeOverrideCSS_OnlySuppliedKeysAppear(t *testing.T) {
-	theme := map[string]string{
-		"accent": "#ff0000",
-		"ink":    "#00ff00",
-	}
+	theme := sharedTheme("accent", "#ff0000", "ink", "#00ff00")
 	got := string(themeOverrideCSS(theme))
 
 	if !strings.Contains(got, "--accent:#ff0000;") {
@@ -274,16 +282,19 @@ func TestThemeOverrideCSS_OnlySuppliedKeysAppear(t *testing.T) {
 	}
 }
 
-func TestThemeOverrideCSS_DeterministicAllowlistOrder(t *testing.T) {
-	// Insertion order below is deliberately not allowlist order, and not
-	// alphabetical either, to prove the output order comes from the fixed
-	// config.ThemeTokenAllowlist, not Go's randomized map iteration.
-	theme := map[string]string{
-		"radius":    "8px",
-		"accent":    "#111111",
-		"font-mono": "monospace",
-		"ink":       "#222222",
-	}
+// TestThemeOverrideCSS_PreservesGivenOrder pins ONE property: emission writes
+// declarations in the order the resolved theme hands them over, unchanged, on
+// every run. It does not prove allowlist order, because it is fed slices that
+// are already in it — that property belongs to the merge, and the test that
+// actually proves it end-to-end from scrambled maps is
+// TestThemeOverrideCSS_FourParts in theme_emit_test.go.
+func TestThemeOverrideCSS_PreservesGivenOrder(t *testing.T) {
+	theme := &config.ResolvedTheme{Shared: []config.ThemeDecl{
+		{Token: "accent", Value: "#111111"},
+		{Token: "ink", Value: "#222222"},
+		{Token: "font-mono", Value: "monospace"},
+		{Token: "radius", Value: "8px"},
+	}}
 
 	want := ":root{--accent:#111111;--ink:#222222;--font-mono:monospace;--radius:8px;}"
 
@@ -295,7 +306,9 @@ func TestThemeOverrideCSS_DeterministicAllowlistOrder(t *testing.T) {
 }
 
 func TestRender_ThemeCSSInjectedAfterBaseCSS(t *testing.T) {
-	cfg := &config.Config{Viewer: config.Viewer{Theme: map[string]string{"accent": "#123456"}}}
+	cfg := &config.Config{Viewer: config.Viewer{Theme: config.Theme{
+		Shared: map[string]string{"accent": "#123456"},
+	}}}
 	out, err := Render(&catalog.Catalog{}, cfg)
 	if err != nil {
 		t.Fatalf("Render: %v", err)

@@ -1,0 +1,47 @@
+# The preset + two-mode + font fixture.
+#
+# fixture-theme-flat is the mode-less case: the shape every project written
+# before per-mode values used, which must merge to exactly the single :root{…}
+# block the engine emitted then. THIS fixture is the other three halves of the
+# theme surface, and each one is here because it puts something in the
+# committed viewer/index.html that no other fixture does:
+#
+#   preset:   a built-in palette as the lowest-priority merge layer, so a
+#             regenerated viewer proves the preset's values actually reach the
+#             page rather than only the config struct.
+#   light:/dark:  a per-mode override on top of it, so the emitted stylesheet
+#             carries a light block (which also applies to print) AND a
+#             screen-only dark block. `paper` is split; `accent` is shared, so
+#             one token of each kind is covered.
+#   fonts:    a project-supplied face, inlined as a data: URL. This is the only
+#             committed viewer in the repository that carries one, so it is the
+#             only place the data:-URL emission path is checked against a
+#             rendered artifact rather than against a unit test's string.
+#
+# fonts/probe.ttf is a 940-byte, one-glyph TTF generated offline with fontTools
+# (CC0; see fonts/README.md). Its "a" has a 2000/1000-em advance — two ems wide
+# — which is what makes "did the face actually load?" measurable as a glyph
+# width rather than as a font-family string the browser may never have honoured.
+schema_version: 1
+title: Theme Preset Fixture
+eyebrow: a preset, a two-mode override, and one inlined font face
+facets:
+  - contract
+  - internals
+modules:
+  - widget
+claims_dir: claims
+viewer:
+  theme:
+    preset: claude
+    accent: "#7c4dff"
+    font-sans: "DossierX Probe, ui-sans-serif, sans-serif"
+    light:
+      paper: "#fbf9f5"
+    dark:
+      paper: "#141210"
+    fonts:
+      - family: DossierX Probe
+        src: fonts/probe.ttf
+        weight: "400"
+        style: normal
