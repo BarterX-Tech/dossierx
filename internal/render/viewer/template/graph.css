@@ -144,9 +144,16 @@
    the one overlay that is specifically about that state, where every
    non-matching node is dimmed and there is nothing to confuse them with. */
 
-/* DARK IS THE BASE, light is the override — the same convention the base
-   stylesheet uses, so the two files move together rather than fighting over
-   which one a reader's OS appearance reaches first. Both sets are complete:
+/* DARK IS THE BASE, light is the override. This file keeps that convention
+   DELIBERATELY, and it is now the opposite of style.css, which is light-first
+   (one unconditional :root plus a `screen and (prefers-color-scheme: dark)`
+   query). The two files differ on purpose: this ramp was solved dark-first and
+   renumbering it to light-first would mean re-solving both sets, which changes
+   every existing project's facet colours for no reader-visible gain. What the
+   two files DO share is the print outcome — the light query below carries
+   `, print`, so paper gets the light ramp whatever the OS appearance is, the
+   same result style.css reaches by scoping its dark query to `screen`.
+   Both sets are complete:
    a categorical ramp has to move in BOTH directions, because the dark values
    are lifted and desaturated to stay legible on --paper's near-black and the
    light values are darkened to stay legible on its near-white. Neither set
@@ -195,7 +202,10 @@
   --dxg-governed: #F06A9C;
 }
 
-@media (prefers-color-scheme: light) {
+/* `, print`: paper is light, whatever the OS says. A printed graph pane with
+   the dark ramp on white would be the same defect style.css's `screen and`
+   dark query prevents for the base palette. */
+@media (prefers-color-scheme: light), print {
   :root {
     --dxg-facet-1: #4257C4;
     --dxg-facet-2: #12897F;

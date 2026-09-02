@@ -35,6 +35,56 @@
    base, light override) and says so in its own header; the two files differ
    deliberately. */
 
+/* THE palette. One unconditional :root, light-first: the values below are what
+   a light-OS screen and a printed page both get. Nothing else in this file
+   declares any of these properties, so this block's position is free; it sits
+   here, at the top, because that is where a reader looks for it.
+
+   The dark query is scoped to `screen` on purpose. Without the prefix, a
+   reader whose OS is in dark mode and who hits Print gets near-black --paper
+   and pale --ink; print media does not carry an appearance, so nothing else
+   would put the light palette back. `screen and` is the whole fix, and the
+   @media print block at the end of the file pins `color-scheme: light` beside
+   it so form controls and scrollbars agree. This is unverified for Firefox and
+   Safari; where a browser already forces light for print it is a no-op, so it
+   is safe either way. */
+
+:root {
+  color-scheme: light dark;
+  --accent: #287052;
+  --accent-bg: rgba(40, 112, 82, .12);
+  --ink: #091426;
+  --muted: #536179;
+  --faint: #7d899a;
+  --paper: #f6f8fc;
+  --card-bg: #ffffff;
+  --border: #d8deea;
+  --link: #205b78;
+  --warn: #a2433d;
+  --warn-bg: rgba(162, 67, 61, .10);
+  --dxg-facet-other: #0d55b5;
+  --font-sans: "Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace;
+  --radius: 6px;
+}
+
+@media screen and (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e8eef8;
+    --muted: #a9b5c8;
+    --faint: #75839a;
+    --paper: #0a1220;
+    --card-bg: #0f1b2e;
+    --border: #263754;
+    --link: #8ab7ff;
+    --accent: #70c99c;
+    --accent-bg: rgba(112, 201, 156, .12);
+    --warn: #ff8b94;
+    --warn-bg: rgba(255, 139, 148, .10);
+    --dxg-facet-other: #77a9e8;
+  }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -952,20 +1002,6 @@ th {
   text-decoration: underline;
 }
 
-/* Paper has no button to press, so the clamp must not reach it: print shows
-   every note whole and hides the control, the same bargain @media print
-   already strikes with the collapsed footer. */
-@media print {
-  .claim-source-note.is-clamped .claim-source-note-body {
-    display: block;
-    overflow: visible;
-  }
-
-  .claim-source-note-toggle {
-    display: none;
-  }
-}
-
 /* Deep-link auto-open for a SOURCE row, the companion to the .claim:target
    rules above. A citation marker's href names the row, not the claim, so the
    claim is not :target and those rules do not fire — yet the row the reader
@@ -1227,8 +1263,11 @@ th {
 /* The panel shadow is the one genuinely per-mode value here: the
    .comments-panel rule above carries the dark value and this query softens it
    for a light OS. The palette itself is light-first (see this file's single
-   :root); this declaration is the exception, not the convention. */
-@media (prefers-color-scheme: light) {
+   :root); this declaration is the exception, not the convention.
+   The query carries `, print` for the same reason the palette's dark query
+   carries `screen and`: paper gets the light value, whatever the OS is set
+   to. */
+@media (prefers-color-scheme: light), print {
   .comments-panel {
     box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
   }
@@ -1723,8 +1762,9 @@ th {
 
 /* Per-mode values: a lighter backdrop dim and a softer toast shadow on a
    light OS. The rail is absent on purpose — its shadow is set once, for both
-   modes, by the later `.comments-rail` rule in the System Record layer. */
-@media (prefers-color-scheme: light) {
+   modes, by the later `.comments-rail` rule in the System Record layer.
+   `, print` for the same reason as above: paper gets the light values. */
+@media (prefers-color-scheme: light), print {
   .comments-overlay {
     background: rgba(0, 0, 0, .22);
   }
@@ -2459,95 +2499,7 @@ body.shell-body {
   }
 }
 
-/* ---- print -------------------------------------------------------------
-   One of the three @media print blocks in this stylesheet today. It exists for
-   one reason (Q4): paper has no disclosure widget, so a printed viewer that
-   honoured the collapsed <details> would silently drop every claim's
-   governed_by/rests_on/implemented-in footer — the exact facts a reviewer
-   prints the page to read.
-   Revealing the contents through CSS is deliberate rather than setting `open`,
-   which CSS cannot do: `open` is a content attribute, not a property a rule
-   can write.
-   Same mechanism, and the same two-rule pairing, as the .claim:target rule
-   above: a closed <details> hides its contents through the UA's
-   ::details-content pseudo-element, so that is what is targeted, and the
-   child-selector form is expected to be a no-op wherever the pseudo-element is
-   implemented. It is kept only as a fallback for engines that predate
-   ::details-content (Chrome/Edge 131+, Safari 18.4+, Firefox 139+) and hide
-   the contents some other way; such an engine drops the pseudo-element rule
-   and still prints as it did before v0.4.1. Both rules declare the same value
-   and carry equal specificity (0,1,2), so the pseudo-element rule is written
-   LAST — source order is the only thing ranking them.
-   This block is independent of the .claim:target rule, of the two
-   server-written `open` signals, and of the expand-all toolbar — whichever of
-   those is or is not in effect on screen, print shows all four states
-   identically.
-   SCOPE — stated plainly so the next reader knows this is a decision, not an
-   oversight: only the facet currently ON SCREEN prints. A collapsed footer
-   belonging to a claim in a facet group the reader is not looking at stays
-   unrendered, because its ancestor section.claim-group carries the `hidden`
-   attribute (computed display: none) and no rule here un-hides it. The rules
-   below reveal a disclosure inside a subtree that is being laid out; they
-   cannot resurrect a subtree that display: none removed from the box tree in
-   the first place. That is deliberate: printing a tabbed viewer has always
-   shown one facet, what v0.4.1 changes is that the shown facet's footers now
-   print with it, and un-hiding every facet for print is a larger design
-   change — page order, per-facet headings, the duplicated overview copies —
-   than a patch release should make.
-   Only the disclosure is touched. Nothing here restyles the card, the type
-   scale or the color tokens; a full print stylesheet is out of scope for
-   v0.4.1. */
-@media print {
-  details.claim-links > *:not(summary) {
-    content-visibility: visible;
-  }
-
-  details.claim-links::details-content {
-    content-visibility: visible;
-  }
-
-  .claim-links-summary {
-    cursor: auto;
-  }
-}
-
 /* System Record visual language for the generated viewer. */
-
-:root {
-  --accent: #287052;
-  --accent-bg: rgba(40, 112, 82, .12);
-  --ink: #091426;
-  --muted: #536179;
-  --faint: #7d899a;
-  --paper: #f6f8fc;
-  --card-bg: #ffffff;
-  --border: #d8deea;
-  --link: #205b78;
-  --warn: #a2433d;
-  --warn-bg: rgba(162, 67, 61, .10);
-  --dxg-facet-other: #0d55b5;
-  --font-sans: "Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace;
-  --radius: 6px;
-  color-scheme: light;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --ink: #e8eef8;
-    --muted: #a9b5c8;
-    --faint: #75839a;
-    --paper: #0a1220;
-    --card-bg: #0f1b2e;
-    --border: #263754;
-    --link: #8ab7ff;
-    --accent: #70c99c;
-    --accent-bg: rgba(112, 201, 156, .12);
-    --warn: #ff8b94;
-    --warn-bg: rgba(255, 139, 148, .10);
-    --dxg-facet-other: #77a9e8;
-  }
-}
 
 html { scroll-behavior: smooth; }
 
@@ -4011,7 +3963,94 @@ code {
   .build-order-module .claim-rests-on { grid-template-columns: 1fr; gap: 3px; }
 }
 
+/* ---- print — THE @media print block ------------------------------------
+   There is exactly one @media print block in this stylesheet and this is it;
+   internal/render/theme_tokens_test.go fails if a second one appears.
+
+   IT MUST STAY LAST IN THE FILE. Several of the rules below beat a screen
+   rule of identical specificity purely on source order — `.content-area
+   { padding: 0 }` against the padded `.content-area` rule in the System
+   Record layer, `.system-record-head { padding-top: 0 }` against that layer's
+   `.system-record-head`. Move this block earlier and the printed page silently
+   regains the sidebar gutter.
+
+   color-scheme is pinned to light here to match the palette: the :root at the
+   top of the file is light-first and its dark query is `screen`-scoped, so
+   print already gets light custom properties; this line makes the UA-painted
+   parts (form controls, scrollbars, canvas) agree. Unverified for Firefox and
+   Safari; where a browser already forces light for print it is a no-op, so it
+   is safe either way.
+
+   Consolidated from three separate @media print blocks. Their reasons follow,
+   unchanged, one per group.
+
+   NOTE (Q4): paper has no button to press, so the source-note clamp must not
+   reach it — print shows every note whole and hides the control.
+
+   DISCLOSURE (Q4). Paper has no disclosure widget, so a printed viewer that
+   honoured the collapsed <details> would silently drop every claim's
+   governed_by/rests_on/implemented-in footer — the exact facts a reviewer
+   prints the page to read.
+   Revealing the contents through CSS is deliberate rather than setting `open`,
+   which CSS cannot do: `open` is a content attribute, not a property a rule
+   can write.
+   Same mechanism, and the same two-rule pairing, as the .claim:target rule
+   above: a closed <details> hides its contents through the UA's
+   ::details-content pseudo-element, so that is what is targeted, and the
+   child-selector form is expected to be a no-op wherever the pseudo-element is
+   implemented. It is kept only as a fallback for engines that predate
+   ::details-content (Chrome/Edge 131+, Safari 18.4+, Firefox 139+) and hide
+   the contents some other way; such an engine drops the pseudo-element rule
+   and still prints as it did before v0.4.1. Both rules declare the same value
+   and carry equal specificity (0,1,2), so the pseudo-element rule is written
+   LAST — source order is the only thing ranking them.
+   This block is independent of the .claim:target rule, of the two
+   server-written `open` signals, and of the expand-all toolbar — whichever of
+   those is or is not in effect on screen, print shows all four states
+   identically.
+   SCOPE — stated plainly so the next reader knows this is a decision, not an
+   oversight: only the facet currently ON SCREEN prints. A collapsed footer
+   belonging to a claim in a facet group the reader is not looking at stays
+   unrendered, because its ancestor section.claim-group carries the `hidden`
+   attribute (computed display: none) and no rule here un-hides it. The rules
+   below reveal a disclosure inside a subtree that is being laid out; they
+   cannot resurrect a subtree that display: none removed from the box tree in
+   the first place. That is deliberate: printing a tabbed viewer has always
+   shown one facet, what v0.4.1 changes is that the shown facet's footers now
+   print with it, and un-hiding every facet for print is a larger design
+   change — page order, per-facet headings, the duplicated overview copies —
+   than a patch release should make.
+   Only the disclosure is touched. Nothing here restyles the card, the type
+   scale or the color tokens; a full print stylesheet is out of scope for
+   v0.4.1.
+*/
 @media print {
+  :root { color-scheme: light; }
+
+  /* source-note clamp */
+  .claim-source-note.is-clamped .claim-source-note-body {
+    display: block;
+    overflow: visible;
+  }
+
+  .claim-source-note-toggle {
+    display: none;
+  }
+
+  /* collapsed claim-links footer */
+  details.claim-links > *:not(summary) {
+    content-visibility: visible;
+  }
+
+  details.claim-links::details-content {
+    content-visibility: visible;
+  }
+
+  .claim-links-summary {
+    cursor: auto;
+  }
+
+  /* layout: chrome off the page, gutters closed */
   .system-record-head { padding-top: 0; }
   .sidebar,
   .nav-toggle,
