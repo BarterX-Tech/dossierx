@@ -1,0 +1,220 @@
+{
+  "claims": [
+    {
+      "id": "panel.contract.api",
+      "facet": "contract",
+      "module": "panel",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "panel.contract.behavior"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "panel.contract.behavior",
+      "facet": "contract",
+      "module": "panel",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "panel.internals.state"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "panel.decision.mockup",
+      "facet": "decision",
+      "module": "panel",
+      "status": "locked",
+      "layout": "mockup",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "panel.internals.state",
+      "facet": "internals",
+      "module": "panel",
+      "status": "locked",
+      "layout": "list",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "panel.decision.mockup"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "panel.internals.verification",
+      "facet": "internals",
+      "module": "panel",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "panel.contract.api"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "widget.contract.overview",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      },
+      "tracks": [
+        {
+          "id": "checkout",
+          "role": "owns"
+        }
+      ]
+    },
+    {
+      "id": "widget.contract.reviewed",
+      "facet": "contract",
+      "module": "widget",
+      "status": "locked",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "panel.contract.api"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      },
+      "tracks": [
+        {
+          "id": "checkout",
+          "role": "cites"
+        }
+      ]
+    },
+    {
+      "id": "widget.contract.walkthrough",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "steps",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "widget.internals.fields"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      },
+      "tracks": [
+        {
+          "id": "checkout",
+          "role": "cites"
+        }
+      ]
+    },
+    {
+      "id": "widget.decision.boundary",
+      "facet": "decision",
+      "module": "widget",
+      "status": "draft",
+      "layout": "banner",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "widget.contract.overview"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    },
+    {
+      "id": "widget.internals.fields",
+      "facet": "internals",
+      "module": "widget",
+      "status": "draft",
+      "layout": "table",
+      "kind": "fact",
+      "edges": {
+        "rests_on": [
+          "widget.contract.overview"
+        ],
+        "governed_by": {
+          "type": "none",
+          "reason": "fixture claim, not backed by any real doctrine"
+        }
+      }
+    }
+  ],
+  "by_facet": {
+    "contract": [
+      "panel.contract.api",
+      "panel.contract.behavior",
+      "widget.contract.overview",
+      "widget.contract.reviewed",
+      "widget.contract.walkthrough"
+    ],
+    "decision": [
+      "panel.decision.mockup",
+      "widget.decision.boundary"
+    ],
+    "internals": [
+      "panel.internals.state",
+      "panel.internals.verification",
+      "widget.internals.fields"
+    ]
+  },
+  "by_module": {
+    "panel": [
+      "panel.contract.api",
+      "panel.contract.behavior",
+      "panel.decision.mockup",
+      "panel.internals.state",
+      "panel.internals.verification"
+    ],
+    "widget": [
+      "widget.contract.overview",
+      "widget.contract.reviewed",
+      "widget.contract.walkthrough",
+      "widget.decision.boundary",
+      "widget.internals.fields"
+    ]
+  }
+}

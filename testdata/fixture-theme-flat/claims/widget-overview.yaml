@@ -1,0 +1,29 @@
+id: widget.contract.overview
+facet: contract
+module: widget
+status: draft
+layout: card
+section: What a widget is
+body: |
+  A widget is the smallest unit this corpus documents. Its identifier is an
+  inline `code` span, which is the `code` element the `--code-inline-bg` token
+  paints.
+
+  ```go
+  // a fenced block, which is the .claim-body pre the --code-bg token paints
+  func Widget() string { return "widget" }
+  ```
+
+  | field | meaning |
+  | --- | --- |
+  | id | the widget's identity |
+  | state | draft or locked |
+
+  The table above is the `.md-table` whose `th` the `--table-head-bg` token
+  paints.
+governed_by:
+  type: none
+  reason: fixture claim, not backed by any real doctrine
+tracks:
+  - id: checkout
+    role: owns
