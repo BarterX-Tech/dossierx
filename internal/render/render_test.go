@@ -282,11 +282,13 @@ func TestThemeOverrideCSS_OnlySuppliedKeysAppear(t *testing.T) {
 	}
 }
 
-func TestThemeOverrideCSS_DeterministicAllowlistOrder(t *testing.T) {
-	// The resolved theme's slices already carry allowlist order (that is
-	// config.ResolveTheme's job and its own tests pin it); what this pins
-	// is that emission preserves the order it is handed, unchanged, on
-	// every run.
+// TestThemeOverrideCSS_PreservesGivenOrder pins ONE property: emission writes
+// declarations in the order the resolved theme hands them over, unchanged, on
+// every run. It does not prove allowlist order, because it is fed slices that
+// are already in it — that property belongs to the merge, and the test that
+// actually proves it end-to-end from scrambled maps is
+// TestThemeOverrideCSS_FourParts in theme_emit_test.go.
+func TestThemeOverrideCSS_PreservesGivenOrder(t *testing.T) {
 	theme := &config.ResolvedTheme{Shared: []config.ThemeDecl{
 		{Token: "accent", Value: "#111111"},
 		{Token: "ink", Value: "#222222"},
