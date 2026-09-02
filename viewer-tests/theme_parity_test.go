@@ -55,6 +55,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/chromedp/cdproto/css"
 	"github.com/chromedp/cdproto/dom"
@@ -558,6 +559,8 @@ func TestThemeParityAgainstThePreChangeRender(t *testing.T) {
 			if targetBefore != targetAfter {
 				t.Fatalf("the :target probe deep-linked to %q before and %q after", targetBefore, targetAfter)
 			}
+			waitScrollSettled(t, ctxBefore)
+			waitScrollSettled(t, ctxAfter)
 			t.Logf("%s: stripped %d active tab(s) in each document; :target = #%s",
 				fixture, strippedBefore, targetBefore)
 
@@ -763,6 +766,36 @@ func runOneParityPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 // value back regardless, so this reasoning is belt and the read is braces.
 const releasePseudoClass = "visited"
 
+// waitScrollSettled blocks until the page has stopped scrolling.
+//
+// Navigating to a fragment starts a smooth scroll, and every scroll event makes
+// system-record.js re-run renderFacetToc, which replaces the whole facet TOC
+// list. Forcing a pseudo-state on one of those buttons while that is happening
+// cannot win: the node is gone before the second round trip lands. On a short
+// fixture the scroll ends in a few frames and a retry covers it; on an 11 MB
+// document it does not, and the retry loop simply races the same rebuild forty
+// times. Waiting for the scroll to stop removes the cause rather than the
+// symptom.
+func waitScrollSettled(t *testing.T, ctx context.Context) {
+	t.Helper()
+	last := -1.0
+	for i := 0; i < 40; i++ {
+		var y float64
+		if err := chromedp.Run(ctx, chromedp.Evaluate(`window.scrollY`, &y)); err != nil {
+			t.Fatalf("read scroll position: %v", err)
+		}
+		if y == last {
+			return
+		}
+		last = y
+		if err := chromedp.Run(ctx, chromedp.Sleep(50*time.Millisecond)); err != nil {
+			t.Fatalf("wait for the scroll to settle: %v", err)
+		}
+	}
+	t.Fatalf("the page was still scrolling after 2s (last position %v); a hover probe on the "+
+		"facet TOC cannot land while the scroll spy is rebuilding it", last)
+}
+
 // setPseudoState forces (or clears) pseudo-classes on the first element
 // matching sel.
 //
@@ -773,14 +806,26 @@ const releasePseudoClass = "visited"
 // "Could not find node with given id (-32000)". Re-asking the document each
 // time costs one round trip and removes the whole class.
 func setPseudoState(ctx context.Context, sel string, classes []string) error {
-	// The retry is for a live page, not for flakiness tolerance: the facet TOC
-	// is built and re-built by the viewer's own script, so an id resolved a
-	// millisecond ago can name a node that no longer exists by the time
-	// forcePseudoState reaches it. Re-resolving is the correct response to that
-	// specific error; the last attempt's error is still returned, so a node that
-	// genuinely is not there fails.
+	// THE RETRY IS FOR A LIVE PAGE, not flakiness tolerance.
+	//
+	// system-record.js rebuilds the facet TOC with list.replaceChildren() every
+	// time the scroll spy re-evaluates, so every .facet-toc__item is a NEW node
+	// each pass. Resolving an id and then forcing a pseudo-state on it are two
+	// round trips, and on a large document the rebuild lands between them often
+	// enough that a single attempt loses reliably — the CDP answer is "Could not
+	// find node with given id (-32000)". Re-resolving after a short pause is the
+	// correct response to exactly that, and the pause is what lets an attempt
+	// fall between two rebuilds rather than racing the same one eight times.
+	//
+	// The last attempt's error is still returned, so an element that genuinely
+	// is not there fails rather than being waited out.
 	var last error
-	for attempt := 0; attempt < 3; attempt++ {
+	for attempt := 0; attempt < 40; attempt++ {
+		if attempt > 0 {
+			if err := chromedp.Run(ctx, chromedp.Sleep(50*time.Millisecond)); err != nil {
+				return err
+			}
+		}
 		last = chromedp.Run(ctx, chromedp.ActionFunc(func(c context.Context) error {
 			root, err := dom.GetDocument().Do(c)
 			if err != nil {
