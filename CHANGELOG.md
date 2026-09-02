@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.6] - 2026-09-02
 
 ### Added
 
@@ -95,23 +95,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `internal/render/viewer/template/style.css` now reads its colour, shadow, and shape values
-  through `var(--token, <the previous literal>)` instead of writing the literal directly, which is
-  what makes `viewer.theme` tokens take effect. The emitted default CSS is unchanged for a project
-  with no theme configured; a project that used to reach into `viewer.template_overrides` to
-  restyle a value this list now covers can drop that override in favour of a token. Run
-  `dossierx check` to regenerate an existing viewer, since generated `viewer/index.html` output
-  changes shape (a `var()` call in place of a literal) even where it renders identically.
-- Every fixture and cross-release-golden viewer under `testdata/` and `viewer-tests/testdata/` was
-  regenerated against the updated stylesheet, CLI, and skill; the newly added theme fixtures
+- Every colour, shadow, and shape value the generated stylesheet emits is now themeable through a
+  `viewer.theme` token — this is the mechanism that makes the theming feature above take effect. A
+  project with no theme configured sees identical rendered output; a project that reached into
+  `viewer.template_overrides` to restyle a value this list now covers can drop that override in
+  favour of a token. Run `dossierx check` to regenerate an existing viewer regardless: the
+  generated `viewer/index.html` output changes shape (a `var()` call in place of a literal) even
+  where it renders identically.
+- This release silently changes rendered output for some existing projects: three fixtures with
+  byte-identical inputs to a v0.7.5 baseline — `fixture-basic`, `fixture-graph-demo`, and
+  `fixture-portability` — render differently, from the stylesheet's `var()`-token conversion and
+  the print `color-scheme: light` fix above. Two new theme fixtures
   (`testdata/fixture-theme-flat`, `testdata/fixture-theme-preset`) are new to this release's
   cross-release golden and are therefore uncompared this time, not silently passing a comparison
-  that ran. Against a v0.7.5 baseline, the golden's SILENT RENDER CHANGES list carries exactly the
-  three entries this feature causes — `fixture-basic`, `fixture-graph-demo`, and
-  `fixture-portability`, each from the `var()`-token conversion in `style.css` and the print
-  `color-scheme: light` fix — with byte-identical inputs at both revisions, which is what makes
-  them silent rather than explained. The `.status-strip` relocation that showed up here against
-  older baselines is a v0.7.5-era change already folded into that baseline and no longer appears.
+  that ran. The `.status-strip` relocation that showed up here against older baselines is a
+  v0.7.5-era change already folded into that baseline and no longer appears.
 - After upgrading, re-run `dossierx skills export` to refresh `AGENTS.md`/the embedded agent guide
   with the updated `dossierx-theme` skill.
 
@@ -2169,7 +2167,7 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...HEAD
+[0.7.6]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.5...v0.7.6
 [0.7.4]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.1...v0.7.2
