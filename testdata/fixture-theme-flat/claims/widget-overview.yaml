@@ -20,7 +20,15 @@ body: |
   | state | draft or locked |
 
   The table above is the `.md-table` whose `th` the `table-head-bg` token
-  paints.
+  paints. The footnote marker below it is a source reference [1], which is the
+  `.claim-source` row the `:target` rule paints when a reader deep-links to it.
+sources:
+  - ref: 1
+    kind: external
+    title: CSS Custom Properties for Cascading Variables, Level 1
+    url: https://www.w3.org/TR/css-variables-1/
+    accessed_on: 2026-09-02
+    supports: that a var() read with a fallback resolves to the fallback when the property is not set
 governed_by:
   type: none
   reason: fixture claim, not backed by any real doctrine
