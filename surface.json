@@ -511,7 +511,7 @@
   ],
   "render_fingerprint": "sha256:9baac50341441ff2b83465421d0ca86be4af75338c202014514380aea4ffc329",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:5fd2359781b797f66eb5cba89fd06a9a9ecf7e4a7c1381b44c6beaf3dcaf56e3",
+    "cmd/dossierx": "sha256:260a6f1d2e535e73d656ea101549d521bc45da95b3443c9861b40272540c4d81",
     "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
     "internal/catalog": "sha256:78c8667bfb35c4fc35ec786814028978eac107fde4f06aade4541ce8baee4380",
     "internal/check": "sha256:4e672cb24b6d82eb12fd818678b0230b8812ad354da50342034aebce0be49879",
@@ -649,6 +649,9 @@
         "skipped",
         "staged",
         "staged_files",
+        "theme_error",
+        "theme_font_bytes",
+        "theme_font_count",
         "viewer_path"
       ],
       "claimEdgesData": [

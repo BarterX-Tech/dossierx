@@ -1089,6 +1089,28 @@ type checkData struct {
 	// See lock.Store.CommentDigestsAdopted.
 	CommentDigestsAdopted []string `json:"comment_digests_adopted,omitempty"`
 
+	// ThemeError is viewer.theme's refusal — an unreadable or unstaged theme
+	// file, a font whose bytes are not the format its extension claims, a
+	// family nothing names, an unknown preset, the total font cap — and it is
+	// in the payload because the alternative was what shipped before it: the
+	// read-only modes computed it (check.Result.ThemeError, whose own doc
+	// comment says "a non-empty ThemeError clears OK") and the envelope
+	// dropped it on the floor, so `check --validate` and `check --staged`
+	// answered ok:true for a project whose viewer plain `check` cannot render.
+	// A pre-commit hook and a CI run stayed green on a document nobody can
+	// produce, which is the exact shape of failure this project treats as
+	// worse than no gate at all.
+	//
+	// It is its own field rather than a lint finding for check.Result's reason:
+	// no claim is at fault and no lint rule ran. ThemeFontCount/ThemeFontBytes
+	// are how much of a reader's download the project's own fonts account for —
+	// the RAW bytes; base64 expands them by a third in the emitted viewer — and
+	// they are the number the theme skill's verification step reads. Both are
+	// zero when ThemeError is set, because nothing was accepted.
+	ThemeError     string `json:"theme_error,omitempty"`
+	ThemeFontCount int    `json:"theme_font_count,omitempty"`
+	ThemeFontBytes int64  `json:"theme_font_bytes,omitempty"`
+
 	CatalogPath      string          `json:"catalog_path,omitempty"`
 	CatalogCount     int             `json:"catalog_count,omitempty"`
 	ViewerPath       string          `json:"viewer_path,omitempty"`
@@ -1118,6 +1140,9 @@ func newCheckData(res check.Result) checkData {
 		scanErrors = append(scanErrors, scanErrorData{File: e.File, Line: e.Line, ClaimID: e.ClaimID, Message: e.Message})
 	}
 	return checkData{
+		ThemeError:         res.ThemeError,
+		ThemeFontCount:     res.ThemeFontCount,
+		ThemeFontBytes:     res.ThemeFontBytes,
 		LintFindings:       findings,
 		LintErrorCount:     len(res.LintErrors),
 		LintWarningCount:   len(res.LintWarnings),
@@ -1469,6 +1494,14 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "lint"
 		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
 	}
+	if res.ThemeError != "" {
+		// Same enforcement as --validate, and it is sharper here: --staged runs
+		// the theme rules against the INDEX's bytes, so this is the refusal
+		// that catches a commit staging a config that names a theme file or a
+		// font the commit does not carry.
+		out.StoppedAt = "render"
+		return out, cliout.Errorf(cliout.CodeInvalidConfig, "check: %s", res.ThemeError)
+	}
 	if len(res.LedgerFindings) > 0 {
 		out.StoppedAt = "ledger"
 		return out, cliout.Errorf(cliout.CodeIntegrityFailed, "check: ledger: %d integrity finding(s)", len(res.LedgerFindings)).
@@ -1505,10 +1538,11 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 	// outcome from res and returns the coded error.
 	reportLintFindings(cmd, res.LintFindings) //nolint:errcheck // intentionally discarded (see comment above)
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportThemeError(cmd, res)
 	for _, step := range res.NextSteps {
 		fmt.Fprintf(out, "  next: %s\n", step)
 	}
-	if len(res.LintErrors) > 0 || len(res.LedgerFindings) > 0 {
+	if len(res.LintErrors) > 0 || len(res.LedgerFindings) > 0 || res.ThemeError != "" {
 		return
 	}
 	fmt.Fprintln(out, "check --staged: OK (read-only: nothing written)")
@@ -1569,6 +1603,23 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "lint"
 		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
 	}
+	if res.ThemeError != "" {
+		// The read-only modes ENFORCE the theme rules, for the reason they
+		// enforce the ledger gate two paragraphs down: a mode that quietly
+		// passed what the writing mode refuses is the easiest possible bypass.
+		// A theme that does not resolve means `dossierx check` cannot render
+		// the viewer, so a --validate that answered OK would be describing a
+		// document nobody can produce.
+		//
+		// stopped_at is "render" because that is where plain `check` stops on
+		// the same input, and a consumer should not have to know which door it
+		// came through. invalid_config is the code because the fault is in what
+		// project.config.yaml declares — a preset this binary does not carry, a
+		// theme file it cannot read, a font whose bytes are not what its
+		// extension claims — and the recovery is editing that declaration.
+		out.StoppedAt = "render"
+		return out, cliout.Errorf(cliout.CodeInvalidConfig, "check: %s", res.ThemeError)
+	}
 	if len(res.LedgerFindings) > 0 {
 		// check.Status REPORTS the ledger gate and leaves the decision to its
 		// caller (so serve's status strip keeps rendering a disputed project);
@@ -1580,6 +1631,20 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 			WithHint(ledgerRecoveryHint(res.LedgerFindings))
 	}
 	return out, nil
+}
+
+// reportThemeError prints the viewer theme's refusal on the read-only paths.
+//
+// It prints NOTHING when the theme is fine or absent, which is almost every
+// project, so the clean output of every existing fixture is unchanged. It
+// exists because the two read-only formatters stop before their "OK" line when
+// res.OK is false, and a theme refusal is one of the things that clears it: a
+// text-mode reader would otherwise get findings, no verdict, and no reason.
+func reportThemeError(cmd *cobra.Command, res check.Result) {
+	if res.ThemeError == "" {
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "  [error] viewer.theme: %s\n", res.ThemeError)
 }
 
 // formatCheckValidateResult is --validate's terminal rendering.
@@ -1604,6 +1669,7 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 	// decided by whether something unrelated failed to lint. Integrity findings
 	// are the ones a reader must not have to run a second command to see.
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportThemeError(cmd, res)
 	if !res.OK || len(res.LedgerFindings) > 0 {
 		return
 	}
