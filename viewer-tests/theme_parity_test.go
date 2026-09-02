@@ -114,7 +114,12 @@ var parityProbes = []parityProbe{
 	{"02 body", []string{"body.shell-body"}, []string{"background-color", "color", "font-family", "font-size", "line-height"}},
 	{"03 inline code", []string{"code"}, []string{"background-color", "color", "font-family", "border-radius"}},
 	{"04 fenced pre", []string{".claim-body pre"}, []string{"background-color", "border-color", "border-radius"}},
-	{"05 pre code", []string{".claim-body pre code"}, []string{"background-color", "padding"}},
+	// border-top-width / border-bottom-width are read here because they are the
+	// pair that carried the defect this row now guards: see the third sanctioned
+	// difference in runOneParityPass. A one-sided read (top only) would pass over
+	// a rule that reset just one edge.
+	{"05 pre code", []string{".claim-body pre code"}, []string{
+		"background-color", "padding", "border-top-width", "border-bottom-width"}},
 	{"06 comment table head", []string{".comment-body .md-table th"}, []string{"background-color", "color"}},
 	{"07 step image", []string{".sbody .md-img"}, []string{"background-color", "border-color", "border-radius"}},
 	{"08 status-draft", []string{".status-draft"}, []string{"background-color", "color"}},
@@ -760,6 +765,40 @@ func runOneParityPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 		}
 	}
 
+	// The THIRD sanctioned difference: the fenced-block <code> no longer carries
+	// the inline-code pill's 1px border.
+	//
+	// The pill rule `code { border: 1px solid var(--border) }` applies to the
+	// <code> inside a <pre> too, and `.claim-body pre code` reset the pill's
+	// background, padding and radius but not its border. That <code> is ONE
+	// inline box that FRAGMENTS across line boxes, and box-decoration-break's
+	// initial `slice` paints the border's top and bottom edge on every fragment
+	// — so every multi-line fenced block in a claim body was drawn with a 1px
+	// --border seam between each pair of lines, in both colour schemes. The
+	// reset now includes `border: 0`.
+	//
+	// This is a DELIBERATE departure from the pre-change render, so it is
+	// asserted in both directions rather than tolerated: 1px before, 0px after.
+	// If the baseline ever reads 0px the baseline is not the pre-change render;
+	// if the current render reads 1px the fix did not land.
+	for _, prop := range []string{"border-top-width", "border-bottom-width"} {
+		k := "05 pre code|.claim-body pre code|" + prop
+		vb, va := rb.Values[k], ra.Values[k]
+		if vb != "1px" {
+			t.Errorf("the pre-change render computes %s = %q on a fenced block's <code>, want "+
+				"%q — that 1px pill border sliced across every line box IS the seam this fix "+
+				"removes, so a baseline without it is not the render this compares against",
+				prop, vb, "1px")
+		}
+		if va != "0px" {
+			t.Errorf("the current render computes %s = %q on a fenced block's <code>, want %q "+
+				"— the `border: 0` in the .claim-body pre code reset did not reach the element "+
+				"carrying the text, so the seam between the lines is still painted", prop, va, "0px")
+		}
+		delete(rb.Values, k)
+		delete(ra.Values, k)
+	}
+
 	const colourSchemeKey = "01 root tokens|html|color-scheme"
 	gotBefore, gotAfter := rb.Values[colourSchemeKey], ra.Values[colourSchemeKey]
 	if gotBefore != "light" {
@@ -1158,8 +1197,17 @@ func runPrintLightPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixtur
 // generation timestamp two renders taken minutes apart legitimately differ in),
 // and an innerText equality assertion runs over the clipped element FIRST, so a
 // pixel difference can only be a painting difference.
+//
+// ONE REGION IS ALLOWED TO DIFFER, and only because it is the fix this branch
+// makes: the fenced-code blocks. Removing the pill border from `pre > code`
+// repaints the 1px seam rows and shifts the glyphs 1px left (the inline box
+// loses its left border), and both effects are confined to the <pre>'s own
+// border box. So instead of a tolerance — which would accept a difference
+// anywhere — every differing pixel must fall INSIDE a fenced block, and if the
+// clip contains a fenced block at least one pixel MUST differ. A fixture with
+// no fenced block stays pixel-identical, exactly as before.
 func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
-	shot := func(url string) (png []byte, text string, w, h float64) {
+	shot := func(url string) (png []byte, text string, w, h float64, fenced []fencedBox) {
 		ctx := browserContextFor(t, browser)
 		runCDP(t, ctx,
 			chromedp.EmulateViewport(1280, 900, chromedp.EmulateScale(1)),
@@ -1217,7 +1265,22 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		})); err != nil {
 			t.Fatalf("screenshot %s: %v", url, err)
 		}
-		return buf, txt, rect.W, rect.H
+		// The fenced blocks, in CLIP coordinates: every <pre> in the clipped
+		// subtree that actually contains a <code>, inflated by 1px so a
+		// half-covered edge pixel on a fractional boundary is inside the box.
+		evalInto(t, ctx, `(function(){
+			var origin = document.querySelector('.content-area').getBoundingClientRect();
+			return Array.prototype.filter.call(
+				document.querySelectorAll('.content-area pre'),
+				function(p){ return !!p.querySelector('code'); }
+			).map(function(p){
+				var r = p.getBoundingClientRect();
+				return {X0: Math.floor(r.left-origin.left)-1, Y0: Math.floor(r.top-origin.top)-1,
+				        X1: Math.ceil(r.right-origin.left)+1, Y1: Math.ceil(r.bottom-origin.top)+1};
+			});
+		})()`, &fenced)
+
+		return buf, txt, rect.W, rect.H, fenced
 	}
 
 	// THE NOISE FLOOR, measured rather than assumed. Two captures of the SAME
@@ -1225,8 +1288,8 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 	// documents says nothing. This is the control that turns the comparison
 	// below into evidence; without it a flaky renderer and a broken stylesheet
 	// are the same red.
-	pngSelfA, _, _, _ := shot(after)
-	pngSelfB, _, _, _ := shot(after)
+	pngSelfA, _, _, _, _ := shot(after)
+	pngSelfB, _, _, _, _ := shot(after)
 	if n, maxD, fx, fy := comparePNGs(t, pngSelfA, pngSelfB); n > 0 {
 		t.Fatalf("%s: two captures of the SAME document differ in %d pixel(s), first at (%d,%d), "+
 			"largest channel delta %d. The capture is not deterministic, so the before/after "+
@@ -1234,8 +1297,8 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 			fixture, n, fx, fy, maxD)
 	}
 
-	pngBefore, textBefore, wb, hb := shot(before)
-	pngAfter, textAfter, wa, ha := shot(after)
+	pngBefore, textBefore, wb, hb, fencedBefore := shot(before)
+	pngAfter, textAfter, wa, ha, fencedAfter := shot(after)
 
 	if len(pngBefore) == 0 || len(pngAfter) == 0 {
 		t.Fatalf("a clipped screenshot came back empty (%d / %d bytes)", len(pngBefore), len(pngAfter))
@@ -1260,16 +1323,122 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 	// walking the pixels answers the question this test is actually about — did
 	// anything paint differently — and it can say WHERE and BY HOW MUCH, which a
 	// byte count cannot.
-	diff, maxDelta, firstX, firstY := comparePNGs(t, pngBefore, pngAfter)
-	if diff > 0 {
-		t.Errorf("%s: the painted content area (%vx%v, clipped to exclude the header and the "+
-			"timestamped sidebar footer) differs in %d pixel(s), first at (%d,%d), largest "+
-			"channel delta %d — with identical text and identical geometry. Something the "+
-			"fourteen var() reads touch is painting differently.",
-			fixture, wa, ha, diff, firstX, firstY, maxDelta)
-	} else {
-		t.Logf("%s: the painted content area (%vx%v) is pixel-identical", fixture, wa, ha)
+	// The fenced-block boxes must be the SAME boxes in both documents, or
+	// "inside a fenced block" means two different regions and the exclusion
+	// below would be excusing a layout change.
+	if !sameBoxes(fencedBefore, fencedAfter) {
+		t.Fatalf("%s: the fenced-code blocks are at %v in the pre-change render and %v in the "+
+			"current one. The seam fix is not supposed to move them, so this is a layout change "+
+			"the exclusion below would have hidden.", fixture, fencedBefore, fencedAfter)
 	}
+
+	inside, outside, maxDelta, fx, fy := comparePNGsOutside(t, pngBefore, pngAfter, fencedAfter)
+	if outside > 0 {
+		t.Errorf("%s: the painted content area (%vx%v, clipped to exclude the header and the "+
+			"timestamped sidebar footer) differs in %d pixel(s) OUTSIDE the fenced-code blocks, "+
+			"first at (%d,%d), largest channel delta %d — with identical text and identical "+
+			"geometry. Only the fenced blocks are allowed to repaint on this branch; anything "+
+			"else is a change a reader sees in a project that sets no theme token.",
+			fixture, wa, ha, outside, fx, fy, maxDelta)
+	}
+	// VACUITY GUARD, and the positive half of the assertion. A fixture whose
+	// clip holds a fenced block must show the repaint; one with none must be
+	// pixel-identical, which is what this pass asserted before the fix existed.
+	switch {
+	case len(fencedAfter) == 0 && inside+outside > 0:
+		t.Errorf("%s: the clip contains no fenced code block, so nothing was allowed to "+
+			"repaint, yet %d pixel(s) differ", fixture, inside+outside)
+	case len(fencedAfter) == 0:
+		t.Logf("%s: the painted content area (%vx%v) is pixel-identical; it holds no fenced "+
+			"code block, so the seam fix has nothing to change here", fixture, wa, ha)
+	case inside == 0:
+		t.Errorf("%s: the clip contains %d fenced code block(s) whose <code> lost a 1px border "+
+			"on this branch, yet not one pixel inside them differs from the pre-change render. "+
+			"Either the fix did not reach the served page or this pass is comparing two copies "+
+			"of the same document.", fixture, len(fencedAfter))
+	default:
+		t.Logf("%s: the painted content area (%vx%v) is pixel-identical outside the %d fenced "+
+			"code block(s); inside them %d pixel(s) differ (largest channel delta %d), which is "+
+			"the pill border coming off `pre > code`",
+			fixture, wa, ha, len(fencedAfter), inside, maxDelta)
+	}
+}
+
+// fencedBox is one fenced-code block's border box in clip coordinates,
+// half-open on the max edges.
+type fencedBox struct{ X0, Y0, X1, Y1 int }
+
+func (b fencedBox) contains(x, y int) bool {
+	return x >= b.X0 && x < b.X1 && y >= b.Y0 && y < b.Y1
+}
+
+func sameBoxes(a, b []fencedBox) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// comparePNGsOutside is comparePNGs partitioned by a set of allowed boxes: it
+// reports how many differing pixels fall inside them and how many fall outside,
+// and the first coordinate of an OUTSIDE difference (the one a failure needs to
+// name). maxDelta is over every differing pixel, inside or out.
+func comparePNGsOutside(t *testing.T, a, b []byte, boxes []fencedBox) (inside, outside, maxDelta, firstX, firstY int) {
+	t.Helper()
+	ia, _, err := image.Decode(bytes.NewReader(a))
+	if err != nil {
+		t.Fatalf("decode the pre-change screenshot: %v", err)
+	}
+	ib, _, err := image.Decode(bytes.NewReader(b))
+	if err != nil {
+		t.Fatalf("decode the current screenshot: %v", err)
+	}
+	ra, rb := ia.Bounds(), ib.Bounds()
+	if ra != rb {
+		t.Fatalf("the two screenshots are %v and %v; a comparison would only cover their overlap", ra, rb)
+	}
+	if ra.Dx() == 0 || ra.Dy() == 0 {
+		t.Fatalf("the screenshots are empty (%v); a pixel comparison would be vacuous", ra)
+	}
+	firstX, firstY = -1, -1
+	for y := ra.Min.Y; y < ra.Max.Y; y++ {
+		for x := ra.Min.X; x < ra.Max.X; x++ {
+			r1, g1, b1, a1 := ia.At(x, y).RGBA()
+			r2, g2, b2, a2 := ib.At(x, y).RGBA()
+			if r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2 {
+				continue
+			}
+			allowed := false
+			for _, bx := range boxes {
+				if bx.contains(x, y) {
+					allowed = true
+					break
+				}
+			}
+			if allowed {
+				inside++
+			} else {
+				outside++
+				if firstX < 0 {
+					firstX, firstY = x, y
+				}
+			}
+			for _, d := range []int{int(r1) - int(r2), int(g1) - int(g2), int(b1) - int(b2), int(a1) - int(a2)} {
+				if d < 0 {
+					d = -d
+				}
+				if d>>8 > maxDelta {
+					maxDelta = d >> 8
+				}
+			}
+		}
+	}
+	return inside, outside, maxDelta, firstX, firstY
 }
 
 // comparePNGs decodes two PNGs and reports the number of differing pixels, the
