@@ -1196,7 +1196,21 @@ func checkStoppedAt(res check.Result, err error) string {
 // exit status 1 (cliout.ExitCode), which is not incidental: tests/check_exit_test.go
 // pins "a lint error exits 1, NOT 2 — check failures must never be mistaken for
 // a missing claim or config", and that stays true for every step.
-func checkFailureCode(stoppedAt string) cliout.Code {
+//
+// It takes the Result and not only the step name because ONE step has two
+// unrelated failures under it. "render" is reached both by a genuine write
+// failure — an unwritable viewer/ directory, a full disk — and by a theme that
+// does not resolve, and those have opposite recoveries. Classifying the theme
+// case as write_failed is what the router skill teaches an agent to escalate as
+// a filesystem problem, so it would send somebody to check disk permissions for
+// a mistyped preset name. Worse, the two READ-ONLY modes already answered
+// invalid_config for the identical input, so the same defect carried a
+// different code depending on which door the caller came through — which is
+// exactly what a stable code is supposed to make impossible.
+func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
+	if res.ThemeError != "" {
+		return cliout.CodeInvalidConfig
+	}
 	switch stoppedAt {
 	case "lint":
 		return cliout.CodeLintFailed
@@ -1410,7 +1424,7 @@ func newCheckCmd() *cobra.Command {
 				// check_parity_test.go / tests/check_exit_test.go. cliout.Errorf
 				// reproduces fmt.Errorf's string precisely, so attaching the
 				// code costs nothing on the text side.
-				failure := cliout.Errorf(checkFailureCode(stoppedAt), "check: %w", runErr)
+				failure := cliout.Errorf(checkFailureCode(res, stoppedAt), "check: %w", runErr)
 				if stoppedAt == "ledger" {
 					// The one failure family whose WRONG recovery is
 					// destructive, so it is the one that must not arrive with
