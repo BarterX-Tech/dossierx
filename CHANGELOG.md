@@ -26,8 +26,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `dossierx check`'s envelope data gains `theme_font_count` and `theme_font_bytes`, reporting how
   many project-supplied font files a theme inlines and their combined raw byte size — what a
   reader downloads before the page renders anything. Both are `omitempty`: they are absent from
-  `data` (not present as `0`) when the theme declares no fonts, and when `theme_error` is set
-  (nothing was accepted).
+  `data` (not present as `0`) when the theme declares no fonts, and when a render-phase theme
+  failure sets `data.theme_error` instead (nothing was accepted). A config-phase theme failure —
+  an unknown token, a bad value, a duplicate key, an `extends` outside the project — carries no
+  `data` at all; only `error.message` names it.
 - Under `dossierx serve`, the Content-Security-Policy now includes `font-src data:`, so a themed
   project's inlined fonts render under `serve` the same way they do in a statically rendered
   viewer. No other CSP directive changed.

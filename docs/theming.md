@@ -185,9 +185,12 @@ Read `data.theme_font_count` and `data.theme_font_bytes` from
 `dossierx check`'s envelope to see exactly what a reader downloads before
 the page renders anything. Both fields are `omitempty`: they are **absent
 from `data`**, not present as `0`, when the theme declares no fonts. A
-theme that fails to resolve at all instead carries `data.theme_error` —
-present under `check`, `--validate`, and `--staged` alike — naming what
-went wrong.
+theme that fails to resolve at the RENDER phase (see the `stopped_at` table
+below) carries `data.theme_error` naming what went wrong, under `check`,
+`--validate`, and `--staged` alike. A theme that fails at the CONFIG phase
+carries no `data` at all — the config loader refuses before any check
+result exists — so there is no `theme_error` to read; `error.message` is
+the only place that failure is named.
 
 ## Verify it applied, in both OS modes
 
@@ -197,10 +200,10 @@ through this in order:
 1. Run `dossierx check`. A theme that does not resolve fails here, always as
    `invalid_config`, but `stopped_at` names where the failure was caught:
 
-   | what failed | `stopped_at` |
-   |---|---|
-   | a grammar/allowlist/shape problem in the inline `viewer.theme` block itself — an unknown token, a malformed colour, length or font-family value, a control character, or stray whitespace | `config` |
-   | anything that needed a file: a missing or escaping `extends` file (including a grammar problem inside that file's own content), a font that does not exist, fails its signature check, or blows the 2 MiB cap, or a font family nothing names | `render` |
+   | what failed | `stopped_at` | `data.theme_error` |
+   |---|---|---|
+   | a grammar/allowlist/shape problem in the inline `viewer.theme` block itself — an unknown token, a malformed colour, length or font-family value, a control character, or stray whitespace | `config` | absent — no `data` exists yet; only `error.message` names it |
+   | an unknown `preset` name, a missing or escaping `extends` file (including a grammar problem inside that file's own content), a font that does not exist, fails its signature check, or blows the 2 MiB cap, or a font family nothing names | `render` | present, naming the failure |
 
    `check --validate` and `check --staged` apply the identical rule set, so
    a hook or CI run is not a way around either failure.
@@ -213,9 +216,10 @@ through this in order:
    way to catch the flat-key trap described above.
 4. Read `data.theme_font_count` and `data.theme_font_bytes` from `check`'s
    envelope if the theme declares fonts — they are absent from `data`
-   entirely when there are none. If the theme fails outright, look at
-   `data.theme_error` instead; it is present under `check`, `--validate`,
-   and `--staged` alike.
+   entirely when there are none. If the theme fails at the render phase,
+   look at `data.theme_error` instead (present under `check`, `--validate`,
+   and `--staged` alike); a config-phase failure carries no `data` at all,
+   so `error.message` is where that one is named.
 
 ## `check`, `--validate`, `--staged`
 
