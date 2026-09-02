@@ -69,14 +69,22 @@ type Viewer struct {
 	// not exist, LoadConfig returns a hard error.
 	TemplateOverrides string `yaml:"template_overrides,omitempty"`
 
-	// Theme maps CSS custom-property token names (without the leading
-	// "--") to their values. Keys must be drawn from ThemeTokenAllowlist —
-	// this is the only project-specific CSS vocabulary the engine
-	// recognizes, kept as a fixed list for typo protection. Values are
-	// injected verbatim into a generated :root{...} stylesheet block, so
-	// they are validated defensively (see validateTheme) rather than
-	// trusted as safe CSS.
-	Theme map[string]string `yaml:"theme,omitempty"`
+	// Theme is the viewer's custom-theme block: an optional preset, an
+	// optional theme file to extend, CSS custom-property values that apply
+	// to both colour schemes or to only one, and project-supplied font
+	// faces. See the Theme type for the shape and theme.go for the decoder.
+	//
+	// Token names (without the leading "--") must be drawn from
+	// ThemeTokenAllowlist — this is the only project-specific CSS
+	// vocabulary the engine recognizes, kept as a fixed list for typo
+	// protection. Values are injected verbatim into generated stylesheet
+	// blocks by internal/render, so they are validated as hostile input
+	// (see theme_validate.go) rather than trusted as safe CSS.
+	//
+	// A theme that names only flat token keys — every project that
+	// predates per-mode values, this engine's own fixtures included —
+	// merges to exactly the single :root{...} block it produced before.
+	Theme Theme `yaml:"theme,omitempty"`
 }
 
 // ThemeTokenAllowlist is the fixed, engine-owned set of viewer.theme keys.
@@ -325,6 +333,16 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 		}
 	}
 
+	// The theme's two path-shaped fields are resolved here and READ
+	// NOWHERE IN THIS FUNCTION. Loading a config stays a pure function of
+	// its bytes plus the directory it was anchored to, which is what lets
+	// "check --staged" decode the index's copy of project.config.yaml and
+	// then resolve the theme against the index's copy of every file it
+	// names, instead of half of each.
+	if err := resolveThemePaths(&cfg.Viewer.Theme, dir); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+
 	// A configured-and-missing override directory is a hard load-time
 	// error (per SPEC); missing individual partials inside it are fine and
 	// are handled later by internal/render, not here.
@@ -426,8 +444,11 @@ func (c *Config) validate() error {
 		return fmt.Errorf("tracks contains duplicate id %q", dup)
 	}
 
-	if err := validateTheme(c.Viewer.Theme); err != nil {
-		return fmt.Errorf("viewer.theme: %w", err)
+	// Shape, allowlist and grammar only: nothing here reads a file. The
+	// theme file named by `extends` and every `fonts[].src` are read later,
+	// by ValidateTheme/ResolveTheme, through an injected reader.
+	if err := validateThemeBlock(&c.Viewer.Theme, "viewer.theme"); err != nil {
+		return err
 	}
 
 	return nil
@@ -463,77 +484,6 @@ func (c *Config) TrackByID(id string) (Track, bool) {
 		}
 	}
 	return Track{}, false
-}
-
-// dangerousThemeChars are rejected outright from any theme token value
-// regardless of the token's shape (color or font-family), since they are
-// the actual injection-safety concern: theme values are interpolated
-// verbatim into a generated <style> block by internal/render.
-const dangerousThemeChars = ";{}<>"
-
-// validateTheme enforces the viewer.theme contract: keys must be in
-// ThemeTokenAllowlist (typo protection — this allowlist is the only engine-
-// owned theme vocabulary), values must be non-empty, and values must not
-// contain characters that would be unsafe to interpolate into CSS. Color-
-// shaped tokens additionally get a light format sanity check.
-func validateTheme(theme map[string]string) error {
-	for _, key := range ThemeTokenAllowlist {
-		val, ok := theme[key]
-		if !ok {
-			continue
-		}
-		if strings.TrimSpace(val) == "" {
-			return fmt.Errorf("%q: value must not be empty", key)
-		}
-		if strings.ContainsAny(val, dangerousThemeChars) {
-			return fmt.Errorf("%q: value %q contains a disallowed character (one of %q)", key, val, dangerousThemeChars)
-		}
-		if themeColorTokens[key] && !looksLikeColor(val) {
-			return fmt.Errorf("%q: value %q does not look like a color (#hex, rgb()/rgba(), or a CSS named color)", key, val)
-		}
-	}
-	for key := range theme {
-		if !themeTokenAllowed[key] {
-			return fmt.Errorf("unknown theme token %q (must be one of %s)", key, strings.Join(ThemeTokenAllowlist, ", "))
-		}
-	}
-	return nil
-}
-
-// looksLikeColor is a light sanity check, not a full CSS color grammar: it
-// accepts #hex (3/4/6/8 digits), rgb(...)/rgba(...), and bare CSS named
-// colors (a run of letters, e.g. "rebeccapurple"). Its job is to catch
-// obvious typos/garbage, not to validate every legal CSS color syntax.
-func looksLikeColor(val string) bool {
-	v := strings.TrimSpace(val)
-	if v == "" {
-		return false
-	}
-	if strings.HasPrefix(v, "#") {
-		hex := v[1:]
-		switch len(hex) {
-		case 3, 4, 6, 8:
-			for _, r := range hex {
-				if !isHexDigit(r) {
-					return false
-				}
-			}
-			return true
-		default:
-			return false
-		}
-	}
-	lower := strings.ToLower(v)
-	if strings.HasPrefix(lower, "rgb(") || strings.HasPrefix(lower, "rgba(") {
-		return strings.HasSuffix(v, ")")
-	}
-	// Bare CSS named color: letters only (e.g. "forestgreen", "transparent").
-	for _, r := range v {
-		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') {
-			return false
-		}
-	}
-	return true
 }
 
 func isHexDigit(r rune) bool {
