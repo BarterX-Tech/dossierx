@@ -99,6 +99,27 @@ var ThemeTokenAllowlist = []string{
 	"font-sans",
 	"font-mono",
 	"radius",
+
+	// Added for the custom-theme work: every consumer below is a literal
+	// that internal/render/viewer/template/style.css turns into
+	// var(--<token>, <the same literal>), so an unset token renders
+	// exactly as it did before this list grew. Order is load-bearing —
+	// internal/render emits declarations in it — so new tokens are
+	// appended, never inserted.
+	"code-inline-bg",
+	"code-bg",
+	"table-head-bg",
+	"image-bg",
+	"hover-bg",
+	"border-strong",
+	"shadow",
+	"shadow-strong",
+	"shadow-cast",
+	"scrim",
+	"selection-bg",
+	"status-draft",
+	"status-draft-bg",
+	"mockup-bg",
 }
 
 // themeColorTokens is the subset of ThemeTokenAllowlist that holds
@@ -116,6 +137,23 @@ var themeColorTokens = map[string]bool{
 	"link":      true,
 	"warn":      true,
 	"warn-bg":   true,
+
+	// All fourteen tokens added for the custom-theme work are colours;
+	// font-sans, font-mono and radius remain the only non-colour tokens.
+	"code-inline-bg":  true,
+	"code-bg":         true,
+	"table-head-bg":   true,
+	"image-bg":        true,
+	"hover-bg":        true,
+	"border-strong":   true,
+	"shadow":          true,
+	"shadow-strong":   true,
+	"shadow-cast":     true,
+	"scrim":           true,
+	"selection-bg":    true,
+	"status-draft":    true,
+	"status-draft-bg": true,
+	"mockup-bg":       true,
 }
 
 // themeTokenAllowed is ThemeTokenAllowlist as a set, built once for O(1)
