@@ -547,7 +547,7 @@ func TestRoot_RendersBrokenProjectsNotBlank(t *testing.T) {
 func TestRoot_CSPValue(t *testing.T) {
 	_, base, _ := startServer(t, baseConfig, standardFiles())
 	resp, _ := do(t, http.MethodGet, base+"/", "")
-	want := "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+	want := "default-src 'none'; img-src 'self'; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
 	if got := resp.Header.Get("Content-Security-Policy"); got != want {
 		t.Fatalf("CSP header = %q, want %q", got, want)
 	}
@@ -596,7 +596,7 @@ func TestRoot_RenderErrorHasCSP(t *testing.T) {
 	if resp.StatusCode != http.StatusInternalServerError {
 		t.Fatalf("GET / with a broken shell override: got %d, want 500 (body=%s)", resp.StatusCode, data)
 	}
-	want := "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
+	want := "default-src 'none'; img-src 'self'; font-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'"
 	if got := resp.Header.Get("Content-Security-Policy"); got != want {
 		t.Fatalf("500 render-error page CSP = %q, want %q (the error branch must set the same CSP as the 200 path)", got, want)
 	}

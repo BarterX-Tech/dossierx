@@ -270,6 +270,50 @@ type StagedProject struct {
 	// StatusStaged, and exporting the stores would invite someone to Save() one
 	// whose path points into a deleted temp directory.
 	ledger ledgerInputs
+
+	// readIndex is the file reader the theme rules run through: it answers
+	// with the INDEX's bytes for a path under the work tree. Unexported for
+	// the same reason ledger is — it is state assembled from a gitRunner
+	// this package owns, and its only legitimate use is being handed back to
+	// StatusStaged with the rest of this value.
+	//
+	// It exists so that "check --staged" runs the SAME theme rule set as the
+	// other two modes rather than a weaker copy of it: because it returns
+	// real blob bytes, the font signature and total-size checks are answered
+	// from the content the commit will carry.
+	readIndex func(string) ([]byte, error)
+}
+
+// stagedThemeReader returns the reader config.ValidateTheme runs the theme's
+// files through under --staged: the index's bytes for a path, never the
+// working tree's.
+//
+// A path that is not in the index at all is an ERROR, not an empty file. The
+// theme is part of what a commit carries, so a project that edited
+// themes/house.yaml and staged only project.config.yaml is committing a
+// config that names a file the commit does not have; answering with the
+// worktree copy would grade the commit on content it does not contain, and
+// answering with zero bytes would grade it on a theme nobody wrote. The
+// message names the fix, because "git add it" is always the fix.
+//
+// The caller in internal/config prefixes this with the field it was reading
+// for ("viewer.theme.extends: <path>: ..."), so the quoted relative path here
+// is the one a person would type after "git add".
+func stagedThemeReader(g *gitRunner) func(string) ([]byte, error) {
+	return func(target string) ([]byte, error) {
+		spec, err := g.spec(target)
+		if err != nil {
+			return nil, err
+		}
+		tracked, err := g.lsFiles(spec)
+		if err != nil {
+			return nil, err
+		}
+		if len(tracked) == 0 {
+			return nil, fmt.Errorf("%q is not staged (git add it)", spec)
+		}
+		return g.showIndexBlob(tracked[0])
+	}
 }
 
 // Staged assembles the project from the git index. It returns ErrNoIndex
@@ -289,6 +333,7 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	// against it — see StagedProject.Config for why a worktree config makes the
 	// whole gate bypassable with one unstaged line.
 	var sp StagedProject
+	sp.readIndex = stagedThemeReader(g)
 	sp.Config, sp.ConfigFromIndex, err = stagedConfig(g, cfg)
 	if err != nil {
 		return StagedProject{}, err

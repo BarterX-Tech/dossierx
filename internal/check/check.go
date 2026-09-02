@@ -122,6 +122,27 @@ type Result struct {
 	// parsing a hint string.
 	BuildOrders []BuildOrderReport
 
+	// ThemeError is the viewer theme's refusal — an unreadable or unstaged
+	// theme file, a font whose bytes are not the format its extension
+	// claims, a font family nothing names, the total font cap — or "" when
+	// the theme is fine or absent. It is a STRING rather than an error
+	// because Result is a value the machine surface projects, and it is a
+	// separate field rather than a lint finding because it is not one: no
+	// claim is at fault and no lint rule was run.
+	//
+	// A non-empty ThemeError clears OK. The viewer this project would render
+	// does not exist, so a status that said "ok" would be describing a
+	// document nobody can produce.
+	ThemeError string
+
+	// ThemeFontCount/ThemeFontBytes are how much of the reader's download
+	// the project's own fonts account for: the number of faces the theme
+	// inlines and their total RAW size (base64 expands it by a third in the
+	// emitted viewer). Zero for a project with no fonts, which is almost all
+	// of them, and zero when ThemeError is set — nothing was accepted.
+	ThemeFontCount int
+	ThemeFontBytes int64
+
 	// OK is true once every fail-fast step passed and the run reached the
 	// "check: OK" line. The reporting fields below are populated only then.
 	OK bool
@@ -241,7 +262,21 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	res.CatalogCount = len(claims)
 
 	// 3. Render the viewer to viewer/index.html.
-	html, err := render.Render(cat, cfg)
+	//
+	// The theme is resolved HERE rather than inside render.Render so that the
+	// same numbers the read-only modes report — how many fonts the reader
+	// downloads and how many bytes of them — are on this Result too, and so
+	// that a theme refusal is one error rather than one per rebuild.
+	rt, err := config.ResolveTheme(cfg, os.ReadFile)
+	if err != nil {
+		res.ThemeError = err.Error()
+		return res, fmt.Errorf("render: %w", err)
+	}
+	res.ThemeFontCount = len(rt.Fonts)
+	for _, f := range rt.Fonts {
+		res.ThemeFontBytes += int64(len(f.Data))
+	}
+	html, err := render.RenderWithTheme(cat, cfg, rt)
 	if err != nil {
 		return res, fmt.Errorf("render: %w", err)
 	}
@@ -325,7 +360,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 // and the two enforcing read-only CLI paths (--validate, --staged), which read
 // the same field and decide for themselves.
 func Status(claims []model.Claim, cfg *config.Config) Result {
-	return status(claims, cfg, loadLedgerInputs(cfg))
+	return status(claims, cfg, loadLedgerInputs(cfg), os.ReadFile)
 }
 
 // StatusStaged is Status evaluated against the GIT INDEX: the claim registry
@@ -350,7 +385,18 @@ func StatusStaged(sp StagedProject, cfg *config.Config) Result {
 	if sp.Config != nil {
 		cfg = sp.Config
 	}
-	return status(sp.Claims, cfg, sp.ledger)
+	read := sp.readIndex
+	if read == nil {
+		// A StagedProject a caller built by hand (only tests do) has no
+		// index reader. Refusing to fall back to os.ReadFile is the point:
+		// silently grading the theme against the working tree under
+		// --staged is exactly the bypass the rest of this file exists to
+		// close, so the theme rules report that they could not run.
+		read = func(path string) ([]byte, error) {
+			return nil, fmt.Errorf("%s: no git index reader (this StagedProject was not built by Staged)", path)
+		}
+	}
+	return status(sp.Claims, cfg, sp.ledger, read)
 }
 
 // status is the shared body of Status and StatusStaged. The only thing that
@@ -359,8 +405,22 @@ func StatusStaged(sp StagedProject, cfg *config.Config) Result {
 // identical by construction, which is what keeps "what --staged checks" and
 // "what --validate checks" the same set of rules rather than two lists that
 // have to be kept in step by hand.
-func status(claims []model.Claim, cfg *config.Config, in ledgerInputs) Result {
+func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func(string) ([]byte, error)) Result {
 	var res Result
+
+	// The theme is evaluated through an INJECTED reader, which is the whole
+	// reason this parameter exists: --staged passes a reader that answers
+	// from the git index, so the theme file's content, every font's
+	// signature and the total size cap are judged against the bytes the
+	// commit will carry rather than against the working tree beside it. All
+	// three modes therefore run one rule set (config.ValidateTheme) instead
+	// of a strict one and a lenient one that have to be kept in step by hand.
+	if rep, err := config.ValidateTheme(cfg, read); err != nil {
+		res.ThemeError = err.Error()
+	} else {
+		res.ThemeFontCount = rep.FontCount
+		res.ThemeFontBytes = rep.FontBytes
+	}
 
 	res.LintFindings = lint.RunAll(claims, cfg)
 	for _, f := range res.LintFindings {
@@ -391,6 +451,12 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs) Result {
 	if len(res.LintErrors) > 0 {
 		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
 		// reporting below empty exactly as the disk-writing Run leaves it.
+		return res
+	}
+
+	if res.ThemeError != "" {
+		// Same shape as the lint fail-fast above: report the refusal, leave
+		// the best-effort reporting below empty.
 		return res
 	}
 
