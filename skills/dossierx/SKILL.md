@@ -200,10 +200,11 @@ locked claim still resolves to its record. A move that **strands** them fails as
 | write, edit, inspect, lock, unlock or reaudit a claim; run `dossierx check`; find the claim the human meant | `dossierx-claims` |
 | cite the evidence behind a claim (`sources`, `[n]` markers), put a claim on a feature track, or read `dossierx track list/show/status` | `dossierx-claims` |
 | read `dossierx comment inbox`, reply to a review thread, or decide comment vs. `claim flag` | `dossierx-comments` |
+| restyle the viewer — brand colours, dark mode, the project's own fonts, `viewer.theme` | `dossierx-theme` |
 | implement code from a module whose claims are all locked | `dossierx-build-order` |
 | tag finished code with its claim, or report that shipped code no longer matches a locked claim | `dossierx-code-links` |
 
-Load one, not all four.
+Load one, not all five.
 
 ## Bootstrap — setting DossierX up in a repo
 

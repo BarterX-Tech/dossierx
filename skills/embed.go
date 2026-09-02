@@ -22,14 +22,14 @@ import "embed"
 // FS holds every skill directory, each containing one SKILL.md.
 //
 // "dossierx" is the ROUTER and is deliberately listed first: it is the one an
-// agent loads always and first (the contract, the seven nouns, the two roles,
-// which companion to load for what), and the other four are loaded only when it
+// agent loads always and first (the contract, the nine nouns, the two roles,
+// which companion to load for what), and the other five are loaded only when it
 // sends the agent there. RouterName below is the machine-readable half of that
 // statement; the exporter uses it to decide what goes into an always-on
 // AGENTS.md section, which has a much smaller budget than a loaded-on-demand
 // skill file.
 //
-//go:embed dossierx dossierx-claims dossierx-build-order dossierx-code-links dossierx-comments
+//go:embed dossierx dossierx-claims dossierx-build-order dossierx-code-links dossierx-comments dossierx-theme
 var FS embed.FS
 
 // RouterName is the directory name of the router skill — the one form that is
@@ -43,17 +43,26 @@ const RouterName = "dossierx"
 // It lives here, beside the go:embed pattern, because it is a statement about the
 // content and not about the exporter: the router first because it is loaded
 // always and first, then claims (the thing every other skill assumes), then the
-// human loop, then the two skills that only apply once claims are locked. A
-// lexical walk would open the guide on build-order — a skill for work that has
-// not started yet — and teach the reader to begin in the middle.
+// human loop, then theming, then the two skills that only apply once claims are
+// locked. A lexical walk would open the guide on build-order — a skill for work
+// that has not started yet — and teach the reader to begin in the middle.
+//
+// dossierx-theme sits where it does because it is a PROJECT-SETUP concern and
+// not a post-lock one: a human asks for the viewer to look like their product
+// early, usually before there is much in it to look at, and the two bundles
+// after it both begin "once the claims are locked". It is last-but-two rather
+// than first because it is also the only bundle that changes nothing the corpus
+// says, so an agent reading straight through should meet the lifecycle before
+// the paint.
 //
 // The exporter cross-checks this list against the embedded directories and fails
-// when they disagree, so a sixth bundle cannot be added without a decision about
-// where in the reading order it belongs.
+// when they disagree, so a seventh bundle cannot be added without a decision
+// about where in the reading order it belongs.
 var Order = []string{
 	RouterName,
 	"dossierx-claims",
 	"dossierx-comments",
+	"dossierx-theme",
 	"dossierx-build-order",
 	"dossierx-code-links",
 }

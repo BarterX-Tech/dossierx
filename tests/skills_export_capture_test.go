@@ -52,7 +52,7 @@ var siblingSkillLinkPattern = regexp.MustCompile(`\]\(\.\./([^/)\n]+)/SKILL\.md\
 
 var skillsExportCaptureOut = flag.String("skills-export-capture-out", "", "write the captured `dossierx skills export` output (surfaces.yaml's `agent-skills` surface) to this path as export-output.json")
 
-// The five bundles this repo ships, in their embedded directory names. Kept
+// The six bundles this repo ships, in their embedded directory names. Kept
 // as a local literal (rather than importing skills.Order from package tests,
 // which has no dependency on the skills module) so this test has no coupling
 // beyond what captureSkillsExport already has to the compiled binary's
@@ -61,6 +61,7 @@ var wantSkillsExportNames = []string{
 	"dossierx",
 	"dossierx-claims",
 	"dossierx-comments",
+	"dossierx-theme",
 	"dossierx-build-order",
 	"dossierx-code-links",
 }

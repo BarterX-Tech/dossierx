@@ -456,6 +456,16 @@ func envelopeCases() []envelopeCase {
 		{"track status / blocked by a cited draft claim in another module", envTracked, []string{"track", "status", "guest-checkout"}},
 		{"track status / an id the config does not declare", envTracked, []string{"track", "status", "guest-chekout"}},
 
+		// The theme leaves, against the plainest fixture there is, because
+		// neither of them loads a project at all: both answer identically in
+		// every environment, which is itself part of what is pinned. Three
+		// blocks, because the noun has three shapes — a list, the no-path
+		// export whose CONTENT rides in data.yaml, and the refusal, which is
+		// the only failure envelope this noun can produce.
+		{"theme list / the built-in presets", envFresh, []string{"theme", "list"}},
+		{"theme export / no path, the YAML in the envelope", envFresh, []string{"theme", "export", "claude"}},
+		{"theme export / a preset this binary does not carry", envFresh, []string{"theme", "export", "clode"}},
+
 		{"skills export / into an explicit directory", envFresh, []string{"skills", "export", "skills-out"}},
 
 		{"usage / a noun with no leaf", envFresh, []string{"claim"}},

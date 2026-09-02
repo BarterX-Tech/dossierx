@@ -28,13 +28,14 @@ import (
 	dxskills "github.com/BarterX-Tech/dossierx/skills"
 )
 
-// The five bundles and the order the router presents them in. Spelled out
+// The six bundles and the order the router presents them in. Spelled out
 // rather than derived so that adding or removing a skill is a deliberate edit
-// to a test, the same way cmd/dossierx/main_test.go pins the 19-leaf surface.
+// to a test, the same way cmd/dossierx/main_test.go pins the leaf surface.
 var wantSkillNames = []string{
 	"dossierx",
 	"dossierx-claims",
 	"dossierx-comments",
+	"dossierx-theme",
 	"dossierx-build-order",
 	"dossierx-code-links",
 }
@@ -62,10 +63,10 @@ func TestCLI_SkillsExport_WritesAllSkillFiles(t *testing.T) {
 		}
 	}
 
-	// Five bundles plus the generic guide, which is always written — with no
+	// Six bundles plus the generic guide, which is always written — with no
 	// project root to put it in, it lands beside the bundles.
-	if !strings.Contains(stdout, "wrote 6 file(s)") {
-		t.Fatalf("expected stdout to report 6 file(s) written, got:\n%s", stdout)
+	if !strings.Contains(stdout, "wrote 7 file(s)") {
+		t.Fatalf("expected stdout to report 7 file(s) written, got:\n%s", stdout)
 	}
 	if _, statErr := os.Stat(filepath.Join(targetDir, "dossierx-agent-guide.md")); statErr != nil {
 		t.Fatalf("the generic guide must be written even with no project root: %v", statErr)
@@ -501,6 +502,20 @@ func TestSkills_EveryInvocationNamesARealCommand(t *testing.T) {
 // (comments 192, code-links 136, build-order 110). Two guides growing for one
 // schema change and three not moving is still the surface signature; four
 // growing together would not be, and that is the thing to look for next time.
+//
+// NOT RAISED FOR THE SIXTH BUNDLE, and that is the census this release adds
+// rather than a raise. dossierx-theme arrives at 235, under the ceiling as
+// written, and the router took ONE line for it: a row in the companion table.
+// The router did not grow because theming does not touch the contract — no
+// noun an agent must know about mid-lifecycle, no new failure it can meet
+// without asking for it, nothing an agent that never themes anything needs
+// resident. That is the difference from the `track`/`sources` release, which
+// added a noun and a schema field an agent meets whether or not it went
+// looking, and it is why the same evidence reads the opposite way here: five
+// companions unmoved (claims 255, comments 192, code-links 136,
+// build-order 110) plus one new bundle under the ceiling is a surface addition
+// that cost the always-on budget one line, which is the shape a raise would
+// have to be argued against.
 func TestSkills_StayWithinTheirLineBudget(t *testing.T) {
 	const maxLines = 265
 

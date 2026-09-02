@@ -45,7 +45,11 @@ func TestThemeLeavesNeedNoProject(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatalf("chdir: %v", err)
 	}
-	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	t.Cleanup(func() {
+		if err := os.Chdir(cwd); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
 
 	for _, args := range [][]string{
 		{"theme", "list"},
@@ -251,16 +255,20 @@ func TestThemeExportRefusesToClobber(t *testing.T) {
 	if env.Error == nil || env.Error.Code != cliout.CodeWriteConflict {
 		t.Fatalf("want error.code %q, got %+v", cliout.CodeWriteConflict, env.Error)
 	}
-	if got, _ := os.ReadFile(path); string(got) != "paper: '#123456'\n" {
-		t.Fatalf("the refused export changed the file anyway: %q", string(got))
+	untouched, readErr := os.ReadFile(path)
+	if readErr != nil {
+		t.Fatalf("read after the refused export: %v", readErr)
+	}
+	if string(untouched) != "paper: '#123456'\n" {
+		t.Fatalf("the refused export changed the file anyway: %q", string(untouched))
 	}
 
 	if _, _, err := execCLIJSON(t, "theme", "export", "claude", path, "--force"); err != nil {
 		t.Fatalf("--force must overwrite: %v", err)
 	}
-	got, readErr := os.ReadFile(path)
-	if readErr != nil {
-		t.Fatalf("read forced export: %v", readErr)
+	got, forcedErr := os.ReadFile(path)
+	if forcedErr != nil {
+		t.Fatalf("read forced export: %v", forcedErr)
 	}
 	if !strings.Contains(string(got), "# DossierX theme file") {
 		t.Fatalf("--force did not replace the file, got:\n%s", string(got))
