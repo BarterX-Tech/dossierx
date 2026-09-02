@@ -24,10 +24,20 @@
       light value rather than its dark one.
 
    The names a project may set are the 28-entry allowlist in
-   internal/config/config.go (ThemeTokenAllowlist). Every consumer in this
-   file spells the token as `var(--token, <the literal that was there before
-   the allowlist grew>)`, so an unset token renders byte-identically to the
-   pre-theme viewer. internal/render/theme_tokens_test.go fails if an
+   internal/config/config.go (ThemeTokenAllowlist). Each token's :root default
+   is the value a light OS gets, and the screen-dark block carries the dark
+   values for the three that differ. A consumer spells the token as
+   `var(--token, <fallback>)`; the fallback is the LIGHT value, because this
+   sheet is light-first and because the fallback only ever fires for a
+   viewer.template_overrides project that forked this file and dropped the
+   :root — which should degrade to light, not to dark.
+
+   A token has to be read by the declaration that WINS, not merely by a
+   declaration. Two rules in this file are re-declared later at equal
+   specificity (`code` and `.claim-body pre, .claim-tree-body`), so their
+   token reads live in the later copy; internal/render/theme_tokens_test.go
+   asserts, per token, that the last declaration of the consumer's
+   selector+property pair is the one carrying the var(). It also fails if an
    allowlisted token has no consumer in this file or in graph.css, and pins
    the structural invariants listed above.
 
@@ -67,15 +77,18 @@
   --font-mono: ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace;
   --radius: 6px;
 
-  /* Added for the custom-theme work. Each value is the literal that was
-     hard-coded at its consumer before this commit, so an unset token renders
-     exactly as it did before. Order matches ThemeTokenAllowlist. --shadow,
-     --shadow-strong and --scrim are the three that differ per mode and are
-     re-pointed in the screen-dark query below; the other eleven are the same
-     in both modes on purpose (a neutral rgba overlay tint tracks whatever it
-     sits on, and the mockup card is deliberately mode-invariant). */
-  --code-inline-bg: rgba(127, 127, 127, .12);
-  --code-bg: rgba(127, 127, 127, .10);
+  /* Added for the custom-theme work. Each value below is what a LIGHT OS and
+     a printed page get; the screen-dark query re-points the three that differ
+     per mode (--shadow, --shadow-strong, --scrim). The other eleven are the
+     same in both modes on purpose: a neutral overlay tint tracks whatever it
+     sits on, and the mockup card is deliberately mode-invariant.
+     Every value is the expression the live consumer used before it read a
+     token, so an unset token renders exactly as it did before. Note "live":
+     for --code-inline-bg and --code-bg that is the System Record layer's
+     color-mix, not the rgba() in the dead declaration those rules have always
+     beaten. Order matches ThemeTokenAllowlist. */
+  --code-inline-bg: color-mix(in srgb, var(--paper) 72%, var(--card-bg));
+  --code-bg: color-mix(in srgb, var(--paper) 82%, var(--card-bg));
   --table-head-bg: rgba(127, 127, 127, .10);
   --image-bg: rgba(127, 127, 127, .06);
   --hover-bg: rgba(125, 137, 154, .08);
@@ -178,11 +191,14 @@ body {
    every component routes body-shaped text through the shared "markdown"
    template func). Ported verbatim from the reference docs stylesheet's global
    `code{...}` rule so a regex, config key, or field name wrapped in single
-   backticks reads as a distinct code "pill", not plain prose. */
+   backticks reads as a distinct code "pill", not plain prose.
+
+   NO background here. The System Record layer's own `code` rule further down
+   re-declares it at equal specificity and later in the file, so anything set
+   here is dead; --code-inline-bg is read there, where it can win. */
 code {
   font-family: var(--font-mono);
   font-size: 12px;
-  background: var(--code-inline-bg, rgba(127, 127, 127, .12));
   padding: 1px 5px;
   border-radius: 5px;
 }
@@ -190,11 +206,15 @@ code {
 /* Fenced ```code``` spans inside a claim's Body, converted to real
    <pre><code> elements by markdown.Render. white-space is reset off the
    pre-wrap inherited from .claim-body since <pre> already preserves
-   whitespace on its own. Background is the same neutral rgba(127,127,127)
-   overlay tint the reference docs stylesheet's `pre{...}` rule uses (not
-   --card-bg, which is the surrounding card's own background and would
-   make the block invisible against it — the exact "white background, not
-   grey" regression this replaces). */
+   whitespace on its own.
+
+   NO background here, for the same reason as the `code` rule above: the
+   System Record layer re-declares this exact selector list later in the file
+   at equal specificity, so a background set here never reaches a reader.
+   --code-bg is read there. What that rule must NOT be is --card-bg, which is
+   the surrounding card's own background and would make the block invisible
+   against it — the "white background, not grey" regression these rules
+   replaced; it is a tint of --paper over --card-bg instead. */
 .claim-body pre,
 .claim-tree-body {
   font-size: 11.5px;
@@ -203,7 +223,6 @@ code {
   overflow-x: auto;
   margin: 0.5rem 0;
   padding: 0.6rem 0.75rem;
-  background: var(--code-bg, rgba(127, 127, 127, .10));
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -1205,7 +1224,7 @@ th {
   border: 1px solid var(--border);
   border-radius: var(--radius, 12px);
   background: var(--paper);
-  box-shadow: 0 1px 2px var(--shadow, rgba(0, 0, 0, .28));
+  box-shadow: 0 1px 2px var(--shadow, rgba(0, 0, 0, .08));
 }
 
 .comments-panel[hidden] {
@@ -1316,7 +1335,7 @@ th {
   width: 100%;
   height: 100%;
   border: 0;
-  background: var(--scrim, rgba(0, 0, 0, .42));
+  background: var(--scrim, rgba(0, 0, 0, .22));
   cursor: pointer;
 }
 
@@ -1520,7 +1539,7 @@ th {
   border: 1px solid var(--warn);
   border-radius: 10px;
   font: 13px var(--font-sans);
-  box-shadow: 0 4px 18px var(--shadow-strong, rgba(0, 0, 0, .34));
+  box-shadow: 0 4px 18px var(--shadow-strong, rgba(0, 0, 0, .14));
 }
 
 .comments-toast[hidden] {
@@ -3258,18 +3277,22 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 .claim-body strong,
 .sbody strong { font-weight: 700; }
 
+/* The LIVE `code` background: this rule beats the inline-code pill rule near
+   the top of the file at equal specificity, on source order. --code-inline-bg
+   is read here so the token actually reaches a reader. */
 code {
   border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--paper) 72%, var(--card-bg));
+  background: var(--code-inline-bg, color-mix(in srgb, var(--paper) 72%, var(--card-bg)));
   color: var(--ink);
   font-size: .86em;
 }
 
+/* The LIVE fenced-block background, same story as `code` above. */
 .claim-body pre,
 .claim-tree-body {
   padding: 13px 14px;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--paper) 82%, var(--card-bg));
+  background: var(--code-bg, color-mix(in srgb, var(--paper) 82%, var(--card-bg)));
   font-size: 12px;
 }
 
@@ -3294,9 +3317,12 @@ code {
 
 .claim-links-summary::marker { content: ""; }
 .claim-links-summary::-webkit-details-marker { display: none; }
-/* .07, not the token's .08: this row is larger than the other hover targets
-   and takes a fainter wash. The fallback keeps its own literal deliberately. */
-.claim-links-summary:hover { background: var(--hover-bg, rgba(125, 137, 154, .07)); color: var(--ink); }
+/* NOT --hover-bg, and deliberately so. This row is much larger than the other
+   hover targets and takes a fainter wash: .07, not .08. Reading the token here
+   would compute .08, because :root always declares --hover-bg and the fallback
+   would never fire — the row would silently change. It is not themable through
+   --hover-bg; a project that wants it themable needs its own token. */
+.claim-links-summary:hover { background: rgba(125, 137, 154, .07); color: var(--ink); }
 
 .claim-footer__identity { display: flex; gap: 10px; align-items: center; min-width: 0; }
 
