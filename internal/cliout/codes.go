@@ -266,6 +266,24 @@ const (
 	// track answers with, at exit 0. There is nothing in that response for a
 	// reader to notice.
 	CodeUnknownTrack Code = "unknown_track"
+	// CodeUnknownPreset is a built-in theme preset name — the positional
+	// argument to "dossierx theme export", and the value of
+	// viewer.theme.preset — that this binary does not carry.
+	//
+	// It is its own code rather than a reuse of CodeInvalidConfig or
+	// CodeBadRequest for the reason every sharp code here exists: the recovery
+	// is one command and nothing else. A caller handed invalid_config goes and
+	// reads its project.config.yaml looking for a shape error, and there is no
+	// shape error to find — the block is well-formed and names a palette that
+	// is not in THIS build. "dossierx theme list" is the whole answer, and it
+	// is also the answer when the real cause is an older binary than the
+	// preset, which is the case a shape-hunting agent cannot reach at all.
+	//
+	// The preset registry is compiled in and its contents are not a promise
+	// (values may change between minor releases), but the NAMES are: a preset
+	// is never renamed or removed without a CHANGELOG entry, so this code
+	// firing always means a typo or a version skew and never a normal state.
+	CodeUnknownPreset Code = "unknown_preset"
 	// CodeMissingFlag is a required flag that was not supplied — --reason,
 	// --as, --module. Distinct from CodeInvalidActor / CodeUnsupportedFormat,
 	// which mean "supplied, but not a legal value".

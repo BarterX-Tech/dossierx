@@ -109,7 +109,7 @@ func newRootCmd() *cobra.Command {
 	// requireSubcommand cannot be reused as-is: it labels the error with
 	// commandPath, which is EMPTY for the root (it is the binary name, stripped),
 	// so it would compose "': a subcommand is required; ' is a command group".
-	// The message is inlined instead, naming the eight nouns the way the noun
+	// The message is inlined instead, naming the nine nouns the way the noun
 	// errors name their leaves.
 	//
 	// "dossierx --help" is unaffected: cobra handles it before RunE, and a
@@ -122,11 +122,11 @@ func newRootCmd() *cobra.Command {
 		if len(args) > 0 {
 			return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 				"dossierx: unknown command %q", args[0]).
-				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
+				WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, theme, track, version>")
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeUsage,
 			"dossierx: a subcommand is required; dossierx does nothing on its own").
-			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, track, version>")
+			WithHint("run one of: dossierx <build-order, check, claim, comment, serve, skills, theme, track, version>")
 	})
 	// --version, taken back off cobra.
 	//
@@ -164,13 +164,14 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: eight nouns, twenty-two leaves, and not one more.
+	// The whole surface: nine nouns, twenty-four leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock                                   3
 	//	track   list show status                                          3
+	//	theme   list export                                               2
 	//	serve · skills export · version                                   3
 	//
 	// The count is a design constraint, not a coincidence. Every verb here is
@@ -180,10 +181,10 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyTwoLeavesUnderEightNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentyFourLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
-	// "track" is the eighth noun, and it is the first addition since v0.3.0
+	// "track" is the eighth noun, and it was the first addition since v0.3.0
 	// built the seven. It earns its place by answering a question none of the
 	// other seven can be asked: every one of them is organized on the MODULE
 	// axis, which says who guarantees a claim, and no arrangement of them says
@@ -191,6 +192,17 @@ func newRootCmd() *cobra.Command {
 	// all READ-ONLY by design — see track.go's package comment for why a track
 	// must never gate a lock — so the eighth noun adds a way to look at the
 	// corpus and no new way to change it.
+	//
+	// "theme" is the ninth, and it is the first noun whose subject is not the
+	// corpus at all: the viewer's palette is a presentation choice a project
+	// makes once, and `viewer.theme` was until now a config block with no way
+	// to see what the engine would accept short of reading FORMAT.md's table.
+	// Its two leaves are the discovery half of that block — what palettes ship,
+	// and what one of them actually contains — and like track they change
+	// nothing a gate reads. "theme export <preset> <path>" is the one leaf in
+	// this surface that writes a file outside the project's stores, and the
+	// file it writes is inert until a human points viewer.theme.extends at it;
+	// see theme.go for why that is not a project mutation.
 	//
 	// The migration verb was the twentieth leaf, added by v0.3.0 and REMOVED by
 	// v0.4.0. It was the one door into ledger adoption, and v0.4.0 removes
@@ -207,6 +219,7 @@ func newRootCmd() *cobra.Command {
 		newCommentCmd(),
 		newBuildOrderCmd(),
 		newTrackCmd(),
+		newThemeCmd(),
 		newSkillsCmd(),
 		newVersionCmd(),
 
@@ -239,7 +252,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyTwoLeavesUnderEightNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentyFourLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
