@@ -25,11 +25,18 @@ Run `dossierx check` and open `viewer/index.html`. The accent colour is the
 only thing that changed; every other token still renders the engine's own
 default.
 
-**Quote every value.** A bare `accent: #C6613F` is, to YAML, the key
-`accent` with a trailing comment, and therefore a *null* value. The decoder
-catches this and says so, but quoting from the start costs nothing.
+**Quote every colour (a bare #hex is a YAML comment).** A bare
+`accent: #C6613F` is, to YAML, the key `accent` with a trailing comment, and
+therefore a *null* value. The decoder catches this and says so, but quoting
+from the start costs nothing.
 
-## Light and dark
+Every value is also checked for stray whitespace: any Unicode space other
+than a plain U+0020 (a non-breaking space, for instance) is refused, and so
+is a leading or trailing space — `accent: ' #C6613F'` is refused with
+`value " #C6613F" has leading or trailing whitespace; write it as
+"#C6613F"`, naming the exact fix.
+
+## Light and dark, and the trap: a flat colour key pins both modes
 
 Fourteen of the twenty-eight tokens have a different default depending on
 the reader's OS colour scheme — `paper`, `card-bg`, `ink`, `muted`, `faint`,
@@ -61,12 +68,23 @@ unchanged. The reverse is also true. **Printing always uses the light
 values**, regardless of the reader's OS setting — see "What a theme cannot
 do" below.
 
-The other fourteen tokens — `font-sans`, `font-mono`, `radius`, and eleven
-more added alongside the per-mode work (`code-inline-bg`, `code-bg`,
-`table-head-bg`, `image-bg`, `hover-bg`, `border-strong`, `shadow-cast`,
-`selection-bg`, `status-draft`, `status-draft-bg`, `mockup-bg`) render the
-same value in both schemes by design. Setting these flat is exactly right;
-there is no light/dark variant to accidentally collapse.
+Two more tokens vary between schemes without being re-declared in the dark
+block: `code-inline-bg` and `code-bg` default to
+`color-mix(in srgb, var(--paper) 72%|82%, var(--card-bg))`, an expression
+over `paper` and `card-bg` rather than a fixed colour, so their *computed*
+value is darker in dark mode even though the engine declares them once.
+Setting either flat freezes that expression's current result — a light
+tint baked permanently onto a dark-mode reader's page — which is exactly
+the trap above. Treat them as mode-varying: set them under `light:`/`dark:`
+if you override them at all, or leave them alone and let them keep tracking
+`paper`/`card-bg`.
+
+The other twelve tokens — `font-sans`, `font-mono`, `radius`, and nine more
+added alongside the per-mode work (`table-head-bg`, `image-bg`, `hover-bg`,
+`border-strong`, `shadow-cast`, `selection-bg`, `status-draft`,
+`status-draft-bg`, `mockup-bg`) render the same value in both schemes by
+design. Setting these flat is exactly right; there is no light/dark variant
+to accidentally collapse.
 
 ## Start from the `claude` preset
 
@@ -148,27 +166,44 @@ Limits, all enforced at load time rather than as a silent fallback:
   match that extension's file signature. A renamed or truncated file is
   refused outright — a browser handed one drops the face silently and
   renders a fallback nobody chose.
+- `src` is resolved relative to the file that declares it: relative to
+  `project.config.yaml` for a font declared inline, but relative to the
+  theme file itself for a font declared inside one reached through
+  `extends` — a `themes/` directory that carries its own `fonts/` stays
+  movable as a unit.
 - Every declared `family` must appear in the merged `font-sans` or
   `font-mono` value, or the theme is refused: a face nothing names is
   downloaded by every reader and rendered by none.
 - Total raw font bytes across every face are capped at 2 MiB — roughly four
   generous variable faces. Base64 adds about a third on top of that in the
   emitted HTML. Going over the cap is a load-time error, never a silent
-  drop of the excess.
+  drop of the excess. The error names only the files read up to and
+  including the one that tipped the total over the cap, not every font the
+  theme declares — it does not read the rest just to list them.
 
 Read `data.theme_font_count` and `data.theme_font_bytes` from
 `dossierx check`'s envelope to see exactly what a reader downloads before
-the page renders anything.
+the page renders anything. Both fields are `omitempty`: they are **absent
+from `data`**, not present as `0`, when the theme declares no fonts. A
+theme that fails to resolve at all instead carries `data.theme_error` —
+present under `check`, `--validate`, and `--staged` alike — naming what
+went wrong.
 
 ## Verify it applied, in both OS modes
 
 A theme that resolves is not the same as a theme that looks right. Work
 through this in order:
 
-1. Run `dossierx check`. A theme that does not resolve fails here —
-   `invalid_config`, `stopped_at: render` — and `check --validate` and
-   `check --staged` apply the identical rule set, so a hook or CI run is
-   not a way around it.
+1. Run `dossierx check`. A theme that does not resolve fails here, always as
+   `invalid_config`, but `stopped_at` names where the failure was caught:
+
+   | what failed | `stopped_at` |
+   |---|---|
+   | a grammar/allowlist/shape problem in the inline `viewer.theme` block itself — an unknown token, a malformed colour, length or font-family value, a control character, or stray whitespace | `config` |
+   | anything that needed a file: a missing or escaping `extends` file (including a grammar problem inside that file's own content), a font that does not exist, fails its signature check, or blows the 2 MiB cap, or a font family nothing names | `render` |
+
+   `check --validate` and `check --staged` apply the identical rule set, so
+   a hook or CI run is not a way around either failure.
 2. Open the rendered `viewer/index.html` and confirm the colour you set is
    the colour you see. Every one of the twenty-eight tokens has an engine
    default, so a typo'd value is a load error, but a *correct value in the
@@ -177,8 +212,10 @@ through this in order:
 3. Switch your OS to the other colour scheme and reload. This is the only
    way to catch the flat-key trap described above.
 4. Read `data.theme_font_count` and `data.theme_font_bytes` from `check`'s
-   envelope if the theme declares fonts. Zero when a declared face was
-   never accepted.
+   envelope if the theme declares fonts — they are absent from `data`
+   entirely when there are none. If the theme fails outright, look at
+   `data.theme_error` instead; it is present under `check`, `--validate`,
+   and `--staged` alike.
 
 ## `check`, `--validate`, `--staged`
 

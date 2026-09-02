@@ -25,8 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A new error code, `unknown_preset`, for a `viewer.theme.preset` name the binary does not carry.
 - `dossierx check`'s envelope data gains `theme_font_count` and `theme_font_bytes`, reporting how
   many project-supplied font files a theme inlines and their combined raw byte size — what a
-  reader downloads before the page renders anything. Both are zero when the theme declares no
-  fonts, and when `theme_error` is set (nothing was accepted).
+  reader downloads before the page renders anything. Both are `omitempty`: they are absent from
+  `data` (not present as `0`) when the theme declares no fonts, and when `theme_error` is set
+  (nothing was accepted).
 - Under `dossierx serve`, the Content-Security-Policy now includes `font-src data:`, so a themed
   project's inlined fonts render under `serve` the same way they do in a statically rendered
   viewer. No other CSP directive changed.
@@ -59,13 +60,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `dark:`-only token — one with no `light:`/flat counterpart at all — previously had no defined
   print behaviour; it now resolves to the engine's light default under print, the same as every
   other token.
-- FORMAT.md's "Mode-invariant vs. mode-varying tokens" table was wrong: it listed `accent`,
-  `accent-bg`, `link`, `warn`, and `warn-bg` as mode-invariant, but the shipped stylesheet's dark
-  `@media` block has always re-pointed all five. The table is corrected: the mode-varying set is
-  the eleven original colour tokens (`ink`, `muted`, `faint`, `paper`, `card-bg`, `border`,
-  `accent`, `accent-bg`, `link`, `warn`, `warn-bg`) plus `shadow`, `shadow-strong`, and `scrim` —
-  14 of 28 tokens in total; the other 14, including `font-sans`, `font-mono`, and `radius`, are
-  mode-invariant by design.
+- FORMAT.md's "Mode-invariant vs. mode-varying tokens" table was wrong in two ways: it listed
+  `accent`, `accent-bg`, `link`, `warn`, and `warn-bg` as mode-invariant, but the shipped
+  stylesheet's dark `@media` block has always re-pointed all five; and it had no third category for
+  `code-inline-bg`/`code-bg`, whose default is a `color-mix()` of `paper` and `card-bg` rather than
+  a fixed colour, so they compute a different value per scheme without being re-declared in the
+  dark block at all. The table is corrected to three groups: 14 mode-varying tokens re-declared in
+  the dark block (the eleven original colour tokens `ink`, `muted`, `faint`, `paper`, `card-bg`,
+  `border`, `accent`, `accent-bg`, `link`, `warn`, `warn-bg` plus `shadow`, `shadow-strong`, and
+  `scrim`), 2 derived tokens (`code-inline-bg`, `code-bg`), and 12 mode-invariant tokens, including
+  `font-sans`, `font-mono`, and `radius`.
 
 ### Changed
 
@@ -80,7 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   regenerated against the updated stylesheet, CLI, and skill; the newly added theme fixtures
   (`testdata/fixture-theme-flat`, `testdata/fixture-theme-preset`) are new to this release's
   cross-release golden and are therefore uncompared this time, not silently passing a comparison
-  that ran.
+  that ran. The regenerated golden's SILENT RENDER CHANGES list also carries three entries that
+  predate this feature and are not part of it — the `.status-strip` relocation across
+  `fixture-basic`, `graph-demo`, and `portability`, held over from v0.7.5 — so the maintainer does
+  not need to attribute those three to theming when reading the diff.
 - After upgrading, re-run `dossierx skills export` to refresh `AGENTS.md`/the embedded agent guide
   with the updated `dossierx-theme` skill.
 

@@ -301,8 +301,10 @@ permitted:
 - `dossierx serve` answers `GET /claim-assets/<claim-id>/<path>` from an
   allowlist computed from the images the loaded claims actually reference;
   it never walks the filesystem. Its `Content-Security-Policy` on `GET /`
-  includes `img-src 'self'`, so a browser will not fetch an image from
-  anywhere else even if a `src` somehow reached the page unvalidated.
+  includes `img-src 'self'` and `font-src data:` (the latter is what lets a
+  themed project's inlined fonts load under `serve`), so a browser will not
+  fetch an image or a font from anywhere else even if a `src` somehow
+  reached the page unvalidated.
 
 **Citation markers.** `[n]` in a claim `body` is a source citation, and it is
 the one inline construct that is not a property of the text alone: it is
@@ -1487,16 +1489,19 @@ changed shape for that case.
 
 #### The tokens
 
-Twenty-eight tokens, and there are no others. Fourteen have a different
-default in dark mode ("mode-varying" below); the other fourteen render the
-same value regardless of scheme ("mode-invariant"). "Consumer" names what
-the token paints in the shipped stylesheet — the same surface an override
-stylesheet or a preset targets.
+Twenty-eight tokens, and there are no others. Fourteen are re-declared
+inside the dark `@media` block with a different value ("mode-varying"
+below); two more are not re-declared but still compute a different value
+per scheme, because their default is a `color-mix()` expression over other
+tokens rather than a fixed color ("derived" below); the remaining twelve
+render the same value regardless of scheme ("mode-invariant"). "Consumer"
+names what the token paints in the shipped stylesheet — the same surface an
+override stylesheet or a preset targets.
 
 | token | role | light default | dark default | consumer |
 |---|---|---|---|---|
 | `accent` | brand color | `#287052` | `#70c99c` | locked state, active tabs |
-| `accent-bg` | accent as a fill | `rgba(40,112,82,.12)` | `rgba(112,201,156,.12)` | accent-tinted backgrounds |
+| `accent-bg` | accent as a fill | `rgba(40, 112, 82, .12)` | `rgba(112, 201, 156, .12)` | accent-tinted backgrounds |
 | `ink` | body text | `#091426` | `#e8eef8` | primary text color |
 | `muted` | secondary text | `#536179` | `#a9b5c8` | metadata, secondary labels |
 | `faint` | quiet labels | `#7d899a` | `#75839a` | the quietest labels |
@@ -1505,34 +1510,40 @@ stylesheet or a preset targets.
 | `border` | ordinary rule | `#d8deea` | `#263754` | card edges, dividers |
 | `link` | hyperlink | `#205b78` | `#8ab7ff` | hyperlinks |
 | `warn` | warning text | `#a2433d` | `#ff8b94` | warnings and refusals |
-| `warn-bg` | warning fill | `rgba(162,67,61,.10)` | `rgba(255,139,148,.10)` | the warning fill |
+| `warn-bg` | warning fill | `rgba(162, 67, 61, .10)` | `rgba(255, 139, 148, .10)` | the warning fill |
 | `font-sans` | body font stack | `"Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif` | same | all body text |
 | `font-mono` | code font stack | `ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace` | same | code and ids |
 | `radius` | corner radius | `6px` | same | every rounded corner |
-| `code-inline-bg` | inline code fill | `color-mix(in srgb, var(--paper) 72%, var(--card-bg))` | same | `` `inline code` `` |
-| `code-bg` | block code fill | `color-mix(in srgb, var(--paper) 82%, var(--card-bg))` | same | fenced blocks, claim trees |
-| `table-head-bg` | table header fill | `rgba(127,127,127,.10)` | same | table header rows |
-| `image-bg` | image mat | `rgba(127,127,127,.06)` | same | the mat behind images |
-| `hover-bg` | hover highlight | `rgba(125,137,154,.08)` | same | hover on rows and tabs |
+| `code-inline-bg` | inline code fill | `color-mix(in srgb, var(--paper) 72%, var(--card-bg))` | *(derived)* | `` `inline code` `` |
+| `code-bg` | block code fill | `color-mix(in srgb, var(--paper) 82%, var(--card-bg))` | *(derived)* | fenced blocks, claim trees |
+| `table-head-bg` | table header fill | `rgba(127, 127, 127, .10)` | same | table header rows |
+| `image-bg` | image mat | `rgba(127, 127, 127, .06)` | same | the mat behind images |
+| `hover-bg` | hover highlight | `rgba(125, 137, 154, .08)` | same | hover on rows and tabs |
 | `border-strong` | emphasized rule | `#aab5c7` | same | emphasized edges |
-| `shadow` | light shadow | `rgba(0,0,0,.08)` | `rgba(0,0,0,.28)` | the comments panel |
-| `shadow-strong` | heavier shadow | `rgba(0,0,0,.14)` | `rgba(0,0,0,.34)` | the toast |
-| `shadow-cast` | cast shadow | `rgba(9,20,38,.12)` | same | the rail, the nav toggle, the facet ToC |
-| `scrim` | modal dim | `rgba(0,0,0,.22)` | `rgba(0,0,0,.42)` | the dim behind a modal |
-| `selection-bg` | text selection | `rgba(40,112,82,.20)` | same | selected text |
+| `shadow` | light shadow | `rgba(0, 0, 0, .08)` | `rgba(0, 0, 0, .28)` | the comments panel |
+| `shadow-strong` | heavier shadow | `rgba(0, 0, 0, .14)` | `rgba(0, 0, 0, .34)` | the toast |
+| `shadow-cast` | cast shadow | `rgba(9, 20, 38, .12)` | same | the rail, the nav toggle, the facet ToC |
+| `scrim` | modal dim | `rgba(0, 0, 0, .22)` | `rgba(0, 0, 0, .42)` | the dim behind a modal |
+| `selection-bg` | text selection | `rgba(40, 112, 82, .20)` | same | selected text |
 | `status-draft` | draft pill text | `#976600` | same | `.pill.pv`, `.status-draft` |
-| `status-draft-bg` | draft pill fill | `rgba(151,102,0,.12)` | same | the draft pill's fill |
+| `status-draft-bg` | draft pill fill | `rgba(151, 102, 0, .12)` | same | the draft pill's fill |
 | `mockup-bg` | mockup canvas | `#fff` | same | mockup diagrams (light artwork in both modes, on purpose) |
 
-**Mode-varying (14)**: `accent`, `accent-bg`, `ink`, `muted`, `faint`,
-`paper`, `card-bg`, `border`, `link`, `warn`, `warn-bg`, `shadow`,
-`shadow-strong`, `scrim`. **Mode-invariant (14)**: every other token in the
-table above, including `font-sans`, `font-mono`, and `radius`.
+**Mode-varying (14, re-declared in the dark block)**: `accent`,
+`accent-bg`, `ink`, `muted`, `faint`, `paper`, `card-bg`, `border`, `link`,
+`warn`, `warn-bg`, `shadow`, `shadow-strong`, `scrim`. **Derived (2, not
+re-declared, but computed differently per scheme)**: `code-inline-bg`,
+`code-bg` — both default to a `color-mix()` of `paper` and `card-bg`, so
+they track whichever scheme those two are currently in, even though the
+engine declares them once. **Mode-invariant (12)**: every other token in
+the table above, including `font-sans`, `font-mono`, and `radius`.
 
 Setting a mode-varying token as a flat key pins it to that value in **both**
-color schemes — sometimes exactly right, never warned about. See "The trap:
-a flat colour key pins both modes" in `docs/theming.md` before doing this on
-purpose or by accident.
+color schemes — sometimes exactly right, never warned about. A derived
+token behaves the same way under a flat override: it stops tracking
+`paper`/`card-bg` and freezes at whatever that expression currently
+evaluates to. See "The trap: a flat colour key pins both modes" in
+`docs/theming.md` before doing either on purpose or by accident.
 
 #### Validation
 
@@ -1541,6 +1552,12 @@ they are interpolated verbatim into a generated `<style>` block:
 
 - Every present value must be non-empty and free of control characters,
   `;`, `{`, `}`, `<`, `>`, a CSS comment delimiter, or an unbalanced quote.
+- Any Unicode whitespace other than a plain U+0020 space (a non-breaking
+  space, a line/paragraph separator, an ideographic space, and the rest) is
+  rejected — it looks like a space to a person and is not one to a CSS
+  parser. Leading or trailing whitespace is rejected too, with the fix
+  spelled out: a value written as `" #C6613F"` is refused as `value "
+  #C6613F" has leading or trailing whitespace; write it as "#C6613F"`.
 - Colors (every token above except `font-sans`, `font-mono`, and `radius`)
   must be `#hex` (3/4/6/8 digits), a CSS named color, or a call to
   `rgb()`/`rgba()`/`hsl()`/`hsla()`/`lab()`/`lch()`/`oklab()`/`oklch()`/
@@ -1600,7 +1617,10 @@ family-consistency check is **skipped when `viewer.template_overrides` is
 set**, since an override stylesheet may reference the family itself and
 this package cannot read that sheet. Total raw font bytes across every
 face are capped at 2 MiB; over it is a load-time error, never a silent
-drop.
+drop. The error names only the files read up to and including the one that
+tipped the running total over the cap, not every font the theme declares —
+reading the rest in full merely to report a complete list would cost the
+most exactly when the check is about to fail.
 
 #### `check`, `--validate`, `--staged`, and `serve`
 
