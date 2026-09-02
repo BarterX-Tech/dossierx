@@ -158,6 +158,69 @@ func TestGraphViewerIssuesNoRequestOnAFileURL(t *testing.T) {
 		}
 	})
 
+	// A PROJECT'S OWN FONT MUST NOT REOPEN THE HOLE THIS FILE CLOSED.
+	//
+	// viewer.theme.fonts is the first feature that puts a project-supplied
+	// BINARY into the viewer, and the whole single-file guarantee turns on how:
+	// inlined as a data: URL, never as a src the browser has to fetch. A
+	// relative "fonts/probe.ttf" left in the emitted @font-face would look
+	// perfect beside the config, render perfectly on the author's machine where
+	// the file is next to the viewer, and be a missing font — or, over http, a
+	// network request — for the client the viewer was sent to. That is a
+	// property of a browser resolving a src, so it is provable only here.
+	t.Run("a project font issues no request of its own", func(t *testing.T) {
+		p := newThemedProject(t, fontConfigYAML, true)
+		url := p.renderStatic()
+
+		ctx := browserContext(t)
+		log := watchRequests(t, ctx)
+		runCDP(t, ctx, chromedp.Navigate(url))
+		pollTrue(t, ctx, `document.readyState === 'complete'`)
+		// The face has to have finished loading before "it asked for nothing"
+		// says anything: a request not yet issued is not a request not made.
+		assertProbeFontLoaded(t, ctx, "offline check")
+
+		mine := log.fromDocument(url)
+		dataFonts := 0
+		for _, u := range mine {
+			switch {
+			case strings.HasPrefix(u, "data:font/"):
+				dataFonts++
+			case strings.HasPrefix(u, "file:"):
+			default:
+				short := u
+				if len(short) > 120 {
+					short = short[:120] + "…"
+				}
+				t.Fatalf("the viewer issued a request that is neither file: nor an inline data: "+
+					"font while loading a project font: %s", short)
+			}
+		}
+		// The plan's wording for this subtest was "zero non-file: requests". A
+		// browser reports the inline payload itself as a request with a data:
+		// URL, so that literal reading fails on a correctly inlined font — and
+		// the interesting assertion is the other way round anyway. Requiring at
+		// least ONE data:font/ request is what positively proves the face came
+		// from the inlined payload rather than from a relative src that happened
+		// to resolve on this machine, which is the actual failure mode.
+		if dataFonts == 0 {
+			t.Fatalf("the document issued no data:font/ request at all. Either the face is not "+
+				"inlined — a relative src resolves on the author's machine and is a missing font "+
+				"for the client the viewer was sent to — or nothing on the page uses it. "+
+				"Requests from this document: %v", mine)
+		}
+		// The same vacuity guard the file:// case above needs, for the same
+		// reason: every assertion here is a "no such request" over a filtered
+		// list, and an empty list would pass them all while proving nothing.
+		if len(mine) == 0 {
+			t.Fatalf("no request was attributed to %s — the listener never attached, or DocumentURL "+
+				"attribution changed; the silence asserted above would be vacuous. All requests seen: %v",
+				url, log.snapshot())
+		}
+		t.Logf("%d request(s) attributed to the document: %d inline data:font/, the rest file:",
+			len(mine), dataFonts)
+	})
+
 	t.Run("under serve the same page does ask", func(t *testing.T) {
 		p := newGraphProject(t)
 		base := p.ensureServe()
