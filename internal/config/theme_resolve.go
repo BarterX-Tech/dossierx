@@ -66,27 +66,91 @@ type ThemeReport struct {
 	FontBytes int64
 }
 
-// resolveThemePaths turns the theme's two path-shaped fields into absolute
-// paths anchored at dir, and refuses an `extends` that climbs out of the
-// project directory. It reads nothing.
+// escapesDir reports whether abs lies outside dir. It is purely lexical:
+// both paths are already absolute and cleaned by filepath.Join, so this
+// catches every `../` climb without touching the filesystem.
+func escapesDir(dir, abs string) bool {
+	rel, err := filepath.Rel(dir, abs)
+	return err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// escapesDirThroughSymlink is escapesDir after both ends have been resolved
+// through any symlinks. It is the second half of the containment check and
+// runs only where the filesystem is being touched anyway (ValidateTheme and
+// below), because a lexically-contained path can still be a link pointing
+// anywhere: `themes/house.yaml -> /etc/passwd` passes the lexical test and
+// would otherwise be read and inlined into a viewer someone publishes.
+//
+// A path that cannot be resolved (it does not exist) is NOT an escape here:
+// it falls through so the caller's own read produces the existence error,
+// which is the message the author needs. "check --staged" depends on this —
+// under it the file may legitimately not be in the working tree at all.
+func escapesDirThroughSymlink(dir, abs string) bool {
+	// No project directory to be contained by. This is a Config built in
+	// process rather than decoded from a file (internal/render's tests do
+	// exactly that), and there is no anchor to measure against — inventing
+	// one from the working directory would refuse paths for a reason that
+	// has nothing to do with the project. Every Config that came from
+	// DecodeConfig has already had the lexical half of this check applied.
+	if dir == "" {
+		return false
+	}
+	realDir, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		return false
+	}
+	realAbs, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return false
+	}
+	return escapesDir(realDir, realAbs)
+}
+
+// resolveThemePaths turns the theme's path-shaped fields into absolute paths
+// anchored at dir, and refuses any that climbs out of the project directory.
+// It reads nothing: the symlink half of the containment check runs later,
+// where the filesystem is already in play.
 func resolveThemePaths(t *Theme, dir string) error {
 	if t.Extends != "" {
 		abs := t.Extends
 		if !filepath.IsAbs(abs) {
 			abs = filepath.Join(dir, abs)
 		}
-		rel, err := filepath.Rel(dir, abs)
-		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if escapesDir(dir, abs) {
 			return fmt.Errorf("viewer.theme.extends: %q resolves outside the project directory", t.Extends)
 		}
 		t.Extends = abs
 	}
+	// A font is read and then embedded in a published file, so it gets the
+	// same containment rule `extends` gets. Without it `src: ../../id_rsa`
+	// is base64 in the viewer.
 	for i := range t.Fonts {
-		if src := t.Fonts[i].Src; src != "" && !filepath.IsAbs(src) {
-			t.Fonts[i].Src = filepath.Join(dir, src)
+		src := t.Fonts[i].Src
+		if src == "" {
+			continue
 		}
+		abs := src
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(dir, abs)
+		}
+		if escapesDir(dir, abs) {
+			return fmt.Errorf("viewer.theme.fonts[%d].src: %q resolves outside the project directory", i, src)
+		}
+		t.Fonts[i].Src = abs
 	}
 	return nil
+}
+
+// wrapThemeFileErr prefixes a file error with the config field it came from,
+// without repeating a path the error already names. os.ReadFile's *PathError
+// and the staged reader's "not staged" message both carry the path already;
+// a reader that returns a bare error does not, and there the absolute path is
+// added so the reader still learns which file failed.
+func wrapThemeFileErr(field, path string, err error) error {
+	if strings.Contains(err.Error(), filepath.Base(path)) {
+		return fmt.Errorf("%s: %w", field, err)
+	}
+	return fmt.Errorf("%s: %s: %w", field, path, err)
 }
 
 // ValidateTheme applies every theme rule that needs to look at a file: the
@@ -169,7 +233,7 @@ func resolveTheme(cfg *Config, read func(path string) ([]byte, error), withData 
 		layers = append(layers, themeLayer{label: "preset " + t.Preset, theme: p})
 	}
 	if t.Extends != "" {
-		ext, err := loadThemeFile(t.Extends, read)
+		ext, err := loadThemeFile(t.Extends, cfg.dir, read)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +280,7 @@ func resolveTheme(cfg *Config, read func(path string) ([]byte, error), withData 
 		}
 	}
 
-	fonts, err := resolveThemeFonts(layers, read, withData)
+	fonts, err := resolveThemeFonts(layers, cfg.dir, read, withData)
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +293,20 @@ func resolveTheme(cfg *Config, read func(path string) ([]byte, error), withData 
 }
 
 // loadThemeFile decodes a theme file with the same walker and the same
-// grammar as viewer.theme itself, then applies the two rules that only make
-// sense for a file: no chaining, and its own fonts are relative to it.
-func loadThemeFile(path string, read func(string) ([]byte, error)) (*Theme, error) {
+// grammar as viewer.theme itself, then applies the rules that only make sense
+// for a file: neither of the two keys that select a layer may appear inside
+// one, and its own fonts are relative to it.
+//
+// projectDir is the config's own directory, and every path this file names is
+// checked against it: a theme file lives under the project, so the fonts it
+// pulls in do too.
+func loadThemeFile(path, projectDir string, read func(string) ([]byte, error)) (*Theme, error) {
+	if escapesDirThroughSymlink(projectDir, path) {
+		return nil, fmt.Errorf("viewer.theme.extends: %q is a link to a file outside the project directory", path)
+	}
 	raw, err := read(path)
 	if err != nil {
-		return nil, fmt.Errorf("viewer.theme.extends: %s: %w", path, err)
+		return nil, wrapThemeFileErr("viewer.theme.extends", path, err)
 	}
 	var node yaml.Node
 	if err := yaml.Unmarshal(raw, &node); err != nil {
@@ -243,34 +315,68 @@ func loadThemeFile(path string, read func(string) ([]byte, error)) (*Theme, erro
 	root := &node
 	if root.Kind == yaml.DocumentNode {
 		if len(root.Content) == 0 {
-			return &Theme{}, nil
+			root = nil
+		} else {
+			root = root.Content[0]
 		}
-		root = root.Content[0]
+	}
+	// An empty file (or one that is only comments) decodes to the zero
+	// node, kind 0. It is refused rather than treated as a layer that
+	// contributes nothing: naming a file in `extends` and getting silence
+	// is indistinguishable from the theme working, and the likeliest cause
+	// is that the content went somewhere else.
+	if root == nil || root.Kind == 0 {
+		return nil, fmt.Errorf("theme file %s: file is empty (it declares no tokens, so extending it does nothing)", path)
 	}
 	var t Theme
 	if err := t.decode(root, "theme file "+path); err != nil {
 		return nil, err
 	}
-	if t.Extends != "" {
-		return nil, fmt.Errorf("theme file %s: %q is not allowed inside a theme file (no chaining)", path, "extends")
+	// Both layer-selecting keys are refused here. `extends` because
+	// chaining is out of scope; `preset` because a theme file is a layer,
+	// not a place to choose which layer sits under it — accepting and
+	// ignoring it would let a project believe it had a preset applied when
+	// nothing had been.
+	for _, k := range []string{"extends", "preset"} {
+		var set bool
+		var advice string
+		switch k {
+		case "extends":
+			set, advice = t.Extends != "", "no chaining"
+		case "preset":
+			set, advice = t.Preset != "", "name the preset in viewer.theme"
+		}
+		if set {
+			return nil, fmt.Errorf("theme file %s: %q is not allowed inside a theme file (%s)", path, k, advice)
+		}
 	}
 	if err := validateThemeBlock(&t, "theme file "+path); err != nil {
 		return nil, err
 	}
 	// A theme file's font paths are relative to the theme file, not to the
 	// config: a themes/ directory that carries its own fonts/ has to be
-	// movable as a unit.
+	// movable as a unit. Containment is still measured against the project
+	// directory, not against the theme file's.
 	for i := range t.Fonts {
-		if src := t.Fonts[i].Src; src != "" && !filepath.IsAbs(src) {
-			t.Fonts[i].Src = filepath.Join(filepath.Dir(path), src)
+		src := t.Fonts[i].Src
+		if src == "" {
+			continue
 		}
+		abs := src
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(filepath.Dir(path), abs)
+		}
+		if escapesDir(projectDir, abs) {
+			return nil, fmt.Errorf("theme file %s: fonts[%d].src %q resolves outside the project directory", path, i, src)
+		}
+		t.Fonts[i].Src = abs
 	}
 	return &t, nil
 }
 
 // resolveThemeFonts concatenates every layer's fonts, applies the CSS
 // defaults, de-duplicates, and then reads and checks each file.
-func resolveThemeFonts(layers []themeLayer, read func(string) ([]byte, error), withData bool) ([]internalFont, error) {
+func resolveThemeFonts(layers []themeLayer, projectDir string, read func(string) ([]byte, error), withData bool) ([]internalFont, error) {
 	type keyed struct {
 		font ThemeFont
 		at   string
@@ -314,9 +420,12 @@ func resolveThemeFonts(layers []themeLayer, read func(string) ([]byte, error), w
 			return nil, fmt.Errorf("%s: src %q must end in one of %s",
 				k.at, f.Src, strings.Join(sortedKeys2(themeFontExtensions), ", "))
 		}
+		if escapesDirThroughSymlink(projectDir, f.Src) {
+			return nil, fmt.Errorf("%s: src %q is a link to a file outside the project directory", k.at, f.Src)
+		}
 		data, err := read(f.Src)
 		if err != nil {
-			return nil, fmt.Errorf("%s: src %s: %w", k.at, f.Src, err)
+			return nil, wrapThemeFileErr(k.at+".src", f.Src, err)
 		}
 		if !hasAnyPrefix(data, sigs) {
 			return nil, fmt.Errorf("%s: src %s does not start with the %s signature "+
@@ -325,15 +434,21 @@ func resolveThemeFonts(layers []themeLayer, read func(string) ([]byte, error), w
 		}
 		total += int64(len(data))
 		sizes = append(sizes, fmt.Sprintf("%s (%d bytes)", f.Src, len(data)))
+		// Checked here rather than after the loop: the cap exists to bound
+		// what a reader downloads, and reading every remaining font in
+		// full to find out we were already over it would mean the check
+		// costs the most exactly when it is going to fail. The listing
+		// names the files read so far, which is the prefix that already
+		// exceeds the cap.
+		if total > MaxThemeFontBytes {
+			return nil, fmt.Errorf("viewer.theme.fonts: %d bytes exceeds the %d byte cap at %s",
+				total, int64(MaxThemeFontBytes), strings.Join(sizes, ", "))
+		}
 		rf := ResolvedFont{Family: f.Family, Weight: f.Weight, Style: f.Style, Ext: ext, Path: f.Src}
 		if withData {
 			rf.Data = data
 		}
 		out = append(out, internalFont{ResolvedFont: rf, size: int64(len(data))})
-	}
-	if total > MaxThemeFontBytes {
-		return nil, fmt.Errorf("viewer.theme.fonts: %d bytes total exceeds the %d byte cap: %s",
-			total, int64(MaxThemeFontBytes), strings.Join(sizes, ", "))
 	}
 	return out, nil
 }

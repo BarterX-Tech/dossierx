@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"unicode"
 )
 
 // Theme values are interpolated verbatim into a <style> block by
@@ -63,11 +64,36 @@ var themeFontExtensions = map[string][]string{
 }
 
 // checkThemeChars applies the rejections that hold for every token class.
+//
+// It is also the ONLY place allowed to decide that a value is acceptable, and
+// it decides that about the value as WRITTEN. Nothing downstream may trim: the
+// bytes internal/render emits are the bytes the project wrote, so a validator
+// that judged a trimmed copy would be answering a question about a string that
+// never reaches the stylesheet. `accent: "red "` is the concrete case — it
+// trims to a legal named colour, emits as `--accent: red ;`... which is in fact
+// still legal CSS, whereas `accent: " red"` inside a shorthand or a value the
+// project later grows is not, and neither is any of the other whitespace this
+// now rejects. Rather than reason case by case about which stray whitespace
+// survives serialization, leading and trailing whitespace is refused outright
+// and the author is told to remove it.
 func checkThemeChars(where, val string) error {
 	for _, r := range val {
 		if r < 0x20 || r == 0x7F {
 			return fmt.Errorf("%s: value %q contains a control character", where, val)
 		}
+		// Every space that is not U+0020: NBSP, the Unicode line and
+		// paragraph separators, ideographic space, and the rest. These
+		// look like a space in an editor and are not one to a CSS
+		// parser, so a value carrying one renders as the engine default
+		// and the author sees nothing wrong with what they wrote.
+		if unicode.IsSpace(r) && r != ' ' {
+			return fmt.Errorf("%s: value %q contains the non-ASCII whitespace character %U; "+
+				"use a plain space", where, val, r)
+		}
+	}
+	if trimmed := strings.TrimSpace(val); trimmed != val {
+		return fmt.Errorf("%s: value %q has leading or trailing whitespace; write it as %q",
+			where, val, trimmed)
 	}
 	if strings.ContainsAny(val, dangerousThemeChars) {
 		return fmt.Errorf("%s: value %q contains a disallowed character (one of %q)", where, val, dangerousThemeChars)
@@ -86,8 +112,21 @@ func checkThemeChars(where, val string) error {
 
 // checkThemeColor is the colour grammar: a hex literal, a named colour, or a
 // call to one of the functions in colorFunctions.
+//
+// IT IS A SHAPE CHECK, NOT A CSS PARSER, and the difference is worth stating
+// because it bounds what a passing check means. Inside an allowed function
+// this validates the character run and the parens, not the arity or the
+// argument types, so `rgb(1)`, `rgb()` and `oklch(--x)` all pass here and are
+// then dropped by the browser as invalid declarations, leaving the reader on
+// the engine default. What it DOES guarantee is the property the emission
+// depends on: nothing in the value can end the declaration or the <style>
+// element, reach outside the document, or resolve through a property the
+// engine cannot see. FORMAT.md carries the same bound for authors.
+//
+// The value is checked as written — checkThemeChars has already refused
+// leading and trailing whitespace, so there is deliberately no trim here.
 func checkThemeColor(where, val string) error {
-	v := strings.TrimSpace(val)
+	v := val
 	if v == "" {
 		return fmt.Errorf("%s: value must not be empty", where)
 	}
@@ -238,7 +277,7 @@ func validateThemeTokens(m map[string]string, lines map[string]int, mode, prefix
 				return err
 			}
 		case key == "radius":
-			if strings.TrimSpace(val) != "0" && !themeLengthRe.MatchString(strings.TrimSpace(val)) {
+			if val != "0" && !themeLengthRe.MatchString(val) {
 				return fmt.Errorf("%s: value %q is not a CSS length "+
 					"(a number with a unit, e.g. 10px, 0.5rem, or a bare 0)", where, val)
 			}

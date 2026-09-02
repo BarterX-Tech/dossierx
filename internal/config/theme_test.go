@@ -105,7 +105,18 @@ func TestThemeDecoder_BehaviourTable(t *testing.T) {
 			wantErr: `viewer.theme.light: key "paper" is defined twice (lines 8 and 9)`,
 		},
 		{
-			name: "merge key at the top level",
+			name: "merge key directly under theme",
+			body: "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\n" +
+				"viewer:\n  theme:\n    <<: {accent: '#C6613F'}\n",
+			wantErr: `viewer.theme: YAML merge keys (<<) are not supported here`,
+		},
+		{
+			name:    "merge key inside a fonts entry",
+			body:    themeConfig("    fonts:\n      - <<: {family: A}\n        src: a.woff2\n"),
+			wantErr: `viewer.theme.fonts[0]: YAML merge keys (<<) are not supported here`,
+		},
+		{
+			name: "merge key inside a mode",
 			body: "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\n" +
 				"viewer:\n  theme:\n    light:\n      accent: '#C6613F'\n    dark:\n      <<: {accent: '#D97757'}\n",
 			wantErr: `viewer.theme.dark: YAML merge keys (<<) are not supported here`,
@@ -220,6 +231,18 @@ func TestThemeColourGrammar(t *testing.T) {
 		{`"unbalanced`, "unbalanced double quote"},
 		{"'unbalanced", "unbalanced single quote"},
 		{"red\nblue", "control character"},
+		// F1: these are ACCEPTED by every shape rule below once trimmed,
+		// which is exactly why they must be refused before the trim can
+		// happen: the bytes emitted into the stylesheet are the bytes
+		// written here, not a cleaned copy of them.
+		{"red ", "leading or trailing whitespace"},
+		{" red", "leading or trailing whitespace"},
+		{"#FAF9F5\t", "control character"},
+		{"red\u00a0", "non-ASCII whitespace"},     // NBSP
+		{"\u00a0red", "non-ASCII whitespace"},     // NBSP
+		{"red\u2028blue", "non-ASCII whitespace"}, // U+2028 LINE SEPARATOR
+		{"red\u2029", "non-ASCII whitespace"},     // U+2029 PARAGRAPH SEPARATOR
+		{"red\u3000", "non-ASCII whitespace"},     // ideographic space
 		{"#ff", "does not look like a colour"},
 		{"#fffff", "does not look like a colour"},
 		{"#gggggg", "does not look like a colour"},
@@ -244,6 +267,50 @@ func TestThemeColourGrammar(t *testing.T) {
 				t.Errorf("error = %v\nwant it to contain %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestTheme_WhitespaceIsRefusedByTheLoader(t *testing.T) {
+	// The helper-level cases above prove checkThemeChars rejects these.
+	// This proves the rejection is reachable from a real config, which is
+	// what matters: before the fix `accent: "red "` loaded and was emitted
+	// verbatim, so every reader got the engine default and no diagnostic
+	// existed anywhere in the pipeline.
+	cases := []struct{ name, body, want string }{
+		{"trailing space in a colour", "    accent: 'red '\n", "leading or trailing whitespace"},
+		{"leading space in a colour", "    accent: ' red'\n", "leading or trailing whitespace"},
+		{"NBSP inside a colour", "    accent: \"red\u00a0\"\n", "non-ASCII whitespace"},
+		{"trailing space in a length", "    radius: '8px '\n", "leading or trailing whitespace"},
+		{"trailing space in a font stack", "    font-sans: 'Arial, sans-serif '\n", "leading or trailing whitespace"},
+		{"NBSP in a font stack", "    font-sans: \"Arial,\u00a0sans-serif\"\n", "non-ASCII whitespace"},
+		{"trailing space in a per-mode colour", "    dark:\n      ink: '#eeeeee '\n", "leading or trailing whitespace"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			_, err := loadTheme(t, dir, tc.body)
+			if err == nil {
+				t.Fatal("the value was accepted and would have been emitted as written")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("error = %v\nwant it to contain %q", err, tc.want)
+			}
+		})
+	}
+}
+
+// TestTheme_StoredValueIsTheValidatedValue is the invariant behind F1: no
+// path through the loader may accept a value and then store a different one.
+func TestTheme_StoredValueIsTheValidatedValue(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := loadTheme(t, dir, "    accent: 'red'\n    radius: '8px'\n    font-sans: 'Arial, sans-serif'\n")
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	for k, v := range cfg.Viewer.Theme.Shared {
+		if v != strings.TrimSpace(v) {
+			t.Errorf("stored %s = %q, which differs from the value a validator would have judged", k, v)
+		}
 	}
 }
 
@@ -503,6 +570,193 @@ func TestExtends_ConfigKeysAreNotThemeTokens(t *testing.T) {
 	}
 }
 
+func TestExtends_PresetInsideAThemeFileIsRefused(t *testing.T) {
+	// Accepting and ignoring `preset:` here is the worst outcome: the
+	// project believes a palette is applied, every token it did not
+	// override stays at the engine default, and nothing anywhere says so.
+	dir := t.TempDir()
+	writeThemeFile(t, dir, "house.yaml", "preset: claude\naccent: '#C6613F'\n")
+	cfg, err := loadTheme(t, dir, "    extends: house.yaml\n")
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	_, err = ValidateTheme(cfg, os.ReadFile)
+	if err == nil {
+		t.Fatal("a theme file naming a preset was accepted")
+	}
+	want := `"preset" is not allowed inside a theme file (name the preset in viewer.theme)`
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("error = %v\nwant it to contain %q", err, want)
+	}
+}
+
+func TestExtends_EmptyThemeFileIsRefused(t *testing.T) {
+	for _, tc := range []struct{ name, body string }{
+		{"zero bytes", ""},
+		{"comments only", "# a house theme\n# (nothing here yet)\n"},
+		{"whitespace only", "\n\n  \n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeThemeFile(t, dir, "house.yaml", tc.body)
+			cfg, err := loadTheme(t, dir, "    extends: house.yaml\n")
+			if err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			_, err = ValidateTheme(cfg, os.ReadFile)
+			if err == nil {
+				t.Fatal("an empty theme file was accepted; extending it does nothing and says nothing")
+			}
+			if !strings.Contains(err.Error(), "file is empty") {
+				t.Errorf("error = %v, want it to say the file is empty", err)
+			}
+		})
+	}
+}
+
+func TestThemePaths_FontsAreContainedLikeExtends(t *testing.T) {
+	// A font is read and then base64'd into a file someone publishes, so
+	// it gets the same containment rule the theme file gets. Without it
+	// `src: ../../secret.ttf` ships in the viewer.
+	t.Run("relative climb out of the project", func(t *testing.T) {
+		dir := t.TempDir()
+		_, err := loadTheme(t, dir, "    font-sans: 'Probe, sans-serif'\n    fonts:\n"+
+			"      - {family: Probe, src: ../x.ttf}\n")
+		if err == nil {
+			t.Fatal("a font outside the project directory was accepted")
+		}
+		if !strings.Contains(err.Error(), `viewer.theme.fonts[0].src: "../x.ttf" resolves outside the project directory`) {
+			t.Errorf("error = %v, want the containment message naming the field", err)
+		}
+	})
+
+	t.Run("theme file font climbing out of the project", func(t *testing.T) {
+		dir := t.TempDir()
+		// Lexically inside the theme file's own directory would be
+		// "themes/../../x.ttf" — outside the project. Containment is
+		// measured against the project, not against themes/.
+		writeThemeFile(t, dir, "themes/house.yaml",
+			"font-sans: 'Probe, sans-serif'\nfonts:\n  - {family: Probe, src: ../../x.ttf}\n")
+		cfg, err := loadTheme(t, dir, "    extends: themes/house.yaml\n")
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		_, err = ValidateTheme(cfg, os.ReadFile)
+		if err == nil {
+			t.Fatal("a theme-file font outside the project directory was accepted")
+		}
+		if !strings.Contains(err.Error(), "resolves outside the project directory") {
+			t.Errorf("error = %v, want the containment message", err)
+		}
+	})
+
+	t.Run("symlink escape is caught where the lexical check cannot see it", func(t *testing.T) {
+		outside := t.TempDir()
+		secret := filepath.Join(outside, "secret.ttf")
+		writeFontFixture(t, secret, ttfSignature)
+
+		dir := t.TempDir()
+		// Lexically "fonts/probe.ttf" is inside the project. Only
+		// resolving the link shows where it really points.
+		if err := os.MkdirAll(filepath.Join(dir, "fonts"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "fonts", "probe.ttf")
+		if err := os.Symlink(secret, link); err != nil {
+			// Not skipped: a containment check that cannot run is a
+			// check that did not happen, and reporting it as a pass
+			// is exactly the failure mode CLAUDE.md names.
+			t.Fatalf("could not create the symlink this check needs: %v", err)
+		}
+		cfg, err := loadTheme(t, dir, "    font-sans: 'Probe, sans-serif'\n    fonts:\n"+
+			"      - {family: Probe, src: fonts/probe.ttf}\n")
+		if err != nil {
+			t.Fatalf("the lexical check should pass here: %v", err)
+		}
+		_, err = ResolveTheme(cfg, os.ReadFile)
+		if err == nil {
+			t.Fatal("a symlinked font pointing outside the project was read and embedded")
+		}
+		if !strings.Contains(err.Error(), "link to a file outside the project directory") {
+			t.Errorf("error = %v, want the symlink containment message", err)
+		}
+	})
+
+	t.Run("extends symlink escape", func(t *testing.T) {
+		outside := t.TempDir()
+		target := filepath.Join(outside, "elsewhere.yaml")
+		if err := os.WriteFile(target, []byte("accent: '#C6613F'\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "themes"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		link := filepath.Join(dir, "themes", "house.yaml")
+		if err := os.Symlink(target, link); err != nil {
+			// Not skipped: a containment check that cannot run is a
+			// check that did not happen, and reporting it as a pass
+			// is exactly the failure mode CLAUDE.md names.
+			t.Fatalf("could not create the symlink this check needs: %v", err)
+		}
+		cfg, err := loadTheme(t, dir, "    extends: themes/house.yaml\n")
+		if err != nil {
+			t.Fatalf("the lexical check should pass here: %v", err)
+		}
+		if _, err := ValidateTheme(cfg, os.ReadFile); err == nil {
+			t.Fatal("a symlinked theme file pointing outside the project was read")
+		} else if !strings.Contains(err.Error(), "link to a file outside the project directory") {
+			t.Errorf("error = %v, want the symlink containment message", err)
+		}
+	})
+
+	t.Run("a symlink that stays inside the project is fine", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "assets", "probe.ttf")
+		writeFontFixture(t, target, ttfSignature)
+		if err := os.MkdirAll(filepath.Join(dir, "fonts"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "fonts", "probe.ttf")); err != nil {
+			// Not skipped: a containment check that cannot run is a
+			// check that did not happen, and reporting it as a pass
+			// is exactly the failure mode CLAUDE.md names.
+			t.Fatalf("could not create the symlink this check needs: %v", err)
+		}
+		cfg, err := loadTheme(t, dir, "    font-sans: 'Probe, sans-serif'\n    fonts:\n"+
+			"      - {family: Probe, src: fonts/probe.ttf}\n")
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if _, err := ResolveTheme(cfg, os.ReadFile); err != nil {
+			t.Errorf("a symlink resolving inside the project was refused: %v", err)
+		}
+	})
+
+	t.Run("a missing file falls through to the existence error", func(t *testing.T) {
+		// EvalSymlinks cannot resolve a path that is not there. That must
+		// not read as an escape, or "check --staged" (where the working
+		// tree may legitimately lack the file) would report containment
+		// instead of the real problem.
+		dir := t.TempDir()
+		cfg, err := loadTheme(t, dir, "    font-sans: 'Probe, sans-serif'\n    fonts:\n"+
+			"      - {family: Probe, src: fonts/gone.ttf}\n")
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		_, err = ResolveTheme(cfg, os.ReadFile)
+		if err == nil {
+			t.Fatal("a missing font was accepted")
+		}
+		if strings.Contains(err.Error(), "outside the project directory") {
+			t.Errorf("error = %v, want the existence error, not a containment error", err)
+		}
+		if !strings.Contains(err.Error(), "gone.ttf") {
+			t.Errorf("error = %v, want it to name the missing file", err)
+		}
+	})
+}
+
 func TestExtends_ThemeFileFontsAreRelativeToTheThemeFile(t *testing.T) {
 	dir := t.TempDir()
 	writeThemeFile(t, dir, "themes/house.yaml",
@@ -692,6 +946,38 @@ func TestFonts_TotalSizeCap(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "exceeds") || !strings.Contains(err.Error(), "big.woff2") {
 		t.Errorf("error = %v, want it to say the cap was exceeded and name each file with its size", err)
+	}
+}
+
+func TestFonts_CapStopsReadingAsSoonAsItIsExceeded(t *testing.T) {
+	// The cap bounds what a reader downloads. Reading every remaining font
+	// in full before comparing would make the check cost the most in
+	// exactly the case where it is going to fail, so the comparison is
+	// inside the loop. This proves it by counting reads: the second font
+	// must never be opened.
+	dir := t.TempDir()
+	big := append([]byte(woff2Signature), make([]byte, MaxThemeFontBytes)...)
+	for _, name := range []string{"a.woff2", "b.woff2"} {
+		if err := os.WriteFile(filepath.Join(dir, name), big, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := loadTheme(t, dir, "    font-sans: 'Probe, sans-serif'\n    fonts:\n"+
+		"      - {family: Probe, src: a.woff2}\n"+
+		"      - {family: Probe, src: b.woff2, weight: '700'}\n")
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	var reads []string
+	counting := func(path string) ([]byte, error) {
+		reads = append(reads, filepath.Base(path))
+		return os.ReadFile(path)
+	}
+	if _, err := ResolveTheme(cfg, counting); err == nil {
+		t.Fatal("two oversized fonts were accepted")
+	}
+	if len(reads) != 1 || reads[0] != "a.woff2" {
+		t.Errorf("reads = %v, want exactly [a.woff2] — the cap must fail before reading the rest", reads)
 	}
 }
 
@@ -1071,4 +1357,58 @@ func TestCSSNamedColors_Count(t *testing.T) {
 	if cssNamedColors["notacolour"] {
 		t.Error("cssNamedColors matched a word that is not a colour")
 	}
+}
+
+// TestThemeFileErr_DoesNotRepeatThePath pins W2-4: the field prefix stays,
+// the absolute path is not printed twice when the wrapped error already
+// names the file, and it IS printed when the wrapped error does not.
+func TestThemeFileErr_DoesNotRepeatThePath(t *testing.T) {
+	dir := t.TempDir()
+	cfg, err := loadTheme(t, dir, "    extends: themes/house.yaml\n")
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	abs := filepath.Join(dir, "themes", "house.yaml")
+
+	t.Run("staged reader names its own relative path", func(t *testing.T) {
+		staged := func(string) ([]byte, error) {
+			return nil, errors.New(`"themes/house.yaml" is not staged (git add it)`)
+		}
+		_, err := ValidateTheme(cfg, staged)
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		msg := err.Error()
+		if !strings.HasPrefix(msg, "viewer.theme.extends: ") {
+			t.Errorf("message = %q, want the field prefix kept", msg)
+		}
+		if strings.Contains(msg, abs) {
+			t.Errorf("message = %q, want the absolute path dropped (the reader already names the file)", msg)
+		}
+		if strings.Count(msg, "house.yaml") != 1 {
+			t.Errorf("message = %q, want the path named exactly once", msg)
+		}
+	})
+
+	t.Run("bare reader error still gets the absolute path", func(t *testing.T) {
+		_, err := ValidateTheme(cfg, func(string) ([]byte, error) {
+			return nil, errors.New("permission denied")
+		})
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if !strings.Contains(err.Error(), abs) {
+			t.Errorf("message = %q, want the absolute path added when the error names no file", err)
+		}
+	})
+
+	t.Run("os.ReadFile PathError is not doubled", func(t *testing.T) {
+		_, err := ValidateTheme(cfg, os.ReadFile)
+		if err == nil {
+			t.Fatal("expected an error")
+		}
+		if n := strings.Count(err.Error(), abs); n != 1 {
+			t.Errorf("message = %q names the absolute path %d times, want 1", err, n)
+		}
+	})
 }
