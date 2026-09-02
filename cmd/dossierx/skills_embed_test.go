@@ -143,7 +143,7 @@ func TestCLI_SkillsExport_DetectsTheHarnessesTheProjectAlreadyHas(t *testing.T) 
 	if err != nil {
 		t.Fatalf("read AGENTS.md: %v", err)
 	}
-	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The eight nouns"} {
+	for _, want := range []string{"# House rules", "Be careful.", agentsBeginMarker, agentsEndMarker, "The nine nouns"} {
 		if !strings.Contains(string(agents), want) {
 			t.Fatalf("expected AGENTS.md to contain %q, got:\n%s", want, string(agents))
 		}
@@ -286,7 +286,7 @@ func TestBuildAgentGuide_IsSelfContained(t *testing.T) {
 	}
 	// The router's body has to be present in full, not summarized: this is the
 	// only form some harnesses will ever read.
-	for _, want := range []string{"The eight nouns, twenty-two leaves", "Five rules that never bend", "unlock → fix → lock"} {
+	for _, want := range []string{"The nine nouns, twenty-four leaves", "Five rules that never bend", "unlock → fix → lock"} {
 		if !strings.Contains(guide, want) {
 			t.Fatalf("expected the guide to carry the router's %q section", want)
 		}

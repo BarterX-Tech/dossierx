@@ -266,18 +266,27 @@ const (
 	// track answers with, at exit 0. There is nothing in that response for a
 	// reader to notice.
 	CodeUnknownTrack Code = "unknown_track"
-	// CodeUnknownPreset is a built-in theme preset name — the positional
-	// argument to "dossierx theme export", and the value of
-	// viewer.theme.preset — that this binary does not carry.
+	// CodeUnknownPreset is the POSITIONAL ARGUMENT to "dossierx theme export"
+	// naming a built-in preset this binary does not carry. That one invocation
+	// is its entire scope.
 	//
-	// It is its own code rather than a reuse of CodeInvalidConfig or
-	// CodeBadRequest for the reason every sharp code here exists: the recovery
-	// is one command and nothing else. A caller handed invalid_config goes and
-	// reads its project.config.yaml looking for a shape error, and there is no
-	// shape error to find — the block is well-formed and names a palette that
-	// is not in THIS build. "dossierx theme list" is the whole answer, and it
-	// is also the answer when the real cause is an older binary than the
-	// preset, which is the case a shape-hunting agent cannot reach at all.
+	// It is deliberately NOT what a bad viewer.theme.preset reports. A preset
+	// this binary does not have is one of a dozen ways the theme block can fail
+	// to resolve — beside an unreadable extends file, a font whose bytes are
+	// not the format its extension claims, a family nothing names, the total
+	// font cap — and all of them arrive from "check" as CodeInvalidConfig,
+	// because all of them have the same recovery: edit what
+	// project.config.yaml declares and run the same command again. Splitting
+	// one of those out would hand an agent two codes for one recovery and
+	// invite it to branch where there is no fork; the message names the known
+	// presets in either case.
+	//
+	// What makes the export argument different is that there IS no
+	// project.config.yaml in play — the command loads no project — so nothing
+	// about "your config declares something that does not resolve" describes
+	// it, and the recovery is not an edit at all. It is "run dossierx theme
+	// list and pass one of those names", which is also the answer when the real
+	// cause is a binary older than the preset.
 	//
 	// The preset registry is compiled in and its contents are not a promise
 	// (values may change between minor releases), but the NAMES are: a preset

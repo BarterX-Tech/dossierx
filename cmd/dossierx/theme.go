@@ -206,7 +206,7 @@ func newThemeExportCmd() *cobra.Command {
 			if !ok {
 				return cmdResult{}, cliout.Errorf(cliout.CodeUnknownPreset,
 					"theme export: %q is not a built-in preset", name).
-					WithHint(fmt.Sprintf("run one of: dossierx theme export <%s> [path]",
+					WithHint(fmt.Sprintf("run \"dossierx theme export <preset> [path]\" with one of: %s",
 						strings.Join(config.PresetNames(), ", ")))
 			}
 			doc := renderThemeFile(name, preset)

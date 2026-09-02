@@ -46,9 +46,10 @@ Five keys are structure — `preset`, `extends`, `light`, `dark`, `fonts` — an
 a token name**, drawn from the twenty-eight below. A typo is a load-time error naming the whole
 vocabulary, never a silently ignored key.
 
-**Quote every value.** A bare `accent: #C6613F` is, to YAML, the key `accent` with a comment and
+**Quote every colour.** A bare `accent: #C6613F` is, to YAML, the key `accent` with a comment and
 therefore a *null* value; the decoder catches it and says so, but it is the single most common
-mistake and quoting everywhere costs nothing.
+mistake here. Lengths and font stacks do not need it (`radius: 10px` above is fine unquoted) —
+quoting them anyway is harmless, and `dossierx theme export` quotes everything for that reason.
 
 Layers, lowest first: **preset → `extends` file → inline keys**. Within each layer, flat keys apply
 to both colour schemes and `light:`/`dark:` apply to one. Nothing merges across projects and there
@@ -69,26 +70,34 @@ differ are the ones that matter** — see the trap below.
 | `border` | `#d8deea` | `#263754` | ordinary rules and card edges |
 | `border-strong` | `#aab5c7` | *(same)* | emphasised edges |
 | `accent` | `#287052` | `#70c99c` | the brand colour: locked state, active tabs |
-| `accent-bg` | `rgba(40,112,82,.12)` | `rgba(112,201,156,.12)` | the accent as a fill |
+| `accent-bg` | `rgba(40, 112, 82, .12)` | `rgba(112, 201, 156, .12)` | the accent as a fill |
 | `link` | `#205b78` | `#8ab7ff` | hyperlinks |
 | `warn` | `#a2433d` | `#ff8b94` | warnings and refusals |
-| `warn-bg` | `rgba(162,67,61,.10)` | `rgba(255,139,148,.10)` | the warning fill |
+| `warn-bg` | `rgba(162, 67, 61, .10)` | `rgba(255, 139, 148, .10)` | the warning fill |
 | `status-draft` | `#976600` | *(same)* | the draft pill's text |
-| `status-draft-bg` | `rgba(151,102,0,.12)` | *(same)* | the draft pill's fill |
-| `code-inline-bg` | `rgba(127,127,127,.12)` | *(same)* | `` `inline code` `` |
-| `code-bg` | `rgba(127,127,127,.10)` | *(same)* | fenced blocks, claim trees |
-| `table-head-bg` | `rgba(127,127,127,.10)` | *(same)* | table header rows |
-| `image-bg` | `rgba(127,127,127,.06)` | *(same)* | the mat behind images |
+| `status-draft-bg` | `rgba(151, 102, 0, .12)` | *(same)* | the draft pill's fill |
+| `code-inline-bg` | `color-mix(in srgb, var(--paper) 72%, var(--card-bg))` | *(derived)* | `` `inline code` `` |
+| `code-bg` | `color-mix(in srgb, var(--paper) 82%, var(--card-bg))` | *(derived)* | fenced blocks, claim trees |
+| `table-head-bg` | `rgba(127, 127, 127, .10)` | *(same)* | table header rows |
+| `image-bg` | `rgba(127, 127, 127, .06)` | *(same)* | the mat behind images |
 | `mockup-bg` | `#fff` | *(same)* | mockup diagrams (light artwork in both modes, on purpose) |
-| `hover-bg` | `rgba(125,137,154,.08)` | *(same)* | hover highlight on rows and tabs |
-| `selection-bg` | `rgba(40,112,82,.20)` | *(same)* | selected text |
-| `shadow` | `rgba(0,0,0,.08)` | `rgba(0,0,0,.28)` | the comments panel |
-| `shadow-strong` | `rgba(0,0,0,.14)` | `rgba(0,0,0,.34)` | the toast |
-| `shadow-cast` | `rgba(9,20,38,.12)` | *(same)* | the rail, the nav toggle, the facet ToC |
-| `scrim` | `rgba(0,0,0,.22)` | `rgba(0,0,0,.42)` | the dim behind a modal |
+| `hover-bg` | `rgba(125, 137, 154, .08)` | *(same)* | hover highlight on rows and tabs |
+| `selection-bg` | `rgba(40, 112, 82, .20)` | *(same)* | selected text |
+| `shadow` | `rgba(0, 0, 0, .08)` | `rgba(0, 0, 0, .28)` | the comments panel |
+| `shadow-strong` | `rgba(0, 0, 0, .14)` | `rgba(0, 0, 0, .34)` | the toast |
+| `shadow-cast` | `rgba(9, 20, 38, .12)` | *(same)* | the rail, the nav toggle, the facet ToC |
+| `scrim` | `rgba(0, 0, 0, .22)` | `rgba(0, 0, 0, .42)` | the dim behind a modal |
 | `font-sans` | `"Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif` | *(same)* | all body text |
 | `font-mono` | `ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace` | *(same)* | code and ids |
 | `radius` | `6px` | *(same)* | every rounded corner |
+
+**`*(derived)*` is not `*(same)*`.** Two defaults are `color-mix()` **expressions over other
+tokens** rather than fixed colours: `code-inline-bg` and `code-bg` are mixes of `paper` and
+`card-bg`, so they follow whatever those two are — in either scheme, and in a theme that only ever
+sets `paper`. They are declared once, so the engine's dark block does not re-point them, but their
+*computed* value is darker in dark mode all the same. Overriding either with a flat colour opts out
+of that: it will then be the same colour on a dark page as on a light one, which is exactly the
+trap below. Set them under `light:`/`dark:`, or leave them alone and set `paper`.
 
 Values are validated as hostile input, not trusted as CSS. Colours must be `#hex`, an
 `rgb(`/`hsl(`/`oklch(`/`color-mix(`-family function, or a CSS named colour; `radius` must carry a
@@ -97,8 +106,8 @@ Anything carrying `;`, `{}`, `<>`, a comment marker or a control character is re
 
 ### The trap: a flat colour key pins both modes
 
-**Fourteen of these tokens have a different default in dark mode** — every colour in the table above
-whose dark column is not *(same)*. Writing one of them flat sets it for **both** schemes:
+**Fourteen of these tokens are re-declared in dark mode** — every row with a value in the dark
+column — and two more, the `*(derived)*` pair, vary without being re-declared. Writing one of them flat sets it for **both** schemes:
 
 ```yaml
 viewer:
@@ -112,8 +121,10 @@ have to know which column you are in. The rule:
 
 - a token whose two defaults differ → set it under `light:` **and** `dark:`, or accept that you have
   pinned both;
-- a token whose defaults are already the same, and `font-sans`, `font-mono`, `radius` → flat is fine
-  and is what you want;
+- a `*(derived)*` token → treat it as differing: flat freezes an expression that was tracking the
+  mode;
+- a token whose dark column says *(same)*, and `font-sans`, `font-mono`, `radius` → flat is fine and
+  is what you want;
 - setting only `dark:` is legal, and the light default survives. **Printing always uses the light
   values**, whatever the reader's OS is set to.
 
@@ -186,9 +197,10 @@ Work through this in order and report step 4's numbers back to the human.
    engine's sheet declares defaults for all twenty-eight tokens, so a *typo'd value* is a load
    error but a *right value in the wrong layer* renders as the untouched default.
 3. Check **both** OS colour schemes, not just yours. This is where a flat colour key shows itself.
-4. Read `data.theme_font_count` and `data.theme_font_bytes` from `dossierx check`'s envelope. Zero
-   for a project with no fonts; if the human declared a face and it reads zero, the face was never
-   accepted. The byte count is what a reader downloads before seeing anything — say it out loud.
+4. Read `data.theme_font_count` and `data.theme_font_bytes` from `dossierx check`'s envelope. Both
+   keys are **omitted entirely** when the project inlines no fonts, so treat a missing key as zero —
+   and if the human declared a face and the keys are still absent, no face was accepted. The byte
+   count is what a reader downloads before seeing anything: say it out loud.
 
 ## What a theme deliberately cannot do
 
@@ -207,8 +219,8 @@ itself, and an override `shell.html` that drops `{{.ThemeCSS}}` gets no theme an
 
 | code | exit | recovery |
 |---|---|---|
-| `invalid_config` | 1 | the theme did not resolve: an unknown token, a value the grammar refuses, an unreadable or unstaged `extends` file, a font whose bytes are not its extension, a family nothing names, or the 2 MiB cap. `message` names the offending key and its line. Fix `project.config.yaml` or the theme file, then re-run the **same** command that refused you. |
-| `unknown_preset` | 1 | a preset name this binary does not carry — a typo, or a binary older than the preset. Run `dossierx theme list`; the hint already names every real one. |
+| `invalid_config` | 1 | the theme did not resolve. Every way it can fail arrives here: an unknown token, a value the grammar refuses, **an unknown preset in `viewer.theme.preset`** (the message lists the known names), an unreadable or unstaged `extends` file, a font whose bytes are not its extension, a family nothing names, or the 2 MiB cap. `message` names the offending key. Fix `project.config.yaml` or the theme file, then re-run the **same** command that refused you. |
+| `unknown_preset` | 1 | **`dossierx theme export` only** — the positional preset argument names something this binary does not carry (a typo, or a binary older than the preset). It is not what a bad `viewer.theme.preset` reports: that command loads no config, so there is nothing to edit. Run `dossierx theme list` and pass one of those names; the hint already names them. |
 | `write_conflict` | 1 | `theme export` found a file at that path and did not overwrite it. Read it first: if the human has edited it, export somewhere else. `--force` replaces it, and only on their say-so. |
 | `write_failed` | 1 | the export could not be written (a directory that is not writable). Ordinary filesystem problem, ordinary fix. |
 
@@ -216,7 +228,8 @@ itself, and an override `shell.html` that drops `{{.ThemeCSS}}` gets no theme an
 
 `viewer.theme` grew per-mode keys, presets, `extends` and `fonts` in this release. A binary that
 predates it **fails the whole config load** rather than ignoring the new keys, at
-`stopped_at: config`, `invalid_config`. Two shapes, both verbatim:
+`stopped_at: config`, `invalid_config`. Two shapes. Both are fragments the `message` **contains** —
+it is prefixed with `load config: config: <path>: ` in each case, so match on the fragment:
 
 ```
 viewer.theme: unknown theme token "preset" (must be one of accent, accent-bg, ink, muted, faint,

@@ -30,6 +30,35 @@ import (
 	"testing"
 )
 
+// newThemedProject builds a project that is otherwise clean and whose
+// viewer.theme is whatever themeBlock says.
+func newThemedProject(t *testing.T, module, themeBlock string) string {
+	t.Helper()
+	root := t.TempDir()
+	writeFixtureProject(t, root, module)
+	cfgPath := filepath.Join(root, "project.config.yaml")
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	if err := os.WriteFile(cfgPath, []byte(string(raw)+themeBlock), 0o644); err != nil {
+		t.Fatalf("write themed config: %v", err)
+	}
+	return root
+}
+
+// newBadPresetProject names a preset this binary does not carry.
+//
+// It is the second fixture because it is the theme failure a reader is most
+// likely to CAUSE — a preset name is the one thing in the block somebody types
+// from memory — and because it is the one whose code was argued over: it is
+// invalid_config here and unknown_preset from "dossierx theme export", and the
+// difference is the recovery. See cliout.CodeUnknownPreset.
+func newBadPresetProject(t *testing.T) string {
+	t.Helper()
+	return newThemedProject(t, "badpreset", "viewer:\n  theme:\n    preset: clode\n")
+}
+
 // newBadFontProject builds a project that is otherwise clean and whose only
 // fault is one font file whose bytes do not match its extension.
 func newBadFontProject(t *testing.T) string {
@@ -97,7 +126,28 @@ func envelopeOf(t *testing.T, dir string, args ...string) (code int, ok bool, er
 // as a filesystem failure and its recovery is "check permissions", which for a
 // mislabelled font file sends an agent to inspect a disk that is fine.
 func TestBrokenThemeRefusesTheSameWayInAllThreeCheckModes(t *testing.T) {
-	root := newBadFontProject(t)
+	for _, fixture := range []struct {
+		name  string
+		build func(*testing.T) string
+	}{
+		// Two shapes of the same defect class, and the second is here to pin a
+		// decision rather than a mechanism: a preset this binary does not carry
+		// reports invalid_config from every check mode, NOT unknown_preset.
+		// unknown_preset belongs to "dossierx theme export"'s positional
+		// argument, which loads no project and whose recovery is "run theme
+		// list", where this one's recovery is "edit the config" — the same
+		// recovery every other theme failure has.
+		{"a font whose bytes are not its extension", newBadFontProject},
+		{"a preset this binary does not carry", newBadPresetProject},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			runBrokenThemeModes(t, fixture.build(t))
+		})
+	}
+}
+
+func runBrokenThemeModes(t *testing.T, root string) {
+	t.Helper()
 	gitInitAndAddAll(t, root)
 
 	for _, args := range [][]string{

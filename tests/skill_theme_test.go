@@ -254,12 +254,135 @@ func themeSkillTableTokens(t *testing.T, src string) []string {
 	if j := strings.Index(body, "\n\n"); j >= 0 {
 		body = body[:j]
 	}
-	cell := regexp.MustCompile("(?m)^\\| `([^`]+)` \\|")
 	var out []string
-	for _, m := range cell.FindAllStringSubmatch(body, -1) {
-		out = append(out, m[1])
+	for _, r := range parseThemeTableRows(body) {
+		out = append(out, r.token)
 	}
 	return out
+}
+
+// themeTableRow is one row of the skill's token table. The dark cell has three
+// legal forms and they are three different CLAIMS about the stylesheet, not one
+// claim and two ways of writing it:
+//
+//	`value`        this token is re-declared in the screen-dark :root
+//	*(same)*       it is not, and its value is a literal, so it really is the
+//	               same colour in both modes — flat is safe
+//	*(derived)*    it is not re-declared either, but its value is an expression
+//	               over OTHER tokens (color-mix over paper/card-bg), so its
+//	               computed result still varies with the mode — flat is a trap
+//
+// The third form exists because collapsing it into *(same)* is a wrong answer
+// to the question the column is asked: a reader scanning for "which of these
+// can I set flat?" would be told yes for two tokens where flat freezes an
+// expression that had been tracking the scheme.
+type themeTableRow struct {
+	token       string
+	light       string
+	dark        string
+	sameAsLight bool
+	derived     bool
+}
+
+// themeTableRowPattern reads "| `token` | `light` | <dark cell> | prose |".
+var themeTableRowPattern = regexp.MustCompile("(?m)^\\| `([^`]+)` \\| `([^`]+)` \\| (`[^`]+`|\\*\\(same\\)\\*|\\*\\(derived\\)\\*) \\|")
+
+func parseThemeTableRows(body string) []themeTableRow {
+	var out []themeTableRow
+	for _, m := range themeTableRowPattern.FindAllStringSubmatch(body, -1) {
+		row := themeTableRow{token: m[1], light: m[2]}
+		switch m[3] {
+		case "*(same)*":
+			row.sameAsLight = true
+		case "*(derived)*":
+			row.sameAsLight, row.derived = true, true
+		default:
+			row.dark = strings.Trim(m[3], "`")
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+// themeSkillTableBody returns the token table's rows as raw text.
+func themeSkillTableBody(t *testing.T, src string) string {
+	t.Helper()
+	const header = "| token | light default | dark default | what it paints |"
+	i := strings.Index(src, header)
+	if i < 0 {
+		t.Fatalf("%s no longer carries the token table header %q; the table this test checks has moved or gone", themeSkillPath, header)
+	}
+	body := src[i+len(header):]
+	if j := strings.Index(body, "\n\n"); j >= 0 {
+		body = body[:j]
+	}
+	return body
+}
+
+// cssTokenBlocks parses the engine stylesheet's unconditional :root and its
+// screen-dark :root into token -> declared value.
+//
+// It reads internal/render/viewer/template/style.css DIRECTLY, and that is the
+// point: the skill's table is a transcription of those two blocks, and the only
+// way a transcription can be checked is against the thing transcribed. The
+// failure this exists to catch already happened once — the table carried the
+// rgba() literals from a plan while the live declarations had become
+// color-mix() expressions, so a reader was told the wrong default for the two
+// tokens most likely to be overridden first.
+//
+// --dxg-* is skipped: the graph ramp is not part of the theme vocabulary (a
+// theme cannot repoint it, which the skill says in as many words), so a table
+// that documented it would be documenting a token nobody can set.
+func cssTokenBlocks(t *testing.T) (root, dark map[string]string) {
+	t.Helper()
+	css := readRepoFile(t, filepath.Join("internal", "render", "viewer", "template", "style.css"))
+
+	rootBlock := captureBlock(t, css, "\n:root {", "\n}")
+	darkOuter := captureBlock(t, css, "\n@media screen and (prefers-color-scheme: dark) {", "\n}")
+	darkBlock := captureBlock(t, darkOuter, "  :root {", "\n  }")
+
+	decl := regexp.MustCompile(`(?m)^\s*--([a-z0-9-]+):\s*(.+?);\s*$`)
+	parse := func(block string) map[string]string {
+		out := map[string]string{}
+		for _, m := range decl.FindAllStringSubmatch(block, -1) {
+			if strings.HasPrefix(m[1], "dxg-") {
+				continue
+			}
+			out[m[1]] = strings.TrimSpace(m[2])
+		}
+		return out
+	}
+	return parse(rootBlock), parse(darkBlock)
+}
+
+// captureBlock returns the text between the first open marker and the first
+// close marker after it. A marker that is not found is fatal: the stylesheet
+// has been restructured, and a parser that silently returned nothing would make
+// every comparison below pass over an empty map.
+func captureBlock(t *testing.T, src, openMarker, closeMarker string) string {
+	t.Helper()
+	i := strings.Index(src, openMarker)
+	if i < 0 {
+		t.Fatalf("style.css no longer contains %q; the block this test parses has moved, and the test must be repointed rather than quietly matching nothing", openMarker)
+	}
+	rest := src[i+len(openMarker):]
+	j := strings.Index(rest, closeMarker)
+	if j < 0 {
+		t.Fatalf("style.css: no %q closing %q", closeMarker, openMarker)
+	}
+	return rest[:j]
+}
+
+// normalizeCSSValue collapses runs of whitespace, so `rgba(40,112,82,.12)` and
+// `rgba(40, 112, 82, .12)` compare equal.
+//
+// Whitespace INSIDE a CSS function is insignificant to every engine that will
+// read it, so a reader who types either spelling gets the same colour, and
+// failing over a respacing would be a false alarm. Nothing else is normalized:
+// no case folding, no hex expansion, no alpha rounding — those would let a
+// genuinely different value pass, which is the whole thing being checked.
+func normalizeCSSValue(v string) string {
+	return strings.Join(strings.Fields(v), " ")
 }
 
 func TestThemeSkillTokenTableMatchesTheEngineVocabulary(t *testing.T) {
@@ -284,6 +407,105 @@ func TestThemeSkillTokenTableMatchesTheEngineVocabulary(t *testing.T) {
 		if !seen[tok] {
 			t.Errorf("the engine carries token %q and %s does not document it; a token nobody is told about is a token nobody uses", tok, themeSkillPath)
 		}
+	}
+
+	// ---- the DEFAULT VALUES, against the stylesheet they are copied from ----
+	//
+	// A token name that exists is the cheap half. The expensive half is the
+	// value beside it, because a reader takes the light/dark columns as the
+	// starting point they are diverging FROM: a wrong default sends them to
+	// override a token that already had the colour they wanted, or to leave one
+	// alone that did not.
+	root, darkBlock := cssTokenBlocks(t)
+	rows := parseThemeTableRows(themeSkillTableBody(t, src))
+
+	// Vacuity guards, both directions. Either number arriving at zero — a
+	// changed table format, a restructured stylesheet — would make every
+	// assertion in this section pass over nothing.
+	if len(rows) != len(engine) {
+		t.Fatalf("parsed %d table row(s) from %s but the engine carries %d token(s); the row parser and the table have diverged, and every value comparison below would be over a partial set", len(rows), themeSkillPath, len(engine))
+	}
+	darkRepoints := 0
+	for tok := range darkBlock {
+		if engine[tok] {
+			darkRepoints++
+		}
+	}
+	if darkRepoints == 0 {
+		t.Fatal("style.css's screen-dark :root re-declares no theme token at all; the dark column of the skill's table would be unfalsifiable")
+	}
+	tableDarkRepoints := 0
+	for _, r := range rows {
+		if !r.sameAsLight {
+			tableDarkRepoints++
+		}
+	}
+	if tableDarkRepoints == 0 {
+		t.Fatal("no table row claims a separate dark default; the row parser and the table have diverged")
+	}
+	if tableDarkRepoints != darkRepoints {
+		t.Errorf("%s marks %d row(s) as differing in dark mode; style.css re-declares %d theme token(s) in its screen-dark :root", themeSkillPath, tableDarkRepoints, darkRepoints)
+	}
+
+	for _, r := range rows {
+		declared, ok := root[r.token]
+		if !ok {
+			t.Errorf("%s documents a default for %q, which style.css's :root does not declare", themeSkillPath, r.token)
+			continue
+		}
+		if normalizeCSSValue(r.light) != normalizeCSSValue(declared) {
+			t.Errorf("%s says %q defaults to %q; style.css's :root declares %q — a reader is being told the wrong starting point for the token they are about to override",
+				themeSkillPath, r.token, r.light, declared)
+		}
+		darkDeclared, repointed := darkBlock[r.token]
+		switch {
+		case r.sameAsLight && repointed:
+			t.Errorf("%s marks %q as *(same)* in dark mode, but style.css re-declares it as %q; a reader setting it flat would be told they are safe when they are pinning a value the engine varies",
+				themeSkillPath, r.token, darkDeclared)
+		case !r.sameAsLight && !repointed:
+			t.Errorf("%s gives %q a separate dark default (%q) that style.css does not declare", themeSkillPath, r.token, r.dark)
+		case !r.sameAsLight && normalizeCSSValue(r.dark) != normalizeCSSValue(darkDeclared):
+			t.Errorf("%s says %q is %q in dark mode; style.css declares %q", themeSkillPath, r.token, r.dark, darkDeclared)
+		}
+
+		// *(derived)* and *(same)* both mean "not re-declared in dark", so the
+		// switch above cannot tell them apart — and the whole point of the
+		// third form is the distinction. It is decided by the LIGHT default:
+		// a value containing var() is an expression over other tokens and its
+		// computed result follows them, where a literal does not. Checked in
+		// both directions, because either mistake tells a reader the wrong
+		// thing about setting the token flat.
+		expression := strings.Contains(declared, "var(--")
+		switch {
+		case expression && !r.derived:
+			t.Errorf("%s marks %q as *(same)*, but style.css declares it as the expression %q — its computed value follows the tokens it names, so a reader told it is mode-invariant would freeze it by setting it flat",
+				themeSkillPath, r.token, declared)
+		case !expression && r.derived:
+			t.Errorf("%s marks %q as *(derived)*, but style.css declares it as the literal %q, which derives from nothing",
+				themeSkillPath, r.token, declared)
+		}
+	}
+
+	// A vacuity guard for the arm above: the *(derived)* form must actually be
+	// exercised. If the stylesheet stopped using expressions the form should be
+	// retired from the document rather than left as a rule nothing tests.
+	derivedRows := 0
+	for _, r := range rows {
+		if r.derived {
+			derivedRows++
+		}
+	}
+	expressionDefaults := 0
+	for tok, v := range root {
+		if engine[tok] && strings.Contains(v, "var(--") {
+			expressionDefaults++
+		}
+	}
+	if derivedRows != expressionDefaults {
+		t.Errorf("%s marks %d row(s) *(derived)*; style.css declares %d theme token(s) as expressions over other tokens", themeSkillPath, derivedRows, expressionDefaults)
+	}
+	if expressionDefaults == 0 && derivedRows == 0 {
+		t.Log("no theme token is declared as an expression any more; the *(derived)* column form is now untested and should be removed from the skill")
 	}
 
 	// The prose count has to agree with the table it introduces, or the
