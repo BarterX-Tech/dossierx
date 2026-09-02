@@ -3,6 +3,7 @@ package serve_test
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -798,4 +799,107 @@ func countComments(t *testing.T, data []byte) int {
 		t.Fatalf("decode comments: %v (body=%s)", err, data)
 	}
 	return len(out.Comments)
+}
+
+// --- theme -------------------------------------------------------------------
+
+// themeServeConfig is a project whose viewer.theme has a per-mode value and one
+// inlined font, so the served document exercises every emitted part.
+const themeServeConfig = baseConfig +
+	"viewer:\n  theme:\n    font-sans: 'Probe, sans-serif'\n" +
+	"    light:\n      paper: '#ffffff'\n" +
+	"    dark:\n      paper: '#151515'\n" +
+	"    fonts:\n      - family: Probe\n        src: fonts/probe.woff2\n"
+
+// probeWoff2 is a file whose first four bytes are the woff2 signature config
+// checks. The rule is about the signature, not the font tables.
+const probeWoff2 = "wOF2-payload"
+
+// TestRoot_ThemeIsServed is the end-to-end shape check for a themed project:
+// the font goes out as a data: URL, the light block covers print, and the dark
+// block is scoped to screen so nothing a project set under dark: can reach a
+// printed page.
+func TestRoot_ThemeIsServed(t *testing.T) {
+	files := standardFiles()
+	files["fonts/probe.woff2"] = probeWoff2
+	_, base, _ := startServer(t, themeServeConfig, files)
+
+	_, body := do(t, http.MethodGet, base+"/", "")
+	doc := string(body)
+	for _, want := range []string{
+		`@font-face{font-family:"Probe";src:url(data:font/woff2;base64,`,
+		"@media (prefers-color-scheme: light), print{:root{--paper:#ffffff;}}",
+		"@media screen and (prefers-color-scheme: dark){:root{--paper:#151515;}}",
+	} {
+		if !strings.Contains(doc, want) {
+			t.Errorf("served document is missing %q", want)
+		}
+	}
+}
+
+// TestRoot_ThemeIsResolvedOnceAtStartup pins the decision in serve.New: the
+// theme and its fonts are read once, and every rebuild for the life of the
+// process emits that result.
+//
+// Two things would go wrong without it. A font file being rewritten by a font
+// tool or an editor would be read half-written by whichever request arrived
+// during the save, so two readers a second apart would get two different
+// viewers for a project whose config never changed; and a theme edit would
+// take effect on some rebuilds and not others depending on nothing the user
+// can see. Changing a theme means restarting serve, which is documented — and
+// this test is what makes "restart" a true statement rather than a habit.
+func TestRoot_ThemeIsResolvedOnceAtStartup(t *testing.T) {
+	files := standardFiles()
+	files["fonts/probe.woff2"] = probeWoff2
+	_, base, root := startServerWatch(t, themeServeConfig, files, 20*time.Millisecond, 10*time.Millisecond)
+
+	_, before := do(t, http.MethodGet, base+"/", "")
+	if !strings.Contains(string(before), "--paper:#151515;") {
+		t.Fatalf("served document does not carry the theme's dark value to begin with")
+	}
+
+	// Edit the theme's font AND touch a claim, so a rebuild definitely
+	// happens: the change under test must survive a real re-render, not
+	// merely a cache hit on an idle server.
+	writeFile(t, filepath.Join(root, "fonts", "probe.woff2"), "wOF2-edited-after-startup")
+	writeFile(t, filepath.Join(root, "claims", "one.yaml"),
+		strings.Replace(draftClaim("widget.contract.one"), "a draft claim.", "REBUILT-MARKER.", 1))
+
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		_, body := do(t, http.MethodGet, base+"/", "")
+		if strings.Contains(string(body), "REBUILT-MARKER") {
+			// The served font must still be the bytes New read. Comparing
+			// the base64 payload, not a word in the file, because the
+			// document is full of prose.
+			wantB64 := base64.StdEncoding.EncodeToString([]byte(probeWoff2))
+			if !strings.Contains(string(body), wantB64) {
+				t.Fatalf("a rebuild dropped or replaced the startup-resolved font; the theme is being re-resolved per rebuild")
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the claim edit never reached a rebuild, so this test proved nothing about the theme")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// TestRoot_ThemeFailureIsAnErrorPageNotASilentFallback holds the other half of
+// resolving at startup: New has no error return, so a broken theme is held and
+// surfaced by the render. A server that started and quietly served an unthemed
+// viewer would be the worst of the three options — the reader sees a document
+// that looks fine and is not the one the project configured.
+func TestRoot_ThemeFailureIsAnErrorPageNotASilentFallback(t *testing.T) {
+	files := standardFiles()
+	files["fonts/probe.woff2"] = "NOPE-not-a-woff2"
+	_, base, _ := startServer(t, themeServeConfig, files)
+
+	resp, body := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("GET / with a broken theme = %d, want 500\n%s", resp.StatusCode, body)
+	}
+	if !strings.Contains(string(body), "theme") {
+		t.Errorf("the error page does not mention the theme:\n%s", body)
+	}
 }
