@@ -47,6 +47,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A faint 1px horizontal seam was drawn between every pair of lines of a multi-line fenced code
+  block in a claim body, in both colour schemes. The reader saw a hairline in `--border` splitting
+  the code block into per-line boxes. The cause: the stylesheet's inline-code pill rule gives every
+  `code` element a `1px solid var(--border)` border, and the `.claim-body pre code` reset cancelled
+  the pill's background, padding and radius but not that border — and a fenced block's `<code>` is
+  a single *inline* box, so it fragments across line boxes and the initial `box-decoration-break:
+  slice` repaints the border's top and bottom edge on every fragment. The reset now includes
+  `border: 0`. A single-line fenced block was unaffected (one fragment, one ring, drawn flush
+  inside the block's own border); a block of *n* lines showed *n*-1 seams.
+- A fenced code block written in a step body, a comment, or a list item is now painted as a code
+  block, the same as one written in a claim body. Those three bodies were never in the
+  fenced-block rule's selector list, so their `<pre>` had no background, no border and no padding
+  at all, and the block reached the reader as a run of inline-code *pills*: measured in a browser,
+  `pre` computed `background rgba(0,0,0,0)`, `border 0`, `padding 0`, while its `<code>` kept the
+  pill's `1px 5px` padding, `--code-inline-bg` background and the sliced border above. They now
+  get `--code-bg`, the `1px solid var(--border)` block border and the `13px 14px` padding a claim
+  body's fenced block has always had, with the pill reset applied inside. This changes pixels for
+  any project that wrote a fence in one of those three places; it is a deliberate consistency fix,
+  not a no-op. `.claim-tree-body` is unchanged — the template writes that `<pre>` directly, with no
+  inner `<code>`.
 - The viewer's `:root` now declares `color-scheme: light dark` instead of only `light`, so a
   reader in OS dark mode gets UA-native dark rendering for the surfaces the stylesheet never drew
   itself. Concretely, in dark mode: native form controls — every `<button>`, `<details>`/

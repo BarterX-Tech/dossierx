@@ -34,8 +34,9 @@
 
    A token has to be read by the declaration that WINS, not merely by a
    declaration. Two rules in this file are re-declared later at equal
-   specificity (`code` and `.claim-body pre, .claim-tree-body`), so their
-   token reads live in the later copy; internal/render/theme_tokens_test.go
+   specificity (`code` and the fenced-block list `.claim-body pre,
+   .claim-list-items pre, .sbody pre, .comment-body pre, .claim-tree-body`),
+   so their token reads live in the later copy; internal/render/theme_tokens_test.go
    asserts, per token, that the last declaration of the consumer's
    selector+property pair is the one carrying the var(). It also fails if an
    allowlisted token has no consumer in this file or in graph.css, and pins
@@ -214,8 +215,22 @@ code {
    --code-bg is read there. What that rule must NOT be is --card-bg, which is
    the surrounding card's own background and would make the block invisible
    against it — the "white background, not grey" regression these rules
-   replaced; it is a tint of --paper over --card-bg instead. */
+   replaced; it is a tint of --paper over --card-bg instead.
+
+   THE SELECTOR LIST IS EVERY BODY markdown.Render EMITS INTO, not just
+   .claim-body. A fence in a step body, a comment or a list item reached the
+   reader as a run of inline-code PILLS with no block background at all —
+   measured in a browser: `pre` there computed background rgba(0,0,0,0),
+   border 0, padding 0, while its <code> kept the pill's 1px 5px padding and
+   --code-inline-bg. Same markdown, four different blocks. They are listed
+   here so a fenced block looks the same wherever it is written.
+   .claim-tree-body is a <pre> the template writes directly, with no inner
+   <code>, which is why it is named rather than reached through a descendant
+   selector. */
 .claim-body pre,
+.claim-list-items pre,
+.sbody pre,
+.comment-body pre,
 .claim-tree-body {
   font-size: 11.5px;
   line-height: 1.5;
@@ -231,12 +246,23 @@ code {
    supplies the block's own background/border — reset the bare inline-code
    pill rule above so it doesn't double up a second background/padding
    inside the pre. */
-.claim-body pre code {
+.claim-body pre code,
+.claim-list-items pre code,
+.sbody pre code,
+.comment-body pre code {
   font-family: var(--font-mono);
   font-size: 12px;
   white-space: pre;
   background: none;
   padding: 0;
+  /* THE PILL'S BORDER TOO, not just its background. This <code> is ONE
+     inline box that FRAGMENTS across line boxes, and the initial
+     box-decoration-break: slice paints the border's top and bottom edge on
+     every fragment — so a 1px --border line was drawn under each line of a
+     multi-line fenced block and above the next one, read by the maintainer as
+     a seam between the lines. Resetting background without border left the
+     half of the pill that a fragmenting inline box multiplies. */
+  border: 0;
   border-radius: 0;
 }
 
@@ -3287,8 +3313,14 @@ code {
   font-size: .86em;
 }
 
-/* The LIVE fenced-block background, same story as `code` above. */
+/* The LIVE fenced-block background, same story as `code` above. The selector
+   list must stay in step with the layout half near the top of the file: a body
+   listed there and not here gets the padding and border of a fenced block with
+   none of its background. */
 .claim-body pre,
+.claim-list-items pre,
+.sbody pre,
+.comment-body pre,
 .claim-tree-body {
   padding: 13px 14px;
   border-radius: 7px;

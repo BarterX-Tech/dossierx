@@ -502,7 +502,11 @@ type consumerSite struct {
 // their sites would be a maintenance tax with no defect to prevent.
 var tokenConsumers = map[string][]consumerSite{
 	"code-inline-bg": {{"code", "background"}},
-	"code-bg":        {{".claim-body pre, .claim-tree-body", "background"}},
+	// The fenced-block list is the same four bodies markdown.Render emits into
+	// that table-head-bg and image-bg below already name, plus .claim-tree-body
+	// (a <pre> the template writes directly, with no inner <code>).
+	"code-bg": {{".claim-body pre, .claim-list-items pre, .sbody pre, " +
+		".comment-body pre, .claim-tree-body", "background"}},
 	"table-head-bg": {{".claim-body .md-table th, .claim-list-items .md-table th, " +
 		".sbody .md-table th, .comment-body .md-table th", "background"}},
 	"image-bg": {{".claim-body .md-img, .claim-list-items .md-img, .sbody .md-img", "background"}},

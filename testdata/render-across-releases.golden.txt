@@ -45,8 +45,8 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/viewer/index.html  (+756 -288)
-    size            12712 lines / 438567 bytes -> 13180 lines / 460171 bytes
+testdata/fixture-basic/viewer/index.html  (+789 -289)
+    size            12712 lines / 438567 bytes -> 13212 lines / 461835 bytes
 @@ -135,22 +135,35 @@
     in the same metric the ramp is solved in rather than in degrees of hue: the
     ramp solver treats --dxg-governed, --dxg-cycle, --dxg-halo and
@@ -127,7 +127,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      --dxg-facet-other: #7D8C85;
 
      --dxg-cycle: #D1201A;
-@@ -1136,42 +1158,129 @@
+@@ -1136,42 +1158,130 @@
     a project's own template_overrides CSS; a project can restyle any of
     this by overriding component partials via viewer.template_overrides.
 
@@ -172,8 +172,9 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 +
 +   A token has to be read by the declaration that WINS, not merely by a
 +   declaration. Two rules in this file are re-declared later at equal
-+   specificity (`code` and `.claim-body pre, .claim-tree-body`), so their
-+   token reads live in the later copy; internal/render/theme_tokens_test.go
++   specificity (`code` and the fenced-block list `.claim-body pre,
++   .claim-list-items pre, .sbody pre, .comment-body pre, .claim-tree-body`),
++   so their token reads live in the later copy; internal/render/theme_tokens_test.go
 +   asserts, per token, that the last declaration of the consumer's
 +   selector+property pair is the one carrying the var(). It also fails if an
 +   allowlisted token has no consumer in this file or in graph.css, and pins
@@ -287,7 +288,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    }
  }
 
-@@ -1217,14 +1326,11 @@
+@@ -1217,14 +1327,11 @@
    background: var(--card-bg);
  }
 
@@ -307,7 +308,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .status-locked {
    color: var(--accent);
    background: var(--accent-bg);
-@@ -1241,11 +1347,14 @@
+@@ -1241,11 +1348,14 @@
     every component routes body-shaped text through the shared "markdown"
     template func). Ported verbatim from the reference docs stylesheet's global
     `code{...}` rule so a regex, config key, or field name wrapped in single
@@ -324,7 +325,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    padding: 1px 5px;
    border-radius: 5px;
  }
-@@ -1253,11 +1362,15 @@
+@@ -1253,12 +1363,30 @@
  /* Fenced ```code``` spans inside a claim's Body, converted to real
     <pre><code> elements by markdown.Render. white-space is reset off the
     pre-wrap inherited from .claim-body since <pre> already preserves
@@ -341,11 +342,26 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 +   --code-bg is read there. What that rule must NOT be is --card-bg, which is
 +   the surrounding card's own background and would make the block invisible
 +   against it — the "white background, not grey" regression these rules
-+   replaced; it is a tint of --paper over --card-bg instead. */
++   replaced; it is a tint of --paper over --card-bg instead.
++
++   THE SELECTOR LIST IS EVERY BODY markdown.Render EMITS INTO, not just
++   .claim-body. A fence in a step body, a comment or a list item reached the
++   reader as a run of inline-code PILLS with no block background at all —
++   measured in a browser: `pre` there computed background rgba(0,0,0,0),
++   border 0, padding 0, while its <code> kept the pill's 1px 5px padding and
++   --code-inline-bg. Same markdown, four different blocks. They are listed
++   here so a fenced block looks the same wherever it is written.
++   .claim-tree-body is a <pre> the template writes directly, with no inner
++   <code>, which is why it is named rather than reached through a descendant
++   selector. */
  .claim-body pre,
++.claim-list-items pre,
++.sbody pre,
++.comment-body pre,
  .claim-tree-body {
    font-size: 11.5px;
-@@ -1266,7 +1379,6 @@
+   line-height: 1.5;
+@@ -1266,7 +1394,6 @@
    overflow-x: auto;
    margin: 0.5rem 0;
    padding: 0.6rem 0.75rem;
@@ -353,7 +369,32 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    border: 1px solid var(--border);
    border-radius: var(--radius);
  }
-@@ -1517,7 +1629,7 @@
+@@ -1275,12 +1402,23 @@
+    supplies the block's own background/border — reset the bare inline-code
+    pill rule above so it doesn't double up a second background/padding
+    inside the pre. */
+-.claim-body pre code {
++.claim-body pre code,
++.claim-list-items pre code,
++.sbody pre code,
++.comment-body pre code {
+   font-family: var(--font-mono);
+   font-size: 12px;
+   white-space: pre;
+   background: none;
+   padding: 0;
++  /* THE PILL'S BORDER TOO, not just its background. This <code> is ONE
++     inline box that FRAGMENTS across line boxes, and the initial
++     box-decoration-break: slice paints the border's top and bottom edge on
++     every fragment — so a 1px --border line was drawn under each line of a
++     multi-line fenced block and above the next one, read by the maintainer as
++     a seam between the lines. Resetting background without border left the
++     half of the pill that a fragmenting inline box multiplies. */
++  border: 0;
+   border-radius: 0;
+ }
+
+@@ -1517,7 +1655,7 @@
  .claim-list-items .md-table th,
  .sbody .md-table th,
  .comment-body .md-table th {
@@ -362,7 +403,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    font-family: var(--font-sans);
    font-size: inherit;
    font-weight: 600;
-@@ -1581,7 +1693,7 @@
+@@ -1581,7 +1719,7 @@
    margin: 0.6rem 0;
    border: 1px solid var(--border);
    border-radius: 6px;
@@ -371,7 +412,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  /* An image is the last thing in a list item often enough to be worth the
-@@ -2095,20 +2207,6 @@
+@@ -2095,20 +2233,6 @@
    text-decoration: underline;
  }
 
@@ -392,7 +433,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  /* Deep-link auto-open for a SOURCE row, the companion to the .claim:target
     rules above. A citation marker's href names the row, not the claim, so the
     claim is not :target and those rules do not fire — yet the row the reader
-@@ -2139,9 +2237,10 @@
+@@ -2139,9 +2263,10 @@
    border-radius: 4px;
  }
 
@@ -405,7 +446,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    padding: 0.1rem 0.4rem;
    border-radius: 4px;
    font-weight: 600;
-@@ -2188,11 +2287,10 @@
+@@ -2188,11 +2313,10 @@
     which is why a `.claim-comments { list-style: none; }` rule lived here —
     it is deleted in v0.4.1 along with that <li>, since the slot is a <span>
     and never carried a marker. Every color below is one of the inverting
@@ -421,7 +462,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
     deliberately NOT the --warn boundary family. */
  .comment-chip {
    display: inline-flex;
-@@ -2282,7 +2380,7 @@
+@@ -2282,7 +2406,7 @@
    border: 1px solid var(--border);
    border-radius: var(--radius, 12px);
    background: var(--paper);
@@ -430,7 +471,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .comments-panel[hidden] {
-@@ -2366,14 +2464,6 @@
+@@ -2366,14 +2490,6 @@
    }
  }
 
@@ -445,7 +486,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  /* ---- interactive comment UI (Phase 5, serve + file://) -----------------
     The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop
     (role=complementary), a modal bottom sheet on mobile. Its backdrop
-@@ -2381,10 +2471,13 @@
+@@ -2381,10 +2497,13 @@
     half, so they are scoped to the <= 860px bottom-sheet breakpoint (in the media
     query below) — above it the desktop rail shows neither. They stay deliberately
     distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
@@ -463,7 +504,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
  /* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
     the media query below); it stays a plain open-state marker on desktop. Never
-@@ -2398,7 +2491,7 @@
+@@ -2398,7 +2517,7 @@
    width: 100%;
    height: 100%;
    border: 0;
@@ -472,7 +513,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    cursor: pointer;
  }
 
-@@ -2416,7 +2509,6 @@
+@@ -2416,7 +2535,6 @@
    flex-direction: column;
    background: var(--paper);
    border-left: 1px solid var(--border);
@@ -480,7 +521,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .comments-rail[hidden] {
-@@ -2603,7 +2695,7 @@
+@@ -2603,7 +2721,7 @@
    border: 1px solid var(--warn);
    border-radius: 10px;
    font: 13px var(--font-sans);
@@ -489,7 +530,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .comments-toast[hidden] {
-@@ -2653,20 +2745,17 @@
+@@ -2653,20 +2771,17 @@
     body.comments-open: three classes each setting overflow: hidden compose
     without a release-order hazard, so no coordination is needed between them. */
 
@@ -518,7 +559,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    overflow: hidden;
  }
 
-@@ -2675,40 +2764,66 @@
+@@ -2675,40 +2790,66 @@
  }
 
  .status-strip--lint {
@@ -595,7 +636,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  /* The detail list is capped and scrolls internally: a project with forty lint
-@@ -2717,7 +2832,7 @@
+@@ -2717,7 +2858,7 @@
    max-height: 40vh;
    overflow-y: auto;
    border-top: 1px solid var(--border);
@@ -604,7 +645,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .status-strip-body[hidden] {
-@@ -2730,8 +2845,8 @@
+@@ -2730,8 +2871,8 @@
 
  .status-group-head {
    margin: 0 0 6px;
@@ -615,7 +656,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    text-transform: uppercase;
    color: var(--muted);
  }
-@@ -2758,11 +2873,15 @@
+@@ -2758,11 +2899,15 @@
 
  .status-finding-rule,
  .status-finding-claim {
@@ -632,7 +673,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .status-finding-claim {
-@@ -2771,15 +2890,10 @@
+@@ -2771,15 +2916,10 @@
 
  .status-finding-msg {
    flex-basis: 100%;
@@ -650,7 +691,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  /* Coarse pointers (touch) need >=44px hit targets on every comment control. */
  @media (pointer: coarse) {
    .comments-rail-close,
-@@ -2813,33 +2927,28 @@
+@@ -2813,33 +2953,28 @@
      border-left: 0;
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
@@ -700,7 +741,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    }
  }
 
-@@ -2890,10 +2999,9 @@
+@@ -2890,10 +3025,9 @@
    color: var(--accent);
  }
 
@@ -714,7 +755,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
  .pill.pw {
    background: var(--warn-bg);
-@@ -2977,8 +3085,9 @@
+@@ -2977,8 +3111,9 @@
     internal/lint/raw_html_scope.go's img allowlist entry). Styling ported
     from docs/tabs/llm-internals.html's inline img style for its health-
     state-machine diagram: a plain white card so an SVG/PNG diagram (often
@@ -726,7 +767,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .mockup-diagram {
    display: block;
    max-width: 100%;
-@@ -2986,7 +3095,7 @@
+@@ -2986,7 +3121,7 @@
    margin-top: 8px;
    border: 1px solid var(--border);
    border-radius: 6px;
@@ -735,7 +776,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    padding: 8px;
  }
 
-@@ -3325,7 +3434,6 @@
+@@ -3325,7 +3460,6 @@
  .content-area {
    flex: 1;
    min-width: 0;
@@ -743,7 +784,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    margin: 0 auto;
  }
 
-@@ -3507,7 +3615,6 @@
+@@ -3507,7 +3641,6 @@
      padding: 6px 10px;
      font: 600 12px var(--font-sans);
      cursor: pointer;
@@ -751,7 +792,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    }
 
    .nav-overlay {
-@@ -3518,6 +3625,11 @@
+@@ -3518,6 +3651,11 @@
      width: 100%;
      height: 100%;
      border: 0;
@@ -763,7 +804,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      background: rgba(0, 0, 0, .42);
      opacity: 0;
      pointer-events: none;
-@@ -3570,96 +3682,8 @@
+@@ -3570,96 +3708,8 @@
    }
  }
 
@@ -860,7 +901,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  html { scroll-behavior: smooth; }
 
  body.shell-body {
-@@ -3673,7 +3697,7 @@
+@@ -3673,7 +3723,7 @@
    text-rendering: optimizeLegibility;
  }
 
@@ -869,7 +910,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
  :where(button, select, summary, a):focus-visible {
    outline: 2px solid var(--accent);
-@@ -3726,9 +3750,79 @@
+@@ -3726,9 +3776,79 @@
  .system-resizing { cursor: col-resize; user-select: none; }
 
  .sidebar-header {
@@ -949,7 +990,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .top {
    align-items: flex-start;
    gap: 12px;
-@@ -3807,7 +3901,7 @@
+@@ -3807,7 +3927,7 @@
  .system-nav-group__toggle::marker { content: ""; }
  .system-nav-group__toggle::-webkit-details-marker { display: none; }
 
@@ -958,7 +999,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
  .system-nav-group__count {
    min-width: 25px;
-@@ -3858,7 +3952,7 @@
+@@ -3858,7 +3978,7 @@
 
  #dxgOpen:hover,
  .sec-tab:hover {
@@ -967,7 +1008,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    color: var(--ink);
  }
 
-@@ -3905,8 +3999,13 @@
+@@ -3905,8 +4025,13 @@
    flex: 1;
    margin: 0;
    padding: 0 282px 80px 42px;
@@ -981,7 +1022,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .system-record-head {
    display: grid;
    grid-template-columns: minmax(0, 1fr) auto;
-@@ -3914,7 +4013,7 @@
+@@ -3914,7 +4039,7 @@
    align-items: start;
    margin: 0 0 24px;
    padding: 38px 0 24px;
@@ -990,7 +1031,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .system-record-head h2 {
-@@ -3993,6 +4092,7 @@
+@@ -3993,6 +4118,7 @@
    border-left: 1px solid var(--border);
    background: var(--paper);
    color: var(--muted);
@@ -998,7 +1039,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .facet-toc[hidden] { display: none; }
-@@ -4022,6 +4122,36 @@
+@@ -4022,6 +4148,36 @@
    color: var(--ink);
  }
 
@@ -1035,7 +1076,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .facet-toc__head small {
    display: block;
    margin-bottom: 3px;
-@@ -4072,10 +4202,69 @@
+@@ -4072,10 +4228,69 @@
 
  .facet-toc__item > span { color: var(--faint); font: 9px/1.45 var(--font-mono); }
  .facet-toc__item > strong { font-size: 11px; font-weight: 520; line-height: 1.38; }
@@ -1106,7 +1147,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .claim { scroll-margin-top: 72px; }
 
  .section-heading {
-@@ -4166,7 +4355,7 @@
+@@ -4166,7 +4381,7 @@
    transform: translateY(-50%);
  }
 
@@ -1115,7 +1156,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
  .claim-collapse-toggle > .label {
    display: flex;
-@@ -4219,8 +4408,8 @@
+@@ -4219,8 +4434,8 @@
 
  .pill.pv,
  .status-draft {
@@ -1126,7 +1167,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .pill.pw,
-@@ -4244,18 +4433,22 @@
+@@ -4244,18 +4459,28 @@
  .claim-body strong,
  .sbody strong { font-weight: 700; }
 
@@ -1141,8 +1182,14 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    font-size: .86em;
  }
 
-+/* The LIVE fenced-block background, same story as `code` above. */
++/* The LIVE fenced-block background, same story as `code` above. The selector
++   list must stay in step with the layout half near the top of the file: a body
++   listed there and not here gets the padding and border of a fenced block with
++   none of its background. */
  .claim-body pre,
++.claim-list-items pre,
++.sbody pre,
++.comment-body pre,
  .claim-tree-body {
    padding: 13px 14px;
    border-radius: 7px;
@@ -1151,7 +1198,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    font-size: 12px;
  }
 
-@@ -4280,6 +4473,11 @@
+@@ -4280,6 +4505,11 @@
 
  .claim-links-summary::marker { content: ""; }
  .claim-links-summary::-webkit-details-marker { display: none; }
@@ -1163,7 +1210,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  .claim-links-summary:hover { background: rgba(125, 137, 154, .07); color: var(--ink); }
 
  .claim-footer__identity { display: flex; gap: 10px; align-items: center; min-width: 0; }
-@@ -4385,7 +4583,7 @@
+@@ -4385,7 +4615,7 @@
  .track-head {
    margin: 0 0 24px;
    padding: 38px 0 23px;
@@ -1172,7 +1219,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .track-title {
-@@ -4421,7 +4619,7 @@
+@@ -4421,7 +4651,7 @@
    margin: 0 0 24px;
    padding: 0 0 15px;
    border-top: 0;
@@ -1181,7 +1228,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    color: var(--ink);
    font-size: 20px;
    letter-spacing: -.02em;
-@@ -4473,7 +4671,7 @@
+@@ -4473,7 +4703,7 @@
  .comments-rail {
    border-left-color: var(--border);
    background: var(--card-bg);
@@ -1190,7 +1237,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
  }
 
  .comments-rail-head {
-@@ -4483,7 +4681,6 @@
+@@ -4483,7 +4713,6 @@
 
  .status-strip {
    border-top-color: var(--border);
@@ -1198,7 +1245,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    color: var(--muted);
  }
 
-@@ -4803,13 +5000,23 @@
+@@ -4803,13 +5032,23 @@
    }
 
    .facet-toc__disclosure,
@@ -1224,7 +1271,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      border: 0;
      border-radius: 6px;
      background: var(--card-bg);
-@@ -4832,11 +5039,13 @@
+@@ -4832,11 +5071,13 @@
      border-radius: 6px;
      background: var(--card-bg);
      color: var(--ink);
@@ -1239,7 +1286,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
    .facet-toc {
      position: fixed;
-@@ -4848,17 +5057,27 @@
+@@ -4848,17 +5089,27 @@
      border: 1px solid var(--border);
      border-radius: 7px;
      background: var(--card-bg);
@@ -1270,7 +1317,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      border: 0;
      border-radius: 7px;
      background: var(--card-bg);
-@@ -4936,11 +5155,99 @@
+@@ -4936,11 +5187,99 @@
    .build-order-module .claim-rests-on { grid-template-columns: 1fr; gap: 3px; }
  }
 
@@ -1370,7 +1417,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    .comments-rail,
    .status-strip { display: none !important; }
    .content-area { padding: 0; }
-@@ -4963,6 +5270,9 @@
+@@ -4963,6 +5302,9 @@
            <div class="logo"><span></span></div>
            <div><h1>dossierx viewer</h1></div>
          </div>
@@ -1380,7 +1427,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
        </div>
        <nav id="nav">
          
-@@ -5058,8 +5368,12 @@
+@@ -5058,8 +5400,12 @@
    
    <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
      <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
@@ -1395,7 +1442,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      </button>
      <div id="statusStripBody" class="status-strip-body" hidden></div>
    </section>
-@@ -5235,6 +5549,12 @@
+@@ -5235,6 +5581,12 @@
            });
          }
 
@@ -1408,7 +1455,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
          
          
          
-@@ -6072,7 +6392,11 @@
+@@ -6072,7 +6424,11 @@
        var stripEl = document.getElementById('statusStrip');
        var stripToggle = document.getElementById('statusStripToggle');
        var stripSummary = document.getElementById('statusStripSummary');
@@ -1420,7 +1467,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
        
        
        
-@@ -6086,6 +6410,55 @@
+@@ -6086,6 +6442,55 @@
          return n + ' ' + word + (n === 1 ? '' : 's');
        }
 
@@ -1476,7 +1523,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
        
        
        
-@@ -6114,9 +6487,11 @@
+@@ -6114,9 +6519,11 @@
        
        
        function renderStatusStrip(data) {
@@ -1491,7 +1538,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
 
          if (!ledger.length && !lintErrors.length) {
            stripEl.hidden = true;
-@@ -6128,31 +6503,36 @@
+@@ -6128,31 +6535,36 @@
          stripBody.textContent = '';
          if (ledger.length) {
            stripBody.appendChild(findingGroup(
@@ -1539,7 +1586,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
          stripEl.hidden = false;
        }
 
-@@ -6160,6 +6540,7 @@
+@@ -6160,6 +6572,7 @@
          stripExpanded = !!expanded;
          if (stripBody) { stripBody.hidden = !stripExpanded; }
          if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
@@ -1547,7 +1594,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
          if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
        }
 
-@@ -6715,10 +7096,44 @@
+@@ -6715,10 +7128,44 @@
      });
    }
 
@@ -1594,7 +1641,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    }
 
    function enhanceFooters() {
-@@ -6795,6 +7210,7 @@
+@@ -6795,6 +7242,7 @@
      toggle.setAttribute('aria-expanded', String(expanded));
      var title = toggle.dataset.claimTitle || 'claim';
      toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + title);
@@ -1602,7 +1649,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    }
 
    function enhanceClaimDisclosures() {
-@@ -6884,6 +7300,45 @@
+@@ -6884,6 +7332,45 @@
      return { module: module, view: group, label: tab ? tab.textContent.replace(/🔒/g, '').trim() : 'Claims' };
    }
 
@@ -1648,7 +1695,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    function updateTocActive() {
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
-@@ -6906,11 +7361,18 @@
+@@ -6906,11 +7393,18 @@
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -1668,7 +1715,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
        document.body.appendChild(toc);
      }
      var active = activeFacet();
-@@ -6919,6 +7381,7 @@
+@@ -6919,6 +7413,7 @@
      var claims = visibleClaims(active.view);
      toc.querySelector('.facet-toc__name').textContent = active.label;
      toc.querySelector('.facet-toc__total').textContent = claims.length + (claims.length === 1 ? ' claim' : ' claims');
@@ -1676,7 +1723,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      var list = toc.querySelector('.facet-toc__list');
      var select = toc.querySelector('.facet-toc__select');
      list.replaceChildren();
-@@ -7088,11 +7551,16 @@
+@@ -7088,11 +7583,16 @@
      running = true;
      enhanceTimestamp();
      bindResizer();
@@ -1693,7 +1740,7 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
      enhanceFacetNavigation();
      syncNavigation();
      renderToc();
-@@ -7119,11 +7587,11 @@
+@@ -7119,11 +7619,11 @@
      // in the same event cycle whenever it contained the active tab.
      var navigationChanged = !!event.target.closest('.sec-tab');
      setTimeout(function () {
@@ -1708,8 +1755,8 @@ testdata/fixture-basic/viewer/index.html  (+756 -288)
    window.dossierxEnhanceSystemRecord = enhance;
    enhance();
 
-testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
-    size            13452 lines / 565597 bytes -> 13920 lines / 587201 bytes
+testdata/fixture-graph-demo/viewer/index.html  (+789 -289)
+    size            13452 lines / 565597 bytes -> 13952 lines / 588865 bytes
 @@ -135,22 +135,35 @@
     in the same metric the ramp is solved in rather than in degrees of hue: the
     ramp solver treats --dxg-governed, --dxg-cycle, --dxg-halo and
@@ -1790,7 +1837,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      --dxg-facet-other: #7D8C85;
 
      --dxg-cycle: #D1201A;
-@@ -1136,42 +1158,129 @@
+@@ -1136,42 +1158,130 @@
     a project's own template_overrides CSS; a project can restyle any of
     this by overriding component partials via viewer.template_overrides.
 
@@ -1835,8 +1882,9 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 +
 +   A token has to be read by the declaration that WINS, not merely by a
 +   declaration. Two rules in this file are re-declared later at equal
-+   specificity (`code` and `.claim-body pre, .claim-tree-body`), so their
-+   token reads live in the later copy; internal/render/theme_tokens_test.go
++   specificity (`code` and the fenced-block list `.claim-body pre,
++   .claim-list-items pre, .sbody pre, .comment-body pre, .claim-tree-body`),
++   so their token reads live in the later copy; internal/render/theme_tokens_test.go
 +   asserts, per token, that the last declaration of the consumer's
 +   selector+property pair is the one carrying the var(). It also fails if an
 +   allowlisted token has no consumer in this file or in graph.css, and pins
@@ -1950,7 +1998,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    }
  }
 
-@@ -1217,14 +1326,11 @@
+@@ -1217,14 +1327,11 @@
    background: var(--card-bg);
  }
 
@@ -1970,7 +2018,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .status-locked {
    color: var(--accent);
    background: var(--accent-bg);
-@@ -1241,11 +1347,14 @@
+@@ -1241,11 +1348,14 @@
     every component routes body-shaped text through the shared "markdown"
     template func). Ported verbatim from the reference docs stylesheet's global
     `code{...}` rule so a regex, config key, or field name wrapped in single
@@ -1987,7 +2035,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    padding: 1px 5px;
    border-radius: 5px;
  }
-@@ -1253,11 +1362,15 @@
+@@ -1253,12 +1363,30 @@
  /* Fenced ```code``` spans inside a claim's Body, converted to real
     <pre><code> elements by markdown.Render. white-space is reset off the
     pre-wrap inherited from .claim-body since <pre> already preserves
@@ -2004,11 +2052,26 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 +   --code-bg is read there. What that rule must NOT be is --card-bg, which is
 +   the surrounding card's own background and would make the block invisible
 +   against it — the "white background, not grey" regression these rules
-+   replaced; it is a tint of --paper over --card-bg instead. */
++   replaced; it is a tint of --paper over --card-bg instead.
++
++   THE SELECTOR LIST IS EVERY BODY markdown.Render EMITS INTO, not just
++   .claim-body. A fence in a step body, a comment or a list item reached the
++   reader as a run of inline-code PILLS with no block background at all —
++   measured in a browser: `pre` there computed background rgba(0,0,0,0),
++   border 0, padding 0, while its <code> kept the pill's 1px 5px padding and
++   --code-inline-bg. Same markdown, four different blocks. They are listed
++   here so a fenced block looks the same wherever it is written.
++   .claim-tree-body is a <pre> the template writes directly, with no inner
++   <code>, which is why it is named rather than reached through a descendant
++   selector. */
  .claim-body pre,
++.claim-list-items pre,
++.sbody pre,
++.comment-body pre,
  .claim-tree-body {
    font-size: 11.5px;
-@@ -1266,7 +1379,6 @@
+   line-height: 1.5;
+@@ -1266,7 +1394,6 @@
    overflow-x: auto;
    margin: 0.5rem 0;
    padding: 0.6rem 0.75rem;
@@ -2016,7 +2079,32 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    border: 1px solid var(--border);
    border-radius: var(--radius);
  }
-@@ -1517,7 +1629,7 @@
+@@ -1275,12 +1402,23 @@
+    supplies the block's own background/border — reset the bare inline-code
+    pill rule above so it doesn't double up a second background/padding
+    inside the pre. */
+-.claim-body pre code {
++.claim-body pre code,
++.claim-list-items pre code,
++.sbody pre code,
++.comment-body pre code {
+   font-family: var(--font-mono);
+   font-size: 12px;
+   white-space: pre;
+   background: none;
+   padding: 0;
++  /* THE PILL'S BORDER TOO, not just its background. This <code> is ONE
++     inline box that FRAGMENTS across line boxes, and the initial
++     box-decoration-break: slice paints the border's top and bottom edge on
++     every fragment — so a 1px --border line was drawn under each line of a
++     multi-line fenced block and above the next one, read by the maintainer as
++     a seam between the lines. Resetting background without border left the
++     half of the pill that a fragmenting inline box multiplies. */
++  border: 0;
+   border-radius: 0;
+ }
+
+@@ -1517,7 +1655,7 @@
  .claim-list-items .md-table th,
  .sbody .md-table th,
  .comment-body .md-table th {
@@ -2025,7 +2113,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    font-family: var(--font-sans);
    font-size: inherit;
    font-weight: 600;
-@@ -1581,7 +1693,7 @@
+@@ -1581,7 +1719,7 @@
    margin: 0.6rem 0;
    border: 1px solid var(--border);
    border-radius: 6px;
@@ -2034,7 +2122,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  /* An image is the last thing in a list item often enough to be worth the
-@@ -2095,20 +2207,6 @@
+@@ -2095,20 +2233,6 @@
    text-decoration: underline;
  }
 
@@ -2055,7 +2143,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  /* Deep-link auto-open for a SOURCE row, the companion to the .claim:target
     rules above. A citation marker's href names the row, not the claim, so the
     claim is not :target and those rules do not fire — yet the row the reader
-@@ -2139,9 +2237,10 @@
+@@ -2139,9 +2263,10 @@
    border-radius: 4px;
  }
 
@@ -2068,7 +2156,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    padding: 0.1rem 0.4rem;
    border-radius: 4px;
    font-weight: 600;
-@@ -2188,11 +2287,10 @@
+@@ -2188,11 +2313,10 @@
     which is why a `.claim-comments { list-style: none; }` rule lived here —
     it is deleted in v0.4.1 along with that <li>, since the slot is a <span>
     and never carried a marker. Every color below is one of the inverting
@@ -2084,7 +2172,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
     deliberately NOT the --warn boundary family. */
  .comment-chip {
    display: inline-flex;
-@@ -2282,7 +2380,7 @@
+@@ -2282,7 +2406,7 @@
    border: 1px solid var(--border);
    border-radius: var(--radius, 12px);
    background: var(--paper);
@@ -2093,7 +2181,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .comments-panel[hidden] {
-@@ -2366,14 +2464,6 @@
+@@ -2366,14 +2490,6 @@
    }
  }
 
@@ -2108,7 +2196,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  /* ---- interactive comment UI (Phase 5, serve + file://) -----------------
     The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop
     (role=complementary), a modal bottom sheet on mobile. Its backdrop
-@@ -2381,10 +2471,13 @@
+@@ -2381,10 +2497,13 @@
     half, so they are scoped to the <= 860px bottom-sheet breakpoint (in the media
     query below) — above it the desktop rail shows neither. They stay deliberately
     distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
@@ -2126,7 +2214,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
  /* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
     the media query below); it stays a plain open-state marker on desktop. Never
-@@ -2398,7 +2491,7 @@
+@@ -2398,7 +2517,7 @@
    width: 100%;
    height: 100%;
    border: 0;
@@ -2135,7 +2223,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    cursor: pointer;
  }
 
-@@ -2416,7 +2509,6 @@
+@@ -2416,7 +2535,6 @@
    flex-direction: column;
    background: var(--paper);
    border-left: 1px solid var(--border);
@@ -2143,7 +2231,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .comments-rail[hidden] {
-@@ -2603,7 +2695,7 @@
+@@ -2603,7 +2721,7 @@
    border: 1px solid var(--warn);
    border-radius: 10px;
    font: 13px var(--font-sans);
@@ -2152,7 +2240,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .comments-toast[hidden] {
-@@ -2653,20 +2745,17 @@
+@@ -2653,20 +2771,17 @@
     body.comments-open: three classes each setting overflow: hidden compose
     without a release-order hazard, so no coordination is needed between them. */
 
@@ -2181,7 +2269,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    overflow: hidden;
  }
 
-@@ -2675,40 +2764,66 @@
+@@ -2675,40 +2790,66 @@
  }
 
  .status-strip--lint {
@@ -2258,7 +2346,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  /* The detail list is capped and scrolls internally: a project with forty lint
-@@ -2717,7 +2832,7 @@
+@@ -2717,7 +2858,7 @@
    max-height: 40vh;
    overflow-y: auto;
    border-top: 1px solid var(--border);
@@ -2267,7 +2355,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .status-strip-body[hidden] {
-@@ -2730,8 +2845,8 @@
+@@ -2730,8 +2871,8 @@
 
  .status-group-head {
    margin: 0 0 6px;
@@ -2278,7 +2366,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    text-transform: uppercase;
    color: var(--muted);
  }
-@@ -2758,11 +2873,15 @@
+@@ -2758,11 +2899,15 @@
 
  .status-finding-rule,
  .status-finding-claim {
@@ -2295,7 +2383,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .status-finding-claim {
-@@ -2771,15 +2890,10 @@
+@@ -2771,15 +2916,10 @@
 
  .status-finding-msg {
    flex-basis: 100%;
@@ -2313,7 +2401,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  /* Coarse pointers (touch) need >=44px hit targets on every comment control. */
  @media (pointer: coarse) {
    .comments-rail-close,
-@@ -2813,33 +2927,28 @@
+@@ -2813,33 +2953,28 @@
      border-left: 0;
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
@@ -2363,7 +2451,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    }
  }
 
-@@ -2890,10 +2999,9 @@
+@@ -2890,10 +3025,9 @@
    color: var(--accent);
  }
 
@@ -2377,7 +2465,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
  .pill.pw {
    background: var(--warn-bg);
-@@ -2977,8 +3085,9 @@
+@@ -2977,8 +3111,9 @@
     internal/lint/raw_html_scope.go's img allowlist entry). Styling ported
     from docs/tabs/llm-internals.html's inline img style for its health-
     state-machine diagram: a plain white card so an SVG/PNG diagram (often
@@ -2389,7 +2477,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .mockup-diagram {
    display: block;
    max-width: 100%;
-@@ -2986,7 +3095,7 @@
+@@ -2986,7 +3121,7 @@
    margin-top: 8px;
    border: 1px solid var(--border);
    border-radius: 6px;
@@ -2398,7 +2486,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    padding: 8px;
  }
 
-@@ -3325,7 +3434,6 @@
+@@ -3325,7 +3460,6 @@
  .content-area {
    flex: 1;
    min-width: 0;
@@ -2406,7 +2494,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    margin: 0 auto;
  }
 
-@@ -3507,7 +3615,6 @@
+@@ -3507,7 +3641,6 @@
      padding: 6px 10px;
      font: 600 12px var(--font-sans);
      cursor: pointer;
@@ -2414,7 +2502,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    }
 
    .nav-overlay {
-@@ -3518,6 +3625,11 @@
+@@ -3518,6 +3651,11 @@
      width: 100%;
      height: 100%;
      border: 0;
@@ -2426,7 +2514,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      background: rgba(0, 0, 0, .42);
      opacity: 0;
      pointer-events: none;
-@@ -3570,96 +3682,8 @@
+@@ -3570,96 +3708,8 @@
    }
  }
 
@@ -2523,7 +2611,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  html { scroll-behavior: smooth; }
 
  body.shell-body {
-@@ -3673,7 +3697,7 @@
+@@ -3673,7 +3723,7 @@
    text-rendering: optimizeLegibility;
  }
 
@@ -2532,7 +2620,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
  :where(button, select, summary, a):focus-visible {
    outline: 2px solid var(--accent);
-@@ -3726,9 +3750,79 @@
+@@ -3726,9 +3776,79 @@
  .system-resizing { cursor: col-resize; user-select: none; }
 
  .sidebar-header {
@@ -2612,7 +2700,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .top {
    align-items: flex-start;
    gap: 12px;
-@@ -3807,7 +3901,7 @@
+@@ -3807,7 +3927,7 @@
  .system-nav-group__toggle::marker { content: ""; }
  .system-nav-group__toggle::-webkit-details-marker { display: none; }
 
@@ -2621,7 +2709,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
  .system-nav-group__count {
    min-width: 25px;
-@@ -3858,7 +3952,7 @@
+@@ -3858,7 +3978,7 @@
 
  #dxgOpen:hover,
  .sec-tab:hover {
@@ -2630,7 +2718,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    color: var(--ink);
  }
 
-@@ -3905,8 +3999,13 @@
+@@ -3905,8 +4025,13 @@
    flex: 1;
    margin: 0;
    padding: 0 282px 80px 42px;
@@ -2644,7 +2732,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .system-record-head {
    display: grid;
    grid-template-columns: minmax(0, 1fr) auto;
-@@ -3914,7 +4013,7 @@
+@@ -3914,7 +4039,7 @@
    align-items: start;
    margin: 0 0 24px;
    padding: 38px 0 24px;
@@ -2653,7 +2741,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .system-record-head h2 {
-@@ -3993,6 +4092,7 @@
+@@ -3993,6 +4118,7 @@
    border-left: 1px solid var(--border);
    background: var(--paper);
    color: var(--muted);
@@ -2661,7 +2749,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .facet-toc[hidden] { display: none; }
-@@ -4022,6 +4122,36 @@
+@@ -4022,6 +4148,36 @@
    color: var(--ink);
  }
 
@@ -2698,7 +2786,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .facet-toc__head small {
    display: block;
    margin-bottom: 3px;
-@@ -4072,10 +4202,69 @@
+@@ -4072,10 +4228,69 @@
 
  .facet-toc__item > span { color: var(--faint); font: 9px/1.45 var(--font-mono); }
  .facet-toc__item > strong { font-size: 11px; font-weight: 520; line-height: 1.38; }
@@ -2769,7 +2857,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .claim { scroll-margin-top: 72px; }
 
  .section-heading {
-@@ -4166,7 +4355,7 @@
+@@ -4166,7 +4381,7 @@
    transform: translateY(-50%);
  }
 
@@ -2778,7 +2866,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
  .claim-collapse-toggle > .label {
    display: flex;
-@@ -4219,8 +4408,8 @@
+@@ -4219,8 +4434,8 @@
 
  .pill.pv,
  .status-draft {
@@ -2789,7 +2877,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .pill.pw,
-@@ -4244,18 +4433,22 @@
+@@ -4244,18 +4459,28 @@
  .claim-body strong,
  .sbody strong { font-weight: 700; }
 
@@ -2804,8 +2892,14 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    font-size: .86em;
  }
 
-+/* The LIVE fenced-block background, same story as `code` above. */
++/* The LIVE fenced-block background, same story as `code` above. The selector
++   list must stay in step with the layout half near the top of the file: a body
++   listed there and not here gets the padding and border of a fenced block with
++   none of its background. */
  .claim-body pre,
++.claim-list-items pre,
++.sbody pre,
++.comment-body pre,
  .claim-tree-body {
    padding: 13px 14px;
    border-radius: 7px;
@@ -2814,7 +2908,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    font-size: 12px;
  }
 
-@@ -4280,6 +4473,11 @@
+@@ -4280,6 +4505,11 @@
 
  .claim-links-summary::marker { content: ""; }
  .claim-links-summary::-webkit-details-marker { display: none; }
@@ -2826,7 +2920,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  .claim-links-summary:hover { background: rgba(125, 137, 154, .07); color: var(--ink); }
 
  .claim-footer__identity { display: flex; gap: 10px; align-items: center; min-width: 0; }
-@@ -4385,7 +4583,7 @@
+@@ -4385,7 +4615,7 @@
  .track-head {
    margin: 0 0 24px;
    padding: 38px 0 23px;
@@ -2835,7 +2929,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .track-title {
-@@ -4421,7 +4619,7 @@
+@@ -4421,7 +4651,7 @@
    margin: 0 0 24px;
    padding: 0 0 15px;
    border-top: 0;
@@ -2844,7 +2938,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    color: var(--ink);
    font-size: 20px;
    letter-spacing: -.02em;
-@@ -4473,7 +4671,7 @@
+@@ -4473,7 +4703,7 @@
  .comments-rail {
    border-left-color: var(--border);
    background: var(--card-bg);
@@ -2853,7 +2947,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
  }
 
  .comments-rail-head {
-@@ -4483,7 +4681,6 @@
+@@ -4483,7 +4713,6 @@
 
  .status-strip {
    border-top-color: var(--border);
@@ -2861,7 +2955,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    color: var(--muted);
  }
 
-@@ -4803,13 +5000,23 @@
+@@ -4803,13 +5032,23 @@
    }
 
    .facet-toc__disclosure,
@@ -2887,7 +2981,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      border: 0;
      border-radius: 6px;
      background: var(--card-bg);
-@@ -4832,11 +5039,13 @@
+@@ -4832,11 +5071,13 @@
      border-radius: 6px;
      background: var(--card-bg);
      color: var(--ink);
@@ -2902,7 +2996,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
    .facet-toc {
      position: fixed;
-@@ -4848,17 +5057,27 @@
+@@ -4848,17 +5089,27 @@
      border: 1px solid var(--border);
      border-radius: 7px;
      background: var(--card-bg);
@@ -2933,7 +3027,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      border: 0;
      border-radius: 7px;
      background: var(--card-bg);
-@@ -4936,11 +5155,99 @@
+@@ -4936,11 +5187,99 @@
    .build-order-module .claim-rests-on { grid-template-columns: 1fr; gap: 3px; }
  }
 
@@ -3033,7 +3127,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    .comments-rail,
    .status-strip { display: none !important; }
    .content-area { padding: 0; }
-@@ -4963,6 +5270,9 @@
+@@ -4963,6 +5302,9 @@
            <div class="logo"><span></span></div>
            <div><h1>Claims Graph Demo</h1><div class="eyebrow">the corpus the graph pane was designed against</div></div>
          </div>
@@ -3043,7 +3137,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
        </div>
        <nav id="nav">
          
-@@ -5798,8 +6108,12 @@
+@@ -5798,8 +6140,12 @@
    
    <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
      <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
@@ -3058,7 +3152,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      </button>
      <div id="statusStripBody" class="status-strip-body" hidden></div>
    </section>
-@@ -5975,6 +6289,12 @@
+@@ -5975,6 +6321,12 @@
            });
          }
 
@@ -3071,7 +3165,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
          
          
          
-@@ -6812,7 +7132,11 @@
+@@ -6812,7 +7164,11 @@
        var stripEl = document.getElementById('statusStrip');
        var stripToggle = document.getElementById('statusStripToggle');
        var stripSummary = document.getElementById('statusStripSummary');
@@ -3083,7 +3177,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
        
        
        
-@@ -6826,6 +7150,55 @@
+@@ -6826,6 +7182,55 @@
          return n + ' ' + word + (n === 1 ? '' : 's');
        }
 
@@ -3139,7 +3233,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
        
        
        
-@@ -6854,9 +7227,11 @@
+@@ -6854,9 +7259,11 @@
        
        
        function renderStatusStrip(data) {
@@ -3154,7 +3248,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
 
          if (!ledger.length && !lintErrors.length) {
            stripEl.hidden = true;
-@@ -6868,31 +7243,36 @@
+@@ -6868,31 +7275,36 @@
          stripBody.textContent = '';
          if (ledger.length) {
            stripBody.appendChild(findingGroup(
@@ -3202,7 +3296,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
          stripEl.hidden = false;
        }
 
-@@ -6900,6 +7280,7 @@
+@@ -6900,6 +7312,7 @@
          stripExpanded = !!expanded;
          if (stripBody) { stripBody.hidden = !stripExpanded; }
          if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
@@ -3210,7 +3304,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
          if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
        }
 
-@@ -7455,10 +7836,44 @@
+@@ -7455,10 +7868,44 @@
      });
    }
 
@@ -3257,7 +3351,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    }
 
    function enhanceFooters() {
-@@ -7535,6 +7950,7 @@
+@@ -7535,6 +7982,7 @@
      toggle.setAttribute('aria-expanded', String(expanded));
      var title = toggle.dataset.claimTitle || 'claim';
      toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + title);
@@ -3265,7 +3359,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    }
 
    function enhanceClaimDisclosures() {
-@@ -7624,6 +8040,45 @@
+@@ -7624,6 +8072,45 @@
      return { module: module, view: group, label: tab ? tab.textContent.replace(/🔒/g, '').trim() : 'Claims' };
    }
 
@@ -3311,7 +3405,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    function updateTocActive() {
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
-@@ -7646,11 +8101,18 @@
+@@ -7646,11 +8133,18 @@
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -3331,7 +3425,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
        document.body.appendChild(toc);
      }
      var active = activeFacet();
-@@ -7659,6 +8121,7 @@
+@@ -7659,6 +8153,7 @@
      var claims = visibleClaims(active.view);
      toc.querySelector('.facet-toc__name').textContent = active.label;
      toc.querySelector('.facet-toc__total').textContent = claims.length + (claims.length === 1 ? ' claim' : ' claims');
@@ -3339,7 +3433,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      var list = toc.querySelector('.facet-toc__list');
      var select = toc.querySelector('.facet-toc__select');
      list.replaceChildren();
-@@ -7828,11 +8291,16 @@
+@@ -7828,11 +8323,16 @@
      running = true;
      enhanceTimestamp();
      bindResizer();
@@ -3356,7 +3450,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
      enhanceFacetNavigation();
      syncNavigation();
      renderToc();
-@@ -7859,11 +8327,11 @@
+@@ -7859,11 +8359,11 @@
      // in the same event cycle whenever it contained the active tab.
      var navigationChanged = !!event.target.closest('.sec-tab');
      setTimeout(function () {
@@ -3371,8 +3465,8 @@ testdata/fixture-graph-demo/viewer/index.html  (+756 -288)
    window.dossierxEnhanceSystemRecord = enhance;
    enhance();
 
-testdata/fixture-portability/viewer/index.html  (+756 -288)
-    size            12703 lines / 440246 bytes -> 13171 lines / 461850 bytes
+testdata/fixture-portability/viewer/index.html  (+789 -289)
+    size            12703 lines / 440246 bytes -> 13203 lines / 463514 bytes
 @@ -135,22 +135,35 @@
     in the same metric the ramp is solved in rather than in degrees of hue: the
     ramp solver treats --dxg-governed, --dxg-cycle, --dxg-halo and
@@ -3453,7 +3547,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      --dxg-facet-other: #7D8C85;
 
      --dxg-cycle: #D1201A;
-@@ -1136,42 +1158,129 @@
+@@ -1136,42 +1158,130 @@
     a project's own template_overrides CSS; a project can restyle any of
     this by overriding component partials via viewer.template_overrides.
 
@@ -3498,8 +3592,9 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 +
 +   A token has to be read by the declaration that WINS, not merely by a
 +   declaration. Two rules in this file are re-declared later at equal
-+   specificity (`code` and `.claim-body pre, .claim-tree-body`), so their
-+   token reads live in the later copy; internal/render/theme_tokens_test.go
++   specificity (`code` and the fenced-block list `.claim-body pre,
++   .claim-list-items pre, .sbody pre, .comment-body pre, .claim-tree-body`),
++   so their token reads live in the later copy; internal/render/theme_tokens_test.go
 +   asserts, per token, that the last declaration of the consumer's
 +   selector+property pair is the one carrying the var(). It also fails if an
 +   allowlisted token has no consumer in this file or in graph.css, and pins
@@ -3613,7 +3708,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    }
  }
 
-@@ -1217,14 +1326,11 @@
+@@ -1217,14 +1327,11 @@
    background: var(--card-bg);
  }
 
@@ -3633,7 +3728,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .status-locked {
    color: var(--accent);
    background: var(--accent-bg);
-@@ -1241,11 +1347,14 @@
+@@ -1241,11 +1348,14 @@
     every component routes body-shaped text through the shared "markdown"
     template func). Ported verbatim from the reference docs stylesheet's global
     `code{...}` rule so a regex, config key, or field name wrapped in single
@@ -3650,7 +3745,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    padding: 1px 5px;
    border-radius: 5px;
  }
-@@ -1253,11 +1362,15 @@
+@@ -1253,12 +1363,30 @@
  /* Fenced ```code``` spans inside a claim's Body, converted to real
     <pre><code> elements by markdown.Render. white-space is reset off the
     pre-wrap inherited from .claim-body since <pre> already preserves
@@ -3667,11 +3762,26 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 +   --code-bg is read there. What that rule must NOT be is --card-bg, which is
 +   the surrounding card's own background and would make the block invisible
 +   against it — the "white background, not grey" regression these rules
-+   replaced; it is a tint of --paper over --card-bg instead. */
++   replaced; it is a tint of --paper over --card-bg instead.
++
++   THE SELECTOR LIST IS EVERY BODY markdown.Render EMITS INTO, not just
++   .claim-body. A fence in a step body, a comment or a list item reached the
++   reader as a run of inline-code PILLS with no block background at all —
++   measured in a browser: `pre` there computed background rgba(0,0,0,0),
++   border 0, padding 0, while its <code> kept the pill's 1px 5px padding and
++   --code-inline-bg. Same markdown, four different blocks. They are listed
++   here so a fenced block looks the same wherever it is written.
++   .claim-tree-body is a <pre> the template writes directly, with no inner
++   <code>, which is why it is named rather than reached through a descendant
++   selector. */
  .claim-body pre,
++.claim-list-items pre,
++.sbody pre,
++.comment-body pre,
  .claim-tree-body {
    font-size: 11.5px;
-@@ -1266,7 +1379,6 @@
+   line-height: 1.5;
+@@ -1266,7 +1394,6 @@
    overflow-x: auto;
    margin: 0.5rem 0;
    padding: 0.6rem 0.75rem;
@@ -3679,7 +3789,32 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    border: 1px solid var(--border);
    border-radius: var(--radius);
  }
-@@ -1517,7 +1629,7 @@
+@@ -1275,12 +1402,23 @@
+    supplies the block's own background/border — reset the bare inline-code
+    pill rule above so it doesn't double up a second background/padding
+    inside the pre. */
+-.claim-body pre code {
++.claim-body pre code,
++.claim-list-items pre code,
++.sbody pre code,
++.comment-body pre code {
+   font-family: var(--font-mono);
+   font-size: 12px;
+   white-space: pre;
+   background: none;
+   padding: 0;
++  /* THE PILL'S BORDER TOO, not just its background. This <code> is ONE
++     inline box that FRAGMENTS across line boxes, and the initial
++     box-decoration-break: slice paints the border's top and bottom edge on
++     every fragment — so a 1px --border line was drawn under each line of a
++     multi-line fenced block and above the next one, read by the maintainer as
++     a seam between the lines. Resetting background without border left the
++     half of the pill that a fragmenting inline box multiplies. */
++  border: 0;
+   border-radius: 0;
+ }
+
+@@ -1517,7 +1655,7 @@
  .claim-list-items .md-table th,
  .sbody .md-table th,
  .comment-body .md-table th {
@@ -3688,7 +3823,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    font-family: var(--font-sans);
    font-size: inherit;
    font-weight: 600;
-@@ -1581,7 +1693,7 @@
+@@ -1581,7 +1719,7 @@
    margin: 0.6rem 0;
    border: 1px solid var(--border);
    border-radius: 6px;
@@ -3697,7 +3832,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  /* An image is the last thing in a list item often enough to be worth the
-@@ -2095,20 +2207,6 @@
+@@ -2095,20 +2233,6 @@
    text-decoration: underline;
  }
 
@@ -3718,7 +3853,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  /* Deep-link auto-open for a SOURCE row, the companion to the .claim:target
     rules above. A citation marker's href names the row, not the claim, so the
     claim is not :target and those rules do not fire — yet the row the reader
-@@ -2139,9 +2237,10 @@
+@@ -2139,9 +2263,10 @@
    border-radius: 4px;
  }
 
@@ -3731,7 +3866,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    padding: 0.1rem 0.4rem;
    border-radius: 4px;
    font-weight: 600;
-@@ -2188,11 +2287,10 @@
+@@ -2188,11 +2313,10 @@
     which is why a `.claim-comments { list-style: none; }` rule lived here —
     it is deleted in v0.4.1 along with that <li>, since the slot is a <span>
     and never carried a marker. Every color below is one of the inverting
@@ -3747,7 +3882,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
     deliberately NOT the --warn boundary family. */
  .comment-chip {
    display: inline-flex;
-@@ -2282,7 +2380,7 @@
+@@ -2282,7 +2406,7 @@
    border: 1px solid var(--border);
    border-radius: var(--radius, 12px);
    background: var(--paper);
@@ -3756,7 +3891,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .comments-panel[hidden] {
-@@ -2366,14 +2464,6 @@
+@@ -2366,14 +2490,6 @@
    }
  }
 
@@ -3771,7 +3906,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  /* ---- interactive comment UI (Phase 5, serve + file://) -----------------
     The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop
     (role=complementary), a modal bottom sheet on mobile. Its backdrop
-@@ -2381,10 +2471,13 @@
+@@ -2381,10 +2497,13 @@
     half, so they are scoped to the <= 860px bottom-sheet breakpoint (in the media
     query below) — above it the desktop rail shows neither. They stay deliberately
     distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
@@ -3789,7 +3924,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
  /* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
     the media query below); it stays a plain open-state marker on desktop. Never
-@@ -2398,7 +2491,7 @@
+@@ -2398,7 +2517,7 @@
    width: 100%;
    height: 100%;
    border: 0;
@@ -3798,7 +3933,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    cursor: pointer;
  }
 
-@@ -2416,7 +2509,6 @@
+@@ -2416,7 +2535,6 @@
    flex-direction: column;
    background: var(--paper);
    border-left: 1px solid var(--border);
@@ -3806,7 +3941,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .comments-rail[hidden] {
-@@ -2603,7 +2695,7 @@
+@@ -2603,7 +2721,7 @@
    border: 1px solid var(--warn);
    border-radius: 10px;
    font: 13px var(--font-sans);
@@ -3815,7 +3950,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .comments-toast[hidden] {
-@@ -2653,20 +2745,17 @@
+@@ -2653,20 +2771,17 @@
     body.comments-open: three classes each setting overflow: hidden compose
     without a release-order hazard, so no coordination is needed between them. */
 
@@ -3844,7 +3979,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    overflow: hidden;
  }
 
-@@ -2675,40 +2764,66 @@
+@@ -2675,40 +2790,66 @@
  }
 
  .status-strip--lint {
@@ -3921,7 +4056,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  /* The detail list is capped and scrolls internally: a project with forty lint
-@@ -2717,7 +2832,7 @@
+@@ -2717,7 +2858,7 @@
    max-height: 40vh;
    overflow-y: auto;
    border-top: 1px solid var(--border);
@@ -3930,7 +4065,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .status-strip-body[hidden] {
-@@ -2730,8 +2845,8 @@
+@@ -2730,8 +2871,8 @@
 
  .status-group-head {
    margin: 0 0 6px;
@@ -3941,7 +4076,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    text-transform: uppercase;
    color: var(--muted);
  }
-@@ -2758,11 +2873,15 @@
+@@ -2758,11 +2899,15 @@
 
  .status-finding-rule,
  .status-finding-claim {
@@ -3958,7 +4093,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .status-finding-claim {
-@@ -2771,15 +2890,10 @@
+@@ -2771,15 +2916,10 @@
 
  .status-finding-msg {
    flex-basis: 100%;
@@ -3976,7 +4111,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  /* Coarse pointers (touch) need >=44px hit targets on every comment control. */
  @media (pointer: coarse) {
    .comments-rail-close,
-@@ -2813,33 +2927,28 @@
+@@ -2813,33 +2953,28 @@
      border-left: 0;
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
@@ -4026,7 +4161,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    }
  }
 
-@@ -2890,10 +2999,9 @@
+@@ -2890,10 +3025,9 @@
    color: var(--accent);
  }
 
@@ -4040,7 +4175,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
  .pill.pw {
    background: var(--warn-bg);
-@@ -2977,8 +3085,9 @@
+@@ -2977,8 +3111,9 @@
     internal/lint/raw_html_scope.go's img allowlist entry). Styling ported
     from docs/tabs/llm-internals.html's inline img style for its health-
     state-machine diagram: a plain white card so an SVG/PNG diagram (often
@@ -4052,7 +4187,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .mockup-diagram {
    display: block;
    max-width: 100%;
-@@ -2986,7 +3095,7 @@
+@@ -2986,7 +3121,7 @@
    margin-top: 8px;
    border: 1px solid var(--border);
    border-radius: 6px;
@@ -4061,7 +4196,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    padding: 8px;
  }
 
-@@ -3325,7 +3434,6 @@
+@@ -3325,7 +3460,6 @@
  .content-area {
    flex: 1;
    min-width: 0;
@@ -4069,7 +4204,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    margin: 0 auto;
  }
 
-@@ -3507,7 +3615,6 @@
+@@ -3507,7 +3641,6 @@
      padding: 6px 10px;
      font: 600 12px var(--font-sans);
      cursor: pointer;
@@ -4077,7 +4212,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    }
 
    .nav-overlay {
-@@ -3518,6 +3625,11 @@
+@@ -3518,6 +3651,11 @@
      width: 100%;
      height: 100%;
      border: 0;
@@ -4089,7 +4224,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      background: rgba(0, 0, 0, .42);
      opacity: 0;
      pointer-events: none;
-@@ -3570,96 +3682,8 @@
+@@ -3570,96 +3708,8 @@
    }
  }
 
@@ -4186,7 +4321,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  html { scroll-behavior: smooth; }
 
  body.shell-body {
-@@ -3673,7 +3697,7 @@
+@@ -3673,7 +3723,7 @@
    text-rendering: optimizeLegibility;
  }
 
@@ -4195,7 +4330,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
  :where(button, select, summary, a):focus-visible {
    outline: 2px solid var(--accent);
-@@ -3726,9 +3750,79 @@
+@@ -3726,9 +3776,79 @@
  .system-resizing { cursor: col-resize; user-select: none; }
 
  .sidebar-header {
@@ -4275,7 +4410,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .top {
    align-items: flex-start;
    gap: 12px;
-@@ -3807,7 +3901,7 @@
+@@ -3807,7 +3927,7 @@
  .system-nav-group__toggle::marker { content: ""; }
  .system-nav-group__toggle::-webkit-details-marker { display: none; }
 
@@ -4284,7 +4419,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
  .system-nav-group__count {
    min-width: 25px;
-@@ -3858,7 +3952,7 @@
+@@ -3858,7 +3978,7 @@
 
  #dxgOpen:hover,
  .sec-tab:hover {
@@ -4293,7 +4428,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    color: var(--ink);
  }
 
-@@ -3905,8 +3999,13 @@
+@@ -3905,8 +4025,13 @@
    flex: 1;
    margin: 0;
    padding: 0 282px 80px 42px;
@@ -4307,7 +4442,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .system-record-head {
    display: grid;
    grid-template-columns: minmax(0, 1fr) auto;
-@@ -3914,7 +4013,7 @@
+@@ -3914,7 +4039,7 @@
    align-items: start;
    margin: 0 0 24px;
    padding: 38px 0 24px;
@@ -4316,7 +4451,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .system-record-head h2 {
-@@ -3993,6 +4092,7 @@
+@@ -3993,6 +4118,7 @@
    border-left: 1px solid var(--border);
    background: var(--paper);
    color: var(--muted);
@@ -4324,7 +4459,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .facet-toc[hidden] { display: none; }
-@@ -4022,6 +4122,36 @@
+@@ -4022,6 +4148,36 @@
    color: var(--ink);
  }
 
@@ -4361,7 +4496,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .facet-toc__head small {
    display: block;
    margin-bottom: 3px;
-@@ -4072,10 +4202,69 @@
+@@ -4072,10 +4228,69 @@
 
  .facet-toc__item > span { color: var(--faint); font: 9px/1.45 var(--font-mono); }
  .facet-toc__item > strong { font-size: 11px; font-weight: 520; line-height: 1.38; }
@@ -4432,7 +4567,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .claim { scroll-margin-top: 72px; }
 
  .section-heading {
-@@ -4166,7 +4355,7 @@
+@@ -4166,7 +4381,7 @@
    transform: translateY(-50%);
  }
 
@@ -4441,7 +4576,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
  .claim-collapse-toggle > .label {
    display: flex;
-@@ -4219,8 +4408,8 @@
+@@ -4219,8 +4434,8 @@
 
  .pill.pv,
  .status-draft {
@@ -4452,7 +4587,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .pill.pw,
-@@ -4244,18 +4433,22 @@
+@@ -4244,18 +4459,28 @@
  .claim-body strong,
  .sbody strong { font-weight: 700; }
 
@@ -4467,8 +4602,14 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    font-size: .86em;
  }
 
-+/* The LIVE fenced-block background, same story as `code` above. */
++/* The LIVE fenced-block background, same story as `code` above. The selector
++   list must stay in step with the layout half near the top of the file: a body
++   listed there and not here gets the padding and border of a fenced block with
++   none of its background. */
  .claim-body pre,
++.claim-list-items pre,
++.sbody pre,
++.comment-body pre,
  .claim-tree-body {
    padding: 13px 14px;
    border-radius: 7px;
@@ -4477,7 +4618,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    font-size: 12px;
  }
 
-@@ -4280,6 +4473,11 @@
+@@ -4280,6 +4505,11 @@
 
  .claim-links-summary::marker { content: ""; }
  .claim-links-summary::-webkit-details-marker { display: none; }
@@ -4489,7 +4630,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  .claim-links-summary:hover { background: rgba(125, 137, 154, .07); color: var(--ink); }
 
  .claim-footer__identity { display: flex; gap: 10px; align-items: center; min-width: 0; }
-@@ -4385,7 +4583,7 @@
+@@ -4385,7 +4615,7 @@
  .track-head {
    margin: 0 0 24px;
    padding: 38px 0 23px;
@@ -4498,7 +4639,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .track-title {
-@@ -4421,7 +4619,7 @@
+@@ -4421,7 +4651,7 @@
    margin: 0 0 24px;
    padding: 0 0 15px;
    border-top: 0;
@@ -4507,7 +4648,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    color: var(--ink);
    font-size: 20px;
    letter-spacing: -.02em;
-@@ -4473,7 +4671,7 @@
+@@ -4473,7 +4703,7 @@
  .comments-rail {
    border-left-color: var(--border);
    background: var(--card-bg);
@@ -4516,7 +4657,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
  }
 
  .comments-rail-head {
-@@ -4483,7 +4681,6 @@
+@@ -4483,7 +4713,6 @@
 
  .status-strip {
    border-top-color: var(--border);
@@ -4524,7 +4665,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    color: var(--muted);
  }
 
-@@ -4803,13 +5000,23 @@
+@@ -4803,13 +5032,23 @@
    }
 
    .facet-toc__disclosure,
@@ -4550,7 +4691,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      border: 0;
      border-radius: 6px;
      background: var(--card-bg);
-@@ -4832,11 +5039,13 @@
+@@ -4832,11 +5071,13 @@
      border-radius: 6px;
      background: var(--card-bg);
      color: var(--ink);
@@ -4565,7 +4706,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
    .facet-toc {
      position: fixed;
-@@ -4848,17 +5057,27 @@
+@@ -4848,17 +5089,27 @@
      border: 1px solid var(--border);
      border-radius: 7px;
      background: var(--card-bg);
@@ -4596,7 +4737,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      border: 0;
      border-radius: 7px;
      background: var(--card-bg);
-@@ -4936,11 +5155,99 @@
+@@ -4936,11 +5187,99 @@
    .build-order-module .claim-rests-on { grid-template-columns: 1fr; gap: 3px; }
  }
 
@@ -4696,7 +4837,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    .comments-rail,
    .status-strip { display: none !important; }
    .content-area { padding: 0; }
-@@ -4963,6 +5270,9 @@
+@@ -4963,6 +5302,9 @@
            <div class="logo"><span></span></div>
            <div><h1>dossierx viewer</h1></div>
          </div>
@@ -4706,7 +4847,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
        </div>
        <nav id="nav">
          
-@@ -5049,8 +5359,12 @@
+@@ -5049,8 +5391,12 @@
    
    <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
      <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
@@ -4721,7 +4862,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      </button>
      <div id="statusStripBody" class="status-strip-body" hidden></div>
    </section>
-@@ -5226,6 +5540,12 @@
+@@ -5226,6 +5572,12 @@
            });
          }
 
@@ -4734,7 +4875,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
          
          
          
-@@ -6063,7 +6383,11 @@
+@@ -6063,7 +6415,11 @@
        var stripEl = document.getElementById('statusStrip');
        var stripToggle = document.getElementById('statusStripToggle');
        var stripSummary = document.getElementById('statusStripSummary');
@@ -4746,7 +4887,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
        
        
        
-@@ -6077,6 +6401,55 @@
+@@ -6077,6 +6433,55 @@
          return n + ' ' + word + (n === 1 ? '' : 's');
        }
 
@@ -4802,7 +4943,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
        
        
        
-@@ -6105,9 +6478,11 @@
+@@ -6105,9 +6510,11 @@
        
        
        function renderStatusStrip(data) {
@@ -4817,7 +4958,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
 
          if (!ledger.length && !lintErrors.length) {
            stripEl.hidden = true;
-@@ -6119,31 +6494,36 @@
+@@ -6119,31 +6526,36 @@
          stripBody.textContent = '';
          if (ledger.length) {
            stripBody.appendChild(findingGroup(
@@ -4865,7 +5006,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
          stripEl.hidden = false;
        }
 
-@@ -6151,6 +6531,7 @@
+@@ -6151,6 +6563,7 @@
          stripExpanded = !!expanded;
          if (stripBody) { stripBody.hidden = !stripExpanded; }
          if (stripToggle) { stripToggle.setAttribute('aria-expanded', String(stripExpanded)); }
@@ -4873,7 +5014,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
          if (stripEl) { stripEl.classList.toggle('status-strip--open', stripExpanded); }
        }
 
-@@ -6706,10 +7087,44 @@
+@@ -6706,10 +7119,44 @@
      });
    }
 
@@ -4920,7 +5061,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    }
 
    function enhanceFooters() {
-@@ -6786,6 +7201,7 @@
+@@ -6786,6 +7233,7 @@
      toggle.setAttribute('aria-expanded', String(expanded));
      var title = toggle.dataset.claimTitle || 'claim';
      toggle.setAttribute('aria-label', (expanded ? 'Collapse ' : 'Expand ') + title);
@@ -4928,7 +5069,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    }
 
    function enhanceClaimDisclosures() {
-@@ -6875,6 +7291,45 @@
+@@ -6875,6 +7323,45 @@
      return { module: module, view: group, label: tab ? tab.textContent.replace(/🔒/g, '').trim() : 'Claims' };
    }
 
@@ -4974,7 +5115,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
    function updateTocActive() {
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
-@@ -6897,11 +7352,18 @@
+@@ -6897,11 +7384,18 @@
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -4994,7 +5135,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
        document.body.appendChild(toc);
      }
      var active = activeFacet();
-@@ -6910,6 +7372,7 @@
+@@ -6910,6 +7404,7 @@
      var claims = visibleClaims(active.view);
      toc.querySelector('.facet-toc__name').textContent = active.label;
      toc.querySelector('.facet-toc__total').textContent = claims.length + (claims.length === 1 ? ' claim' : ' claims');
@@ -5002,7 +5143,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      var list = toc.querySelector('.facet-toc__list');
      var select = toc.querySelector('.facet-toc__select');
      list.replaceChildren();
-@@ -7079,11 +7542,16 @@
+@@ -7079,11 +7574,16 @@
      running = true;
      enhanceTimestamp();
      bindResizer();
@@ -5019,7 +5160,7 @@ testdata/fixture-portability/viewer/index.html  (+756 -288)
      enhanceFacetNavigation();
      syncNavigation();
      renderToc();
-@@ -7110,11 +7578,11 @@
+@@ -7110,11 +7610,11 @@
      // in the same event cycle whenever it contained the active tab.
      var navigationChanged = !!event.target.closest('.sec-tab');
      setTimeout(function () {
