@@ -244,10 +244,19 @@ func validateThemeTokens(m map[string]string, lines map[string]int, mode, prefix
 			}
 		}
 	}
+	// Sorted, not map order: two runs of the same engine over the same
+	// config must produce the same message. A config with several unknown
+	// tokens would otherwise report a different one each time, which makes
+	// the error impossible to pin in a test and confusing to fix by hand.
+	unknown := make([]string, 0, len(m))
 	for key := range m {
-		if themeTokenAllowed[key] {
-			continue
+		if !themeTokenAllowed[key] {
+			unknown = append(unknown, key)
 		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		key := unknown[0]
 		// `light: { fonts: [...] }` and friends: the structural words are
 		// reserved at the top of the theme block only, so under a mode
 		// they are neither structure nor a token. Saying so beats
