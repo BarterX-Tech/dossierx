@@ -66,6 +66,28 @@
   --font-sans: "Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace;
   --radius: 6px;
+
+  /* Added for the custom-theme work. Each value is the literal that was
+     hard-coded at its consumer before this commit, so an unset token renders
+     exactly as it did before. Order matches ThemeTokenAllowlist. --shadow,
+     --shadow-strong and --scrim are the three that differ per mode and are
+     re-pointed in the screen-dark query below; the other eleven are the same
+     in both modes on purpose (a neutral rgba overlay tint tracks whatever it
+     sits on, and the mockup card is deliberately mode-invariant). */
+  --code-inline-bg: rgba(127, 127, 127, .12);
+  --code-bg: rgba(127, 127, 127, .10);
+  --table-head-bg: rgba(127, 127, 127, .10);
+  --image-bg: rgba(127, 127, 127, .06);
+  --hover-bg: rgba(125, 137, 154, .08);
+  --border-strong: #aab5c7;
+  --shadow: rgba(0, 0, 0, .08);
+  --shadow-strong: rgba(0, 0, 0, .14);
+  --shadow-cast: rgba(9, 20, 38, .12);
+  --scrim: rgba(0, 0, 0, .22);
+  --selection-bg: rgba(40, 112, 82, .20);
+  --status-draft: #976600;
+  --status-draft-bg: rgba(151, 102, 0, .12);
+  --mockup-bg: #fff;
 }
 
 @media screen and (prefers-color-scheme: dark) {
@@ -82,6 +104,14 @@
     --warn: #ff8b94;
     --warn-bg: rgba(255, 139, 148, .10);
     --dxg-facet-other: #77a9e8;
+
+    /* The three theme tokens that genuinely differ per mode: a shadow needs
+       more alpha to read on a dark surface, and the modal dim needs more to
+       separate the sheet from what is behind it. The other eleven new tokens
+       are mode-invariant and are declared once, above. */
+    --shadow: rgba(0, 0, 0, .28);
+    --shadow-strong: rgba(0, 0, 0, .34);
+    --scrim: rgba(0, 0, 0, .42);
   }
 }
 
@@ -152,7 +182,7 @@ body {
 code {
   font-family: var(--font-mono);
   font-size: 12px;
-  background: rgba(127, 127, 127, .12);
+  background: var(--code-inline-bg, rgba(127, 127, 127, .12));
   padding: 1px 5px;
   border-radius: 5px;
 }
@@ -173,7 +203,7 @@ code {
   overflow-x: auto;
   margin: 0.5rem 0;
   padding: 0.6rem 0.75rem;
-  background: rgba(127, 127, 127, .10);
+  background: var(--code-bg, rgba(127, 127, 127, .10));
   border: 1px solid var(--border);
   border-radius: var(--radius);
 }
@@ -424,7 +454,7 @@ code {
 .claim-list-items .md-table th,
 .sbody .md-table th,
 .comment-body .md-table th {
-  background: rgba(127, 127, 127, .10);
+  background: var(--table-head-bg, rgba(127, 127, 127, .10));
   font-family: var(--font-sans);
   font-size: inherit;
   font-weight: 600;
@@ -488,7 +518,7 @@ code {
   margin: 0.6rem 0;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: rgba(127, 127, 127, .06);
+  background: var(--image-bg, rgba(127, 127, 127, .06));
 }
 
 /* An image is the last thing in a list item often enough to be worth the
@@ -1083,10 +1113,9 @@ th {
    it is deleted in v0.4.1 along with that <li>, since the slot is a <span>
    and never carried a marker. Every color below is one of the inverting
    theme tokens (declared in this file's single :root and re-pointed in the
-   prefers-color-scheme: dark query beside it), so the whole surface tracks
-   the OS theme with no separate dark rule — the one genuinely per-mode value, the
-   panel's drop shadow, gets its light value in the media query at the end of
-   this block. claim-card--commented is a distinct accent marker,
+   screen-dark query beside it), so the whole surface tracks the OS theme with
+   no separate dark rule — including the one genuinely per-mode value, the
+   panel's drop shadow, which is --shadow. claim-card--commented is a distinct accent marker,
    deliberately NOT the --warn boundary family. */
 .comment-chip {
   display: inline-flex;
@@ -1176,7 +1205,7 @@ th {
   border: 1px solid var(--border);
   border-radius: var(--radius, 12px);
   background: var(--paper);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .28);
+  box-shadow: 0 1px 2px var(--shadow, rgba(0, 0, 0, .28));
 }
 
 .comments-panel[hidden] {
@@ -1260,19 +1289,6 @@ th {
   }
 }
 
-/* The panel shadow is the one genuinely per-mode value here: the
-   .comments-panel rule above carries the dark value and this query softens it
-   for a light OS. The palette itself is light-first (see this file's single
-   :root); this declaration is the exception, not the convention.
-   The query carries `, print` for the same reason the palette's dark query
-   carries `screen and`: paper gets the light value, whatever the OS is set
-   to. */
-@media (prefers-color-scheme: light), print {
-  .comments-panel {
-    box-shadow: 0 1px 2px rgba(0, 0, 0, .08);
-  }
-}
-
 /* ---- interactive comment UI (Phase 5, serve + file://) -----------------
    The 💬 chip opens a shared overlay panel: a non-modal right rail on desktop
    (role=complementary), a modal bottom sheet on mobile. Its backdrop
@@ -1281,11 +1297,12 @@ th {
    query below) — above it the desktop rail shows neither. They stay deliberately
    distinct from the sidebar's #navOverlay / body.nav-open — opening one overlay
    closes the other. Colours are the inverting theme tokens from this file's
-   single :root; the per-mode values that remain (the backdrop dim and the
-   toast shadow) get their light values in the media query at the end of this
-   block. The rail's own shadow is deliberately NOT per-mode: the
-   `.comments-rail` rule in the System Record layer further down sets one
-   shadow for both modes and wins on source order. */
+   single :root, including the per-mode ones: the backdrop dim is --scrim and
+   the toast shadow is --shadow-strong, both re-pointed in the screen-dark
+   query, so this block needs no light media query of its own. The rail's own
+   shadow is deliberately NOT per-mode: the `.comments-rail` rule in the
+   System Record layer further down sets --shadow-cast for both modes and wins
+   on source order. */
 
 /* body.comments-open drives the scroll-lock only at the mobile breakpoint (see
    the media query below); it stays a plain open-state marker on desktop. Never
@@ -1299,7 +1316,7 @@ th {
   width: 100%;
   height: 100%;
   border: 0;
-  background: rgba(0, 0, 0, .42);
+  background: var(--scrim, rgba(0, 0, 0, .42));
   cursor: pointer;
 }
 
@@ -1503,7 +1520,7 @@ th {
   border: 1px solid var(--warn);
   border-radius: 10px;
   font: 13px var(--font-sans);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .34);
+  box-shadow: 0 4px 18px var(--shadow-strong, rgba(0, 0, 0, .34));
 }
 
 .comments-toast[hidden] {
@@ -1760,20 +1777,6 @@ th {
   }
 }
 
-/* Per-mode values: a lighter backdrop dim and a softer toast shadow on a
-   light OS. The rail is absent on purpose — its shadow is set once, for both
-   modes, by the later `.comments-rail` rule in the System Record layer.
-   `, print` for the same reason as above: paper gets the light values. */
-@media (prefers-color-scheme: light), print {
-  .comments-overlay {
-    background: rgba(0, 0, 0, .22);
-  }
-
-  .comments-toast {
-    box-shadow: 0 4px 18px rgba(0, 0, 0, .14);
-  }
-}
-
 /* The claim head line. v0.4.1 gives it two children instead of loose text:
    a <span class="label"> carrying the label plus its status pill, and the
    comment chip's slot. Flex with a baseline cross-axis keeps the pill and
@@ -1917,7 +1920,7 @@ th {
   margin-top: 8px;
   border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--mockup-bg, #fff);
   padding: 8px;
 }
 
@@ -2447,6 +2450,11 @@ body.shell-body {
     width: 100%;
     height: 100%;
     border: 0;
+    /* Deliberately NOT --scrim. The sidebar backdrop is mode-invariant by
+       design: the sheet it dims is the same weight in both modes, and a
+       project that lightens --scrim for its comment sheet should not thereby
+       lighten this one. It is not a theme token and has no consumer in the
+       allowlist. */
     background: rgba(0, 0, 0, .42);
     opacity: 0;
     pointer-events: none;
@@ -2514,7 +2522,7 @@ body.shell-body {
   text-rendering: optimizeLegibility;
 }
 
-::selection { background: rgba(40, 112, 82, .20); }
+::selection { background: var(--selection-bg, rgba(40, 112, 82, .20)); }
 
 :where(button, select, summary, a):focus-visible {
   outline: 2px solid var(--accent);
@@ -2718,7 +2726,7 @@ body.shell-body {
 .system-nav-group__toggle::marker { content: ""; }
 .system-nav-group__toggle::-webkit-details-marker { display: none; }
 
-.system-nav-group__toggle:hover { background: rgba(125, 137, 154, .08); }
+.system-nav-group__toggle:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); }
 
 .system-nav-group__count {
   min-width: 25px;
@@ -2769,7 +2777,7 @@ body.shell-body {
 
 #dxgOpen:hover,
 .sec-tab:hover {
-  background: rgba(125, 137, 154, .08);
+  background: var(--hover-bg, rgba(125, 137, 154, .08));
   color: var(--ink);
 }
 
@@ -2830,7 +2838,7 @@ body.shell-body {
   align-items: start;
   margin: 0 0 24px;
   padding: 38px 0 24px;
-  border-bottom: 1px solid #aab5c7;
+  border-bottom: 1px solid var(--border-strong, #aab5c7);
 }
 
 .system-record-head h2 {
@@ -3019,7 +3027,7 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 
 .facet-toc__item > span { color: var(--faint); font: 9px/1.45 var(--font-mono); }
 .facet-toc__item > strong { font-size: 11px; font-weight: 520; line-height: 1.38; }
-.facet-toc__item:hover { background: rgba(125, 137, 154, .08); color: var(--ink); }
+.facet-toc__item:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); color: var(--ink); }
 .facet-toc__item.on { background: var(--accent-bg); box-shadow: inset 2px 0 0 var(--accent); color: var(--ink); }
 .facet-toc__item.on > span { color: var(--accent); }
 
@@ -3172,7 +3180,7 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
   transform: translateY(-50%);
 }
 
-.claim-collapse-toggle:hover { background: rgba(125, 137, 154, .08); }
+.claim-collapse-toggle:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); }
 
 .claim-collapse-toggle > .label {
   display: flex;
@@ -3225,8 +3233,8 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 
 .pill.pv,
 .status-draft {
-  background: rgba(151, 102, 0, .12);
-  color: #976600;
+  background: var(--status-draft-bg, rgba(151, 102, 0, .12));
+  color: var(--status-draft, #976600);
 }
 
 .pill.pw,
@@ -3286,7 +3294,9 @@ code {
 
 .claim-links-summary::marker { content: ""; }
 .claim-links-summary::-webkit-details-marker { display: none; }
-.claim-links-summary:hover { background: rgba(125, 137, 154, .07); color: var(--ink); }
+/* .07, not the token's .08: this row is larger than the other hover targets
+   and takes a fainter wash. The fallback keeps its own literal deliberately. */
+.claim-links-summary:hover { background: var(--hover-bg, rgba(125, 137, 154, .07)); color: var(--ink); }
 
 .claim-footer__identity { display: flex; gap: 10px; align-items: center; min-width: 0; }
 
@@ -3391,7 +3401,7 @@ code {
 .track-head {
   margin: 0 0 24px;
   padding: 38px 0 23px;
-  border-bottom: 1px solid #aab5c7;
+  border-bottom: 1px solid var(--border-strong, #aab5c7);
 }
 
 .track-title {
@@ -3427,7 +3437,7 @@ code {
   margin: 0 0 24px;
   padding: 0 0 15px;
   border-top: 0;
-  border-bottom: 1px solid #aab5c7;
+  border-bottom: 1px solid var(--border-strong, #aab5c7);
   color: var(--ink);
   font-size: 20px;
   letter-spacing: -.02em;
@@ -3479,7 +3489,7 @@ code {
 .comments-rail {
   border-left-color: var(--border);
   background: var(--card-bg);
-  box-shadow: -14px 0 34px rgba(9, 20, 38, .12);
+  box-shadow: -14px 0 34px var(--shadow-cast, rgba(9, 20, 38, .12));
 }
 
 .comments-rail-head {
@@ -3847,7 +3857,7 @@ code {
     border-radius: 6px;
     background: var(--card-bg);
     color: var(--ink);
-    box-shadow: 0 7px 18px rgba(9, 20, 38, .12);
+    box-shadow: 0 7px 18px var(--shadow-cast, rgba(9, 20, 38, .12));
   }
 
   .sidebar { width: min(310px, calc(100vw - 42px)); min-width: 0; max-width: none; }
@@ -3865,7 +3875,7 @@ code {
     border: 1px solid var(--border);
     border-radius: 7px;
     background: var(--card-bg);
-    box-shadow: 0 7px 18px rgba(9, 20, 38, .12);
+    box-shadow: 0 7px 18px var(--shadow-cast, rgba(9, 20, 38, .12));
   }
 
   .facet-toc__disclosure,
