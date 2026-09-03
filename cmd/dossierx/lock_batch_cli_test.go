@@ -8,6 +8,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
@@ -150,16 +151,14 @@ func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T
 }
 
 // ---------------------------------------------------------------------
-// a requested claim resting on a draft OUTSIDE the requested set still blocks
+// a requested claim resting on a readable draft outside the requested set can
+// be approved locally, with its dependency condition retained for readiness.
 // ---------------------------------------------------------------------
 
 // batchOutsideDraftDependencyFixture: "dependent" rests_on "outsider", and
 // only "dependent" (plus an unrelated "bystander") is requested. "outsider"
-// is draft and stays draft — it is never part of the batch. The scoping rule
-// must still refuse: "dependent" flipping to locked while resting on a still-
-// draft "outsider" is precisely the state rest-on-locked exists to prevent,
-// and it is a finding whose ClaimID ("dependent") IS in the requested set, so
-// it is not scoped away.
+// stays draft and is never part of the batch. Policy v1 admits that readable
+// draft edge locally but carries it as a dependency-readiness condition.
 func batchOutsideDraftDependencyFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
@@ -190,18 +189,42 @@ func TestBatchLockLocallyApprovesWhenRequestedClaimRestsOnDraftOutsideTheBatch(t
 		t.Fatalf("local approval must disclose the draft dependency condition, got %+v", data.Evaluation)
 	}
 
-	// NOTHING WAS WRITTEN, including "bystander", which has no gate of its own.
-	for _, id := range []string{"widget.contract.dependent", "widget.contract.bystander", "widget.contract.outsider"} {
+	for id, want := range map[string]string{
+		"widget.contract.dependent": "locked",
+		"widget.contract.bystander": "locked",
+		"widget.contract.outsider":  "draft",
+	} {
 		showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 		if err != nil {
 			t.Fatalf("claim show %s: %v", id, err)
 		}
 		var show struct {
-			Status string `json:"status"`
+			Status    string `json:"status"`
+			Readiness struct {
+				DependencyReady      bool `json:"dependency_ready"`
+				DependencyConditions []struct {
+					DependencyID string `json:"dependency_id"`
+					Kind         string `json:"kind"`
+				} `json:"dependency_conditions"`
+			} `json:"readiness"`
 		}
 		envData(t, showEnv, &show)
-		if show.Status != "draft" {
-			t.Fatalf("%s: expected status draft (refused batch wrote nothing), got %q", id, show.Status)
+		if show.Status != want {
+			t.Fatalf("%s: status = %q, want %q", id, show.Status, want)
+		}
+		if id == "widget.contract.dependent" {
+			if show.Readiness.DependencyReady {
+				t.Fatalf("dependent must not be dependency-ready while outsider remains draft: %+v", show.Readiness)
+			}
+			conditioned := false
+			for _, condition := range show.Readiness.DependencyConditions {
+				if condition.DependencyID == "widget.contract.outsider" && condition.Kind == "dependency_unapproved" {
+					conditioned = true
+				}
+			}
+			if !conditioned {
+				t.Fatalf("dependent readiness must name the readable draft outsider: %+v", show.Readiness)
+			}
 		}
 	}
 }
@@ -229,18 +252,32 @@ func TestSingleIDLockStillProducesLockDataNotBatchShape(t *testing.T) {
 	}
 }
 
-// TestPolicyLockDryRunPreviewsMultipleIDs pins --dry-run's documented
-// single-claim scope: it previews one claim's gates and does not attempt to
-// approximate a batch preview.
+// TestPolicyLockDryRunPreviewsMultipleIDs pins the policy-v1 set preview. It
+// reports every requested member and mints a token bound to this exact request,
+// while leaving the fixture untouched.
 func TestPolicyLockDryRunPreviewsMultipleIDs(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
 	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.clean", "widget.contract.flagged", "--dry-run")
-	if err == nil || env.OK {
-		t.Fatalf("--dry-run with more than one id must produce the shared set preview, got %+v", env)
+	if err != nil || !env.OK {
+		t.Fatalf("--dry-run with more than one id must produce the shared set preview, got %+v (%v)", env, err)
 	}
-	if env.Error == nil || env.Error.Code != cliout.CodeBadRequest {
-		t.Fatalf("expected %q, got %+v", cliout.CodeBadRequest, env.Error)
+	var data policyLockPreviewData
+	envData(t, env, &data)
+	if !strings.HasPrefix(data.Snapshot, "v2:") {
+		t.Fatalf("group preview must issue a v2 request-bound proposal, got %q", data.Snapshot)
+	}
+	if len(data.Evaluation.Verdicts) != 2 {
+		t.Fatalf("group preview must return one verdict per requested id, got %+v", data.Evaluation)
+	}
+	flagged := false
+	for _, verdict := range data.Evaluation.Verdicts {
+		if verdict.ClaimID == "widget.contract.flagged" && len(verdict.Refusals) > 0 {
+			flagged = true
+		}
+	}
+	if !flagged {
+		t.Fatalf("group preview must expose the flagged member refusal, got %+v", data.Evaluation)
 	}
 }

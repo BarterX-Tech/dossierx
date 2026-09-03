@@ -135,13 +135,14 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock preview: %w", err)
 	}
 	evaluation := lock.EvaluateSetWithSemanticConflicts(claims, ids, cfg, store, conflicts)
+	lintPrecondition := policyLintPrecondition(evaluation)
 	data := policyLockPreviewData{
 		Would:      "lock " + strings.Join(evaluation.RequestedIDs, ", "),
 		Blocked:    !evaluation.Allowed() || strings.TrimSpace(reason) == "",
 		Snapshot:   policySnapshot(claims, evaluation.RequestedIDs),
 		Evaluation: evaluation,
 		From:       "draft", To: "locked",
-		Preconditions: []cliout.Precondition{{Name: "claim_is_draft", OK: evaluation.Allowed()}, {Name: "lint_clean", OK: evaluation.Allowed()}, {Name: "no_open_comment_threads", OK: evaluation.Allowed()}},
+		Preconditions: []cliout.Precondition{{Name: "claim_is_draft", OK: evaluation.Allowed()}, lintPrecondition, {Name: "no_open_comment_threads", OK: evaluation.Allowed()}},
 		SideEffects:   []string{"write requested claim approvals and lock ledger records"},
 	}
 	reviewed, err := reviewedPolicyClaims(claims, evaluation.RequestedIDs)
@@ -158,6 +159,28 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 			fmt.Fprintf(cmd.OutOrStdout(), "  %s local=%t conditions=%d refusals=%v\n", verdict.ClaimID, verdict.LocalAdmissible, len(verdict.Conditions), verdict.Refusals)
 		}
 	}}, nil
+}
+
+// policyLintPrecondition projects only lint findings that actually affect the
+// requested set. It must not turn missing dependencies or open comment
+// threads into fake lint detail: those gates have their own refusal data.
+func policyLintPrecondition(evaluation lock.SetEvaluation) cliout.Precondition {
+	details := []string{}
+	seen := map[string]bool{}
+	for _, verdict := range evaluation.Verdicts {
+		for _, finding := range verdict.LintFindings {
+			detail := fmt.Sprintf("%s: %s: %s", finding.LintName, finding.ClaimID, finding.Message)
+			if !seen[detail] {
+				seen[detail] = true
+				details = append(details, detail)
+			}
+		}
+	}
+	sort.Strings(details)
+	if len(details) == 0 {
+		return cliout.Precondition{Name: "lint_clean", OK: true}
+	}
+	return cliout.Precondition{Name: "lint_clean", OK: false, Detail: strings.Join(details, "; ")}
 }
 
 // runPolicySetLock is the sole local-approval write path for both a singleton
@@ -372,6 +395,14 @@ func policyRefusalError(evaluation lock.SetEvaluation) error {
 					details["doctrine_facet"] = parts[1]
 					details["dependency_id"] = parts[2]
 					return cliout.Errorf(cliout.CodeLintFailed, "lock: claim %q requires locked %s doctrine dependency %q", verdict.ClaimID, parts[1], parts[2]).WithDetails(details)
+				}
+			case strings.HasPrefix(refusal, "retired_dependency:"), strings.HasPrefix(refusal, "unreadable_dependency:"):
+				parts := strings.SplitN(refusal, ":", 2)
+				if len(parts) == 2 {
+					state := strings.TrimSuffix(parts[0], "_dependency")
+					details["dependency_id"] = parts[1]
+					details["dependency_state"] = state
+					return cliout.Errorf(cliout.CodeLintFailed, "lock: claim %q requires a readable active dependency %q (%s)", verdict.ClaimID, parts[1], state).WithDetails(details)
 				}
 			}
 		}

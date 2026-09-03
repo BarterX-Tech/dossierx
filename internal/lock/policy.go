@@ -173,6 +173,23 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 				verdict.Refusals = append(verdict.Refusals, "dependency_cycle:"+depID)
 				continue
 			}
+			// Local approval relaxes a required edge only when its input is
+			// readable. A retired claim is deliberately no longer a usable
+			// premise, and an unrecognised lifecycle value cannot be treated as
+			// readable merely because it loaded as YAML. These are required-edge
+			// refusals; unrelated lifecycle lint stays scoped to its own claim.
+			switch strings.ToLower(strings.TrimSpace(string(dep.Status))) {
+			case "retired":
+				verdict.LocalAdmissible = false
+				verdict.Refusals = append(verdict.Refusals, "retired_dependency:"+depID)
+				continue
+			case "", string(model.StatusDraft), string(model.StatusLocked):
+				// A normal draft is an admissible local-approval condition below.
+			default:
+				verdict.LocalAdmissible = false
+				verdict.Refusals = append(verdict.Refusals, "unreadable_dependency:"+depID)
+				continue
+			}
 			if cfg != nil && cfg.HubGatingEnabled() && dep.Facet == cfg.DoctrineFacet && !candidateLocked(depID, candidate) {
 				verdict.LocalAdmissible = false
 				verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+cfg.DoctrineFacet+":"+depID)

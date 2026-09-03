@@ -50,7 +50,7 @@ func readLedger(t *testing.T, storeFile string) map[string]lock.LedgerRecord {
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		t.Fatalf("parse store: %v\n%s", err, raw)
 	}
-	if onDisk.Version != 2 {
+	if onDisk.Version != 3 {
 		t.Fatalf("store version = %d, want the lock-ledger schema version 3:\n%s", onDisk.Version, raw)
 	}
 	return onDisk.Ledger

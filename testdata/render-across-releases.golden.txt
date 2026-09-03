@@ -110,8 +110,8 @@ testdata/fixture-basic/.catalog.json  (+48 -0)
      }
    ],
 
-testdata/fixture-basic/viewer/index.html  (+72 -1)
-    size            13212 lines / 461835 bytes -> 13283 lines / 465499 bytes
+testdata/fixture-basic/viewer/index.html  (+82 -2)
+    size            13212 lines / 461835 bytes -> 13292 lines / 465681 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -149,7 +149,7 @@ testdata/fixture-basic/viewer/index.html  (+72 -1)
 
    <script>
      (function () {
-@@ -6518,9 +6539,59 @@
+@@ -6518,9 +6539,68 @@
        
        
        
@@ -177,7 +177,16 @@ testdata/fixture-basic/viewer/index.html  (+72 -1)
 +            var path = (cause.path || []).join(' → ');
 +            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
 +          });
-+          card.insertBefore(box, card.querySelector('.claim-links') || null);
++          var links = card.querySelector('.claim-links');
++          
++          
++          
++          
++          if (links && links.parentNode) {
++            links.parentNode.insertBefore(box, links);
++          } else {
++            card.appendChild(box);
++          }
 +        });
 +      }
 +
@@ -209,6 +218,15 @@ testdata/fixture-basic/viewer/index.html  (+72 -1)
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
+@@ -6585,7 +6665,7 @@
+         if (!mounted) { return; }
+         apiGet('/api/status').then(function (data) {
+           renderStatusStrip(data);
+-        }).catch(function () {   });
++        }, function () {   });
+       }
+
+       if (stripToggle) {
 
 testdata/fixture-graph-demo/.catalog.json  (+1076 -0)
     size            1106 lines / 28795 bytes -> 2182 lines / 65184 bytes
@@ -1695,8 +1713,8 @@ testdata/fixture-graph-demo/.catalog.json  (+1076 -0)
      }
    ],
 
-testdata/fixture-graph-demo/viewer/index.html  (+72 -1)
-    size            13952 lines / 588865 bytes -> 14023 lines / 616103 bytes
+testdata/fixture-graph-demo/viewer/index.html  (+82 -2)
+    size            13952 lines / 588865 bytes -> 14032 lines / 616285 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -1734,7 +1752,7 @@ testdata/fixture-graph-demo/viewer/index.html  (+72 -1)
 
    <script>
      (function () {
-@@ -7258,9 +7279,59 @@
+@@ -7258,9 +7279,68 @@
        
        
        
@@ -1762,7 +1780,16 @@ testdata/fixture-graph-demo/viewer/index.html  (+72 -1)
 +            var path = (cause.path || []).join(' → ');
 +            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
 +          });
-+          card.insertBefore(box, card.querySelector('.claim-links') || null);
++          var links = card.querySelector('.claim-links');
++          
++          
++          
++          
++          if (links && links.parentNode) {
++            links.parentNode.insertBefore(box, links);
++          } else {
++            card.appendChild(box);
++          }
 +        });
 +      }
 +
@@ -1794,6 +1821,15 @@ testdata/fixture-graph-demo/viewer/index.html  (+72 -1)
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
+@@ -7325,7 +7405,7 @@
+         if (!mounted) { return; }
+         apiGet('/api/status').then(function (data) {
+           renderStatusStrip(data);
+-        }).catch(function () {   });
++        }, function () {   });
+       }
+
+       if (stripToggle) {
 
 testdata/fixture-portability/.catalog.json  (+83 -0)
     size            68 lines / 1472 bytes -> 151 lines / 4182 bytes
@@ -1902,8 +1938,8 @@ testdata/fixture-portability/.catalog.json  (+83 -0)
      }
    ],
 
-testdata/fixture-portability/viewer/index.html  (+72 -1)
-    size            13203 lines / 463514 bytes -> 13274 lines / 467888 bytes
+testdata/fixture-portability/viewer/index.html  (+82 -2)
+    size            13203 lines / 463514 bytes -> 13283 lines / 468070 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -1941,7 +1977,7 @@ testdata/fixture-portability/viewer/index.html  (+72 -1)
 
    <script>
      (function () {
-@@ -6509,9 +6530,59 @@
+@@ -6509,9 +6530,68 @@
        
        
        
@@ -1969,7 +2005,16 @@ testdata/fixture-portability/viewer/index.html  (+72 -1)
 +            var path = (cause.path || []).join(' → ');
 +            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
 +          });
-+          card.insertBefore(box, card.querySelector('.claim-links') || null);
++          var links = card.querySelector('.claim-links');
++          
++          
++          
++          
++          if (links && links.parentNode) {
++            links.parentNode.insertBefore(box, links);
++          } else {
++            card.appendChild(box);
++          }
 +        });
 +      }
 +
@@ -2001,6 +2046,15 @@ testdata/fixture-portability/viewer/index.html  (+72 -1)
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
+@@ -6576,7 +6656,7 @@
+         if (!mounted) { return; }
+         apiGet('/api/status').then(function (data) {
+           renderStatusStrip(data);
+-        }).catch(function () {   });
++        }, function () {   });
+       }
+
+       if (stripToggle) {
 
 testdata/fixture-theme-flat/.catalog.json  (+219 -3)
     size            220 lines / 5009 bytes -> 436 lines / 11807 bytes
@@ -2297,8 +2351,8 @@ testdata/fixture-theme-flat/.catalog.json  (+219 -3)
      }
    ],
 
-testdata/fixture-theme-flat/viewer/index.html  (+72 -1)
-    size            13440 lines / 490505 bytes -> 13511 lines / 497474 bytes
+testdata/fixture-theme-flat/viewer/index.html  (+82 -2)
+    size            13440 lines / 490505 bytes -> 13520 lines / 497656 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -2336,7 +2390,7 @@ testdata/fixture-theme-flat/viewer/index.html  (+72 -1)
 
    <script>
      (function () {
-@@ -6746,9 +6767,59 @@
+@@ -6746,9 +6767,68 @@
        
        
        
@@ -2364,7 +2418,16 @@ testdata/fixture-theme-flat/viewer/index.html  (+72 -1)
 +            var path = (cause.path || []).join(' → ');
 +            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
 +          });
-+          card.insertBefore(box, card.querySelector('.claim-links') || null);
++          var links = card.querySelector('.claim-links');
++          
++          
++          
++          
++          if (links && links.parentNode) {
++            links.parentNode.insertBefore(box, links);
++          } else {
++            card.appendChild(box);
++          }
 +        });
 +      }
 +
@@ -2396,6 +2459,15 @@ testdata/fixture-theme-flat/viewer/index.html  (+72 -1)
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
+@@ -6813,7 +6893,7 @@
+         if (!mounted) { return; }
+         apiGet('/api/status').then(function (data) {
+           renderStatusStrip(data);
+-        }).catch(function () {   });
++        }, function () {   });
+       }
+
+       if (stripToggle) {
 
 testdata/fixture-theme-preset/.catalog.json  (+48 -0)
     size            49 lines / 1002 bytes -> 97 lines / 2597 bytes
@@ -2462,8 +2534,8 @@ testdata/fixture-theme-preset/.catalog.json  (+48 -0)
      }
    ],
 
-testdata/fixture-theme-preset/viewer/index.html  (+72 -1)
-    size            13214 lines / 465304 bytes -> 13285 lines / 468968 bytes
+testdata/fixture-theme-preset/viewer/index.html  (+82 -2)
+    size            13214 lines / 465304 bytes -> 13294 lines / 469150 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -2501,7 +2573,7 @@ testdata/fixture-theme-preset/viewer/index.html  (+72 -1)
 
    <script>
      (function () {
-@@ -6520,9 +6541,59 @@
+@@ -6520,9 +6541,68 @@
        
        
        
@@ -2529,7 +2601,16 @@ testdata/fixture-theme-preset/viewer/index.html  (+72 -1)
 +            var path = (cause.path || []).join(' → ');
 +            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
 +          });
-+          card.insertBefore(box, card.querySelector('.claim-links') || null);
++          var links = card.querySelector('.claim-links');
++          
++          
++          
++          
++          if (links && links.parentNode) {
++            links.parentNode.insertBefore(box, links);
++          } else {
++            card.appendChild(box);
++          }
 +        });
 +      }
 +
@@ -2561,3 +2642,12 @@ testdata/fixture-theme-preset/viewer/index.html  (+72 -1)
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
+@@ -6587,7 +6667,7 @@
+         if (!mounted) { return; }
+         apiGet('/api/status').then(function (data) {
+           renderStatusStrip(data);
+-        }).catch(function () {   });
++        }, function () {   });
+       }
+
+       if (stripToggle) {

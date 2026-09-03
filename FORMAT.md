@@ -21,8 +21,9 @@ each local verdict, dependency conditions and an opaque request-bound `snapshot`
 the matching snapshot as mandatory `--proposal` on the write refuses if its request or reviewed dependency
 content changed in between. A readable draft dependency can leave a claim
 locally approved with a visible `dependency_unapproved` condition. That claim
-is not dependency-ready. Missing dependencies, cycles, open review threads,
-lint/integrity gates and unresolved doctrine gating still refuse approval.
+is not dependency-ready. Missing, retired, unreadable, or cyclic required
+dependencies, open review threads, lint/integrity gates and unresolved doctrine
+gating still refuse approval.
 
 Each policy-v1 approval stores a receipt per reviewed dependency: its id,
 comparable content hash and decoded claim content. The receipt makes the

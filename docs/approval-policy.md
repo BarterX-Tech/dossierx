@@ -10,7 +10,9 @@ A claim may be locally approved while its required dependency is still a
 readable draft. That is an honest conditional approval. The claim remains
 unready for integrated use until the dependency is approved and its chain is
 current. A missing, unreadable, retired, cyclic, or historically unknown
-required dependency keeps the chain unready. A content change in a dependency
+required dependency keeps the chain unready. The first four also refuse a new
+local approval: only a readable draft can receive a conditional approval. A
+content change in a dependency
 creates review on the direct consumer and an inherited review cause on every
 downstream consumer, with the full path shown on that consumer.
 
