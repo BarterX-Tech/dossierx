@@ -56,10 +56,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   dependency list per phase. A viewer for a project with a locked build order now ships the
   vendored mermaid renderer (`mermaid.min.js` 11.17.2, 3,572,661 bytes): measured on the
   regenerated fixture viewers (`wc -c` on `testdata/<fixture>/build/viewer/index.html`, before ->
-  after), `fixture-theme-flat`, the one fixture with a locked order, grows from 486,912 to
-  4,081,266 bytes (+3,594,354), and the four fixtures with no locked order grow by under 1 KB each
-  (`fixture-basic` 460,171 -> 461,018, `fixture-graph-demo` 587,201 -> 587,996,
-  `fixture-portability` 461,850 -> 462,697, `fixture-theme-preset` 463,640 -> 464,487). A
+  after, against the v0.7.6 baseline), `fixture-theme-flat`, the one fixture with a locked order,
+  grows from 490,505 to 4,084,957 bytes (+3,594,452), and the four fixtures with no locked order
+  grow by under 1 KB each (`fixture-basic` 461,835 -> 462,735, `fixture-graph-demo`
+  588,865 -> 589,713, `fixture-portability` 463,514 -> 464,414, `fixture-theme-preset`
+  465,304 -> 466,204). A
   consuming project that commits its viewer should expect the same ~3.6 MB step the first time it
   locks a build order. The tab's own section and per-module groups carry the ids
   `dossierx-build-order` and `dossierx-build-order-<module>`, outside the space a module's name
@@ -76,16 +77,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   engine's `lock-store.json` from an unrelated repository file of the same name; the flag store
   gains a `version` field (an older store without one still loads).
 - Rendered output across releases (`testdata/render-across-releases.golden.txt`, regenerated
-  against v0.7.4): 148 artifacts compared, 0 removed, 4 added (`testdata/fixture-theme-flat` and
-  `testdata/fixture-theme-preset`, both new since v0.7.4, viewer and catalog each), and 3 viewers
-  rendered differently — `fixture-basic`, `fixture-graph-demo`, `fixture-portability`, each
-  +756/-288 lines. Every hunk in those three is the theme work already pending on this branch:
-  `style.css` restructured into one light-first `:root` with `var(--token, <literal>)` reads,
-  the `@media (prefers-color-scheme: light)` blocks folded away, one screen-scoped dark block and
-  one print block, plus the collapsible-panel script. The build/ layout itself moved no viewer
-  byte; the three are classified "explained" rather than "silent" only because this release adds
-  tracked inputs under each fixture's `build/` (`build/.gitignore`, the digest), and the
-  regenerated fixture files carry that theme delta as well as the move.
+  against v0.7.6): 152 artifacts compared, 0 added, 0 removed, 0 silent, and 5 viewers
+  rendered differently after their own inputs changed — every fixture viewer, because this
+  release adds tracked inputs under each fixture's `build/` (`build/.gitignore`, the digest). The
+  four fixtures with no locked build order (`fixture-basic`, `fixture-graph-demo`,
+  `fixture-portability`, `fixture-theme-preset`) each move by +266/-196 (graph-demo +266/-200)
+  lines, and every hunk is the Build order tab: the `.bo-*` stylesheet block replacing the
+  `.build-order-module` rules, the tab's print rules, the removed `buildOrderToModule` deep-link
+  map and `prepareBuildOrder`, and the `:not(.build-order-section)` guards on the active-section
+  queries. `fixture-theme-flat`, the one fixture with a locked order, is rewritten (490,505 ->
+  4,084,957 bytes) because its viewer now carries the vendored mermaid renderer. The v0.7.6
+  baseline already holds the theme work and the fenced-block seam fix, so neither appears here.
 
 ### Added
 
@@ -101,6 +103,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the one leaf besides the global `--format json|text` that also accepts `--format mermaid`, for
   pasting the diagram into a PR. It never recomputes the sequence; it reads exactly what
   `propose`/`lock` last wrote.
+
+### Removed
+
+- The per-module Build Order sub-tab and its flat per-claim list (`internal/render/components/build_order.html`,
+  the `buildOrderToModule` deep-link map) — replaced by the mermaid **Build order** tab above.
+- `build_order.html` as a `viewer.template_overrides` override point: the tab it used to render
+  is no longer a component partial, so a project's override directory naming it is refused rather
+  than silently ignored.
+- `TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup`, decision C5's shared-markup pin — it
+  existed to hold the removed sub-tab's list markup to the claim-edge-list's shared footer, and
+  goes with the list it was pinning.
+
+## [0.7.6] - 2026-09-02
+
+### Added
 
 - The viewer can now be restyled with a project's own colours and fonts through `viewer.theme`:
   an optional built-in `preset` (`claude` today), an optional theme file (`extends`) a project can
@@ -140,6 +157,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- A faint 1px horizontal seam was drawn between every pair of lines of a multi-line fenced code
+  block in a claim body, in both colour schemes. The reader saw a hairline in `--border` splitting
+  the code block into per-line boxes. The cause: the stylesheet's inline-code pill rule gives every
+  `code` element a `1px solid var(--border)` border, and the `.claim-body pre code` reset cancelled
+  the pill's background, padding and radius but not that border — and a fenced block's `<code>` is
+  a single *inline* box, so it fragments across line boxes and the initial `box-decoration-break:
+  slice` repaints the border's top and bottom edge on every fragment. The reset now includes
+  `border: 0`. A single-line fenced block was unaffected (one fragment, one ring, drawn flush
+  inside the block's own border); a block of *n* lines showed *n*-1 seams.
+- A fenced code block written in a step body, a comment, or a list item is now painted as a code
+  block, the same as one written in a claim body. Those three bodies were never in the
+  fenced-block rule's selector list, so their `<pre>` had no background, no border and no padding
+  at all, and the block reached the reader as a run of inline-code *pills*: measured in a browser,
+  `pre` computed `background rgba(0,0,0,0)`, `border 0`, `padding 0`, while its `<code>` kept the
+  pill's `1px 5px` padding, `--code-inline-bg` background and the sliced border above. They now
+  get `--code-bg`, the `1px solid var(--border)` block border and the `13px 14px` padding a claim
+  body's fenced block has always had, with the pill reset applied inside. This changes pixels for
+  any project that wrote a fence in one of those three places; it is a deliberate consistency fix,
+  not a no-op. `.claim-tree-body` is unchanged — the template writes that `<pre>` directly, with no
+  inner `<code>`.
 - The viewer's `:root` now declares `color-scheme: light dark` instead of only `light`, so a
   reader in OS dark mode gets UA-native dark rendering for the surfaces the stylesheet never drew
   itself. Concretely, in dark mode: native form controls — every `<button>`, `<details>`/
@@ -168,34 +205,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- `internal/render/viewer/template/style.css` now reads its colour, shadow, and shape values
-  through `var(--token, <the previous literal>)` instead of writing the literal directly, which is
-  what makes `viewer.theme` tokens take effect. The emitted default CSS is unchanged for a project
-  with no theme configured; a project that used to reach into `viewer.template_overrides` to
-  restyle a value this list now covers can drop that override in favour of a token. Run
-  `dossierx check` to regenerate an existing viewer, since generated `build/viewer/index.html`
-  output changes shape (a `var()` call in place of a literal) even where it renders identically.
-- Every fixture and cross-release-golden viewer under `testdata/` and `viewer-tests/testdata/` was
-  regenerated against the updated stylesheet, CLI, and skill; the newly added theme fixtures
+- Every colour, shadow, and shape value the generated stylesheet emits is now themeable through a
+  `viewer.theme` token — this is the mechanism that makes the theming feature above take effect. A
+  project with no theme configured sees identical rendered output; a project that reached into
+  `viewer.template_overrides` to restyle a value this list now covers can drop that override in
+  favour of a token. Run `dossierx check` to regenerate an existing viewer regardless: the
+  generated `viewer/index.html` output changes shape (a `var()` call in place of a literal) even
+  where it renders identically.
+- This release silently changes rendered output for some existing projects: three fixtures with
+  byte-identical inputs to a v0.7.5 baseline — `fixture-basic`, `fixture-graph-demo`, and
+  `fixture-portability` — render differently, from the stylesheet's `var()`-token conversion and
+  the print `color-scheme: light` fix above. Two new theme fixtures
   (`testdata/fixture-theme-flat`, `testdata/fixture-theme-preset`) are new to this release's
   cross-release golden and are therefore uncompared this time, not silently passing a comparison
-  that ran. The regenerated golden's SILENT RENDER CHANGES list also carries three entries that
-  predate this feature and are not part of it — the `.status-strip` relocation across
-  `fixture-basic`, `graph-demo`, and `portability`, held over from v0.7.5 — so the maintainer does
-  not need to attribute those three to theming when reading the diff.
+  that ran. The `.status-strip` relocation that showed up here against older baselines is a
+  v0.7.5-era change already folded into that baseline and no longer appears.
 - After upgrading, re-run `dossierx skills export` to refresh `AGENTS.md`/the embedded agent guide
   with the updated `dossierx-theme` skill.
-
-### Removed
-
-- The per-module Build Order sub-tab and its flat per-claim list (`internal/render/components/build_order.html`,
-  the `buildOrderToModule` deep-link map) — replaced by the mermaid **Build order** tab above.
-- `build_order.html` as a `viewer.template_overrides` override point: the tab it used to render
-  is no longer a component partial, so a project's override directory naming it is refused rather
-  than silently ignored.
-- `TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup`, decision C5's shared-markup pin — it
-  existed to hold the removed sub-tab's list markup to the claim-edge-list's shared footer, and
-  goes with the list it was pinning.
 
 ## [0.7.5] - 2026-08-30
 
@@ -2251,7 +2277,9 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.6...HEAD
+[0.7.6]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.5...v0.7.6
+[0.7.5]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.1...v0.7.2

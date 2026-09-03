@@ -41,7 +41,7 @@ Every row below is present in the committed `build/viewer/index.html`.
 | project mockup | `.mockup-diagram`, `.gcp-console` | `panel.decision.mockup` — `layout: mockup`, locked, `raw_html_reviewed: true`, module in `mockup_modules` |
 | system record head | `.system-record-head` | every module's record head |
 | sidebar chrome | `.sidebar`, `.logo`, `.sec-tab`, `.facet-toc`, `.facet-toc__item`, `.facet-toc__select`, `.nav-toggle`, `.nav-overlay`, `.system-nav-group__toggle`, `.system-nav-group__count` | the viewer shell |
-| claim source anchor | `.claim-source` | the `sources`-free claims still emit the anchor the `:target` rule paints |
+| claim source row | `.claim-source`, `.claim-source:target` | `widget.contract.overview` carries one external `sources:` entry, cited from its body as `[1]`; the parity probe deep-links to `#widget.contract.overview-source-1` so the `:target` rule fires |
 | graph pane | `--dxg-*` palette via the graph pane's own palette read | the claims graph, opened by the parity test |
 
 ## What this corpus deliberately does NOT instantiate
@@ -56,8 +56,6 @@ State it here rather than let a silent absence read as a pass.
   `check` returns above the render stage on the first error-severity finding
   and every cycle shape is error severity, so a fixture that must render
   cannot carry one.
-- **No `sources:` block**, so no real footnote reference is rendered; only the
-  `.claim-source` anchor the `:target` rule paints.
 - **No `light:`/`dark:` sub-mapping and no `fonts:`**. That is the point of
   this fixture — it is the flat, mode-less case. `fixture-theme-preset` is
   where a preset, a two-mode override and a data:-inlined font face live.

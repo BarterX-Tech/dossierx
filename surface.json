@@ -521,7 +521,7 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:85ff8db88b3fe4da021088d48b818decc884ed3b20a6bfd556b2ba7cb94c9e4e",
+  "render_fingerprint": "sha256:7038e2d6b606bd083cfe46dd7d7c46e64e17419de126e979a5034af12834a643",
   "behaviour_fingerprint": {
     "cmd/dossierx": "sha256:edf8683bf2caa82a2bbd05cce1e5f7b766384e612a9f154a25662f74585f2b1a",
     "internal/buildorder": "sha256:aa1370761703c373972a7e5b364a70bbe08bb29a2ebae619043882af9c8d778a",
@@ -539,13 +539,13 @@
     "internal/lock": "sha256:1807f5d79a67d858da85d02469d12990caf2330cc6668f019eca4f381a07c38e",
     "internal/model": "sha256:0b1f841bb0e8ae3c6357364c2456f8d50c21cebe201fb3f45264c3bb3e938015",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
-    "internal/render": "sha256:e07f43c4ac976d5194d55b35b1d87923dfd2f64333656cda6758a5a51444a02f",
+    "internal/render": "sha256:73087d6cc8fd485f5a3836aa09d121f59330b78bd8f89b0e7a5d497fe64461d7",
     "internal/render/components": "sha256:93cdee657c714b358050e33ffc97a8b3b7e5d41dc57bdc8951b829d9eadf1720",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
     "internal/serve": "sha256:a7205ad141089fd78c114f1ad09888007399f10086a28412d72db068a6fb9792",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:337c6395557473d3e6bb3a57090cee843569859675aec9729265c57a4b6c27cd"
+    "skills": "sha256:f17421e8d1b2db9aa7f16ef664d5aee8d0b37f54aeb00e15c3f2ec8f66874c94"
   },
   "envelope": {
     "keys": [
@@ -883,23 +883,23 @@
   "version_pins": [
     {
       "file": "README.md",
-      "pin": "dossierx/cmd/dossierx@v0.7.5",
-      "version": "v0.7.5"
+      "pin": "dossierx/cmd/dossierx@v0.7.6",
+      "version": "v0.7.6"
     },
     {
       "file": "README.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.5",
-      "version": "v0.7.5"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.6",
+      "version": "v0.7.6"
     },
     {
       "file": "scripts/ci/dossierx-check.yml",
-      "pin": "dossierx/cmd/dossierx@v0.7.5",
-      "version": "v0.7.5"
+      "pin": "dossierx/cmd/dossierx@v0.7.6",
+      "version": "v0.7.6"
     },
     {
       "file": "skills/dossierx/SKILL.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.5",
-      "version": "v0.7.5"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.6",
+      "version": "v0.7.6"
     }
   ],
   "counts": {

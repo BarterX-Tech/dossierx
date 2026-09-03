@@ -6,7 +6,7 @@ build_role: orientation
 layout: mockup
 section: What the panel looks like
 body: |
-  The markup below is the project-authored diagram the `--mockup-bg` token
+  The markup below is the project-authored diagram the `mockup-bg` token
   paints.
 raw_html: '<div class="mockup-diagram"><div class="gcp-console"><div class="gcp-row"><span class="mockup-badge">DRAFT</span> widget.contract.overview</div></div></div>'
 raw_html_reviewed: true

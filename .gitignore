@@ -30,6 +30,11 @@ coverage.html
 
 # The fixtures' lock stores and build orders need no negation here because no
 # pattern in this file ever ignored one.
+# That negation is what keeps testdata/fixture-theme-flat's digest tracked as
+# well: it carries locked claims and one open comment thread (the thread that
+# makes .claim-review-pending render, which the theme parity suite probes), so
+# without its digest a fresh clone's "dossierx check" exits 1 with
+# integrity_failed, as CI did on PR #60 before the store was tracked.
 
 # Editor / OS cruft
 .vscode/

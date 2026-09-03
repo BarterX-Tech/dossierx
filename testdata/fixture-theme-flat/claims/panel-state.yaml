@@ -14,3 +14,5 @@ governed_by:
   reason: fixture claim, not backed by any real doctrine
 rests_on:
   - panel.decision.mockup
+audit_notes:
+  - 'stub: ProposeDiff has no real LLM backend yet; dependency "panel.decision.mockup" changed but no proposal was generated'

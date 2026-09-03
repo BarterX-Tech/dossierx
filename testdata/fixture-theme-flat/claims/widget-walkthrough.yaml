@@ -6,13 +6,13 @@ layout: steps
 section: How a widget is reviewed
 steps:
   - |
-    Read the diagram, which is the `.sbody .md-img` the `--image-bg` token
+    Read the diagram, which is the `.sbody .md-img` the `image-bg` token
     paints:
 
     ![Review flow](assets/flow.svg)
   - |
     Check the step's own table, which is the `.sbody .md-table th` the
-    `--table-head-bg` token paints:
+    `table-head-bg` token paints:
 
     | stage | who |
     | --- | --- |

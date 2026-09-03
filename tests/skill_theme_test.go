@@ -555,6 +555,7 @@ func TestThemeSkillTokenExtractionCanFail(t *testing.T) {
 func numberWord(t *testing.T, n int) string {
 	t.Helper()
 	words := map[int]string{
+		3: "three", 4: "four", 5: "five", 6: "six", 7: "seven", 8: "eight",
 		20: "twenty", 21: "twenty-one", 22: "twenty-two", 23: "twenty-three",
 		24: "twenty-four", 25: "twenty-five", 26: "twenty-six", 27: "twenty-seven",
 		28: "twenty-eight", 29: "twenty-nine", 30: "thirty", 31: "thirty-one",
@@ -857,5 +858,32 @@ func replayStep1FailureShapes(t *testing.T, step string) {
 				t.Errorf("the binary reports stopped_at %q, which verification step 1 does not mention at all", env.StoppedAt)
 			}
 		})
+	}
+}
+
+// TestThemeSkillCannotDoCountMatchesItsList pins the frontmatter's promise
+// against the section it promises.
+//
+// The frontmatter said "the four things a theme deliberately cannot do" while
+// the section listed four, then a fifth was added and the sentence was not.
+// That number is load-bearing in a way most prose is not: the description is
+// what a harness shows an agent DECIDING whether to load the bundle, so a
+// reader who counts four and finds five has been told the document is stale
+// before they have read a line of it.
+func TestThemeSkillCannotDoCountMatchesItsList(t *testing.T) {
+	src := themeSkillSource(t)
+	section := themeSkillSection(t, src, "## What a theme deliberately cannot do")
+
+	bullets := regexp.MustCompile(`(?m)^- \*\*No `).FindAllString(section, -1)
+	if len(bullets) == 0 {
+		t.Fatal("the \"cannot do\" section lists no bullets; either the section was restructured or this reader is broken, and the count check below would be over nothing")
+	}
+	// The description is a folded YAML scalar, so the sentence is wrapped across
+	// source lines; collapse whitespace before looking for it.
+	flat := strings.Join(strings.Fields(strings.ToLower(src)), " ")
+	want := numberWord(t, len(bullets)) + " things a theme deliberately cannot do"
+	if !strings.Contains(flat, want) {
+		t.Errorf("the section lists %d bullets, so the frontmatter should say %q; it does not — and the description is what a harness shows an agent deciding whether to load this bundle at all",
+			len(bullets), want)
 	}
 }
