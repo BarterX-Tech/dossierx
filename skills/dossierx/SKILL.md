@@ -100,6 +100,20 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 
 ## --dry-run: "blocked" is a successful answer
 
+### Local-approval policy v1
+
+On a new project, `claim lock` evaluates one requested set whether it contains
+one id or several. `--dry-run` returns each local verdict, dependency
+conditions and a `snapshot`; pass the snapshot to the later write as
+`--proposal <snapshot>` so a changed reviewed dependency refuses instead of
+being silently approved. A readable draft `rests_on` target may leave a claim
+locally approved with `dependency_unapproved`; it is not dependency-ready.
+Read `claim show <id>` or the served API's `readiness` data for local approval,
+dependency readiness, independent review causes and causal paths. Existing
+stores retain the legacy doctrine until the human explicitly runs
+`dossierx claim migrate-lock-policy --reason "<their words>"`; migration keeps
+approvals, baselines and review state unchanged.
+
 Every mutating verb takes `--dry-run`. It writes nothing and **always exits 0 with `ok: true`**,
 even when the real run would refuse — including when you forgot a required flag.
 

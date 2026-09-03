@@ -6,6 +6,30 @@ specific project, module, or facet. All project-specific vocabulary
 (which facets exist, which modules exist, where claims live) comes from
 `project.config.yaml`, never from the engine itself.
 
+## Lock policy v1
+
+The lock store has a separate `policy_version` from its JSON `version`. A
+missing store is a new project and begins at policy v1. A store written before
+this policy remains on its recorded legacy rule until a human explicitly runs
+`dossierx claim migrate-lock-policy --reason "..."`. Migration records its
+time and reason but does not rewrite claims, approvals, dependency baselines,
+receipts or review causes.
+
+Policy v1 evaluates a requested claim set as one final candidate state. A set
+of one uses the same evaluator as a group. `claim lock ... --dry-run` returns
+each local verdict, dependency conditions and an opaque `snapshot`. Supplying
+that snapshot as `--proposal` on the write refuses if any reviewed dependency
+content changed in between. A readable draft dependency can leave a claim
+locally approved with a visible `dependency_unapproved` condition. That claim
+is not dependency-ready. Missing dependencies, cycles, open review threads,
+lint/integrity gates and unresolved doctrine gating still refuse approval.
+
+Each policy-v1 approval stores a receipt per reviewed dependency: its id,
+comparable content hash and decoded claim content. The receipt makes the
+reviewed boundary retrievable even for an uncommitted draft. It is provenance,
+not a semantic proof. Status and review bookkeeping remain outside comparable
+content hashing.
+
 ## Claim
 
 A claim is one atomic YAML fact, one claim per file, under the project's

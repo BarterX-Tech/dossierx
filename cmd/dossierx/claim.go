@@ -42,6 +42,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 )
 
@@ -57,6 +58,7 @@ func newClaimCmd() *cobra.Command {
 		newClaimListCmd(),
 		newClaimNewCmd(),
 		newLockCmd(),
+		newLockPolicyMigrateCmd(),
 		newUnlockCmd(),
 		newFlagCmd(),
 		newReauditCmd(),
@@ -345,16 +347,17 @@ type claimShowData struct {
 	// than one module's contract — reads here exactly like any other claim, and
 	// the agent about to unlock it cannot see that a track's completeness turns
 	// on it. Always present, as [] for a claim in no track.
-	Tracks        []claimTrackView   `json:"tracks"`
-	Locked        bool               `json:"locked"`
-	LockedAt      string             `json:"locked_at,omitempty"`
-	ReviewPending bool               `json:"review_pending"`
-	Trigger       string             `json:"review_pending_trigger"`
-	Edges         claimEdgesData     `json:"edges"`
-	ImplementedIn []claimLinkView    `json:"implemented_in"`
-	Comments      claimCommentCounts `json:"comments"`
-	Ledger        *claimLedgerView   `json:"ledger,omitempty"`
-	NextActions   []string           `json:"next_actions"`
+	Tracks        []claimTrackView     `json:"tracks"`
+	Locked        bool                 `json:"locked"`
+	LockedAt      string               `json:"locked_at,omitempty"`
+	ReviewPending bool                 `json:"review_pending"`
+	Trigger       string               `json:"review_pending_trigger"`
+	Readiness     readiness.Assessment `json:"readiness"`
+	Edges         claimEdgesData       `json:"edges"`
+	ImplementedIn []claimLinkView      `json:"implemented_in"`
+	Comments      claimCommentCounts   `json:"comments"`
+	Ledger        *claimLedgerView     `json:"ledger,omitempty"`
+	NextActions   []string             `json:"next_actions"`
 }
 
 // claimLedgerViewFor projects the lock store's record for claim into the
@@ -542,6 +545,8 @@ func newClaimShowCmd() *cobra.Command {
 			if flagErr != nil {
 				flagStore = nil
 			}
+			assessments := readiness.Compute(claims, store, flagStore)
+			assessment := assessments[id]
 
 			mirroredBy, dependedOnBy := incomingEdges(claims, id)
 			links := linkViewsFor(cfg, claim)
@@ -580,8 +585,9 @@ func newClaimShowCmd() *cobra.Command {
 				Tracks:        claimTrackViews(claim.Tracks),
 				Locked:        claim.Status == model.StatusLocked,
 				LockedAt:      lockedAt,
-				ReviewPending: claim.ReviewPending,
+				ReviewPending: assessment.ReviewPending,
 				Trigger:       trigger,
+				Readiness:     assessment,
 				Edges: claimEdgesData{
 					Mirrors:        emptyIfNil(claim.Mirrors),
 					RestsOn:        emptyIfNil(claim.RestsOn),
@@ -617,6 +623,13 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 		fmt.Fprintf(out, " review_pending (%s)", d.Trigger)
 	}
 	fmt.Fprintln(out)
+	fmt.Fprintf(out, "  local/dependency ready: %t / %t\n", d.Readiness.LocalApproved, d.Readiness.DependencyReady)
+	if len(d.Readiness.DependencyConditions) > 0 {
+		fmt.Fprintf(out, "  dependency conditions: %v\n", d.Readiness.DependencyConditions)
+	}
+	if len(d.Readiness.ReviewCauses) > 0 {
+		fmt.Fprintf(out, "  review causes:       %v\n", d.Readiness.ReviewCauses)
+	}
 	fmt.Fprintf(out, "  facet/module:       %s / %s\n", d.Facet, d.Module)
 	if d.LockedAt != "" {
 		fmt.Fprintf(out, "  locked at:          %s\n", d.LockedAt)
@@ -719,15 +732,16 @@ func writeClaimShowText(cmd *cobra.Command, d claimShowData) {
 // --review-pending can still see which of the results are also drifted without
 // a second pass.
 type claimListEntry struct {
-	ClaimID       string `json:"claim_id"`
-	Title         string `json:"title"`
-	Facet         string `json:"facet"`
-	Module        string `json:"module"`
-	Status        string `json:"status"`
-	ReviewPending bool   `json:"review_pending"`
-	MigratedFrom  string `json:"migrated_from,omitempty"`
-	Drifted       bool   `json:"drifted"`
-	OpenThreads   int    `json:"open_threads"`
+	ClaimID       string               `json:"claim_id"`
+	Title         string               `json:"title"`
+	Facet         string               `json:"facet"`
+	Module        string               `json:"module"`
+	Status        string               `json:"status"`
+	ReviewPending bool                 `json:"review_pending"`
+	Readiness     readiness.Assessment `json:"readiness"`
+	MigratedFrom  string               `json:"migrated_from,omitempty"`
+	Drifted       bool                 `json:"drifted"`
+	OpenThreads   int                  `json:"open_threads"`
 	// Sources is the COUNT of this claim's citations, not the citations.
 	//
 	// A count is what a list can honestly carry: the citations themselves are
@@ -807,6 +821,15 @@ func newClaimListCmd() *cobra.Command {
 					"claim list: unknown facet %q; this project declares: %s", facet, strings.Join(cfg.Facets, ", ")).
 					WithHint("run: dossierx claim list (unfiltered) to see what is there")
 			}
+			store, storeErr := lock.LoadStore(storePath(cfg))
+			if storeErr != nil {
+				store = nil
+			}
+			flagStore, flagErr := reaudit.LoadFlagStore(flagStorePath(cfg))
+			if flagErr != nil {
+				flagStore = nil
+			}
+			assessments := readiness.Compute(claims, store, flagStore)
 
 			// The drift lookup is built once per module rather than per claim:
 			// implink.ViewsByClaim re-hashes every linked file on disk, and
@@ -832,7 +855,8 @@ func newClaimListCmd() *cobra.Command {
 
 			entries := make([]claimListEntry, 0, len(claims))
 			for _, c := range claims {
-				if reviewPending && !c.ReviewPending {
+				assessment := assessments[c.ID]
+				if reviewPending && !assessment.ReviewPending {
 					continue
 				}
 				if migrated && c.MigratedFrom == "" {
@@ -860,7 +884,8 @@ func newClaimListCmd() *cobra.Command {
 					Facet:         c.Facet,
 					Module:        c.Module,
 					Status:        string(c.Status),
-					ReviewPending: c.ReviewPending,
+					ReviewPending: assessment.ReviewPending,
+					Readiness:     assessment,
 					MigratedFrom:  c.MigratedFrom,
 					Drifted:       driftedIDs[c.ID],
 					OpenThreads:   len(c.OpenThreadIDs()),

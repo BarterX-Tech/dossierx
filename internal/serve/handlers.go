@@ -21,6 +21,8 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
+	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
@@ -259,7 +261,11 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
 		return
 	}
-	writeJSON(w, http.StatusOK, statusToDTO(check.Status(claims, s.cfg)))
+	dto := statusToDTO(check.Status(claims, s.cfg))
+	store, _ := lock.LoadStore(s.storePath())
+	flags, _ := reaudit.LoadFlagStore(s.flagStorePath())
+	dto.Readiness = readiness.Compute(claims, store, flags)
+	writeJSON(w, http.StatusOK, dto)
 }
 
 // ---------------------------------------------------------------------
@@ -799,6 +805,11 @@ type statusDTO struct {
 	// sequence had gone stale under the claims they were reading. It is an array,
 	// never null.
 	BuildOrders []check.BuildOrderReport `json:"build_orders"`
+
+	// Readiness is a claim-id keyed live assessment. It deliberately sits beside
+	// lock counts rather than being derived from them: a locked/build-order
+	// count cannot imply that required dependencies are approved and clear.
+	Readiness map[string]readiness.Assessment `json:"readiness"`
 }
 
 // statusToDTO projects a check.Result into the strip's wire form.
@@ -846,6 +857,7 @@ func statusToDTO(res check.Result) statusDTO {
 		NextSteps:      next,
 		LedgerFindings: ledger,
 		BuildOrders:    orders,
+		Readiness:      map[string]readiness.Assessment{},
 	}
 }
 
