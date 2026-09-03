@@ -29,6 +29,8 @@ type CandidateVerdict struct {
 	LocalAdmissible bool                  `json:"local_admissible"`
 	Refusals        []string              `json:"refusals"`
 	Conditions      []DependencyCondition `json:"dependency_conditions"`
+	OpenThreads     []string              `json:"open_threads,omitempty"`
+	LintFindings    []lint.Finding        `json:"lint_findings,omitempty"`
 }
 
 // SetEvaluation is the one policy answer used by one-claim and group preview
@@ -126,6 +128,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 		if len(claim.OpenThreadIDs()) > 0 {
 			verdict.LocalAdmissible = false
 			verdict.Refusals = append(verdict.Refusals, "unresolved_comments")
+			verdict.OpenThreads = claim.OpenThreadIDs()
 		}
 		for _, conflict := range conflicts {
 			if conflict.ClaimID != id {
@@ -155,6 +158,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 			if findingAffects(finding, id) {
 				verdict.LocalAdmissible = false
 				verdict.Refusals = append(verdict.Refusals, "lint:"+finding.LintName)
+				verdict.LintFindings = append(verdict.LintFindings, finding)
 			}
 		}
 		for _, depID := range claim.RestsOn {

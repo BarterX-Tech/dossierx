@@ -13,6 +13,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
+	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -22,10 +23,15 @@ import (
 // Snapshot is an opaque candidate-content token a later write may supply with
 // --proposal; a mismatch refuses rather than approving unseen dependency text.
 type policyLockPreviewData struct {
-	Would      string             `json:"would"`
-	Blocked    bool               `json:"blocked"`
-	Snapshot   string             `json:"snapshot"`
-	Evaluation lock.SetEvaluation `json:"evaluation"`
+	Would         string                `json:"would"`
+	Blocked       bool                  `json:"blocked"`
+	Snapshot      string                `json:"snapshot"`
+	Evaluation    lock.SetEvaluation    `json:"evaluation"`
+	From          string                `json:"from"`
+	To            string                `json:"to"`
+	Preconditions []cliout.Precondition `json:"preconditions"`
+	SideEffects   []string              `json:"side_effects"`
+	Missing       []string              `json:"missing"`
 }
 
 type policyLockData struct {
@@ -33,6 +39,10 @@ type policyLockData struct {
 	Reason     string             `json:"reason"`
 	Snapshot   string             `json:"snapshot"`
 	Evaluation lock.SetEvaluation `json:"evaluation"`
+	ClaimID    string             `json:"claim_id"`
+	From       string             `json:"from"`
+	To         string             `json:"to"`
+	LockedAt   string             `json:"locked_at"`
 }
 
 type policyMigrationData struct {
@@ -120,6 +130,12 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 		Blocked:    !evaluation.Allowed() || strings.TrimSpace(reason) == "",
 		Snapshot:   policySnapshot(claims, evaluation.RequestedIDs),
 		Evaluation: evaluation,
+		From:       "draft", To: "locked",
+		Preconditions: []cliout.Precondition{{Name: "claim_is_draft", OK: evaluation.Allowed()}, {Name: "lint_clean", OK: evaluation.Allowed()}, {Name: "no_open_comment_threads", OK: evaluation.Allowed()}},
+		SideEffects:   []string{"write requested claim approvals and lock ledger records"},
+	}
+	if strings.TrimSpace(reason) == "" {
+		data.Missing = []string{"--reason"}
 	}
 	return cmdResult{Data: data, Text: func() {
 		fmt.Fprintf(cmd.OutOrStdout(), "lock preview: %s\n", data.Would)
@@ -155,6 +171,9 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	store, err := lock.LoadStore(storePath(cfg))
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
+	}
+	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
+		return cmdResult{}, err
 	}
 	evaluation := lock.EvaluateSetWithSemanticConflicts(claims, ids, cfg, store, conflicts)
 	snapshot := policySnapshot(claims, evaluation.RequestedIDs)
@@ -258,9 +277,20 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 		}
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: store write failed; prior state restored: %w", err)
 	}
-	return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}, Text: func() {
+	lockedAt := ""
+	if len(evaluation.RequestedIDs) == 1 {
+		lockedAt = store.LockedAt[evaluation.RequestedIDs[0]]
+	}
+	return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation, ClaimID: firstID(evaluation.RequestedIDs), From: "draft", To: "locked", LockedAt: lockedAt}, Text: func() {
 		fmt.Fprintf(cmd.OutOrStdout(), "lock: %d claim(s) locally approved: %s\n", len(evaluation.RequestedIDs), strings.Join(evaluation.RequestedIDs, ", "))
 	}}, nil
+}
+
+func firstID(ids []string) string {
+	if len(ids) == 0 {
+		return ""
+	}
+	return ids[0]
 }
 
 // policyRefusalError retains the established envelope families for the
@@ -270,21 +300,32 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 func policyRefusalError(evaluation lock.SetEvaluation) error {
 	for _, verdict := range evaluation.Verdicts {
 		for _, refusal := range verdict.Refusals {
+			details := map[string]any{"claim_id": verdict.ClaimID}
+			if len(verdict.OpenThreads) > 0 {
+				details["open_threads"] = verdict.OpenThreads
+			}
+			if len(verdict.LintFindings) > 0 {
+				details["lint_findings"] = verdict.LintFindings
+			}
 			switch {
 			case refusal == "claim_not_found":
-				return cliout.Errorf(cliout.CodeClaimNotFound, "lock: claim %q not found", verdict.ClaimID)
+				return cliout.Errorf(cliout.CodeClaimNotFound, "lock: claim %q not found", verdict.ClaimID).WithDetails(details)
 			case refusal == "unresolved_comments":
-				return cliout.Errorf(cliout.CodeUnresolvedComments, "lock: claim %q has unresolved comment threads", verdict.ClaimID)
+				return cliout.Errorf(cliout.CodeUnresolvedComments, "lock: claim %q has unresolved comment threads", verdict.ClaimID).WithDetails(details)
 			case strings.HasPrefix(refusal, "ledger_record_deleted"), strings.HasPrefix(refusal, "comment_digest_unrecorded"), strings.HasPrefix(refusal, "standing_ledger_record"):
-				return cliout.Errorf(cliout.CodeIntegrityFailed, "lock: claim %q has an approval-record integrity refusal", verdict.ClaimID)
+				return cliout.Errorf(cliout.CodeIntegrityFailed, "lock: claim %q has an approval-record integrity refusal", verdict.ClaimID).WithDetails(details)
 			case refusal == "already_locked":
-				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID)
+				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID).WithDetails(details)
 			case strings.HasPrefix(refusal, "semantic_contradiction_requires_human_review"):
-				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID)
+				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details)
 			}
 		}
 	}
-	return cliout.Errorf(cliout.CodeLintFailed, "lock: one or more requested claims are refused; no approval was written")
+	findings := []lint.Finding{}
+	for _, verdict := range evaluation.Verdicts {
+		findings = append(findings, verdict.LintFindings...)
+	}
+	return cliout.Errorf(cliout.CodeLintFailed, "lock: one or more requested claims are refused; no approval was written").WithDetails(map[string]any{"verdicts": evaluation.Verdicts, "lint_findings": findings})
 }
 
 // policyWriteFault is a deterministic, opt-in recovery seam for disposable

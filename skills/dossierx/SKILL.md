@@ -13,8 +13,6 @@ description: >-
   Load a companion skill only when this one sends you there.
 ---
 
-# DossierX — router and machine contract
-
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
 a linted, dependency-checked HTML viewer. A claim starts `draft` (freely editable) and is promoted
 to `locked` (frozen; changes require a recorded human approval). Everything the tool knows lives in
@@ -27,11 +25,9 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
-## The nine nouns, twenty-four leaves
-
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
-dossierx claim  show list new lock unlock flag reaudit link
+dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy
 dossierx comment inbox list add reply
 dossierx build-order propose status lock
 dossierx track list show status            # read-only: the cross-cutting feature axis
@@ -46,8 +42,6 @@ A claim joins a track via `tracks:` in its own YAML, so changing membership on a
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.
-
-## The envelope — every command, every run
 
 `--format json` is the **default**: one envelope per invocation, on stdout, on failure as well as
 success. `--format text` is the prose you paste into chat for a human.

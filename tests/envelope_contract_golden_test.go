@@ -486,6 +486,7 @@ func envelopeCases() []envelopeCase {
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / previewed", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"}},
 		{"claim lock / already locked", envLocked, []string{"claim", "lock", "widget.contract.overview", "--reason", "again"}},
+		{"claim migrate-lock-policy / preview", envFresh, []string{"claim", "migrate-lock-policy", "--dry-run"}},
 
 		{"claim unlock / a locked claim", envLocked, []string{"claim", "unlock", "widget.contract.overview", "--reason", "fixing it"}},
 		{"claim flag / a locked claim", envLocked, []string{"claim", "flag", "widget.contract.overview", "--claim-says", "a", "--now-does", "b", "--reason", "c"}},

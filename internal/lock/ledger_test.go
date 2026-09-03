@@ -220,8 +220,8 @@ func TestLedgerRoundTripsThroughTheStoreFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore (reload): %v", err)
 	}
-	if reloaded.OnDiskVersion() != ledgerSchemaVersion {
-		t.Errorf("on-disk version = %d, want %d", reloaded.OnDiskVersion(), ledgerSchemaVersion)
+	if reloaded.OnDiskVersion() != storeSchemaVersion {
+		t.Errorf("on-disk version = %d, want %d", reloaded.OnDiskVersion(), storeSchemaVersion)
 	}
 	if !reloaded.FileExists() {
 		t.Errorf("expected FileExists true for a store that was just saved")
@@ -1304,8 +1304,8 @@ func TestCrossPreLedger_Crosses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadStore (reload): %v", err)
 	}
-	if reloaded.OnDiskVersion() != ledgerSchemaVersion {
-		t.Fatalf("the crossing must PERSIST the stamp, got version %d on disk", reloaded.OnDiskVersion())
+	if reloaded.OnDiskVersion() != storeSchemaVersion {
+		t.Fatalf("the crossing must PERSIST the current schema stamp, got version %d on disk", reloaded.OnDiskVersion())
 	}
 	if reloaded.PreLedger() {
 		t.Fatalf("a crossed project must no longer read as pre-ledger")

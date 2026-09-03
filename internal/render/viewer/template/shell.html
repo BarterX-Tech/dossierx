@@ -1349,6 +1349,23 @@
         });
       }
 
+      // A checked-in/offline viewer has no /api/status endpoint. The rendered
+      // graph payload carries the same readiness projection as .catalog.json,
+      // so turn its node data back into the claim-id map the card renderer
+      // accepts. A live status response below always replaces this snapshot.
+      function offlineReadiness() {
+        var node = document.getElementById('dossierx-graph');
+        if (!node) { return {}; }
+        try {
+          var payload = JSON.parse(node.textContent || '{}');
+          var out = {};
+          (payload.nodes || []).forEach(function (graphNode) {
+            if (graphNode.id && graphNode.readiness) { out[graphNode.id] = graphNode.readiness; }
+          });
+          return out;
+        } catch (_) { return {}; }
+      }
+
       // renderStatusStrip paints one /api/status payload. An empty verdict hides
       // the strip entirely rather than showing a green badge: the viewer already
       // reads as "fine" by default, and a persistent all-clear chip would be one
@@ -1356,7 +1373,7 @@
       function renderStatusStrip(data) {
         if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
         lastStatusData = data || {};
-			renderClaimReadiness(lastStatusData.readiness || {});
+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);

@@ -43,6 +43,8 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
+	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 	"github.com/BarterX-Tech/dossierx/internal/render"
 )
 
@@ -442,6 +444,7 @@ func (s *Server) renderViewer() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serve: build catalog: %w", err)
 	}
+	cat.SetReadiness(s.readinessFor(claims))
 	if s.themeErr != nil {
 		return nil, fmt.Errorf("serve: theme: %w", s.themeErr)
 	}
@@ -450,6 +453,12 @@ func (s *Server) renderViewer() ([]byte, error) {
 		return nil, fmt.Errorf("serve: render: %w", err)
 	}
 	return []byte(html), nil
+}
+
+func (s *Server) readinessFor(claims []model.Claim) map[string]readiness.Assessment {
+	store, _ := lock.LoadStore(s.storePath())
+	flags, _ := reaudit.LoadFlagStore(s.flagStorePath())
+	return readiness.Compute(claims, store, flags)
 }
 
 // disarmUngatedMockups returns claims with RawHTMLReviewed cleared on every

@@ -22,7 +22,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
-	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
@@ -262,9 +261,7 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto := statusToDTO(check.Status(claims, s.cfg))
-	store, _ := lock.LoadStore(s.storePath())
-	flags, _ := reaudit.LoadFlagStore(s.flagStorePath())
-	dto.Readiness = readiness.Compute(claims, store, flags)
+	dto.Readiness = s.readinessFor(claims)
 	writeJSON(w, http.StatusOK, dto)
 }
 
@@ -322,6 +319,7 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, fmt.Errorf("build catalog: %w", err))
 		return
 	}
+	cat.SetReadiness(s.readinessFor(claims))
 
 	p := graph.Build(cat, s.cfg)
 	// graph.Build reads no clock — it leaves GeneratedAt empty and every

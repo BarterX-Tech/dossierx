@@ -299,20 +299,20 @@ func collect(id string, path []string, active map[string]bool, byID map[string]m
 	for _, depID := range unique(c.RestsOn) {
 		dep, exists := byID[depID]
 		if !exists {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionMissingDependency, DependencyID: depID, Path: appendPath(path[:1], depID), Detail: "required dependency is missing"})
+			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionMissingDependency, DependencyID: depID, Path: appendPath(currentNode(path), depID), Detail: "required dependency is missing"})
 			continue
 		}
 		state := dependencyState(dep)
 		if state == ConditionRetiredDependency || state == ConditionUnreadableDependency {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: state, DependencyID: depID, Path: appendPath(path[:1], depID), Detail: "required dependency cannot be consumed"})
+			out.conditions = append(out.conditions, DependencyCondition{Kind: state, DependencyID: depID, Path: appendPath(currentNode(path), depID), Detail: "required dependency cannot be consumed"})
 			continue
 		}
 		if dep.Status != model.StatusLocked {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyUnapproved, DependencyID: depID, Path: appendPath(path[:1], depID), Detail: "required dependency is not locally approved"})
+			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyUnapproved, DependencyID: depID, Path: appendPath(currentNode(path), depID), Detail: "required dependency is not locally approved"})
 		} else if approval := approvalState(dep, store); !approval.valid {
 			out.conditions = append(out.conditions, DependencyCondition{
 				Kind: ConditionDependencyUnapproved, DependencyID: depID,
-				Path:   appendPath(path[:1], depID),
+				Path:   appendPath(currentNode(path), depID),
 				Detail: "required dependency has no valid standing approval",
 			})
 		}
@@ -323,7 +323,7 @@ func collect(id string, path []string, active map[string]bool, byID map[string]m
 		child := localSummary(dep, claims, store, flags, byID)
 		child = collect(depID, append(path, depID), withActive(active, depID), byID, child, claims, store, flags)
 		for _, condition := range child.conditions {
-			condition.Path = appendPath(path[:1], condition.Path...)
+			condition.Path = appendPath(currentNode(path), condition.Path...)
 			out.conditions = append(out.conditions, condition)
 		}
 		for _, cause := range child.causes {
@@ -333,7 +333,7 @@ func collect(id string, path []string, active map[string]bool, byID map[string]m
 			}
 			cause.Direct = false
 			cause.Inherited = true
-			cause.Path = appendPath(path[:1], cause.Path...)
+			cause.Path = appendPath(currentNode(path), cause.Path...)
 			out.causes = append(out.causes, cause)
 		}
 	}
@@ -363,11 +363,21 @@ func withActive(active map[string]bool, id string) map[string]bool {
 	return next
 }
 
+func currentNode(path []string) []string {
+	if len(path) == 0 {
+		return nil
+	}
+	return []string{path[len(path)-1]}
+}
+
 func cyclePath(path []string, target string) Path {
 	for i := len(path) - 1; i >= 0; i-- {
 		if path[i] == target {
 			cycle := append([]string(nil), path[i+1:]...)
 			cycle = append(cycle, target)
+			if len(cycle) == 1 {
+				cycle = append(cycle, target)
+			}
 			return Path(cycle)
 		}
 	}

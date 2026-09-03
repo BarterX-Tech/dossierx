@@ -25,7 +25,7 @@ func standingStore(claims ...model.Claim) *lock.Store {
 	return s
 }
 
-func baseline(s *lock.Store, dependent string, dependency model.Claim) {
+func recordBaseline(s *lock.Store, dependent string, dependency model.Claim) {
 	if s.Hashes[dependent] == nil {
 		s.Hashes[dependent] = map[string]string{}
 	}
@@ -66,7 +66,7 @@ func TestComputeStandingApprovalAndDraftDependency(t *testing.T) {
 	a := model.Claim{ID: "fixture.contract.a", Facet: "contract", Module: "fixture", Status: model.StatusDraft, Body: "draft boundary"}
 	b := lockedClaim("fixture.contract.b", a.ID)
 	s := standingStore(b)
-	baseline(s, b.ID, a)
+	recordBaseline(s, b.ID, a)
 
 	got := Compute([]model.Claim{a, b}, s, nil)
 	if !got[b.ID].LocalApproved || !got[b.ID].LocallyApproved {
@@ -87,10 +87,10 @@ func TestComputeNestedCausesAndSelectivePathClearing(t *testing.T) {
 	b := lockedClaim("fixture.contract.b", a.ID, d.ID)
 	claims := []model.Claim{b, a, d, c}
 	s := standingStore(claims...)
-	baseline(s, a.ID, c)
-	baseline(s, d.ID, c)
-	baseline(s, b.ID, a)
-	baseline(s, b.ID, d)
+	recordBaseline(s, a.ID, c)
+	recordBaseline(s, d.ID, c)
+	recordBaseline(s, b.ID, a)
+	recordBaseline(s, b.ID, d)
 
 	changedC := c
 	changedC.Body = "changed foundation"
@@ -109,7 +109,7 @@ func TestComputeNestedCausesAndSelectivePathClearing(t *testing.T) {
 
 	// Confirming A's unchanged boundary refreshes only A's C baseline. D's
 	// independent path remains active and must still keep B pending.
-	baseline(s, a.ID, changedC)
+	recordBaseline(s, a.ID, changedC)
 	got = Compute(claims, s, nil)
 	if hasCause(got[b.ID], CauseUpstreamDependencyReview, b.ID, a.ID, c.ID) {
 		t.Fatalf("confirming A must clear only A's inherited path: %+v", got[b.ID].ReviewCauses)
@@ -125,10 +125,13 @@ func TestComputeOwnCausesPropagateAndUnchangedUnlockIsCondition(t *testing.T) {
 	a.Comments = []model.Comment{{ID: "c-thread", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "review boundary"}}
 	b := lockedClaim("fixture.contract.b", a.ID)
 	s := standingStore(a, b)
-	baseline(s, a.ID, c)
-	baseline(s, b.ID, a)
+	recordBaseline(s, a.ID, c)
+	recordBaseline(s, b.ID, a)
 	flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{a.ID: {Reason: "boundary needs review"}}}
 	got := Compute([]model.Claim{b, a, c}, s, flags)
+	if !hasCause(got[a.ID], CauseOwnThread, a.ID) || !hasCause(got[a.ID], CauseOwnFlag, a.ID) {
+		t.Fatalf("A must retain independent direct thread and flag causes: %+v", got[a.ID].ReviewCauses)
+	}
 	if !hasCause(got[b.ID], CauseUpstreamDependencyReview, b.ID, a.ID) || !got[b.ID].ReviewPending {
 		t.Fatalf("B must inherit A's own flag: %+v", got[b.ID])
 	}
@@ -149,11 +152,33 @@ func TestComputeOwnCausesPropagateAndUnchangedUnlockIsCondition(t *testing.T) {
 	}
 }
 
+func TestComputeInvalidNestedApprovalPreservesEveryPathNode(t *testing.T) {
+	c := lockedClaim("fixture.contract.c")
+	a := lockedClaim("fixture.contract.a", c.ID)
+	b := lockedClaim("fixture.contract.b", a.ID)
+	s := standingStore(a, b, c)
+	recordBaseline(s, a.ID, c)
+	recordBaseline(s, b.ID, a)
+	changedC := c
+	changedC.Body = "tampered foundation"
+
+	got := Compute([]model.Claim{b, a, changedC}, s, nil)
+	if !hasCause(got[a.ID], CauseApprovalContentDrift, a.ID, c.ID) {
+		t.Fatalf("A must report the direct dependency drift path: %+v", got[a.ID].ReviewCauses)
+	}
+	if !hasCondition(got[b.ID], ConditionDependencyUnapproved, b.ID, a.ID) {
+		t.Fatalf("B must report its immediate invalid prerequisite: %+v", got[b.ID].DependencyConditions)
+	}
+	if !hasCause(got[b.ID], CauseUpstreamDependencyReview, b.ID, a.ID, c.ID) {
+		t.Fatalf("B must preserve B->A->C for inherited invalid approval: %+v", got[b.ID].ReviewCauses)
+	}
+}
+
 func TestComputeIntegrityDriftPropagatesAndStaleBitCannotMakeReady(t *testing.T) {
 	a := lockedClaim("fixture.contract.a")
 	b := lockedClaim("fixture.contract.b", a.ID)
 	s := standingStore(a, b)
-	baseline(s, b.ID, a)
+	recordBaseline(s, b.ID, a)
 	changedA := a
 	changedA.Body = "tampered after approval"
 	changedA.ReviewPending = false
@@ -191,7 +216,7 @@ func TestComputeMissingRetiredCycleGovernedAndLegacyHistory(t *testing.T) {
 	legacyB := lockedClaim("fixture.contract.legacy-b", legacyA.ID)
 
 	s := standingStore(missing, retired, cycleA, cycleB, governed, legacyA, legacyB)
-	baseline(s, governed.ID, governor)
+	recordBaseline(s, governed.ID, governor)
 	// An old policy store keeps the approval record but has no attributable
 	// dependency baseline. Readiness must remain explicitly unknown.
 	s.PolicyVersion = lock.PolicyLegacy

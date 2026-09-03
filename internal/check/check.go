@@ -55,6 +55,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 	"github.com/BarterX-Tech/dossierx/internal/render"
 )
@@ -255,6 +256,8 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	if err != nil {
 		return res, fmt.Errorf("catalog: build: %w", err)
 	}
+	flags, _ := reaudit.LoadFlagStore(flagStorePath(cfg))
+	cat.SetReadiness(readiness.Compute(claims, inputs.store, flags))
 	catPath := catalogPath(cfg)
 	if err := catalog.WriteJSON(cat, catPath); err != nil {
 		return res, fmt.Errorf("catalog: %w", err)

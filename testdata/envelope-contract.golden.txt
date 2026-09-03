@@ -152,6 +152,7 @@ claim show / a draft claim
                   locked:bool
                   module:string
                   next_actions:[string]
+                  readiness:{claim_id:string,dependency_ready:bool,local_approval_issue:string,local_approved:bool,local_reasons:[string],locally_approved:bool,policy_version:number,ready:bool,review_pending:bool}
                   review_pending:bool
                   review_pending_trigger:string
                   source_path:string
@@ -176,7 +177,7 @@ claim list / every claim
     ok            true
     envelope      command data ok
     command       claim list
-    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,review_pending:bool,sources:number,status:string,title:string}]
+    data          claims:[{claim_id:string,drifted:bool,facet:string,module:string,open_threads:number,readiness:{claim_id:string,dependency_ready:bool,local_approval_issue:string,local_approved:bool,local_reasons:[string],locally_approved:bool,policy_version:number,ready:bool,review_pending:bool},review_pending:bool,sources:number,status:string,title:string}]
                   count:number
                   filters:{drifted:bool,migrated:bool,review_pending:bool}
                   percent_of_total:number
@@ -204,9 +205,12 @@ claim lock / approved
     envelope      command data ok
     command       claim lock
     data          claim_id:string
+                  claim_ids:[string]
+                  evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,refusals:[]}]}
                   from:string
                   locked_at:string
                   reason:string
+                  snapshot:string
                   to:string
 
 claim lock / refused by an open human thread
@@ -216,19 +220,19 @@ claim lock / refused by an open human thread
     envelope      command data error ok
     command       claim lock
     data          claim_id:string
-                  gate:string
-                  lint_errors:number
-                  lint_findings:[]
-                  open_threads:[string]
-                  unlocked_dependency:string
+                  claim_ids:[string]
+                  evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,open_threads:[string],refusals:[string]}]}
+                  from:string
+                  locked_at:string
+                  reason:string
+                  snapshot:string
+                  to:string
     error         code:string
                   details:object
                   message:string
     error.code    unresolved_comments
-    error.details lint_errors:number
-                  lint_findings:[]
+    error.details claim_id:string
                   open_threads:[string]
-                  unlocked_dependency:string
 
 claim lock / previewed
     argv          claim lock widget.contract.overview --reason approved --dry-run
@@ -237,11 +241,12 @@ claim lock / previewed
     envelope      command data ok
     command       claim lock
     data          blocked:bool
+                  evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,refusals:[]}]}
                   from:string
-                  missing:[]
-                  preconditions:[{detail:string,name:string,ok:bool}]
-                  proposed:{reason:string,review_pending:bool,status:string}
+                  missing:null
+                  preconditions:[{name:string,ok:bool}]
                   side_effects:[string]
+                  snapshot:string
                   to:string
                   would:string
 
@@ -249,12 +254,31 @@ claim lock / already locked
     argv          claim lock widget.contract.overview --reason again
     exit          1
     ok            false
-    envelope      command error ok
+    envelope      command data error ok
     command       claim lock
+    data          claim_id:string
+                  claim_ids:[string]
+                  evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,refusals:[string]}]}
+                  from:string
+                  locked_at:string
+                  reason:string
+                  snapshot:string
+                  to:string
     error         code:string
-                  hint:string
+                  details:object
                   message:string
     error.code    already_locked
+    error.details claim_id:string
+
+claim migrate-lock-policy / preview
+    argv          claim migrate-lock-policy --dry-run
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       claim migrate-lock-policy
+    data          from:number
+                  reason:string
+                  to:number
 
 claim unlock / a locked claim
     argv          claim unlock widget.contract.overview --reason fixing it

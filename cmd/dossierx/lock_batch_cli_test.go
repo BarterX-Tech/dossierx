@@ -52,24 +52,20 @@ func batchDeadlockFixture(t *testing.T) string {
 	})
 }
 
-func TestBatchLockSucceedsWhereSerialLocksDeadlock(t *testing.T) {
+func TestLocalApprovalDoesNotLetUnrelatedLintBlockACandidate(t *testing.T) {
 	cfgPath := batchDeadlockFixture(t)
 
-	// Precondition: the deadlock is real. A single lock of an UNRELATED
-	// claim is refused by the pre-existing, unrelated finding.
+	// Local-approval v1 evaluates the candidate rather than making an
+	// unrelated historical rests_on finding hostage the request.
 	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go")
-	if err == nil || env.OK {
-		t.Fatalf("fixture precondition: a single lock of an unrelated claim must be refused by the unscoped whole-corpus lint gate, got %+v", env)
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
-		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
+	if err != nil || !env.OK {
+		t.Fatalf("single locally admissible claim must not be refused by unrelated historical lint: %+v (err=%v)", env, err)
 	}
 
-	// The batch, over the two unrelated claims together, must succeed: the
-	// blocking finding names anchor and sibling, neither of which is
-	// requested.
+	// A set of one takes the same policy path after the first independent
+	// approval, retaining the public group result shape for policy writes.
 	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock",
-		"widget.contract.one", "widget.contract.two", "--reason", "batch relock, unrelated to the anchor/sibling finding")
+		"widget.contract.two", "--reason", "batch relock, unrelated to the anchor/sibling finding")
 	if err != nil {
 		t.Fatalf("batch lock over unrelated claims must succeed: %+v (err=%v)", env, err)
 	}
@@ -79,8 +75,8 @@ func TestBatchLockSucceedsWhereSerialLocksDeadlock(t *testing.T) {
 
 	var data batchLockData
 	envData(t, env, &data)
-	if len(data.Locked) != 2 {
-		t.Fatalf("expected both requested claims locked, got %+v", data)
+	if len(data.Locked) != 1 {
+		t.Fatalf("expected requested claim locked, got %+v", data)
 	}
 	for _, l := range data.Locked {
 		if l.To != "locked" || l.From != "draft" {
