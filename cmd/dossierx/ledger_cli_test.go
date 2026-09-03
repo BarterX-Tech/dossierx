@@ -51,7 +51,7 @@ func readLedger(t *testing.T, storeFile string) map[string]lock.LedgerRecord {
 		t.Fatalf("parse store: %v\n%s", err, raw)
 	}
 	if onDisk.Version != 2 {
-		t.Fatalf("store version = %d, want the lock-ledger schema version 2:\n%s", onDisk.Version, raw)
+		t.Fatalf("store version = %d, want the lock-ledger schema version 3:\n%s", onDisk.Version, raw)
 	}
 	return onDisk.Ledger
 }

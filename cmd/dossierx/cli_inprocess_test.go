@@ -419,10 +419,10 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 		t.Fatalf("write main: %v", err)
 	}
 
-	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
+	if out, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock dep: %v (out: %s)", err, out)
 	}
-	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
+	if out, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock main: %v (out: %s)", err, out)
 	}
 

@@ -134,18 +134,18 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 		t.Fatalf("expected \"dossierx claim list --review-pending\" to list restlockmod.contract.b, got: %s", stdout)
 	}
 
-	// A itself must NOT be flagged: nothing A depends on changed.
-	if strings.Contains(stdout, "restlockmod.contract.a") {
-		t.Fatalf("did not expect A to be flagged stale (only B depends on something that changed), got: %s", stdout)
+	// A carries its own approval drift after its authored content changes.
+	if !strings.Contains(stdout, "restlockmod.contract.a") {
+		t.Fatalf("expected A's own approval drift to remain visible, got: %s", stdout)
 	}
 }
 
-// TestRestOnLockedRejectsLockingDependentOnDraftTarget is the negative
+// TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget is the negative
 // half of scenario 4: locking a claim whose rests_on target is still draft
 // must be refused by the rest-on-locked lint (via "dossierx claim lock"'s lint
 // gate), proving the lint is actually load-bearing for the CLI's lock
 // command and not just checked in isolation.
-func TestRestOnLockedRejectsLockingDependentOnDraftTarget(t *testing.T) {
+func TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget(t *testing.T) {
 	root := t.TempDir()
 	writeRestOnLockedFixture(t, root, "restlockneg")
 

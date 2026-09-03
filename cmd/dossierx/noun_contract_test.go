@@ -368,7 +368,7 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("re-read store: %v", err)
 	}
-	if !strings.Contains(string(after), `"version": 2`) {
+	if !strings.Contains(string(after), `"version": 3`) {
 		t.Fatalf("the crossing must stamp the ledger schema:\n%s", after)
 	}
 	for _, key := range []string{id, lock.BuildOrderLedgerKey("widget")} {

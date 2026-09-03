@@ -187,6 +187,9 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 	}
+	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
+		return cmdResult{}, err
+	}
 	evaluation := lock.EvaluateSetWithSemanticConflicts(claims, ids, cfg, store, conflicts)
 	snapshot := policySnapshot(claims, evaluation.RequestedIDs)
 	if proposal == "" {
@@ -199,11 +202,7 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 			cliout.Errorf(cliout.CodeClaimFileChanged, "lock: reviewed proposal does not match the requested current content").WithDetails(map[string]any{"reason": mismatch, "requested_ids": evaluation.RequestedIDs, "review_required": true})
 	}
 	if !evaluation.Allowed() {
-		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}},
-			policyRefusalError(evaluation)
-	}
-	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
-		return cmdResult{}, err
+		return cmdResult{Data: policyRefusalData(evaluation)}, policyRefusalError(evaluation)
 	}
 
 	requested := map[string]bool{}
@@ -306,6 +305,35 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	}}, nil
 }
 
+// policyRefusalData keeps the established lock refusal envelope readable
+// while the policy evaluator retains the complete per-member verdict inside
+// error details. A consumer following the lint router can keep reading the
+// same data.lint_findings key for singleton and set locks.
+func policyRefusalData(evaluation lock.SetEvaluation) lockRefusedData {
+	data := lockRefusedData{}
+	for _, verdict := range evaluation.Verdicts {
+		if len(verdict.Refusals) == 0 {
+			continue
+		}
+		data.ClaimID = verdict.ClaimID
+		data.OpenThreads = emptyIfNil(verdict.OpenThreads)
+		for _, finding := range verdict.LintFindings {
+			data.LintFindings = append(data.LintFindings, lintFindingData{Lint: finding.LintName, ClaimID: finding.ClaimID, Severity: string(finding.Severity), Message: finding.Message})
+		}
+		data.LintErrors = len(data.LintFindings)
+		switch verdict.Refusals[0] {
+		case "unresolved_comments":
+			data.Gate = string(cliout.CodeUnresolvedComments)
+		case "claim_not_found":
+			data.Gate = string(cliout.CodeClaimNotFound)
+		default:
+			data.Gate = string(cliout.CodeLintFailed)
+		}
+		return data
+	}
+	return data
+}
+
 func firstID(ids []string) string {
 	if len(ids) == 0 {
 		return ""
@@ -331,7 +359,7 @@ func policyRefusalError(evaluation lock.SetEvaluation) error {
 			case refusal == "claim_not_found":
 				return cliout.Errorf(cliout.CodeClaimNotFound, "lock: claim %q not found", verdict.ClaimID).WithDetails(details)
 			case refusal == "unresolved_comments":
-				return cliout.Errorf(cliout.CodeUnresolvedComments, "lock: claim %q has unresolved comment threads", verdict.ClaimID).WithDetails(details)
+				return cliout.Errorf(cliout.CodeUnresolvedComments, "lock: claim %q has unresolved comment threads: %s", verdict.ClaimID, strings.Join(verdict.OpenThreads, ", ")).WithDetails(details)
 			case strings.HasPrefix(refusal, "ledger_record_deleted"), strings.HasPrefix(refusal, "comment_digest_unrecorded"), strings.HasPrefix(refusal, "standing_ledger_record"):
 				return cliout.Errorf(cliout.CodeIntegrityFailed, "lock: claim %q has an approval-record integrity refusal", verdict.ClaimID).WithDetails(details)
 			case refusal == "already_locked":

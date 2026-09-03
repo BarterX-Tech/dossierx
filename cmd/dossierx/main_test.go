@@ -299,7 +299,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // touch any lifecycle guarantee the other nineteen make.
 //
 // THE FOURTH MOVE IS THE THEME NOUN, taking twenty-two-under-eight to
-// twenty-four-under-nine. It is the first noun whose subject is not the corpus:
+// twenty-five-under-nine. It is the first noun whose subject is not the corpus:
 // `viewer.theme` had a twenty-eight-token vocabulary and built-in presets with
 // no way to see either from the CLI, so "which palettes ship?" and "what does
 // the claude preset actually set?" were questions answerable only by reading

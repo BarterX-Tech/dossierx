@@ -192,6 +192,19 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 				})
 			}
 		}
+		// Doctrine hub gating remains a local approval gate for both required
+		// rests_on and mirrored doctrine edges. Local approval relaxes only a
+		// readable draft prerequisite; it never licenses a configured doctrine
+		// hub to be approved through a mirror while still draft.
+		if cfg != nil && cfg.HubGatingEnabled() {
+			for _, mirrorID := range claim.Mirrors {
+				mirror, ok := byID[mirrorID]
+				if ok && mirror.Facet == cfg.DoctrineFacet && !candidateLocked(mirrorID, candidate) {
+					verdict.LocalAdmissible = false
+					verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+mirrorID)
+				}
+			}
+		}
 		verdict.Refusals = uniqueStrings(verdict.Refusals)
 		result.Verdicts = append(result.Verdicts, verdict)
 	}

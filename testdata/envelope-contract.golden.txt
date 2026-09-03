@@ -220,13 +220,11 @@ claim lock / refused by an open human thread
     envelope      command data error ok
     command       claim lock
     data          claim_id:string
-                  claim_ids:[string]
-                  evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,open_threads:[string],refusals:[string]}]}
-                  from:string
-                  locked_at:string
-                  reason:string
-                  snapshot:string
-                  to:string
+                  gate:string
+                  lint_errors:number
+                  lint_findings:null
+                  open_threads:[string]
+                  unlocked_dependency:string
     error         code:string
                   details:object
                   message:string
@@ -245,6 +243,7 @@ claim lock / previewed
                   from:string
                   missing:null
                   preconditions:[{name:string,ok:bool}]
+                  reviewed:[{content:string,hash:string,id:string}]
                   side_effects:[string]
                   snapshot:string
                   to:string
@@ -257,13 +256,11 @@ claim lock / already locked
     envelope      command data error ok
     command       claim lock
     data          claim_id:string
-                  claim_ids:[string]
-                  evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,refusals:[string]}]}
-                  from:string
-                  locked_at:string
-                  reason:string
-                  snapshot:string
-                  to:string
+                  gate:string
+                  lint_errors:number
+                  lint_findings:null
+                  open_threads:[]
+                  unlocked_dependency:string
     error         code:string
                   details:object
                   message:string

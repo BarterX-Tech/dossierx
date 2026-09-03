@@ -181,7 +181,7 @@ func emit(cmd *cobra.Command, res cmdResult, runErr error) error {
 
 // envelopeRunE adapts a print-free command body to cobra's RunE signature. A
 // converted command's wiring is therefore always the same one line, which is
-// what keeps the contract uniform across twenty-four leaves.
+// what keeps the contract uniform across twenty-five leaves.
 func envelopeRunE(body func(cmd *cobra.Command, args []string) (cmdResult, error)) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		res, err := body(cmd, args)

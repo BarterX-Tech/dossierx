@@ -367,7 +367,7 @@ func TestUpgradeFailsClosedUntilTheProjectCrosses(t *testing.T) {
 	if rec.Grandfathered {
 		t.Fatalf("the crossing must record a real APPROVAL, never a grandfathered adoption: %+v", rec)
 	}
-	if raw, readErr := os.ReadFile(storeFile); readErr != nil || !strings.Contains(string(raw), `"version": 2`) {
+	if raw, readErr := os.ReadFile(storeFile); readErr != nil || !strings.Contains(string(raw), `"version": 3`) {
 		t.Fatalf("the crossing must stamp the ledger schema on disk, got %s (err %v)", raw, readErr)
 	}
 	if _, statErr := os.Stat(filepath.Join(filepath.Dir(storeFile), ".dossierx-comment-digest.json")); statErr != nil {

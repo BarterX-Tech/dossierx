@@ -164,7 +164,7 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-four leaves, and not one more.
+	// The whole surface: nine nouns, twenty-five leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8
