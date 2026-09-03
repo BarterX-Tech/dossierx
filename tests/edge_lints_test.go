@@ -140,31 +140,32 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 	}
 }
 
-// TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget is the negative
-// half of scenario 4: locking a claim whose rests_on target is still draft
-// must be refused by the rest-on-locked lint (via "dossierx claim lock"'s lint
-// gate), proving the lint is actually load-bearing for the CLI's lock
-// command and not just checked in isolation.
+// TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget pins the policy-v1
+// replacement for the old write gate: a readable draft prerequisite leaves a
+// visible dependency_unapproved condition, not an unapproved local claim.
 func TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget(t *testing.T) {
 	root := t.TempDir()
 	writeRestOnLockedFixture(t, root, "restlockneg")
 
-	// Lock B while A is still draft: must be refused.
+	// The reviewed write locally approves B while A remains draft.
 	stdout, stderr, code := reviewedRun(t, root, "claim", "lock", "restlockneg.contract.b", "--reason", "test fixture")
-	if code == 0 {
-		t.Fatalf("expected \"dossierx lock\" to refuse locking B while its rests_on target A is still draft, got exit 0\nstdout: %s", stdout)
+	if code != 0 {
+		t.Fatalf("expected local approval against a readable draft dependency, got exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
-	combined := stdout + stderr
-	if !strings.Contains(combined, "rest-on-locked") && !strings.Contains(combined, "lint") {
-		t.Fatalf("expected refusal to mention the lint gate, got stdout: %q stderr: %q", stdout, stderr)
+	show, showErr, showCode := run(t, root, "claim", "show", "restlockneg.contract.b")
+	if showCode != 0 {
+		t.Fatalf("show locally approved dependent: exit %d stdout=%s stderr=%s", showCode, show, showErr)
+	}
+	if !strings.Contains(show, "local/dependency ready: true / false") || !strings.Contains(show, "dependency_unapproved") {
+		t.Fatalf("local approval must expose the draft dependency condition, got: %s", show)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(root, "claims", "b.yaml"))
 	if err != nil {
 		t.Fatalf("read b.yaml: %v", err)
 	}
-	if strings.Contains(string(raw), "status: locked") {
-		t.Fatalf("B must remain draft after a refused lock, got:\n%s", raw)
+	if !strings.Contains(string(raw), "status: locked") {
+		t.Fatalf("B must be locally approved after the reviewed write, got:\n%s", raw)
 	}
 }
 
