@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -187,10 +188,7 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 			cliout.Errorf(cliout.CodeMissingFlag, "lock: --proposal from --dry-run is required before approval").WithDetails(map[string]any{"required": "--proposal", "requested_ids": evaluation.RequestedIDs, "review_required": true})
 	}
 	if proposal != snapshot {
-		mismatch := "stale_or_wrong_request"
-		if !strings.HasPrefix(proposal, "v1:") {
-			mismatch = "invalid"
-		}
+		mismatch := proposalMismatch(proposal, evaluation.RequestedIDs)
 		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}},
 			cliout.Errorf(cliout.CodeClaimFileChanged, "lock: reviewed proposal does not match the requested current content").WithDetails(map[string]any{"reason": mismatch, "requested_ids": evaluation.RequestedIDs, "review_required": true})
 	}
@@ -381,6 +379,8 @@ func parseSemanticConflicts(values []string) ([]lock.SemanticConflict, error) {
 }
 
 func policySnapshot(claims []model.Claim, ids []string) string {
+	requested := append([]string(nil), ids...)
+	sort.Strings(requested)
 	byID := map[string]model.Claim{}
 	for _, claim := range claims {
 		byID[claim.ID] = claim
@@ -409,10 +409,32 @@ func policySnapshot(claims []model.Claim, ids []string) string {
 	}
 	sort.Strings(ordered)
 	h := sha256.New()
+	fmt.Fprintf(h, "requested=%s\n", strings.Join(requested, ","))
 	for _, id := range ordered {
 		fmt.Fprintf(h, "%s=%s\n", id, lock.ContentHash(byID[id]))
 	}
-	return "v1:" + hex.EncodeToString(h.Sum(nil))
+	return "v2:" + url.QueryEscape(strings.Join(requested, ",")) + ":" + hex.EncodeToString(h.Sum(nil))
+}
+
+// proposalMismatch distinguishes a token for a different reviewed request
+// from a token whose request was right but whose reviewed content changed.
+// The requested-set segment is descriptive, not a capability secret; the hash
+// still binds it to the entire transitive reviewed closure.
+func proposalMismatch(proposal string, requested []string) string {
+	parts := strings.SplitN(proposal, ":", 3)
+	if len(parts) != 3 || parts[0] != "v2" || parts[2] == "" {
+		return "invalid"
+	}
+	ids, err := url.QueryUnescape(parts[1])
+	if err != nil {
+		return "invalid"
+	}
+	want := append([]string(nil), requested...)
+	sort.Strings(want)
+	if ids != strings.Join(want, ",") {
+		return "wrong_request"
+	}
+	return "stale"
 }
 
 func reviewedPolicyClaims(claims []model.Claim, ids []string) []policyReviewedClaim {

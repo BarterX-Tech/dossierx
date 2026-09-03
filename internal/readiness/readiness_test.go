@@ -169,8 +169,10 @@ func TestComputeInvalidNestedApprovalPreservesEveryPathNode(t *testing.T) {
 	if !hasCause(got[a.ID], CauseUpstreamDependencyReview, a.ID, c.ID) {
 		t.Fatalf("A must also retain C's independent approval-integrity path: %+v", got[a.ID].ReviewCauses)
 	}
-	if !hasCondition(got[b.ID], ConditionDependencyUnapproved, b.ID, a.ID) {
-		t.Fatalf("B must report its immediate invalid prerequisite: %+v", got[b.ID].DependencyConditions)
+	// A remains locally approved here; C's invalid standing approval is the
+	// blocking input, so B must retain the complete transitive condition path.
+	if !hasCondition(got[b.ID], ConditionDependencyUnapproved, b.ID, a.ID, c.ID) {
+		t.Fatalf("B must preserve B->A->C for the transitive invalid prerequisite: %+v", got[b.ID].DependencyConditions)
 	}
 	if !hasCause(got[b.ID], CauseUpstreamDependencyReview, b.ID, a.ID, c.ID) {
 		t.Fatalf("B must preserve B->A->C for inherited invalid approval: %+v", got[b.ID].ReviewCauses)

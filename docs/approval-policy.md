@@ -54,10 +54,10 @@ dossierx claim lock widget.contract.boundary widget.contract.consumer \
   --proposal "<snapshot returned by --dry-run>"
 ```
 
-The snapshot covers the reviewed candidate and relevant dependency content. If
-that content changes before the write, the command refuses as stale. Re-run the
-preview and review the new dependency text; the writer never substitutes
-unseen content into an approval. A write failure must leave the previous state
+The snapshot binds the canonical requested id set and reviewed dependency
+closure. Missing, malformed, stale, or wrong-set tokens refuse before approval
+storage changes. Re-run the preview and review the new dependency text; the
+writer never substitutes unseen content into an approval. A write failure must leave the previous state
 or an explicitly recoverable state, never a successful-looking partial batch.
 
 When a reviewer or upstream analysis has identified an actual semantic

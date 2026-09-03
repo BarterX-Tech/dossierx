@@ -17,8 +17,8 @@ receipts or review causes.
 
 Policy v1 evaluates a requested claim set as one final candidate state. A set
 of one uses the same evaluator as a group. `claim lock ... --dry-run` returns
-each local verdict, dependency conditions and an opaque `snapshot`. Supplying
-that snapshot as `--proposal` on the write refuses if any reviewed dependency
+each local verdict, dependency conditions and an opaque request-bound `snapshot`. Supplying
+the matching snapshot as mandatory `--proposal` on the write refuses if its request or reviewed dependency
 content changed in between. A readable draft dependency can leave a claim
 locally approved with a visible `dependency_unapproved` condition. That claim
 is not dependency-ready. Missing dependencies, cycles, open review threads,
