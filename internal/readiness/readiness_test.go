@@ -163,8 +163,11 @@ func TestComputeInvalidNestedApprovalPreservesEveryPathNode(t *testing.T) {
 	changedC.Body = "tampered foundation"
 
 	got := Compute([]model.Claim{b, a, changedC}, s, nil)
-	if !hasCause(got[a.ID], CauseApprovalContentDrift, a.ID, c.ID) {
+	if !hasCause(got[a.ID], CauseDirectDependencyChange, a.ID, c.ID) {
 		t.Fatalf("A must report the direct dependency drift path: %+v", got[a.ID].ReviewCauses)
+	}
+	if !hasCause(got[a.ID], CauseUpstreamDependencyReview, a.ID, c.ID) {
+		t.Fatalf("A must also retain C's independent approval-integrity path: %+v", got[a.ID].ReviewCauses)
 	}
 	if !hasCondition(got[b.ID], ConditionDependencyUnapproved, b.ID, a.ID) {
 		t.Fatalf("B must report its immediate invalid prerequisite: %+v", got[b.ID].DependencyConditions)

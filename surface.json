@@ -524,7 +524,7 @@
   ],
   "render_fingerprint": "sha256:edf486c1d77b303f7e995fe62040fe4fb38dbf13fd8965b7bb0caa2bb3d4e6d8",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:87ba4883834a2910ae042fc3447415638dad2d726d38b60602bdc6b82cf15725",
+    "cmd/dossierx": "sha256:292cd01ee8f60842d4888191a00045dd7866e3c6693f250081272f8615224691",
     "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
     "internal/catalog": "sha256:4a85bc7f9cab6489de1dc639a5917e30b7062d6d63d5e15dc33c9d57ca73409f",
     "internal/check": "sha256:c20de11b7be499434e10f2646fa97e4b48f6c30a562bb961a4868e6812da15b3",
@@ -546,7 +546,7 @@
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
     "internal/serve": "sha256:4cab4698bd021772e7d90b100ea162032fd76b485d9a03f3983f1f2ceb964b11",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:49dafcc12327941f35442101d2d54ef6aed5f3097ee2ff3991f49d1c51e95522"
+    "skills": "sha256:bcfc49f2555ca5f89570e86a3042892571634d613166e45aab9d25ab0cf150ef"
   },
   "envelope": {
     "keys": [
@@ -801,6 +801,7 @@
         "from",
         "missing",
         "preconditions",
+        "reviewed",
         "side_effects",
         "snapshot",
         "to",

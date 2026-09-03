@@ -2469,7 +2469,7 @@ func newLockCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "the human approval this lock executes, in their words (required)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what locking would do — transition, preconditions, side effects, what is missing — and write nothing")
-	cmd.Flags().StringVar(&proposal, "proposal", "", "snapshot returned by --dry-run; refuse if reviewed content changed")
+	cmd.Flags().StringVar(&proposal, "proposal", "", "required token returned by --dry-run; refuse if missing or reviewed content changed")
 	cmd.Flags().StringArrayVar(&semanticConflict, "semantic-conflict", nil, "known contradiction as claim-id=dependency-id=reason; refuse for human review")
 	return cmd
 }

@@ -32,6 +32,13 @@ type policyLockPreviewData struct {
 	Preconditions []cliout.Precondition `json:"preconditions"`
 	SideEffects   []string              `json:"side_effects"`
 	Missing       []string              `json:"missing"`
+	Reviewed      []policyReviewedClaim `json:"reviewed"`
+}
+
+type policyReviewedClaim struct {
+	ID    string      `json:"id"`
+	Hash  string      `json:"hash"`
+	Claim model.Claim `json:"claim"`
 }
 
 type policyLockData struct {
@@ -133,6 +140,7 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 		From:       "draft", To: "locked",
 		Preconditions: []cliout.Precondition{{Name: "claim_is_draft", OK: evaluation.Allowed()}, {Name: "lint_clean", OK: evaluation.Allowed()}, {Name: "no_open_comment_threads", OK: evaluation.Allowed()}},
 		SideEffects:   []string{"write requested claim approvals and lock ledger records"},
+		Reviewed:      reviewedPolicyClaims(claims, evaluation.RequestedIDs),
 	}
 	if strings.TrimSpace(reason) == "" {
 		data.Missing = []string{"--reason"}
@@ -172,18 +180,26 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 	}
-	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
-		return cmdResult{}, err
-	}
 	evaluation := lock.EvaluateSetWithSemanticConflicts(claims, ids, cfg, store, conflicts)
 	snapshot := policySnapshot(claims, evaluation.RequestedIDs)
-	if proposal != "" && proposal != snapshot {
+	if proposal == "" {
+		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Evaluation: evaluation}},
+			cliout.Errorf(cliout.CodeMissingFlag, "lock: --proposal from --dry-run is required before approval").WithDetails(map[string]any{"required": "--proposal", "requested_ids": evaluation.RequestedIDs, "review_required": true})
+	}
+	if proposal != snapshot {
+		mismatch := "stale_or_wrong_request"
+		if !strings.HasPrefix(proposal, "v1:") {
+			mismatch = "invalid"
+		}
 		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}},
-			cliout.Errorf(cliout.CodeClaimFileChanged, "lock: preview snapshot is stale; re-run --dry-run and review the current dependency content")
+			cliout.Errorf(cliout.CodeClaimFileChanged, "lock: reviewed proposal does not match the requested current content").WithDetails(map[string]any{"reason": mismatch, "requested_ids": evaluation.RequestedIDs, "review_required": true})
 	}
 	if !evaluation.Allowed() {
 		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}},
 			policyRefusalError(evaluation)
+	}
+	if err := crossPreLedger(cfg, store, claims, "claim lock"); err != nil {
+		return cmdResult{}, err
 	}
 
 	requested := map[string]bool{}
@@ -396,7 +412,44 @@ func policySnapshot(claims []model.Claim, ids []string) string {
 	for _, id := range ordered {
 		fmt.Fprintf(h, "%s=%s\n", id, lock.ContentHash(byID[id]))
 	}
-	return hex.EncodeToString(h.Sum(nil))
+	return "v1:" + hex.EncodeToString(h.Sum(nil))
+}
+
+func reviewedPolicyClaims(claims []model.Claim, ids []string) []policyReviewedClaim {
+	byID := map[string]model.Claim{}
+	for _, claim := range claims {
+		byID[claim.ID] = claim
+	}
+	seen := map[string]bool{}
+	var visit func(string)
+	visit = func(id string) {
+		if seen[id] {
+			return
+		}
+		seen[id] = true
+		claim, ok := byID[id]
+		if !ok {
+			return
+		}
+		for _, dep := range claim.RestsOn {
+			visit(dep)
+		}
+	}
+	for _, id := range ids {
+		visit(id)
+	}
+	ordered := make([]string, 0, len(seen))
+	for id := range seen {
+		ordered = append(ordered, id)
+	}
+	sort.Strings(ordered)
+	out := make([]policyReviewedClaim, 0, len(ordered))
+	for _, id := range ordered {
+		claim := byID[id]
+		claim.SourcePath = ""
+		out = append(out, policyReviewedClaim{ID: id, Hash: lock.ContentHash(claim), Claim: claim})
+	}
+	return out
 }
 
 func readOptional(path string) ([]byte, bool) {

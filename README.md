@@ -91,7 +91,7 @@ Open the URL it prints. That is a local viewer of every claim, facet, build orde
 3. The agent runs `dossierx comment inbox` — every open thread in the project, one call.
 4. The agent fixes the claim and replies on the thread. Replies are deliberately **ungated**: an agent may reply to a human-opened thread, because that is the entire workflow.
 5. You click **Resolve**. That click *is* the approval — and it is load-bearing, because a claim cannot be locked while it carries an unresolved thread.
-6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>"`.
+6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>" --proposal "<the preview token>"`.
 
 Closing a thread is yours alone **on the CLI**, and in v0.3.0 that is structural rather than polite: `dossierx comment` is `inbox · list · add · reply` and nothing else. Resolve, reopen, edit and delete were removed from the CLI in v0.3.0 and live only in the viewer and in `dossierx serve`'s HTTP API.
 

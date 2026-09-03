@@ -24,7 +24,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 | Surface | the CLI — all 25 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, and its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
-
+## The nine nouns, twenty-five leaves
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
 dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy
@@ -97,8 +97,8 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 ### Local-approval policy v1
 
 New projects use one set evaluator for single/group lock preview and write.
-`--dry-run` returns verdicts, conditions and a `snapshot`; pass it as
-`--proposal` to reject stale review. Draft dependencies yield visible
+`--dry-run` returns verdicts, conditions and a `snapshot`; `--proposal` is
+required on every lock write, rejecting missing, invalid, stale and wrong-set review. Draft dependencies yield visible
 `dependency_unapproved`, never readiness. Read `claim show` or API `readiness`
 for causes/paths. Existing stores stay legacy until `claim migrate-lock-policy
 --reason "<their words>"`; migration preserves approvals and baselines.
