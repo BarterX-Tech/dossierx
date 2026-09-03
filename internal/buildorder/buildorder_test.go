@@ -414,7 +414,9 @@ func TestPropose_ClaimEntryFile_IsProjectRelativeNotAbsolute(t *testing.T) {
 	if filepath.IsAbs(entries[0].File) {
 		t.Fatalf("expected ClaimEntry.File to be project-relative, got absolute path %q", entries[0].File)
 	}
-	if want := filepath.Join("claims", "schema.yaml"); entries[0].File != want {
+	// A slash literal, not filepath.Join: the artifact is committed and its
+	// paths are slash-separated on every host (displayPath).
+	if want := "claims/schema.yaml"; entries[0].File != want {
 		t.Fatalf("ClaimEntry.File = %q, want %q", entries[0].File, want)
 	}
 }
