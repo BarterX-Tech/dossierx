@@ -79,13 +79,13 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 
 	// A thread with a reply, so comment list's whole tree — thread fields AND
 	// reply fields — is exercised rather than just the root of it.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "does this still hold?")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "does this still hold?")
 	if err != nil {
 		t.Fatalf("comment add: %v", err)
 	}
 	var added commentWriteData
 	envData(t, env, &added)
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "reply", "widget.contract.overview", added.ThreadID, "--as", "agent", "--body", "checked, it holds"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "reply", "widget.contract.overview", added.ThreadID, "--as", "agent", "--body", "checked, it holds"); err != nil {
 		t.Fatalf("comment reply: %v", err)
 	}
 
@@ -145,7 +145,7 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 // Envelope and this test has to look at the bytes.
 func captureJSONBytes(t *testing.T, args ...string) []byte {
 	t.Helper()
-	env, _, _ := execCLIJSON(t, args...) //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
+	env, _, _ := execReviewedCLIJSON(t, args...) //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	// Re-marshalling the decoded envelope would re-tag everything through
 	// cliout's own tags and hide the very thing under test, so run again and
 	// keep the raw stdout instead.
@@ -281,11 +281,11 @@ func TestVersionFlagAnswersInAnEnvelope(t *testing.T) {
 // answer differently, which is exactly what happened while one of them was
 // cobra's built-in and the other was a converted command.
 func TestVersionFlagAndVerbAgree(t *testing.T) {
-	flagEnv, _, err := execCLIJSON(t, "--version")
+	flagEnv, _, err := execReviewedCLIJSON(t, "--version")
 	if err != nil {
 		t.Fatalf("--version: %v", err)
 	}
-	verbEnv, _, err := execCLIJSON(t, "version")
+	verbEnv, _, err := execReviewedCLIJSON(t, "version")
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
@@ -305,7 +305,7 @@ func TestVersionFlagAndVerbAgree(t *testing.T) {
 // preconditions that failed.
 func dryRunBlocked(t *testing.T, args ...string) (blocked bool, missing []string) {
 	t.Helper()
-	env, _, err := execCLIJSON(t, append(args, "--dry-run")...)
+	env, _, err := execReviewedCLIJSON(t, append(args, "--dry-run")...)
 	if err != nil {
 		t.Fatalf("%v --dry-run failed outright (a dry run answers, it does not refuse): %v", args, err)
 	}
@@ -319,7 +319,7 @@ func dryRunBlocked(t *testing.T, args ...string) (blocked bool, missing []string
 func assertDryRunAgrees(t *testing.T, wantBlocked bool, args ...string) {
 	t.Helper()
 	blocked, missing := dryRunBlocked(t, args...)
-	_, _, realErr := execCLIJSON(t, args...)
+	_, _, realErr := execReviewedCLIJSON(t, args...)
 	realRefused := realErr != nil
 	if blocked != realRefused {
 		t.Fatalf("%v: dry run says blocked=%v (missing %v) but the real run %s",
@@ -365,7 +365,7 @@ func TestClaimLinkDryRunAgreesWithTheWritePath(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("rewrite config: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture"); err != nil {
 		t.Fatalf("lock the claim so it is linkable: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "impl.go"), []byte("package impl\n"), 0o644); err != nil {
@@ -456,7 +456,7 @@ func TestBuildOrderLockDryRunAgreesOnAStaleOrder(t *testing.T) {
 
 	mustSucceed := func(args ...string) {
 		t.Helper()
-		if _, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
@@ -519,7 +519,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 
 	mustSucceed := func(args ...string) {
 		t.Helper()
-		if _, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
@@ -604,7 +604,7 @@ func TestClaimsSentinelContentionIsAWriteConflictOnEveryVerb(t *testing.T) {
 		{"claim unlock", []string{"claim", "unlock", "widget.contract.overview", "--reason", "r"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, tc.args...)...)
+			env, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, tc.args...)...)
 			if err == nil {
 				t.Fatalf("expected %v to be refused on a read-only project dir", tc.args)
 			}

@@ -98,6 +98,49 @@ func run(t *testing.T, dir string, args ...string) (stdout, stderr string, exitC
 	return outBuf.String(), errBuf.String(), code
 }
 
+// reviewedRun is the fixture-only form of run for tests that need to reach a
+// lock success or its later policy gates. It performs the same human-review
+// exchange a caller must perform: request --dry-run, read its snapshot, then
+// submit that exact snapshot with the original request. Token refusal cases
+// must use run directly so absence, staleness, and request mismatch remain
+// observable.
+func reviewedRun(t *testing.T, dir string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	lockAt := -1
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "claim" && args[i+1] == "lock" {
+			lockAt = i
+			break
+		}
+	}
+	if lockAt < 0 || containsArg(args, "--dry-run") || containsArg(args, "--proposal") {
+		return run(t, dir, args...)
+	}
+	previewArgs := append(append([]string(nil), args...), "--format", "json", "--dry-run")
+	preview, previewErr, previewCode := run(t, dir, previewArgs...)
+	if previewCode != 0 {
+		t.Fatalf("reviewed lock preview %v exited %d: %s (stderr=%s)", args, previewCode, preview, previewErr)
+	}
+	var envelope struct {
+		Data struct {
+			Snapshot string `json:"snapshot"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(preview), &envelope); err != nil || envelope.Data.Snapshot == "" {
+		t.Fatalf("reviewed lock preview %v returned no proposal token: %v\n%s", args, err, preview)
+	}
+	return run(t, dir, append(args, "--proposal", envelope.Data.Snapshot)...)
+}
+
+func containsArg(args []string, want string) bool {
+	for _, arg := range args {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
 // writeFixtureProject writes a minimal, valid project.config.yaml plus one
 // draft claim under root, using module/facet names unique to each test so
 // fixtures never collide with the shared testdata/fixture-basic.

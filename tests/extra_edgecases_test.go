@@ -57,7 +57,7 @@ func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
 		wg.Add(1)
 		go func(i int, id string) {
 			defer wg.Done()
-			_, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture")
+			_, stderr, code := reviewedRun(t, root, "claim", "lock", id, "--reason", "test fixture")
 			codes[i] = code
 			if code != 0 {
 				t.Errorf("concurrent lock of %s failed: exit %d, stderr: %s", id, code, stderr)
@@ -141,12 +141,12 @@ func TestVeryLongClaimIDHandledEndToEnd(t *testing.T) {
 		t.Fatalf("write claim: %v", err)
 	}
 
-	if stdout, stderr, code := run(t, root, "check"); code != 0 {
+	if stdout, stderr, code := reviewedRun(t, root, "check"); code != 0 {
 		t.Fatalf("check failed for a very long claim id: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
 	// deps must find it by its full, exact (untruncated) id.
-	depsOut, depsErr, depsCode := run(t, root, "claim", "show", id)
+	depsOut, depsErr, depsCode := reviewedRun(t, root, "claim", "show", id)
 	if depsCode != 0 {
 		t.Fatalf("deps failed for the long id: exit %d\nstdout: %s\nstderr: %s", depsCode, depsOut, depsErr)
 	}
@@ -175,7 +175,7 @@ func TestVeryLongClaimIDHandledEndToEnd(t *testing.T) {
 		t.Fatalf("expected rendered viewer to contain the full long id")
 	}
 
-	if stdout, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+	if stdout, stderr, code := reviewedRun(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock failed for the long id: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	raw, err := os.ReadFile(filepath.Join(claimsDir, "long.yaml"))

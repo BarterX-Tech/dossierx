@@ -10,6 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/spf13/cobra"
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
@@ -37,9 +39,9 @@ type policyLockPreviewData struct {
 }
 
 type policyReviewedClaim struct {
-	ID    string      `json:"id"`
-	Hash  string      `json:"hash"`
-	Claim model.Claim `json:"claim"`
+	ID      string `json:"id"`
+	Hash    string `json:"hash"`
+	Content string `json:"content"`
 }
 
 type policyLockData struct {
@@ -141,8 +143,12 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 		From:       "draft", To: "locked",
 		Preconditions: []cliout.Precondition{{Name: "claim_is_draft", OK: evaluation.Allowed()}, {Name: "lint_clean", OK: evaluation.Allowed()}, {Name: "no_open_comment_threads", OK: evaluation.Allowed()}},
 		SideEffects:   []string{"write requested claim approvals and lock ledger records"},
-		Reviewed:      reviewedPolicyClaims(claims, evaluation.RequestedIDs),
 	}
+	reviewed, err := reviewedPolicyClaims(claims, evaluation.RequestedIDs)
+	if err != nil {
+		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock preview: prepare reviewed content: %w", err)
+	}
+	data.Reviewed = reviewed
 	if strings.TrimSpace(reason) == "" {
 		data.Missing = []string{"--reason"}
 	}
@@ -437,7 +443,7 @@ func proposalMismatch(proposal string, requested []string) string {
 	return "stale"
 }
 
-func reviewedPolicyClaims(claims []model.Claim, ids []string) []policyReviewedClaim {
+func reviewedPolicyClaims(claims []model.Claim, ids []string) ([]policyReviewedClaim, error) {
 	byID := map[string]model.Claim{}
 	for _, claim := range claims {
 		byID[claim.ID] = claim
@@ -469,9 +475,13 @@ func reviewedPolicyClaims(claims []model.Claim, ids []string) []policyReviewedCl
 	for _, id := range ordered {
 		claim := byID[id]
 		claim.SourcePath = ""
-		out = append(out, policyReviewedClaim{ID: id, Hash: lock.ContentHash(claim), Claim: claim})
+		content, err := yaml.Marshal(claim)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, policyReviewedClaim{ID: id, Hash: lock.ContentHash(claim), Content: string(content)})
 	}
-	return out
+	return out, nil
 }
 
 func readOptional(path string) ([]byte, bool) {

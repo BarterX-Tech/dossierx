@@ -643,7 +643,39 @@ func (f *fixture) NewClaim(id, body, buildRole string) {
 // half this harness cannot enact (see the package comment).
 func (f *fixture) LockClaim(id, reason string) {
 	f.t.Helper()
-	f.Setup("dossierx claim lock <id> --reason <reason>", map[string]string{"id": id, "reason": reason})
+	f.reviewedLock("dossierx claim lock <id> --reason <reason>", map[string]string{"id": id, "reason": reason})
+}
+
+// reviewedLock is the fixture's explicit review exchange. Procedure setup
+// needs a real approval record, so it first obtains the dry-run snapshot and
+// then writes with that exact token. Deliberate token-refusal scenarios call
+// Setup/Run directly and therefore never reach this helper.
+func (f *fixture) reviewedLock(template string, bind map[string]string) *invocation {
+	f.t.Helper()
+	preview := f.exec(template+" --dry-run", bind)
+	if preview.Exit != 0 || preview.Env == nil {
+		f.t.Fatalf("fixture lock preview failed: %s\nexit %d\nstdout: %s\nstderr: %s", template, preview.Exit, preview.Stdout, preview.Stderr)
+	}
+	proposal, ok := preview.Env.Data["snapshot"].(string)
+	if !ok || proposal == "" {
+		f.t.Fatalf("fixture lock preview returned no proposal token: %s", preview.Stdout)
+	}
+	withProposal := make(map[string]string, len(bind)+1)
+	for key, value := range bind {
+		withProposal[key] = value
+	}
+	withProposal["proposal"] = proposal
+	inv := f.Setup(template+" --proposal <proposal>", withProposal)
+	return inv
+}
+
+// RunReviewedLock records the documented write step while executing the
+// required preview/token exchange that makes the approval reviewable.
+func (f *fixture) RunReviewedLock(template string, bind map[string]string) *invocation {
+	f.t.Helper()
+	inv := f.reviewedLock(template, bind)
+	f.record(template)
+	return inv
 }
 
 // OpenHumanThread opens a comment thread as the human and returns the minted

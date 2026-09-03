@@ -96,7 +96,7 @@ func writeTrackFixture(t *testing.T) (cfgPath, root string) {
 func TestTrackListReportsEveryDeclaredTrackInDeclarationOrder(t *testing.T) {
 	cfgPath, _ := writeTrackFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "track", "list")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", "list")
 	if err != nil {
 		t.Fatalf("track list: %v (%+v)", err, env)
 	}
@@ -137,7 +137,7 @@ func TestTrackListOnAProjectWithNoTracksSucceeds(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "track", "list")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", "list")
 	if err != nil {
 		t.Fatalf("track list on a track-less project must succeed: %v (%+v)", err, env)
 	}
@@ -149,7 +149,7 @@ func TestTrackListOnAProjectWithNoTracksSucceeds(t *testing.T) {
 
 	// And the text rendering says WHY it is empty rather than printing a bare
 	// count, which reads as a failed search.
-	out, _, err := execCLI(t, "--config", cfgPath, "track", "list")
+	out, _, err := execReviewedCLI(t, "--config", cfgPath, "track", "list")
 	if err != nil {
 		t.Fatalf("track list --format text: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestTrackListOnAProjectWithNoTracksSucceeds(t *testing.T) {
 func TestTrackShowSeparatesOwnedProseFromCitedReferences(t *testing.T) {
 	cfgPath, _ := writeTrackFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "track", "show", "guest-checkout")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", "show", "guest-checkout")
 	if err != nil {
 		t.Fatalf("track show: %v (%+v)", err, env)
 	}
@@ -220,7 +220,7 @@ func TestTrackShowSeparatesOwnedProseFromCitedReferences(t *testing.T) {
 func TestTrackStatusNamesEveryClaimBlockingCompletion(t *testing.T) {
 	cfgPath, _ := writeTrackFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "track", "status", "guest-checkout")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", "status", "guest-checkout")
 	if err != nil {
 		t.Fatalf("track status: %v (%+v)", err, env)
 	}
@@ -257,12 +257,12 @@ func TestTrackStatusNamesEveryClaimBlockingCompletion(t *testing.T) {
 func TestTrackBecomesCompleteWhenTheLastCitedClaimLocks(t *testing.T) {
 	cfgPath, _ := writeTrackFixture(t)
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"payments.contract.card-capture", "--reason", "the human approved it"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "track", "status", "guest-checkout")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", "status", "guest-checkout")
 	if err != nil {
 		t.Fatalf("track status: %v (%+v)", err, env)
 	}
@@ -284,7 +284,7 @@ func TestTrackBecomesCompleteWhenTheLastCitedClaimLocks(t *testing.T) {
 func TestAnEmptyTrackIsNotComplete(t *testing.T) {
 	cfgPath, _ := writeTrackFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "track", "status", "refunds")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", "status", "refunds")
 	if err != nil {
 		t.Fatalf("track status refunds: %v (%+v)", err, env)
 	}
@@ -299,7 +299,7 @@ func TestAnEmptyTrackIsNotComplete(t *testing.T) {
 
 	// The text form has to say it in words, because complete:false with an empty
 	// blocking list is the one pair a reader cannot interpret from its shape.
-	out, _, err := execCLI(t, "--config", cfgPath, "track", "status", "refunds")
+	out, _, err := execReviewedCLI(t, "--config", cfgPath, "track", "status", "refunds")
 	if err != nil {
 		t.Fatalf("track status --format text: %v", err)
 	}
@@ -318,7 +318,7 @@ func TestUnknownTrackIsItsOwnRefusal(t *testing.T) {
 
 	for _, leaf := range []string{"show", "status"} {
 		t.Run(leaf, func(t *testing.T) {
-			env, _, err := execCLIJSON(t, "--config", cfgPath, "track", leaf, "guest-chekout")
+			env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "track", leaf, "guest-chekout")
 			if err == nil || env.OK {
 				t.Fatalf("an unknown track id must fail, got %+v", env)
 			}
@@ -339,7 +339,7 @@ func TestUnknownTrackIsItsOwnRefusal(t *testing.T) {
 	// mistake from misspelling one of three.
 	root := t.TempDir()
 	bare, _ := icWriteFixtureProject(t, root, "widget")
-	env, _, err := execCLIJSON(t, "--config", bare, "track", "show", "anything")
+	env, _, err := execReviewedCLIJSON(t, "--config", bare, "track", "show", "anything")
 	if err == nil || env.Error == nil {
 		t.Fatalf("expected a refusal, got %+v", env)
 	}
@@ -363,7 +363,7 @@ func TestTrackLeavesWriteNothing(t *testing.T) {
 		{"track", "status", "guest-checkout"},
 		{"track", "status", "refunds"},
 	} {
-		if _, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}

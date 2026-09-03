@@ -1109,7 +1109,8 @@ missing file — and then one hand-edit falsifies what the ledger says about it:
 ```sh
 dossierx claim unlock widget.contract.overview --reason "editing"
 $EDITOR claims/widget-overview.yaml           # rewrite the body to say something else
-dossierx claim lock   widget.contract.overview --reason "re-lock"
+dossierx claim lock   widget.contract.overview --dry-run
+dossierx claim lock   widget.contract.overview --reason "re-lock" --proposal "<snapshot>"
 $EDITOR .dossierx-lock-store.json             # put the ORIGINAL reason, at and actor back
 ```
 
@@ -1282,7 +1283,8 @@ dossierx claim unlock <id> --reason "..."
 
 # 3. then re-lock only what you still stand behind. The FIRST of these
 #    crosses the store onto the ledger and records a real approval:
-dossierx claim lock <id> --reason "..."
+dossierx claim lock <id> --dry-run
+dossierx claim lock <id> --reason "..." --proposal "<snapshot>"
 
 # 4. then the build orders again, for every module that is fully locked
 #    again. A module you re-locked only partially has nothing to propose

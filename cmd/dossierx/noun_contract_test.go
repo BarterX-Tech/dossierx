@@ -32,7 +32,7 @@ import (
 func TestBareNounIsOneUsageEnvelope(t *testing.T) {
 	for _, noun := range []string{"claim", "comment", "build-order", "track", "theme", "skills"} {
 		t.Run(noun, func(t *testing.T) {
-			env, _, err := execCLIJSON(t, noun)
+			env, _, err := execReviewedCLIJSON(t, noun)
 			if err == nil {
 				t.Fatalf("a bare %q must fail; it did not", noun)
 			}
@@ -100,7 +100,7 @@ func TestBareRootIsOneUsageEnvelope(t *testing.T) {
 // parent take arbitrary positionals), and naming what was actually typed is
 // worth more than a generic complaint.
 func TestUnknownLeafUnderANounIsUsage(t *testing.T) {
-	env, _, err := execCLIJSON(t, "claim", "definitely-not-a-verb")
+	env, _, err := execReviewedCLIJSON(t, "claim", "definitely-not-a-verb")
 	if err == nil || env.OK {
 		t.Fatalf("an unknown leaf must fail, got %+v", env)
 	}
@@ -225,7 +225,7 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	})
 	claimFile := filepath.Join(root, "claims", "a.yaml")
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "flag", "widget.contract.a",
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "flag", "widget.contract.a",
 		"--claim-says", "the original approved body.", "--now-does", "something else entirely",
 		"--reason", "the code does not match the claim"); err != nil {
 		t.Fatalf("claim flag: %v", err)
@@ -251,7 +251,7 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	}
 
 	// check must put it back.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Logf("check returned %v (the gate's verdict is not what this test is about)", err)
 	}
 	after, err := os.ReadFile(claimFile)
@@ -272,10 +272,10 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 // project, which is a gate firing on correct state.
 func TestBuildOrderSignatureMatchesTheGate(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
 
@@ -321,10 +321,10 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	root := filepath.Dir(cfgPath)
 	const id = "widget.contract.a"
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
 
@@ -337,29 +337,29 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	rewindStoreToPreLedger(t, storeFile)
 
 	// 1. The refusal, on both write paths, and that it IS the refusal.
-	lockEnv, _, lockErr := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
+	lockEnv, _, lockErr := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved")
 	if lockErr == nil || lockEnv.Error == nil || lockEnv.Error.Code != cliout.CodePreLedgerUnadopted {
 		t.Fatalf("claim lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, lockEnv.Error)
 	}
-	boEnv, _, boErr := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
+	boEnv, _, boErr := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
 	if boErr == nil || boEnv.Error == nil || boEnv.Error.Code != cliout.CodePreLedgerUnadopted {
 		t.Fatalf("build-order lock must refuse with %q, got %+v", cliout.CodePreLedgerUnadopted, boEnv.Error)
 	}
 
 	// 2. The recovery, in the order the refusal text gives.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("re-propose (FIRST: propose needs the module still fully locked): %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "crossing onto the ledger"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "crossing onto the ledger"); err != nil {
 		t.Fatalf("unlock is gateless and always has been: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved after the crossing"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "re-approved after the crossing"); err != nil {
 		t.Fatalf("the crossing lock: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("re-propose after the crossing: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "re-approved after the crossing"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "re-approved after the crossing"); err != nil {
 		t.Fatalf("build-order lock after the crossing: %v", err)
 	}
 
@@ -387,7 +387,7 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	// The finding set is asserted EMPTY, not merely free of two named rules: a
 	// crossing point that stamped only the schema version would leave
 	// comment-digest-absent behind, pointing at a file that never existed.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
 	if err != nil || !env.OK {
 		t.Fatalf("check --validate after the crossing: %v (%+v)", err, env)
 	}
@@ -455,7 +455,7 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			env, _, err := execCLIJSON(t, tc.argv...)
+			env, _, err := execReviewedCLIJSON(t, tc.argv...)
 			if err == nil || env.OK {
 				t.Fatalf("a removed verb must fail, got %+v", env)
 			}
@@ -490,7 +490,7 @@ func TestRetiredInvocationsNameTheirReplacement(t *testing.T) {
 // that resolving is the human's approval and lives in the viewer, which is the
 // same rule internal/comments' canAct enforces in code.
 func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
-	env, _, err := execCLIJSON(t, "comment", "resolve", "widget.contract.a", "c-abc123", "--as", "agent")
+	env, _, err := execReviewedCLIJSON(t, "comment", "resolve", "widget.contract.a", "c-abc123", "--as", "agent")
 	if err == nil {
 		t.Fatal("comment resolve must fail")
 	}
@@ -513,7 +513,7 @@ func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
 // in the leaf count TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins.
 // A removal explanation that advertises itself is a re-addition.
 func TestRetiredVerbsAreNotSurface(t *testing.T) {
-	env, _, err := execCLIJSON(t, "comment")
+	env, _, err := execReviewedCLIJSON(t, "comment")
 	if err == nil {
 		t.Fatal("a bare noun must fail")
 	}

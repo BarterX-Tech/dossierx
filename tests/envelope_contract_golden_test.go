@@ -443,7 +443,7 @@ func envProposedOrder(t *testing.T, dir string) map[string]string {
 // holding would look like a contract change and be a broken fixture.
 func envMustRun(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	stdout, stderr, code := run(t, dir, append([]string{"--format", "json"}, args...)...)
+	stdout, stderr, code := reviewedRun(t, dir, append([]string{"--format", "json"}, args...)...)
 	if code != 0 {
 		t.Fatalf("fixture setup %v exited %d\nstdout: %s\nstderr: %s", args, code, stdout, stderr)
 	}
@@ -885,7 +885,7 @@ func TestEnvelopeContractGolden(t *testing.T) {
 			}
 		}
 
-		stdout, stderr, code := run(t, dir, append([]string{"--format", "json"}, live...)...)
+		stdout, stderr, code := reviewedRun(t, dir, append([]string{"--format", "json"}, live...)...)
 		if strings.TrimSpace(stdout) == "" {
 			t.Fatalf("%s: no envelope on stdout (exit %d)\nstderr: %s", c.name, code, stderr)
 		}

@@ -34,7 +34,7 @@ func TestUnknownClaimIDExitsTwo(t *testing.T) {
 		{"claim", "flag", "widget.contract.ghost", "--claim-says", "a", "--now-does", "b", "--reason", "c"},
 	}
 	for _, args := range cases {
-		_, stderr, code := run(t, root, args...)
+		_, stderr, code := reviewedRun(t, root, args...)
 		if code != 2 {
 			t.Fatalf("expected exit 2 for %v on an unknown claim, got %d (stderr: %s)", args, code, stderr)
 		}

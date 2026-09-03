@@ -30,8 +30,8 @@ the five rules are there and are not repeated here.
 | know everything about one claim | `dossierx claim show <id>` |
 | find the claim a human described | `dossierx claim list --match "<their words>"` |
 | what is pending / migrated / drifted | `dossierx claim list --review-pending` · `--migrated` · `--drifted` |
-| freeze a claim, on the human's word | `dossierx claim lock <id> --reason "<their words>"` |
-| change a locked claim | `dossierx claim unlock <id> --reason "..."` → edit → `dossierx claim lock <id> --reason "..."` |
+| freeze a claim, on the human's word | `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"` |
+| change a locked claim | `dossierx claim unlock <id> --reason "..."` → edit → `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "..."` |
 | a locked claim drifted from a changed dependency | `dossierx claim reaudit <id>` (preview) then `--confirm --reason "..."` |
 | what feature tracks this project declares | `dossierx track list` |
 | read a feature end to end, assembled across modules | `dossierx track show <id>` |
@@ -184,7 +184,7 @@ the lifecycle yourself.
 
 A draft claim is yours. A locked claim is the human's, and the **only** path through it is
 `dossierx claim unlock <id> --reason "<their words>"` → edit the file →
-`dossierx claim lock <id> --reason "<their words>"`.
+`dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"`.
 
 Both ends require `--reason` and take `--dry-run`. Preview, show the human the `side_effects`
 (locking records a content baseline; unlocking releases it and can flip dependents), get a yes,

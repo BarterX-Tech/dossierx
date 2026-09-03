@@ -57,14 +57,14 @@ func TestLocalApprovalDoesNotLetUnrelatedLintBlockACandidate(t *testing.T) {
 
 	// Local-approval v1 evaluates the candidate rather than making an
 	// unrelated historical rests_on finding hostage the request.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go")
 	if err != nil || !env.OK {
 		t.Fatalf("single locally admissible claim must not be refused by unrelated historical lint: %+v (err=%v)", env, err)
 	}
 
 	// A set of one takes the same policy path after the first independent
 	// approval, retaining the public group result shape for policy writes.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.two", "--reason", "batch relock, unrelated to the anchor/sibling finding")
 	if err != nil {
 		t.Fatalf("batch lock over unrelated claims must succeed: %+v (err=%v)", env, err)
@@ -86,7 +86,7 @@ func TestLocalApprovalDoesNotLetUnrelatedLintBlockACandidate(t *testing.T) {
 
 	// And it is durable: re-reading the claims off disk shows both locked.
 	for _, id := range []string{"widget.contract.one", "widget.contract.two"} {
-		showEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
+		showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 		if err != nil {
 			t.Fatalf("claim show %s: %v", id, err)
 		}
@@ -124,7 +124,7 @@ func batchOpenThreadFixture(t *testing.T) string {
 func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.clean", "widget.contract.flagged", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("a batch with an open-thread member must be refused, got %+v", env)
@@ -148,7 +148,7 @@ func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T
 	// NOTHING WAS WRITTEN — not even the clean claim, which on its own has no
 	// gate standing in its way at all. Atomicity: all requested ids lock, or
 	// none do.
-	showEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.clean")
+	showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.clean")
 	if err != nil {
 		t.Fatalf("claim show widget.contract.clean: %v", err)
 	}
@@ -191,7 +191,7 @@ func batchOutsideDraftDependencyFixture(t *testing.T) string {
 func TestBatchLockRefusedWhenRequestedClaimRestsOnDraftOutsideTheBatch(t *testing.T) {
 	cfgPath := batchOutsideDraftDependencyFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.dependent", "widget.contract.bystander", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("a requested claim resting on a draft outside the batch must still refuse the whole batch, got %+v", env)
@@ -217,7 +217,7 @@ func TestBatchLockRefusedWhenRequestedClaimRestsOnDraftOutsideTheBatch(t *testin
 
 	// NOTHING WAS WRITTEN, including "bystander", which has no gate of its own.
 	for _, id := range []string{"widget.contract.dependent", "widget.contract.bystander", "widget.contract.outsider"} {
-		showEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
+		showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 		if err != nil {
 			t.Fatalf("claim show %s: %v", id, err)
 		}
@@ -243,7 +243,7 @@ func TestBatchLockRefusedWhenRequestedClaimRestsOnDraftOutsideTheBatch(t *testin
 func TestSingleIDLockStillProducesLockDataNotBatchShape(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.clean", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.clean", "--reason", "go")
 	if err != nil {
 		t.Fatalf("single-id lock: %v (%+v)", err, env)
 	}
@@ -260,7 +260,7 @@ func TestSingleIDLockStillProducesLockDataNotBatchShape(t *testing.T) {
 func TestSingleIDLockDryRunRejectsMultipleIDs(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.clean", "widget.contract.flagged", "--dry-run")
 	if err == nil || env.OK {
 		t.Fatalf("--dry-run with more than one id must be refused, got %+v", env)

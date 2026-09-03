@@ -1324,7 +1324,11 @@
       // never re-derived in the browser: dependency paths and independent
       // causes belong to the policy engine, not a second JavaScript policy.
       function renderClaimReadiness(assessments) {
-        document.querySelectorAll('[data-claim-id]').forEach(function (head) {
+        // Claim ids also occur on graph links, comment controls, and edge
+        // references. Restrict this live projection to the card heading so a
+        // link encountered first cannot make the status-to-card path depend on
+        // unrelated DOM placement.
+        document.querySelectorAll('.claim > .k[data-claim-id]').forEach(function (head) {
           var id = head.getAttribute('data-claim-id');
           var assessment = assessments && assessments[id];
           var card = head.closest('.claim');

@@ -254,7 +254,8 @@ dossierx build-order propose --module <m>
 dossierx claim unlock <id> --reason "<your words>"
 
 # 3. then re-lock only what you still stand behind:
-dossierx claim lock <id> --reason "<your words>"
+dossierx claim lock <id> --dry-run
+dossierx claim lock <id> --reason "<your words>" --proposal "<snapshot>"
 
 # 4. then the build orders again, for every module that is fully locked
 #    again. A module you re-locked only partially has nothing to propose

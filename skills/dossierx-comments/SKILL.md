@@ -30,7 +30,7 @@ treat an unanswered thread as a blocked task, not as background noise.
 | 4 | **you** | fix the claim if it is draft (or take a locked one through unlock → fix, with their yes — the re-lock waits for their Resolve), then `dossierx comment reply <claim-id> <thread-id> --as agent --body "..."` |
 | 5 | human | clicks **Resolve** in the viewer. That click is their approval, and it is what unblocks locking |
 | 6 | human | "good, lock it" |
-| 7 | **you** | resolve their words to an id, `--dry-run`, show it, get a yes, `dossierx claim lock <id> --reason "<their words>"` |
+| 7 | **you** | resolve their words to an id, `--dry-run`, show it, get a yes, `dossierx claim lock <id> --dry-run`, then `--proposal "<snapshot>" --reason "<their words>"` |
 
 Step 4 ends in a reply, never in a lock. The thread you are answering is still open — step 5 has
 not happened — and an open thread is exactly what the lock gate refuses (`unresolved_comments`),

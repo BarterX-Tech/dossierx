@@ -151,7 +151,8 @@
 #
 #   dossierx build-order propose --module <m>    # every LOCKED build order, re-proposed
 #   dossierx claim unlock <id> --reason "..."    # every locked claim
-#   dossierx claim lock   <id> --reason "..."    # re-lock only what you still stand
+#   dossierx claim lock   <id> --dry-run          # review the exact draft first
+#   dossierx claim lock   <id> --reason "..." --proposal "<snapshot>"    # re-lock only what you still stand
 #                                                # behind; the first lock in a project
 #                                                # holding nothing locked is what
 #                                                # crosses the store onto the ledger

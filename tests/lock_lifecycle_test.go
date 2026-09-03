@@ -124,7 +124,7 @@ func TestLockLifecycle_LockRefusedOnLintFailure(t *testing.T) {
 	})
 	before := llReadFile(t, claimPath)
 
-	stdout, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.broken", "--reason", "test fixture")
+	stdout, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.broken", "--reason", "test fixture")
 	if code == 0 {
 		t.Fatalf("expected non-zero exit locking a claim with a dangling dependency, got 0\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
@@ -150,10 +150,10 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 	depPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.dep", facet: "contract", module: "widget", status: "draft", body: "dependency claim, v1."})
 	mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main claim resting on the dependency.", restsOn: []string{"widget.contract.dep"}})
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("locking dependency claim failed: %s", stderr)
 	}
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("locking main claim failed: %s", stderr)
 	}
 
@@ -169,7 +169,7 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 	// rather than tampering and this test keeps measuring dependency drift.
 	armLedger(t, root)
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "check"); code != 0 {
 		t.Fatalf("dossierx check failed after dependency changed: %s", stderr)
 	}
 
@@ -181,7 +181,7 @@ func TestLockLifecycle_DependencyChangeFlipsReviewPendingOnCheck(t *testing.T) {
 		t.Fatalf("expected main claim to be flagged review_pending after its dependency changed, got:\n%s", mainAfter)
 	}
 
-	staleOut, _, staleCode := run(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
+	staleOut, _, staleCode := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
 	if staleCode != 0 {
 		t.Fatalf("dossierx claim list --review-pending exited non-zero: %d", staleCode)
 	}
@@ -201,7 +201,7 @@ func TestLockLifecycle_ReauditRefusedWhenNotPending(t *testing.T) {
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.stable", facet: "contract", module: "widget", status: "locked", body: "a stable, already-locked claim."})
 	before := llReadFile(t, claimPath)
 
-	_, stderr, code := run(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.stable")
+	_, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.stable")
 	if code != 2 {
 		t.Fatalf("expected exit code 2 for reaudit on a non-pending claim, got %d (stderr: %s)", code, stderr)
 	}
@@ -226,10 +226,10 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 	_ = depPath
 	mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main claim resting on the dependency.", restsOn: []string{"widget.contract.dep"}})
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock dep: %s", stderr)
 	}
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock main: %s", stderr)
 	}
 
@@ -243,7 +243,7 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 	// the ledger. Re-record it, so the lock-ledger gate sees an approved edit
 	// rather than tampering and this test keeps measuring dependency drift.
 	armLedger(t, root)
-	if _, stderr, code := run(t, root, "--config", cfgPath, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "check"); code != 0 {
 		t.Fatalf("check: %s", stderr)
 	}
 
@@ -253,7 +253,7 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 	}
 
 	// Row 6: reject (no --confirm) -> claim on disk completely untouched.
-	rejectOut, _, rejectCode := run(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main")
+	rejectOut, _, rejectCode := reviewedRun(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main")
 	if rejectCode != 0 {
 		t.Fatalf("reaudit without --confirm should exit 0 (propose-only), got %d", rejectCode)
 	}
@@ -267,7 +267,7 @@ func TestLockLifecycle_ReauditRejectThenConfirm(t *testing.T) {
 
 	// Rows 4 & 7: confirm -> review_pending clears, status stays locked, an
 	// audit note is appended.
-	confirmOut, stderr, confirmCode := run(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture")
+	confirmOut, stderr, confirmCode := reviewedRun(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture")
 	if confirmCode != 0 {
 		t.Fatalf("confirmed reaudit failed: %d\nstdout: %s\nstderr: %s", confirmCode, confirmOut, stderr)
 	}
@@ -299,7 +299,7 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 	mainBPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.mainb", facet: "contract", module: "widget", status: "draft", body: "dependent B.", restsOn: []string{"widget.contract.dep"}})
 
 	for _, id := range []string{"widget.contract.dep", "widget.contract.maina", "widget.contract.mainb"} {
-		if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+		if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("lock %s: %s", id, stderr)
 		}
 	}
@@ -314,11 +314,11 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 	// the ledger. Re-record it, so the lock-ledger gate sees an approved edit
 	// rather than tampering and this test keeps measuring dependency drift.
 	armLedger(t, root)
-	if _, stderr, code := run(t, root, "--config", cfgPath, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "check"); code != 0 {
 		t.Fatalf("check: %s", stderr)
 	}
 
-	staleOut, _, staleCode := run(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
+	staleOut, _, staleCode := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
 	if staleCode != 0 {
 		t.Fatalf("stale exited %d", staleCode)
 	}
@@ -326,7 +326,7 @@ func TestLockLifecycle_MultipleDependentsStaleListsAllReauditOneAtATime(t *testi
 		t.Fatalf("expected dossierx claim list --review-pending to list both dependents, got: %s", staleOut)
 	}
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.maina", "--confirm", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.maina", "--confirm", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("reaudit maina: %s", stderr)
 	}
 
@@ -354,7 +354,7 @@ func TestLockLifecycle_ReviewPendingFilterIsEmptyWhenNothingIsLocked(t *testing.
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.draftonly", facet: "contract", module: "widget", status: "draft", body: "never locked."})
 
-	out, stderr, code := run(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
+	out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
 	if code != 0 {
 		t.Fatalf("expected exit 0, got %d (stderr: %s)", code, stderr)
 	}
@@ -388,7 +388,7 @@ func TestLockLifecycle_HubGatingBlocksWhenConfigured(t *testing.T) {
 	hubPath, childPath := llWriteMirrorPair(t, root, "widget.doctrine.hub", "doctrine", "widget.contract.child")
 
 	// Hub not yet locked: locking child must be refused by hub-gating.
-	_, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
+	_, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
 	if code == 0 {
 		t.Fatalf("expected lock of child to be refused while doctrine hub is still draft")
 	}
@@ -400,13 +400,13 @@ func TestLockLifecycle_HubGatingBlocksWhenConfigured(t *testing.T) {
 	}
 
 	// Lock the hub, then locking the child succeeds.
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.doctrine.hub", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.doctrine.hub", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("expected hub to lock successfully: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, hubPath), "status: locked") {
 		t.Fatalf("expected hub to be locked on disk")
 	}
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("expected child lock to succeed once hub is locked: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, childPath), "status: locked") {
@@ -422,7 +422,7 @@ func TestLockLifecycle_HubGatingSkippedWhenNotConfigured(t *testing.T) {
 	// Hub-gating is not configured at all: locking child must succeed even
 	// though "hub" (not even in a doctrine-designated facet) is still
 	// draft — nothing should gate on it.
-	_, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
+	_, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.child", "--reason", "test fixture")
 	if code != 0 {
 		t.Fatalf("expected child lock to succeed when hub-gating is not configured: %s", stderr)
 	}
