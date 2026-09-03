@@ -175,7 +175,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 			}
 			if cfg != nil && cfg.HubGatingEnabled() && dep.Facet == cfg.DoctrineFacet && !candidateLocked(depID, candidate) {
 				verdict.LocalAdmissible = false
-				verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+depID)
+				verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+cfg.DoctrineFacet+":"+depID)
 				continue
 			}
 			if store == nil || !store.LocalApprovalEnabled() {
@@ -201,7 +201,7 @@ func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []strin
 				mirror, ok := byID[mirrorID]
 				if ok && mirror.Facet == cfg.DoctrineFacet && !candidateLocked(mirrorID, candidate) {
 					verdict.LocalAdmissible = false
-					verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+mirrorID)
+					verdict.Refusals = append(verdict.Refusals, "doctrine_dependency_not_locked:"+cfg.DoctrineFacet+":"+mirrorID)
 				}
 			}
 		}

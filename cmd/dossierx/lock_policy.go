@@ -366,6 +366,13 @@ func policyRefusalError(evaluation lock.SetEvaluation) error {
 				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID).WithDetails(details)
 			case strings.HasPrefix(refusal, "semantic_contradiction_requires_human_review"):
 				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID).WithDetails(details)
+			case strings.HasPrefix(refusal, "doctrine_dependency_not_locked:"):
+				parts := strings.SplitN(refusal, ":", 3)
+				if len(parts) == 3 {
+					details["doctrine_facet"] = parts[1]
+					details["dependency_id"] = parts[2]
+					return cliout.Errorf(cliout.CodeLintFailed, "lock: claim %q requires locked %s doctrine dependency %q", verdict.ClaimID, parts[1], parts[2]).WithDetails(details)
+				}
 			}
 		}
 	}

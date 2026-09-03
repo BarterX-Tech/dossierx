@@ -21,6 +21,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -76,6 +77,24 @@ func runAsync(dir string, args ...string) <-chan asyncResult {
 // held it, which is exactly what the first select catches.
 func assertGatedThenCompletes(t *testing.T, root string, args []string, wantCode int, claimPath string) {
 	t.Helper()
+	// Prepare the reviewed request before the writer is deliberately blocked on
+	// the claims sentinel; deliberate missing-token cases do not use this helper.
+	if len(args) >= 2 && args[0] == "claim" && args[1] == "lock" {
+		previewArgs := append(append([]string(nil), args...), "--format", "json", "--dry-run")
+		stdout, stderr, code := run(t, root, previewArgs...)
+		if code != 0 {
+			t.Fatalf("lock preview before sentinel: exit %d stdout=%s stderr=%s", code, stdout, stderr)
+		}
+		var preview struct {
+			Data struct {
+				Snapshot string `json:"snapshot"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &preview); err != nil || preview.Data.Snapshot == "" {
+			t.Fatalf("lock preview before sentinel returned no token: %v (%s)", err, stdout)
+		}
+		args = append(args, "--proposal", preview.Data.Snapshot)
+	}
 
 	var before string
 	if claimPath != "" {

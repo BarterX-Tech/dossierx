@@ -1347,7 +1347,16 @@
             var path = (cause.path || []).join(' → ');
             box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
           });
-          card.insertBefore(box, card.querySelector('.claim-links') || null);
+          var links = card.querySelector('.claim-links');
+          // claim-links lives inside the card's collapse-content wrapper, not
+          // directly under the section. A DOM reference must belong to the
+          // parent receiving the insertion; otherwise Comet raises
+          // NotFoundError and no readiness card is rendered.
+          if (links && links.parentNode) {
+            links.parentNode.insertBefore(box, links);
+          } else {
+            card.appendChild(box);
+          }
         });
       }
 
@@ -1440,7 +1449,7 @@
         if (!mounted) { return; }
         apiGet('/api/status').then(function (data) {
           renderStatusStrip(data);
-        }).catch(function () { /* keep the last verdict; the next tick recovers */ });
+        }, function () { /* keep the last verdict; the next tick recovers */ });
       }
 
       if (stripToggle) {
