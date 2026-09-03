@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-09-03
+
 ### BREAKING — every dossierx artifact moved under build/
 
 - Every file the engine generates at runtime now lives under one configurable directory,
@@ -60,9 +62,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   grows from 490,505 to 4,084,957 bytes (+3,594,452), and the four fixtures with no locked order
   grow by under 1 KB each (`fixture-basic` 461,835 -> 462,735, `fixture-graph-demo`
   588,865 -> 589,713, `fixture-portability` 463,514 -> 464,414, `fixture-theme-preset`
-  465,304 -> 466,204). A
-  consuming project that commits its viewer should expect the same ~3.6 MB step the first time it
-  locks a build order. The tab's own section and per-module groups carry the ids
+  465,304 -> 466,204). A consuming project that commits its viewer should expect the same
+  ~3.6 MB step the first time it locks a build order. The tab's own section and per-module
+  groups carry the ids
   `dossierx-build-order` and `dossierx-build-order-<module>`, outside the space a module's name
   is slugged into, so a module named `build-order` keeps its own `#build-order` section and the
   tab its diagrams; a module whose name slugs to one of the tab's ids (`dossierx build order`) is
@@ -2277,7 +2279,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.6...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.7...HEAD
+[0.7.7]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.3...v0.7.4
