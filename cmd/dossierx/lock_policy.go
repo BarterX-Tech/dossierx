@@ -105,7 +105,7 @@ func policyEnabledForConfig(cfg interface{ Dir() string }) bool {
 	return err == nil && store.LocalApprovalEnabled()
 }
 
-func previewPolicyLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, error) {
+func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflicts []lock.SemanticConflict) (cmdResult, error) {
 	cfg, claims, err := loadConfigAndClaims()
 	if err != nil {
 		return cmdResult{}, err
@@ -114,7 +114,7 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string) (cmdResu
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock preview: %w", err)
 	}
-	evaluation := lock.EvaluateSet(claims, ids, cfg, store)
+	evaluation := lock.EvaluateSetWithSemanticConflicts(claims, ids, cfg, store, conflicts)
 	data := policyLockPreviewData{
 		Would:      "lock " + strings.Join(evaluation.RequestedIDs, ", "),
 		Blocked:    !evaluation.Allowed() || strings.TrimSpace(reason) == "",
@@ -133,7 +133,7 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string) (cmdResu
 // and a group. It evaluates the final candidate before writing anything, then
 // writes under the claims/store sentinels and restores captured files if a later
 // write fails. It never accepts a supplied snapshot that no longer matches.
-func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string) (cmdResult, error) {
+func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string, conflicts []lock.SemanticConflict) (cmdResult, error) {
 	cfg, err := loadConfig()
 	if err != nil {
 		return cmdResult{}, err
@@ -156,7 +156,7 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string)
 	if err != nil {
 		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 	}
-	evaluation := lock.EvaluateSet(claims, ids, cfg, store)
+	evaluation := lock.EvaluateSetWithSemanticConflicts(claims, ids, cfg, store, conflicts)
 	snapshot := policySnapshot(claims, evaluation.RequestedIDs)
 	if proposal != "" && proposal != snapshot {
 		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}},
@@ -164,7 +164,7 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string)
 	}
 	if !evaluation.Allowed() {
 		return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}},
-			cliout.Errorf(cliout.CodeLintFailed, "lock: one or more requested claims are refused; no approval was written")
+			policyRefusalError(evaluation)
 	}
 
 	requested := map[string]bool{}
@@ -231,6 +231,12 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string)
 			return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w; prior state restored", err)
 		}
 		written = append(written, claim.ID)
+		if err := policyWriteFault("after_claim_write", claim.ID); err != nil {
+			if recoverErr := rollback(); recoverErr != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: injected write failure and %v", recoverErr)
+			}
+			return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: injected write failure; prior state restored: %w", err)
+		}
 	}
 	approval := lock.Approval{Actor: lock.DefaultActor(), Reason: reason}
 	for _, claim := range finalClaims {
@@ -239,6 +245,12 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string)
 		}
 		lock.RefreshBaseline(claim, finalClaims, store)
 		lock.RecordApproval(store, claim, approval)
+	}
+	if err := policyWriteFault("before_store_save", ""); err != nil {
+		if recoverErr := rollback(); recoverErr != nil {
+			return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: injected store failure and %v", recoverErr)
+		}
+		return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: injected store failure; prior state restored: %w", err)
 	}
 	if err := store.Save(); err != nil {
 		if recoverErr := rollback(); recoverErr != nil {
@@ -249,6 +261,66 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string)
 	return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation}, Text: func() {
 		fmt.Fprintf(cmd.OutOrStdout(), "lock: %d claim(s) locally approved: %s\n", len(evaluation.RequestedIDs), strings.Join(evaluation.RequestedIDs, ", "))
 	}}, nil
+}
+
+// policyRefusalError retains the established envelope families for the
+// highest-priority refusal while the data payload keeps every member verdict.
+// A group never hides the open-thread or not-found recovery behind a generic
+// lint error merely because another member was also evaluated.
+func policyRefusalError(evaluation lock.SetEvaluation) error {
+	for _, verdict := range evaluation.Verdicts {
+		for _, refusal := range verdict.Refusals {
+			switch {
+			case refusal == "claim_not_found":
+				return cliout.Errorf(cliout.CodeClaimNotFound, "lock: claim %q not found", verdict.ClaimID)
+			case refusal == "unresolved_comments":
+				return cliout.Errorf(cliout.CodeUnresolvedComments, "lock: claim %q has unresolved comment threads", verdict.ClaimID)
+			case strings.HasPrefix(refusal, "ledger_record_deleted"), strings.HasPrefix(refusal, "comment_digest_unrecorded"), strings.HasPrefix(refusal, "standing_ledger_record"):
+				return cliout.Errorf(cliout.CodeIntegrityFailed, "lock: claim %q has an approval-record integrity refusal", verdict.ClaimID)
+			case refusal == "already_locked":
+				return cliout.Errorf(cliout.CodeAlreadyLocked, "lock: claim %q is already locked", verdict.ClaimID)
+			case strings.HasPrefix(refusal, "semantic_contradiction_requires_human_review"):
+				return cliout.Errorf(cliout.CodeReviewPending, "lock: claim %q has a semantic contradiction requiring human review", verdict.ClaimID)
+			}
+		}
+	}
+	return cliout.Errorf(cliout.CodeLintFailed, "lock: one or more requested claims are refused; no approval was written")
+}
+
+// policyWriteFault is a deterministic, opt-in recovery seam for disposable
+// integration tests. `DOSSIERX_LOCK_FAULT=after_claim_write[:claim-id]` fails
+// after a selected claim write; `before_store_save` fails after all claim
+// writes and approval preparation. It is disabled unless explicitly set and
+// always exercises the ordinary rollback path rather than a test-only write.
+func policyWriteFault(stage, claimID string) error {
+	wanted := strings.TrimSpace(os.Getenv("DOSSIERX_LOCK_FAULT"))
+	if wanted == "" {
+		return nil
+	}
+	parts := strings.SplitN(wanted, ":", 2)
+	if parts[0] != stage {
+		return nil
+	}
+	if len(parts) == 2 && parts[1] != "" && parts[1] != claimID {
+		return nil
+	}
+	return fmt.Errorf("fault seam %s", wanted)
+}
+
+// parseSemanticConflicts accepts claim-id=dependency-id=reason. The claim id
+// is mandatory, the dependency id may be empty, and the reason is preserved in
+// the preview/refusal so a human can review an observed contradiction rather
+// than a machine pretending a content hash decided meaning.
+func parseSemanticConflicts(values []string) ([]lock.SemanticConflict, error) {
+	conflicts := make([]lock.SemanticConflict, 0, len(values))
+	for _, value := range values {
+		parts := strings.SplitN(value, "=", 3)
+		if len(parts) != 3 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[2]) == "" {
+			return nil, fmt.Errorf("semantic conflict must be claim-id=dependency-id=reason")
+		}
+		conflicts = append(conflicts, lock.SemanticConflict{ClaimID: strings.TrimSpace(parts[0]), DependencyID: strings.TrimSpace(parts[1]), Detail: strings.TrimSpace(parts[2])})
+	}
+	return conflicts, nil
 }
 
 func policySnapshot(claims []model.Claim, ids []string) string {

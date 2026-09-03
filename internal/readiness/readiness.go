@@ -25,6 +25,10 @@ const (
 	CauseUpstreamDependencyReview CauseKind = "upstream_dependency_review"
 	CauseOwnThread                CauseKind = "own_thread"
 	CauseOwnFlag                  CauseKind = "own_flag"
+	CauseApprovalContentDrift     CauseKind = "approval_content_drift"
+	CauseApprovalMissing          CauseKind = "approval_missing"
+	CauseApprovalReleased         CauseKind = "approval_released"
+	CauseApprovalUnknown          CauseKind = "approval_unknown"
 )
 
 // ConditionKind identifies a condition that prevents the required dependency
@@ -87,10 +91,11 @@ type Assessment struct {
 	ReviewPending        bool                  `json:"review_pending"`
 	DependencyConditions []DependencyCondition `json:"dependency_conditions,omitempty"`
 	// Conditions and Causes are concise aliases useful to generic consumers.
-	Conditions   []DependencyCondition `json:"conditions,omitempty"`
-	ReviewCauses []Cause               `json:"review_causes,omitempty"`
-	Causes       []Cause               `json:"causes,omitempty"`
-	LocalReasons []string              `json:"local_reasons,omitempty"`
+	Conditions         []DependencyCondition `json:"conditions,omitempty"`
+	ReviewCauses       []Cause               `json:"review_causes,omitempty"`
+	Causes             []Cause               `json:"causes,omitempty"`
+	LocalReasons       []string              `json:"local_reasons,omitempty"`
+	LocalApprovalIssue string                `json:"local_approval_issue,omitempty"`
 }
 
 type summary struct {
@@ -116,7 +121,12 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		collected := collect(c.ID, []string{c.ID}, map[string]bool{c.ID: true}, byID, local, claims, store, flags)
 		conditions := sortConditions(collected.conditions)
 		causes := sortCauses(collected.causes)
-		localApproved := c.Status == model.StatusLocked
+		approval := approvalState(c, store)
+		localApproved := c.Status == model.StatusLocked && approval.valid
+		reasons := localReasons(c)
+		if c.Status == model.StatusLocked && !approval.valid {
+			reasons = append(reasons, approval.detail)
+		}
 		assessment := Assessment{
 			ClaimID:              id,
 			PolicyVersion:        policyVersion(store),
@@ -128,7 +138,8 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			Conditions:           append([]DependencyCondition(nil), conditions...),
 			ReviewCauses:         causes,
 			Causes:               append([]Cause(nil), causes...),
-			LocalReasons:         localReasons(c),
+			LocalReasons:         reasons,
+			LocalApprovalIssue:   approval.detail,
 		}
 		assessment.Ready = assessment.LocalApproved && assessment.DependencyReady && !assessment.ReviewPending
 		result[id] = assessment
@@ -143,11 +154,53 @@ func localReasons(c model.Claim) []string {
 	return []string{fmt.Sprintf("claim status %q is not locally approved", c.Status)}
 }
 
+type approvalCheck struct {
+	valid  bool
+	kind   CauseKind
+	detail string
+}
+
+// approvalState checks the standing lock-ledger record rather than trusting a
+// claim's mutable status field. LockedClaimHash includes every persisted claim
+// field that the approval signs, while ContentHash intentionally answers the
+// separate dependent-staleness question.
+func approvalState(c model.Claim, store *lock.Store) approvalCheck {
+	if c.Status != model.StatusLocked {
+		return approvalCheck{detail: fmt.Sprintf("claim status %q is not locally approved", c.Status)}
+	}
+	if store == nil {
+		return approvalCheck{kind: CauseApprovalUnknown, detail: "no lock store is available to establish a standing approval"}
+	}
+	record, ok := store.Record(c.ID)
+	if !ok {
+		return approvalCheck{kind: CauseApprovalMissing, detail: "no standing lock-ledger approval exists for this locked claim"}
+	}
+	if record.Subject != lock.SubjectClaim {
+		return approvalCheck{kind: CauseApprovalUnknown, detail: "the lock-ledger record is not a claim approval"}
+	}
+	if record.Released() {
+		return approvalCheck{kind: CauseApprovalReleased, detail: "the lock-ledger approval was released and is not standing"}
+	}
+	if record.Hash == "" || record.Hash != lock.LockedClaimHash(c) {
+		return approvalCheck{kind: CauseApprovalContentDrift, detail: "current claim content differs from its standing lock approval"}
+	}
+	return approvalCheck{valid: true}
+}
+
 // localSummary computes only causes owned by id and conditions that are
 // intrinsic to its own dependency evidence. collect adds transitive required
 // chain information and converts child causes into inherited causes.
 func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore, byID map[string]model.Claim) summary {
 	var out summary
+	if c.Status == model.StatusLocked {
+		approval := approvalState(c, store)
+		if !approval.valid {
+			out.causes = append(out.causes, Cause{
+				Kind: approval.kind, SourceKind: approval.kind, Path: Path{c.ID}, Direct: true,
+				Detail: approval.detail,
+			})
+		}
+	}
 	if c.HasOpenThreads() {
 		out.causes = append(out.causes, Cause{
 			Kind: CauseOwnThread, SourceKind: CauseOwnThread, Path: Path{c.ID}, Direct: true,
@@ -256,6 +309,12 @@ func collect(id string, path []string, active map[string]bool, byID map[string]m
 		}
 		if dep.Status != model.StatusLocked {
 			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyUnapproved, DependencyID: depID, Path: appendPath(path[:1], depID), Detail: "required dependency is not locally approved"})
+		} else if approval := approvalState(dep, store); !approval.valid {
+			out.conditions = append(out.conditions, DependencyCondition{
+				Kind: ConditionDependencyUnapproved, DependencyID: depID,
+				Path:   appendPath(path[:1], depID),
+				Detail: "required dependency has no valid standing approval",
+			})
 		}
 		if active[depID] {
 			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyCycle, DependencyID: depID, Path: cyclePath(path, depID), Detail: "required dependency cycle"})

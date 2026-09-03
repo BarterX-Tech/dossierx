@@ -269,7 +269,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFourLeavesUnderNineNouns pins the headline of the v0.3.0
+// TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins the approval-policy surface.
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
@@ -308,18 +308,19 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // a gate; `theme export <preset> <path>` writes a file, and that file is inert
 // until a human points viewer.theme.extends at it. Same argument as track: a
 // way to LOOK, and no new way to change what the project treats as approved.
-func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
+func TestSurfaceIsTwentyFiveLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
-		"claim show":    true,
-		"claim list":    true,
-		"claim new":     true,
-		"claim lock":    true,
-		"claim unlock":  true,
-		"claim flag":    true,
-		"claim reaudit": true,
-		"claim link":    true,
+		"claim show":                true,
+		"claim list":                true,
+		"claim new":                 true,
+		"claim lock":                true,
+		"claim unlock":              true,
+		"claim flag":                true,
+		"claim reaudit":             true,
+		"claim link":                true,
+		"claim migrate-lock-policy": true,
 
 		"comment inbox": true,
 		"comment list":  true,
@@ -385,8 +386,8 @@ func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 24 {
-		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 25 {
+		t.Errorf("the surface is 25 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -483,7 +484,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderNineNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyFiveLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

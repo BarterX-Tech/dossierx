@@ -60,6 +60,13 @@ preview and review the new dependency text; the writer never substitutes
 unseen content into an approval. A write failure must leave the previous state
 or an explicitly recoverable state, never a successful-looking partial batch.
 
+When a reviewer or upstream analysis has identified an actual semantic
+contradiction, pass it explicitly as `--semantic-conflict
+"claim-id=dependency-id=reason"` on preview and write. The evaluator records a
+`semantic_contradiction_requires_human_review` refusal. It never infers this
+from a hash, and refreshing a snapshot cannot clear it; a human must review the
+stated conflict.
+
 Under the local-approval policy, approving `consumer` against a readable draft
 `boundary` can succeed locally while reporting `dependency_unapproved:
 boundary`. Approving both in one final candidate state can clear that condition

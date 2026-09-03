@@ -216,10 +216,11 @@ func buildOrderReports(cfg *config.Config, claims []model.Claim) []BuildOrderRep
 // commands, which do not lint first, keep that gate; check does not need it.)
 func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	var res Result
+	inputs := loadLedgerInputs(cfg)
 
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
-	res.LintFindings = lint.RunAll(claims, cfg)
+	res.LintFindings = policyLintFindings(lint.RunAll(claims, cfg), inputs.store)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -243,7 +244,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		// precedence is unchanged — cmd/dossierx tests LintErrors first, so this
 		// still reports lint_failed / stopped_at "lint"; what changes is that
 		// data.ledger_findings is populated rather than silently empty.
-		res.LedgerFindings = ledgerGate(claims, loadLedgerInputs(cfg))
+		res.LedgerFindings = ledgerGate(claims, inputs)
 		return res, fmt.Errorf("lint: %d error-level finding(s)", len(res.LintErrors))
 	}
 
@@ -422,7 +423,7 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func
 		res.ThemeFontBytes = rep.FontBytes
 	}
 
-	res.LintFindings = lint.RunAll(claims, cfg)
+	res.LintFindings = policyLintFindings(lint.RunAll(claims, cfg), in.store)
 	for _, f := range res.LintFindings {
 		if f.Severity == lint.SeverityWarning {
 			res.LintWarnings = append(res.LintWarnings, f)
@@ -598,12 +599,12 @@ func implinkStatus(cfg *config.Config, claims []model.Claim) (stdout, stderr, hi
 // and in the common case the answer is the first or second candidate. The two
 // cheap gates are tested first so a full lint pass is only spent on a candidate
 // that could still qualify.
-func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config) string {
+func firstLockableDraft(drafts, claims []model.Claim, cfg *config.Config, store *lock.Store) string {
 	for _, c := range drafts {
 		if c.HasOpenThreads() || hasUnlockedDoctrineDep(c, claims, cfg) {
 			continue
 		}
-		if lintErrorsForCandidate(c, claims, cfg) == 0 {
+		if lintErrorsForCandidate(c, claims, cfg, store) == 0 {
 			return c.ID
 		}
 	}
@@ -634,7 +635,7 @@ func hasUnlockedDoctrineDep(c model.Claim, claims []model.Claim, cfg *config.Con
 // its locked form, which is precisely what lock.Lock lints. Linting the
 // still-draft entry instead would report zero for the very claims this is meant
 // to filter out.
-func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config) int {
+func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Config, store *lock.Store) int {
 	candidate := c
 	candidate.Status = model.StatusLocked
 	candidate.ReviewPending = false
@@ -648,7 +649,7 @@ func lintErrorsForCandidate(c model.Claim, claims []model.Claim, cfg *config.Con
 	}
 
 	errs := 0
-	for _, f := range lint.RunAll(lintClaims, cfg) {
+	for _, f := range policyLintFindings(lint.RunAll(lintClaims, cfg), store) {
 		if f.Severity != lint.SeverityWarning {
 			errs++
 		}
@@ -765,7 +766,7 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 	// example is the first draft that passes every gate, and when none does the
 	// hint says so instead of pretending to know where to start.
 	if len(draftIDs) > 0 {
-		if example := firstLockableDraft(drafts, claims, cfg); example != "" {
+		if example := firstLockableDraft(drafts, claims, cfg, store); example != "" {
 			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (e.g. %s)", len(draftIDs), example))
 		} else {
 			hints = append(hints, fmt.Sprintf("%d claim(s) still draft -> dossierx claim lock <id> --reason \"…\" (none is lockable yet: every draft is blocked by a lint error, an open comment thread, or an unlocked dependency)", len(draftIDs)))
@@ -897,4 +898,23 @@ func digestStorePresent(cfg *config.Config) bool {
 
 func flagStorePath(cfg *config.Config) string {
 	return filepath.Join(cfg.Dir(), ".dossierx-flag-store.json")
+}
+
+// policyLintFindings keeps the registry authoritative while reconciling the
+// one legacy rule that local-approval v1 explicitly replaces. A v1 approval
+// may rest on a readable draft boundary; readiness reports that condition and
+// withholds integrated readiness. Stores without recorded adoption preserve
+// the old lint result, so upgrading a binary does not relax old projects.
+func policyLintFindings(findings []lint.Finding, store *lock.Store) []lint.Finding {
+	if store == nil || !store.LocalApprovalEnabled() {
+		return findings
+	}
+	out := make([]lint.Finding, 0, len(findings))
+	for _, finding := range findings {
+		if finding.LintName == "rest-on-locked" {
+			continue
+		}
+		out = append(out, finding)
+	}
+	return out
 }

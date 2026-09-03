@@ -23,7 +23,7 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 
 | | Agent (you) | Human |
 |---|---|---|
-| Surface | the CLI — all 24 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, and its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
+| Surface | the CLI — all 25 commands | the viewer, via `dossierx serve` — including its **Tracks** group and per-track pages, and its **claims graph**, the pane that draws `rests_on`/`governed_by`/`mirrors`, filters by track, and overlays isolated claims, dependency cycles, governance, review-pending and open threads |
 | Freely | author, edit, restructure, delete **draft** claims; reply to any thread; run `dossierx check` as often as you like | read anything; comment on any card; resolve/reopen/edit/delete their own messages |
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
@@ -102,17 +102,12 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 
 ### Local-approval policy v1
 
-On a new project, `claim lock` evaluates one requested set whether it contains
-one id or several. `--dry-run` returns each local verdict, dependency
-conditions and a `snapshot`; pass the snapshot to the later write as
-`--proposal <snapshot>` so a changed reviewed dependency refuses instead of
-being silently approved. A readable draft `rests_on` target may leave a claim
-locally approved with `dependency_unapproved`; it is not dependency-ready.
-Read `claim show <id>` or the served API's `readiness` data for local approval,
-dependency readiness, independent review causes and causal paths. Existing
-stores retain the legacy doctrine until the human explicitly runs
-`dossierx claim migrate-lock-policy --reason "<their words>"`; migration keeps
-approvals, baselines and review state unchanged.
+New projects use one set evaluator for single/group lock preview and write.
+`--dry-run` returns verdicts, conditions and a `snapshot`; pass it as
+`--proposal` to reject stale review. Draft dependencies yield visible
+`dependency_unapproved`, never readiness. Read `claim show` or API `readiness`
+for causes/paths. Existing stores stay legacy until `claim migrate-lock-policy
+--reason "<their words>"`; migration preserves approvals and baselines.
 
 Every mutating verb takes `--dry-run`. It writes nothing and **always exits 0 with `ok: true`**,
 even when the real run would refuse — including when you forgot a required flag.

@@ -2183,11 +2183,16 @@ func newLockCmd() *cobra.Command {
 	var reason string
 	var dryRun bool
 	var proposal string
+	var semanticConflict []string
 	cmd := &cobra.Command{
 		Use:   "lock <id> [id...]",
 		Short: "Lock one or more draft claims (refused if lint fails); --reason records the human approval it executes",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
+			conflicts, err := parseSemanticConflicts(semanticConflict)
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest, "lock: %w", err)
+			}
 			// --dry-run answers a question; it never writes and never takes a
 			// sentinel, so it runs entirely off a plain read here, before the
 			// write path below is entered at all. It previews exactly ONE
@@ -2204,7 +2209,7 @@ func newLockCmd() *cobra.Command {
 					return cmdResult{}, err
 				}
 				if policyEnabledForConfig(cfg) {
-					return previewPolicyLock(cmd, args, reason)
+					return previewPolicyLock(cmd, args, reason, conflicts)
 				}
 				if len(args) > 1 {
 					return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest, "lock: grouped previews require the local-approval policy migration")
@@ -2241,7 +2246,7 @@ func newLockCmd() *cobra.Command {
 				return cmdResult{}, err
 			}
 			if policyEnabledForConfig(cfg) {
-				return runPolicySetLock(cmd, args, reason, proposal)
+				return runPolicySetLock(cmd, args, reason, proposal, conflicts)
 			}
 			if len(args) > 1 {
 				return runBatchLock(cmd, args, reason)
@@ -2465,6 +2470,7 @@ func newLockCmd() *cobra.Command {
 	cmd.Flags().StringVar(&reason, "reason", "", "the human approval this lock executes, in their words (required)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what locking would do — transition, preconditions, side effects, what is missing — and write nothing")
 	cmd.Flags().StringVar(&proposal, "proposal", "", "snapshot returned by --dry-run; refuse if reviewed content changed")
+	cmd.Flags().StringArrayVar(&semanticConflict, "semantic-conflict", nil, "known contradiction as claim-id=dependency-id=reason; refuse for human review")
 	return cmd
 }
 

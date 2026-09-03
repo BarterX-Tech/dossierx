@@ -1319,6 +1319,36 @@
         return group;
       }
 
+      // renderClaimReadiness puts the live local-approval/readiness answer on
+      // the claim a reader is looking at. The data is supplied by /api/status,
+      // never re-derived in the browser: dependency paths and independent
+      // causes belong to the policy engine, not a second JavaScript policy.
+      function renderClaimReadiness(assessments) {
+        document.querySelectorAll('[data-claim-id]').forEach(function (head) {
+          var id = head.getAttribute('data-claim-id');
+          var assessment = assessments && assessments[id];
+          var card = head.closest('.claim');
+          if (!card || !assessment) { return; }
+          var existing = card.querySelector('.claim-readiness');
+          if (existing) { existing.remove(); }
+          var box = el('div', 'claim-readiness');
+          var summary = 'local approval: ' + (assessment.local_approved ? 'yes' : 'no') +
+            ' · dependency ready: ' + (assessment.dependency_ready ? 'yes' : 'no');
+          box.appendChild(textEl('p', 'claim-readiness-summary', summary));
+          var conditions = assessment.dependency_conditions || [];
+          var causes = assessment.review_causes || [];
+          conditions.forEach(function (condition) {
+            var path = (condition.path || []).join(' → ');
+            box.appendChild(textEl('p', 'claim-readiness-detail', 'dependency condition: ' + condition.kind + (path ? ' · ' + path : '')));
+          });
+          causes.forEach(function (cause) {
+            var path = (cause.path || []).join(' → ');
+            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
+          });
+          card.insertBefore(box, card.querySelector('.claim-links') || null);
+        });
+      }
+
       // renderStatusStrip paints one /api/status payload. An empty verdict hides
       // the strip entirely rather than showing a green badge: the viewer already
       // reads as "fine" by default, and a persistent all-clear chip would be one
@@ -1326,6 +1356,7 @@
       function renderStatusStrip(data) {
         if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
         lastStatusData = data || {};
+			renderClaimReadiness(lastStatusData.readiness || {});
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);

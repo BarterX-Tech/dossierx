@@ -41,6 +41,15 @@ type SetEvaluation struct {
 	UnrelatedFindings []lint.Finding     `json:"unrelated_findings"`
 }
 
+// SemanticConflict is an explicit human/agent finding about incompatible
+// meanings. The evaluator never derives it from comparable hashes: a hash can
+// prove bytes differ, not that two statements contradict each other.
+type SemanticConflict struct {
+	ClaimID      string `json:"claim_id"`
+	DependencyID string `json:"dependency_id,omitempty"`
+	Detail       string `json:"detail"`
+}
+
 func (e SetEvaluation) Allowed() bool {
 	for _, verdict := range e.Verdicts {
 		if !verdict.LocalAdmissible {
@@ -55,6 +64,14 @@ func (e SetEvaluation) Allowed() bool {
 // write claims or stores and does not infer semantic compatibility from a hash;
 // semantic contradictions remain a human-review refusal supplied by callers.
 func EvaluateSet(claims []model.Claim, requestedIDs []string, cfg *config.Config, store *Store) SetEvaluation {
+	return EvaluateSetWithSemanticConflicts(claims, requestedIDs, cfg, store, nil)
+}
+
+// EvaluateSetWithSemanticConflicts evaluates the policy with explicit,
+// reviewable semantic findings supplied by the caller. A conflict refuses
+// approval and names human review as the required recovery; it is never
+// inferred from a hash or silently cleared by a snapshot refresh.
+func EvaluateSetWithSemanticConflicts(claims []model.Claim, requestedIDs []string, cfg *config.Config, store *Store, conflicts []SemanticConflict) SetEvaluation {
 	ids := uniqueIDs(requestedIDs)
 	result := SetEvaluation{RequestedIDs: ids, PolicyVersion: PolicyLegacy}
 	if store != nil {
@@ -109,6 +126,20 @@ func EvaluateSet(claims []model.Claim, requestedIDs []string, cfg *config.Config
 		if len(claim.OpenThreadIDs()) > 0 {
 			verdict.LocalAdmissible = false
 			verdict.Refusals = append(verdict.Refusals, "unresolved_comments")
+		}
+		for _, conflict := range conflicts {
+			if conflict.ClaimID != id {
+				continue
+			}
+			verdict.LocalAdmissible = false
+			detail := "semantic_contradiction_requires_human_review"
+			if conflict.DependencyID != "" {
+				detail += ":" + conflict.DependencyID
+			}
+			if conflict.Detail != "" {
+				detail += ":" + conflict.Detail
+			}
+			verdict.Refusals = append(verdict.Refusals, detail)
 		}
 		for _, finding := range allFindings {
 			if finding.Severity == lint.SeverityWarning && !(finding.LintName == "roll-up" && finding.ClaimID == id) {

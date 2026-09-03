@@ -315,12 +315,14 @@ func LoadStore(path string) (*Store, error) {
 	// cannot answer that — `"ledger": {}` and no ledger key both decode to an
 	// empty map. See Store.ledgerKeyOnDisk.
 	var onDisk struct {
-		Version       int               `json:"version"`
-		PolicyVersion PolicyVersion     `json:"policy_version"`
-		Hashes        json.RawMessage   `json:"hashes"`
-		Receipts      json.RawMessage   `json:"receipts"`
-		LockedAt      map[string]string `json:"locked_at"`
-		Ledger        json.RawMessage   `json:"ledger"`
+		Version               int               `json:"version"`
+		PolicyVersion         PolicyVersion     `json:"policy_version"`
+		PolicyMigratedAt      string            `json:"policy_migrated_at"`
+		PolicyMigrationReason string            `json:"policy_migration_reason"`
+		Hashes                json.RawMessage   `json:"hashes"`
+		Receipts              json.RawMessage   `json:"receipts"`
+		LockedAt              map[string]string `json:"locked_at"`
+		Ledger                json.RawMessage   `json:"ledger"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
@@ -365,6 +367,8 @@ func LoadStore(path string) (*Store, error) {
 	// Do not infer policy adoption from a binary upgrade. Existing stores stay
 	// on the legacy doctrine until an explicit migration writes this field.
 	s.PolicyVersion = onDisk.PolicyVersion
+	s.PolicyMigratedAt = onDisk.PolicyMigratedAt
+	s.PolicyMigrationReason = onDisk.PolicyMigrationReason
 
 	// Legacy (pre-versioning, schema 0) store: drop its flat hashes, keep
 	// LockedAt, and present it to callers as an already-migrated

@@ -86,6 +86,18 @@
         "--config",
         "--dry-run",
         "--format",
+        "--proposal",
+        "--reason",
+        "--semantic-conflict"
+      ]
+    },
+    {
+      "path": "claim migrate-lock-policy",
+      "short": "Adopt the local-approval lock policy without rewriting existing approvals",
+      "flags": [
+        "--config",
+        "--dry-run",
+        "--format",
         "--reason"
       ]
     },
@@ -510,12 +522,12 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:21b6ebdd179be9c12ee383ab6dd38c295855faca83afc1c0c7f50a57d2b37a1a",
+  "render_fingerprint": "sha256:fc7a4f5df10ca3fc7f5b4d38a8e3d31a62333c5da2839f4f5b300f4643a9e0a8",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:bed95c56a0bf97b2542a1fba7e09f0736ce77b59c489428fd2f179ed76eb4b3d",
+    "cmd/dossierx": "sha256:9a04391084f7b54a0f635032df992d7a57ed07a5c8af149f8633a99ceb1146e2",
     "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
     "internal/catalog": "sha256:78c8667bfb35c4fc35ec786814028978eac107fde4f06aade4541ce8baee4380",
-    "internal/check": "sha256:4e672cb24b6d82eb12fd818678b0230b8812ad354da50342034aebce0be49879",
+    "internal/check": "sha256:e282ac8664075e222b68a258f8b84efdffd888a183ddeeea083d15afe72e4e50",
     "internal/cliout": "sha256:11023152c67bb661e89d6dcb1ec8a6d74a1e0a7f9bf3eb91c9aeffac705c6e3f",
     "internal/comments": "sha256:c3f88f60edd6aee3bd590012ef0c7bbee1e9e0a76ffd10d1689b274021f21b73",
     "internal/config": "sha256:139d87ad7da9359ec4fb6bcd49d1e95020a733a95dbcb4705312aa5a59e0b48f",
@@ -524,16 +536,17 @@
     "internal/implink": "sha256:b7afa9b1052202d41c7329c9e2b4be42f0deaec9141835193c2069d986caa630",
     "internal/lint": "sha256:192a64c9e8dc59cd809a97ee99b12ed72a45afe1a513e3d87e37ed9e349f3e83",
     "internal/loader": "sha256:04a25e29820e9bb1a023cb09b13904295a3a398897664966950d349a42f7f671",
-    "internal/lock": "sha256:d182f2eb6f02f32f4fb91a3ad79e903f9be2dc6e918731951c43e2e84e34180b",
+    "internal/lock": "sha256:c31268733d81861cd438b348a7ff47b79a43b8b6d3bc0a6a51929b218eb39365",
     "internal/model": "sha256:3f1f609759c8dec52772abfcca89fa328accb43bb7e07eef58f93b381f0c6266",
+    "internal/readiness": "sha256:cbbbb207a9c6cc693a1eba76f732573a14f645c0166581b48d33cc2fed46a254",
     "internal/reaudit": "sha256:ff284ff7f4ec947c39969f0a78db8de7f2d32219e7c7b2132e1fb2d3089d7250",
-    "internal/render": "sha256:8214e0f742f7eb0e9e8433fe665cb91b9a8d978515dd8c64507fa766ba922ed7",
+    "internal/render": "sha256:97c5fe15300280a0b7e68eb43f5c2005658021ede31c8796bca1f1e03e1ae20c",
     "internal/render/components": "sha256:567dbf70716b4d4ce2676d93911506d0fc17436cbdb09e3db25d6d5c9735041c",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
-    "internal/serve": "sha256:304cc1cdc641af2024e11cdb99e3a79ab8c9b350d2ae33cb9b70c2dc648abb9e",
+    "internal/serve": "sha256:6b8e3bd934d077854cf5b3615547af3d728a5c15819e0e938079aa9d4763e9db",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:5f352f1530ac9f8efd18fde74f7d79c35779ac56a6b116cd0476c865ecc71647"
+    "skills": "sha256:a703c122192b459669ae93644a9536b11e2deae478513b5eb623f56849b43b34"
   },
   "envelope": {
     "keys": [
@@ -703,6 +716,7 @@
         "migrated_from",
         "module",
         "next_actions",
+        "readiness",
         "review_pending",
         "review_pending_trigger",
         "section",
@@ -770,6 +784,24 @@
         "lint_findings",
         "open_threads",
         "unlocked_dependency"
+      ],
+      "policyLockData": [
+        "claim_ids",
+        "evaluation",
+        "reason",
+        "snapshot"
+      ],
+      "policyLockPreviewData": [
+        "blocked",
+        "evaluation",
+        "snapshot",
+        "would"
+      ],
+      "policyMigrationData": [
+        "from",
+        "migrated_at",
+        "reason",
+        "to"
       ],
       "reauditData": [
         "applied",
@@ -868,7 +900,7 @@
     }
   ],
   "counts": {
-    "commands": 24,
+    "commands": 25,
     "error_codes": 46,
     "http_routes": 14,
     "lint_rules": 38,
