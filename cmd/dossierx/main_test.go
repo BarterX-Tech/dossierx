@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -235,8 +236,10 @@ func TestReportLintFindingsErrorSeverityFails(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// storePath / catalogPath / renderOutPath: resolved against cfg.Dir(),
-// never the process cwd (same convention as claims_dir).
+// storePath / catalogPath / renderOutPath / flagStorePath: resolved under
+// the build directory beside cfg.Dir(), never the process cwd (same
+// convention as claims_dir), and in agreement with internal/config's
+// accessors — which internal/check and internal/serve also delegate to.
 // ---------------------------------------------------------------------
 
 func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
@@ -254,14 +257,30 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	if got, want := storePath(cfg), filepath.Join(root, ".dossierx-lock-store.json"); got != want {
+	build := filepath.Join(root, "build")
+	if got, want := storePath(cfg), filepath.Join(build, "ledger", "lock-store.json"); got != want {
 		t.Fatalf("storePath: got %q, want %q", got, want)
 	}
-	if got, want := catalogPath(cfg), filepath.Join(root, ".catalog.json"); got != want {
+	if got, want := flagStorePath(cfg), filepath.Join(build, "ledger", "flag-store.json"); got != want {
+		t.Fatalf("flagStorePath: got %q, want %q", got, want)
+	}
+	if got, want := digest.StorePath(cfg), filepath.Join(build, "ledger", "comment-digest.json"); got != want {
+		t.Fatalf("digest.StorePath: got %q, want %q", got, want)
+	}
+	if got, want := catalogPath(cfg), filepath.Join(build, "catalog", "catalog.json"); got != want {
 		t.Fatalf("catalogPath: got %q, want %q", got, want)
 	}
-	if got, want := renderOutPath(cfg), filepath.Join(root, "viewer", "index.html"); got != want {
+	if got, want := renderOutPath(cfg), filepath.Join(build, "viewer", "index.html"); got != want {
 		t.Fatalf("renderOutPath: got %q, want %q", got, want)
+	}
+	if got, want := claimsSentinelPath(cfg), filepath.Join(build, "ledger", "claims"); got != want {
+		t.Fatalf("claimsSentinelPath: got %q, want %q", got, want)
+	}
+	// Cross-package parity: the accessors every package delegates to.
+	if storePath(cfg) != cfg.LockStorePath() || flagStorePath(cfg) != cfg.FlagStorePath() ||
+		catalogPath(cfg) != cfg.CatalogPath() || renderOutPath(cfg) != cfg.ViewerPath() ||
+		digest.StorePath(cfg) != cfg.CommentDigestPath() {
+		t.Fatalf("a cmd/dossierx path helper disagrees with internal/config's accessor")
 	}
 }
 
@@ -269,7 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFourLeavesUnderNineNouns pins the headline of the v0.3.0
+// TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins the headline of the v0.3.0
 // restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
@@ -308,7 +327,20 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // a gate; `theme export <preset> <path>` writes a file, and that file is inert
 // until a human points viewer.theme.extends at it. Same argument as track: a
 // way to LOOK, and no new way to change what the project treats as approved.
-func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
+//
+// THE FIFTH MOVE IS "build-order show", and it is a LEAF rather than a noun:
+// twenty-four-under-nine becomes twenty-five-under-nine, with the noun count
+// unchanged. The argument for it is that the build-order noun could compute an
+// order, report whether one exists, and approve one — and had no way to HAND
+// ONE OVER. `propose` prints the sequence it just wrote and never again;
+// `status` answers proposed/locked/stale and carries no claims at all; the
+// order itself was readable only by opening build/build-order/<m>.json and
+// re-deriving the phase levels by hand, which is the derivation this engine
+// exists to own. `show` is read-only in the strongest sense the noun has: it
+// takes no --reason, writes no file, takes no sentinel and touches neither the
+// artifact nor the ledger. Same argument as track and theme: a way to look, and
+// no new way to change what the project treats as approved.
+func TestSurfaceIsTwentyFiveLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -329,6 +361,7 @@ func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 		"build-order propose": true,
 		"build-order status":  true,
 		"build-order lock":    true,
+		"build-order show":    true,
 
 		"track list":   true,
 		"track show":   true,
@@ -385,8 +418,8 @@ func TestSurfaceIsTwentyFourLeavesUnderNineNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 24 {
-		t.Errorf("the surface is 24 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 25 {
+		t.Errorf("the surface is 25 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -483,7 +516,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyFourLeavesUnderNineNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentyFiveLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

@@ -52,7 +52,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 		t.Fatalf("render failed: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
-	outPath := filepath.Join(root, "viewer", "index.html")
+	outPath := filepath.Join(root, "build", "viewer", "index.html")
 	content, err := os.ReadFile(outPath)
 	if err != nil {
 		t.Fatalf("read rendered output: %v", err)
@@ -76,7 +76,7 @@ func TestRenderCLI_ExplicitEmptyRowsArrayIsValid(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Row 5: "dossierx check" always overwrites viewer/index.html, even if
+// Row 5: "dossierx check" always overwrites build/viewer/index.html, even if
 // hand-edited since the last render — no diff-and-prompt, the generated
 // header is the only warning.
 // ---------------------------------------------------------------------
@@ -90,7 +90,7 @@ func TestRenderCLI_AlwaysOverwritesHandEditedOutput(t *testing.T) {
 		t.Fatalf("first render failed: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
-	outPath := filepath.Join(root, "viewer", "index.html")
+	outPath := filepath.Join(root, "build", "viewer", "index.html")
 	firstContent, err := os.ReadFile(outPath)
 	if err != nil {
 		t.Fatalf("read rendered output: %v", err)
@@ -186,8 +186,8 @@ func TestRenderCLI_FailsOnUnreviewedMockupWithHandler(t *testing.T) {
 	if code == 0 {
 		t.Fatalf("render must fail (non-zero) on an unreviewed mockup with an inline handler, got exit 0\nstdout: %s\nstderr: %s", stdout, stderr)
 	}
-	if _, err := os.Stat(filepath.Join(root, "viewer", "index.html")); err == nil {
-		t.Fatalf("render must not have written viewer/index.html for a gate-failing mockup")
+	if _, err := os.Stat(filepath.Join(root, "build", "viewer", "index.html")); err == nil {
+		t.Fatalf("render must not have written build/viewer/index.html for a gate-failing mockup")
 	}
 }
 
@@ -217,7 +217,7 @@ func TestRenderCLI_ValidLockedReviewedAllowlistedMockupRenders(t *testing.T) {
 		t.Fatalf("render of a fully valid mockup must succeed, got exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
-	content, err := os.ReadFile(filepath.Join(root, "viewer", "index.html"))
+	content, err := os.ReadFile(filepath.Join(root, "build", "viewer", "index.html"))
 	if err != nil {
 		t.Fatalf("read rendered output: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestRenderCLI_ValidLockedReviewedAllowlistedMockupRenders(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// Row 4: rendered viewer/index.html must carry a "generated - do not edit"
+// Row 4: rendered build/viewer/index.html must carry a "generated - do not edit"
 // header, proven against the actual file on disk (not just Render()'s
 // in-memory return value, which internal/render/render_test.go already
 // covers).
@@ -242,7 +242,7 @@ func TestRenderCLI_GeneratedHeaderPresentOnDisk(t *testing.T) {
 		t.Fatalf("render failed: exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
-	outPath := filepath.Join(root, "viewer", "index.html")
+	outPath := filepath.Join(root, "build", "viewer", "index.html")
 	content, err := os.ReadFile(outPath)
 	if err != nil {
 		t.Fatalf("read rendered output: %v", err)

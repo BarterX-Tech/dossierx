@@ -9,7 +9,7 @@
 // "dossierx check --validate", which happened not to write; that verb is gone, and
 // "check --validate" is its replacement precisely BECAUSE it is specified never
 // to write (plain "check" reconciles review_pending, rewrites the lock store,
-// and regenerates .catalog.json and the viewer, all of which would dirty a
+// and regenerates build/catalog/catalog.json and the viewer, all of which would dirty a
 // checked-in fixture directory). So these still run directly against their
 // testdata directory via --config, with no need to copy into a t.TempDir().
 package tests

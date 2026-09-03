@@ -23,7 +23,7 @@ import (
 )
 
 // newBuildOrderCmd is the "dossierx build-order" command group: propose, status,
-// and lock, one subcommand each, all operating on a single --module.
+// lock and show, one subcommand each, all operating on a single --module.
 func newBuildOrderCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "build-order",
@@ -33,6 +33,7 @@ func newBuildOrderCmd() *cobra.Command {
 		newBuildOrderProposeCmd(),
 		newBuildOrderStatusCmd(),
 		newBuildOrderLockCmd(),
+		newBuildOrderShowCmd(),
 	)
 	return commandGroup(cmd)
 }
@@ -565,10 +566,21 @@ func newBuildOrderLockCmd() *cobra.Command {
 				// (recordBuildOrderApproval), and lock.CrossPreLedger refuses it
 				// there, so the preview evaluates the same gate.
 				preLedgerPrecondition(dr, cfg, claims)
+				// The gitignore guard, previewed: the write path refuses with
+				// store_gitignored in the same state.
+				storesArePrecondition(dr, cfg)
 				return dryRunResult(cmd, "build-order lock", dr), nil
 			}
 
 			if err := requireReason("build-order lock", reason); err != nil {
+				return cmdResult{}, err
+			}
+
+			// The gitignore guard, before the store sentinel: this command
+			// writes the artifact AND its ledger record, and neither reaches a
+			// collaborator through an ignored directory.
+			gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "build-order lock")
+			if err != nil {
 				return cmdResult{}, err
 			}
 
@@ -680,7 +692,8 @@ func newBuildOrderLockCmd() *cobra.Command {
 				return cmdResult{}, err
 			}
 			return cmdResult{
-				Data: buildOrderLockData{Module: module, Path: path, LockedAt: artifact.LockedAt, Reason: reason},
+				Warnings: gitignoreWarnings,
+				Data:     buildOrderLockData{Module: module, Path: path, LockedAt: artifact.LockedAt, Reason: reason},
 				Text: func() {
 					fmt.Fprintf(cmd.OutOrStdout(), "build-order lock: %s locked at %s\n", module, artifact.LockedAt)
 				},
@@ -717,7 +730,7 @@ func newBuildOrderLockCmd() *cobra.Command {
 // canonical JSON — module, phases, per-claim entries, excluded set, the frozen
 // hash baseline, and the LockedAt stamp — which is precisely the content
 // buildorder.WriteArtifact just persisted, so a later hand edit of
-// .build-order.<module>.json no longer matches its record.
+// build/build-order/<module>.json no longer matches its record.
 func recordBuildOrderApproval(cfg *config.Config, module string, artifact *buildorder.Artifact, reason string) error {
 	recovery := fmt.Sprintf("the artifact is on disk and locked, with nothing vouching for it; discard it and approve a fresh one: dossierx build-order propose --module %s, then dossierx build-order lock --module %s --reason \"<the human's words>\"", module, module)
 

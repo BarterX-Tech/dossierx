@@ -222,9 +222,12 @@ const (
 	// CodeBuildOrderRefused is buildorder's own refusal of a propose/lock (a
 	// module with unlocked claims, a missing build_role, a dependency cycle).
 	CodeBuildOrderRefused Code = "build_order_refused"
-	// CodeBuildOrderHandEdited is "dossierx build-order lock" refusing to freeze
-	// an artifact that is not what a fresh propose computes — the phase sequence,
-	// a claim's placement, its File, or the excluded set was changed by hand.
+	// CodeBuildOrderHandEdited is a build-order verb refusing an artifact that
+	// is not what the engine derives: "lock" refusing to freeze one that is not
+	// what a fresh propose computes — the phase sequence, a claim's placement,
+	// its File, or the excluded set was changed by hand — and "show" refusing
+	// one whose own stored entries cannot be laid out at all, which means a
+	// rests_on cycle inside bytes propose never writes.
 	//
 	// It is deliberately NOT CodeBuildOrderRefused. Every documented recovery for
 	// that code is a repair to the CLAIMS (lock the remaining ones, resolve a
@@ -297,11 +300,31 @@ const (
 	// --as, --module. Distinct from CodeInvalidActor / CodeUnsupportedFormat,
 	// which mean "supplied, but not a legal value".
 	CodeMissingFlag Code = "missing_flag"
-	// CodeUnsupportedFormat is a --format value other than json or text.
+	// CodeUnsupportedFormat is a --format value the command cannot render. The
+	// root's persistent --format accepts json and text; one leaf,
+	// "build-order show", registers a local --format that also accepts mermaid,
+	// because a diagram is a rendering of that one payload and nothing else on
+	// the surface has anything to draw.
 	CodeUnsupportedFormat Code = "unsupported_format"
 	// CodeUsage is an invocation cobra itself rejected: an unknown command, an
 	// unknown flag, the wrong number of positional arguments.
 	CodeUsage Code = "usage"
+	// CodeLayoutLegacy is a project that keeps dossierx artifacts at the
+	// project root — the layout every release before the build/ directory
+	// wrote — which this release no longer reads. Every verb refuses with it,
+	// check --validate and check --staged included, and the message is the
+	// exact block of moves to run; error.details.moves[] carries the same
+	// list as {from, to, tracked}. See internal/layout.
+	CodeLayoutLegacy Code = "layout_legacy"
+	// CodeStoreGitignored is an approval-recording verb (claim lock, claim
+	// flag, claim reaudit --confirm, build-order lock, batch claim lock)
+	// refusing because a store it is about to write under build/ is matched
+	// by .gitignore and not in the index — the approval would never reach a
+	// collaborator — or because the project is inside a git work tree and git
+	// could not answer the question at all. The read-only check modes report
+	// the same state as the store-gitignored finding (or, when git cannot
+	// answer, as data.gitignore_check) and never carry this code.
+	CodeStoreGitignored Code = "store_gitignored"
 	// CodeWriteConflict is contention on one of the project's write sentinels —
 	// another dossierx process (or a serve request) holds the claims lock.
 	// Retrying is the correct response, unlike CodeClaimFileChanged, which

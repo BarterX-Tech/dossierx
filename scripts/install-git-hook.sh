@@ -419,8 +419,8 @@ check_one() {
   3. dossierx claim lock   <id> --reason "<the human approval, in their words>"
 
 Then stage the claim file AND the tracked stores it moved
-(.dossierx-lock-store.json, .dossierx-comment-digest.json,
-.dossierx-flag-store.json) and commit again — the ledger is a tracked file and
+(build/ledger/lock-store.json, build/ledger/comment-digest.json,
+build/ledger/flag-store.json) and commit again — the ledger is a tracked file and
 CI reads it.
 
 reaudit is the DRIFT tool, not the general edit tool; it will refuse a claim
@@ -1083,13 +1083,13 @@ printf '%s\n' "" \
 	"    — and put it in .github/workflows/." \
 	"  · it does not check anything you did not stage. --staged reads the index." \
 	"" \
-	"Three project-root files are TRACKED ARTIFACTS. Commit them; never" \
+	"Three files under build/ledger/ are TRACKED ARTIFACTS. Commit them; never" \
 	".gitignore them:" \
-	"  .dossierx-lock-store.json      the lock ledger the gate compares against —" \
+	"  build/ledger/lock-store.json      the lock ledger the gate compares against —" \
 	"                                 without it in the repository the gate is" \
 	"                                 vacuous" \
-	"  .dossierx-comment-digest.json  the review history's fingerprint" \
-	"  .dossierx-flag-store.json      the pending \"dossierx claim flag\" triggers." \
+	"  build/ledger/comment-digest.json  the review history's fingerprint" \
+	"  build/ledger/flag-store.json      the pending \"dossierx claim flag\" triggers." \
 	"                                 A review_pending claim whose flag entry did" \
 	"                                 not travel with it reaudits to an EMPTY" \
 	"                                 proposal, and --confirm then clears the flag" \

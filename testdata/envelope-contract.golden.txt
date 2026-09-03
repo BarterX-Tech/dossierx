@@ -64,7 +64,8 @@ check / read-only, lint-clean
     ok            true
     envelope      command data ok warnings
     command       check
-    data          ledger_finding_count:number
+    data          gitignore_check:string
+                  ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
                   lint_warning_count:number
@@ -81,6 +82,7 @@ check / writing the catalog and the viewer
     command       check
     data          catalog_count:number
                   catalog_path:string
+                  gitignore_check:string
                   ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
@@ -96,7 +98,8 @@ check / refused at lint by a dangling edge, read-only
     ok            false
     envelope      command data error ok stopped_at
     command       check
-    data          ledger_finding_count:number
+    data          gitignore_check:string
+                  ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
                   lint_warning_count:number
@@ -114,7 +117,8 @@ check / refused at lint by a dangling edge, writing
     ok            false
     envelope      command data error ok stopped_at
     command       check
-    data          ledger_finding_count:number
+    data          gitignore_check:string
+                  ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
                   lint_warning_count:number
@@ -464,6 +468,30 @@ build-order lock / nothing proposed yet
                   message:string
     error.code    not_proposed
 
+build-order show / a locked order
+    argv          build-order show --module widget
+    exit          0
+    ok            true
+    envelope      command data ok
+    command       build-order show
+    data          locked:bool
+                  locked_at:string
+                  module:string
+                  path:string
+                  phases:[{claims:[],cross_module:{},definition:string,excluded_deps:[],ghosts:[],levels:[],locked:number,mermaid:string,number:number,phase:string}|{claims:[string],cross_module:{},definition:string,excluded_deps:[],ghosts:[],levels:[[string]],locked:number,mermaid:string,number:number,phase:string}]
+                  stale:bool
+
+build-order show / nothing proposed yet
+    argv          build-order show --module widget
+    exit          1
+    ok            false
+    envelope      command error ok
+    command       build-order show
+    error         code:string
+                  hint:string
+                  message:string
+    error.code    not_proposed
+
 track list / two declared tracks
     argv          track list
     exit          0
@@ -678,7 +706,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 46)
+    pinned by an invocation above (14 of 48)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -693,7 +721,7 @@ ERROR-CODE COVERAGE
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (32)
+    reachable only from states no fixture here builds (34)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
         bad_request
@@ -711,6 +739,7 @@ ERROR-CODE COVERAGE
         integrity_failed
         internal
         invalid_claim
+        layout_legacy
         missing_flag
         no_artifact
         pre_ledger_unadopted
@@ -718,6 +747,7 @@ ERROR-CODE COVERAGE
         reply_not_found
         review_pending
         rights_denied
+        store_gitignored
         structured_layout
         thread_not_found
         thread_open

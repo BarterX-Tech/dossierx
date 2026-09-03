@@ -1,0 +1,6 @@
+# Written by dossierx check. Generated kinds are ignored; tracked kinds are not.
+catalog/
+viewer/
+*.lock
+*.tmp-*
+*.probe-*

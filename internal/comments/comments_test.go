@@ -115,11 +115,11 @@ func newProject(t *testing.T, files map[string]string) *project {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	store, err := lock.LoadStore(filepath.Join(root, ".dossierx-lock-store.json"))
+	store, err := lock.LoadStore(filepath.Join(root, "build", "ledger", "lock-store.json"))
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
 	}
-	flags, err := reaudit.LoadFlagStore(filepath.Join(root, ".dossierx-flag-store.json"))
+	flags, err := reaudit.LoadFlagStore(filepath.Join(root, "build", "ledger", "flag-store.json"))
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)
 	}

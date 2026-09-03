@@ -146,18 +146,16 @@
       ['.claim-links > .claim-edges > .claim-migrated', 'Migrated From', /^\s*migrated_from:\s*/i],
       ['.claim-links > .claim-edges > .claim-implemented-in', 'Implemented In', /^\s*implemented\s+in:\s*/i],
       ['.claim-links > .claim-edges > .claim-review-pending', 'Review Pending', /^\s*review_pending\s*/i],
-      ['.claim-links > .claim-edges > .claim-sources', 'Sources', /^\s*sources:\s*/i],
-      ['.build-order-module .claim-file', 'File', /^\s*file:\s*/i],
-      ['.build-order-module .claim-rests-on', 'Rests On', /^\s*rests_on:\s*/i]
+      ['.claim-links > .claim-edges > .claim-sources', 'Sources', /^\s*sources:\s*/i]
     ];
     rows.forEach(function (entry) {
       document.querySelectorAll(entry[0]).forEach(function (row) {
-        if (row.querySelector(':scope > .claim-relation-label, :scope > .build-order-field__label')) { return; }
+        if (row.querySelector(':scope > .claim-relation-label')) { return; }
         var textNode = Array.prototype.slice.call(row.childNodes).find(function (node) { return node.nodeType === 3 && node.textContent.trim(); });
         if (!textNode) { return; }
         textNode.textContent = textNode.textContent.replace(entry[2], ' ');
         var label = document.createElement('span');
-        label.className = entry[0].indexOf('.build-order-module') === 0 ? 'build-order-field__label' : 'claim-relation-label';
+        label.className = 'claim-relation-label';
         label.textContent = entry[1];
         row.insertBefore(label, textNode);
       });
@@ -233,7 +231,7 @@
 
   function cleanTitle(claim) {
     var title = claim.querySelector(':scope > .k');
-    if (!title) { return (claim.id || '').replace(/^build-order-/, '').replace(/[.-]/g, ' '); }
+    if (!title) { return (claim.id || '').replace(/[.-]/g, ' '); }
     var copy = title.cloneNode(true);
     copy.querySelectorAll('.pill, .claim-comments-slot').forEach(function (node) { node.remove(); });
     return copy.textContent.replace(/\s+/g, ' ').trim();
@@ -250,14 +248,13 @@
     });
   }
 
+  // activeFacet returns null while the Build order tab is active (it is not a
+  // module section: no header, TOC, status strip or claim controls are built
+  // over the diagrams), so renderToc hides the TOC there.
   function activeFacet() {
-    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.track-section)'));
+    var modules = Array.prototype.slice.call(document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)'));
     var module = modules.find(function (section) { return !section.hidden; });
     if (!module) { return null; }
-    var build = module.querySelector(':scope > .build-order-module:not([hidden])');
-    if (build) {
-      return { module: module, view: build, label: build.classList.contains('system-orientation-only') ? 'Orientation' : 'Build Order' };
-    }
     var groups = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group'));
     var group = groups.find(function (section) { return !section.hidden; });
     if (!group) { return null; }
@@ -373,99 +370,12 @@
     updateTocActive();
   }
 
-  function prepareBuildOrder(module) {
-    var build = module.querySelector(':scope > .build-order-module');
-    if (!build || build.dataset.systemPrepared === 'true') { return build; }
-    build.dataset.systemPrepared = 'true';
-    var title = build.querySelector(':scope > h3');
-    if (title) { title.classList.add('system-build-title'); title.dataset.originalText = title.textContent; }
-    var children = Array.prototype.slice.call(build.children);
-    var orientation = children.find(function (node) {
-      return node.classList.contains('build-order-phase') && node.textContent.trim().toLowerCase() === 'orientation';
-    });
-    if (orientation) {
-      var start = children.indexOf(orientation);
-      for (var index = start; index < children.length; index += 1) {
-        var node = children[index];
-        if (index > start && node.classList.contains('build-order-phase')) { break; }
-        node.classList.add('system-orientation-node');
-      }
-      build.dataset.hasOrientation = 'true';
-    }
-    return build;
-  }
-
-  function activateFacet(module, mode, targetID, updateHash) {
-    var build = prepareBuildOrder(module);
-    var isBuild = mode === 'build-order' || mode === 'orientation';
-    module.querySelectorAll(':scope > .claim-group').forEach(function (group) { group.hidden = isBuild || group.id !== targetID; });
-    if (build) {
-      build.hidden = !isBuild;
-      build.classList.toggle('system-orientation-only', mode === 'orientation');
-      var title = build.querySelector(':scope > .system-build-title');
-      if (title) { title.textContent = mode === 'orientation' ? 'Orientation' : title.dataset.originalText; }
-    }
-    module.querySelectorAll(':scope > .sub-nav .subtab').forEach(function (tab) {
-      var tabMode = tab.dataset.systemMode || 'claims';
-      tab.classList.toggle('on', tabMode === mode && (isBuild || tab.dataset.target === '#' + targetID));
-    });
-    if (updateHash) { history.replaceState(null, '', '#' + targetID); }
-    scrollTo(0, 0);
-    renderToc();
-  }
-
-  function enhanceFacetNavigation() {
-    document.querySelectorAll('.module-section:not(.track-section)').forEach(function (module) {
-      var build = prepareBuildOrder(module);
-      if (!build) { return; }
-      var subnav = module.querySelector(':scope > .sub-nav');
-      if (!subnav) {
-        subnav = document.createElement('div');
-        subnav.className = 'sub-nav system-created-sub-nav';
-        var firstGroup = module.querySelector(':scope > .claim-group');
-        var firstTab = document.createElement('button');
-        firstTab.className = 'subtab';
-        firstTab.dataset.target = '#' + firstGroup.id;
-        firstTab.textContent = 'Claims';
-        subnav.appendChild(firstTab);
-        module.insertBefore(subnav, firstGroup);
-      }
-      if (!subnav.querySelector('[data-system-mode="build-order"]')) {
-        [['build-order', 'Build Order', '#' + build.id], ['orientation', 'Orientation', '#orientation-' + module.id]].forEach(function (entry) {
-          if (entry[0] === 'orientation' && build.dataset.hasOrientation !== 'true') { return; }
-          var tab = document.createElement('button');
-          tab.type = 'button';
-          tab.className = 'subtab system-added-subtab';
-          tab.dataset.target = entry[2];
-          tab.dataset.systemMode = entry[0];
-          tab.textContent = entry[1];
-          tab.addEventListener('click', function (event) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            activateFacet(module, entry[0], entry[2].slice(1), true);
-          }, true);
-          subnav.appendChild(tab);
-        });
-      }
-      subnav.querySelectorAll('.subtab:not(.system-added-subtab)').forEach(function (tab) {
-        if (tab.dataset.systemBound === 'true') { return; }
-        tab.dataset.systemBound = 'true';
-        tab.addEventListener('click', function () { setTimeout(function () { activateFacet(module, 'claims', tab.dataset.target.slice(1), false); }, 0); });
-      });
-      var active = Array.prototype.slice.call(module.querySelectorAll(':scope > .claim-group')).find(function (group) { return !group.hidden; });
-      if (active && !module.dataset.systemActivated) {
-        module.dataset.systemActivated = 'true';
-        activateFacet(module, 'claims', active.id, false);
-      }
-    });
-  }
-
   function addModuleHeaders() {
     var labels = {};
     document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
       labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
     });
-    document.querySelectorAll('.module-section:not(.track-section)').forEach(function (section) {
+    document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
       if (section.querySelector(':scope > .system-record-head')) { return; }
       var claims = Array.prototype.slice.call(section.querySelectorAll('.claim-group .claim[data-status]'));
       var unique = {};
@@ -526,7 +436,6 @@
     if (typeof window.dossierxPositionStatusStrip === 'function') {
       window.dossierxPositionStatusStrip();
     }
-    enhanceFacetNavigation();
     syncNavigation();
     renderToc();
     enhanceGraphLabels();

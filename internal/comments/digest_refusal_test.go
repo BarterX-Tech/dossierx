@@ -96,7 +96,7 @@ func TestCommentDigestDriftRefusalNamesOnlyCommandsThatExist(t *testing.T) {
 // TestCommentDigestDriftRefusalNeverAdvisesDeletingTheStore pins the half of the
 // message that is a security property rather than a usability one.
 //
-// Deleting .dossierx-comment-digest.json makes this refusal go away, and it is
+// Deleting build/ledger/comment-digest.json makes this refusal go away, and it is
 // the single worst thing a wedged reader can do: a claim the store has never
 // seen is *unknown*, never *drifted*, so the delete clears both this refusal and
 // the comment-ledger-drift finding that named the edit. internal/check reports

@@ -437,6 +437,16 @@ func envProposedOrder(t *testing.T, dir string) map[string]string {
 	return nil
 }
 
+// envLockedOrder is envProposedOrder with the build order LOCKED, which is the
+// state "build-order show" exists to hand over: an approved implementation
+// sequence with a lock stamp and a ledger record behind it.
+func envLockedOrder(t *testing.T, dir string) map[string]string {
+	t.Helper()
+	envProposedOrder(t, dir)
+	envMustRun(t, dir, "build-order", "lock", "--module", "widget", "--reason", "approved")
+	return nil
+}
+
 // envMustRun runs a setup command in the JSON format and fails the test if it
 // did not succeed. Setup failures must never present as a golden diff: a block
 // recording the envelope of a command whose PRECONDITION quietly stopped
@@ -513,6 +523,13 @@ func envelopeCases() []envelopeCase {
 		{"build-order status / nothing proposed yet", envLocked, []string{"build-order", "status", "--module", "widget"}},
 		{"build-order lock / a fresh proposal", envProposedOrder, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
 		{"build-order lock / nothing proposed yet", envLocked, []string{"build-order", "lock", "--module", "widget", "--reason", "approved"}},
+		// Both halves of "show", because the refusal is a DECISION rather than
+		// a fallout: "build-order status" answers the same unproposed module
+		// with ok:true, proposed:false at exit 0, and "show" answers it with
+		// not_proposed at exit 1. Pinning only the success block would leave
+		// the divergence resting on a comment in build_order_show.go.
+		{"build-order show / a locked order", envLockedOrder, []string{"build-order", "show", "--module", "widget"}},
+		{"build-order show / nothing proposed yet", envLocked, []string{"build-order", "show", "--module", "widget"}},
 
 		// The track leaves, against a project that has adopted the axis and one
 		// that has not. Both matter: the adopted project is where the lists have

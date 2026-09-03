@@ -31,7 +31,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -41,7 +40,6 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
-	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render"
 )
@@ -377,22 +375,17 @@ func (s *Server) applyViewerRuntimeMode() {
 	fmt.Fprintf(s.warnw, "WARNING: this project's shell.html override lacks the DossierX live-viewer runtime (no %q marker); serving READ-ONLY — the browser comment UI cannot mount and HTTP comment writes are disabled. Use the CLI (dossierx comment ...) to review, or restore the marker to your override.\n", render.ViewerRuntimeMarker)
 }
 
-// assertOutputsOutsideClaimsTree is serve's startup guardrail: the viewer,
-// catalog, and lock-store output paths MUST live outside the watched claims
-// tree. If one were inside, a render/catalog/store write would look like a claim
-// change and drive the watcher in an endless re-render loop. A violation almost
-// always means a misconfigured claims_dir (e.g. "."), so serve refuses to start
-// rather than spin.
+// assertOutputsOutsideClaimsTree is serve's startup guardrail: the build
+// directory — where every output the engine writes now lives — MUST sit
+// outside the watched claims tree. If it were inside, a render/catalog/store
+// write would look like a claim change and drive the watcher in an endless
+// re-render loop. config.DecodeConfig already refuses that containment at
+// load time, so this is the belt to that brace; it checks the one directory
+// rather than three files because the directory is what config guarantees.
 func (s *Server) assertOutputsOutsideClaimsTree() error {
 	root := s.cfg.ClaimsDir
-	for _, out := range []struct{ name, path string }{
-		{"viewer/index.html", s.renderOutPath()},
-		{".catalog.json", s.catalogPath()},
-		{"lock store", s.storePath()},
-	} {
-		if isInsideDir(root, out.path) {
-			return fmt.Errorf("serve: %s (%s) is inside the watched claims_dir (%s); move claims_dir so the render/catalog/store outputs sit outside it", out.name, out.path, root)
-		}
+	if isInsideDir(root, s.cfg.BuildDirPath()) {
+		return fmt.Errorf("serve: the build directory (%s) is inside the watched claims_dir (%s); set build_dir or claims_dir so the engine's outputs sit outside it", s.cfg.BuildDirPath(), root)
 	}
 	return nil
 }
@@ -427,7 +420,7 @@ func (s *Server) routes() http.Handler {
 
 // renderViewer is the pipeline's work function: load the CURRENT claims, build
 // the catalog, and render the viewer to a byte slice held in memory. It never
-// writes viewer/index.html or .catalog.json — those are "dossierx render" /
+// writes build/viewer/index.html or build/catalog/catalog.json — those are "dossierx render" /
 // "check"'s files, and a truncating per-request write would be readable
 // half-finished. catalog.Build cannot fail structurally (duplicate ids /
 // dangling refs are lint's concern and still render), so the only real failure
@@ -501,27 +494,15 @@ func disarmUngatedMockups(claims []model.Claim, cfg *config.Config) []model.Clai
 	return out
 }
 
-// storePath and flagStorePath resolve the lock-store and flag-store files under
-// cfg.Dir() (absolute), matching cmd/dossierx and internal/check. serve reads
-// both (never under their own sentinel) only to build the comment Deps, whose
-// review_pending recomputation consults real drift/flag state.
+// storePath and flagStorePath resolve the lock-store and flag-store files
+// under the build directory (cfg.LockStorePath / cfg.FlagStorePath), matching
+// cmd/dossierx and internal/check. serve reads both (never under their own
+// sentinel) only to build the comment Deps, whose review_pending
+// recomputation consults real drift/flag state.
 func (s *Server) storePath() string {
-	return filepath.Join(s.cfg.Dir(), lock.StoreFileName)
+	return s.cfg.LockStorePath()
 }
 
 func (s *Server) flagStorePath() string {
-	return filepath.Join(s.cfg.Dir(), ".dossierx-flag-store.json")
-}
-
-// renderOutPath and catalogPath resolve "dossierx render"/"check"'s viewer and
-// catalog output files under cfg.Dir() (absolute), matching cmd/dossierx and
-// internal/check. serve never writes them from the GET / pipeline (which renders
-// to memory), but the startup guardrail checks they sit outside the watched
-// claims tree so a check-driven write can never loop the watcher.
-func (s *Server) renderOutPath() string {
-	return filepath.Join(s.cfg.Dir(), "viewer", "index.html")
-}
-
-func (s *Server) catalogPath() string {
-	return filepath.Join(s.cfg.Dir(), ".catalog.json")
+	return s.cfg.FlagStorePath()
 }

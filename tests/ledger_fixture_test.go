@@ -45,7 +45,7 @@ func armLedger(t *testing.T, root string) {
 		// itself; there is nothing to approve, so leave it untouched.
 		return
 	}
-	path := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	path := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(path)
 	if err != nil {
 		t.Fatalf("arm ledger: load store %s: %v", path, err)

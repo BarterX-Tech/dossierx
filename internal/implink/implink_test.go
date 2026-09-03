@@ -265,7 +265,7 @@ func TestSet_WriteLoadRoundTrip(t *testing.T) {
 }
 
 func TestLoadArtifact_MissingFile_WrapsErrNoArtifact(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".implementation.widget.json")
+	path := filepath.Join(t.TempDir(), "build", "code-links", "widget.json")
 	_, err := LoadArtifact(path)
 	if err == nil || !errors.Is(err, ErrNoArtifact) {
 		t.Fatalf("expected an ErrNoArtifact-wrapping error, got: %v", err)

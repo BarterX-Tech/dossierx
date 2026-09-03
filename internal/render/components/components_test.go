@@ -1298,40 +1298,6 @@ func TestEdgesHTML_HostileIDIsEscapedInEveryContext(t *testing.T) {
 	}
 }
 
-// TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup is C5: build_order.html's
-// once-independent rests_on rendering and the shared edges footer must now emit
-// the same bytes for the same edge, so the two can no longer drift.
-func TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup(t *testing.T) {
-	ids := []string{"widget.contract.a", "widget.internals.b", "ledger.contract.c"}
-
-	// The footer's version, rendered from a real claim.
-	footer := string(edgesHTML(model.Claim{
-		ID: "widget.contract.self", Module: "widget", Facet: "contract", RestsOn: ids,
-	}))
-	// build_order.html's version, which knows only the rendering claim's id.
-	list := string(ClaimEdgeListHTML("widget.contract.self", ids))
-
-	if !strings.Contains(footer, list) {
-		t.Fatalf("ClaimEdgeListHTML must emit the same markup the shared footer does\n list:   %s\n footer: %s", list, footer)
-	}
-	if !strings.HasPrefix(list, `<ul class="claim-edge-id-list">`) {
-		t.Errorf("expected the shared bulleted list container, got: %s", list)
-	}
-}
-
-// An unshaped fromID leaves ClaimEdgeListHTML with no module/facet context to
-// elide against. Every target then keeps its full prefix: a degraded label,
-// never a wrong one, and never a panic.
-func TestClaimEdgeListHTML_UnshapedFromIDKeepsEveryPrefix(t *testing.T) {
-	list := string(ClaimEdgeListHTML("not-an-id", []string{"widget.contract.a", "widget.contract.b"}))
-	if n := strings.Count(list, "claim-ref-prefix"); n != 2 {
-		t.Errorf("expected both targets to keep a full prefix when the reader's context is unknown, got %d in: %s", n, list)
-	}
-	if !strings.Contains(list, `<span class="claim-ref-prefix">Widget · Contract › </span>`) {
-		t.Errorf("expected the widest prefix tier, got: %s", list)
-	}
-}
-
 // TestPartialHeadings_LabelIDAndKeepMachineIDReachable is C4/item 5 across all
 // seven layout partials at once — banner.html included, the one partial with no
 // edges footer for the rest of this work to reach. The heading shows the label;

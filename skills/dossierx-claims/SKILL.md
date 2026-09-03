@@ -91,7 +91,7 @@ nothing else, so a claim written outside it reports success and is then invisibl
 the claim is a **draft** — edit its file freely.
 
 The loop while authoring is `dossierx check --validate`: the same lint gate `check` drives, at the
-same severity, writing **nothing** — no claim files, no lock store, no `.catalog.json`, no viewer.
+same severity, writing **nothing** — no claim files, no lock store, no `build/catalog/catalog.json`, no viewer.
 Run the full `dossierx check` when you want the viewer rebuilt and code links scanned.
 
 ## Citing your evidence — `sources`
@@ -243,7 +243,7 @@ The recovery is never "re-lock it so the hashes match" — that launders the edi
 version control, or go unlock → fix → lock. CI is the authority; the hook is only fast feedback.
 
 The three project-root stores are tracked, committed artifacts, never `.gitignore`d, and
-`.dossierx-flag-store.json` is the one to watch: **no gate rule reads it at all**, so losing it is
+`build/ledger/flag-store.json` is the one to watch: **no gate rule reads it at all**, so losing it is
 silent. The claim still arrives `review_pending`, but `reaudit` has no before/after to propose, and
 confirming that empty proposal clears the human's flag having applied nothing. Commit it with its
 claim, and treat an empty `reaudit` diff on a flagged claim as a missing entry: **stop and say

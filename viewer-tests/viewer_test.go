@@ -422,6 +422,13 @@ func TestOverlaysAreMutuallyExclusive(t *testing.T) {
 		t.Fatal("EmulateViewport(1200) did not take effect: still matches the <=860px media query")
 	}
 
+	// Wait for the live probe before the first real click: its answer reveals
+	// every zero-thread chip on the page (syncEmptyChips) and shifts the layout
+	// under a click whose coordinates chromedp computed a frame earlier, which
+	// is a click that lands beside the chip and a comments-open that never
+	// comes. The chip's handler itself is synchronous.
+	pollTrue(t, ctx, `document.body.classList.contains('comments-live') && !!document.querySelector('.comment-chip')`)
+
 	// Open the comment panel.
 	runCDP(t, ctx, chromedp.Click(".comment-chip", chromedp.ByQuery))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)

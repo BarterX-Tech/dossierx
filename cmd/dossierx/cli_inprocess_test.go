@@ -141,7 +141,7 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 	if strings.Contains(out, "wrote") {
 		t.Fatalf("--validate must not report writing anything, got: %s", out)
 	}
-	for _, artifact := range []string{filepath.Join(root, ".catalog.json"), filepath.Join(root, "viewer", "index.html")} {
+	for _, artifact := range []string{filepath.Join(root, "build", "catalog", "catalog.json"), filepath.Join(root, "build", "viewer", "index.html")} {
 		if _, statErr := os.Stat(artifact); statErr == nil {
 			t.Fatalf("check --validate wrote %s; it must be read-only", artifact)
 		}
@@ -159,11 +159,11 @@ func TestCLI_CheckWritesArtifactsAndValidateWritesNone(t *testing.T) {
 	if !strings.Contains(out, `orientation notes: module "widget": 1 (1 in overview)`) {
 		t.Fatalf("expected orientation notes report line, got: %s", out)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".catalog.json")); statErr != nil {
-		t.Fatalf("expected .catalog.json to exist after check: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, "build", "catalog", "catalog.json")); statErr != nil {
+		t.Fatalf("expected build/catalog/catalog.json to exist after check: %v", statErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, "viewer", "index.html")); statErr != nil {
-		t.Fatalf("expected viewer/index.html to exist after check: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, "build", "viewer", "index.html")); statErr != nil {
+		t.Fatalf("expected build/viewer/index.html to exist after check: %v", statErr)
 	}
 }
 

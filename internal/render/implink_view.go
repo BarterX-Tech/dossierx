@@ -29,8 +29,8 @@ import (
 // skipped silently: implink.ViewsByClaim's ErrNoArtifact (and, defensively,
 // any other error) is treated identically, the same "never fail Render
 // over a missing or malformed optional side file" reasoning
-// attachBuildOrders already applies to a module with no build-order
-// artifact. Returns nil (not an empty, non-nil map) when no module has
+// buildOrderTabData applies to a module whose build-order artifact does not
+// load. Returns nil (not an empty, non-nil map) when no module has
 // ever linked anything, so attachImplinkOverride's len(lookup) == 0 check
 // can tell "nothing to do at all" apart from "checked every module, all
 // empty" without caring about the distinction itself.

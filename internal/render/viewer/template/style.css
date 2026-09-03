@@ -849,8 +849,8 @@ th {
 }
 
 /* claim-ref is the shared anchor EVERY claim-to-claim edge renders through
-   (components.go's writeClaimRef): governed_by, mirrors, rests_on,
-   depended-on-by, and build_order.html's rests_on. Its two inner spans carry
+   (components.go's writeClaimRef): governed_by, mirrors, rests_on and
+   depended-on-by, all inside the shared claim footer. Its two inner spans carry
    the readability tiers — a dimmed "Widget · Contract ›" prefix, kept only
    when the target is outside the reading claim's own module/facet, and the
    claim's own label. No new color tokens: the prefix borrows --faint (the
@@ -861,9 +861,8 @@ th {
    Specificity note: these are scoped under .claim-edges deliberately. The
    bare .claim-ref-prefix class (0,1,0) would lose to the existing
    ".claim-edges a" rule (0,1,1) and inherit --link; ".claim-edges
-   .claim-ref-prefix" (0,2,0) wins. build_order.html's independently rendered
-   rests_on sits inside a .claim-edges container too, so one scope covers
-   both paths. */
+   .claim-ref-prefix" (0,2,0) wins. The shared claim footer is the only
+   place a claim-ref renders, and this sheet is inlined into every viewer. */
 .claim-edges .claim-ref-prefix {
   color: var(--faint);
   font-weight: 400;
@@ -2850,6 +2849,19 @@ body.shell-body {
   body.system-toc-collapsed .content-area { padding-right: 86px; }
 }
 
+/* The Build order tab reclaims the 282px right rail .content-area reserves
+   for the facet TOC, which renderToc hides on this tab, so the widest
+   diagram on the page is not laid out beside a blank gutter. Scoped to
+   screen because at (0,3,1) an unscoped version would beat the print
+   block's `.content-area { padding: 0 }` (0,1,0) on paper — the first rule
+   to break the invariant the print header states — and to the same
+   min-width as the TOC-collapsed rule above because the same specificity
+   equally outranks the tablet and phone .content-area rules, where the rail
+   it reclaims does not exist. */
+@media screen and (min-width: 1181px) {
+  body:has(.build-order-section:not([hidden])) .content-area { padding-right: 42px; }
+}
+
 .system-record-head {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2916,14 +2928,202 @@ body.shell-body {
   font-weight: 700;
 }
 
-.build-order-module[hidden] { display: none; }
+/* ---- Build order tab (.bo-*) --------------------------------------------
+   The viewer's build order is a top-level tab of its own (#dossierx-build-order, a
+   .module-section) holding one .bo-module group per locked module, each six
+   .bo-phase blocks in the fixed sequence with one mermaid flowchart per
+   non-empty phase (internal/buildorder/mermaid.go; build-order.html).
 
-.build-order-module.system-orientation-only > :not(.system-build-title):not(.system-orientation-node) {
-  display: none;
+   .bo-modules is the module strip: NOT .sub-nav, which has never needed
+   horizontal overflow above 860px and has none — 25 locked modules at a 23px
+   gap run off the desktop column with no scrollbar. It scrolls sideways at
+   every width, sticky like the .sub-nav it stands in for (same z-index).
+
+   COLOURS: every colour declaration below is !important, and that is not
+   decoration. mermaid injects its own stylesheet into each SVG, compiled
+   under the SVG's id — "#mermaid-1 .node rect" at (1,1,1) — which outranks
+   any unqualified page rule, so without !important every node paints in
+   mermaid's base-theme lavender: light boxes on --paper: #0a1220 under the
+   dark block, the exact failure these rules exist to prevent. The diagram
+   text carries NO colour literal (PaletteCSS emits only stroke-dasharray
+   classDefs), so the light :root, the screen-dark block and a project's
+   viewer.theme all apply here by construction. The ghost rule names path as
+   well as rect: a stadium is drawn by rough.js as <path> elements inside a
+   <g class="basic label-container outer-path">, never a <rect>. The rules
+   assume mermaid's default look (classic); under look: 'handDrawn' even a
+   rectangle is a <path>, which is why build-order-ui.js never sets look.
+   The edge rule targets .flowchart-link, mermaid 11's class on every edge
+   path; the arrowhead markers live in <defs> and are painted from the
+   lineColor themeVariable build-order-ui.js reads off --muted at
+   initialise time. ---------------------------------------------------- */
+.bo-modules {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 23px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  position: sticky;
+  z-index: 8;
+  top: 0;
+  margin: 0 0 24px;
+  padding: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
 }
 
-.build-order-module.system-orientation-only > .build-order-phase.system-orientation-node {
-  display: none;
+.bo-modules .subtab {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.bo-phase {
+  padding: 22px 0 26px;
+  border-top: 1px solid var(--border);
+}
+
+.bo-phase__head {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 14px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--border-strong, #aab5c7);
+}
+
+.bo-phase__num {
+  color: var(--accent);
+  font: 700 11px/1.4 var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.bo-phase__name {
+  margin: 0;
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -.02em;
+}
+
+.bo-phase__def {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.bo-phase__meta,
+.bo-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The wide-diagram rule: the SVG keeps its natural width (mermaid runs with
+   useMaxWidth: false and the max-width rule is belt and braces), a block
+   wider than the column scrolls inside .bo-diagram, and .content-area never
+   gains a horizontal scrollbar. Nothing scales a diagram down. */
+.bo-diagram {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+
+.bo-diagram svg {
+  display: block;
+  max-width: none !important;
+  height: auto;
+}
+
+/* Nothing else in this sheet styles a bare pre (only .claim-body pre), so
+   without these the block shows its flowchart source as a wall of monospace
+   between parse and the first render pass. mermaid stamps data-processed
+   BEFORE it reads the text, so the hiding stops the moment a render starts
+   and never hides a failed block (whose reader sees .bo-error and mermaid's
+   own message). After the render the <pre> survives around the SVG and its
+   white-space reaches the html labels' foreignObject content. */
+.bo-diagram pre.mermaid {
+  margin: 0;
+  white-space: normal;
+  font-family: var(--font-sans);
+}
+
+.bo-diagram pre.mermaid:not([data-processed]) {
+  visibility: hidden;
+  min-height: 2rem;
+}
+
+.bo-diagram .node.locked_con rect {
+  fill: var(--accent-bg) !important;
+  stroke: var(--accent) !important;
+}
+
+.bo-diagram .node.draft_con rect {
+  fill: var(--card-bg) !important;
+  stroke: var(--accent) !important;
+}
+
+.bo-diagram .node.locked_int rect {
+  fill: color-mix(in srgb, var(--link) 12%, var(--card-bg)) !important;
+  stroke: var(--link) !important;
+}
+
+.bo-diagram .node.draft_int rect {
+  fill: var(--card-bg) !important;
+  stroke: var(--link) !important;
+}
+
+.bo-diagram .node.ghost rect,
+.bo-diagram .node.ghost path {
+  fill: var(--card-bg) !important;
+  stroke: var(--border) !important;
+}
+
+.bo-diagram .node .nodeLabel {
+  color: var(--ink) !important;
+}
+
+.bo-diagram .node.ghost .nodeLabel {
+  color: var(--muted) !important;
+}
+
+.bo-diagram .flowchart-link {
+  stroke: var(--muted) !important;
+}
+
+.bo-diagram g.node { cursor: pointer; }
+
+.bo-diagram g.node.bo-missing {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.bo-cross,
+.bo-excluded {
+  margin: 12px 0 0;
+  padding: 0 0 0 18px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bo-cross__module {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.bo-excluded-deps {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.bo-error {
+  margin: 8px 0 0;
+  color: var(--warn);
+  font-size: 13px;
 }
 
 .facet-toc {
@@ -3453,65 +3653,6 @@ code {
 
 .track-cite > .pill { margin-left: auto; }
 
-.build-order-module {
-  margin-top: 34px;
-  padding-top: 22px;
-  border-top: 1px solid var(--border);
-}
-
-.build-order-module > .system-build-title {
-  margin: 0 0 24px;
-  padding: 0 0 15px;
-  border-top: 0;
-  border-bottom: 1px solid var(--border-strong, #aab5c7);
-  color: var(--ink);
-  font-size: 20px;
-  letter-spacing: -.02em;
-  text-transform: none;
-}
-
-.build-order-module > .build-order-phase {
-  margin: 30px 0 10px;
-  padding: 0;
-  border: 0;
-  color: var(--muted);
-  font: 700 10px/1.4 var(--font-mono);
-  letter-spacing: .09em;
-}
-
-.build-order-module .card { padding: 15px 17px; }
-.build-order-module .k { margin-bottom: 11px; font-size: 14px; }
-.build-order-module .claim-edges { display: grid; gap: 8px; }
-
-.build-order-module .claim-file,
-.build-order-module .claim-rests-on {
-  display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
-  gap: 10px;
-  align-items: start;
-  color: var(--muted);
-  font-size: 11px;
-}
-
-.build-order-field__label {
-  color: var(--faint);
-  font: 700 9px/1.55 var(--font-mono);
-  letter-spacing: .07em;
-  text-transform: uppercase;
-}
-
-.build-order-module code {
-  border: 0;
-  background: transparent;
-  overflow-wrap: anywhere;
-}
-
-.build-order-module .claim-edge-id-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
 .comments-rail {
   border-left-color: var(--border);
   background: var(--card-bg);
@@ -3994,9 +4135,6 @@ code {
   .claim-footer__counts { justify-content: flex-start; }
   .claim-footer__counts > span:not(.claim-footer__chevron) { padding: 4px 6px; }
   .claim-footer__chevron { margin-left: auto; }
-
-  .build-order-module .claim-file,
-  .build-order-module .claim-rests-on { grid-template-columns: 1fr; gap: 3px; }
 }
 
 /* ---- print — THE @media print block ------------------------------------
@@ -4100,4 +4238,25 @@ code {
   .claim-collapse-toggle { pointer-events: none; }
   .claim-collapse-chevron { display: none; }
   .claim-collapse-content[hidden] { display: block !important; }
+
+  /* Build order tab. What this buys is honest and small: a phase block is
+     not split across a page break. Browsers do not paginate horizontally, so
+     a diagram wider than the paper is CLIPPED at the page edge; nothing here
+     makes it spill onto further pages. The marker rules exist because
+     lineColor and background are baked into the SVG at initialise time from
+     the SCREEN palette while this block pins color-scheme: light and the
+     dark block above is screen-scoped: a dark-mode reader printing would get
+     light node fills beside pale-grey arrowheads on a near-black backdrop.
+     The module strip is the ONLY place the printed module's name appears
+     (build-order.html's section has no heading of its own), so the strip
+     stays on the page: only the buttons for the OTHER modules are dropped,
+     the selected one prints as the page's title line, unstuck from the
+     viewport it no longer has. */
+  .bo-modules { position: static; }
+  .bo-modules .subtab:not(.on) { display: none; }
+  .bo-diagram { overflow: visible; }
+  .bo-phase { break-inside: avoid; }
+  .bo-diagram svg { background: transparent !important; }
+  .bo-diagram .marker,
+  .bo-diagram marker path { fill: var(--muted) !important; stroke: var(--muted) !important; }
 }

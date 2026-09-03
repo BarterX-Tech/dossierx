@@ -21,7 +21,7 @@ viewer:
     accent: '#C6613F'
 ```
 
-Run `dossierx check` and open `viewer/index.html`. The accent colour is the
+Run `dossierx check` and open `build/viewer/index.html`. The accent colour is the
 only thing that changed; every other token still renders the engine's own
 default.
 
@@ -207,7 +207,7 @@ through this in order:
 
    `check --validate` and `check --staged` apply the identical rule set, so
    a hook or CI run is not a way around either failure.
-2. Open the rendered `viewer/index.html` and confirm the colour you set is
+2. Open the rendered `build/viewer/index.html` and confirm the colour you set is
    the colour you see. Every one of the twenty-eight tokens has an engine
    default, so a typo'd value is a load error, but a *correct value in the
    wrong layer* (set under `light:` when you meant flat, say) renders as

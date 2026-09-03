@@ -19,6 +19,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
+	"github.com/BarterX-Tech/dossierx/internal/layout"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -164,12 +165,12 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-four leaves, and not one more.
+	// The whole surface: nine nouns, twenty-five leaves, and not one more.
 	//
 	//	check                                                            1
 	//	claim   show list new lock unlock flag reaudit link               8
 	//	comment inbox list add reply                                      4
-	//	build-order propose status lock                                   3
+	//	build-order propose status lock show                              4
 	//	track   list show status                                          3
 	//	theme   list export                                               2
 	//	serve · skills export · version                                   3
@@ -181,7 +182,7 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyFourLeavesUnderNineNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentyFiveLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
 	// "track" is the eighth noun, and it was the first addition since v0.3.0
@@ -252,7 +253,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyFourLeavesUnderNineNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentyFiveLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -454,7 +455,37 @@ func loadConfig() (*config.Config, error) {
 		}
 		return nil, cliout.Errorf(code, "load config: %w", err)
 	}
+	// Every verb refuses a legacy root layout BEFORE reading anything: the
+	// stores, the artifacts, the catalog and the viewer all moved under the
+	// build directory, and a command that read a root store while another
+	// wrote a build/ one would let a stale root ledger shadow the real one.
+	// The "build/ is ignored" hint needs a git verdict this package gets from
+	// check.Gitignored; a non-verdict there just means no hint.
+	if err := refuseLegacyLayout(cfg); err != nil {
+		return nil, err
+	}
 	return cfg, nil
+}
+
+// refuseLegacyLayout is layout.Refuse with the buildDirIgnored hint computed
+// from the gitignore guard: a finding on any checked path means the pattern
+// would swallow the moved files too.
+func refuseLegacyLayout(cfg *config.Config) error {
+	// The scan first: on the current layout — every project after the
+	// migration — it is empty and the git verdict behind the hint (three
+	// git spawns) is never paid, on any verb.
+	moves, err := layout.LegacyFiles(cfg)
+	if err != nil {
+		return cliout.Errorf(cliout.CodeInternal, "%w", err)
+	}
+	if len(moves) == 0 {
+		return nil
+	}
+	buildDirIgnored := false
+	if findings, _, _, err := check.Gitignored(cfg); err == nil && len(findings) > 0 {
+		buildDirIgnored = true
+	}
+	return layout.RefuseMoves(cfg, moves, buildDirIgnored)
 }
 
 // loadClaims loads every claim under cfg's claims_dir. The "load claims:"
@@ -484,11 +515,12 @@ func loadConfigAndClaims() (*config.Config, []model.Claim, error) {
 	return cfg, claims, nil
 }
 
-// storePath is the on-disk location of the lock content-hash store,
-// resolved relative to the config file's own directory (never cwd), same
-// convention as claims_dir and viewer.template_overrides.
+// storePath is the on-disk location of the lock ledger, cfg.LockStorePath()
+// (build/ledger/lock-store.json by default) — a one-line delegate kept so the
+// call sites read as they always have and
+// TestPathHelpersResolveAgainstConfigDir pins the four helpers together.
 func storePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), lock.StoreFileName)
+	return cfg.LockStorePath()
 }
 
 // digestStorePresent reports whether the comment digest store is on disk for
@@ -514,8 +546,8 @@ func digestStorePresent(cfg *config.Config) bool {
 
 // claimsSentinelPath is the base path of the ONE project-wide claim-file
 // write sentinel (lock.AcquireFileLock appends ".lock", so the real lock file
-// is cfg.Dir()/.dossierx-claims.lock). It deliberately lives under cfg.Dir(),
-// never cwd, and OUTSIDE claims_dir — so it is never itself loaded as a claim
+// is build/ledger/claims.lock). It deliberately lives under the build
+// directory, never cwd, and OUTSIDE claims_dir — so it is never itself loaded as a claim
 // (LoadClaims only decodes *.yaml/*.yml, and the file is outside claims_dir
 // besides) and, in a later serve phase, never trips a claims_dir file watcher.
 //
@@ -813,14 +845,14 @@ func standingLedgerRecord(store *lock.Store, claim model.Claim) (rec lock.Ledger
 // duplicated rather than shared (see that package's doc comment) and
 // TestPathHelpersResolveAgainstConfigDir fails loudly if they disagree.
 func catalogPath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".catalog.json")
+	return cfg.CatalogPath()
 }
 
 // renderOutPath is where "dossierx check" writes the generated viewer — the
 // file "dossierx serve" then serves and re-renders. Same duplication contract
 // as catalogPath.
 func renderOutPath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), "viewer", "index.html")
+	return cfg.ViewerPath()
 }
 
 // ---------------------------------------------------------------------
@@ -1111,6 +1143,14 @@ type checkData struct {
 	ThemeFontCount int    `json:"theme_font_count,omitempty"`
 	ThemeFontBytes int64  `json:"theme_font_bytes,omitempty"`
 
+	// GitignoreCheck is present ONLY when the store-gitignored guard gave no
+	// verdict: "not a work tree", "outside the work tree" or "git not
+	// available". It is the one place a consumer learns the check did not
+	// apply — the same explicit non-verdict shape as Skipped on --staged — so
+	// CI that wants the guard can insist on the field being absent. Empty
+	// (omitted) when the guard ran and answered.
+	GitignoreCheck string `json:"gitignore_check,omitempty"`
+
 	CatalogPath      string          `json:"catalog_path,omitempty"`
 	CatalogCount     int             `json:"catalog_count,omitempty"`
 	ViewerPath       string          `json:"viewer_path,omitempty"`
@@ -1143,6 +1183,7 @@ func newCheckData(res check.Result) checkData {
 		ThemeError:         res.ThemeError,
 		ThemeFontCount:     res.ThemeFontCount,
 		ThemeFontBytes:     res.ThemeFontBytes,
+		GitignoreCheck:     res.GitignoreCheck,
 		LintFindings:       findings,
 		LintErrorCount:     len(res.LintErrors),
 		LintWarningCount:   len(res.LintWarnings),
@@ -1294,7 +1335,7 @@ func ledgerRecoveryHint(findings []lock.Finding) string {
 		// where to look when the obvious reading does not fit.
 		return "the lock ledger holds standing approval records for claims that are not in the project any more, so content a human approved has left the audit without anything recording that they agreed to drop it. Two causes, and data.ledger_findings names the claims for both: a locked claim's FILE was deleted (restore it from version control), or claims_dir was repointed and left those files outside it (put claims_dir back, or move the files into the new one). If the removal was intended, restore the claim first, run dossierx claim unlock <id> --reason \"...\", and remove it again so the release is on the record. Then run: dossierx check --validate"
 	case rules[check.RuleCommentDigestAbsent], rules[lock.RuleCommentDigestUnrecorded], rules[check.RuleCommentDigestMissing]:
-		return "the comment digest store is missing entries (or the whole file), so review history on those claims is checked against nothing. Restore .dossierx-comment-digest.json from version control — or git add it, if this commit is the one that updated it — then run: dossierx check --validate. Do not run a comment op to re-create an entry: that records whatever the claim says now as the truth"
+		return "the comment digest store is missing entries (or the whole file), so review history on those claims is checked against nothing. Restore " + config.CommentDigestDisplayPath + " from version control — or git add it, if this commit is the one that updated it — then run: dossierx check --validate. Do not run a comment op to re-create an entry: that records whatever the claim says now as the truth"
 	case rules[lock.RuleCommentLedgerDrift]:
 		return "a locked claim's comment block changed outside the engine. Restore the claim file from version control and run: dossierx check --validate; if the change is legitimate and the human agrees to it, the reason-carrying path is dossierx claim unlock <id> --reason \"...\", fix, then dossierx claim lock <id> --reason \"...\""
 	case rules[lock.RuleLockContentDrift], rules[lock.RuleLockLedgerMissing], rules[lock.RuleLockLedgerOrphan], rules[lock.RuleLockLedgerReleased]:
@@ -1412,9 +1453,12 @@ func newCheckCmd() *cobra.Command {
 			// still learns the run blessed content nobody approved). See
 			// adoptionWarnings.
 			data.CommentDigestsAdopted = adopted.CommentDigests
+			warnings := append(adoptionWarnings(adopted), lintWarningLines(res.LintWarnings)...)
+			warnings = append(warnings, res.GitignoreWarnings...)
+			warnings = append(warnings, res.ViewerWarnings...)
 			out := cmdResult{
 				Data:      data,
-				Warnings:  append(adoptionWarnings(adopted), lintWarningLines(res.LintWarnings)...),
+				Warnings:  warnings,
 				StoppedAt: stoppedAt,
 				Text:      func() { formatCheckResult(cmd, res) },
 			}
@@ -1436,7 +1480,7 @@ func newCheckCmd() *cobra.Command {
 			return out, nil
 		}),
 	}
-	cmd.Flags().BoolVar(&validate, "validate", false, "validate only: lint in memory and report, writing NOTHING — no claim files, no lock store, no .catalog.json, no viewer")
+	cmd.Flags().BoolVar(&validate, "validate", false, "validate only: lint in memory and report, writing NOTHING — no claim files, no lock store, no catalog, no viewer")
 	cmd.Flags().BoolVar(&staged, "staged", false, "judge the GIT INDEX instead of the working tree (what the commit will contain), writing NOTHING — this is what a pre-commit hook runs")
 	return cmd
 }
@@ -1457,6 +1501,13 @@ func newCheckCmd() *cobra.Command {
 // somewhere it cannot apply, and failing there would push hook authors into
 // swallowing exit codes — which would disarm every other gate in this release.
 // The envelope says so explicitly (data.skipped), so CI can insist.
+//
+// The gitignore guard follows the same rule: when git cannot be consulted to
+// tell whether a store is ignored, this read-only mode reports
+// data.gitignore_check and exits 0 rather than refusing — only the
+// approval-recording verbs (claim lock, claim flag, claim reaudit --confirm,
+// build-order lock) refuse with store_gitignored, because they are about to
+// write something the repository is the only carrier for.
 func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	cfg, err := loadConfig()
 	if err != nil {
@@ -1484,6 +1535,12 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 			return cmdResult{StoppedAt: "load"}, cliout.Errorf(cliout.CodeUntrackedConfig, "%w", err).
 				WithHint("git add project.config.yaml (or the path given to --config), then commit again — check --staged judges the index, and it cannot read a config that is not in it")
 		}
+		// The index still carries the legacy root layout: the same refusal
+		// every verb gives the working-tree form, already coded by
+		// internal/layout, passed through rather than re-wrapped as internal.
+		if coded := cliout.As(err); coded != nil && coded.Code == cliout.CodeLayoutLegacy {
+			return cmdResult{StoppedAt: "config"}, err
+		}
 		// A real git failure is not a verdict either way, so it must not be
 		// reported as a clean run. CodeInternal rather than a check-step code:
 		// nothing about the project was judged.
@@ -1497,7 +1554,7 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 	data.StagedFiles = sp.FromIndex
 	out := cmdResult{
 		Data:     data,
-		Warnings: lintWarningLines(res.LintWarnings),
+		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), res.ViewerWarnings...),
 		Text:     func() { formatCheckStagedResult(cmd, sp, res) },
 	}
 
@@ -1553,6 +1610,7 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 	reportLintFindings(cmd, res.LintFindings) //nolint:errcheck // intentionally discarded (see comment above)
 	reportLedgerFindings(cmd, res.LedgerFindings)
 	reportThemeError(cmd, res)
+	reportGitignoreCheck(cmd, res)
 	for _, step := range res.NextSteps {
 		fmt.Fprintf(out, "  next: %s\n", step)
 	}
@@ -1569,7 +1627,7 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 // claim, validate it, fix it, validate again") would have become a WRITER.
 // Plain "check" writes on every single run — reconcileReviewPending saves claim
 // files, loadStoreForRead saves the migrated lock store, and check.Run writes
-// .catalog.json and viewer/index.html — so "validate" could not be a flag that
+// build/catalog/catalog.json and build/viewer/index.html — so "validate" could not be a flag that
 // merely suppresses the last two steps. It has to drive a different seam.
 //
 // That seam already existed: check.Status is the memory-only sibling internal/
@@ -1605,7 +1663,7 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 	data.ReadOnly = true
 	out := cmdResult{
 		Data:     data,
-		Warnings: lintWarningLines(res.LintWarnings),
+		Warnings: append(append(lintWarningLines(res.LintWarnings), res.GitignoreWarnings...), res.ViewerWarnings...),
 		Text:     func() { formatCheckValidateResult(cmd, res) },
 	}
 	if len(res.LintErrors) > 0 {
@@ -1654,6 +1712,25 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 // exists because the two read-only formatters stop before their "OK" line when
 // res.OK is false, and a theme refusal is one of the things that clears it: a
 // text-mode reader would otherwise get findings, no verdict, and no reason.
+// reportGitignoreCheck prints, in text mode, the guard's non-verdict and its
+// ignored-but-tracked warnings — the same lines the envelope carries as
+// data.gitignore_check and warnings[]. It prints nothing on a project where
+// the guard ran and found nothing to say, so every passing fixture's output is
+// unchanged; a non-verdict is a note, never a failure (see runCheckStaged's
+// doc comment for the rule the guard follows).
+func reportGitignoreCheck(cmd *cobra.Command, res check.Result) {
+	out := cmd.OutOrStdout()
+	for _, w := range res.GitignoreWarnings {
+		fmt.Fprintf(out, "  warning: %s\n", w)
+	}
+	for _, w := range res.ViewerWarnings {
+		fmt.Fprintf(out, "  warning: %s\n", w)
+	}
+	if res.GitignoreCheck != "" && res.GitignoreCheck != check.GitignoreNotAWorkTree {
+		fmt.Fprintf(out, "  note: gitignore check did not run: %s\n", res.GitignoreCheck)
+	}
+}
+
 func reportThemeError(cmd *cobra.Command, res check.Result) {
 	if res.ThemeError == "" {
 		return
@@ -1684,6 +1761,7 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 	// are the ones a reader must not have to run a second command to see.
 	reportLedgerFindings(cmd, res.LedgerFindings)
 	reportThemeError(cmd, res)
+	reportGitignoreCheck(cmd, res)
 	if !res.OK || len(res.LedgerFindings) > 0 {
 		return
 	}
@@ -1746,6 +1824,7 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	// is still refused. It prints nothing when the gate found nothing, which is
 	// why every passing project's output is unchanged.
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportGitignoreCheck(cmd, res)
 
 	if !res.OK {
 		return
@@ -2144,13 +2223,19 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 		deleted := store.LedgerRecordDeleted(claim)
 		dr.Require("ledger_record_not_deleted", !deleted, boolDetail(!deleted,
 			"this claim's lock-ledger record is intact, or this engine never locked it",
-			"this claim has NO lock-ledger record while the store still carries its locked_at stamp and/or its dependency baselines — the record was deleted rather than released, and locking would write a fresh approval over whatever the file says now. Restore .dossierx-lock-store.json from version control; do not unlock-and-relock"))
+			"this claim has NO lock-ledger record while the store still carries its locked_at stamp and/or its dependency baselines — the record was deleted rather than released, and locking would write a fresh approval over whatever the file says now. Restore "+config.LockStoreDisplayPath+" from version control; do not unlock-and-relock"))
 
 		unrecorded := store.CommentDigestUnrecorded(claim)
 		dr.Require("comment_threads_recorded", !unrecorded, boolDetail(!unrecorded,
 			"this claim's comment threads are covered by the comment digest store, or it carries none",
-			"this claim carries comment threads with NO entry in .dossierx-comment-digest.json in a ledger-covered project — locking would RECORD the current block as the approved review history, manufacturing the evidence whose absence is the finding. Restore .dossierx-comment-digest.json from version control"))
+			"this claim carries comment threads with NO entry in "+config.CommentDigestDisplayPath+" in a ledger-covered project — locking would RECORD the current block as the approved review history, manufacturing the evidence whose absence is the finding. Restore "+config.CommentDigestDisplayPath+" from version control"))
 	}
+
+	// THE GITIGNORE GUARD, previewed. The write path refuses with
+	// store_gitignored when a store it is about to write would be ignored (or
+	// git cannot answer inside a work tree), and a preview that did not say so
+	// would spend a human's yes on a lock that then refuses.
+	storesArePrecondition(dr, cfg)
 
 	g := evaluateLockGates(claim, claims, cfg)
 	// The detail NAMES the rules. A preview whose blocked precondition reads
@@ -2240,6 +2325,14 @@ func newLockCmd() *cobra.Command {
 			id := args[0]
 
 			cfg, err := loadConfig()
+			if err != nil {
+				return cmdResult{}, err
+			}
+
+			// The gitignore guard, BEFORE any sentinel: an approval whose only
+			// carrier is the repository must not be written under a pattern
+			// git never re-enters. See refuseIfStoresGitignored.
+			gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "lock")
 			if err != nil {
 				return cmdResult{}, err
 			}
@@ -2344,12 +2437,12 @@ func newLockCmd() *cobra.Command {
 				if errors.Is(err, lock.ErrCommentDigestUnrecorded) {
 					return cmdResult{Warnings: adoptionWarnings(adopted)},
 						cliout.Wrap(err, cliout.CodeIntegrityFailed).
-							WithHint("restore .dossierx-comment-digest.json from version control (git checkout <commit> -- .dossierx-comment-digest.json), then read the claim's threads against what the human actually wrote. Do NOT run a comment op or re-lock to re-create the entry: both record whatever the claim says now as the review history. `dossierx check` reports this as comment-digest-unrecorded")
+							WithHint("restore " + config.CommentDigestDisplayPath + " from version control (git checkout <commit> -- " + config.CommentDigestDisplayPath + "), then read the claim's threads against what the human actually wrote. Do NOT run a comment op or re-lock to re-create the entry: both record whatever the claim says now as the review history. `dossierx check` reports this as comment-digest-unrecorded")
 				}
 				if errors.Is(err, lock.ErrLedgerRecordDeleted) {
 					return cmdResult{Warnings: adoptionWarnings(adopted)},
 						cliout.Wrap(err, cliout.CodeIntegrityFailed).
-							WithHint("restore .dossierx-lock-store.json from version control (git checkout <commit> -- .dossierx-lock-store.json) — the approved content is in git. Do NOT re-lock and do NOT unlock-then-lock: both record whatever the claim says now as approved, which is what deleting the record was for. `dossierx check` reports this as lock-ledger-deleted")
+							WithHint("restore " + config.LockStoreDisplayPath + " from version control (git checkout <commit> -- " + config.LockStoreDisplayPath + ") — the approved content is in git. Do NOT re-lock and do NOT unlock-then-lock: both record whatever the claim says now as approved, which is what deleting the record was for. `dossierx check` reports this as lock-ledger-deleted")
 				}
 				// Checked before evaluateLockGates: an already-locked claim
 				// trips none of the three gates (its lint is clean, its
@@ -2403,7 +2496,7 @@ func newLockCmd() *cobra.Command {
 				// payload under error. See lockRefusedData.
 				gate := evaluateLockGates(claim, claims, cfg)
 				return cmdResult{
-						Warnings: adoptionWarnings(adopted),
+						Warnings: append(adoptionWarnings(adopted), gitignoreWarnings...),
 						Data:     newLockRefusedData(id, gate),
 					}, lockErr(gate.code(), err).
 						WithDetails(lockRefusalDetails(gate))
@@ -2431,7 +2524,7 @@ func newLockCmd() *cobra.Command {
 			if blockers := rollUpBlockers(claim, claims, cfg); len(blockers) > 0 {
 				g := lockGate{LintErrors: len(blockers), LintFindings: blockers, OpenThreads: claim.OpenThreadIDs()}
 				return cmdResult{
-						Warnings: adoptionWarnings(adopted),
+						Warnings: append(adoptionWarnings(adopted), gitignoreWarnings...),
 						Data:     newLockRefusedData(id, g),
 					}, cliout.Errorf(cliout.CodeLintFailed,
 						"lock: refused, %d error-level lint finding(s) outstanding: %s", len(blockers), g.lintBlockerDetail()).
@@ -2446,7 +2539,7 @@ func newLockCmd() *cobra.Command {
 				return cmdResult{}, cliout.Errorf(cliout.CodeWriteFailed, "lock: %w", err)
 			}
 			return cmdResult{
-				Warnings: adoptionWarnings(adopted),
+				Warnings: append(adoptionWarnings(adopted), gitignoreWarnings...),
 				Data: lockData{
 					ClaimID:  id,
 					From:     from,
@@ -2806,6 +2899,16 @@ func newReauditCmd() *cobra.Command {
 				}
 			}
 
+			// The gitignore guard, before any sentinel, on the WRITING path
+			// only: a confirmed reaudit records an approval, a preview does not.
+			var gitignoreWarnings []string
+			if confirm {
+				gitignoreWarnings, err = refuseIfStoresGitignored(cfg, "reaudit")
+				if err != nil {
+					return cmdResult{}, err
+				}
+			}
+
 			// Claim-file write discipline (Phase 0): the guards above ran on a
 			// lock-free load DELIBERATELY — they hold no file lock, so an early
 			// return leaks nothing. Now take the project-wide claims sentinel
@@ -3067,7 +3170,7 @@ func newReauditCmd() *cobra.Command {
 			data.Applied = true
 			data.ReviewPending = applied.ReviewPending
 			return cmdResult{
-				Warnings: adoptionWarnings(adopted),
+				Warnings: append(adoptionWarnings(adopted), gitignoreWarnings...),
 				Data:     data,
 				Text: func() {
 					printProposal()
@@ -3136,6 +3239,10 @@ func reauditDryRunResult(cmd *cobra.Command, cfg *config.Config, claims []model.
 	_, standing, matches := standingLedgerRecord(store, claim)
 	dr.Require("content_matches_ledger", matches,
 		fmt.Sprintf("a standing lock-ledger approval covers this claim=%v; its recorded content still matches the file=%v", standing, matches))
+
+	// The gitignore guard, previewed: the confirm path refuses with
+	// store_gitignored in the same state.
+	storesArePrecondition(dr, cfg)
 
 	// The proposal is computed once the STATE gates hold. internal/reaudit
 	// refuses to propose for a claim that is not locked+review_pending, and

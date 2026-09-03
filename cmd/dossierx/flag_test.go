@@ -139,7 +139,7 @@ func TestFlagRefusesARawHTMLCardEndToEnd(t *testing.T) {
 	if strings.Contains(string(after), "review_pending: true") {
 		t.Fatalf("a refused flag must leave the claim file alone, got:\n%s", after)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".dossierx-flag-store.json")); err == nil {
+	if _, err := os.Stat(filepath.Join(root, "build", "ledger", "flag-store.json")); err == nil {
 		t.Fatalf("a refused flag must not record a pending-flag entry")
 	}
 }

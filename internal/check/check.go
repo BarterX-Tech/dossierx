@@ -11,7 +11,7 @@
 //
 // Run performs exactly the work newCheckCmd's RunE used to inline, in the
 // same order and with the same fail-fast semantics and the same side effects
-// (it writes .catalog.json and viewer/index.html and reconciles impl-links),
+// (it writes build/catalog/catalog.json and build/viewer/index.html and reconciles impl-links),
 // but instead of printing it records every datum the terminal reporter needs
 // in Result and returns the first step error (unprefixed; the caller wraps it
 // "check: %w", exactly as the RunE did at each call site). A caller that
@@ -52,6 +52,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
+	"github.com/BarterX-Tech/dossierx/internal/layout"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -143,6 +144,27 @@ type Result struct {
 	ThemeFontCount int
 	ThemeFontBytes int64
 
+	// GitignoreCheck is the reason the store-gitignored guard gave NO verdict
+	// — "not a work tree", "outside the work tree", "git not available" — and
+	// "" when it ran and answered (a finding, a warning, or nothing). It is
+	// the only place a reader learns the check did not apply; cmd/dossierx
+	// projects it as data.gitignore_check. GitignoreWarnings are the
+	// ignored-but-tracked paths (see Gitignored), which the CLI appends to the
+	// envelope's warnings[] without touching the exit status.
+	GitignoreCheck    string
+	GitignoreWarnings []string
+
+	// ViewerWarnings are render-side notes with no severity: the one line
+	// render.StyleOverrideWarnings emits when a style.css override is in
+	// force beside a locked build order (the Build order tab's .bo-* rules
+	// come from the engine's sheet and an override predating the tab has
+	// none), and render.BuildOrderWarnings' one line per locked artifact the
+	// Build order tab skipped rather than drew (the per-module half of
+	// build_order_view.go's load-error policy). Render has no warnings
+	// channel, so Run and Status carry them here and the CLI appends them to
+	// warnings[] beside GitignoreWarnings, never touching the exit status.
+	ViewerWarnings []string
+
 	// OK is true once every fail-fast step passed and the run reached the
 	// "check: OK" line. The reporting fields below are populated only then.
 	OK bool
@@ -217,6 +239,20 @@ func buildOrderReports(cfg *config.Config, claims []model.Claim) []BuildOrderRep
 func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	var res Result
 
+	// 0. The gitignore guard, evaluated ONCE and above the lint fail-fast, so a
+	// lint-red project still reports store-gitignored and never returns with
+	// neither a finding nor a gitignore_check reason. Its findings join the
+	// ledger findings wherever those are set below.
+	gitignoreFindings, gitignoreWarnings, gitignoreReason, gitignoreErr := Gitignored(cfg)
+	res.GitignoreCheck = gitignoreReason
+	res.GitignoreWarnings = gitignoreWarnings
+	res.ViewerWarnings = append(render.StyleOverrideWarnings(cfg), render.BuildOrderWarnings(cfg, claims)...)
+	if gitignoreErr != nil {
+		// A read-only verdict: Run reports the non-verdict and carries on.
+		// The approval verbs, which write, refuse on the same error.
+		gitignoreFindings = nil
+	}
+
 	// 1. Lint. A single error-severity finding fails the whole run here,
 	// before any catalog/render write happens.
 	res.LintFindings = lint.RunAll(claims, cfg)
@@ -243,11 +279,11 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		// precedence is unchanged — cmd/dossierx tests LintErrors first, so this
 		// still reports lint_failed / stopped_at "lint"; what changes is that
 		// data.ledger_findings is populated rather than silently empty.
-		res.LedgerFindings = ledgerGate(claims, loadLedgerInputs(cfg))
+		res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, loadLedgerInputs(cfg)))
 		return res, fmt.Errorf("lint: %d error-level finding(s)", len(res.LintErrors))
 	}
 
-	// 2. Catalog: build then persist .catalog.json. The built catalog is
+	// 2. Catalog: build then persist build/catalog/catalog.json. The built catalog is
 	// reused for the render below (deterministic — rebuilding would only
 	// repeat work and could not diverge).
 	cat, err := catalog.Build(claims, cfg)
@@ -260,8 +296,13 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	}
 	res.CatalogPath = catPath
 	res.CatalogCount = len(claims)
+	// The build directory's own .gitignore, written once, after the first
+	// write that creates the directory.
+	if err := layout.EnsureBuildGitignore(cfg); err != nil {
+		return res, fmt.Errorf("catalog: %w", err)
+	}
 
-	// 3. Render the viewer to viewer/index.html.
+	// 3. Render the viewer to build/viewer/index.html.
 	//
 	// The theme is resolved HERE rather than inside render.Render so that the
 	// same numbers the read-only modes report — how many fonts the reader
@@ -315,7 +356,7 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// project's documentation offline. Everything a reader needs in order to
 	// SEE the tampered claim has been regenerated by the time the gate refuses,
 	// and what the refusal costs is the exit status, not the viewer.
-	res.LedgerFindings = ledgerGate(claims, loadLedgerInputs(cfg))
+	res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, loadLedgerInputs(cfg)))
 	if len(res.LedgerFindings) > 0 {
 		return res, fmt.Errorf("ledger: %d integrity finding(s)", len(res.LedgerFindings))
 	}
@@ -337,8 +378,8 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 // Status computes the subset of Result the serve status strip renders — the
 // lint partition, per-module open-comment counts, and the next-steps advisory —
 // WITHOUT any of Run's disk writes. It exists so GET/HEAD /api/status can drive
-// the same check data as a page-poll WITHOUT truncating viewer/index.html or
-// .catalog.json (Run's os.WriteFile side effects) and WITHOUT the per-request
+// the same check data as a page-poll WITHOUT truncating build/viewer/index.html or
+// build/catalog/catalog.json (Run's os.WriteFile side effects) and WITHOUT the per-request
 // impl-link Scan, which mutates link artifacts. Those writers are the "dossierx
 // check" writer's job, gated to the CLI / serve startup — never a read endpoint
 // reachable by a bare, CSRF-exempt GET or HEAD. It reads only (lint in memory,
@@ -447,6 +488,18 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func
 	// lint error, so there is nothing to gain by deferring it and one whole
 	// class of silence to lose.
 	res.LedgerFindings = ledgerGate(claims, in)
+	// The gitignore guard, reported the same way: a finding here does not
+	// decide anything (Status reports; its enforcing callers decide), and a
+	// non-verdict is carried as GitignoreCheck for the envelope.
+	if gitignoreFindings, gitignoreWarnings, gitignoreReason, gitignoreErr := Gitignored(cfg); gitignoreErr == nil {
+		res.LedgerFindings = append(gitignoreFindings, res.LedgerFindings...)
+		res.GitignoreCheck = gitignoreReason
+		res.GitignoreWarnings = gitignoreWarnings
+	} else {
+		res.GitignoreCheck = gitignoreReason
+		res.GitignoreWarnings = gitignoreWarnings
+	}
+	res.ViewerWarnings = append(render.StyleOverrideWarnings(cfg), render.BuildOrderWarnings(cfg, claims)...)
 
 	if len(res.LintErrors) > 0 {
 		// Mirror Run's lint fail-fast: surface the errors, leave the best-effort
@@ -862,11 +915,11 @@ func nextSteps(cfg *config.Config, claims []model.Claim, implinkHints []string, 
 // stable, and the parity test in cmd/dossierx fails loudly if the two copies
 // ever disagree about where check writes.
 func catalogPath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".catalog.json")
+	return cfg.CatalogPath()
 }
 
 func renderOutPath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), "viewer", "index.html")
+	return cfg.ViewerPath()
 }
 
 // lockStoreFileName is the lock ledger's file name, named rather than inlined
@@ -880,7 +933,7 @@ func renderOutPath(cfg *config.Config) string {
 const lockStoreFileName = lock.StoreFileName
 
 func storePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), lockStoreFileName)
+	return cfg.LockStorePath()
 }
 
 // digestStorePresent reports whether the comment digest store is on disk for
@@ -896,5 +949,5 @@ func digestStorePresent(cfg *config.Config) bool {
 }
 
 func flagStorePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".dossierx-flag-store.json")
+	return cfg.FlagStorePath()
 }

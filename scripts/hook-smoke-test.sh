@@ -696,7 +696,7 @@ cp "$UNTRACKED/claims/$CLAIM_ID.yaml" "$UNTRACKED/decoy/"
 # Commit the claims and the ledger WITHOUT the config, before the hook exists —
 # the hook would (correctly, after this fix) refuse to be the thing that creates
 # this state.
-(cd "$UNTRACKED" && git add claims decoy .dossierx-lock-store.json .dossierx-comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
+(cd "$UNTRACKED" && git add claims decoy build/ledger/lock-store.json build/ledger/comment-digest.json && git commit -qm "claims, no config") >"$TMP/untracked-commit1.out" 2>&1 ||
 	fail "could not build the untracked-config fixture: $(cat "$TMP/untracked-commit1.out")"
 (cd "$UNTRACKED" && git ls-files --error-unmatch project.config.yaml) >/dev/null 2>&1 &&
 	fail "the fixture tracked project.config.yaml; this case must leave it untracked"
@@ -843,7 +843,7 @@ grep -q 'claims_dir' "$TMP/skipped-commit.out" ||
 # refuses skips). It was never committable through the hook either way.
 echo "hook-smoke-test: an out-of-tree claims_dir with a standing ledger is judged, not skipped ..."
 (cd "$SKIPPED/repo" && git add -A)
-(cd "$SKIPPED/repo" && git ls-files --error-unmatch .dossierx-lock-store.json) >/dev/null 2>&1 ||
+(cd "$SKIPPED/repo" && git ls-files --error-unmatch build/ledger/lock-store.json) >/dev/null 2>&1 ||
 	fail "the fixture did not stage a lock ledger; case 19b cannot prove anything"
 if (cd "$SKIPPED/repo" && git commit -qm "stage the ledger for claims nothing in this repo can carry") >"$TMP/abandoned-commit.out" 2>&1; then
 	fail "a standing ledger for out-of-scope claims was committed — check --staged took the skip over an index it could have judged: $(cat "$TMP/abandoned-commit.out")"
@@ -922,7 +922,7 @@ new_project "$LEDGERRM"
 (cd "$LEDGERRM" && sh "$INSTALLER" --yes) >"$TMP/ledgerrm-install.out" 2>&1 ||
 	fail "install into the deleted-ledger fixture failed: $(cat "$TMP/ledgerrm-install.out")"
 
-(cd "$LEDGERRM" && git rm -q .dossierx-lock-store.json) ||
+(cd "$LEDGERRM" && git rm -q build/ledger/lock-store.json) ||
 	fail "could not stage the ledger deletion"
 if (cd "$LEDGERRM" && git commit -qm "chore: drop the lock store") >"$TMP/ledgerrm-commit.out" 2>&1; then
 	fail "a commit that deletes the lock ledger while locked claims remain was ACCEPTED — lock-ledger-absent did not fire: $(cat "$TMP/ledgerrm-commit.out")"

@@ -51,8 +51,8 @@ func TestIsInsideDir(t *testing.T) {
 		{filepath.Join(root, "a.yaml"), true},
 		{filepath.Join(root, "sub", "deep", "b.yaml"), true},
 		{root, true}, // the dir itself counts as inside
-		{filepath.Join(sep+"proj", "viewer", "index.html"), false},
-		{filepath.Join(sep+"proj", ".catalog.json"), false},
+		{filepath.Join(sep+"proj", "build", "viewer", "index.html"), false},
+		{filepath.Join(sep+"proj", "build", "catalog", "catalog.json"), false},
 		{sep + "proj", false}, // the parent is outside
 		{filepath.Join(sep+"other", "x"), false},
 	}

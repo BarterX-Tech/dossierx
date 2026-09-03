@@ -185,7 +185,7 @@ func lockThroughTheLedger(t *testing.T, cfg *config.Config, id string) {
 		}
 	}
 	claims := loadFixtureClaims(t, cfg)
-	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), ".dossierx-lock-store.json"))
+	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json"))
 	if err != nil {
 		t.Fatalf("load store: %v", err)
 	}
@@ -351,7 +351,7 @@ func TestStaged_EitherSabotageAloneIsStillRefused(t *testing.T) {
 
 	t.Run("ledger deleted, claims_dir left in place", func(t *testing.T) {
 		cfg := singleTreeFixture(t)
-		git(t, cfg.Dir(), "rm", "-q", ".dossierx-lock-store.json")
+		git(t, cfg.Dir(), "rm", "-q", "build/ledger/lock-store.json")
 		git(t, cfg.Dir(), "add", "-A")
 
 		rules, res := stagedRulesFor(t, cfg)
@@ -382,7 +382,7 @@ func TestStaged_EitherSabotageAloneIsStillRefused(t *testing.T) {
 func TestStaged_CollapsedScopeIsUndetected(t *testing.T) {
 	cfg := singleTreeFixture(t)
 	collapsed := repointClaimsDir(t, cfg, "archive")
-	git(t, cfg.Dir(), "rm", "-q", ".dossierx-lock-store.json")
+	git(t, cfg.Dir(), "rm", "-q", "build/ledger/lock-store.json")
 	git(t, cfg.Dir(), "add", "-A")
 
 	rules, _ := stagedRulesFor(t, collapsed)
@@ -435,7 +435,7 @@ func TestStaged_EitherHalfOfTheDisownedClaimIsStillRefused(t *testing.T) {
 // the record would be testing a different, noisier tamper.
 func dropLedgerRecord(t *testing.T, cfg *config.Config, id string) {
 	t.Helper()
-	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), ".dossierx-lock-store.json"))
+	store, err := lock.LoadStore(filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json"))
 	if err != nil {
 		t.Fatalf("load store: %v", err)
 	}
@@ -699,9 +699,9 @@ func TestStaged_RemovingTheProjectEntirelyIsNotRefused(t *testing.T) {
 	cfg := singleTreeFixture(t)
 	root := cfg.Dir()
 
-	git(t, root, "rm", "-r", "-q", "claims", config.FileName, ".dossierx-lock-store.json")
+	git(t, root, "rm", "-r", "-q", "claims", config.FileName, "build/ledger/lock-store.json")
 	if _, err := os.Stat(digest.StorePath(cfg)); err == nil {
-		git(t, root, "rm", "-q", digest.StoreFileName)
+		git(t, root, "rm", "-q", config.CommentDigestDisplayPath)
 	}
 
 	sp, err := check.Staged(cfg)

@@ -512,7 +512,7 @@ func TestPasteBlockExportRunsRootedAndTeachesTheHarness(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestREADME_DigestStoreCommitTimingMatchesTheEngine pins README's instruction
-// for WHEN to commit `.dossierx-comment-digest.json` against when the engine
+// for WHEN to commit `build/ledger/comment-digest.json` against when the engine
 // actually creates it.
 //
 // README's tracked-artifacts paragraph says: commit "the lock store the moment
@@ -521,7 +521,7 @@ func TestPasteBlockExportRunsRootedAndTeachesTheHarness(t *testing.T) {
 // store is created EMPTY by the FIRST LOCK (internal/lock — Store.Save creates
 // it in the same act that creates a lock store for a fresh project, and
 // CrossPreLedger does the same at the crossing; README's own crossing section
-// says so: the first lock "creates `.dossierx-comment-digest.json` in the same
+// says so: the first lock "creates `build/ledger/comment-digest.json` in the same
 // act"). A reader who does what the paragraph says — waits for a comment —
 // commits the lock store without the digest store beside it, and the very next
 // `check --staged` (the pre-commit hook's own invocation) reports
@@ -554,15 +554,15 @@ func TestREADME_DigestStoreCommitTimingMatchesTheEngine(t *testing.T) {
 	// lock, with zero comments anywhere. If this ever fails, the engine moved
 	// and it is README's "created in the same act" crossing paragraph that
 	// needs re-verifying, not this assertion loosening.
-	digestPath := filepath.Join(root, ".dossierx-comment-digest.json")
+	digestPath := filepath.Join(root, "build", "ledger", "comment-digest.json")
 	if _, err := os.Stat(digestPath); err != nil {
-		t.Fatalf(".dossierx-comment-digest.json does not exist after the project's first lock (%v); the engine no longer creates it at lock time, and README's crossing section (\"creates `.dossierx-comment-digest.json` in the same act\") now needs re-verifying alongside the timing sentence this test pins", err)
+		t.Fatalf("build/ledger/comment-digest.json does not exist after the project's first lock (%v); the engine no longer creates it at lock time, and README's crossing section (\"creates `build/ledger/comment-digest.json` in the same act\") now needs re-verifying alongside the timing sentence this test pins", err)
 	}
 
 	// Half two — the reader's side. Follow the tracked-artifacts sentence
 	// literally: the lock store goes in "the moment anything is locked"; the
 	// digest waits for a comment that has not happened. Stage exactly that.
-	gitInConsumer(t, root, "add", "claims", ".dossierx-lock-store.json")
+	gitInConsumer(t, root, "add", "claims", "build/ledger/lock-store.json")
 
 	stdout, _, code := run(t, root, "check", "--staged", "--format", "json")
 	var envelope struct {
@@ -595,6 +595,6 @@ func TestREADME_DigestStoreCommitTimingMatchesTheEngine(t *testing.T) {
 	}
 	const commentTimeClaim = "the digest once anyone comments"
 	if strings.Contains(readme, commentTimeClaim) {
-		t.Errorf("README tells the reader to commit the digest store %q, and the engine creates it at the FIRST LOCK — reproduced above: in a project where nobody has ever commented, locking one claim created .dossierx-comment-digest.json, and an index holding the lock store without it fails `check --staged` with `comment-digest-absent`. The pre-commit hook runs exactly that command, so the reader who waits as instructed is stopped by the gate on their next commit with a finding about a store the instruction told them not to commit yet. Tie the digest store's commit timing to the lock that creates it (its own crossing section already says \"in the same act\"), or drop the timing clause", commentTimeClaim)
+		t.Errorf("README tells the reader to commit the digest store %q, and the engine creates it at the FIRST LOCK — reproduced above: in a project where nobody has ever commented, locking one claim created build/ledger/comment-digest.json, and an index holding the lock store without it fails `check --staged` with `comment-digest-absent`. The pre-commit hook runs exactly that command, so the reader who waits as instructed is stopped by the gate on their next commit with a finding about a store the instruction told them not to commit yet. Tie the digest store's commit timing to the lock that creates it (its own crossing section already says \"in the same act\"), or drop the timing clause", commentTimeClaim)
 	}
 }

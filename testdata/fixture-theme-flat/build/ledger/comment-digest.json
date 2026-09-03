@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "digests": {
+    "panel.contract.api": "7855300bfc707f085f7250e17e92092aa60eb395b1427f3020e608a00035467d",
+    "panel.contract.behavior": "06a75f0d4766481d9feb7fb89c43523bd4cd6e24460387c3ad96930c55cdc20a",
+    "panel.decision.mockup": "1c308bc40b5bd850111b9c0cf09004e472752837ac7cd604028e37192c206c88",
+    "panel.internals.state": "e11a0f63ff5b456f28f78c215b5ee49e08103e4cda0210c1f5f1c91c4e352c3a",
+    "panel.internals.verification": "8b76ece93daf16782af7477992d36d846596ac44313878bec175835491a5242c",
+    "widget.contract.overview": "378a94b162370c802b6f634931082e72c2a5fe94e6465471345928b6328398b9",
+    "widget.contract.reviewed": "6482a31fa56c71365086308a90cea020d660a271014f9d72d7768c95a8214650",
+    "widget.contract.walkthrough": "4fecd0cdb75a08b54260b61769c3ac479e9e39b23b40e3c53f6b274ca6f132a3",
+    "widget.decision.boundary": "ef7b57bd707724408fb1595363e23525d0a070d2525f9d4ac476a258ff2cfb22",
+    "widget.internals.fields": "701b122d7b6aa1cb7e3e8d84147490a78b3cb81e2588efbcfd698d9f93fe10bf"
+  }
+}

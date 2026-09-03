@@ -887,7 +887,7 @@ func digestFor(t *testing.T, store *Store, id string) (string, bool) {
 // claim files said NOW:
 //
 //	edit a locked claim's comments by hand  -> comment-ledger-drift, correctly
-//	rm .dossierx-comment-digest.json        -> comment-digest-absent, correctly
+//	rm build/ledger/comment-digest.json        -> comment-digest-absent, correctly
 //	dossierx check                          -> ONE ordinary run adopts the edited
 //	                                           block as the truth: ok:true, both
 //	                                           findings gone, permanently green

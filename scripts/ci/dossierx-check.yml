@@ -100,12 +100,12 @@
 # WHAT IT DEPENDS ON BEING COMMITTED
 # ---------------------------------------------------------------------------
 #
-# Three project-root stores are TRACKED FILES:
+# Three stores under build/ledger/ are TRACKED FILES:
 #
-#   .dossierx-lock-store.json      what was approved, when, by whom, and on
+#   build/ledger/lock-store.json      what was approved, when, by whom, and on
 #                                  whose words, per locked claim
-#   .dossierx-comment-digest.json  the review history's fingerprint
-#   .dossierx-flag-store.json      the pending "claim flag" triggers a later
+#   build/ledger/comment-digest.json  the review history's fingerprint
+#   build/ledger/flag-store.json      the pending "claim flag" triggers a later
 #                                  "claim reaudit" reads back to build its diff.
 #                                  Nothing in this workflow compares it to
 #                                  anything, but a review_pending claim whose
@@ -118,7 +118,7 @@
 # nothing to compare the claims against and this workflow is theatre.
 #
 # One generated file joins them the moment you approve it: a LOCKED
-# .build-order.<module>.json. While it is locked:false it is ordinary output that
+# build/build-order/<module>.json. While it is locked:false it is ordinary output that
 # `build-order propose` rewrites in full, but a locked one is the sequence a
 # human approved and the artifact an implementing agent builds from, so this
 # workflow compares it against its record (build-order-content-drift,
@@ -160,7 +160,7 @@
 #                                                # fully locked again: re-derive
 #                                                # the sequence and re-approve it
 #
-# then COMMIT the .dossierx-lock-store.json and .dossierx-comment-digest.json it
+# then COMMIT the build/ledger/lock-store.json and build/ledger/comment-digest.json it
 # writes. Until that commit lands, every run here checks out the old-format store
 # and refuses; after it lands, every record in the ledger CI reads is an approval
 # a human actually gave.
@@ -211,7 +211,7 @@ jobs:
       # job log; drop it if you post-process the output, in which case the JSON
       # envelope's error.code is the thing to branch on.
       #
-      # This run DOES write (regenerated claim files, .catalog.json, the
+      # This run DOES write (regenerated claim files, build/catalog/catalog.json, the
       # viewer) — that is fine, the writes go nowhere but the runner's disk.
       # Use "dossierx check --validate" instead if your workflow needs the tree
       # left untouched, but note it is the read-only LINT pass: it does not

@@ -198,7 +198,7 @@ Work through this in order and report step 4's numbers back to the human.
    not its extension, a family nothing names, the 2 MiB cap). `check --validate` and `check
    --staged` report the identical code and step, so a hook or CI run is not a way to skip the theme
    rules.
-2. Open the rendered `viewer/index.html` and confirm the colour you set is the colour you see. The
+2. Open the rendered `build/viewer/index.html` and confirm the colour you set is the colour you see. The
    engine's sheet declares defaults for all twenty-eight tokens, so a *typo'd value* is a load
    error but a *right value in the wrong layer* renders as the untouched default.
 3. Check **both** OS colour schemes, not just yours. This is where a flat colour key shows itself.

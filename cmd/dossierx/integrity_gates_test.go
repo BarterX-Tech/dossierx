@@ -150,7 +150,7 @@ func TestReauditDryRunPreviewsTheIntegrityGate(t *testing.T) {
 // standing, pointing at content that existed nowhere.
 func TestBuildOrderProposeRefusesToDiscardALockedOrder(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
-	artifactPath := filepath.Join(filepath.Dir(cfgPath), ".build-order.widget.json")
+	artifactPath := filepath.Join(filepath.Dir(cfgPath), "build", "build-order", "widget.json")
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("first propose: %v", err)
@@ -370,7 +370,7 @@ func TestUpgradeFailsClosedUntilTheProjectCrosses(t *testing.T) {
 	if raw, readErr := os.ReadFile(storeFile); readErr != nil || !strings.Contains(string(raw), `"version": 2`) {
 		t.Fatalf("the crossing must stamp the ledger schema on disk, got %s (err %v)", raw, readErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(filepath.Dir(storeFile), ".dossierx-comment-digest.json")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(filepath.Dir(storeFile), "comment-digest.json")); statErr != nil {
 		t.Fatalf("the crossing must create the comment digest store in the same act: %v", statErr)
 	}
 
@@ -661,7 +661,7 @@ func tamper(t *testing.T, path, old, updated string) {
 // ledgerRecordOf reads one claim's ledger record straight off disk.
 func ledgerRecordOf(t *testing.T, cfgPath, id string) lock.LedgerRecord {
 	t.Helper()
-	storeFile := filepath.Join(filepath.Dir(cfgPath), ".dossierx-lock-store.json")
+	storeFile := filepath.Join(filepath.Dir(cfgPath), "build", "ledger", "lock-store.json")
 	rec, ok := readLedger(t, storeFile)[id]
 	if !ok {
 		t.Fatalf("expected a ledger record for %s", id)
@@ -677,7 +677,7 @@ func ledgerRecordOf(t *testing.T, cfgPath, id string) lock.LedgerRecord {
 // The sibling comment digest store has to go too, and that is not fixture
 // tidiness — it is the difference between the two states this helper has to be
 // able to tell apart. lock.Store.LedgerDowngraded treats a
-// .dossierx-comment-digest.json sitting beside a store that says "version 1" as
+// build/ledger/comment-digest.json sitting beside a store that says "version 1" as
 // proof the project HAS been through a ledger-aware build, because this build
 // writes that file at the exact instant a project becomes ledger-covered. A
 // genuine v0.2.x project has never had one: the file did not exist before
@@ -756,7 +756,7 @@ func TestBuildOrderLockHandEditReportsItsOwnCode(t *testing.T) {
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
 	armLedgerFixture(t, cfgPath)
-	artifactPath := filepath.Join(filepath.Dir(cfgPath), ".build-order.widget.json")
+	artifactPath := filepath.Join(filepath.Dir(cfgPath), "build", "build-order", "widget.json")
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)
@@ -825,7 +825,7 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", alpha, "--as", "human", "--body", "please clarify"); err != nil {
 		t.Fatalf("comment add (first): %v", err)
 	}
-	digestPath := filepath.Join(filepath.Dir(cfgPath), ".dossierx-comment-digest.json")
+	digestPath := filepath.Join(filepath.Dir(cfgPath), "build", "ledger", "comment-digest.json")
 	if err := os.WriteFile(digestPath, []byte("not json at all {{{"), 0o644); err != nil {
 		t.Fatalf("corrupt digest store: %v", err)
 	}
@@ -869,7 +869,7 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 // internal/lock cannot import internal/buildorder — was guarded by nothing but
 // Store.PreLedger.
 //
-// So the whole sequence was: reorder .build-order.widget.json by hand, set the
+// So the whole sequence was: reorder build/build-order/widget.json by hand, set the
 // store's "version" back to 1, delete the single build-order:<module> key, and
 // run `dossierx check`. The run adopted the HAND-REORDERED bytes as a
 // grandfathered approval, re-stamped the version, exited 0 with ok:true — and
@@ -879,8 +879,8 @@ func TestCommentOnAnUnreadableDigestStoreIsNotReportedAsInternal(t *testing.T) {
 func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 	cfgPath := twoPhaseBuildOrderFixture(t)
 	dir := filepath.Dir(cfgPath)
-	artifactPath := filepath.Join(dir, ".build-order.widget.json")
-	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+	artifactPath := filepath.Join(dir, "build", "build-order", "widget.json")
+	storeFile := filepath.Join(dir, "build", "ledger", "lock-store.json")
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)
@@ -944,7 +944,7 @@ func TestBuildOrderAdoptionRefusesADowngradedLedger(t *testing.T) {
 func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 	dir := filepath.Dir(cfgPath)
-	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+	storeFile := filepath.Join(dir, "build", "ledger", "lock-store.json")
 	const id = "widget.contract.a"
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
@@ -1016,8 +1016,8 @@ func TestAPreLedgerProjectWithOnlyALockedBuildOrderAgreesWithItsWritePaths(t *te
 func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 	dir := filepath.Dir(cfgPath)
-	artifactPath := filepath.Join(dir, ".build-order.widget.json")
-	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+	artifactPath := filepath.Join(dir, "build", "build-order", "widget.json")
+	storeFile := filepath.Join(dir, "build", "ledger", "lock-store.json")
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)
@@ -1080,7 +1080,7 @@ func TestBuildOrderLockFailsWhenTheLedgerRecordCannotBeWritten(t *testing.T) {
 func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 	dir := filepath.Dir(cfgPath)
-	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+	storeFile := filepath.Join(dir, "build", "ledger", "lock-store.json")
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)
@@ -1117,7 +1117,7 @@ func TestBuildOrderLockOnAnUnbackedArtifactPointsAtPropose(t *testing.T) {
 }
 
 // TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld reproduces the
-// reported wedge exactly: another process holds .dossierx-lock-store.json.lock
+// reported wedge exactly: another process holds build/ledger/lock-store.json.lock
 // — which an ordinary concurrent `check` or `claim lock` does — while
 // "build-order lock" runs.
 //
@@ -1132,8 +1132,8 @@ func TestBuildOrderLockRefusesBeforeWritingWhenTheStoreIsHeld(t *testing.T) {
 	}
 	cfgPath := buildOrderFixture(t)
 	dir := filepath.Dir(cfgPath)
-	artifactPath := filepath.Join(dir, ".build-order.widget.json")
-	storeFile := filepath.Join(dir, ".dossierx-lock-store.json")
+	artifactPath := filepath.Join(dir, "build", "build-order", "widget.json")
+	storeFile := filepath.Join(dir, "build", "ledger", "lock-store.json")
 
 	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)

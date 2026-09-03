@@ -32,6 +32,7 @@
 package lock
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -85,16 +86,17 @@ const (
 	ledgerSchemaVersion     = 2
 )
 
-// StoreFileName is the lock store's filename. It sits in the config file's own
-// directory (never cwd), the same convention claims_dir, .catalog.json and the
-// comment digest store follow.
+// StoreFileName is the lock store's BASE NAME, an alias of
+// config.LockStoreFileName. The file lives under the project's build directory
+// at config.Config.LockStorePath() (build/ledger/lock-store.json by default),
+// never cwd, beside the comment digest store.
 //
-// It is exported for the same reason digest.StoreFileName is: a finding about
-// the file has to NAME it, and the gate may be reading a store materialized out
-// of the git index into a temp directory — so the honest thing to print is the
-// project-relative name, not the path this run happened to read. The commands
-// still build their own paths from cfg.Dir(); this is the name, not the path.
-const StoreFileName = ".dossierx-lock-store.json"
+// It is exported for the same reason digest.StoreFileName is: internal/check's
+// index scan has to RECOGNISE the file by base name. It is the name, not the
+// path, and not the display form either — a message that names the file
+// prints config.LockStoreDisplayPath, because the bare base name is two
+// directories away from the file a reader has to open.
+const StoreFileName = config.LockStoreFileName
 
 // Store is the on-disk (JSON) record of dependency content hashes as of each
 // locked claim's most recent lock or confirmed reaudit.
@@ -230,20 +232,70 @@ func (s *Store) recordBaseline(dependentID, depID, hash string) {
 // happened. That is the exact silent drift hole this comparison exists to
 // prevent, so it must stay keyed on the version that changed the SHAPE.
 func LoadStore(path string) (*Store, error) {
-	s := &Store{
+	raw, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return emptyStore(path), nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("lock: read store %s: %w", path, err)
+	}
+	s, err := decodeStore(raw, path)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// emptyStore is the empty, freshly-initialised store a missing file loads as.
+func emptyStore(path string) *Store {
+	return &Store{
 		Version:  storeSchemaVersion,
 		Hashes:   map[string]map[string]string{},
 		LockedAt: map[string]string{},
 		path:     path,
 	}
+}
 
-	raw, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return s, nil
+// DecodeStore decodes a lock store from bytes already in hand — the git index's
+// copy, under "check --staged" — STRICTLY: an unknown top-level key is refused,
+// and the "version" must be one this package has ever written (the nested-hash
+// schema or the ledger schema; a pre-ledger store is still dossierx content).
+// Strictness is the point: LoadStore's decoder accepts `{}` and any JSON with
+// a "version" key, and once the store's base name is the generic
+// lock-store.json a caller asking "is this blob OUR store?" needs a decoder
+// that can say no. There is one parser (decodeStore) behind both entry points.
+func DecodeStore(raw []byte) (*Store, error) {
+	var probe map[string]json.RawMessage
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&probe); err != nil {
+		return nil, fmt.Errorf("lock: decode store: %w", err)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("lock: read store %s: %w", path, err)
+	for key := range probe {
+		switch key {
+		case "version", "hashes", "locked_at", "ledger":
+		default:
+			return nil, fmt.Errorf("lock: decode store: unknown key %q", key)
+		}
 	}
+	versionRaw, ok := probe["version"]
+	if !ok {
+		return nil, fmt.Errorf("lock: decode store: no version field")
+	}
+	var version int
+	if err := json.Unmarshal(versionRaw, &version); err != nil {
+		return nil, fmt.Errorf("lock: decode store: version: %w", err)
+	}
+	if version != nestedHashSchemaVersion && version != storeSchemaVersion {
+		return nil, fmt.Errorf("lock: decode store: version %d is not one this engine writes", version)
+	}
+	return decodeStore(raw, "")
+}
+
+// decodeStore is the one parser behind LoadStore and DecodeStore; path is the
+// file the bytes came from, for messages, or "" for an in-memory blob.
+func decodeStore(raw []byte, path string) (*Store, error) {
+	s := emptyStore(path)
 
 	// Decode in two phases so a legacy flat "hashes" (map[depID]hash) can
 	// never make json.Unmarshal fail against the new nested
@@ -524,6 +576,11 @@ func (s *Store) Save() error {
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("lock: marshal store: %w", err)
+	}
+	// The store lives under build/ledger/, which does not exist in a fresh
+	// project until the first write creates it.
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return fmt.Errorf("lock: create store dir for %s: %w", s.path, err)
 	}
 	if err := atomicWriteFile(s.path, raw, 0o644); err != nil {
 		return fmt.Errorf("lock: write store %s: %w", s.path, err)
@@ -911,8 +968,8 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	// keeps unlock -> fix -> lock open, the one path every other refusal in this
 	// package points at.
 	if store.LedgerRecordDeleted(claim) {
-		return claim, fmt.Errorf("%w: claim %q has no lock-ledger record, but the lock store still carries its own locked_at stamp and/or its dependency baselines — so this engine locked it, and the record was deleted rather than released. Nothing in this build deletes a record: unlock KEEPS it and stamps released_at on it, precisely so the evidence survives. Locking here would write a FRESH approval over whatever the file says now, which is the last step of that bypass and the one that makes it invisible. Restore .dossierx-lock-store.json from version control — the approved content is in git. Do not unlock-and-relock to clear this: that accepts the edit and asks a human to sign bytes they never saw",
-			ErrLedgerRecordDeleted, claim.ID)
+		return claim, fmt.Errorf("%w: claim %q has no lock-ledger record, but the lock store still carries its own locked_at stamp and/or its dependency baselines — so this engine locked it, and the record was deleted rather than released. Nothing in this build deletes a record: unlock KEEPS it and stamps released_at on it, precisely so the evidence survives. Locking here would write a FRESH approval over whatever the file says now, which is the last step of that bypass and the one that makes it invisible. Restore %s from version control — the approved content is in git. Do not unlock-and-relock to clear this: that accepts the edit and asks a human to sign bytes they never saw",
+			ErrLedgerRecordDeleted, claim.ID, config.LockStoreDisplayPath)
 	}
 
 	// THE DELETED DIGEST KEY, which is the same bypass one file over and which
@@ -946,8 +1003,8 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	// working, since an entry is something a comment op creates rather than
 	// something locking requires.
 	if commentDigestUnrecorded(store, claim) {
-		return claim, fmt.Errorf("%w: claim %q carries %d comment thread(s) but has no entry in the comment digest store, and this project is covered by the lock ledger — so the entry was removed, or the threads were not written by the engine. Locking here would RECORD the current comments block as the approved review history, manufacturing the evidence whose absence is the finding: a thread forged as resolved would become the record of a review that never happened. Restore .dossierx-comment-digest.json from version control (or git add it, if this commit is the one that updated it), and check the claim's threads against what the human actually wrote. `dossierx check` reports this as comment-digest-unrecorded",
-			ErrCommentDigestUnrecorded, claim.ID, len(claim.Comments))
+		return claim, fmt.Errorf("%w: claim %q carries %d comment thread(s) but has no entry in the comment digest store, and this project is covered by the lock ledger — so the entry was removed, or the threads were not written by the engine. Locking here would RECORD the current comments block as the approved review history, manufacturing the evidence whose absence is the finding: a thread forged as resolved would become the record of a review that never happened. Restore %s from version control (or git add it, if this commit is the one that updated it), and check the claim's threads against what the human actually wrote. `dossierx check` reports this as comment-digest-unrecorded",
+			ErrCommentDigestUnrecorded, claim.ID, len(claim.Comments), config.CommentDigestDisplayPath)
 	}
 
 	lintClaims := withLockedCandidate(claims, claim)

@@ -91,8 +91,8 @@ func TestCheckParity_DraftAndOrientation(t *testing.T) {
 			"body: |\n  fixture claim one.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] orphan: widget.contract.one: claim has no mirrors/rests_on edges in either direction\n" +
 		"[warning] orphan: widget.overview.router: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 2 finding(s), 0 error(s)\n" +
@@ -117,8 +117,8 @@ func TestCheckParity_LockedWithOpenThread(t *testing.T) {
 			"comments:\n" +
 			"  - id: c-aaaaaa\n    status: open\n    author: human\n    created: \"2026-07-24T10:00:00Z\"\n    body: please clarify\n    edited: false\n",
 	})
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] comments-unresolved: widget.contract.locked: 1 unresolved comment thread(s)\n" +
 		"[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 2 finding(s), 0 error(s)\n" +
@@ -147,11 +147,11 @@ func TestCheckParity_LintErrorFailsFast(t *testing.T) {
 	wantStderr := "Error: check: lint: 1 error-level finding(s)\n"
 	assertCheckParity(t, cfgPath, wantStdout, wantStderr, true)
 	// Fail-fast must have stopped before catalog/render: neither file exists.
-	if _, err := os.Stat(filepath.Join(root, ".catalog.json")); !os.IsNotExist(err) {
-		t.Fatalf("expected NO .catalog.json after a lint-error check, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(root, "build", "catalog", "catalog.json")); !os.IsNotExist(err) {
+		t.Fatalf("expected NO build/catalog/catalog.json after a lint-error check, stat err=%v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "viewer", "index.html")); !os.IsNotExist(err) {
-		t.Fatalf("expected NO viewer/index.html after a lint-error check, stat err=%v", err)
+	if _, err := os.Stat(filepath.Join(root, "build", "viewer", "index.html")); !os.IsNotExist(err) {
+		t.Fatalf("expected NO build/viewer/index.html after a lint-error check, stat err=%v", err)
 	}
 }
 
@@ -164,8 +164,8 @@ func TestCheckParity_FullyLocked(t *testing.T) {
 			"body: |\n  a fully locked claim.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
@@ -187,8 +187,8 @@ func TestCheckParity_ImplinkScanAndStatus(t *testing.T) {
 			"governed_by:\n  type: none\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-claim: widget.contract.locked\nfunc Foo() {}\n",
 	})
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
@@ -236,8 +236,8 @@ func TestCheckParity_ScanErrorFailsAtScan(t *testing.T) {
 			"governed_by:\n  type: none\n  reason: fixture\n",
 		"src/impl.go": "package impl\n\n// dossierx-claim: widget.contract.draft\nfunc Foo() {}\n",
 	})
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	wantStdout := "[warning] orphan: widget.contract.draft: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
@@ -262,8 +262,8 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 		"--claim-says", "old", "--now-does", "new", "--reason", "changed"); err != nil {
 		t.Fatalf("flag setup: %v", err)
 	}
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	want := "[warning] orphan: widget.contract.locked: claim has no mirrors/rests_on edges in either direction\n" +
 		"lint: 1 finding(s), 0 error(s)\n" +
 		"catalog: wrote " + catalog + " (1 claim(s))\n" +
@@ -325,8 +325,8 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 	}
 	armLedgerFixture(t, cfgPath) // the revert is a second approved edit to a locked claim
 
-	catalog := filepath.Join(root, ".catalog.json")
-	viewer := filepath.Join(root, "viewer", "index.html")
+	catalog := filepath.Join(root, "build", "catalog", "catalog.json")
+	viewer := filepath.Join(root, "build", "viewer", "index.html")
 	// The dependent is review_pending with NO active trigger (drift reverted, no
 	// flag, no open thread), so the reaudit hint must be labeled "no active
 	// trigger" — NOT "from drift/flag" (F's live-flag case keeps that label).

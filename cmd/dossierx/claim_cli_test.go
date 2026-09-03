@@ -631,7 +631,7 @@ func TestCommentInboxSinceIsInclusiveAndNeverMissesAThread(t *testing.T) {
 // ---------------------------------------------------------------------
 
 // TestCheckValidateIsTrulyReadOnly is the assertion the flag exists for. Plain
-// "check" writes on every run — claim files, the lock store, .catalog.json and
+// "check" writes on every run — claim files, the lock store, build/catalog/catalog.json and
 // the viewer — so "read-only" has to be proved against the FILESYSTEM, not
 // against the absence of a "wrote" line.
 func TestCheckValidateIsTrulyReadOnly(t *testing.T) {

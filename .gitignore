@@ -8,29 +8,28 @@
 *.out
 coverage.html
 
-# Engine artifacts left behind by running the CLI against a fixture.
-# "dossierx check" writes .dossierx-comment-digest.json next to a project's
-# config, so every fixture render and every sample-viewer regeneration drops
-# one. In THIS repo they are almost always regenerable droppings; the single
-# fixture that IS a dossierx project whose review history we keep is excepted
-# below. A real consuming project still commits its own digest; its .gitignore
-# is its own. Unanchored so it catches the repo root, testdata fixtures, and any
-# project checked out inside this tree.
-.dossierx-comment-digest.json
+# Engine artifacts left behind by running the CLI against a project checked
+# out inside this tree. "dossierx check" writes build/ledger/comment-digest.json
+# under a project's build directory, and outside testdata/ that is a
+# regenerable dropping. Unanchored (the leading **) so it catches the repo
+# root and any project checked out inside this tree; a pattern containing a
+# slash is otherwise anchored to the directory holding this file. A real
+# consuming project commits its own digest; its .gitignore is its own.
+**/build/ledger/comment-digest.json
 
-# ...with one exception. testdata/fixture-graph-demo is the first fixture in this
-# repo that IS a ledger-covered dossierx project: it carries 25 locked claims, so
-# its lock store is ledger-covered, and a ledger-covered project without a
-# committed digest store makes "dossierx check" emit comment-digest-absent and
-# exit 1. A fresh clone or CI checkout would fail on it. The digest is therefore
-# a tracked input of that fixture, exactly as a real consuming project commits
-# its own.
-!testdata/fixture-graph-demo/.dossierx-comment-digest.json
+# ...but NOT under testdata/. The engine now REFUSES an ignored store
+# (store-gitignored, checked per file with --no-index against this
+# repository's own .gitignore), and this repository runs the engine on its own
+# fixtures in place: the five rendered fixtures through `dossierx check`, and
+# the 41 projects under testdata/fixture-coverage through `check --validate`
+# (tests/lint_fixtures_test.go, tests/lifecycle_fixtures_test.go). Every fixture
+# digest is therefore a tracked fixture input. The negation must be `**`, not
+# `*`: a `*` does not cross `/`, so it would re-include only fixtures one level
+# down and leave every fixture-coverage project reporting store-gitignored.
+!testdata/**/build/ledger/comment-digest.json
 
-# That fixture's .dossierx-lock-store.json is tracked too, and needs no negation
-# here because no pattern in this file ever ignored a lock store. Between the
-# two, testdata/fixture-graph-demo is the only path under which a .dossierx-*
-# store is tracked in this repo.
+# The fixtures' lock stores and build orders need no negation here because no
+# pattern in this file ever ignored one.
 
 # Editor / OS cruft
 .vscode/

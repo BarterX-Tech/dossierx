@@ -189,18 +189,18 @@ func (p *project) seedComment(role, body string) string {
 	return m
 }
 
-// renderStatic writes viewer/index.html and returns a file:// URL pointing at
+// renderStatic writes build/viewer/index.html and returns a file:// URL pointing at
 // it.
 //
 // It drives "check", not the "render" verb this called before v0.3.0: rendering
 // stopped being a verb when the surface went 26 -> 19 and became a stage of
 // check. check does strictly more (lint, catalog, the ledger gate) but it
-// writes the same viewer/index.html, which is the only thing this helper is
+// writes the same build/viewer/index.html, which is the only thing this helper is
 // after.
 func (p *project) renderStatic() string {
 	p.t.Helper()
 	p.run("check")
-	out := filepath.Join(p.dir, "viewer", "index.html")
+	out := filepath.Join(p.dir, "build", "viewer", "index.html")
 	if _, err := os.Stat(out); err != nil {
 		p.t.Fatalf("render did not write %s: %v", out, err)
 	}

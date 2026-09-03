@@ -69,6 +69,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/config"
 )
 
 // repoRoot locates the repository root from this test source file (which lives
@@ -391,43 +393,73 @@ func TestSkillRouter_StoppedAtValuesMatchTheBinary(t *testing.T) {
 }
 
 // TestTrackedStoresAreDocumentedEverywhereTheyAreEnumerated asserts that every
-// project-root store the engine writes appears in each place that enumerates
-// "the files you must commit".
+// tracked store the engine writes under build/ledger/ appears in each place
+// that enumerates "the files you must commit".
 //
-// The store names are derived from the engine rather than restated, so adding a
-// fourth store fails this test until the four enumerations below have been
-// updated. `.dossierx-flag-store.json` is the one that shipped missing from all
-// four: it is required for `claim reaudit` to have anything to propose, and a
-// review_pending claim that arrives without its flag entry reaudits to an empty
-// proposal whose --confirm clears the human's flag having applied nothing.
+// The store names are DERIVED from the engine rather than restated, so adding
+// a fourth store fails this test until the four enumerations below have been
+// updated. The flag store is the one that shipped missing from all four: it is
+// required for `claim reaudit` to have anything to propose, and a review_pending
+// claim that arrives without its flag entry reaudits to an empty proposal whose
+// --confirm clears the human's flag having applied nothing.
+//
+// Two derivations, cross-checked, because each alone has a hole. The exported
+// slice config.TrackedStoreFileNames is the engine's own statement of the set
+// (and is what internal/config's tests pin the accessors against) — but a
+// hand-maintained slice is exactly what an author of a fifth store forgets.
+// The regex over the "…FileName" declarations in internal/config/paths.go
+// and the four engine files that used to spell the names catches that author —
+// but a suffix regex alone would also capture any non-store base name a later
+// edit spells as a constant in the same file (a catalogFileName would make
+// this test demand the catalog be documented as a tracked store). So the two
+// sets must be EQUAL, with a floor of three, and the documents are searched for
+// the build/ledger/ form of each name.
 func TestTrackedStoresAreDocumentedEverywhereTheyAreEnumerated(t *testing.T) {
-	stores := map[string]bool{}
-	storeLit := regexp.MustCompile(`"(\.dossierx-[a-z-]+\.json)"`)
-	// The engine's own names, read from wherever the engine actually declares
-	// them. The lock and comment-digest stores are exported constants in their
-	// owning packages (lock.StoreFileName, digest.StoreFileName); the flag store
-	// is still an inline literal in the two places that build its path. Reading
-	// all four files means this keeps working whether a name is a const or a
-	// literal, which is what the guard below is really checking.
+	declared := map[string]bool{}
+	for _, name := range config.TrackedStoreFileNames {
+		declared[name] = true
+	}
+	if len(declared) < 3 {
+		t.Fatalf("config.TrackedStoreFileNames holds %d name(s) (%v); the engine writes at least three tracked stores, so the extraction is broken", len(declared), config.TrackedStoreFileNames)
+	}
+
+	// "…FileName", not "…StoreFileName": the digest's constant is
+	// config.CommentDigestFileName, which the narrower suffix would never see.
+	// The catalog and viewer base names are deliberately spelled "…BaseName"
+	// in paths.go so this suffix cannot capture them.
+	storeConst := regexp.MustCompile(`[A-Za-z]+FileName\s*=\s*"([a-z-]+\.json)"`)
+	fromConsts := map[string]bool{}
 	for _, rel := range []string{
+		filepath.Join("internal", "config", "paths.go"),
 		filepath.Join("internal", "check", "check.go"),
 		filepath.Join("internal", "serve", "server.go"),
 		filepath.Join("internal", "lock", "lock.go"),
 		filepath.Join("internal", "digest", "digest.go"),
 	} {
-		for _, m := range storeLit.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
-			stores[m[1]] = true
+		for _, m := range storeConst.FindAllStringSubmatch(readRepoFile(t, rel), -1) {
+			fromConsts[m[1]] = true
 		}
 	}
-	for _, want := range []string{".dossierx-lock-store.json", ".dossierx-flag-store.json"} {
-		if !stores[want] {
+	for name := range fromConsts {
+		if !declared[name] {
+			t.Fatalf("a %q store constant is declared in the engine but config.TrackedStoreFileNames does not list it; add it there so every enumeration below is held to it", name)
+		}
+	}
+	for name := range declared {
+		if !fromConsts[name] {
+			t.Fatalf("config.TrackedStoreFileNames lists %q, which no …StoreFileName constant declares; the slice and the declarations have drifted", name)
+		}
+	}
+	for _, want := range []string{"lock-store.json", "flag-store.json"} {
+		if !declared[want] {
 			t.Fatalf("the engine no longer names %s where this test reads it; repoint the extraction before trusting the assertions below", want)
 		}
 	}
 
 	// Every surface that tells someone which files to commit. Missing from any
 	// one of them is enough: a reader following the CI template does not also
-	// read the hook installer's closing message.
+	// read the hook installer's closing message. The documents name the path
+	// a reader opens, so the ledger prefix is applied here and only here.
 	for _, rel := range []string{
 		"README.md",
 		"FORMAT.md",
@@ -435,9 +467,10 @@ func TestTrackedStoresAreDocumentedEverywhereTheyAreEnumerated(t *testing.T) {
 		filepath.Join("scripts", "install-git-hook.sh"),
 	} {
 		doc := readRepoFile(t, rel)
-		for store := range stores {
+		for name := range declared {
+			store := "build/" + config.LedgerDirName + "/" + name
 			if !strings.Contains(doc, store) {
-				t.Errorf("%s never mentions %s, which the engine writes to the project root and which has to travel with the claims", rel, store)
+				t.Errorf("%s never mentions %s, which the engine writes under the build directory and which has to travel with the claims", rel, store)
 			}
 		}
 	}

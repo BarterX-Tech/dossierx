@@ -29,7 +29,6 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 )
 
@@ -175,7 +174,7 @@ func TestStaged_AgreesWithValidateOnAMatrixOfTamperedTrees(t *testing.T) {
 		{
 			name: "the lock ledger deleted",
 			tamper: func(t *testing.T, cfg *config.Config) *config.Config {
-				git(t, cfg.Dir(), "rm", "-q", ".dossierx-lock-store.json")
+				git(t, cfg.Dir(), "rm", "-q", "build/ledger/lock-store.json")
 				return cfg
 			},
 			wantRule: lock.RuleLockLedgerAbsent,
@@ -183,7 +182,7 @@ func TestStaged_AgreesWithValidateOnAMatrixOfTamperedTrees(t *testing.T) {
 		{
 			name: "the comment digest store deleted",
 			tamper: func(t *testing.T, cfg *config.Config) *config.Config {
-				git(t, cfg.Dir(), "rm", "-q", digest.StoreFileName)
+				git(t, cfg.Dir(), "rm", "-q", config.CommentDigestDisplayPath)
 				return cfg
 			},
 			wantRule: check.RuleCommentDigestAbsent,
@@ -259,7 +258,7 @@ func TestStaged_AgreesWithValidateOnAMatrixOfTamperedTrees(t *testing.T) {
 			// disagreed about would be a defect on top of the gap.
 			name: "claims_dir repointed OUTSIDE the work tree AND the ledger deleted",
 			tamper: func(t *testing.T, cfg *config.Config) *config.Config {
-				git(t, cfg.Dir(), "rm", "-q", ".dossierx-lock-store.json")
+				git(t, cfg.Dir(), "rm", "-q", "build/ledger/lock-store.json")
 				return repointClaimsDir(t, cfg, "../outside-claims")
 			},
 		},

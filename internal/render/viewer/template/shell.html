@@ -74,6 +74,22 @@
                 <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
               {{- end}}
             </div>
+          </details>{{end}}{{if .BuildOrders.Modules}}
+        <!-- The Build order group: a top-level tab of its own, never a facet of
+             any module. Guarded on .BuildOrders.Modules and hugged to the
+             preceding action exactly as the Tracks guard is, so a project with
+             no locked build order emits not one byte here. Its one button is
+             an ordinary .sec-tab whose target is the #dossierx-build-order section
+             (a .module-section to the show/hide machinery below) and whose
+             default facet is the first locked module's .bo-module group. The
+             tab's ids carry the "dossierx-build-order" prefix so they sit
+             outside the space slugify maps module names into: a module named
+             "build-order" gets id="build-order", and the tab must not. -->
+          <details class="system-nav-group" open>
+            <summary class="system-nav-group__toggle"><span>Build order</span><span class="system-nav-group__count">{{len .BuildOrders.Modules}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <div class="system-nav-group__body">
+              <button class="sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-{{.BuildOrders.FirstModuleID}}">Build order</button>
+            </div>
           </details>{{end}}
         </div>
       </nav>
@@ -81,7 +97,7 @@
       {{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
       <div id="sidebarResizer" class="system-sidebar-resizer" tabindex="0" role="separator" aria-label="Resize navigation drawer" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="420" aria-valuenow="270" title="Drag to resize · Double-click to reset"></div>
     </aside>
-    <main class="content-area">
+    <main class="content-area">{{if .BuildOrders.Modules}}<script type="application/json" id="dossierx-build-orders">{{.BuildOrderPayload}}</script>{{end}}
       {{if .ModuleGroups}}
         {{range .ModuleGroups}}
           <section class="module-section" id="{{.ID}}" hidden>
@@ -98,7 +114,6 @@
                 {{end}}
               </section>
             {{end}}
-            {{if .BuildOrderHTML}}{{.BuildOrderHTML}}{{end}}
           </section>
         {{end}}
       {{else}}
@@ -133,7 +148,33 @@
             {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
           </section>
         </section>
-      {{end}}{{end}}
+      {{end}}{{end}}{{if .BuildOrders.Modules}}
+      <!-- The Build order section: a .module-section like every module and
+           track, so the show/hide, hash and fragment-swap machinery below
+           handles it with nothing new, holding one .claim-group per locked
+           module (build-order.html) so a "#dossierx-build-order-<module>" hash resolves
+           as a facet through facetToModule. Emitted LAST, after the tracks, so
+           moduleSections[0] stays the first module and a plain open or an
+           unresolvable hash still lands there, never on the diagrams. Inside
+           the SAME guard as the sidebar group, the payload block above and the
+           two script tags at the end of the body: a project with no locked
+           order carries none of it — and that guard is also what keeps the
+           one-time reload in applyFragment a one-time event.
+           The strip is .bo-modules, NOT .sub-nav: .sub-nav has never needed
+           horizontal overflow above 860px and has none, and a project's 25
+           locked modules would run off the desktop column unreachable. The
+           buttons keep .subtab so the delegated click handler below and
+           showModuleFacet's .on toggle drive them unchanged. -->
+      <section class="module-section build-order-section" id="dossierx-build-order" hidden>
+        <div class="bo-modules">
+          {{- range .BuildOrders.Modules}}
+          <button class="subtab" data-target="#dossierx-build-order-{{.ID}}">{{.Label}}</button>
+          {{- end}}
+        </div>
+        {{- range .BuildOrders.Modules}}
+        {{.HTML}}
+        {{- end}}
+      </section>{{end}}
     </main>
   </div>
 
@@ -235,7 +276,7 @@
       // top) precisely so a later SSE fragment swap can replace <main> + <nav>
       // and then call initViewer() again to re-point them at the fresh DOM.
       var moduleSections, moduleTabs;
-      var facetToModule, moduleDefaultFacet, firstModuleID, claimToFacet, buildOrderToModule, sourceToFacet;
+      var facetToModule, moduleDefaultFacet, firstModuleID, claimToFacet, sourceToFacet;
 
       // initViewer re-queries the section/tab NodeLists and rebuilds every
       // lookup map from the CURRENT DOM. Called once at load and (Phase 5c) after
@@ -296,22 +337,6 @@
           });
         });
 
-        // buildOrderToModule maps each Build Order section's own id — and each of
-        // its claim-card ids — to its owning module-section id. The Build Order
-        // section is deliberately NOT a facet .claim-group (it renders below the
-        // active facet and stays visible on every facet of its module), so it is
-        // absent from facetToModule/claimToFacet; this separate map lets a
-        // "#build-order-..." deep-link still switch to the owning module.
-        buildOrderToModule = {};
-        moduleSections.forEach(function (sec) {
-          sec.querySelectorAll('.build-order-module').forEach(function (bo) {
-            if (bo.id) { buildOrderToModule[bo.id] = sec.id; }
-            bo.querySelectorAll('.claim[id]').forEach(function (c) {
-              buildOrderToModule[c.id] = sec.id;
-            });
-          });
-        });
-
         // Zero-thread chips arrive from the server hidden (a file:// export has
         // no comment API to reach). Re-apply the probe's verdict over whatever
         // DOM is current — on first load `mounted` is still false and this is a
@@ -330,10 +355,12 @@
       // resolve maps an arbitrary hash fragment to a {module, facet, claim}
       // triple. Checked in order: a claim id -> its own card's facet + module; a
       // source row's anchor id -> the same, but scrolled to the row rather than
-      // to the card; a Build Order section/card id -> its owning module +
-      // default facet; a facet id -> its own module + itself; a bare module id
-      // (which a TRACK section also is — see track_view.go) -> that module + its
-      // default facet; anything else -> the first module + its default facet.
+      // to the card; a facet id -> its own module + itself (a Build order
+      // module's "#dossierx-build-order-<module>" group is a facet of the #dossierx-build-order
+      // section here, nothing special); a bare module id (which a TRACK section
+      // and the Build order section also are — see track_view.go) -> that
+      // module + its default facet; anything else -> the first module + its
+      // default facet.
       function resolve(id) {
         if (Object.prototype.hasOwnProperty.call(claimToFacet, id)) {
           var facetID = claimToFacet[id];
@@ -349,10 +376,6 @@
         if (Object.prototype.hasOwnProperty.call(sourceToFacet, id)) {
           var srcFacet = sourceToFacet[id];
           return { module: facetToModule[srcFacet], facet: srcFacet, claim: id };
-        }
-        if (Object.prototype.hasOwnProperty.call(buildOrderToModule, id)) {
-          var boModule = buildOrderToModule[id];
-          return { module: boModule, facet: moduleDefaultFacet[boModule], claim: id };
         }
         if (Object.prototype.hasOwnProperty.call(facetToModule, id)) {
           return { module: facetToModule[id], facet: id };
@@ -1255,7 +1278,9 @@
 
       function activeFacetClaimIDs() {
         var ids = Object.create(null);
-        var section = document.querySelector('.module-section:not([hidden])');
+        // The Build order section holds diagrams, not claim cards: with it
+        // active the id set is empty and only project-wide findings render.
+        var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
         var group = section && section.querySelector(':scope > .claim-group:not([hidden])');
         if (!group) { return ids; }
         group.querySelectorAll('.claim').forEach(function (claim) {
@@ -1281,7 +1306,9 @@
 // interval before system-record.js has enhanced a fresh SSE fragment.
       function positionStatusStrip() {
         if (!stripEl) { return; }
-        var section = document.querySelector('.module-section:not([hidden])');
+        // Never the Build order section: it falls through to the .content-area
+        // branch rather than taking the strip as the diagrams' first child.
+        var section = document.querySelector('.module-section:not([hidden]):not(.build-order-section)');
         if (!section) {
           var content = document.querySelector('.content-area');
           if (content && stripEl.parentNode !== content) { content.insertBefore(stripEl, content.firstChild); }
@@ -1746,6 +1773,23 @@
         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
         oldNav.outerHTML = frag.nav;           // replaces <nav id="nav">
 
+        // The Build order tab's renderer (the vendored mermaid build and
+        // build-order-ui.js) sits OUTSIDE .content-area and is only emitted
+        // for a project with a locked order, so a fragment swap cannot deliver
+        // it: a project that locks its FIRST build order while this page is
+        // open receives a .build-order-section with no renderer. One full
+        // reload, once, on that zero-to-one transition; every later swap has
+        // the renderer and takes the observer path. It is a one-time event
+        // only because the section is inside the same guard as the scripts.
+        // The test is the section's CLASS, which no module section carries,
+        // never its id: a module's section id is slugify(module), and a
+        // module named "build-order" once matched a getElementById here on
+        // every swap, turning each one into a full reload.
+        if (document.querySelector('.build-order-section') && typeof window.mermaid === 'undefined') {
+          window.location.reload();
+          return;
+        }
+
         // ---- re-point every lookup map at the fresh DOM ----
         initViewer();
 
@@ -1878,6 +1922,13 @@
        parse time and does nothing else until a reader opens the pane. -->
   <script>{{.SystemRecordJS}}</script>
   <script>{{.GraphCoreJS}}</script>
-  <script>{{.GraphUIJS}}</script>
+  <script>{{.GraphUIJS}}</script>{{if .BuildOrders.Modules}}
+  <!-- The Build order tab's two client files: the vendored mermaid build
+       (~3.5 MB) and the engine's renderer glue, GUARDED on the same condition
+       as the sidebar group and the section, because build orders are opt-in
+       and an unguarded tag would take every viewer that has never locked an
+       order from ~450 KB to ~4 MB of dead renderer. -->
+  <script>{{.MermaidJS}}</script>
+  <script>{{.BuildOrderUIJS}}</script>{{end}}
 </body>
 </html>

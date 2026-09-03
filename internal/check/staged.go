@@ -161,8 +161,10 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
+	"github.com/BarterX-Tech/dossierx/internal/layout"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 )
 
 // ErrNoIndex means there is no index CONTENT to evaluate: git is not installed,
@@ -327,6 +329,17 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 	g, err := newGitRunner(cfg.Dir())
 	if err != nil {
 		return StagedProject{}, err
+	}
+
+	// The commit itself may still carry the legacy root layout even when the
+	// working tree has moved on — a config change staged without the moves —
+	// and a gate that read the moved worktree files would judge a commit that
+	// does not contain them. Refuse it the way every other verb refuses the
+	// worktree form, naming the tracked files.
+	if legacy, legacyErr := legacyLayoutInIndex(g, cfg); legacyErr != nil {
+		return StagedProject{}, legacyErr
+	} else if len(legacy) > 0 {
+		return StagedProject{}, layout.RefuseTracked(cfg, legacy)
 	}
 
 	// The CONFIG comes out of the index first, and everything below is resolved
@@ -646,6 +659,17 @@ func stagedConfig(g *gitRunner, cfg *config.Config) (*config.Config, bool, error
 // The cost — one ls-files and one cat-file over the repository's yaml — is paid
 // ONLY on the untracked-config path, which the hook reaches only when no
 // project.config.yaml is tracked anywhere in the repository.
+//
+// THE STORE MATCH IS NAME-BASED, UNSCOPED, AND CONFIRMED BY DECODING. It
+// matches by base name — the three current names (lock-store.json,
+// comment-digest.json, flag-store.json) AND the three legacy root names, so a
+// half-migrated index is caught too — anywhere in the index, never under a
+// prefix taken from the worktree config, which would be the same circularity.
+// A name hit then joins the cat-file batch and counts ONLY if the blob decodes
+// STRICTLY as that store (lock.DecodeStore, digest.DecodeStore,
+// reaudit.DecodeFlagStore): once the stores carry generic names, a
+// repository's unrelated lock-store.json is not a refusal, and one that does
+// decode is dossierx content wherever it sits.
 func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
 	entries, err := g.indexEntries()
 	if err != nil {
@@ -653,10 +677,12 @@ func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
 	}
 
 	var candidates []indexEntry
+	storeKind := map[string]storeDecoder{}
 	for _, e := range entries {
-		switch path.Base(e.path) {
-		case lockStoreFileName, digest.StoreFileName:
-			return e.path, nil
+		if dec := storeDecoderForName(path.Base(e.path)); dec != nil {
+			candidates = append(candidates, e)
+			storeKind[e.path] = dec
+			continue
 		}
 		if isClaimFile(e.path) {
 			candidates = append(candidates, e)
@@ -678,11 +704,65 @@ func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
 	}
 	sort.Strings(paths)
 	for _, p := range paths {
+		if dec, isStore := storeKind[p]; isStore {
+			if dec(blobs[p]) {
+				return p, nil
+			}
+			continue
+		}
 		if c, err := decodeClaim(p, blobs[p]); err == nil && strings.TrimSpace(c.ID) != "" {
 			return p, nil
 		}
 	}
 	return "", nil
+}
+
+// storeDecoder reports whether raw decodes strictly as one of the engine's
+// stores.
+type storeDecoder func(raw []byte) bool
+
+// storeDecoderForName maps a base name — current or legacy — to the strict
+// decoder that confirms it, or nil for a name that is not a store's.
+func storeDecoderForName(base string) storeDecoder {
+	switch base {
+	case lockStoreFileName, layout.LegacyLockStoreName:
+		return func(raw []byte) bool { _, err := lock.DecodeStore(raw); return err == nil }
+	case digest.StoreFileName, layout.LegacyCommentDigestName:
+		return func(raw []byte) bool { _, err := digest.DecodeStore(raw); return err == nil }
+	case config.FlagStoreFileName, layout.LegacyFlagStoreName:
+		return func(raw []byte) bool { _, err := reaudit.DecodeFlagStore(raw); return err == nil }
+	}
+	return nil
+}
+
+// legacyLayoutInIndex lists the legacy root names the index holds under the
+// project's own subtree — never the whole repository, so a sibling project's
+// viewer/index.html in a monorepo cannot refuse this project's commit. It is
+// "check --staged"'s half of the layout refusal: the working tree may already
+// be migrated while the commit still carries the root files.
+func legacyLayoutInIndex(g *gitRunner, cfg *config.Config) ([]string, error) {
+	spec, err := g.spec(cfg.Dir())
+	if err != nil {
+		return nil, nil
+	}
+	tracked, err := g.lsFiles(spec)
+	if err != nil {
+		return nil, err
+	}
+	var legacy []string
+	for _, rel := range tracked {
+		local := rel
+		if spec != "." && spec != "" {
+			if !strings.HasPrefix(rel, spec+"/") {
+				continue
+			}
+			local = strings.TrimPrefix(rel, spec+"/")
+		}
+		if layout.IsLegacyName(local) {
+			legacy = append(legacy, local)
+		}
+	}
+	return legacy, nil
 }
 
 // worktreePath maps a repository-relative path git reported back to the
@@ -729,7 +809,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 
 	var in ledgerInputs
 
-	lockPath, err := materializeIndexFile(g, dir, storePath(cfg))
+	lockPath, err := materializeIndexFile(g, dir, cfg.LockStorePath())
 	if err != nil {
 		return ledgerInputs{}, err
 	}
@@ -739,7 +819,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 		in.store = store
 	}
 
-	digestPath, err := materializeIndexFile(g, dir, digest.StorePath(cfg))
+	digestPath, err := materializeIndexFile(g, dir, cfg.CommentDigestPath())
 	if err != nil {
 		return ledgerInputs{}, err
 	}
@@ -756,7 +836,7 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 	// commit that stages a tampered artifact while the worktree copy still
 	// matches its record.
 	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {
-		path, err := materializeIndexFile(g, dir, buildorder.ArtifactPath(cfg, module))
+		path, err := materializeIndexFile(g, dir, cfg.BuildOrderPath(module))
 		if err != nil {
 			return nil, err
 		}
@@ -771,15 +851,21 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 // writes nothing and returns the path anyway — the store loaders read a missing
 // file as an absent store, which is precisely what "not in the index" means and
 // is the state lock.RuleLockLedgerAbsent exists to catch.
+//
+// The copy keeps the file's REPOSITORY PATH under dir, not its base name.
+// Every store is a plain <name>.json under the build directory now, so a
+// module named "lock-store" has a build-order artifact whose base name is the
+// ledger's, and a base-name copy would overwrite one with the other in the
+// temp directory. Keeping the path also keeps the lock store and the digest
+// siblings, which digest.StorePathBeside depends on.
 func materializeIndexFile(g *gitRunner, dir, src string) (string, error) {
-	out := filepath.Join(dir, filepath.Base(src))
-
 	spec, err := g.spec(src)
 	if err != nil {
 		// Outside the work tree entirely: treat as untracked, which is the
 		// conservative reading (an absent ledger is a finding, never a pass).
-		return out, nil
+		return filepath.Join(dir, "outside", filepath.Base(src)), nil
 	}
+	out := filepath.Join(dir, filepath.FromSlash(spec))
 	tracked, err := g.lsFiles(spec)
 	if err != nil {
 		return "", err
@@ -791,6 +877,9 @@ func materializeIndexFile(g *gitRunner, dir, src string) (string, error) {
 	raw, err := g.showIndexBlob(tracked[0])
 	if err != nil {
 		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(out), 0o700); err != nil {
+		return "", fmt.Errorf("check --staged: stage %s for reading: %w", src, err)
 	}
 	if err := os.WriteFile(out, raw, 0o600); err != nil {
 		return "", fmt.Errorf("check --staged: stage %s for reading: %w", src, err)
@@ -883,6 +972,12 @@ type gitRunner struct {
 	// path both of them can open.
 	base   string
 	prefix string
+
+	// verb is the prefix every git failure is reported under — "check --staged"
+	// for the index gate, "gitignore check" for Gitignored — so a git failure
+	// during `dossierx claim lock` is not reported as a --staged failure.
+	// Empty means "check --staged", which keeps every pinned message intact.
+	verb string
 }
 
 // newGitRunner locates git, confirms dir is inside a work tree, and re-anchors
@@ -964,42 +1059,65 @@ func (g *gitRunner) spec(target string) (string, error) {
 // change which paths this code matches against ls-files' output. A gate whose
 // answer depends on the auditee's git config is not a gate.
 func (g *gitRunner) run(args ...string) ([]byte, error) {
-	full := append([]string{"-c", "core.quotepath=false", "-c", "diff.relative=false"}, args...)
-	cmd := exec.Command(g.bin, full...) //nolint:gosec // fixed binary, fixed argv; no shell involved
-	cmd.Dir = g.dir
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = err.Error()
-		}
-		return nil, fmt.Errorf("check --staged: git %s: %s", strings.Join(args, " "), msg)
-	}
-	return out, nil
+	return g.runWithStdin("", args...)
 }
 
 // runWithStdin is run() with input fed to git's stdin. Only cat-file --batch
 // needs it, and it needs it because the alternative — one "git show" per object
 // — is what made "always read from the index" look expensive enough to shortcut
 // in the first place.
+//
+// Both are thin wrappers over runStatus that treat EVERY non-zero exit as an
+// error, which is right for every command --staged issues: none of them uses
+// the exit status as an answer.
 func (g *gitRunner) runWithStdin(stdin string, args ...string) ([]byte, error) {
+	out, code, err := g.runStatus(stdin, args...)
+	if err != nil {
+		return nil, err
+	}
+	if code != 0 {
+		return nil, fmt.Errorf("%s: git %s: %s", g.verbOrDefault(), strings.Join(args, " "), strings.TrimSpace(string(out)))
+	}
+	return out, nil
+}
+
+func (g *gitRunner) verbOrDefault() string {
+	if g.verb == "" {
+		return "check --staged"
+	}
+	return g.verb
+}
+
+// runStatus executes git and CARRIES ITS EXIT STATUS. err is non-nil only for a
+// spawn failure (the binary vanished, fork failed); otherwise code is the
+// process's exit status and out is stdout on success or stderr's text on a
+// non-zero exit. It exists because `git check-ignore` ANSWERS through its
+// status — 0 (at least one path ignored), 1 (none), 128 (fatal) — and a
+// caller of run could only write `if err != nil { /* not ignored */ }`, which
+// reports "not ignored" for exit 1 and for exit 128 alike: a broken git passing
+// the gate, the skip that reads as a pass.
+func (g *gitRunner) runStatus(stdin string, args ...string) (out []byte, code int, err error) {
 	full := append([]string{"-c", "core.quotepath=false", "-c", "diff.relative=false"}, args...)
 	cmd := exec.Command(g.bin, full...) //nolint:gosec // fixed binary, fixed argv; no shell involved
 	cmd.Dir = g.dir
-	cmd.Stdin = strings.NewReader(stdin)
+	if stdin != "" {
+		cmd.Stdin = strings.NewReader(stdin)
+	}
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
+	out, err = cmd.Output()
+	if err == nil {
+		return out, 0, nil
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("check --staged: git %s: %s", strings.Join(args, " "), msg)
+		return []byte(msg), ee.ExitCode(), nil
 	}
-	return out, nil
+	return nil, -1, fmt.Errorf("%s: git %s: %w", g.verbOrDefault(), strings.Join(args, " "), err)
 }
 
 // lsFiles lists the index entries matching spec, as paths relative to the

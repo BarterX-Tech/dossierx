@@ -84,7 +84,7 @@ func TestConcurrentLocksDoNotLoseStoreUpdates(t *testing.T) {
 	// load-modify-save race would silently drop (whichever store.Save()
 	// happened last would win, discarding every earlier concurrent
 	// writer's LockedAt entry).
-	storeRaw, err := os.ReadFile(filepath.Join(root, ".dossierx-lock-store.json"))
+	storeRaw, err := os.ReadFile(filepath.Join(root, "build", "ledger", "lock-store.json"))
 	if err != nil {
 		t.Fatalf("read lock store: %v", err)
 	}
@@ -156,18 +156,18 @@ func TestVeryLongClaimIDHandledEndToEnd(t *testing.T) {
 
 	// The catalog must carry the claim under its full id, not a truncated
 	// or hashed form.
-	catalogRaw, err := os.ReadFile(filepath.Join(root, ".catalog.json"))
+	catalogRaw, err := os.ReadFile(filepath.Join(root, "build", "catalog", "catalog.json"))
 	if err != nil {
 		t.Fatalf("read catalog: %v", err)
 	}
 	if !strings.Contains(string(catalogRaw), id) {
-		t.Fatalf("expected .catalog.json to contain the full long id, got a file that does not:\n(len=%d)", len(catalogRaw))
+		t.Fatalf("expected build/catalog/catalog.json to contain the full long id, got a file that does not:\n(len=%d)", len(catalogRaw))
 	}
 
 	// The rendered viewer must also carry the full id, and lock must
 	// succeed against it (round-tripping SaveClaim/LoadClaims/ContentHash
 	// on a very long id, all keyed by exact string equality).
-	viewerRaw, err := os.ReadFile(filepath.Join(root, "viewer", "index.html"))
+	viewerRaw, err := os.ReadFile(filepath.Join(root, "build", "viewer", "index.html"))
 	if err != nil {
 		t.Fatalf("read rendered viewer: %v", err)
 	}

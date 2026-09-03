@@ -141,7 +141,7 @@ func TestStoreRoundTripsThroughItsOwnFile(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, ".dossierx-lock-store.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "build", "ledger", "lock-store.json")); !os.IsNotExist(err) {
 		t.Fatalf("the comment digest must never be written into the lock store file")
 	}
 
@@ -197,7 +197,7 @@ func TestAdoptNeverOverwritesAnExistingDigest(t *testing.T) {
 }
 
 // TestStorePathIsResolvedAgainstTheConfigDir, not the process cwd — the same
-// convention claims_dir, .catalog.json and the lock store follow — and outside
+// convention claims_dir, the catalog and the lock store follow — and outside
 // claims_dir, so the file is never itself decoded as a claim.
 func TestStorePathIsResolvedAgainstTheConfigDir(t *testing.T) {
 	dir := t.TempDir()
@@ -213,9 +213,17 @@ func TestStorePathIsResolvedAgainstTheConfigDir(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	want := filepath.Join(dir, StoreFileName)
-	if got := StorePath(cfg); got != want {
-		t.Fatalf("StorePath = %q, want %q", got, want)
+	want := filepath.Join(dir, "build", "ledger", StoreFileName)
+	if got := StorePath(cfg); got != want || got != cfg.CommentDigestPath() {
+		t.Fatalf("StorePath = %q, want %q (cfg.CommentDigestPath = %q)", got, want, cfg.CommentDigestPath())
+	}
+	// StorePathBeside derives the digest's path from the lock store's DIRECTORY
+	// (internal/lock's PrepareStore has only a *lock.Store in hand), so the two
+	// must be siblings under build/ledger/ by construction. A wrong sibling
+	// reads as "no digest store" — LoadStore treats a missing file as fresh —
+	// which is a silent pass, so this equality is pinned by name.
+	if got := StorePathBeside(cfg.LockStorePath()); got != cfg.CommentDigestPath() {
+		t.Fatalf("StorePathBeside(LockStorePath) = %q, want CommentDigestPath %q", got, cfg.CommentDigestPath())
 	}
 }
 
@@ -251,5 +259,33 @@ func TestCheckWritableDetectsAnUnwritableDirectory(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("the probe left files behind: %v", entries)
+	}
+}
+
+// TestLoadStoreToleratesAnUnknownKeyAndDecodeStoreRefusesIt pins the split
+// between the two entry points. LoadStore is the on-disk path every verb takes:
+// a key a LATER release adds to the store must not make check on this binary
+// fail with lock-ledger-unreadable and prescribe restoring a file that is not
+// corrupt. DecodeStore answers "is this blob OUR store?" for the index's copy
+// under check --staged, and there an unknown key is a no.
+func TestLoadStoreToleratesAnUnknownKeyAndDecodeStoreRefusesIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, StoreFileName)
+	raw := []byte(`{"version":1,"digests":{"widget.contract.main":"sha256:abc"},"future_key":"x"}`)
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadStore(path)
+	if err != nil {
+		t.Fatalf("LoadStore must tolerate an unknown key, as every release before did: %v", err)
+	}
+	if got, ok := store.Digest("widget.contract.main"); !ok || got != "sha256:abc" {
+		t.Fatalf("the known keys must still load beside the unknown one: %q/%v", got, ok)
+	}
+	if _, err := DecodeStore(raw); err == nil {
+		t.Fatalf("DecodeStore must refuse an unknown key")
+	}
+	if _, err := DecodeStore([]byte(`{"version":1,"digests":{}}`)); err != nil {
+		t.Fatalf("DecodeStore must accept the exact on-disk shape: %v", err)
 	}
 }

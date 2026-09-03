@@ -108,12 +108,12 @@ func (a *Artifact) linkIndex(claimID string) int {
 }
 
 // ArtifactPath returns the on-disk path for module's implementation-link
-// artifact, resolved against cfg's own directory (never the process cwd) —
-// the same convention internal/buildorder.ArtifactPath and internal/lock's
-// store path follow. The filename is scoped per-module, sibling to
-// .catalog.json and .build-order.<module>.json.
+// artifact: cfg.CodeLinksPath(module), i.e. <build_dir>/code-links/<module>.json,
+// resolved against the config's own directory (never the process cwd) like
+// every other generated path (see internal/config/paths.go). The file is
+// scoped per-module.
 func ArtifactPath(cfg *config.Config, module string) string {
-	return filepath.Join(cfg.Dir(), fmt.Sprintf(".implementation.%s.json", module))
+	return cfg.CodeLinksPath(module)
 }
 
 // LoadArtifact reads and decodes the implementation-link artifact at path.

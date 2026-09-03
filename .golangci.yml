@@ -77,7 +77,13 @@ linters-settings:
 
       # render is a top-of-stack sink: it may import other internal/...
       # packages, but nothing under internal/{lint,catalog,lock,loader,
-      # implink} may import render in return.
+      # implink,buildorder} may import render in return.
+      # internal/buildorder joined the list when it grew the mermaid generator
+      # the viewer's Build order tab renders from: render imports buildorder,
+      # so the reverse edge is a cycle, and the one thing buildorder wants from
+      # render — components.ClaimLabel — is transcribed into
+      # internal/buildorder/mermaid.go instead, exactly as internal/graph
+      # transcribes it and for the same reason.
       # citation_grammar_test.go is exempted here for the reason given at
       # lint-must-not-import-lock-and-friends above: it is the cross-check that
       # the lint's citation scanner and the renderer's agree, so it has to see
@@ -92,9 +98,10 @@ linters-settings:
           - "**/internal/lock/**"
           - "**/internal/loader/**"
           - "**/internal/implink/**"
+          - "**/internal/buildorder/**"
         deny:
           - pkg: github.com/BarterX-Tech/dossierx/internal/render
-            desc: "internal/render is top-of-stack; nothing under internal/{lint,catalog,lock,loader,implink} may import it"
+            desc: "internal/render is top-of-stack; nothing under internal/{lint,catalog,lock,loader,implink,buildorder} may import it"
 
       # internal/graph builds the claims-graph payload the viewer's graph
       # pane reads, and the whole point of that package is stated as an

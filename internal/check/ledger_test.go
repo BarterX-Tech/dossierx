@@ -25,7 +25,7 @@ import (
 // reads it from. It is the fixture equivalent of "a human approved these".
 func armLedger(t *testing.T, cfg *config.Config, claims []model.Claim) {
 	t.Helper()
-	path := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	path := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(path)
 	if err != nil {
 		t.Fatalf("arm ledger: load store: %v", err)
@@ -97,7 +97,7 @@ func TestRun_LedgerMissingFailsButStillRegeneratesTheViewer(t *testing.T) {
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
 	})
 	// Undo the fixture's arming: this test is the hand-flipped case.
-	if err := os.Remove(filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")); err != nil {
+	if err := os.Remove(filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")); err != nil {
 		t.Fatalf("remove store: %v", err)
 	}
 
@@ -262,7 +262,7 @@ func TestRun_UnreadableLedgerFailsClosed(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
 	})
-	if err := os.WriteFile(filepath.Join(cfg.Dir(), ".dossierx-lock-store.json"), []byte("{ truncated"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json"), []byte("{ truncated"), 0o644); err != nil {
 		t.Fatalf("corrupt store: %v", err)
 	}
 
@@ -286,7 +286,7 @@ func TestRun_UnreadableDigestStoreDoesNotAccuseLockedClaims(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/locked.yaml": lockedClaim("widget.contract.locked"),
 	})
-	if err := os.WriteFile(filepath.Join(cfg.Dir(), ".dossierx-comment-digest.json"), []byte("{ truncated"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg.Dir(), "build", "ledger", "comment-digest.json"), []byte("{ truncated"), 0o644); err != nil {
 		t.Fatalf("corrupt digest store: %v", err)
 	}
 
@@ -435,7 +435,7 @@ func runResult(t *testing.T, claims []model.Claim, cfg *config.Config) check.Res
 // Deleting the digest store used to launder a comment tamper permanently.
 //
 // The sequence was: hand-delete an unresolved thread (comment-ledger-drift fires,
-// correctly), then delete .dossierx-comment-digest.json. Every claim goes back to
+// correctly), then delete build/ledger/comment-digest.json. Every claim goes back to
 // "unknown", which is never "drifted", so the finding vanished before any command
 // ran — and the unresolved review the human had left was gone with it, no gate,
 // no trace but the deleted file in the diff. This is the same guard the lock
@@ -480,7 +480,7 @@ func TestRun_DeletingTheDigestStoreIsReported(t *testing.T) {
 // the only thing separating them is the sibling file.
 func downgradeLockStore(t *testing.T, cfg *config.Config, keepDigestStore bool) {
 	t.Helper()
-	path := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	path := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read lock store: %v", err)

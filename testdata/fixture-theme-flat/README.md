@@ -19,7 +19,7 @@ values existed uses. It is the shape that must merge to exactly the single
 
 ## What this corpus instantiates
 
-Every row below is present in the committed `viewer/index.html`.
+Every row below is present in the committed `build/viewer/index.html`.
 
 | construct | selector the parity probe reads | where it comes from |
 |---|---|---|
@@ -37,7 +37,7 @@ Every row below is present in the committed `viewer/index.html`.
 | comment chip / composer | `.comment-chip`, `.comment-composer-input`, `.comment-composer-submit` | the open thread above |
 | comments chrome | `.comments-panel`, `.comments-rail`, `.comments-toast`, `.comments-overlay` | the viewer shell (always present, inert until opened) |
 | track head | `.track-head` | the `checkout` track, owned by `widget.contract.overview` and cited by two more |
-| build-order module | `.build-order-module > .system-build-title` | `.build-order.panel.json`: the `panel` module locked end to end across all five phases |
+| build-order tab | `.bo-phase__head` | `build/build-order/panel.json`: the `panel` module locked end to end across all five phases |
 | project mockup | `.mockup-diagram`, `.gcp-console` | `panel.decision.mockup` — `layout: mockup`, locked, `raw_html_reviewed: true`, module in `mockup_modules` |
 | system record head | `.system-record-head` | every module's record head |
 | sidebar chrome | `.sidebar`, `.logo`, `.sec-tab`, `.facet-toc`, `.facet-toc__item`, `.facet-toc__select`, `.nav-toggle`, `.nav-overlay`, `.system-nav-group__toggle`, `.system-nav-group__count` | the viewer shell |
@@ -75,6 +75,12 @@ State it here rather than let a silent absence read as a pass.
 dossierx --config testdata/fixture-theme-flat/project.config.yaml check
 ```
 
-`viewer/index.html` and `.catalog.json` are tracked generated artifacts;
-`tests/fixture_staleness_test.go` fails if they drift from what the current
-engine writes.
+`build/viewer/index.html` and `build/catalog/catalog.json` are tracked
+generated artifacts; `tests/fixture_staleness_test.go` fails if they drift from
+what the current engine writes. `build/ledger/comment-digest.json` is a tracked
+FIXTURE INPUT, not an output: this project is ledger-covered, `check` never
+writes a digest for a ledger-covered project, and without a committed digest a
+fresh checkout reports `comment-digest-absent` and exits 1. It was written once
+by re-recording the five threadless `panel.*` approvals (unlock, then lock, one
+at a time) and re-entering `widget.contract.reviewed`'s thread through
+`dossierx comment add`, so the thread's id and `created` stamp are the engine's.

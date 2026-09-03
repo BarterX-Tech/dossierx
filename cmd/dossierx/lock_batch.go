@@ -52,6 +52,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -192,6 +193,14 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 		return cmdResult{}, err
 	}
 
+	// The gitignore guard, before the claims sentinel — the batch has no
+	// dry-run twin (see newLockCmd's refusal of --dry-run with two ids), so
+	// this refusal is the only place the state is reported for it.
+	gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "lock")
+	if err != nil {
+		return cmdResult{}, err
+	}
+
 	// Same write discipline as the single-lock path: the project-wide claims
 	// sentinel first, loaded inside it, before the lock-store sentinel below —
 	// see newLockCmd's identical comment for why the order is deadlock-free.
@@ -283,7 +292,7 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 			offenders = append(offenders, batchLockOffender{
 				ClaimID: id,
 				Gate:    string(cliout.CodeIntegrityFailed),
-				Detail:  "this claim's lock-ledger record was deleted — restore .dossierx-lock-store.json from version control; do not unlock-and-relock",
+				Detail:  "this claim's lock-ledger record was deleted — restore " + config.LockStoreDisplayPath + " from version control; do not unlock-and-relock",
 			})
 			continue
 		}
@@ -292,7 +301,7 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 			offenders = append(offenders, batchLockOffender{
 				ClaimID: id,
 				Gate:    string(cliout.CodeIntegrityFailed),
-				Detail:  fmt.Sprintf("%d comment thread(s) with no entry in the comment digest store — restore .dossierx-comment-digest.json from version control", len(claim.Comments)),
+				Detail:  fmt.Sprintf("%d comment thread(s) with no entry in the comment digest store — restore %s from version control", len(claim.Comments), config.CommentDigestDisplayPath),
 			})
 			continue
 		}
@@ -373,7 +382,7 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 			LintFindings: g.lockLintFindingData(),
 		}
 		return cmdResult{
-				Warnings: adoptionWarnings(adopted),
+				Warnings: append(adoptionWarnings(adopted), gitignoreWarnings...),
 				Data:     data,
 			}, cliout.Errorf(code,
 				"lock: batch refused, %d of %d claim(s) failed a per-claim gate, %d error-level lint finding(s) scoped to the requested set outstanding — nothing was written",
@@ -432,7 +441,7 @@ func runBatchLock(cmd *cobra.Command, ids []string, reason string) (cmdResult, e
 	}
 
 	return cmdResult{
-		Warnings: adoptionWarnings(adopted),
+		Warnings: append(adoptionWarnings(adopted), gitignoreWarnings...),
 		Data:     batchLockData{ClaimIDs: ids, Reason: reason, Locked: locked},
 		Text: func() {
 			fmt.Fprintf(cmd.OutOrStdout(), "lock: %d claim(s) now locked: %s\n", len(locked), strings.Join(ids, ", "))
