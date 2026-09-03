@@ -524,7 +524,7 @@
   "render_fingerprint": "sha256:7038e2d6b606bd083cfe46dd7d7c46e64e17419de126e979a5034af12834a643",
   "behaviour_fingerprint": {
     "cmd/dossierx": "sha256:edf8683bf2caa82a2bbd05cce1e5f7b766384e612a9f154a25662f74585f2b1a",
-    "internal/buildorder": "sha256:aa1370761703c373972a7e5b364a70bbe08bb29a2ebae619043882af9c8d778a",
+    "internal/buildorder": "sha256:bf557239a85d4da9c7c40a4e0cdf2036eef0a0f104be3dfd14aa74506f64568f",
     "internal/catalog": "sha256:78c8667bfb35c4fc35ec786814028978eac107fde4f06aade4541ce8baee4380",
     "internal/check": "sha256:a41bea933700375da7465b5f6b7f22b32af009ab8469a6236fffb098f54eeacf",
     "internal/cliout": "sha256:f81803a9de0c622fe36afcd765152463d71ba185a3e82a44ccd40ece15b609d3",

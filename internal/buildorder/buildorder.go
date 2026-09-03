@@ -375,7 +375,10 @@ func displayPath(cfg *config.Config, source string) string {
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return source
 	}
-	return rel
+	// Slash-separated on every host: the artifact is committed, so a path
+	// in it must not depend on which operating system ran propose, and the
+	// text table prints this value verbatim.
+	return filepath.ToSlash(rel)
 }
 
 // stableDisplayOrder mirrors internal/render.orderClaims' Order-then-

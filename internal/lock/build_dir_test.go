@@ -3,6 +3,7 @@ package lock
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -72,6 +73,13 @@ func TestAcquireFileLockCreatesTheSentinelDirectory(t *testing.T) {
 	// and its error must still contain the sentinel path.
 	if os.Geteuid() == 0 {
 		t.Skip("root ignores directory permission bits")
+	}
+	if runtime.GOOS == "windows" {
+		// The sentinel-creation half above has run and counts; only the
+		// read-only refusal cannot be exercised here, for the reason every
+		// other permission-bit test in this repository states.
+		t.Log("directory permission bits do not gate file creation on Windows; the read-only refusal is not exercised on this host")
+		return
 	}
 	ro := buildDirConfig(t)
 	if err := os.Chmod(ro.Dir(), 0o555); err != nil {
