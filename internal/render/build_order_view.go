@@ -24,6 +24,13 @@ package render
 //     module's tab entry is the cost, not the project's viewer. (Two claim
 //     ids sanitising to one node id used to be a Views error too; the
 //     allocator in internal/buildorder now gives each its own node.)
+//
+//     A locked artifact can outlive one of its catalog claims. Before calling
+//     Views, buildOrderViewClaims supplies those artifact entries as synthetic
+//     draft claims carrying only their stored id and edges. This lets the
+//     diagram retain the approved node and its Mermaid scripts while the
+//     payload deliberately omits the synthetic claim, so the client marks a
+//     click as a missing-catalog miss instead of silently dropping the tab.
 //   - A template execution error is RETURNED and fails Render, named: that
 //     is a defect in this package's own template, not in a project's file.
 
@@ -149,6 +156,43 @@ type buildOrderPayloadView struct {
 	Locked       int                 `json:"locked"`
 }
 
+// buildOrderViewClaims gives Views the standalone claim facts a locked
+// artifact still carries when a claim file has since been deleted. The
+// synthetic entries are intentionally presentation-only: buildOrderTabData's
+// byID map remains the current catalog, so the payload has no fabricated claim
+// card to navigate to and the client can show its honest missing-catalog path.
+func buildOrderViewClaims(artifact *buildorder.Artifact, claims []model.Claim) []model.Claim {
+	if artifact == nil {
+		return claims
+	}
+	viewClaims := append([]model.Claim(nil), claims...)
+	known := make(map[string]bool, len(claims))
+	for _, c := range claims {
+		known[c.ID] = true
+	}
+	add := func(id string, restsOn []string) {
+		if id == "" || known[id] {
+			return
+		}
+		viewClaims = append(viewClaims, model.Claim{
+			ID:      id,
+			Module:  artifact.Module,
+			RestsOn: append([]string(nil), restsOn...),
+			Status:  model.StatusDraft,
+		})
+		known[id] = true
+	}
+	for _, phase := range artifact.Phases {
+		for _, claim := range phase.Claims {
+			add(claim.ID, claim.RestsOn)
+		}
+	}
+	for _, id := range artifact.Excluded {
+		add(id, nil)
+	}
+	return viewClaims
+}
+
 // buildOrderTabData loads every module's artifact, keeps the locked ones,
 // computes their PhaseViews, executes tmpl per module and marshals the
 // payload. Modules are visited in cfg.Modules order (a claim's module that
@@ -184,7 +228,7 @@ func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.
 		if err != nil || !artifact.Locked {
 			continue // the skip half of the policy above
 		}
-		views, nodeIDs, err := buildorder.Views(artifact, cat.Claims)
+		views, nodeIDs, err := buildorder.Views(artifact, buildOrderViewClaims(artifact, cat.Claims))
 		if err != nil {
 			continue // the skip half of the policy above; BuildOrderWarnings names it
 		}
@@ -313,7 +357,7 @@ func BuildOrderWarnings(cfg *config.Config, claims []model.Claim) []string {
 		if err != nil || !artifact.Locked {
 			continue
 		}
-		if _, _, err := buildorder.Views(artifact, claims); err != nil {
+		if _, _, err := buildorder.Views(artifact, buildOrderViewClaims(artifact, claims)); err != nil {
 			out = append(out, fmt.Sprintf("build order for module %q is not drawn in the viewer's Build order tab: %v; re-propose and lock it (dossierx build-order propose --module %s)", module, err, module))
 		}
 	}

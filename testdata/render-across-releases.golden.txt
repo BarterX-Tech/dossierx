@@ -37,7 +37,7 @@
 
 baseline   v0.7.7 (e7d60cf26d34b4dfac1096cc21b296a5d5baeb0e)
 compared   152 rendered artifacts present at both revisions
-added      0
+added      1
 removed    0
 silent     10 rendered differently from byte-identical inputs
 explained  0 rendered differently after their own inputs changed
@@ -110,8 +110,8 @@ testdata/fixture-basic/build/catalog/catalog.json  (+48 -0)
      }
    ],
 
-testdata/fixture-basic/build/viewer/index.html  (+82 -2)
-    size            13282 lines / 462735 bytes -> 13362 lines / 466581 bytes
+testdata/fixture-basic/build/viewer/index.html  (+115 -7)
+    size            13282 lines / 462735 bytes -> 13390 lines / 468304 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -149,7 +149,40 @@ testdata/fixture-basic/build/viewer/index.html  (+82 -2)
 
    <script>
      (function () {
-@@ -6662,9 +6683,68 @@
+@@ -6611,11 +6632,32 @@
+         });
+       }
+
++      function readinessWarningsForActiveFacet(readiness, claimIDs) {
++        var rows = [];
++        Object.keys(readiness || {}).sort().forEach(function (id) {
++          if (claimIDs[id] !== true) { return; }
++          var assessment = readiness[id] || {};
++          var conditions = assessment.dependency_conditions || assessment.conditions || [];
++          var causes = assessment.review_causes || assessment.causes || [];
++          conditions.forEach(function (condition) {
++            var path = (condition.path || []).join(' → ');
++            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
++              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
++          });
++          causes.forEach(function (cause) {
++            var path = (cause.path || []).join(' → ');
++            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
++              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
++          });
++        });
++        return rows;
++      }
+
+
+
+
+
++
+       function positionStatusStrip() {
+         if (!stripEl) { return; }
+         
+@@ -6662,14 +6704,74 @@
        
        
        
@@ -214,11 +247,55 @@ testdata/fixture-basic/build/viewer/index.html  (+82 -2)
        function renderStatusStrip(data) {
          if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
          lastStatusData = data || {};
-+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
++        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-@@ -6729,7 +6809,7 @@
++        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+
+-        if (!ledger.length && !lintErrors.length) {
++        if (!ledger.length && !lintErrors.length && !readiness.length) {
+           stripEl.hidden = true;
+           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
+           stripBody.textContent = '';
+@@ -6683,6 +6785,9 @@
+             ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
+           ));
+         }
++        if (readiness.length) {
++          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
++        }
+         if (lintErrors.length) {
+           stripBody.appendChild(findingGroup(
+             'Issues to resolve',
+@@ -6694,19 +6799,22 @@
+         
+         if (ledger.length) {
+           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
+-          stripNote.textContent = lintErrors.length
+-            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
++          stripNote.textContent = (lintErrors.length || readiness.length)
++            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
+             : 'Review these locked claims before relying on their approved state.';
+-        } else {
++        } else if (lintErrors.length) {
+           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
+           stripNote.textContent = lintErrors.length === 1
+             ? 'This issue blocks the next successful DossierX check.'
+             : 'These issues block the next successful DossierX check.';
++        } else {
++          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
++          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+         }
+
+         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
+         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
+-        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
++        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+         setStripExpanded(stripExpanded);
+         positionStatusStrip();
+         stripEl.hidden = false;
+@@ -6729,7 +6837,7 @@
          if (!mounted) { return; }
          apiGet('/api/status').then(function (data) {
            renderStatusStrip(data);
@@ -1713,8 +1790,8 @@ testdata/fixture-graph-demo/build/catalog/catalog.json  (+1076 -0)
      }
    ],
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+82 -2)
-    size            14018 lines / 589713 bytes -> 14098 lines / 617133 bytes
+testdata/fixture-graph-demo/build/viewer/index.html  (+115 -7)
+    size            14018 lines / 589713 bytes -> 14126 lines / 618856 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -1752,7 +1829,40 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+82 -2)
 
    <script>
      (function () {
-@@ -7398,9 +7419,68 @@
+@@ -7347,11 +7368,32 @@
+         });
+       }
+
++      function readinessWarningsForActiveFacet(readiness, claimIDs) {
++        var rows = [];
++        Object.keys(readiness || {}).sort().forEach(function (id) {
++          if (claimIDs[id] !== true) { return; }
++          var assessment = readiness[id] || {};
++          var conditions = assessment.dependency_conditions || assessment.conditions || [];
++          var causes = assessment.review_causes || assessment.causes || [];
++          conditions.forEach(function (condition) {
++            var path = (condition.path || []).join(' → ');
++            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
++              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
++          });
++          causes.forEach(function (cause) {
++            var path = (cause.path || []).join(' → ');
++            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
++              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
++          });
++        });
++        return rows;
++      }
+
+
+
+
+
++
+       function positionStatusStrip() {
+         if (!stripEl) { return; }
+         
+@@ -7398,14 +7440,74 @@
        
        
        
@@ -1817,11 +1927,55 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+82 -2)
        function renderStatusStrip(data) {
          if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
          lastStatusData = data || {};
-+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
++        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-@@ -7465,7 +7545,7 @@
++        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+
+-        if (!ledger.length && !lintErrors.length) {
++        if (!ledger.length && !lintErrors.length && !readiness.length) {
+           stripEl.hidden = true;
+           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
+           stripBody.textContent = '';
+@@ -7419,6 +7521,9 @@
+             ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
+           ));
+         }
++        if (readiness.length) {
++          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
++        }
+         if (lintErrors.length) {
+           stripBody.appendChild(findingGroup(
+             'Issues to resolve',
+@@ -7430,19 +7535,22 @@
+         
+         if (ledger.length) {
+           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
+-          stripNote.textContent = lintErrors.length
+-            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
++          stripNote.textContent = (lintErrors.length || readiness.length)
++            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
+             : 'Review these locked claims before relying on their approved state.';
+-        } else {
++        } else if (lintErrors.length) {
+           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
+           stripNote.textContent = lintErrors.length === 1
+             ? 'This issue blocks the next successful DossierX check.'
+             : 'These issues block the next successful DossierX check.';
++        } else {
++          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
++          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+         }
+
+         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
+         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
+-        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
++        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+         setStripExpanded(stripExpanded);
+         positionStatusStrip();
+         stripEl.hidden = false;
+@@ -7465,7 +7573,7 @@
          if (!mounted) { return; }
          apiGet('/api/status').then(function (data) {
            renderStatusStrip(data);
@@ -1938,8 +2092,8 @@ testdata/fixture-portability/build/catalog/catalog.json  (+83 -0)
      }
    ],
 
-testdata/fixture-portability/build/viewer/index.html  (+82 -2)
-    size            13273 lines / 464414 bytes -> 13353 lines / 468970 bytes
+testdata/fixture-portability/build/viewer/index.html  (+115 -7)
+    size            13273 lines / 464414 bytes -> 13381 lines / 470693 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -1977,7 +2131,40 @@ testdata/fixture-portability/build/viewer/index.html  (+82 -2)
 
    <script>
      (function () {
-@@ -6653,9 +6674,68 @@
+@@ -6602,11 +6623,32 @@
+         });
+       }
+
++      function readinessWarningsForActiveFacet(readiness, claimIDs) {
++        var rows = [];
++        Object.keys(readiness || {}).sort().forEach(function (id) {
++          if (claimIDs[id] !== true) { return; }
++          var assessment = readiness[id] || {};
++          var conditions = assessment.dependency_conditions || assessment.conditions || [];
++          var causes = assessment.review_causes || assessment.causes || [];
++          conditions.forEach(function (condition) {
++            var path = (condition.path || []).join(' → ');
++            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
++              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
++          });
++          causes.forEach(function (cause) {
++            var path = (cause.path || []).join(' → ');
++            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
++              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
++          });
++        });
++        return rows;
++      }
+
+
+
+
+
++
+       function positionStatusStrip() {
+         if (!stripEl) { return; }
+         
+@@ -6653,14 +6695,74 @@
        
        
        
@@ -2042,11 +2229,55 @@ testdata/fixture-portability/build/viewer/index.html  (+82 -2)
        function renderStatusStrip(data) {
          if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
          lastStatusData = data || {};
-+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
++        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-@@ -6720,7 +6800,7 @@
++        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+
+-        if (!ledger.length && !lintErrors.length) {
++        if (!ledger.length && !lintErrors.length && !readiness.length) {
+           stripEl.hidden = true;
+           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
+           stripBody.textContent = '';
+@@ -6674,6 +6776,9 @@
+             ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
+           ));
+         }
++        if (readiness.length) {
++          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
++        }
+         if (lintErrors.length) {
+           stripBody.appendChild(findingGroup(
+             'Issues to resolve',
+@@ -6685,19 +6790,22 @@
+         
+         if (ledger.length) {
+           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
+-          stripNote.textContent = lintErrors.length
+-            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
++          stripNote.textContent = (lintErrors.length || readiness.length)
++            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
+             : 'Review these locked claims before relying on their approved state.';
+-        } else {
++        } else if (lintErrors.length) {
+           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
+           stripNote.textContent = lintErrors.length === 1
+             ? 'This issue blocks the next successful DossierX check.'
+             : 'These issues block the next successful DossierX check.';
++        } else {
++          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
++          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+         }
+
+         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
+         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
+-        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
++        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+         setStripExpanded(stripExpanded);
+         positionStatusStrip();
+         stripEl.hidden = false;
+@@ -6720,7 +6828,7 @@
          if (!mounted) { return; }
          apiGet('/api/status').then(function (data) {
            renderStatusStrip(data);
@@ -2351,8 +2582,8 @@ testdata/fixture-theme-flat/build/catalog/catalog.json  (+219 -3)
      }
    ],
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+82 -2)
-    size            17423 lines / 4084957 bytes -> 17503 lines / 4092108 bytes
+testdata/fixture-theme-flat/build/viewer/index.html  (+115 -7)
+    size            17423 lines / 4084957 bytes -> 17531 lines / 4093831 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -2390,7 +2621,40 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+82 -2)
 
    <script>
      (function () {
-@@ -6944,9 +6965,68 @@
+@@ -6893,11 +6914,32 @@
+         });
+       }
+
++      function readinessWarningsForActiveFacet(readiness, claimIDs) {
++        var rows = [];
++        Object.keys(readiness || {}).sort().forEach(function (id) {
++          if (claimIDs[id] !== true) { return; }
++          var assessment = readiness[id] || {};
++          var conditions = assessment.dependency_conditions || assessment.conditions || [];
++          var causes = assessment.review_causes || assessment.causes || [];
++          conditions.forEach(function (condition) {
++            var path = (condition.path || []).join(' → ');
++            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
++              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
++          });
++          causes.forEach(function (cause) {
++            var path = (cause.path || []).join(' → ');
++            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
++              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
++          });
++        });
++        return rows;
++      }
+
+
+
+
+
++
+       function positionStatusStrip() {
+         if (!stripEl) { return; }
+         
+@@ -6944,14 +6986,74 @@
        
        
        
@@ -2455,11 +2719,55 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+82 -2)
        function renderStatusStrip(data) {
          if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
          lastStatusData = data || {};
-+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
++        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-@@ -7011,7 +7091,7 @@
++        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+
+-        if (!ledger.length && !lintErrors.length) {
++        if (!ledger.length && !lintErrors.length && !readiness.length) {
+           stripEl.hidden = true;
+           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
+           stripBody.textContent = '';
+@@ -6965,6 +7067,9 @@
+             ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
+           ));
+         }
++        if (readiness.length) {
++          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
++        }
+         if (lintErrors.length) {
+           stripBody.appendChild(findingGroup(
+             'Issues to resolve',
+@@ -6976,19 +7081,22 @@
+         
+         if (ledger.length) {
+           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
+-          stripNote.textContent = lintErrors.length
+-            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
++          stripNote.textContent = (lintErrors.length || readiness.length)
++            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
+             : 'Review these locked claims before relying on their approved state.';
+-        } else {
++        } else if (lintErrors.length) {
+           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
+           stripNote.textContent = lintErrors.length === 1
+             ? 'This issue blocks the next successful DossierX check.'
+             : 'These issues block the next successful DossierX check.';
++        } else {
++          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
++          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+         }
+
+         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
+         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
+-        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
++        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+         setStripExpanded(stripExpanded);
+         positionStatusStrip();
+         stripEl.hidden = false;
+@@ -7011,7 +7119,7 @@
          if (!mounted) { return; }
          apiGet('/api/status').then(function (data) {
            renderStatusStrip(data);
@@ -2534,8 +2842,8 @@ testdata/fixture-theme-preset/build/catalog/catalog.json  (+48 -0)
      }
    ],
 
-testdata/fixture-theme-preset/build/viewer/index.html  (+82 -2)
-    size            13284 lines / 466204 bytes -> 13364 lines / 470050 bytes
+testdata/fixture-theme-preset/build/viewer/index.html  (+115 -7)
+    size            13284 lines / 466204 bytes -> 13392 lines / 471773 bytes
 @@ -1899,6 +1899,27 @@
    border-top: 1px solid var(--border);
  }
@@ -2573,7 +2881,40 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+82 -2)
 
    <script>
      (function () {
-@@ -6664,9 +6685,68 @@
+@@ -6613,11 +6634,32 @@
+         });
+       }
+
++      function readinessWarningsForActiveFacet(readiness, claimIDs) {
++        var rows = [];
++        Object.keys(readiness || {}).sort().forEach(function (id) {
++          if (claimIDs[id] !== true) { return; }
++          var assessment = readiness[id] || {};
++          var conditions = assessment.dependency_conditions || assessment.conditions || [];
++          var causes = assessment.review_causes || assessment.causes || [];
++          conditions.forEach(function (condition) {
++            var path = (condition.path || []).join(' → ');
++            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
++              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
++          });
++          causes.forEach(function (cause) {
++            var path = (cause.path || []).join(' → ');
++            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
++              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
++          });
++        });
++        return rows;
++      }
+
+
+
+
+
++
+       function positionStatusStrip() {
+         if (!stripEl) { return; }
+         
+@@ -6664,14 +6706,74 @@
        
        
        
@@ -2638,11 +2979,55 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+82 -2)
        function renderStatusStrip(data) {
          if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
          lastStatusData = data || {};
-+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
++        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-@@ -6731,7 +6811,7 @@
++        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+
+-        if (!ledger.length && !lintErrors.length) {
++        if (!ledger.length && !lintErrors.length && !readiness.length) {
+           stripEl.hidden = true;
+           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
+           stripBody.textContent = '';
+@@ -6685,6 +6787,9 @@
+             ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
+           ));
+         }
++        if (readiness.length) {
++          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
++        }
+         if (lintErrors.length) {
+           stripBody.appendChild(findingGroup(
+             'Issues to resolve',
+@@ -6696,19 +6801,22 @@
+         
+         if (ledger.length) {
+           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
+-          stripNote.textContent = lintErrors.length
+-            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
++          stripNote.textContent = (lintErrors.length || readiness.length)
++            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
+             : 'Review these locked claims before relying on their approved state.';
+-        } else {
++        } else if (lintErrors.length) {
+           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
+           stripNote.textContent = lintErrors.length === 1
+             ? 'This issue blocks the next successful DossierX check.'
+             : 'These issues block the next successful DossierX check.';
++        } else {
++          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
++          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+         }
+
+         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
+         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
+-        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
++        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+         setStripExpanded(stripExpanded);
+         positionStatusStrip();
+         stripEl.hidden = false;
+@@ -6731,7 +6839,7 @@
          if (!mounted) { return; }
          apiGet('/api/status').then(function (data) {
            renderStatusStrip(data);
@@ -2651,3 +3036,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+82 -2)
        }
 
        if (stripToggle) {
+
+ADDED SINCE THE BASELINE
+------------------------
+testdata/markdown-cases/inline-only-emphasis.golden.html

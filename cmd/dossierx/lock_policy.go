@@ -153,6 +153,19 @@ func previewPolicyLock(cmd *cobra.Command, ids []string, reason string, conflict
 	if strings.TrimSpace(reason) == "" {
 		data.Missing = []string{"--reason"}
 	}
+	// Keep the policy-preview path honest about the same repository carrier
+	// guard enforced by the approval write. A proposal must not invite a human
+	// approval that the real run will reject because its stores are ignored or
+	// git cannot answer inside the work tree.
+	storesArePreconditionData := cliout.NewDryRun(data.Would)
+	storesArePrecondition(storesArePreconditionData, cfg)
+	for _, precondition := range storesArePreconditionData.Preconditions {
+		data.Preconditions = append(data.Preconditions, precondition)
+		if !precondition.OK {
+			data.Blocked = true
+			data.Missing = append(data.Missing, precondition.Name)
+		}
+	}
 	return cmdResult{Data: data, Text: func() {
 		fmt.Fprintf(cmd.OutOrStdout(), "lock preview: %s\n", data.Would)
 		for _, verdict := range data.Evaluation.Verdicts {
@@ -189,6 +202,14 @@ func policyLintPrecondition(evaluation lock.SetEvaluation) cliout.Precondition {
 // write fails. It never accepts a supplied snapshot that no longer matches.
 func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string, conflicts []lock.SemanticConflict) (cmdResult, error) {
 	cfg, err := loadConfig()
+	if err != nil {
+		return cmdResult{}, err
+	}
+	// The policy-enabled path must enforce the same repository carrier guard as
+	// the legacy singleton and batch paths before taking any write sentinel.
+	// Ignored stores cannot carry an approval to collaborators, and a failed
+	// git check is equally unsafe to proceed through.
+	gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "lock")
 	if err != nil {
 		return cmdResult{}, err
 	}
@@ -323,7 +344,7 @@ func runPolicySetLock(cmd *cobra.Command, ids []string, reason, proposal string,
 	if len(evaluation.RequestedIDs) == 1 {
 		lockedAt = store.LockedAt[evaluation.RequestedIDs[0]]
 	}
-	return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation, ClaimID: firstID(evaluation.RequestedIDs), From: "draft", To: "locked", LockedAt: lockedAt}, Text: func() {
+	return cmdResult{Data: policyLockData{ClaimIDs: evaluation.RequestedIDs, Reason: reason, Snapshot: snapshot, Evaluation: evaluation, ClaimID: firstID(evaluation.RequestedIDs), From: "draft", To: "locked", LockedAt: lockedAt}, Warnings: gitignoreWarnings, Text: func() {
 		fmt.Fprintf(cmd.OutOrStdout(), "lock: %d claim(s) locally approved: %s\n", len(evaluation.RequestedIDs), strings.Join(evaluation.RequestedIDs, ", "))
 	}}, nil
 }

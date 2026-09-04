@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.8] - 2026-09-04
+## [0.7.8] - 2026-09-05
 
 ### Changed
 
@@ -21,14 +21,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   wrong-request tokens refuse before an approval, receipt, baseline, or claim
   write. The generated viewer and API show local approval, readiness conditions
   and review-cause paths on each claim.
+- Inline emphasis and strikethrough now work in the inline-only markdown
+  surfaces used by rows and table cells, with a dedicated golden case so the
+  construct remains covered in the exported surface inventory.
 - v0.7.7's `build/` artifact layout, Build order tab, Mermaid renderer and
   `build-order show` remain part of the release. The v0.7.7 comparison records
   ten intentional policy-v1 render changes: all five fixture catalogs gain
   readiness records and all five viewers gain readiness-card markup. Viewer
-  bytes move as follows: `fixture-basic` 462,735 -> 466,581,
-  `fixture-graph-demo` 589,713 -> 617,133, `fixture-portability` 464,414 ->
-  468,970, `fixture-theme-flat` 4,084,957 -> 4,092,108, and
-  `fixture-theme-preset` 466,204 -> 470,050. These are the otherwise-silent
+  bytes move as follows: `fixture-basic` 462,735 -> 468,304,
+  `fixture-graph-demo` 589,713 -> 618,856, `fixture-portability` 464,414 ->
+  470,693, `fixture-theme-flat` 4,084,957 -> 4,093,831, and
+  `fixture-theme-preset` 466,204 -> 471,773. These are the otherwise-silent
   changes recorded in `testdata/render-across-releases.golden.txt` against
   v0.7.7; they make policy readiness visible in generated artifacts.
 
@@ -37,6 +40,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A live viewer can insert each readiness card below a claim's links without
   using the section as an invalid DOM insertion parent. A rendering failure in
   the status refresh is no longer folded into the fetch failure path.
+- Local approval previews and writes now enforce the `stores_are_tracked`
+  repository guard for the policy-enabled lock path, so an ignored or
+  unanswerable store is disclosed before review and refused before any write.
+- A locked Build order artifact keeps rendering when its catalog has lost one
+  of the artifact's claims. The approved node and Mermaid scripts remain
+  visible, while the claim payload leaves the missing entry absent so a click
+  reports an honest catalog miss.
 
 ## [0.7.7] - 2026-09-04
 

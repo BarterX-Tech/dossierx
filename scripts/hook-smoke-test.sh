@@ -127,15 +127,37 @@ BIN="$TMP/bin/dossierx"
 [ -f "$BIN" ] || BIN="$TMP/bin/dossierx.exe"
 [ -f "$BIN" ] || fail "built binary not found under $TMP/bin"
 
+# Keep fixture stores visible to the local repository even when the host has a
+# machine-wide build/ ignore. The project-level negations are the documented
+# layout contract and let the preview reach the same writable state as the
+# subsequent reviewed lock.
+ensure_fixture_store_tracking() {
+	cat >"$(pwd)/.gitignore" <<'EOF'
+build/*
+!build/.gitignore
+!build/ledger
+!build/ledger/*
+!build/build-order
+!build/build-order/*
+!build/code-links
+!build/code-links/*
+EOF
+}
+
 # A lock write is the second half of an explicit review exchange. Keep fixture
 # setup honest by previewing the exact request and carrying its token forward.
 reviewed_lock() {
 	local claim_id="$1"
 	local reason="$2"
 	local preview proposal
+	ensure_fixture_store_tracking
 	preview=$("$BIN" --format json claim lock "$claim_id" --reason "$reason" --dry-run) ||
 		fail "lock preview failed for $claim_id"
-	proposal=$(printf '%s\n' "$preview" | sed -n 's/.*"snapshot":"\([^"]*\)".*/\1/p')
+	# The token lives at data.snapshot in the JSON envelope. Allow the
+	# formatter's optional whitespace around the colon; parsing the current
+	# envelope is part of the smoke fixture, while the proposal requirement
+	# itself remains enforced by the CLI.
+	proposal=$(printf '%s\n' "$preview" | sed -n 's/.*"snapshot"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
 	[ -n "$proposal" ] || fail "lock preview returned no proposal token for $claim_id"
 	"$BIN" claim lock "$claim_id" --reason "$reason" --proposal "$proposal" --format text >/dev/null ||
 		fail "lock write failed for $claim_id"
