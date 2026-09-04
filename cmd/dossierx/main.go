@@ -165,10 +165,10 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-five leaves, and not one more.
+	// The whole surface: nine nouns, twenty-six leaves, and not one more.
 	//
 	//	check                                                            1
-	//	claim   show list new lock unlock flag reaudit link               8
+	//	claim   show list new lock unlock flag reaudit link migrate-lock-policy 9
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock show                              4
 	//	track   list show status                                          3
@@ -182,7 +182,7 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyFiveLeavesUnderNineNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentySixLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
 	// "track" is the eighth noun, and it was the first addition since v0.3.0
@@ -253,7 +253,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyFiveLeavesUnderNineNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentySixLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()

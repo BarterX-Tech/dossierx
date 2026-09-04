@@ -1,5 +1,5 @@
 // envelope_cli_test.go is the golden-fixture suite for the machine contract: for
-// every one of the twenty-five leaves, it runs the real command tree with the
+// every one of the twenty-six leaves, it runs the real command tree with the
 // default (JSON) format and pins the envelope the agent actually receives.
 //
 // TestEveryLeafButServeEmitsAnEnvelope below is the coverage floor — every leaf
@@ -101,7 +101,7 @@ func TestUnknownFormatIsRefusedWithACode(t *testing.T) {
 
 // TestEveryLeafButServeEmitsAnEnvelope is the inverse of Phase 1's
 // text-only-opt-out fixture, and it is the stronger statement now that the ten
-// commands that carried the opt-out are gone: with the surface at twenty-five
+// commands that carried the opt-out are gone: with the surface at twenty-six
 // leaves, EVERY leaf except "serve" must answer --format json with exactly one
 // envelope. A leaf that quietly printed prose instead would be a hole in the
 // contract that no per-command test would notice.

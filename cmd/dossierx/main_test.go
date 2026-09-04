@@ -288,7 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
+// TestSurfaceIsTwentySixLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
@@ -328,7 +328,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // way to LOOK, and no new way to change what the project treats as approved.
 //
 // THE FIFTH MOVE IS "build-order show", and it is a LEAF rather than a noun:
-// twenty-four-under-nine becomes twenty-five-under-nine, with the noun count
+// twenty-four-under-nine became twenty-five-under-nine, with the noun count
 // unchanged. The argument for it is that the build-order noun could compute an
 // order, report whether one exists, and approve one — and had no way to HAND
 // ONE OVER. `propose` prints the sequence it just wrote and never again;
@@ -339,7 +339,14 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // takes no --reason, writes no file, takes no sentinel and touches neither the
 // artifact nor the ledger. Same argument as track and theme: a way to look, and
 // no new way to change what the project treats as approved.
-func TestSurfaceIsTwentyFiveLeavesUnderNineNouns(t *testing.T) {
+//
+// THE SIXTH MOVE IS `claim migrate-lock-policy`, taking twenty-five-under-nine
+// to twenty-six-under-nine. It moves old lock records to the current policy
+// schema without creating an approval or changing a claim. The command is a
+// narrow migration surface because the policy version and historical receipts
+// must remain visible and recoverable rather than being silently rewritten by
+// lock or unlock.
+func TestSurfaceIsTwentySixLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
@@ -418,8 +425,8 @@ func TestSurfaceIsTwentyFiveLeavesUnderNineNouns(t *testing.T) {
 			t.Errorf("unexpected leaf command %q — adding to the surface is a decision, not an accident; if it is intended, add it to this test's table and to the CHANGELOG", name)
 		}
 	}
-	if len(got) != 25 {
-		t.Errorf("the surface is 25 leaves; got %d: %v", len(got), sortedCommandNames(got))
+	if len(got) != 26 {
+		t.Errorf("the surface is 26 leaves; got %d: %v", len(got), sortedCommandNames(got))
 	}
 }
 
@@ -516,7 +523,7 @@ func TestClaimMatchScorePrefersAnIDOrTitleHitOverTheJoinedHaystack(t *testing.T)
 // the page.
 //
 // The count is derived here rather than pinned to a literal because this file
-// is where the leaf set is authoritative: TestSurfaceIsTwentyFiveLeavesUnderNineNouns
+// is where the leaf set is authoritative: TestSurfaceIsTwentySixLeavesUnderNineNouns
 // walks the same tree. Change the surface and this fails until the site follows.
 //
 // THE SEARCH IS SCOPED TO THE DESCRIPTION ATTRIBUTE, and it was not always. It

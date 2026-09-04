@@ -510,7 +510,7 @@ func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
 // TestRetiredVerbsAreNotSurface: the stubs answer, and they stay invisible.
 //
 // They must not appear in --help, in requireSubcommand's "run one of:" list, or
-// in the leaf count TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins.
+// in the leaf count TestSurfaceIsTwentySixLeavesUnderNineNouns pins.
 // A removal explanation that advertises itself is a re-addition.
 func TestRetiredVerbsAreNotSurface(t *testing.T) {
 	env, _, err := execReviewedCLIJSON(t, "comment")
