@@ -330,7 +330,7 @@ func DecodeStore(raw []byte) (*Store, error) {
 	}
 	for key := range probe {
 		switch key {
-		case "version", "hashes", "locked_at", "ledger":
+		case "version", "policy_version", "policy_migrated_at", "policy_migration_reason", "hashes", "receipts", "locked_at", "ledger":
 		default:
 			return nil, fmt.Errorf("lock: decode store: unknown key %q", key)
 		}

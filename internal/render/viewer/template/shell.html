@@ -1299,6 +1299,27 @@
         });
       }
 
+      function readinessWarningsForActiveFacet(readiness, claimIDs) {
+        var rows = [];
+        Object.keys(readiness || {}).sort().forEach(function (id) {
+          if (claimIDs[id] !== true) { return; }
+          var assessment = readiness[id] || {};
+          var conditions = assessment.dependency_conditions || assessment.conditions || [];
+          var causes = assessment.review_causes || assessment.causes || [];
+          conditions.forEach(function (condition) {
+            var path = (condition.path || []).join(' → ');
+            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
+              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
+          });
+          causes.forEach(function (cause) {
+            var path = (cause.path || []).join(' → ');
+            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
+              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
+          });
+        });
+        return rows;
+      }
+
 // The status endpoint is project-wide, but the reader's orientation is
 // module-local. Place the notice between the active record header and its
 // facet controls, where it can be seen before reading without competing
@@ -1411,12 +1432,13 @@
       function renderStatusStrip(data) {
         if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
         lastStatusData = data || {};
-			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
+        renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
+        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
 
-        if (!ledger.length && !lintErrors.length) {
+        if (!ledger.length && !lintErrors.length && !readiness.length) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
@@ -1430,6 +1452,9 @@
             ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
           ));
         }
+        if (readiness.length) {
+          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
+        }
         if (lintErrors.length) {
           stripBody.appendChild(findingGroup(
             'Issues to resolve',
@@ -1441,19 +1466,22 @@
         // lint errors sit behind it — the reader needs the worst fact first.
         if (ledger.length) {
           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = lintErrors.length
-            ? 'There ' + (lintErrors.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length, 'issue') + ' in this facet also blocking the next successful DossierX check.'
+          stripNote.textContent = (lintErrors.length || readiness.length)
+            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
             : 'Review these locked claims before relying on their approved state.';
-        } else {
+        } else if (lintErrors.length) {
           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
           stripNote.textContent = lintErrors.length === 1
             ? 'This issue blocks the next successful DossierX check.'
             : 'These issues block the next successful DossierX check.';
+        } else {
+          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
+          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
         }
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        if (!stripUserToggled) { stripExpanded = ledger.length > 0; }
+        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
         setStripExpanded(stripExpanded);
         positionStatusStrip();
         stripEl.hidden = false;

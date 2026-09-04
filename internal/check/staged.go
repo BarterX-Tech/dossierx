@@ -697,17 +697,21 @@ func indexHoldsJudgeableContent(g *gitRunner) (string, error) {
 		return "", err
 	}
 	// Sorted, so the path named in the refusal is the same one on every run and
-	// on every platform.
+	// on every platform. Prefer a decoded store over claims: when an untracked
+	// config sits over both, the staged store is the concrete ledger that proves
+	// there is content to judge and gives the operator the useful path.
 	paths := make([]string, 0, len(blobs))
 	for p := range blobs {
 		paths = append(paths, p)
 	}
 	sort.Strings(paths)
 	for _, p := range paths {
-		if dec, isStore := storeKind[p]; isStore {
-			if dec(blobs[p]) {
-				return p, nil
-			}
+		if dec, isStore := storeKind[p]; isStore && dec(blobs[p]) {
+			return p, nil
+		}
+	}
+	for _, p := range paths {
+		if _, isStore := storeKind[p]; isStore {
 			continue
 		}
 		if c, err := decodeClaim(p, blobs[p]); err == nil && strings.TrimSpace(c.ID) != "" {

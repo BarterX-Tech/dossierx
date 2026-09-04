@@ -3,6 +3,7 @@ package viewertests
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -168,6 +169,24 @@ func newProject(t *testing.T) *project {
 // args and wins — the pin is a default, not a lock.
 func (p *project) run(args ...string) string {
 	p.t.Helper()
+	if isClaimLock(args) {
+		previewArgs := append([]string{}, args...)
+		previewArgs = append(previewArgs, "--format", "json", "--dry-run")
+		previewCmd := exec.Command(p.bin, append([]string{"--config", p.config}, previewArgs...)...)
+		preview, err := previewCmd.CombinedOutput()
+		if err != nil {
+			p.t.Fatalf("dossierx lock preview %v failed: %v\n%s", args, err, preview)
+		}
+		var envelope struct {
+			Data struct {
+				Snapshot string `json:"snapshot"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal(preview, &envelope); err != nil || envelope.Data.Snapshot == "" {
+			p.t.Fatalf("dossierx lock preview %v returned no proposal token: %v\n%s", args, err, preview)
+		}
+		args = append(args, "--proposal", envelope.Data.Snapshot)
+	}
 	full := append([]string{"--config", p.config, "--format", "text"}, args...)
 	cmd := exec.Command(p.bin, full...)
 	out, err := cmd.CombinedOutput()
@@ -175,6 +194,20 @@ func (p *project) run(args ...string) string {
 		p.t.Fatalf("dossierx %v failed: %v\n%s", args, err, out)
 	}
 	return string(out)
+}
+
+func isClaimLock(args []string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "claim" && args[i+1] == "lock" {
+			for _, arg := range args {
+				if arg == "--dry-run" || arg == "--proposal" {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // seedComment adds one open thread on the test claim as the given role and

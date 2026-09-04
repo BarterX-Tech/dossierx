@@ -102,6 +102,9 @@ func TestMarkdownGoldenRenderConsistency(t *testing.T) {
 	for _, yamlFile := range yamlFiles {
 		yamlFile := yamlFile
 		t.Run(yamlFile, func(t *testing.T) {
+			if isInlineOnlyFixture(yamlFile) {
+				return
+			}
 			claim := loadClaim(t, dir, yamlFile)
 			if claim.Body == "" {
 				t.Fatalf("%s: empty body", yamlFile)
@@ -138,13 +141,48 @@ func TestMarkdownGoldenRenderConsistency(t *testing.T) {
 	}
 }
 
-// TestMarkdownGoldenRenderInline tests RenderInline where applicable.
-// Currently, all fixtures test Render. This test is a placeholder for
-// inline-specific fixture testing if needed in the future.
+// TestMarkdownGoldenRenderInline covers fixtures whose expected output is the
+// inline surface alone, without Render's paragraph wrapper.
 func TestMarkdownGoldenRenderInline(t *testing.T) {
-	// Inline-specific cases (if any) would go here.
-	// For now, this is a placeholder to document the capability.
-	t.Skip("inline-only fixtures not yet added")
+	dir := markdownCasesDir(t)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("failed to read markdown-cases dir: %v", err)
+	}
+	found := false
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") || !isInlineOnlyFixture(entry.Name()) {
+			continue
+		}
+		found = true
+		yamlFile := entry.Name()
+		t.Run(yamlFile, func(t *testing.T) {
+			claim := loadClaim(t, dir, yamlFile)
+			if claim.Body == "" {
+				t.Fatalf("%s: empty body", yamlFile)
+			}
+			goldenFile := strings.TrimSuffix(yamlFile, ".yaml") + ".golden.html"
+			goldenContent, err := os.ReadFile(filepath.Join(dir, goldenFile))
+			if err != nil {
+				t.Fatalf("read %s: %v", goldenFile, err)
+			}
+			idx := strings.Index(string(goldenContent), " -->\n")
+			if idx == -1 {
+				t.Fatalf("%s: invalid golden file format (missing comment)", goldenFile)
+			}
+			expected := strings.TrimSuffix(string(goldenContent[idx+5:]), "\n")
+			if got := string(RenderInline(claim.Body)); got != expected {
+				t.Errorf("inline render output mismatch for %s\nExpected:\n%s\n\nGot:\n%s", yamlFile, expected, got)
+			}
+		})
+	}
+	if !found {
+		t.Fatal("no inline-only YAML fixtures found")
+	}
+}
+
+func isInlineOnlyFixture(name string) bool {
+	return strings.HasPrefix(name, "inline-only-") && strings.HasSuffix(name, ".yaml")
 }
 
 func testRegenerateGoldens(t *testing.T) {
@@ -168,8 +206,12 @@ func testRegenerateGoldens(t *testing.T) {
 			continue
 		}
 
-		// Render the body
-		rendered := string(Render(claim.Body))
+		var rendered string
+		if isInlineOnlyFixture(yamlFile) {
+			rendered = string(RenderInline(claim.Body))
+		} else {
+			rendered = string(Render(claim.Body))
+		}
 
 		// Create golden file content with comment header
 		goldenFile := strings.TrimSuffix(yamlFile, ".yaml") + ".golden.html"

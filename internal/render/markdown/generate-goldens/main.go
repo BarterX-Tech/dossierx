@@ -75,8 +75,13 @@ func processFixture(casesDir, filename string) error {
 	baseName := strings.TrimSuffix(filename, ".yaml")
 	goldenPath := filepath.Join(casesDir, baseName+".golden.html")
 
-	// Render the body
-	rendered := markdown.Render(claim.Body)
+	// Inline-only fixtures pin RenderInline without Render's paragraph wrapper.
+	var rendered string
+	if strings.HasPrefix(filename, "inline-only-") {
+		rendered = string(markdown.RenderInline(claim.Body))
+	} else {
+		rendered = string(markdown.Render(claim.Body))
+	}
 
 	// Write golden file
 	content := fmt.Sprintf("<!-- Generated golden file for %s -->\n%s\n", filename, rendered)

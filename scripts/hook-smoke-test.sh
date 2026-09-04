@@ -127,6 +127,20 @@ BIN="$TMP/bin/dossierx"
 [ -f "$BIN" ] || BIN="$TMP/bin/dossierx.exe"
 [ -f "$BIN" ] || fail "built binary not found under $TMP/bin"
 
+# A lock write is the second half of an explicit review exchange. Keep fixture
+# setup honest by previewing the exact request and carrying its token forward.
+reviewed_lock() {
+	local claim_id="$1"
+	local reason="$2"
+	local preview proposal
+	preview=$("$BIN" --format json claim lock "$claim_id" --reason "$reason" --dry-run) ||
+		fail "lock preview failed for $claim_id"
+	proposal=$(printf '%s\n' "$preview" | sed -n 's/.*"snapshot":"\([^"]*\)".*/\1/p')
+	[ -n "$proposal" ] || fail "lock preview returned no proposal token for $claim_id"
+	"$BIN" claim lock "$claim_id" --reason "$reason" --proposal "$proposal" --format text >/dev/null ||
+		fail "lock write failed for $claim_id"
+}
+
 # The hook resolves the binary from PATH by default; this repository's binary
 # is not installed, so point every hook run at the one we just built.
 export DOSSIERX_BIN="$BIN"
@@ -158,7 +172,7 @@ YAML
 			--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
-		"$BIN" claim lock "$CLAIM_ID" --reason "approved for the smoke test" --format text >/dev/null
+		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
 	)
 }
 
@@ -184,7 +198,7 @@ YAML
 			--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
 			--format text >/dev/null
 		"$BIN" check --format text >/dev/null
-		"$BIN" claim lock "$CLAIM_ID" --reason "approved for the smoke test" --format text >/dev/null
+		reviewed_lock "$CLAIM_ID" "approved for the smoke test"
 	)
 }
 
@@ -641,7 +655,7 @@ YAML
 		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
-	"$BIN" claim lock "$CLAIM_ID" --reason "approved for the smoke test" --format text >/dev/null
+	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
 )
 # The fixture only means something if the claim really did land outside the
 # config's directory.
@@ -769,7 +783,7 @@ YAML
 		--governed-reason "smoke-test fixture, not backed by any doctrine claim" \
 		--format text >/dev/null
 	"$BIN" check --format text >/dev/null
-	"$BIN" claim lock "$CLAIM_ID" --reason "approved for the smoke test" --format text >/dev/null
+	reviewed_lock "$CLAIM_ID" "approved for the smoke test"
 )
 # The fixture only means something if the claims really are outside the repo.
 [ -f "$SKIPPED/outside-claims/$CLAIM_ID.yaml" ] ||

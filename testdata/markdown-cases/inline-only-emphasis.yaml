@@ -1,0 +1,9 @@
+id: widget.markdown-cases.inline-only-emphasis
+facet: contract
+module: widget
+status: draft
+layout: card
+body: The **inline** surface has no paragraph wrapper.
+governed_by:
+  type: none
+  reason: markdown renderer test fixture

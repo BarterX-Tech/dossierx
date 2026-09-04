@@ -188,7 +188,7 @@ func icWriteRoledClaim(t *testing.T, claimPath, module string) {
 func icMustRun(t *testing.T, cfgPath string, args ...string) {
 	t.Helper()
 	full := append([]string{"--config", cfgPath}, args...)
-	env, stderr, err := execCLIJSON(t, full...)
+	env, stderr, err := execReviewedCLIJSON(t, full...)
 	if err != nil {
 		t.Fatalf("fixture setup %v failed: %v\nenvelope: %+v\nstderr: %s", args, err, env, stderr)
 	}
