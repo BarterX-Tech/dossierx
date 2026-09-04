@@ -1,0 +1,52 @@
+{{/* build-order.html — one module's entry in the viewer's Build order tab.
+     Executed by internal/render/build_order_view.go once per module whose
+     build-order artifact on disk is LOCKED (an unlocked or unreadable
+     artifact skips the module; a hand-edited one that contradicts the phase
+     sequence fails Render by name), against buildOrderModuleData.
+
+     It renders one <section class="claim-group bo-module"> holding SIX
+     .bo-phase blocks in the fixed sequence — orientation, schema, behavior,
+     api, verification, then the excluded block — always six, so the sequence
+     a reader sees is the whole sequence: a phase the artifact has no claims
+     in still gets its header, definition and "no claims in this module".
+     A non-empty phase carries one <pre class="mermaid"> whose text is EXACTLY
+     buildorder.Mermaid's output under PaletteCSS: html/template escapes it
+     here, and mermaid reads element.innerHTML and entity-decodes it, so what
+     mermaid parses is the bytes the Go generator emitted. Cross-module
+     dependencies are listed under the diagram, never drawn; rests_on edges
+     to excluded claims likewise. There is no card list: the diagram IS the
+     build order's rendering, and the machine order stays in the artifact.
+
+     This file is parsed from the embedded FS only. It is NOT a
+     viewer.template_overrides override point (its data shape is this
+     package's, not a documented contract), and a project still carrying the
+     old build_order.html override is refused by name in loadTemplates. */}}
+<section class="claim-group bo-module" id="dossierx-build-order-{{.ID}}" hidden>
+  {{- range .Phases}}
+  <section class="bo-phase" data-phase="{{.Name}}" data-number="{{.Number}}" data-count="{{.Count}}" data-levels="{{.Levels}}" data-locked="{{.Locked}}">
+    <header class="bo-phase__head">
+      <span class="bo-phase__num">{{.NumLabel}}</span>
+      <h3 class="bo-phase__name">{{.Name}}</h3>
+      <p class="bo-phase__def">{{.Definition}}</p>
+      <p class="bo-phase__meta">{{if .IsExcluded}}{{.Count}} claim{{if ne .Count 1}}s{{end}}{{else}}{{.Counts}}{{end}}</p>
+    </header>
+    {{- if .IsExcluded}}
+    {{- if .Excluded}}
+    <ul class="bo-excluded">{{range .Excluded}}<li><code>{{.}}</code></li>{{end}}</ul>
+    {{- else}}
+    <p class="bo-empty">no excluded claims in this module</p>
+    {{- end}}
+    {{- else if .Mermaid}}
+    <div class="bo-diagram"><pre class="mermaid" data-module="{{.ModuleID}}" data-phase="{{.Name}}">{{.Mermaid}}</pre></div>
+    {{- if .Cross}}
+    <ul class="bo-cross">{{range .Cross}}<li><span class="bo-cross__module">{{.Module}}</span> · {{len .IDs}} {{if eq (len .IDs) 1}}dependency{{else}}dependencies{{end}}: {{range $i, $id := .IDs}}{{if $i}}, {{end}}<code>{{$id}}</code>{{end}}</li>{{end}}</ul>
+    {{- end}}
+    {{- if .ExcludedDeps}}
+    <p class="bo-excluded-deps">rests on excluded: {{range $i, $id := .ExcludedDeps}}{{if $i}}, {{end}}<code>{{$id}}</code>{{end}}</p>
+    {{- end}}
+    {{- else}}
+    <p class="bo-empty">no claims in this module</p>
+    {{- end}}
+  </section>
+  {{- end}}
+</section>

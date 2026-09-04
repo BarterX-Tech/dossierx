@@ -142,10 +142,10 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 		t.Fatalf("render not written at %s: %v", res.RenderPath, statErr)
 	}
 	// The paths resolve under cfg.Dir().
-	if res.CatalogPath != filepath.Join(cfg.Dir(), ".catalog.json") {
+	if res.CatalogPath != filepath.Join(cfg.Dir(), "build", "catalog", "catalog.json") {
 		t.Fatalf("catalog path %q not under cfg.Dir()", res.CatalogPath)
 	}
-	if res.RenderPath != filepath.Join(cfg.Dir(), "viewer", "index.html") {
+	if res.RenderPath != filepath.Join(cfg.Dir(), "build", "viewer", "index.html") {
 		t.Fatalf("render path %q not under cfg.Dir()", res.RenderPath)
 	}
 
@@ -191,11 +191,11 @@ func TestRun_LintErrorFailsFastNoWrites(t *testing.T) {
 	if res.CatalogPath != "" || res.RenderPath != "" {
 		t.Fatalf("expected no catalog/render paths on fail-fast, got %q / %q", res.CatalogPath, res.RenderPath)
 	}
-	if _, statErr := os.Stat(filepath.Join(cfg.Dir(), ".catalog.json")); !os.IsNotExist(statErr) {
-		t.Fatalf("expected NO .catalog.json on lint fail-fast, stat=%v", statErr)
+	if _, statErr := os.Stat(filepath.Join(cfg.Dir(), "build", "catalog", "catalog.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected NO build/catalog/catalog.json on lint fail-fast, stat=%v", statErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(cfg.Dir(), "viewer", "index.html")); !os.IsNotExist(statErr) {
-		t.Fatalf("expected NO viewer/index.html on lint fail-fast, stat=%v", statErr)
+	if _, statErr := os.Stat(filepath.Join(cfg.Dir(), "build", "viewer", "index.html")); !os.IsNotExist(statErr) {
+		t.Fatalf("expected NO build/viewer/index.html on lint fail-fast, stat=%v", statErr)
 	}
 }
 

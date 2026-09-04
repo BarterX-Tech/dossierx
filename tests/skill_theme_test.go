@@ -130,7 +130,7 @@ func TestThemeSkillYAMLBlocksLoadAndTheme(t *testing.T) {
 			if _, stderr, code := run(t, root, "check"); code != 0 {
 				t.Fatalf("baseline render failed: exit %d\n%s", code, stderr)
 			}
-			baseline := readFileOrFail(t, filepath.Join(root, "viewer", "index.html"))
+			baseline := readFileOrFail(t, filepath.Join(root, "build", "viewer", "index.html"))
 
 			for _, m := range themeExtendsLine.FindAllStringSubmatch(block, -1) {
 				dest := filepath.Join(root, filepath.FromSlash(m[1]))
@@ -157,7 +157,7 @@ func TestThemeSkillYAMLBlocksLoadAndTheme(t *testing.T) {
 			if _, stderr, code := run(t, root, "check"); code != 0 {
 				t.Fatalf("block %d does not render:\n%s\nexit %d\nstderr:\n%s", i, block, code, stderr)
 			}
-			themed := readFileOrFail(t, filepath.Join(root, "viewer", "index.html"))
+			themed := readFileOrFail(t, filepath.Join(root, "build", "viewer", "index.html"))
 			if themed == baseline {
 				t.Fatalf("block %d loaded but changed nothing in the rendered viewer, so the skill is showing a reader a theme that does nothing:\n%s", i, block)
 			}
@@ -687,10 +687,10 @@ func TestThemeSkillVerificationProcedureReplays(t *testing.T) {
 	}
 	replayStep1FailureShapes(t, steps[1])
 
-	// Step 2 — "Open the rendered viewer/index.html". Not opened; asserted to
+	// Step 2 — "Open the rendered build/viewer/index.html". Not opened; asserted to
 	// exist and to carry what the theme set.
-	requireStepMentions(t, steps[2], "viewer/index.html")
-	viewer := readFileOrFail(t, filepath.Join(root, "viewer", "index.html"))
+	requireStepMentions(t, steps[2], "build/viewer/index.html")
+	viewer := readFileOrFail(t, filepath.Join(root, "build", "viewer", "index.html"))
 	if !strings.Contains(viewer, "#fafafa") {
 		t.Error("step 2: the rendered viewer does not carry the light paper value the theme set, so the artifact the reader is told to open would not show them their change")
 	}

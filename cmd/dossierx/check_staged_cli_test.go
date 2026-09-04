@@ -87,7 +87,7 @@ func TestCLI_CheckStaged_LeavesGitStatusByteIdentical(t *testing.T) {
 
 	// And nothing plain "check" writes on every run exists yet either: no
 	// catalog, no viewer, no reconciled claim file.
-	for _, rel := range []string{".catalog.json", filepath.Join("viewer", "index.html")} {
+	for _, rel := range []string{"build/catalog/catalog.json", filepath.Join("build", "viewer", "index.html")} {
 		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
 			t.Fatalf("check --staged wrote %s (stat err=%v); it must write nothing", rel, err)
 		}
@@ -168,7 +168,7 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 	// empty-the-map launder. The installed hook's refusal text names all three
 	// stores for exactly this reason, so staging one of them is the fixture being
 	// out of date, not the gate being strict.
-	stagedGit(t, root, "add", ".dossierx-lock-store.json", ".dossierx-comment-digest.json")
+	stagedGit(t, root, "add", "build/ledger/lock-store.json", "build/ledger/comment-digest.json")
 	if out, stderr, err := execCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
 		t.Fatalf("claim + approval staged together must pass: %v\nstdout:%s\nstderr:%s", err, out, stderr)
 	}

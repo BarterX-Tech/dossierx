@@ -21,15 +21,8 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/render/markdown"
 )
 
-//go:embed card.html table.html list.html steps.html tree.html banner.html mockup.html build_order.html comments.html
+//go:embed card.html table.html list.html steps.html tree.html banner.html mockup.html comments.html
 var FS embed.FS
-
-// buildOrderFileName is the override-lookup name for the optional Build
-// Order viewer partial (see LoadBuildOrder) — not part of fileForLayout
-// since it isn't selected by a claim's model.Layout the way the 7 partials
-// above are; it renders a whole module's build-order artifact instead of
-// one claim.
-const buildOrderFileName = "build_order.html"
 
 // fileForLayout maps a model.Layout to its default partial's filename.
 // This is the "plain map lookup on claim.Layout" the render package uses —
@@ -70,7 +63,6 @@ var funcMap = template.FuncMap{
 	"colClass":      colClass,
 	"mockupHTML":    mockupHTML,
 	"claimLabel":    ClaimLabel,
-	"claimEdgeList": ClaimEdgeListHTML,
 	"commentChip":   CommentChipHTML,
 }
 
@@ -94,7 +86,7 @@ var funcMap = template.FuncMap{
 // calls it, and widening this restricted map back toward the full funcMap is
 // exactly how the initialization cycle above comes back.
 //
-// Unlike the per-layout partials and build_order.html, this panel is not wired
+// Unlike the per-layout partials, this panel is not wired
 // to viewer.template_overrides: it reaches the render through EdgesHTMLWithLinks
 // (the shared "edges" func, whose signature is fixed — a project-scoped override
 // template can't be threaded to it without widening attachEdgesOverride, which
@@ -179,35 +171,6 @@ func loadOne(overrideDir string, layout model.Layout, file string) (*template.Te
 	tmpl, err := template.New(file).Funcs(funcMap).ParseFS(FS, file)
 	if err != nil {
 		return nil, fmt.Errorf("components: parse default template for layout %q: %w", layout, err)
-	}
-	return tmpl, nil
-}
-
-// LoadBuildOrder parses the Build Order viewer partial (build_order.html),
-// applying the same override-then-embedded-default fallback as Load's
-// per-layout partials: a project may override build_order.html by name
-// inside its viewer.template_overrides directory, and falls back to the
-// engine's embedded default when it does not. Unlike Load, this returns a
-// single *template.Template rather than a map, since build_order.html is
-// not selected per-claim by model.Layout — internal/render calls this once
-// and reuses the result for every module that has a locked build-order
-// artifact to render.
-func LoadBuildOrder(overrideDir string) (*template.Template, error) {
-	data, found, err := OverrideFile(overrideDir, buildOrderFileName)
-	if err != nil {
-		return nil, err
-	}
-	if found {
-		tmpl, err := template.New(buildOrderFileName).Funcs(funcMap).Parse(string(data))
-		if err != nil {
-			return nil, fmt.Errorf("components: parse override template %q: %w", filepath.Join(overrideDir, buildOrderFileName), err)
-		}
-		return tmpl, nil
-	}
-
-	tmpl, err := template.New(buildOrderFileName).Funcs(funcMap).ParseFS(FS, buildOrderFileName)
-	if err != nil {
-		return nil, fmt.Errorf("components: parse default build_order template: %w", err)
 	}
 	return tmpl, nil
 }
@@ -339,7 +302,7 @@ type TargetStatus struct {
 // gated on an edge that isn't ready yet), not on every edge indiscriminately.
 //
 // statuses is nil whenever the caller has no catalog to look targets up in
-// — the default, parse-time "edges"/"claimEdgeList" funcMap bindings can
+// — the default, parse-time "edges" funcMap binding can
 // never see the catalog (see this file's Load/loadOne), so every target
 // silently gets no pill under those bindings. Only internal/render's
 // attachEdgesOverride, which does have the whole catalog, ever supplies a
@@ -908,9 +871,12 @@ func splitClaimID(id string) (module, facet, slug string, ok bool) {
 // splitClaimID for why render cannot assume the linted shape.
 //
 // Exported both as a Go helper and, via funcMap, as the "claimLabel" template
-// func, so all seven layout partials' <div class="k"> heading and
-// build_order.html's per-claim heading share this one implementation instead
-// of each re-deriving a label from {{.ID}} in template syntax.
+// func, so all seven layout partials' <div class="k"> heading share this one
+// implementation instead of each re-deriving a label from {{.ID}} in template
+// syntax. The Build order tab's diagram nodes label claims by the SAME rule
+// through a deliberate duplicate in internal/buildorder/mermaid.go
+// (claimLabel there; the render package cannot be imported from below it),
+// and internal/render/build_order_view_test.go pins the two to agree.
 func ClaimLabel(id string) string {
 	_, _, slug, ok := splitClaimID(id)
 	if !ok {
@@ -997,36 +963,6 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, t
 	b.WriteString(html.EscapeString(DisplayCase(slug)))
 	b.WriteString(`</span></a>`)
 	b.WriteString(targetPillHTML(targetID, targetStatuses))
-}
-
-// ClaimEdgeListHTML renders ids as the same nested <ul class="claim-edge-id-
-// list"> the shared edges footer emits, labeled and prefix-elided relative to
-// fromID — the id of the claim the list is being rendered UNDER.
-//
-// It exists for build_order.html, the one template that renders a rests_on
-// edge itself instead of going through {{edges .}}: it lists a whole locked
-// build-order artifact, whose claim entries are internal/buildorder's own view
-// type, not a model.Claim, so the edges footer cannot reach them. That
-// independent rendering had already drifted (an inline, comma-separated run
-// rather than the footer's bulleted list); routing it through this func
-// converges the two on one markup shape and one label implementation, so a
-// future change to either lands in both.
-//
-// The reader's context is derived from fromID's own segments rather than
-// passed separately, because a buildorder claim entry carries only an id. An
-// unshaped fromID yields empty module/facet, which simply means nothing
-// matches and every target keeps its full "Module · Facet ›" prefix — a
-// degraded label, never a wrong one.
-func ClaimEdgeListHTML(fromID string, ids []string) template.HTML {
-	module, facet, _, _ := splitClaimID(fromID)
-	var b strings.Builder
-	// build_order.html only ever lists LOCKED claims (see that partial's
-	// own doc comment — attachBuildOrders filters to locked-only
-	// artifacts before this ever executes), and "claimEdgeList" has no
-	// override binding of its own to carry a catalog lookup through the
-	// way "edges" does, so this always renders with no target pill.
-	writeIDListItems(&b, module, facet, ids, nil)
-	return template.HTML(b.String())
 }
 
 // DisplayCase renders a raw module/facet/slug value (e.g. "token-ledger" or

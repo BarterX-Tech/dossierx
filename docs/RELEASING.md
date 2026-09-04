@@ -59,6 +59,27 @@ The checklist below asks for each one.
       Read the diff. A command, flag or exit code that moved and is not in
       `CHANGELOG.md` is the thing this step exists to catch.
 
+- [ ] **Every rendered fixture is regenerated and re-committed.** `ls -d
+      testdata/fixture-*/` minus `fixture-coverage` — every one of them, not a
+      sample — with:
+
+      go run ./cmd/dossierx check --config testdata/<fixture>/project.config.yaml
+
+      run from the repository root, exit 0 required for each. This rewrites
+      `build/viewer/index.html` and `build/catalog/catalog.json` for every
+      fixture, and `build/ledger/comment-digest.json` for a fixture that has
+      no ledger yet. Afterwards `git status --porcelain testdata` may show
+      only the viewers — each differing in its generation stamp alone, which
+      `go test ./tests -run TestCommittedFixtureViewersAreNotStale -count=1 -v`
+      passing on the uncommitted tree is the check for — and nothing
+      untracked. Because the vendored mermaid renderer changes every rendered
+      viewer this release, a fixture with a locked build order commits a
+      viewer noticeably larger than before: record each fixture viewer's
+      before/after `wc -c` in the CHANGELOG entry so the repository's growth
+      is visible rather than discovered later from
+      `TestCommittedFixtureViewersAreNotStale` failing — the way the fixture
+      viewers went stale through v0.3.0 and v0.3.1.
+
 - [ ] **Every release-version pin points at the version being released.** Sweep
       with `git grep`, never a plain `grep -r`: on some machines `grep` resolves
       to ugrep, whose `-r` skips dot-directories, so `.github/` goes unsearched

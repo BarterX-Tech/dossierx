@@ -3,6 +3,7 @@ package lock
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -59,6 +60,17 @@ var (
 // per-platform, and on every platform but Windows it is a constant false.
 func AcquireFileLock(storePath string) (release func(), err error) {
 	lockPath := storePath + ".lock"
+	// The sentinel sits beside its store under build/ledger/, which a fresh
+	// project does not have until the first write creates it — and the first
+	// write is exactly the one this lock guards. A failure here is reported
+	// with lockPath in the message, never only the directory: cmd/dossierx's
+	// comment path classifies a sentinel failure as write_conflict by finding
+	// the sentinel's path in the error text (see claimsSentinelContention),
+	// and on a read-only project directory this MkdirAll is now the first
+	// step that fails.
+	if mkErr := os.MkdirAll(filepath.Dir(lockPath), 0o755); mkErr != nil {
+		return nil, fmt.Errorf("lock: acquire file lock %s: %w", lockPath, mkErr)
+	}
 	deadline := time.Now().Add(lockAcquireTimeout)
 	for {
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)

@@ -178,7 +178,7 @@ func TestHandDeletingAThreadIsDetected(t *testing.T) {
 // lock-store writer and the guarantee would be false the day it shipped.
 func TestTheDigestNeverTouchesTheLockStore(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	lockStorePath := filepath.Join(p.root, ".dossierx-lock-store.json")
+	lockStorePath := filepath.Join(p.root, "build", "ledger", "lock-store.json")
 
 	if _, _, err := p.deps().Add(claimA, model.CommentRoleAgent, "a thread"); err != nil {
 		t.Fatalf("Add: %v", err)
@@ -379,10 +379,15 @@ func TestReadOnlyProjectDirWritesNothingOnEitherAttempt(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
 	p.addThread(model.CommentRoleHuman, "first")
 
-	if err := os.Chmod(p.root, 0o555); err != nil {
-		t.Fatalf("make the project dir read-only: %v", err)
+	// The stores and the claims sentinel live under build/ledger/ now, which
+	// the seeding thread above created; make that directory read-only too,
+	// or the op would write there while the project root refused nothing.
+	for _, dir := range []string{p.root, filepath.Join(p.root, "build", "ledger")} {
+		if err := os.Chmod(dir, 0o555); err != nil {
+			t.Fatalf("make %s read-only: %v", dir, err)
+		}
+		t.Cleanup(func() { os.Chmod(dir, 0o755) }) //nolint:errcheck // best-effort restore so TempDir cleanup works
 	}
-	t.Cleanup(func() { os.Chmod(p.root, 0o755) }) //nolint:errcheck // best-effort restore so TempDir cleanup works
 
 	const body = "on a read-only project dir"
 	for attempt := 1; attempt <= 2; attempt++ {
@@ -410,7 +415,7 @@ func TestNoReAdoptionInALedgerCoveredProject(t *testing.T) {
 
 	// Make the project ledger-covered the way any locking build does: a lock
 	// store on disk at the current schema.
-	lockStorePath := filepath.Join(p.root, ".dossierx-lock-store.json")
+	lockStorePath := filepath.Join(p.root, "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(lockStorePath)
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
@@ -454,7 +459,7 @@ func TestNoReAdoptionInALedgerCoveredProject(t *testing.T) {
 func (p *project) makeCovered() {
 	t := p.t
 	t.Helper()
-	lockStorePath := filepath.Join(p.root, ".dossierx-lock-store.json")
+	lockStorePath := filepath.Join(p.root, "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(lockStorePath)
 	if err != nil {
 		t.Fatalf("LoadStore: %v", err)
@@ -481,7 +486,7 @@ func (p *project) makeCovered() {
 // an ordinary `dossierx comment reply`.
 //
 // The attack is two edits and one ordinary command. Drop this claim's single key
-// from .dossierx-comment-digest.json; forge its comments block; then reply on it.
+// from build/ledger/comment-digest.json; forge its comments block; then reply on it.
 // checkCommentDigest treated "unknown" as "cannot have drifted" and returned
 // nil, and recordCommentDigest then wrote an entry for the FORGED block — so the
 // claim came out with a digest certifying the forgery and the finding that named

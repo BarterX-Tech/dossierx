@@ -87,7 +87,7 @@ func firstDifferingLine(want, got string) (line int, wantLine, gotLine string) {
 }
 
 // renderedFixture is one discovered fixture: a directory under testdata/ that
-// carries both a project.config.yaml and a committed viewer/index.html, which
+// carries both a project.config.yaml and a committed build/viewer/index.html, which
 // together are what make it comparable at all.
 type renderedFixture struct {
 	name string // e.g. "fixture-basic"
@@ -95,7 +95,7 @@ type renderedFixture struct {
 }
 
 // discoverRenderedFixtures walks testdata/ for fixture-* directories carrying
-// both a project.config.yaml and a committed viewer/index.html.
+// both a project.config.yaml and a committed build/viewer/index.html.
 //
 // testdata/fixture-coverage matches the glob but has neither file at its top
 // level (its projects are one level down), so it drops out here without being
@@ -122,7 +122,7 @@ func discoverRenderedFixtures(t *testing.T) []renderedFixture {
 		if _, err := os.Stat(filepath.Join(dir, "project.config.yaml")); err != nil {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(dir, "viewer", "index.html")); err != nil {
+		if _, err := os.Stat(filepath.Join(dir, "build", "viewer", "index.html")); err != nil {
 			// A fixture with no committed viewer has nothing to be stale
 			// against. That is a real, expected state mid-branch: a fixture's
 			// inputs can land in one commit and its generated output in a
@@ -178,7 +178,7 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 	// that proves nothing. This is the reason the count is asserted rather
 	// than the loop simply being allowed to run zero times.
 	if len(fixtures) == 0 {
-		t.Fatalf("discovered no fixture with both a project.config.yaml and a committed viewer/index.html under testdata/; " +
+		t.Fatalf("discovered no fixture with both a project.config.yaml and a committed build/viewer/index.html under testdata/; " +
 			"either the fixtures moved or this test's discovery is broken — both are failures, not a pass")
 	}
 
@@ -198,11 +198,11 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 			// itself. Removing them first means the bytes compared below are
 			// bytes this run actually produced, and a check that renders
 			// nothing fails on the missing file instead.
-			if err := os.RemoveAll(filepath.Join(tmp, "viewer")); err != nil {
-				t.Fatalf("remove copied viewer/: %v", err)
+			if err := os.RemoveAll(filepath.Join(tmp, "build", "viewer")); err != nil {
+				t.Fatalf("remove copied build/viewer/: %v", err)
 			}
-			if err := os.Remove(filepath.Join(tmp, ".catalog.json")); err != nil && !os.IsNotExist(err) {
-				t.Fatalf("remove copied .catalog.json: %v", err)
+			if err := os.RemoveAll(filepath.Join(tmp, "build", "catalog")); err != nil {
+				t.Fatalf("remove copied build/catalog/: %v", err)
 			}
 
 			cfgPath := filepath.Join(tmp, "project.config.yaml")
@@ -213,12 +213,20 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 
 			regenCmd := "go run ./cmd/dossierx check --config testdata/" + fx.name + "/project.config.yaml"
 
-			// viewer/index.html: timestamps normalized, everything else exact.
-			assertRegeneratedMatches(t, fx, tmp, filepath.Join("viewer", "index.html"), true, regenCmd)
+			// build/viewer/index.html: timestamps normalized, everything else exact.
+			assertRegeneratedMatches(t, fx, tmp, filepath.Join("build", "viewer", "index.html"), true, regenCmd)
 
-			// .catalog.json carries no timestamp at all, so it is compared
-			// raw. Normalizing it would only be able to hide something.
-			assertRegeneratedMatches(t, fx, tmp, ".catalog.json", false, regenCmd)
+			// build/catalog/catalog.json carries no timestamp at all, so it is
+			// compared raw. Normalizing it would only be able to hide something.
+			assertRegeneratedMatches(t, fx, tmp, filepath.Join("build", "catalog", "catalog.json"), false, regenCmd)
+
+			// build/ledger/comment-digest.json is written by check for a fixture
+			// without a ledger and is a tracked fixture input since the build/
+			// layout (this repository's .gitignore negates it under testdata/),
+			// so a regeneration that moves it is a stale fixture too.
+			if _, err := os.Stat(filepath.Join(fx.dir, "build", "ledger", "comment-digest.json")); err == nil {
+				assertRegeneratedMatches(t, fx, tmp, filepath.Join("build", "ledger", "comment-digest.json"), false, regenCmd)
+			}
 
 			// Control (b). Everything above passed, which by itself does not
 			// prove the comparison can FAIL — a normalizer that flattened too
@@ -227,7 +235,7 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 			// byte and require the very same comparison to report it, on the
 			// line the byte was added to.
 			t.Run("negative_control_one_byte_difference_is_caught", func(t *testing.T) {
-				renderedPath := filepath.Join(tmp, "viewer", "index.html")
+				renderedPath := filepath.Join(tmp, "build", "viewer", "index.html")
 				rendered, err := os.ReadFile(renderedPath)
 				if err != nil {
 					t.Fatalf("read regenerated viewer: %v", err)
@@ -240,7 +248,7 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 				if err != nil {
 					t.Fatalf("re-read mutated viewer: %v", err)
 				}
-				committed, err := os.ReadFile(filepath.Join(fx.dir, "viewer", "index.html"))
+				committed, err := os.ReadFile(filepath.Join(fx.dir, "build", "viewer", "index.html"))
 				if err != nil {
 					t.Fatalf("read committed viewer: %v", err)
 				}

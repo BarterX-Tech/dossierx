@@ -198,8 +198,8 @@ func TestCLI_ClaimLink_ThenShow(t *testing.T) {
 	if !strings.Contains(setOut, "widget.contract.main -> widget.go#Run") {
 		t.Fatalf("expected claim link to echo the claim->file#symbol link, got: %s", setOut)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".implementation.widget.json")); statErr != nil {
-		t.Fatalf("expected .implementation.widget.json to exist: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(root, "build", "code-links", "widget.json")); statErr != nil {
+		t.Fatalf("expected build/code-links/widget.json to exist: %v", statErr)
 	}
 
 	// "implink status" reported this; "claim show" absorbed it. The per-claim

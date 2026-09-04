@@ -179,13 +179,22 @@ func resolveBaseline(t *testing.T) (tag, commit string) {
 // output rather than an input to it. The three shapes are the three golden
 // corpora: the markdown cases' .golden.html (including the .claim/.comment
 // variants under markdown-claim-body-cases), and each fixture project's
-// viewer/index.html and .catalog.json.
+// build/viewer/index.html and build/catalog/catalog.json.
+//
+// The LEGACY root names (viewer/index.html, .catalog.json) are still
+// classified as artifacts, because the baseline revision of a comparison that
+// straddles the build/ move carries them under those names, and a classifier
+// that stopped recognising them would drop every baseline viewer into
+// "removed" and compare nothing. legacyArtifactPath is the rename map that
+// pairs the two.
 func isRenderedArtifact(rel string) bool {
 	base := path.Base(rel)
 	switch {
 	case strings.HasSuffix(base, ".golden.html"):
 		return true
 	case base == ".catalog.json":
+		return true
+	case base == "catalog.json" && path.Base(path.Dir(rel)) == "catalog" && path.Base(path.Dir(path.Dir(rel))) == "build":
 		return true
 	case base == "index.html" && path.Base(path.Dir(rel)) == "viewer":
 		return true
@@ -195,10 +204,38 @@ func isRenderedArtifact(rel string) bool {
 
 // isTimestamped reports whether an artifact legitimately differs run to run.
 // Only the viewer carries generation stamps; fixture_staleness_test.go makes the
-// same split and compares .catalog.json raw, "normalizing it would only be able
+// same split and compares the catalog raw, "normalizing it would only be able
 // to hide something".
 func isTimestamped(rel string) bool {
 	return path.Base(rel) == "index.html" && path.Base(path.Dir(rel)) == "viewer"
+}
+
+// legacyArtifactPath maps a BASELINE-revision artifact path to the path the
+// working tree keeps the same artifact at, for the one release that moved
+// every fixture's rendered output under build/:
+//
+//	testdata/<f>/viewer/index.html  ->  testdata/<f>/build/viewer/index.html
+//	testdata/<f>/.catalog.json      ->  testdata/<f>/build/catalog/catalog.json
+//
+// Without it `compared` is built by IDENTICAL path in both revisions, every
+// fixture viewer and catalog lands in added/removed, no diff is printed for
+// any of them, and the one check built for "every claim locked and
+// byte-identical, the viewer renders differently" compares zero viewers while
+// reporting PASS in the release that rewrites all of them. A path that is not
+// a legacy artifact maps to itself; a baseline that already carries the
+// build/ paths (every release after this one) is unaffected.
+func legacyArtifactPath(rel string) string {
+	dir := fixtureDirOf(rel)
+	if dir == "" {
+		return rel
+	}
+	switch rel {
+	case dir + "/viewer/index.html":
+		return dir + "/build/viewer/index.html"
+	case dir + "/.catalog.json":
+		return dir + "/build/catalog/catalog.json"
+	}
+	return rel
 }
 
 // fixtureDirOf returns the testdata/fixture-* directory a path sits under, or ""
@@ -353,7 +390,10 @@ func compareRenderedOutput(t *testing.T, baselineLabel, commit string) renderCom
 		changed[p] = true
 	}
 
+	// baseArtifacts is keyed by the WORKING-TREE path of each baseline artifact
+	// (the rename map), and baseSource remembers the path to ask git for it at.
 	headArtifacts, baseArtifacts := map[string]bool{}, map[string]bool{}
+	baseSource := map[string]string{}
 	for _, p := range headPaths {
 		if isRenderedArtifact(p) {
 			headArtifacts[p] = true
@@ -361,7 +401,9 @@ func compareRenderedOutput(t *testing.T, baselineLabel, commit string) renderCom
 	}
 	for _, p := range basePaths {
 		if isRenderedArtifact(p) {
-			baseArtifacts[p] = true
+			mapped := legacyArtifactPath(p)
+			baseArtifacts[mapped] = true
+			baseSource[mapped] = p
 		}
 	}
 	if len(baseArtifacts) == 0 {
@@ -387,10 +429,13 @@ func compareRenderedOutput(t *testing.T, baselineLabel, commit string) renderCom
 
 	var silent, explained []renderMove
 	for _, rel := range compared {
-		if !changed[rel] {
+		src := baseSource[rel]
+		// A renamed artifact never appears in `git diff --name-only` under its
+		// new path as a modification of its old one; it is compared regardless.
+		if src == rel && !changed[rel] {
 			continue
 		}
-		baseText := gitOut(t, "show", commit+":"+rel)
+		baseText := gitOut(t, "show", commit+":"+src)
 		headBytes, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
 		if err != nil {
 			t.Fatalf("read %s from the working tree: %v", rel, err)

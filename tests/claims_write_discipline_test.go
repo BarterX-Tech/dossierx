@@ -3,8 +3,8 @@
 // lock_lifecycle_test.go's llReadFile, all in this same package).
 //
 // Phase 0 introduces one project-wide "claims sentinel" —
-// lock.AcquireFileLock(cfg.Dir()/.dossierx-claims), whose real lock file is
-// cfg.Dir()/.dossierx-claims.lock — that EVERY claim-file writer
+// lock.AcquireFileLock(cfg.ClaimsSentinelPath()), whose real lock file is
+// cfg.Dir()/build/ledger/claims.lock — that EVERY claim-file writer
 // (lock/unlock/check/flag/reaudit) must take, FIRST, before its own lock-store
 // or flag-store sentinel, then re-read claims inside. loader.SaveClaim rewrites
 // a claim's whole file, so without this a writer holding a pre-mutation
@@ -82,7 +82,10 @@ func assertGatedThenCompletes(t *testing.T, root string, args []string, wantCode
 		before = llReadFile(t, claimPath)
 	}
 
-	sentinel := filepath.Join(root, ".dossierx-claims.lock")
+	sentinel := filepath.Join(root, "build", "ledger", "claims.lock")
+	if err := os.MkdirAll(filepath.Dir(sentinel), 0o755); err != nil {
+		t.Fatalf("mkdir ledger dir: %v", err)
+	}
 	if err := os.WriteFile(sentinel, nil, 0o644); err != nil {
 		t.Fatalf("hold claims sentinel: %v", err)
 	}
@@ -190,7 +193,10 @@ func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widdeps")
 		id := "widdeps.contract.overview"
-		sentinel := filepath.Join(root, ".dossierx-claims.lock")
+		sentinel := filepath.Join(root, "build", "ledger", "claims.lock")
+		if err := os.MkdirAll(filepath.Dir(sentinel), 0o755); err != nil {
+			t.Fatalf("mkdir ledger dir: %v", err)
+		}
 		if err := os.WriteFile(sentinel, nil, 0o644); err != nil {
 			t.Fatalf("hold claims sentinel: %v", err)
 		}
@@ -298,7 +304,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 	// The shared lock store must carry every distinct claim — the lost-update
 	// invariant TestConcurrentLocksDoNotLoseStoreUpdates guards, re-checked
 	// under the added claims-sentinel contention.
-	storeRaw := llReadFile(t, filepath.Join(root, ".dossierx-lock-store.json"))
+	storeRaw := llReadFile(t, filepath.Join(root, "build", "ledger", "lock-store.json"))
 	for _, id := range ids {
 		if !strings.Contains(storeRaw, id) {
 			t.Errorf("expected lock store to carry %s, but it was lost:\n%s", id, storeRaw)
@@ -315,7 +321,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 	}
 	// The sentinel lock file is created and removed per invocation; none may
 	// have leaked (a leak would wedge the next writer for the 10s timeout).
-	if _, err := os.Stat(filepath.Join(root, ".dossierx-claims.lock")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(root, "build", "ledger", "claims.lock")); !os.IsNotExist(err) {
 		t.Fatalf("claims sentinel lock file leaked after the storm (stat err=%v)", err)
 	}
 }

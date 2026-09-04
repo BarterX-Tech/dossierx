@@ -15,11 +15,11 @@ import (
 // clobbered to false and orphaned.
 
 func (p *project) lockStorePath() string {
-	return filepath.Join(p.root, ".dossierx-lock-store.json")
+	return filepath.Join(p.root, "build", "ledger", "lock-store.json")
 }
 
 func (p *project) flagStorePath() string {
-	return filepath.Join(p.root, ".dossierx-flag-store.json")
+	return filepath.Join(p.root, "build", "ledger", "flag-store.json")
 }
 
 // depsFresh builds a Deps wired the way the CLI and serve do it: the two review

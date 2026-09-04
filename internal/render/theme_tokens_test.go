@@ -519,7 +519,7 @@ var tokenConsumers = map[string][]consumerSite{
 	"border-strong": {
 		{".system-record-head", "border-bottom"},
 		{".track-head", "border-bottom"},
-		{".build-order-module > .system-build-title", "border-bottom"},
+		{".bo-phase__head", "border-bottom"},
 	},
 	"shadow":        {{".comments-panel", "box-shadow"}},
 	"shadow-strong": {{".comments-toast", "box-shadow"}},

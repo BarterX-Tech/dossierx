@@ -33,7 +33,7 @@ func ledgerProject(t *testing.T) (cfgPath, claimPath, storeFile string) {
 	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
-	return cfgPath, claimPath, filepath.Join(root, ".dossierx-lock-store.json")
+	return cfgPath, claimPath, filepath.Join(root, "build", "ledger", "lock-store.json")
 }
 
 // readLedger decodes the ledger out of the store file.

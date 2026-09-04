@@ -40,8 +40,8 @@ func commentDeps(t *testing.T, cfgPath string) *comments.Deps {
 	}
 	return &comments.Deps{
 		Cfg:           cfg,
-		LockStorePath: filepath.Join(cfg.Dir(), ".dossierx-lock-store.json"),
-		FlagStorePath: filepath.Join(cfg.Dir(), ".dossierx-flag-store.json"),
+		LockStorePath: filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json"),
+		FlagStorePath: filepath.Join(cfg.Dir(), "build", "ledger", "flag-store.json"),
 	}
 }
 
@@ -350,11 +350,11 @@ func TestComment_CheckOnLockedOpenThread(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected check to exit 0 on a locked+open-thread project, got %d\nstdout: %s\nstderr: %s", code, out, stderr)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".catalog.json")); err != nil {
-		t.Fatalf("expected .catalog.json written by check: %v", err)
+	if _, err := os.Stat(filepath.Join(root, "build", "catalog", "catalog.json")); err != nil {
+		t.Fatalf("expected build/catalog/catalog.json written by check: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "viewer", "index.html")); err != nil {
-		t.Fatalf("expected viewer/index.html written by check: %v", err)
+	if _, err := os.Stat(filepath.Join(root, "build", "viewer", "index.html")); err != nil {
+		t.Fatalf("expected build/viewer/index.html written by check: %v", err)
 	}
 	if !strings.Contains(out, `open comments: module "widget": 1`) {
 		t.Fatalf("expected an open-comments summary line, got: %s", out)

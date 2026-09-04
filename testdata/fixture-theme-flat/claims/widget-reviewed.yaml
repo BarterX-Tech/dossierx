@@ -17,9 +17,9 @@ rests_on:
   - panel.contract.api
 review_pending: true
 comments:
-  - id: c-dead66
+  - id: c-7e728a
     status: open
     author: human
-    created: "2026-09-02T10:22:26Z"
+    created: "2026-09-02T12:24:55Z"
     body: 'Does this still hold after the panel took over the reading pane? Leaving this open on purpose: an open thread on a locked claim is what puts it in review_pending.'
     edited: false

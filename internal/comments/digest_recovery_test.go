@@ -13,7 +13,7 @@ import (
 // THE WEDGE. The write path saves the claim first and refreshes the digest
 // second (Record explains why that order is the only safe one), so a crash in
 // between leaves a digest that LAGS the file — and so does an ordinary commit
-// that carries the claim file without .dossierx-comment-digest.json, which
+// that carries the claim file without build/ledger/comment-digest.json, which
 // reproduces the same state for every teammate who pulls.
 //
 // From there EVERY comment op on that claim is refused, because checkCommentDigest

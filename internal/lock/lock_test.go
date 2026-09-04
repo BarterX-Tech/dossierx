@@ -849,8 +849,8 @@ func TestClaimsSentinelPath_OutsideClaimsDir(t *testing.T) {
 	}
 
 	base := ClaimsSentinelPath(cfg)
-	if got := base; got != filepath.Join(cfg.Dir(), ".dossierx-claims") {
-		t.Fatalf("ClaimsSentinelPath = %q, want %q", got, filepath.Join(cfg.Dir(), ".dossierx-claims"))
+	if want := filepath.Join(cfg.Dir(), "build", "ledger", "claims"); base != want || base != cfg.ClaimsSentinelPath() {
+		t.Fatalf("ClaimsSentinelPath = %q, want %q (cfg.ClaimsSentinelPath = %q)", base, want, cfg.ClaimsSentinelPath())
 	}
 	if strings.HasPrefix(base, cfg.ClaimsDir+string(filepath.Separator)) {
 		t.Fatalf("claims sentinel %q must live OUTSIDE claims_dir %q", base, cfg.ClaimsDir)
@@ -877,7 +877,7 @@ func TestClaimsSentinelPath_OutsideClaimsDir(t *testing.T) {
 // claim reads locked or draft). But reporting is not refusing, and the sequence
 // does not stop there. Verified against the binary before this gate existed:
 //
-//	delete the claim's key from "ledger" in .dossierx-lock-store.json
+//	delete the claim's key from "ledger" in build/ledger/lock-store.json
 //	edit "status: locked" -> "status: draft"     check: lock-ledger-deleted, exit 1
 //	rewrite the body                             check: lock-ledger-deleted, exit 1
 //	dossierx claim lock <id> --reason "..."      exit 0 — a FRESH record, over the
@@ -917,7 +917,7 @@ func TestLockRefusesAClaimWhoseLedgerRecordWasDeleted(t *testing.T) {
 
 	// The recovery must be a RESTORE. Naming unlock here would be actively
 	// wrong: unlocking accepts the attacker's edit and asks a human to sign it.
-	if !strings.Contains(err.Error(), "Restore .dossierx-lock-store.json from version control") {
+	if !strings.Contains(err.Error(), "Restore build/ledger/lock-store.json from version control") {
 		t.Errorf("the refusal must name the restore as the recovery, got %q", err)
 	}
 }
@@ -1045,7 +1045,7 @@ func TestLockRefusesAClaimWhoseCommentDigestEntryWasDeleted(t *testing.T) {
 
 	// The recovery is a restore, and it must not name a comment op or a re-lock:
 	// both record whatever the claim says now as the review history.
-	if !strings.Contains(lockErr.Error(), "Restore .dossierx-comment-digest.json from version control") {
+	if !strings.Contains(lockErr.Error(), "Restore build/ledger/comment-digest.json from version control") {
 		t.Errorf("the refusal must name the restore as the recovery, got %q", lockErr)
 	}
 }

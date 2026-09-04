@@ -31,6 +31,7 @@
 package digest
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -59,29 +60,34 @@ const StoreSchemaVersion = 1
 // and a re-adoption — same contract as internal/lock's LockedClaimHash.
 const digestVersion = 1
 
-// StoreFileName is the digest store's filename. It sits next to the lock store
-// under the config file's own directory (never cwd), the same convention
-// claims_dir, .catalog.json and the lock store follow, and outside claims_dir
-// so it is never itself decoded as a claim.
+// StoreFileName is the digest store's BASE NAME, an alias of
+// config.CommentDigestFileName. The file sits next to the lock store under the
+// project's build directory (config.Config.CommentDigestPath(),
+// build/ledger/comment-digest.json by default), never cwd, and outside
+// claims_dir so it is never itself decoded as a claim.
 //
-// It is exported because a finding about the file's ABSENCE has to name it, and
-// the one caller that raises such a finding (internal/check's
-// comment-digest-absent rule) evaluates stores that may have been materialized
-// out of the git index into a temp directory — so the honest thing to print is
-// the project-relative name, not the path the gate happened to read.
-const StoreFileName = ".dossierx-comment-digest.json"
+// It is exported because internal/check's index scan has to RECOGNISE the file
+// by base name. A finding that NAMES the file prints
+// config.CommentDigestDisplayPath instead: the bare base name is two
+// directories away from the file, and the gate may be reading a store
+// materialized out of the git index into a temp directory, so the honest thing
+// to print is the project-relative display form, not the path it read.
+const StoreFileName = config.CommentDigestFileName
 
 // StorePath returns the digest store's path for cfg. Callers that need to
 // serialize on it acquire lock.AcquireFileLock(StorePath(cfg)) — INSIDE the
 // claims sentinel; see this package's doc comment.
 func StorePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), StoreFileName)
+	return cfg.CommentDigestPath()
 }
 
 // StorePathBeside returns the digest store's path for a project identified by
-// its LOCK STORE's path — the two files are siblings in the config file's own
-// directory, by construction (see storeFileName and internal/lock's own path
-// helper).
+// its LOCK STORE's path — the two files are siblings under the build
+// directory's ledger/ subdirectory, by construction (config.Config.LockStorePath
+// and CommentDigestPath join the same directory), and internal/digest's tests
+// pin StorePathBeside(cfg.LockStorePath()) == cfg.CommentDigestPath() so a
+// wrong sibling — which digest.LoadStore would read as "no digest store", a
+// silent pass — fails by name.
 //
 // It exists for exactly one caller: internal/lock's PrepareStore, which
 // grandfathers a pre-ledger project and must create the digest store at the same
@@ -166,21 +172,66 @@ func LoadStore(path string) (*Store, error) {
 	if err != nil {
 		return nil, fmt.Errorf("digest: read store %s: %w", path, err)
 	}
+	if err := decodeInto(s, raw, false); err != nil {
+		return nil, fmt.Errorf("digest: parse store %s: %w", path, err)
+	}
+	return s, nil
+}
 
+// DecodeStore decodes a digest store from bytes already in hand — the git
+// index's copy, under "check --staged" — STRICTLY: an unknown key is refused
+// and "version" must be StoreSchemaVersion, so a caller asking "is this blob
+// OUR store?" gets a no for `{}` and for unrelated JSON that happens to sit at
+// the generic name comment-digest.json. LoadStore and DecodeStore share one
+// parser (decodeInto) and only THIS entry point refuses unknown keys: LoadStore
+// keeps json.Unmarshal's tolerance, as every release before this one had, so a
+// key a later release adds to the store does not make check on the older
+// binary fail with lock-ledger-unreadable and prescribe restoring a file that
+// is not corrupt — the same split internal/lock draws between its two entry
+// points. The returned store has no path and cannot be saved.
+func DecodeStore(raw []byte) (*Store, error) {
+	var probe struct {
+		Version *int `json:"version"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if err := dec.Decode(&probe); err != nil {
+		return nil, fmt.Errorf("digest: decode store: %w", err)
+	}
+	if probe.Version == nil {
+		return nil, fmt.Errorf("digest: decode store: no version field")
+	}
+	if *probe.Version != StoreSchemaVersion {
+		return nil, fmt.Errorf("digest: decode store: version %d is not one this engine writes", *probe.Version)
+	}
+	s := &Store{Version: StoreSchemaVersion, Digests: map[string]string{}}
+	if err := decodeInto(s, raw, true); err != nil {
+		return nil, fmt.Errorf("digest: decode store: %w", err)
+	}
+	return s, nil
+}
+
+// decodeInto is the one parser behind LoadStore and DecodeStore. strict
+// refuses unknown keys (the on-disk shape is exactly what Save writes; the
+// index's copy under check --staged is judged on that); lenient ignores them.
+func decodeInto(s *Store, raw []byte, strict bool) error {
 	var onDisk struct {
 		Version  int                  `json:"version"`
 		Digests  map[string]string    `json:"digests"`
 		Reaudits map[string][]Reaudit `json:"reaudits"`
 	}
-	if err := json.Unmarshal(raw, &onDisk); err != nil {
-		return nil, fmt.Errorf("digest: parse store %s: %w", path, err)
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if strict {
+		dec.DisallowUnknownFields()
+	}
+	if err := dec.Decode(&onDisk); err != nil {
+		return err
 	}
 	if onDisk.Digests != nil {
 		s.Digests = onDisk.Digests
 	}
 	s.Reaudits = onDisk.Reaudits
 	s.fileExists = true
-	return s, nil
+	return nil
 }
 
 // Save writes the store back to its path as JSON, atomically (temp file in the
@@ -191,6 +242,11 @@ func (s *Store) Save() error {
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("digest: marshal store: %w", err)
+	}
+	// The store lives under build/ledger/, which a fresh project does not
+	// have until the first write creates it.
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return fmt.Errorf("digest: create store dir for %s: %w", s.path, err)
 	}
 	if err := atomicWriteFile(s.path, raw, 0o644); err != nil {
 		return fmt.Errorf("digest: write store %s: %w", s.path, err)

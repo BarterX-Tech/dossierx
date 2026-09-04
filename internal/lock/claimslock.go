@@ -1,20 +1,14 @@
 package lock
 
 import (
-	"path/filepath"
-
 	"github.com/BarterX-Tech/dossierx/internal/config"
 )
 
-// claimsSentinelName is the base filename of the ONE project-wide claim-file
-// write sentinel. AcquireFileLock appends ".lock", so the real lock file is
-// cfg.Dir()/.dossierx-claims.lock.
-const claimsSentinelName = ".dossierx-claims"
-
 // ClaimsSentinelPath returns the base path of the single project-wide
-// claim-file write sentinel (AcquireFileLock appends ".lock"). It lives under
-// cfg.Dir() — which config guarantees is absolute — and deliberately OUTSIDE
-// claims_dir, so it is never itself decoded as a claim (LoadClaims only reads
+// claim-file write sentinel (AcquireFileLock appends ".lock", so the file on
+// disk is build/ledger/claims.lock by default). It is config.ClaimsSentinelPath:
+// under the build directory — which config guarantees is outside claims_dir —
+// so it is never itself decoded as a claim (LoadClaims only reads
 // *.yaml/*.yml, and this file is outside claims_dir besides) and, in a later
 // serve phase, never trips a claims_dir file watcher.
 //
@@ -32,7 +26,7 @@ const claimsSentinelName = ".dossierx-claims"
 // cannot import package main — chiefly internal/comments — use to take the
 // same sentinel, so CLI comment ops serialize against every other writer.
 func ClaimsSentinelPath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), claimsSentinelName)
+	return cfg.ClaimsSentinelPath()
 }
 
 // AcquireClaimsLock takes the project-wide claim-file write sentinel for cfg,

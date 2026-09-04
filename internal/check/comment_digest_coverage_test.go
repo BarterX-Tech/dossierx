@@ -94,7 +94,7 @@ func TestCommentDigest_MissingEntryIsSilentForDraftsAndReleasedRecords(t *testin
 
 	// Release the locked claim's record the way `claim unlock` does, and empty
 	// the digest store: neither claim may be reported.
-	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)
@@ -202,7 +202,7 @@ func TestCommentDigest_SweepCoversAClaimAuthoredAfterTheFirstLock(t *testing.T) 
 	}
 	claims := reload(t, cfg)
 
-	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)

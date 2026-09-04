@@ -76,7 +76,7 @@ func TestCLI_Unlock_ClearsPendingFlag(t *testing.T) {
 		t.Fatalf("flag main: %v", err)
 	}
 
-	flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+	flagStorePath := filepath.Join(root, "build", "ledger", "flag-store.json")
 	if raw, err := os.ReadFile(flagStorePath); err != nil {
 		t.Fatalf("read flag store after flag: %v", err)
 	} else if !strings.Contains(string(raw), "widget.contract.main") {
@@ -176,7 +176,7 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 
 	t.Run("absent flag store proceeds silently", func(t *testing.T) {
 		root, cfgPath, claimPath := writeProject(t)
-		flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+		flagStorePath := filepath.Join(root, "build", "ledger", "flag-store.json")
 		if _, err := os.Stat(flagStorePath); !os.IsNotExist(err) {
 			t.Fatalf("precondition: expected no flag store on disk, stat err=%v", err)
 		}
@@ -192,7 +192,10 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 
 	t.Run("unparseable flag store warns and proceeds", func(t *testing.T) {
 		root, cfgPath, claimPath := writeProject(t)
-		flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+		flagStorePath := filepath.Join(root, "build", "ledger", "flag-store.json")
+		if err := os.MkdirAll(filepath.Dir(flagStorePath), 0o755); err != nil {
+			t.Fatalf("mkdir ledger dir: %v", err)
+		}
 		if err := os.WriteFile(flagStorePath, []byte("{ this is not valid json"), 0o644); err != nil {
 			t.Fatalf("write corrupt flag store: %v", err)
 		}
@@ -208,10 +211,13 @@ func TestCLI_Unlock_TolerantOfFlagStore(t *testing.T) {
 
 	t.Run("valid flag store has this claim's entry removed", func(t *testing.T) {
 		root, cfgPath, claimPath := writeProject(t)
-		flagStorePath := filepath.Join(root, ".dossierx-flag-store.json")
+		flagStorePath := filepath.Join(root, "build", "ledger", "flag-store.json")
 		valid := `{"flags":{` +
 			`"widget.contract.main":{"claim_says":"a","now_does":"b","reason":"c","flagged_at":"2026-01-01T00:00:00Z"},` +
 			`"widget.contract.other":{"claim_says":"x","now_does":"y","reason":"z","flagged_at":"2026-01-01T00:00:00Z"}}}`
+		if err := os.MkdirAll(filepath.Dir(flagStorePath), 0o755); err != nil {
+			t.Fatalf("mkdir ledger dir: %v", err)
+		}
 		if err := os.WriteFile(flagStorePath, []byte(valid), 0o644); err != nil {
 			t.Fatalf("write valid flag store: %v", err)
 		}

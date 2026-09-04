@@ -738,7 +738,7 @@ func (f *fixture) SetBuildRoleByHand(id, role string) {
 // same two-file requirement; this is its exec-boundary twin.
 func (f *fixture) RewindStoreToPreLedger() {
 	f.t.Helper()
-	storePath := filepath.Join(f.root, ".dossierx-lock-store.json")
+	storePath := filepath.Join(f.root, "build", "ledger", "lock-store.json")
 	raw, err := os.ReadFile(storePath)
 	if err != nil {
 		f.t.Fatalf("read %s (the fixture must lock something before rewinding): %v", storePath, err)
@@ -756,7 +756,7 @@ func (f *fixture) RewindStoreToPreLedger() {
 	if err := os.WriteFile(storePath, rewound, 0o644); err != nil {
 		f.t.Fatalf("write rewound store: %v", err)
 	}
-	digest := filepath.Join(f.root, ".dossierx-comment-digest.json")
+	digest := filepath.Join(f.root, "build", "ledger", "comment-digest.json")
 	if err := os.Remove(digest); err != nil && !os.IsNotExist(err) {
 		f.t.Fatalf("remove %s: %v", digest, err)
 	}

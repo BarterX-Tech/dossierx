@@ -22,6 +22,15 @@
       ]
     },
     {
+      "path": "build-order show",
+      "short": "Print --module's build order: the machine envelope, a phase table, or one mermaid flowchart per phase",
+      "flags": [
+        "--config",
+        "--format",
+        "--module"
+      ]
+    },
+    {
       "path": "build-order status",
       "short": "Show --module's build-order artifact state: proposed/locked/stale and coverage",
       "flags": [
@@ -327,6 +336,7 @@
     "invalid_actor",
     "invalid_claim",
     "invalid_config",
+    "layout_legacy",
     "lint_failed",
     "missing_flag",
     "no_artifact",
@@ -338,6 +348,7 @@
     "reply_not_found",
     "review_pending",
     "rights_denied",
+    "store_gitignored",
     "structured_layout",
     "thread_not_found",
     "thread_open",
@@ -510,30 +521,31 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:21b6ebdd179be9c12ee383ab6dd38c295855faca83afc1c0c7f50a57d2b37a1a",
+  "render_fingerprint": "sha256:7038e2d6b606bd083cfe46dd7d7c46e64e17419de126e979a5034af12834a643",
   "behaviour_fingerprint": {
-    "cmd/dossierx": "sha256:bed95c56a0bf97b2542a1fba7e09f0736ce77b59c489428fd2f179ed76eb4b3d",
-    "internal/buildorder": "sha256:6b6cd0f90b9b3c138cebdecfcd03ac55317baa6f4f46c9ebb6b7d7bd302cd31d",
+    "cmd/dossierx": "sha256:edf8683bf2caa82a2bbd05cce1e5f7b766384e612a9f154a25662f74585f2b1a",
+    "internal/buildorder": "sha256:bf557239a85d4da9c7c40a4e0cdf2036eef0a0f104be3dfd14aa74506f64568f",
     "internal/catalog": "sha256:78c8667bfb35c4fc35ec786814028978eac107fde4f06aade4541ce8baee4380",
-    "internal/check": "sha256:4e672cb24b6d82eb12fd818678b0230b8812ad354da50342034aebce0be49879",
-    "internal/cliout": "sha256:11023152c67bb661e89d6dcb1ec8a6d74a1e0a7f9bf3eb91c9aeffac705c6e3f",
-    "internal/comments": "sha256:c3f88f60edd6aee3bd590012ef0c7bbee1e9e0a76ffd10d1689b274021f21b73",
-    "internal/config": "sha256:139d87ad7da9359ec4fb6bcd49d1e95020a733a95dbcb4705312aa5a59e0b48f",
-    "internal/digest": "sha256:f7637ed8419ecbd919cb28ea38fd65e3eb631e8ff4ba3bd942948cf9f9c51526",
+    "internal/check": "sha256:a41bea933700375da7465b5f6b7f22b32af009ab8469a6236fffb098f54eeacf",
+    "internal/cliout": "sha256:f81803a9de0c622fe36afcd765152463d71ba185a3e82a44ccd40ece15b609d3",
+    "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
+    "internal/config": "sha256:1634c2345d5dfbad793bc185d59df28a1fe215b26a07c96b591882bcfeef4631",
+    "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/graph": "sha256:37e6a645b4c1470a20ebb6041fe467f93d271129aecb82fa5db7eb56ebb0253c",
-    "internal/implink": "sha256:b7afa9b1052202d41c7329c9e2b4be42f0deaec9141835193c2069d986caa630",
+    "internal/implink": "sha256:c85496552b958669b6eb3fb5731b9c0beeca75b42a04eada6bc0336832242477",
+    "internal/layout": "sha256:5cdfa2ab0f86908c3a7b82579f951e7eaa41b877a68edbc839513db4657ec1e2",
     "internal/lint": "sha256:192a64c9e8dc59cd809a97ee99b12ed72a45afe1a513e3d87e37ed9e349f3e83",
     "internal/loader": "sha256:04a25e29820e9bb1a023cb09b13904295a3a398897664966950d349a42f7f671",
-    "internal/lock": "sha256:d182f2eb6f02f32f4fb91a3ad79e903f9be2dc6e918731951c43e2e84e34180b",
-    "internal/model": "sha256:3f1f609759c8dec52772abfcca89fa328accb43bb7e07eef58f93b381f0c6266",
-    "internal/reaudit": "sha256:ff284ff7f4ec947c39969f0a78db8de7f2d32219e7c7b2132e1fb2d3089d7250",
-    "internal/render": "sha256:8214e0f742f7eb0e9e8433fe665cb91b9a8d978515dd8c64507fa766ba922ed7",
-    "internal/render/components": "sha256:567dbf70716b4d4ce2676d93911506d0fc17436cbdb09e3db25d6d5c9735041c",
+    "internal/lock": "sha256:1807f5d79a67d858da85d02469d12990caf2330cc6668f019eca4f381a07c38e",
+    "internal/model": "sha256:0b1f841bb0e8ae3c6357364c2456f8d50c21cebe201fb3f45264c3bb3e938015",
+    "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
+    "internal/render": "sha256:73087d6cc8fd485f5a3836aa09d121f59330b78bd8f89b0e7a5d497fe64461d7",
+    "internal/render/components": "sha256:93cdee657c714b358050e33ffc97a8b3b7e5d41dc57bdc8951b829d9eadf1720",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:3aa9e2a9ecb55a37b45f8330782033cdbf67c3cdf712f033a1f163bb12ff9797",
-    "internal/serve": "sha256:304cc1cdc641af2024e11cdb99e3a79ab8c9b350d2ae33cb9b70c2dc648abb9e",
+    "internal/serve": "sha256:a7205ad141089fd78c114f1ad09888007399f10086a28412d72db068a6fb9792",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:5f352f1530ac9f8efd18fde74f7d79c35779ac56a6b116cd0476c865ecc71647"
+    "skills": "sha256:b3b02c62f665afc1cf70af6d39186e01ecdec38c064667d21ebe65ae1913a803"
   },
   "envelope": {
     "keys": [
@@ -565,6 +577,7 @@
       "invalid_actor": 1,
       "invalid_claim": 1,
       "invalid_config": 1,
+      "layout_legacy": 1,
       "lint_failed": 1,
       "missing_flag": 1,
       "no_artifact": 1,
@@ -576,6 +589,7 @@
       "reply_not_found": 2,
       "review_pending": 2,
       "rights_denied": 1,
+      "store_gitignored": 1,
       "structured_layout": 1,
       "thread_not_found": 2,
       "thread_open": 1,
@@ -621,6 +635,26 @@
         "path",
         "phases"
       ],
+      "buildOrderShowData": [
+        "locked",
+        "locked_at",
+        "module",
+        "path",
+        "phases",
+        "stale"
+      ],
+      "buildOrderShowPhaseData": [
+        "claims",
+        "cross_module",
+        "definition",
+        "excluded_deps",
+        "ghosts",
+        "levels",
+        "locked",
+        "mermaid",
+        "number",
+        "phase"
+      ],
       "buildOrderStatusData": [
         "covered_claims",
         "excluded_count",
@@ -636,6 +670,7 @@
         "catalog_count",
         "catalog_path",
         "comment_digests_adopted",
+        "gitignore_check",
         "ledger_finding_count",
         "ledger_findings",
         "lint_error_count",
@@ -848,28 +883,28 @@
   "version_pins": [
     {
       "file": "README.md",
-      "pin": "dossierx/cmd/dossierx@v0.7.6",
-      "version": "v0.7.6"
+      "pin": "dossierx/cmd/dossierx@v0.7.7",
+      "version": "v0.7.7"
     },
     {
       "file": "README.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.6",
-      "version": "v0.7.6"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.7",
+      "version": "v0.7.7"
     },
     {
       "file": "scripts/ci/dossierx-check.yml",
-      "pin": "dossierx/cmd/dossierx@v0.7.6",
-      "version": "v0.7.6"
+      "pin": "dossierx/cmd/dossierx@v0.7.7",
+      "version": "v0.7.7"
     },
     {
       "file": "skills/dossierx/SKILL.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.6",
-      "version": "v0.7.6"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.7",
+      "version": "v0.7.7"
     }
   ],
   "counts": {
-    "commands": 24,
-    "error_codes": 46,
+    "commands": 25,
+    "error_codes": 48,
     "http_routes": 14,
     "lint_rules": 38,
     "nouns": 9

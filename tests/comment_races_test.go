@@ -204,8 +204,8 @@ func TestCommentRace_ResolveVsFlag(t *testing.T) {
 		}
 		deps := &comments.Deps{
 			Cfg:           cfg,
-			LockStorePath: filepath.Join(cfg.Dir(), ".dossierx-lock-store.json"),
-			FlagStorePath: filepath.Join(cfg.Dir(), ".dossierx-flag-store.json"),
+			LockStorePath: filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json"),
+			FlagStorePath: filepath.Join(cfg.Dir(), "build", "ledger", "flag-store.json"),
 		}
 
 		var wg sync.WaitGroup
@@ -229,7 +229,7 @@ func TestCommentRace_ResolveVsFlag(t *testing.T) {
 		if !strings.Contains(final, "status: locked") || !strings.Contains(final, "review_pending: true") {
 			t.Fatalf("iter %d: flag-orphan race — resolve cleared review_pending while a flag stands (expected locked + review_pending:true):\n%s", i, final)
 		}
-		flagStore := llReadFile(t, root+"/.dossierx-flag-store.json")
+		flagStore := llReadFile(t, root+"/build/ledger/flag-store.json")
 		if !strings.Contains(flagStore, "widget.contract.main") {
 			t.Fatalf("iter %d: expected the flag recorded in the flag store, got:\n%s", i, flagStore)
 		}

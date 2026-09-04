@@ -31,6 +31,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 
@@ -58,6 +59,18 @@ import (
 // gate fails closed, loudly, and says which of the two stores failed.
 const RuleLedgerUnreadable = "lock-ledger-unreadable"
 
+// RuleStoreGitignored is the project-scoped finding for an engine-written path
+// under the build directory that .gitignore matches and the index does not
+// hold: the lock ledger, the comment digest, the flag store, the build
+// directory's own .gitignore, or a module's build-order or code-links artifact.
+// A collaborator or CI cloning the project would have no approval record to
+// compare against, so `check` reports it as an error-severity finding and the
+// approval-recording verbs refuse with error.code store_gitignored. Its
+// evidence is git rather than the stores — see gitignore.go's Gitignored —
+// but it is declared here, beside every other rule, because FORMAT.md's and
+// README's rule tables are derived from this file's Rule* declarations.
+const RuleStoreGitignored = "store-gitignored"
+
 // RuleCommentDigestAbsent is project-scoped: this project is already covered by
 // the lock ledger, and the COMMENT DIGEST STORE is not there.
 //
@@ -67,7 +80,7 @@ const RuleLedgerUnreadable = "lock-ledger-unreadable"
 // an integrity check must not manufacture a finding out of missing evidence. But
 // that made the whole file a delete-to-clear switch: hand-delete an unresolved
 // thread (which is how a claim gets past the lock gate with a review still open),
-// then delete .dossierx-comment-digest.json in the same commit, and the finding
+// then delete build/ledger/comment-digest.json in the same commit, and the finding
 // that named the edit was gone before any command ran. The lock ledger has
 // guarded exactly this shape from the start (lock-ledger-absent, plus AdoptLedger
 // refusing to adopt when its file is absent); the digest store had neither half.
@@ -515,8 +528,8 @@ func abandonedBuildOrders(orders []buildOrderState, store *lock.Store) []lock.Fi
 		findings = append(findings, lock.Finding{
 			Rule: RuleBuildOrderLedgerAbandoned,
 			Message: fmt.Sprintf(
-				"module %q has a standing build-order lock-ledger record from %s (%q), but no build-order artifact can be found for it: the file was deleted, or the module was removed from project.config.yaml's modules list so nothing audits it any more. A locked build order is the implementation sequence an agent follows — restore .build-order.%s.json from version control, or re-propose and lock it with the human's approval.",
-				module, record.At, record.Reason, module),
+				"module %q has a standing build-order lock-ledger record from %s (%q), but no build-order artifact can be found for it: the file was deleted, or the module was removed from project.config.yaml's modules list so nothing audits it any more. A locked build order is the implementation sequence an agent follows — restore %s from version control, or re-propose and lock it with the human's approval.",
+				module, record.At, record.Reason, buildOrderDisplayPath(module)),
 		})
 	}
 	// Map iteration is random; the gate's output is diffed between a hook run
@@ -789,7 +802,7 @@ func commentDigestCoverage(claims []model.Claim, in ledgerInputs) []lock.Finding
 			ClaimID: c.ID,
 			Message: fmt.Sprintf(
 				"claim %q holds a standing lock-ledger approval from %s (%q) but has no entry in %s, so its comment threads are not being checked against anything. Every approval records the claim's comment digest in the same act, so an approved claim with no entry means the entry was removed — emptying the map is how an unresolved review is edited away without the deletion of the file itself being reported. Restore %s from version control, or git add it if this commit is the one that updated it. Do NOT run a comment op to re-create the entry: that records whatever the claim says NOW as the truth, which is exactly what removing it was for.",
-				c.ID, record.At, record.Reason, digest.StoreFileName, digest.StoreFileName),
+				c.ID, record.At, record.Reason, config.CommentDigestDisplayPath, config.CommentDigestDisplayPath),
 		})
 	}
 
@@ -799,7 +812,7 @@ func commentDigestCoverage(claims []model.Claim, in ledgerInputs) []lock.Finding
 			ClaimID: id,
 			Message: fmt.Sprintf(
 				"%s records comment threads for claim %q, which is no longer in the project: the claim file was deleted, or its id was changed — and changing the id in the same edit that deletes a comments block is how an unresolved review disappears with nothing reported against the claim that replaces it. Restore the claim (under its recorded id) from version control, or — if the removal was intended — restore it, resolve or delete its threads through dossierx so the removal is on the record, and delete it again.",
-				digest.StoreFileName, id),
+				config.CommentDigestDisplayPath, id),
 		})
 	}
 	return findings
@@ -818,6 +831,13 @@ func commentDigestAbsent(claims []model.Claim, in ledgerInputs) (lock.Finding, b
 		Rule: RuleCommentDigestAbsent,
 		Message: fmt.Sprintf(
 			"this project has a lock ledger but no comment digest store (%s), so comment-thread drift is not being checked AT ALL on this run — for any of its %d claim(s). The engine writes that file the moment a project acquires a lock ledger, so its absence means it was deleted (which is how an edited-away review thread stops being reported, and it stays quiet even when the last thread went with it) or it is not part of this commit. Restore it from version control, or git add it if this commit is the one that created it. Do not re-create it by running a comment op: a re-created store records whatever the claims say NOW as the truth, which is exactly what a deletion was for.",
-			digest.StoreFileName, len(claims)),
+			config.CommentDigestDisplayPath, len(claims)),
 	}, true
+}
+
+// buildOrderDisplayPath is a module's build-order artifact as a reader sees it
+// from the project directory with the default build_dir — a display form for
+// messages, not a path to open (see config.LockStoreDisplayPath).
+func buildOrderDisplayPath(module string) string {
+	return path.Join(config.DefaultBuildDir, config.BuildOrderDirName, module+".json")
 }

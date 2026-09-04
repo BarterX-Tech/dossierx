@@ -205,7 +205,7 @@ Work through this in order and report step 4's numbers back to the human.
    rules. **`data.theme_error` carries the detail on a `render` failure and is absent on a `config`
    one** (the config never loaded, so there is no result to carry it) — read it there rather than
    regexing `message`, which the router forbids.
-2. Open the rendered `viewer/index.html` and confirm the colour you set is the colour you **see**.
+2. Open the rendered `build/viewer/index.html` and confirm the colour you set is the colour you **see**.
    Only this catches a shape-valid non-colour or a value in the wrong layer — both pass `check` and
    render as the untouched engine default.
 3. Check **both** OS colour schemes, not just yours. This is where a flat colour key shows itself.

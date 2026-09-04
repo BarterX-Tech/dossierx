@@ -377,7 +377,7 @@ func TestRoot_NoDiskWrites(t *testing.T) {
 			t.Fatalf("GET /: got %d, want 200", resp.StatusCode)
 		}
 	}
-	for _, rel := range []string{filepath.Join("viewer", "index.html"), ".catalog.json"} {
+	for _, rel := range []string{filepath.Join("build", "viewer", "index.html"), "build/catalog/catalog.json"} {
 		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
 			t.Fatalf("GET / wrote %s to disk (stat err=%v); the pipeline must render to memory", rel, err)
 		}
@@ -385,7 +385,7 @@ func TestRoot_NoDiskWrites(t *testing.T) {
 }
 
 // GET/HEAD /api/status computes the check Result from memory only. A status
-// poll must NOT run check.Run's disk writers (viewer/index.html, .catalog.json)
+// poll must NOT run check.Run's disk writers (build/viewer/index.html, build/catalog/catalog.json)
 // or the impl-link Scan that mutates link artifacts: those are the "dossierx
 // check" writer, not a read endpoint's job. Because GET and HEAD are safe
 // methods that skip the CSRF admission gates, a write-on-read here would let a
@@ -417,7 +417,7 @@ func TestStatus_NoDiskWrites(t *testing.T) {
 		}
 	}
 
-	for _, rel := range []string{filepath.Join("viewer", "index.html"), ".catalog.json"} {
+	for _, rel := range []string{filepath.Join("build", "viewer", "index.html"), "build/catalog/catalog.json"} {
 		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
 			t.Fatalf("GET/HEAD /api/status wrote %s to disk (stat err=%v); status must be computed from memory only, never through check.Run's disk writers", rel, err)
 		}

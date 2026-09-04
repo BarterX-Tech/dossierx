@@ -92,6 +92,33 @@ const (
 	BuildRoleOutOfScope BuildRole = "out-of-scope"
 )
 
+// buildRoleDefinitions is the ONE home of the six phase definitions as
+// prose: each entry is the matching const's doc comment above with the
+// leading identifier and its following "is" removed and the comment lines
+// joined by single spaces, nothing trimmed at the end. The viewer's Build
+// order tab, the "build-order show" export's %% lines and the payload all
+// read from BuildRoleDefinition, and build_role_definition_test.go parses
+// this file with go/ast and holds every entry to its doc comment, so editing
+// a comment without the map (or the map without the comment) is a named test
+// failure rather than a viewer that keeps printing superseded wording.
+var buildRoleDefinitions = map[BuildRole]string{
+	BuildRoleOrientation:  `context/process claims that are read for background but never themselves acted on during implementation (e.g. "why this module exists", house-style notes). First phase.`,
+	BuildRoleSchema:       `data-shape claims (types, fields, storage layout) — built first among the "real work" phases, since behavior and api claims describe logic over these shapes.`,
+	BuildRoleBehavior:     `workflow/logic claims — the bulk of the real implementation work. Within this phase, claims are ordered by their rests_on edges (a behavior claim resting on another behavior claim is built after it), not left in an arbitrary order.`,
+	BuildRoleAPI:          `public-function/entry-point claims, built after behavior: an API is a thin, addressable surface over behavior that must already exist for the API to have something to call into.`,
+	BuildRoleVerification: `test-checklist/acceptance-criteria claims, read last so a human (or agent) writing tests has every other phase of the module's build already in front of them to write tests against.`,
+	BuildRoleOutOfScope:   `marks a claim as deferred/future-scope: it is excluded from every module's build order sequence (never placed in a phase), but internal/buildorder still reports it (as Excluded) so it is never silently dropped from view the way a claim the pipeline simply forgot about would be.`,
+}
+
+// BuildRoleDefinition returns the one-paragraph definition of r, exactly as
+// the const's doc comment reads (see buildRoleDefinitions for the trim
+// rule). It returns "" for a value that is not one of the six roles, so a
+// caller printing a header over an unknown role prints nothing rather than
+// a wrong sentence.
+func BuildRoleDefinition(r BuildRole) string {
+	return buildRoleDefinitions[r]
+}
+
 // Kind distinguishes a claim that states a fact about the system (the
 // default, and everything the engine has ever rendered until this field
 // existed) from one that is itself guidance about how to read the docs —

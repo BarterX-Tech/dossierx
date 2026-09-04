@@ -34,6 +34,7 @@ import (
 	_ "image/png"
 	"testing"
 
+	"github.com/chromedp/cdproto/emulation"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
@@ -148,6 +149,16 @@ func assertNoSeam(t *testing.T, browser, url, scheme string) {
 	})); err != nil {
 		t.Fatalf("%s: screenshot the fenced block: %v", scheme, err)
 	}
+	// Restore the tab's device metrics before it is closed. A 2x
+	// captureBeyondViewport clip leaves the shared browser in a state the NEXT
+	// test's tab inherits: measured on this suite, TestOverlaysAreMutuallyExclusive
+	// (viewer_test.go) ran directly after this test, pinned its own 1200x800
+	// viewport, and its real click on .comment-chip never opened the panel —
+	// reproducibly in the full run and in a two-test run of just these two,
+	// and never with this test excluded, with the clip at scale 1, or with
+	// this reset in place. The reset goes through runCDP so a browser that
+	// cannot clear its override fails this test here rather than the next one.
+	runCDP(t, ctx, emulation.ClearDeviceMetricsOverride())
 	img, _, err := image.Decode(bytes.NewReader(buf))
 	if err != nil {
 		t.Fatalf("%s: decode the fenced block screenshot: %v", scheme, err)

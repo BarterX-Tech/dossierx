@@ -167,8 +167,8 @@ type ViewFile struct {
 // when module has no artifact at all (never called Set) — callers (namely
 // internal/render's attach step) are expected to treat that as "render
 // nothing extra for this module", the same graceful-degradation contract
-// internal/buildorder's attachBuildOrders already follows for a module with
-// no build-order artifact.
+// internal/render's Build order tab follows for a module whose build-order
+// artifact does not load.
 func ViewsByClaim(cfg *config.Config, module string) (map[string][]ViewFile, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("implink: cfg must not be nil")

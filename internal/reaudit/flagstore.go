@@ -27,6 +27,7 @@
 package reaudit
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,10 +57,22 @@ type PendingFlag struct {
 // --confirm" already do for internal/lock.Store — see cmd/dossierx/flag.go and
 // cmd/dossierx/main.go's newReauditCmd for that usage.
 type FlagStore struct {
-	Flags map[string]PendingFlag `json:"flags"`
+	// Version is the on-disk schema version, written on every Save and
+	// required by DecodeFlagStore. It exists so the store can be told apart
+	// from unrelated JSON at the generic name flag-store.json (internal/check
+	// decodes index blobs to decide whether a commit carries dossierx
+	// content); a store written before the field existed is read by
+	// LoadFlagStore through a one-time lenient path DecodeFlagStore does not
+	// offer, and the next Save stamps it.
+	Version int                    `json:"version"`
+	Flags   map[string]PendingFlag `json:"flags"`
 
 	path string
 }
+
+// FlagStoreSchemaVersion is the only version FlagStore.Save writes and
+// DecodeFlagStore accepts.
+const FlagStoreSchemaVersion = 1
 
 // LoadFlagStore reads the flag store from path. A missing file is not an
 // error — it is the common, expected case for any claim or project that has
@@ -67,7 +80,7 @@ type FlagStore struct {
 // store, mirroring internal/lock.LoadStore's same "missing file is a fresh
 // store, not a failure" contract.
 func LoadFlagStore(path string) (*FlagStore, error) {
-	s := &FlagStore{Flags: map[string]PendingFlag{}, path: path}
+	s := &FlagStore{Version: FlagStoreSchemaVersion, Flags: map[string]PendingFlag{}, path: path}
 
 	raw, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -76,14 +89,66 @@ func LoadFlagStore(path string) (*FlagStore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("reaudit: read flag store %s: %w", path, err)
 	}
-	if err := json.Unmarshal(raw, s); err != nil {
+	// The one-time lenient path: a store written before "version" existed
+	// has no such key, and this loader accepts it (and Save then stamps it).
+	// DecodeFlagStore, which answers "is this blob our store?", does not.
+	if err := decodeFlagStore(s, raw, false); err != nil {
 		return nil, fmt.Errorf("reaudit: parse flag store %s: %w", path, err)
 	}
-	if s.Flags == nil {
-		s.Flags = map[string]PendingFlag{}
-	}
+	s.Version = FlagStoreSchemaVersion
 	s.path = path
 	return s, nil
+}
+
+// DecodeFlagStore decodes a flag store from bytes already in hand — the git
+// index's copy, under "check --staged" — STRICTLY: unknown keys are refused,
+// "version" must be present and equal FlagStoreSchemaVersion, and the "flags"
+// key must be present. `{}` and unrelated JSON are refused, which is what lets
+// internal/check tell this store from any other file named flag-store.json.
+// The returned store has no path and cannot be saved.
+func DecodeFlagStore(raw []byte) (*FlagStore, error) {
+	s := &FlagStore{Flags: map[string]PendingFlag{}}
+	if err := decodeFlagStore(s, raw, true); err != nil {
+		return nil, fmt.Errorf("reaudit: decode flag store: %w", err)
+	}
+	return s, nil
+}
+
+// decodeFlagStore is the one parser behind LoadFlagStore and DecodeFlagStore.
+// strict requires the version and flags keys and refuses unknown keys; the
+// lenient mode ignores an unknown key, as every release before this one did,
+// so a key a later release adds does not make the older binary's check fail
+// (internal/lock and internal/digest draw the same line).
+func decodeFlagStore(s *FlagStore, raw []byte, strict bool) error {
+	var onDisk struct {
+		Version *int                    `json:"version"`
+		Flags   *map[string]PendingFlag `json:"flags"`
+	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	if strict {
+		dec.DisallowUnknownFields()
+	}
+	if err := dec.Decode(&onDisk); err != nil {
+		return err
+	}
+	if strict {
+		if onDisk.Version == nil {
+			return fmt.Errorf("no version field")
+		}
+		if *onDisk.Version != FlagStoreSchemaVersion {
+			return fmt.Errorf("version %d is not one this engine writes", *onDisk.Version)
+		}
+		if onDisk.Flags == nil {
+			return fmt.Errorf("no flags field")
+		}
+	}
+	if onDisk.Version != nil {
+		s.Version = *onDisk.Version
+	}
+	if onDisk.Flags != nil && *onDisk.Flags != nil {
+		s.Flags = *onDisk.Flags
+	}
+	return nil
 }
 
 // Save writes the flag store back to its path as JSON, atomically (temp
@@ -91,9 +156,15 @@ func LoadFlagStore(path string) (*FlagStore, error) {
 // AcquireFileLock's critical section never observes a partially-written
 // file — the same reasoning as internal/lock.Store.Save.
 func (s *FlagStore) Save() error {
+	s.Version = FlagStoreSchemaVersion
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("reaudit: marshal flag store: %w", err)
+	}
+	// The store lives under build/ledger/, which a fresh project does not
+	// have until the first write creates it.
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return fmt.Errorf("reaudit: create flag store dir for %s: %w", s.path, err)
 	}
 	if err := atomicWriteFile(s.path, raw, 0o644); err != nil {
 		return fmt.Errorf("reaudit: write flag store %s: %w", s.path, err)

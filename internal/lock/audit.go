@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
@@ -554,7 +555,7 @@ func Audit(claims []model.Claim, store *Store, digests *digest.Store) []Finding 
 					ClaimID: c.ID,
 					Message: fmt.Sprintf(
 						"claim %q carries %d comment thread(s) but has no entry in %s, so they are not being checked against anything — a forged or edited thread on this claim would read as unknown rather than drifted, and an unresolved objection edited away would not be reported at all. Comments are engine-managed: the one path that writes a thread records the claim's digest in the same act, so threads without an entry mean the entry was removed or the threads were written by hand. Restore %s from version control (or git add it, if this commit is the one that updated it). Do NOT run a comment op to re-create the entry: that records whatever the claim says NOW as the truth, which is exactly what removing it was for.",
-						c.ID, len(c.Comments), digest.StoreFileName, digest.StoreFileName),
+						c.ID, len(c.Comments), config.CommentDigestDisplayPath, config.CommentDigestDisplayPath),
 				})
 			}
 		}
@@ -666,7 +667,7 @@ func PreLedgerFinding(store *Store, lockedClaims, lockedBuildOrders int) Finding
 		Rule: RuleLockLedgerPreLedger,
 		Message: fmt.Sprintf(
 			"this project's lock store predates the lock ledger (schema version %d), so %d locked claim(s) and %d locked build order(s) here have no approval record — and nothing can attest to content no ledger ever recorded. There is no automatic adoption and no migration command any more.\n\n%s\n\nCommit the updated %s and %s with the re-locks.",
-			version, lockedClaims, lockedBuildOrders, preLedgerCrossingSteps, StoreFileName, digest.StoreFileName),
+			version, lockedClaims, lockedBuildOrders, preLedgerCrossingSteps, config.LockStoreDisplayPath, config.CommentDigestDisplayPath),
 	}
 }
 

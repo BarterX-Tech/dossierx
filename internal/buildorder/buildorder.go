@@ -314,7 +314,7 @@ func computePhases(claims []model.Claim, cfg *config.Config, module string) ([]P
 		if len(bucket) == 0 {
 			continue
 		}
-		ordered, cyclic := layeredTopoSort(stableDisplayOrder(bucket))
+		layers, cyclic := layeredTopoSort(stableDisplayOrder(bucket))
 		if len(cyclic) > 0 {
 			return nil, nil, fmt.Errorf(
 				// "dossierx lint" was retired in v0.3.0 — linting is a STAGE of
@@ -325,13 +325,19 @@ func computePhases(claims []model.Claim, cfg *config.Config, module string) ([]P
 				phase, len(cyclic), strings.Join(cyclic, ", "),
 			)
 		}
-		entries := make([]ClaimEntry, 0, len(ordered))
-		for _, c := range ordered {
-			entries = append(entries, ClaimEntry{
-				ID:      c.ID,
-				File:    displayPath(cfg, c.SourcePath),
-				RestsOn: append([]string(nil), c.RestsOn...),
-			})
+		// The artifact stores the FLATTENED layers, in layer order: the
+		// boundary between layers is presentation (the viewer and
+		// "build-order show" recompute it from the stored rests_on through
+		// this same sort), never a field of the signed bytes.
+		entries := make([]ClaimEntry, 0, len(bucket))
+		for _, layer := range layers {
+			for _, c := range layer {
+				entries = append(entries, ClaimEntry{
+					ID:      c.ID,
+					File:    displayPath(cfg, c.SourcePath),
+					RestsOn: append([]string(nil), c.RestsOn...),
+				})
+			}
 		}
 		phaseBlocks = append(phaseBlocks, PhaseBlock{Phase: string(phase), Claims: entries})
 	}
@@ -353,8 +359,8 @@ func isKnownPhase(role model.BuildRole) bool {
 // displayPath renders source (a model.Claim.SourcePath, always absolute —
 // see internal/config.LoadConfig's ClaimsDir resolution) relative to cfg's
 // own directory for ClaimEntry.File, instead of storing the raw absolute
-// filesystem path. The artifact (and the viewer partial that renders it,
-// build_order.html) is meant to be shareable project documentation, not a
+// filesystem path. The artifact (and the viewer's Build order tab, which
+// carries it verbatim in its payload) is meant to be shareable project documentation, not a
 // dump of the reviewing machine's local directory layout — an absolute
 // path bakes in the local username/home-directory structure (e.g. on
 // macOS, /Users/<name>/...), which has no business appearing in published
@@ -369,7 +375,10 @@ func displayPath(cfg *config.Config, source string) string {
 	if err != nil || strings.HasPrefix(rel, "..") {
 		return source
 	}
-	return rel
+	// Slash-separated on every host: the artifact is committed, so a path
+	// in it must not depend on which operating system ran propose, and the
+	// text table prints this value verbatim.
+	return filepath.ToSlash(rel)
 }
 
 // stableDisplayOrder mirrors internal/render.orderClaims' Order-then-
@@ -410,10 +419,15 @@ func stableDisplayOrder(claims []model.Claim) []model.Claim {
 
 // layeredTopoSort implements Kahn's algorithm restricted to same-module,
 // same-phase rests_on edges among claims (claims is assumed to already be
-// one phase's, one module's bucket — Propose is the only caller and
-// guarantees this): repeatedly peel off every not-yet-placed claim whose
-// same-phase rests_on targets (present in claims) are already placed,
-// forming successive layers, until every claim is placed. A rests_on B
+// one phase's, one module's bucket — computePhases and mermaid.go's Views
+// are its callers and guarantee this): repeatedly peel off every
+// not-yet-placed claim whose same-phase rests_on targets (present in claims)
+// are already placed, forming successive layers, until every claim is
+// placed. The layers are returned AS layers (layers[0] is every claim with
+// nothing in-bucket to wait on, layers[1] every claim released by placing
+// layers[0], and so on); computePhases flattens them into the artifact in
+// that order, and the viewer's per-phase diagram and "build-order show" read
+// the boundaries as the level a claim sits at. A rests_on B
 // means claim A depends on B remaining true (per FORMAT.md), so B —
 // the target — is placed first; a claim with no in-bucket rests_on targets
 // at all has nothing to wait on and is ready in layer 0.
@@ -435,7 +449,7 @@ func stableDisplayOrder(claims []model.Claim) []model.Claim {
 // claims, and they are returned (sorted, as the second return value) for
 // the caller to turn into a hard error instead of silently vanishing from
 // the artifact.
-func layeredTopoSort(claims []model.Claim) (ordered []model.Claim, cyclic []string) {
+func layeredTopoSort(claims []model.Claim) (layers [][]model.Claim, cyclic []string) {
 	idSet := make(map[string]bool, len(claims))
 	for _, c := range claims {
 		idSet[c.ID] = true
@@ -463,7 +477,6 @@ func layeredTopoSort(claims []model.Claim) (ordered []model.Claim, cyclic []stri
 	}
 
 	placed := make(map[string]bool, len(claims))
-	out := make([]model.Claim, 0, len(claims))
 	for len(placed) < len(claims) {
 		var layer []string
 		for _, c := range claims {
@@ -482,17 +495,19 @@ func layeredTopoSort(claims []model.Claim) (ordered []model.Claim, cyclic []stri
 				}
 			}
 			sort.Strings(cyclic)
-			return out, cyclic
+			return layers, cyclic
 		}
+		placedLayer := make([]model.Claim, 0, len(layer))
 		for _, id := range layer {
 			placed[id] = true
-			out = append(out, byID[id])
+			placedLayer = append(placedLayer, byID[id])
 		}
+		layers = append(layers, placedLayer)
 		for _, id := range layer {
 			for _, dep := range dependents[id] {
 				remaining[dep]--
 			}
 		}
 	}
-	return out, nil
+	return layers, nil
 }

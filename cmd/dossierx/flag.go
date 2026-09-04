@@ -9,7 +9,6 @@ package main
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -24,10 +23,10 @@ import (
 )
 
 // flagStorePath is the on-disk location of the pending-flag store,
-// resolved relative to the config file's own directory (never cwd) — the
-// same convention storePath/catalogPath/renderOutPath already follow.
+// cfg.FlagStorePath() (build/ledger/flag-store.json by default) — the same
+// one-line delegate shape storePath/catalogPath/renderOutPath follow.
 func flagStorePath(cfg *config.Config) string {
-	return filepath.Join(cfg.Dir(), ".dossierx-flag-store.json")
+	return cfg.FlagStorePath()
 }
 
 // flagData is "dossierx claim flag"'s machine payload: the before/after assertion
@@ -47,7 +46,7 @@ type flagData struct {
 // must live in body — plus the three required assertions, reported as missing
 // inputs rather than as a hard error so a preview can be run before the agent
 // has composed them.
-func flagDryRun(claim model.Claim, claimSays, nowDoes, reason string) *cliout.DryRun {
+func flagDryRun(cfg *config.Config, claim model.Claim, claimSays, nowDoes, reason string) *cliout.DryRun {
 	dr := cliout.NewDryRun("flag claim " + claim.ID + " for reaudit")
 
 	for _, required := range []struct{ name, value string }{
@@ -66,6 +65,9 @@ func flagDryRun(claim model.Claim, claimSays, nowDoes, reason string) *cliout.Dr
 	dr.Require("claim_is_body_only", lay == "", boolDetail(lay == "",
 		fmt.Sprintf("layout %q renders from body, which is the only field a flag-sourced reaudit rewrites", claim.Layout),
 		flagNonBodyDetail(claim, lay)))
+	// The gitignore guard, previewed: the write path refuses with
+	// store_gitignored in the same state.
+	storesArePrecondition(dr, cfg)
 
 	dr.Effect("sets review_pending on " + claim.SourcePath).
 		Effect("records a one-shot pending-flag entry that the next \"dossierx claim reaudit --confirm\" consumes").
@@ -89,7 +91,7 @@ func newFlagCmd() *cobra.Command {
 			id := args[0]
 
 			if dryRun {
-				_, claims, err := loadConfigAndClaims()
+				cfg, claims, err := loadConfigAndClaims()
 				if err != nil {
 					return cmdResult{}, err
 				}
@@ -97,7 +99,7 @@ func newFlagCmd() *cobra.Command {
 				if !ok {
 					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "flag: claim %q not found: %w", id, errClaimNotFound)
 				}
-				return dryRunResult(cmd, "flag", flagDryRun(claim, claimSays, nowDoes, reason)), nil
+				return dryRunResult(cmd, "flag", flagDryRun(cfg, claim, claimSays, nowDoes, reason)), nil
 			}
 
 			if strings.TrimSpace(claimSays) == "" || strings.TrimSpace(nowDoes) == "" || strings.TrimSpace(reason) == "" {
@@ -106,6 +108,13 @@ func newFlagCmd() *cobra.Command {
 			}
 
 			cfg, err := loadConfig()
+			if err != nil {
+				return cmdResult{}, err
+			}
+
+			// The gitignore guard, before any sentinel: a flag is a request
+			// for review the repository is the only carrier for.
+			gitignoreWarnings, err := refuseIfStoresGitignored(cfg, "flag")
 			if err != nil {
 				return cmdResult{}, err
 			}
@@ -189,6 +198,7 @@ func newFlagCmd() *cobra.Command {
 			}
 
 			return cmdResult{
+				Warnings: gitignoreWarnings,
 				Data: flagData{
 					ClaimID:       id,
 					ClaimSays:     claimSays,

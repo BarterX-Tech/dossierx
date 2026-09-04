@@ -75,7 +75,26 @@ func walkJSONKeys(v any, path string, visit func(path, key string)) {
 // see the leak at all.
 func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 	root := t.TempDir()
-	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
+	cfgPath, claimPath := icWriteFixtureProject(t, root, "widget")
+
+	// A PROPOSED AND LOCKED build order, seeded before anything else, because
+	// "build-order show" is in the list below and this test's whole method is
+	// to walk the raw keys of a REAL payload. Against the bare fixture that
+	// command answers not_proposed, whose envelope carries an error and no
+	// data.phases[] at all — a case that asserts nothing about the shape it was
+	// added to cover.
+	//
+	// The order of these four steps is the only one buildorder.Propose's gates
+	// allow, and the thread below has to come AFTER all of them: Propose
+	// refuses a non-locked claim, refuses a claim with an open comment thread,
+	// and refuses one with an empty build_role. A thread added afterwards
+	// blocks nothing this test runs. The pre-existing "claim lock --dry-run"
+	// row consequently previews an already-locked claim, which is still an
+	// envelope and still what this test reads.
+	icWriteRoledClaim(t, claimPath, "widget")
+	icMustRun(t, cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "fixture approval")
+	icMustRun(t, cfgPath, "build-order", "propose", "--module", "widget")
+	icMustRun(t, cfgPath, "build-order", "lock", "--module", "widget", "--reason", "fixture approval")
 
 	// A thread with a reply, so comment list's whole tree — thread fields AND
 	// reply fields — is exercised rather than just the root of it.
@@ -106,6 +125,11 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 		{"build-order", "status", "--module", "widget"},
 		{"build-order", "propose", "--module", "widget", "--dry-run"},
 		{"build-order", "lock", "--module", "widget", "--reason", "r", "--dry-run"},
+		// The one leaf whose payload nests three levels deep — data.phases[]
+		// with a per-phase cross_module map and a ghosts[] of a type declared
+		// in another package — which is precisely the shape an untagged Go
+		// field leaks its name through.
+		{"build-order", "show", "--module", "widget"},
 		// The track leaves run against the SAME track-less fixture as everything
 		// else here: list answers with an empty registry, and show/status answer
 		// with the unknown-track refusal. All three are envelopes, which is what
@@ -137,6 +161,36 @@ func TestEveryEnvelopeKeyIsSnakeCase(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+// icWriteRoledClaim rewrites the shared fixture claim with a build_role, which
+// is what buildorder.Propose needs and what icWriteFixtureProject deliberately
+// does not carry (its subject is the claim lifecycle, not the build order).
+func icWriteRoledClaim(t *testing.T, claimPath, module string) {
+	t.Helper()
+	claim := "id: " + module + ".contract.overview\n" +
+		"facet: contract\nmodule: " + module + "\nstatus: draft\nlayout: card\n" +
+		"build_role: schema\n" +
+		"body: |\n  fixture claim for in-process CLI tests.\n" +
+		"governed_by:\n  type: none\n  reason: fixture claim, not backed by any real doctrine\n"
+	if err := os.WriteFile(claimPath, []byte(claim), 0o644); err != nil {
+		t.Fatalf("rewrite claim with a build_role: %v", err)
+	}
+}
+
+// icMustRun runs a setup command and FAILS the test if it did not succeed.
+//
+// A setup step that silently did not happen is the failure mode this whole file
+// exists to catch one level up: the commands below would then walk a refusal
+// envelope, find no offending key in it, and report PASS over a payload that
+// was never produced.
+func icMustRun(t *testing.T, cfgPath string, args ...string) {
+	t.Helper()
+	full := append([]string{"--config", cfgPath}, args...)
+	env, stderr, err := execCLIJSON(t, full...)
+	if err != nil {
+		t.Fatalf("fixture setup %v failed: %v\nenvelope: %+v\nstderr: %s", args, err, env, stderr)
 	}
 }
 
@@ -199,6 +253,13 @@ func TestEnvelopePayloadTypesDeclareSnakeCaseJSONTags(t *testing.T) {
 		buildOrderProposeData{},
 		buildOrderStatusData{},
 		buildOrderLockData{},
+		// Both halves of "build-order show". This list is HAND-WRITTEN with no
+		// cross-check in either direction, which is exactly why the payload
+		// that embeds a type from another package is named here: nothing goes
+		// red if it is forgotten, and buildOrderShowPhaseData carries
+		// buildorder.Ghost, the class this test's doc comment exists for.
+		buildOrderShowData{},
+		buildOrderShowPhaseData{},
 		trackListData{},
 		trackShowData{},
 		trackStatusData{},
@@ -530,7 +591,7 @@ func TestBuildOrderLockDryRunAgreesOnAHandEditedOrder(t *testing.T) {
 	// A freshly proposed order previews AND locks cleanly. Asserting this first
 	// is what keeps the test honest: without it, a preview that blocked
 	// unconditionally would pass the assertion below.
-	artifactPath := filepath.Join(root, ".build-order.widget.json")
+	artifactPath := filepath.Join(root, "build", "build-order", "widget.json")
 	pristine, err := os.ReadFile(artifactPath)
 	if err != nil {
 		t.Fatalf("read artifact: %v", err)

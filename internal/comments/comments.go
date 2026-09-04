@@ -87,7 +87,7 @@ var (
 	// exists to detect. Refusing up front makes the failure atomic: nothing is
 	// written, so a retry is safe and idempotent (it fails the same way until the
 	// store is restored).
-	ErrCommentDigestUnavailable = errors.New("comments: the comment digest store could not be opened for writing, so this write was refused before anything was changed: restore .dossierx-comment-digest.json from version control (or remove a stale .dossierx-comment-digest.json.lock left by a crash) and retry")
+	ErrCommentDigestUnavailable = errors.New("comments: the comment digest store could not be opened for writing, so this write was refused before anything was changed: restore " + config.CommentDigestDisplayPath + " from version control (or remove a stale " + config.CommentDigestDisplayPath + ".lock left by a crash) and retry")
 )
 
 // nowFunc is the ops' clock, overridable in tests so created/resolved/reopened
@@ -703,14 +703,14 @@ func checkCommentDigest(store *digest.Store, c model.Claim, ledgerCovered bool) 
 	if !known {
 		if ledgerCovered && len(c.Comments) > 0 {
 			return fmt.Errorf("%w: claim %q carries %d comment thread(s) but has NO entry in %s, and this project is covered by the lock ledger — a state no honest sequence produces, because the only code path that writes a thread records the claim's digest in the same act. Either the entry was removed from the digest store or the threads were not written by the engine. This write is refused rather than recording the block as the truth: doing that would certify whatever the block says now, which is precisely what removing the entry sets up. DO NOT DELETE %s, and do not re-enter the threads by hand — restore %s from version control (its entry for this claim is the review history), or, if the comments block is what was forged, restore %s. dossierx check names this claim under comment-digest-unrecorded",
-				ErrCommentDigestDrift, c.ID, len(c.Comments), digest.StoreFileName, digest.StoreFileName, digest.StoreFileName, claimFileFor(c))
+				ErrCommentDigestDrift, c.ID, len(c.Comments), config.CommentDigestDisplayPath, config.CommentDigestDisplayPath, config.CommentDigestDisplayPath, claimFileFor(c))
 		}
 		return nil
 	}
 	if recorded == digest.CommentsDigest(c) {
 		return nil
 	}
-	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed and no command re-blesses a block: the recovery is version control. DO NOT DELETE %s to clear this — a claim the store has never seen reads as unknown rather than drifted, so the delete would bury this refusal and the comment-ledger-drift finding beside it, and dossierx check reports it as comment-digest-absent. Restore whichever side is wrong: the claim file (%s) when its comments block was hand-edited, or %s when a commit carried the claim file without it. If you cannot tell which, restore BOTH from the same commit — the engine writes them as a pair and they only agree as a pair — then re-enter anything written since with dossierx comment add / dossierx comment reply", ErrCommentDigestDrift, c.ID, digest.StoreFileName, claimFileFor(c), digest.StoreFileName)
+	return fmt.Errorf("%w: claim %q's comments block does not match the digest recorded at the last comment operation, so this write is refused rather than re-recording the edited block as the truth. Comments are engine-managed and no command re-blesses a block: the recovery is version control. DO NOT DELETE %s to clear this — a claim the store has never seen reads as unknown rather than drifted, so the delete would bury this refusal and the comment-ledger-drift finding beside it, and dossierx check reports it as comment-digest-absent. Restore whichever side is wrong: the claim file (%s) when its comments block was hand-edited, or %s when a commit carried the claim file without it. If you cannot tell which, restore BOTH from the same commit — the engine writes them as a pair and they only agree as a pair — then re-enter anything written since with dossierx comment add / dossierx comment reply", ErrCommentDigestDrift, c.ID, config.CommentDigestDisplayPath, claimFileFor(c), config.CommentDigestDisplayPath)
 }
 
 // claimFileFor names the file to restore, for a message a human acts on.

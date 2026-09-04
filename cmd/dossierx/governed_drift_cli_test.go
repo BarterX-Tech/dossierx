@@ -151,7 +151,7 @@ func lockStoreOf(t *testing.T, projectDir string) struct {
 	var store struct {
 		Hashes map[string]map[string]string `json:"hashes"`
 	}
-	raw, err := os.ReadFile(filepath.Join(projectDir, ".dossierx-lock-store.json"))
+	raw, err := os.ReadFile(filepath.Join(projectDir, "build", "ledger", "lock-store.json"))
 	if err != nil {
 		t.Fatalf("read lock store: %v", err)
 	}

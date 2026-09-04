@@ -45,7 +45,7 @@ func lockBuildOrder(t *testing.T, cfg *config.Config, claims []model.Claim, modu
 		t.Fatalf("lock build order: %v", err)
 	}
 
-	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)
@@ -130,7 +130,7 @@ func TestBuildOrderGate_DeletingTheRecordIsLedgerMissing(t *testing.T) {
 	})
 	lockBuildOrder(t, cfg, claims, "widget")
 
-	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)
@@ -172,7 +172,7 @@ func TestBuildOrderGate_ProposedButUnlockedIsNotAudited(t *testing.T) {
 //
 // Every forward rule starts from the file, so removing the file removed the
 // module from the gate's evidence set entirely: the standing record stayed in
-// the ledger, `check` reported nothing, and `rm .build-order.widget.json` was a
+// the ledger, `check` reported nothing, and `rm build/build-order/widget.json` was a
 // strictly better attack than the hand edit the gate was built to catch. This is
 // the reverse sweep, the same shape as lock-ledger-abandoned for claims.
 func TestBuildOrderGate_DeletingTheArtifactIsLedgerAbandoned(t *testing.T) {
@@ -228,7 +228,7 @@ func TestBuildOrderGate_ReleasedRecordIsNotAbandoned(t *testing.T) {
 	})
 	lockBuildOrder(t, cfg, claims, "widget")
 
-	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)
@@ -313,7 +313,7 @@ func TestBuildOrderGate_ReProposedArtifactIsNotAbandoned(t *testing.T) {
 	if err := buildorder.WriteArtifact(reproposed, buildorder.ArtifactPath(cfg, "widget")); err != nil {
 		t.Fatalf("write re-proposed artifact: %v", err)
 	}
-	storePath := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	storePath := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(storePath)
 	if err != nil {
 		t.Fatalf("load store: %v", err)
@@ -394,7 +394,7 @@ func TestBuildOrderGate_FlagFlipWithAContentEditIsLedgerOrphan(t *testing.T) {
 // A CORRUPT artifact was audited by NO rule, which made destroying the approved
 // implementation sequence quieter than deleting it. Reproduced as three states
 // on one project: a valid locked artifact under a standing record -> ok:true;
-// `rm .build-order.widget.json` -> ok:false ['build-order-ledger-abandoned'];
+// `rm build/build-order/widget.json` -> ok:false ['build-order-ledger-abandoned'];
 // truncate the same file mid-token -> ok:true, zero findings, exit 0.
 //
 // collectBuildOrderStates set Unreadable and left Present false, so the forward

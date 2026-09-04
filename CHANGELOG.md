@@ -5,6 +5,118 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.7.7] - 2026-09-03
+
+### BREAKING — every dossierx artifact moved under build/
+
+- Every file the engine generates at runtime now lives under one configurable directory,
+  `build_dir` (default `build`, resolved against the config file's directory like `claims_dir`),
+  one subdirectory per kind: `build/build-order/<module>.json`, `build/code-links/<module>.json`,
+  `build/ledger/lock-store.json`, `build/ledger/comment-digest.json`,
+  `build/ledger/flag-store.json`, `build/catalog/catalog.json`, `build/viewer/index.html`, the
+  claim-file write sentinel `build/ledger/claims.lock`, and a `build/.gitignore` that `check`
+  writes once. Nothing is written to the project root any more. A project that still keeps any of
+  the seven legacy root files (`.dossierx-lock-store.json`, `.dossierx-comment-digest.json`,
+  `.dossierx-flag-store.json`, `.build-order.<module>.json`, `.implementation.<module>.json`,
+  `.catalog.json`, `viewer/index.html`) is refused on EVERY verb — `check --validate` and
+  `check --staged` included — with `error.code: layout_legacy` and the exact block to paste: one
+  `mkdir -p` for the destination directories, `git mv` for each file git tracks, `mv` for each it
+  does not, and a removal for the catalog and the viewer; `--format json` carries the same list as
+  `error.details.moves[]` (`{from, to, tracked}`). Signatures hash bytes, not paths, so nothing is
+  re-locked. `check --staged` refuses the same way when the INDEX still carries a legacy file.
+- `build_order.html` is no longer an override point: the tab it used to render is not a component
+  partial any more, so a project whose `viewer.template_overrides` directory still holds that file
+  is refused by name — `check` (and every render) stops working for it until the file is removed
+  (see Removed below).
+- `claims_dir` may no longer contain the build directory, sit inside it, or equal it, and
+  `build_dir` may not be the config directory itself; a project with `claims_dir: .` — which only
+  `serve` refused before — now fails to load on every verb until the claims move under a
+  subdirectory or `build_dir` points outside them.
+- `claim lock` (single and batch), `claim flag`, `claim reaudit --confirm` and `build-order lock`
+  now require `git` on PATH when the project is inside a git work tree, and refuse with
+  `error.code: store_gitignored` when git cannot answer there (no binary, a bare or corrupt
+  repository) or when any path the engine writes under `build/ledger`, `build/build-order` or
+  `build/code-links` is matched by `.gitignore` and not in the index. `check`, `check --validate`
+  and `check --staged` do not refuse on an unanswerable git: they report
+  `data.gitignore_check: "git not available"` (or `"not a work tree"`, `"outside the work tree"`)
+  instead of a verdict and exit 0. A `golang:alpine`-style CI image with git stripped sees the
+  first half as a new refusal.
+
+### Changed
+
+- `check`'s envelope gains `data.gitignore_check`, present only when the store-gitignored guard
+  gave no verdict, and `warnings[]` carries one line per path that is ignored but already tracked
+  (force-added, or committed before the pattern) — that ledger does reach collaborators, but
+  nothing will stage the next new artifact under `build/`.
+- Every finding and refusal that names a store prints its `build/ledger/...` path.
+- The viewer's per-module Build Order sub-tab and its flat per-claim list are replaced by a
+  top-level **Build order** tab that renders the same locked artifact as a six-phase mermaid
+  diagram — nodes for each claim, ghost nodes for a `rests_on` target the artifact placed in an
+  earlier phase of the SAME module, and (in the tab's own list, not the diagram) a cross-module
+  dependency list per phase. A viewer for a project with a locked build order now ships the
+  vendored mermaid renderer (`mermaid.min.js` 11.17.2, 3,572,661 bytes): measured on the
+  regenerated fixture viewers (`wc -c` on `testdata/<fixture>/build/viewer/index.html`, before ->
+  after, against the v0.7.6 baseline), `fixture-theme-flat`, the one fixture with a locked order,
+  grows from 490,505 to 4,084,957 bytes (+3,594,452), and the four fixtures with no locked order
+  grow by under 1 KB each (`fixture-basic` 461,835 -> 462,735, `fixture-graph-demo`
+  588,865 -> 589,713, `fixture-portability` 463,514 -> 464,414, `fixture-theme-preset`
+  465,304 -> 466,204). A consuming project that commits its viewer should expect the same
+  ~3.6 MB step the first time it locks a build order. The tab's own section and per-module
+  groups carry the ids
+  `dossierx-build-order` and `dossierx-build-order-<module>`, outside the space a module's name
+  is slugged into, so a module named `build-order` keeps its own `#build-order` section and the
+  tab its diagrams; a module whose name slugs to one of the tab's ids (`dossierx build order`) is
+  refused at render by name. Two claim ids that sanitise to one mermaid node id (a module or
+  facet name differing only in `-` vs `_`) are drawn as two nodes — the second carries a short,
+  stable hash suffix — and a locked artifact the tab cannot draw (a hand-edited phase name or
+  edge) costs that module its tab entry and one `warnings[]` line, never the viewer.
+- `internal/check`'s git runner carries git's exit status (`runStatus`), so a `check-ignore` that
+  exits 128 is reported as "git could not answer" rather than read as "not ignored".
+- The lock, digest and flag stores are decoded strictly from bytes (`lock.DecodeStore`,
+  `digest.DecodeStore`, `reaudit.DecodeFlagStore`), which is what lets `check --staged` tell the
+  engine's `lock-store.json` from an unrelated repository file of the same name; the flag store
+  gains a `version` field (an older store without one still loads).
+- Rendered output across releases (`testdata/render-across-releases.golden.txt`, regenerated
+  against v0.7.6): 152 artifacts compared, 0 added, 0 removed, 0 silent, and 5 viewers
+  rendered differently after their own inputs changed — every fixture viewer, because this
+  release adds tracked inputs under each fixture's `build/` (`build/.gitignore`, the digest). The
+  four fixtures with no locked build order (`fixture-basic`, `fixture-graph-demo`,
+  `fixture-portability`, `fixture-theme-preset`) each move by +266/-196 (graph-demo +266/-200)
+  lines, and every hunk is the Build order tab: the `.bo-*` stylesheet block replacing the
+  `.build-order-module` rules, the tab's print rules, the removed `buildOrderToModule` deep-link
+  map and `prepareBuildOrder`, and the `:not(.build-order-section)` guards on the active-section
+  queries. `fixture-theme-flat`, the one fixture with a locked order, is rewritten (490,505 ->
+  4,084,957 bytes) because its viewer now carries the vendored mermaid renderer. The v0.7.6
+  baseline already holds the theme work and the fenced-block seam fix, so neither appears here.
+
+### Added
+
+- `build_dir` in `project.config.yaml` (optional, default `build`).
+- The `store-gitignored` ledger finding and the `store_gitignored` / `layout_legacy` error codes;
+  `stores_are_tracked` as a `--dry-run` precondition on `claim lock`, `claim flag`,
+  `claim reaudit --confirm` and `build-order lock`.
+- README's "Where DossierX writes" subsection with the layout table and the `.gitignore`
+  replacement block a bare `build/` pattern needs (`build/*` plus a slash-less negation and a `/*`
+  re-include per tracked kind).
+- `dossierx build-order show --module <name> --format json|text|mermaid`, the read-only leaf that
+  renders a module's stored build-order artifact, proposed or locked (`data.locked` says which) —
+  the one leaf besides the global `--format json|text` that also accepts `--format mermaid`, for
+  pasting the diagram into a PR. It never recomputes the sequence; it reads exactly what
+  `propose`/`lock` last wrote.
+
+### Removed
+
+- The per-module Build Order sub-tab and its flat per-claim list (`internal/render/components/build_order.html`,
+  the `buildOrderToModule` deep-link map) — replaced by the mermaid **Build order** tab above.
+- `build_order.html` as a `viewer.template_overrides` override point: the tab it used to render
+  is no longer a component partial, so a project's override directory naming it is refused rather
+  than silently ignored.
+- `TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup`, decision C5's shared-markup pin — it
+  existed to hold the removed sub-tab's list markup to the claim-edge-list's shared footer, and
+  goes with the list it was pinning.
+
 ## [0.7.6] - 2026-09-02
 
 ### Added
@@ -2167,7 +2279,10 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.7...HEAD
+[0.7.7]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.5...v0.7.6
+[0.7.5]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.1...v0.7.2

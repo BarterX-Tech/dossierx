@@ -25,9 +25,10 @@ spec and has no bearing on what to write first.
 ## The contract
 
 ```
-dossierx build-order propose --module <name>                      # derive it; writes .build-order.<name>.json
+dossierx build-order propose --module <name>                      # derive it; writes build/build-order/<name>.json
 dossierx build-order status  --module <name>                      # proposed | locked | stale, + N of M covered
 dossierx build-order lock    --module <name> --reason "<their words>"
+dossierx build-order show    --module <name> --format json|text|mermaid   # json is the default
 ```
 
 `propose` and `lock` both take `--dry-run`. `lock` requires `--reason` — it is a lifecycle action,
@@ -76,7 +77,7 @@ built from.
 
 ## Following the sequence
 
-Read `.build-order.<module>.json` and build strictly phase by phase, in the order each phase
+Read `build/build-order/<module>.json` and build strictly phase by phase, in the order each phase
 lists. Paths in it are project-relative by design — this artifact is meant to be shared, not to
 record one machine's directory layout. Within `behavior` and `api`, the listed order already
 accounts for every `rests_on` edge; do not re-derive your own order from the claim bodies.
@@ -102,6 +103,37 @@ would update hashes without recomputing the sequence, freezing an order that is 
 instance after a `rests_on` edit. Re-run `propose` to recompute against the current claim set,
 show the human the new sequence, then `lock` again with their `--reason`. Never treat a stale build
 order as authoritative.
+
+## Reading the diagram
+
+`dossierx build-order show --module <name>` renders the stored artifact, proposed or
+locked (`data.locked` says which) — it never recomputes the sequence, so it reads
+exactly what `propose`/`lock` last wrote. `--format mermaid` prints one flowchart per
+phase that HAS claims, blank-line separated; an empty phase and the excluded block
+print nothing there (their counts and definitions are in `--format text` and in
+`data.phases[]`) — a chunk with no diagram is meant to fail a mermaid parse, not read
+as an intentionally empty one:
+
+- **Nodes** are claims, labelled the same way the viewer's claim cards are — never
+  disagree with `dossierx claim show` about what a node means.
+- **Ghost nodes** are a `rests_on` target INSIDE this module that the artifact placed
+  in an earlier phase — already built, and the reason this node is drawn at all is to
+  tell you to build it before the claim pointing at it. Each is drawn once, as a
+  dashed-outline stadium node labelled with that earlier phase, with a dotted arrow
+  into the dependent claim. A target the artifact excluded, or one in another module,
+  is never drawn as a ghost: the first is listed under "rests on excluded", the second
+  in the cross-module list, both text, no node.
+- **The cross-module list** is in `--format text` and in the viewer's `.bo-cross`
+  block, not in the mermaid export (which carries only the four `%%` header lines: the
+  phase, its definition, the counts, and the arrow legend). It names dependencies on
+  OTHER modules' claims — informational only, never a phase-order violation, since
+  cross-module ordering is out of scope for one module's own sequence.
+- **`--format mermaid`** prints raw mermaid text with no fence — for pasting into a PR
+  description or an issue, put each flowchart (the blank-line-separated chunks) in its
+  own ```mermaid fence; wrapping several phases in one fence is a parse error, and
+  pasting them unfenced renders as literal text. The viewer's own top-level **Build
+  order** tab draws the identical diagram from the same artifact, so a node you see in
+  a PR and a node you see in the viewer are the same claim, same label, same phase.
 
 ## Portability
 

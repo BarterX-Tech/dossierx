@@ -525,3 +525,118 @@ func TestLoadConfig_MalformedYAML(t *testing.T) {
 		t.Errorf("malformed YAML must not be reported as ErrNotFound (file exists, just doesn't parse), got: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------
+// build_dir: the directory every runtime-generated file lives under
+// ---------------------------------------------------------------------
+
+func TestLoadConfig_BuildDirDefaultsToBuildUnderConfigDir(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := writeConfig(t, dir, "project.config.yaml", `
+schema_version: 1
+facets: [contract]
+modules: [ledger]
+claims_dir: claims
+`)
+	cfg, err := LoadConfig(p)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got, want := cfg.BuildDirPath(), filepath.Join(dir, "build"); got != want {
+		t.Fatalf("BuildDirPath() = %q, want %q (build_dir unset must default to build beside the config)", got, want)
+	}
+}
+
+func TestLoadConfig_BuildDirRelativeResolvesAgainstConfigNotCwd(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	p := writeConfig(t, dir, "project.config.yaml", `
+schema_version: 1
+facets: [contract]
+modules: [ledger]
+claims_dir: claims
+build_dir: out/dossierx
+`)
+
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherDir := t.TempDir()
+	if err := os.Chdir(otherDir); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(oldWd); err != nil {
+			t.Fatal(err)
+		}
+	}()
+
+	cfg, err := LoadConfig(p)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	want := filepath.Join(dir, "out", "dossierx")
+	if cfg.BuildDirPath() != want {
+		t.Fatalf("BuildDirPath() = %q, want %q (resolved against the config's directory, not cwd %s)", cfg.BuildDirPath(), want, otherDir)
+	}
+	if strings.HasPrefix(cfg.BuildDirPath(), otherDir) {
+		t.Fatalf("BuildDirPath() %q resolved against the process cwd", cfg.BuildDirPath())
+	}
+}
+
+// TestLoadConfig_BuildDirInsideClaimsDirIsRefused walks every overlap the
+// containment rule refuses, plus one accepted row so the table is not vacuous.
+// The rule runs after resolution (see the note on validate), which is what
+// lets the traversal and absolute rows be judged at all.
+func TestLoadConfig_BuildDirInsideClaimsDirIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	for _, d := range []string{"claims", filepath.Join("claims", "x"), filepath.Join("build", "claims")} {
+		if err := os.MkdirAll(filepath.Join(dir, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	absInsideClaims := filepath.Join(dir, "claims", "out")
+
+	cases := []struct {
+		name      string
+		claimsDir string
+		buildDir  string
+		refused   bool
+	}{
+		{"build_dir equal to claims_dir", "claims", "claims", true},
+		{"build_dir under claims_dir", "claims", "claims/x", true},
+		{"claims_dir under build_dir", "build/claims", "build", true},
+		{"absolute build_dir inside claims_dir", "claims", absInsideClaims, true},
+		{"traversal that lands inside claims_dir", "claims", "./claims/../claims/out", true},
+		{"build_dir is the config directory", "claims", ".", true},
+		{"accepted: claims_dir claims, build_dir out", "claims", "out", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: " + tc.claimsDir + "\nbuild_dir: " + tc.buildDir + "\n"
+			p := writeConfig(t, dir, "project.config.yaml", body)
+			cfg, err := LoadConfig(p)
+			if !tc.refused {
+				if err != nil {
+					t.Fatalf("expected the config to load, got: %v", err)
+				}
+				if got, want := cfg.BuildDirPath(), filepath.Join(dir, tc.buildDir); got != want {
+					t.Fatalf("BuildDirPath() = %q, want %q", got, want)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected build_dir %q against claims_dir %q to be refused, got BuildDirPath %q", tc.buildDir, tc.claimsDir, cfg.BuildDirPath())
+			}
+			if !strings.Contains(err.Error(), "build_dir") {
+				t.Fatalf("the refusal must name build_dir, got: %v", err)
+			}
+		})
+	}
+}

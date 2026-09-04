@@ -378,7 +378,7 @@ construct and no image ever renders in a `rows` cell.
 ### `order` and viewer sequencing
 
 `order` is optional and purely a viewer concern — it has no effect on
-`.catalog.json` or lint output.
+`build/catalog/catalog.json` or lint output.
 
 - Unset (or `0`) means "no explicit order": the claim keeps whatever stable
   fallback position it would otherwise get (currently source-file order).
@@ -387,10 +387,10 @@ construct and no image ever renders in a `rows` cell.
 
 This is deliberately separate from `internal/catalog.Document`'s claim
 order, which is always alphabetical by `id` — that ordering exists solely
-to keep `.catalog.json` and lint diffs byte-deterministic across builds and
+to keep `build/catalog/catalog.json` and lint diffs byte-deterministic across builds and
 must never be repurposed for display sequencing. `order` only reorders how
 a module/facet group's claims are laid out in the rendered viewer
-(`internal/render.orderClaims`); it does not exist in `.catalog.json`.
+(`internal/render.orderClaims`); it does not exist in `build/catalog/catalog.json`.
 
 ### `sources` and `[n]` citations
 
@@ -650,6 +650,18 @@ claim in that module is locked.
 See `internal/buildorder`'s package doc comment for the full propose /
 status / lock lifecycle (`dossierx build-order propose|status|lock`), which
 mirrors `internal/lock`'s own draft→locked→stale lifecycle for claims.
+`dossierx build-order show --module <name> --format json|text|mermaid` (json
+default) renders the stored artifact, proposed or locked (`data.locked`
+says which) — one flowchart per phase that has claims, in build-role order,
+ghost nodes for a `rests_on` target the artifact placed in an EARLIER phase
+of the same module (already built; a target it excluded or one in another
+module is listed as text, never drawn), and a cross-module dependency list
+per phase in `--format text` and in the viewer only, not in the mermaid
+export — without recomputing anything: it reads
+`build/build-order/<module>.json` and never re-derives the sequence from
+the current claims. The viewer's top-level "Build order" tab (one tab, a
+module strip inside it) renders the same six-phase diagram from the same
+stored, locked artifact.
 
 ### `section` and in-content headings
 
@@ -798,16 +810,25 @@ is a statement about whether a human ever approved it, and the two must not
 share a severity ladder — registering these as lints would let one tampered
 file freeze locking project-wide and stop the viewer regenerating.
 
-### The project-root stores are tracked artifacts
+### The stores under `build/ledger/` are tracked artifacts
 
 | File | Holds |
 |---|---|
-| `.dossierx-lock-store.json` | the lock ledger: per locked claim and per locked build-order artifact, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
-| `.dossierx-comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
-| `.dossierx-flag-store.json` | each flagged claim's pending `claim flag` trigger: `{claim_says, now_does, reason, flagged_at}`, consumed and deleted by a confirmed `claim reaudit` |
+| `build/ledger/lock-store.json` | the lock ledger: per locked claim and per locked build-order artifact, `{hash, at, actor, reason}`, plus the dependency-drift baselines |
+| `build/ledger/comment-digest.json` | a digest of each claim's comment block, as of the engine's last comment write |
+| `build/ledger/flag-store.json` | each flagged claim's pending `claim flag` trigger: `{claim_says, now_does, reason, flagged_at}`, consumed and deleted by a confirmed `claim reaudit` |
 
-All three live beside `project.config.yaml`. **Commit them; never `.gitignore`
-them.** The gate compares the claims on disk against the first two, so a
+All three live under the build directory (`build_dir`, default `build`,
+resolved against the config file's directory like `claims_dir`), in its
+`ledger/` subdirectory. **Commit them; never `.gitignore` them.** Every other
+generated kind lives under the same directory too — `build/build-order/<module>.json`,
+`build/code-links/<module>.json`, `build/catalog/catalog.json`, `build/viewer/index.html` —
+and `check` writes `build/.gitignore` once so the regenerated kinds are ignored
+and the tracked kinds are not. A project whose repository `.gitignore` matches
+any tracked path under `build/` is refused (see `store-gitignored`), and a
+project that still keeps these files at the project root — every release
+before the build directory wrote them there — is refused on every verb with
+`error.code: layout_legacy` and the exact `git mv`/`mv` block to run. The gate compares the claims on disk against the first two, so a
 project that does not track them has no gate — a claim and its approval have to
 travel in the same commit for CI to be able to check either one. All three are
 engine-written: hand-editing them is the same act as hand-editing a locked
@@ -827,7 +848,7 @@ left to be discovered.** The other two stores are each guarded from both sides �
 the lock ledger by `lock-ledger-missing` / `-orphan` / `-released` / `-abandoned`
 and `lock-content-drift`, the digest store by `comment-digest-absent` /
 `-missing` / `-abandoned` and `comment-ledger-drift`. Nothing in the gate reads
-`.dossierx-flag-store.json`, so **deleting it, `.gitignore`-ing it, or emptying
+`build/ledger/flag-store.json`, so **deleting it, `.gitignore`-ing it, or emptying
 its map is undetectable**: `dossierx check` exits 0 over a project whose flag
 entries are gone, and the human's recorded "the claim says X, the code does Y"
 is erased with no finding, no warning, and nothing in any diff but the absence
@@ -884,7 +905,7 @@ certified exactly the edit that most needed a signature; it is built on
 | Finding | The invariant it enforces |
 |---|---|
 | `lock-ledger-absent` | Locked claims exist, so the ledger file must exist. Deleting it is not a way to re-bless a project; it is a project-scoped refusal you fix by restoring the file from version control. |
-| `lock-ledger-downgraded` | The lock store says it predates the ledger while the project around it proves otherwise — its `version` set back from `2` to `1` and the `ledger` key deleted, one hand edit to the audited file. **Read this as tamper evidence, not as a grandfathering guard.** It was written as the latter: adoption used to key on the store's own `version`, so this edit re-ran adoption and recorded whatever the claims said at that moment as approved, and the rule's job was to catch that with evidence the store does not own (a sibling `.dossierx-comment-digest.json`, or ledger records still sitting in a store claiming to predate records). There is no adoption path at all any more — see *Crossing onto the ledger* below — so the edit buys nothing and this rule is no longer load-bearing for that. It still fires, because a store lying about its own schema version is still a store somebody edited by hand, and the per-claim findings under it still stand. Restore the store from version control. Do **not** re-lock. A downgraded store is deliberately not offered the crossing either: `PreLedgerUnadopted` is `PreLedger && !LedgerDowngraded`, so this store gets *this* finding rather than `lock-ledger-pre-ledger`, and `CrossPreLedger` returns without stamping it. |
+| `lock-ledger-downgraded` | The lock store says it predates the ledger while the project around it proves otherwise — its `version` set back from `2` to `1` and the `ledger` key deleted, one hand edit to the audited file. **Read this as tamper evidence, not as a grandfathering guard.** It was written as the latter: adoption used to key on the store's own `version`, so this edit re-ran adoption and recorded whatever the claims said at that moment as approved, and the rule's job was to catch that with evidence the store does not own (a sibling `build/ledger/comment-digest.json`, or ledger records still sitting in a store claiming to predate records). There is no adoption path at all any more — see *Crossing onto the ledger* below — so the edit buys nothing and this rule is no longer load-bearing for that. It still fires, because a store lying about its own schema version is still a store somebody edited by hand, and the per-claim findings under it still stand. Restore the store from version control. Do **not** re-lock. A downgraded store is deliberately not offered the crossing either: `PreLedgerUnadopted` is `PreLedger && !LedgerDowngraded`, so this store gets *this* finding rather than `lock-ledger-pre-ledger`, and `CrossPreLedger` returns without stamping it. |
 | `lock-ledger-pre-ledger` | This project's lock store predates the lock ledger **and** the project still holds a locked claim or a locked build order, so nothing locked here has an approval record and nothing can attest to content no ledger ever recorded. This is **not** tampering and there is nothing wrong with the claims: the ledger simply does not exist yet. There is no adoption path and no migration command any more — a project crosses by emptying itself of everything that predates the ledger, and the next `claim lock` stamps the store while recording a real approval. One project-scoped finding, deliberately in place of one `lock-ledger-missing` per claim — repeating "locked with no record" N times would attach a recovery (set it back to draft and re-lock) that is destructive advice at a project that has done nothing wrong. **It is CONDITIONAL:** a pre-ledger project holding nothing locked is silent, because such a project crosses correctly on its next lock and a finding there would be a finding on correct state. It is emitted exactly once per project in every state, from two mutually exclusive halves — the locked-claims term (`lock.Audit`) and the locked-build-orders-only term (`internal/check`'s gate, the only layer holding both inputs). Its write-path twin is the `pre_ledger_unadopted` refusal from `claim lock`, `claim reaudit --confirm` and `build-order lock`. See *Crossing onto the ledger* below. Tell it apart from `lock-ledger-absent`, which means the project **had** a ledger and no longer does — and from `lock-ledger-downgraded`, a store that only *claims* to predate the ledger: that rule owns that diagnosis, and such a store is never offered the crossing. |
 | `lock-ledger-missing` | Every `locked` claim has an approval record. A `status:` flipped to `locked` by hand walks past the lint gate, hub-gating and the unresolved-comment gate as though all three had passed. |
 | `lock-ledger-deleted` | A claim **this engine locked** still has its record. `lock-ledger-missing`'s sharper twin, and it exists because every other rule keyed on a record *existing*, so deleting one removed the claim from the switch entirely: drop its entry from the `ledger` map, flip `status: locked` to `draft`, and it is an ordinary draft — freely editable, and re-lockable afterwards with an agent-supplied `--reason` that produces a record indistinguishable from a human's. The evidence the deletion does not reach is one key away in the same file: `locked_at`, stamped by every lock and confirmed reaudit and removed by nothing in this build, plus the claim's dependency baselines under `hashes`. The only path that legitimately ends an approval is `unlock`, which **keeps** the record and stamps `ReleasedAt` — so a record that is absent rather than released was deleted by hand. Stated plainly: deleting `locked_at` and the baselines in the same edit leaves nothing to notice, which is three keys in a tracked file instead of one, in a diff whose purpose is to be read. |
@@ -893,14 +914,15 @@ certified exactly the edit that most needed a signature; it is built on
 | `lock-ledger-orphan` | A `draft` claim holds no *unreleased* record. Unlocking releases a record and keeps it; flipping `locked` back to `draft` by hand does not, and that is the cheapest way to dodge review. |
 | `lock-ledger-abandoned` | An unreleased record still has the claim it approved. Deleting a locked claim's *file* removes the node from every per-claim rule below at once — they are all driven by the claims that exist — so removal was the one change to a locked claim that produced no finding at all. There is no `claim delete` verb: `unlock` first, then delete, so the withdrawal is on the record. |
 | `comment-ledger-drift` | A claim's comment block matches the digest recorded at the last engine write. Deleting an unresolved thread by hand is how a claim would otherwise slip past the lock gate with a review still open. |
-| `comment-digest-absent` | A ledger-covered project has the digest store the rule above compares against. A claim the store has never seen is *unknown*, never *drifted* — correct, since a gate must not manufacture a finding out of missing evidence, but it made the file a delete-to-clear switch: hand-delete an unresolved thread, delete `.dossierx-comment-digest.json` in the same commit, and the finding that named the edit was gone before any command ran. Project-scoped, and gated **only** on the project already being ledger-covered, so a project upgrading into the feature never sees it. |
+| `comment-digest-absent` | A ledger-covered project has the digest store the rule above compares against. A claim the store has never seen is *unknown*, never *drifted* — correct, since a gate must not manufacture a finding out of missing evidence, but it made the file a delete-to-clear switch: hand-delete an unresolved thread, delete `build/ledger/comment-digest.json` in the same commit, and the finding that named the edit was gone before any command ran. Project-scoped, and gated **only** on the project already being ledger-covered, so a project upgrading into the feature never sees it. |
 | `comment-digest-unrecorded` | In a ledger-covered project, a claim **holding threads** has a digest entry beside them. The predicate is the threads themselves, which is what makes it survive the tamper: comments are engine-managed and the single path that writes a thread into a claim file records the claim's digest in the same act, so threads with no entry have exactly two explanations — the entry was removed, or the threads were never written by the engine — and both are the finding. Deliberately silent where the evidence is honestly absent: an uncovered project, an absent store (`comment-digest-absent` is that cause, said once), a claim with no threads, and a claim holding a *standing* approval (that one is `comment-digest-missing`, built on the ledger record instead — reporting both would name one state twice). |
 | `comment-digest-missing` | The digest store is there, and a claim holding a **standing** approval record has no entry in it. The store was protected against deletion and not against being *emptied*, and overwriting it with `{"version":1,"digests":{}}` is strictly cheaper to hide in a review diff than the `rm` the rule above catches: hand-delete an unresolved `comments:` block and empty the map in one edit, and `claim lock` accepted the claim with a real record while `check --validate` reported ok. Coverage, not file presence, is the trigger, and the predicate is built only out of the ledger record — every approval writes the claim's comment digest in the same act that writes the record (`lock.RecordApproval`), so a standing record with no entry is a statement about the store, not about the claim. Silent where it should be: a project with no ledger coverage is not asked, an uncommented draft holds no record, and a released record describes a claim that has left the approval path. Suppressed entirely when the whole file is gone, so `comment-digest-absent` stays the single project-scoped cause. |
 | `comment-digest-abandoned` | A digest entry that recorded review history still has the claim it recorded it for. This is the comment half's reverse sweep, symmetric with `lock-ledger-abandoned`, and it is what makes the **rename** launder visible: deleting a claim's `comments:` block alone fires `comment-ledger-drift`, but deleting the block *and* changing `id:` in the same edit went completely quiet — the claim the store knows no longer exists, the claim that exists is one the store has never seen, and `claim lock <new id>` then succeeded on a claim whose human review had been erased. The old id's entry survives that edit precisely because it is not reachable from the file the tamper rewrote. It does not fire on the two accounted-for departures — an entry that recorded no threads, and a claim whose record an honest `unlock` released — and `lock.SweepCommentDigests` drops those entries so they never accumulate. `lock.AbandonedCommentDigests` owns the predicate for both the rule and the sweep, so the gate and the sweep cannot disagree. |
-| `build-order-content-drift` | A locked `.build-order.<module>.json` still matches the artifact that was approved. The sequence is what an implementing agent builds from, so reordering two phases by hand, moving a claim into `excluded`, or splicing the frozen `hashes` baseline so the order never reports `stale` again all change what gets built without changing any claim. |
+| `build-order-content-drift` | A locked `build/build-order/<module>.json` still matches the artifact that was approved. The sequence is what an implementing agent builds from, so reordering two phases by hand, moving a claim into `excluded`, or splicing the frozen `hashes` baseline so the order never reports `stale` again all change what gets built without changing any claim. |
 | `build-order-ledger-missing` | A build-order artifact carrying `locked: true` has an approval record. `locked` in that file is a claim about a human's `--reason`, and a hand-set one is the same act as a hand-set `status: locked` on a claim. |
 | `build-order-ledger-orphan` | An unlocked build-order artifact whose ledger record still **stands**, unreleased. This was the cheapest bypass in the gate: both build-order rules above skip an artifact carrying `locked: false` — correctly, since an unlocked artifact is a proposal nobody approved — so writing `false` removed the file from every rule's evidence at once while the approved sequence sat there for an agent to follow and the record still said a human approved it. The honest re-propose window is separated by the *release*, not by a guess: `build-order propose` releases the module's record as it overwrites the artifact, so an unlocked artifact under a released record is the documented flow and one under a standing record is not. The predicate therefore has no exception, and it catches a flag flip made together with a content edit — which the earlier, exact predicate (re-sign the artifact as if the flag were still `true`) could not, since a content edit re-signs to something else. |
-| `build-order-ledger-abandoned` | An unreleased build-order record still has the artifact it approved. The two build-order rules above are both driven by the artifacts that exist, so deleting `.build-order.<module>.json` — or dropping the module from `modules:`, which stops anything auditing it — silenced them both at once and made removal strictly quieter than editing. It fires on *unreleased* records only, so a build order a human deliberately released stays silent. This is the build-order twin of `lock-ledger-abandoned`, and exists for the same reason. |
+| `build-order-ledger-abandoned` | An unreleased build-order record still has the artifact it approved. The two build-order rules above are both driven by the artifacts that exist, so deleting `build/build-order/<module>.json` — or dropping the module from `modules:`, which stops anything auditing it — silenced them both at once and made removal strictly quieter than editing. It fires on *unreleased* records only, so a build order a human deliberately released stays silent. This is the build-order twin of `lock-ledger-abandoned`, and exists for the same reason. |
+| `store-gitignored` | Every path the engine writes under `build/ledger`, `build/build-order` and `build/code-links` is trackable. Checked per FILE with `git check-ignore --no-index` — the three ledger stores, `build/.gitignore`, and each module's build-order and code-links artifact, whether or not the file exists yet — because a directory-level check reads the index and goes green the moment one file under the directory is force-added, while every sibling stays ignored. One finding per ignored, untracked path, naming the pattern and its line; an ignored path that IS tracked is an envelope warning instead, since that ledger does reach collaborators. The recovery is the replacement block (`build/*` plus a slash-less negation and a `/*` re-include per tracked kind — git never re-enters an excluded directory, and a trailing-slash negation cannot match a directory that does not exist yet) or `build_dir` pointed at a directory the pattern does not match. Outside a work tree, or where git cannot answer, `check`'s read-only modes report `data.gitignore_check` and no finding; the approval-recording verbs refuse with `store_gitignored`. |
 | `build-order-unreadable` | A build-order artifact that is *there* is legible. This is the build-order twin of `lock-ledger-unreadable`, and it closed the gap where corrupting the approved sequence was quieter than deleting it: deletion is caught by `build-order-ledger-abandoned`, but truncating the same file mid-token left it neither present (so the forward rules skipped it) nor absent (so the reverse sweep skipped it), and `check` exited 0 over a destroyed sequence. Its own rule because it is neither of the two: the artifact was not deleted, and its bytes cannot be compared to anything. Restore the file from version control — never re-propose, which records whatever the claims say **now** as the approved order. |
 | `lock-ledger-unreadable` | The evidence itself is legible. A ledger that exists but does not parse fails closed and loudly, never quieter than a deleted one. |
 
@@ -970,7 +992,7 @@ them at once and left an unreleased approval pointing at nothing.
 `lock-ledger-downgraded` covers the *ledger* being edited instead of the claims,
 which was the one bypass that lived entirely inside the file doing the checking.
 The `build-order-*` rules cover the artifact an implementing agent actually
-reads: `.build-order.<module>.json` is generated, but a **locked** one is
+reads: `build/build-order/<module>.json` is generated, but a **locked** one is
 generated, approved and then frozen, and its `hashes` baseline is the only thing
 that makes `stale` mean anything. A locked build order is checked against its
 record for the same reason a locked claim is — the record is written by
@@ -979,7 +1001,7 @@ evidence set has to be closed from both ends: a rule keyed on `locked: true`
 is disarmed by writing `false`, which is why `build-order-ledger-orphan` audits
 the artifacts the forward rules skip.
 
-Commit `.build-order.<module>.json` once it is locked, for the same reason you
+Commit `build/build-order/<module>.json` once it is locked, for the same reason you
 commit the ledger: those rules read the artifact off disk, so an approved order
 that never travels with the repository is an approval CI has nothing to compare
 against. While it is still `locked: false` it is ordinary generated output that
@@ -1039,6 +1061,7 @@ read the sentence above as covering the file byte for byte.
 | a locked build order's flag cleared to `false` while its record stands | `build-order-ledger-orphan` |
 | a locked build order's artifact deleted, or its module dropped from `modules:` | `build-order-ledger-abandoned` |
 | a build-order artifact present and undecodable | `build-order-unreadable` |
+| a tracked store or artifact under `build/` matched by `.gitignore` and not in the index | `store-gitignored` |
 
 Note the shape of that table. Every artifact in the design is watched by rules
 built out of the *other* artifacts, so removing any single piece of the evidence
@@ -1086,7 +1109,7 @@ missing file — and then one hand-edit falsifies what the ledger says about it:
 dossierx claim unlock widget.contract.overview --reason "editing"
 $EDITOR claims/widget-overview.yaml           # rewrite the body to say something else
 dossierx claim lock   widget.contract.overview --reason "re-lock"
-$EDITOR .dossierx-lock-store.json             # put the ORIGINAL reason, at and actor back
+$EDITOR build/ledger/lock-store.json             # put the ORIGINAL reason, at and actor back
 ```
 
 `dossierx check` → `ok: true`, zero findings. `dossierx check --staged` →
@@ -1280,8 +1303,8 @@ safe precisely because the project holds zero locked artifacts at that instant,
 and necessary because otherwise the first re-lock of step 3 would be refused as a
 deleted record (`lock-ledger-deleted`).
 
-Then **commit the rewritten `.dossierx-lock-store.json` and the new
-`.dossierx-comment-digest.json`** with the re-locks. Until that commit lands,
+Then **commit the rewritten `build/ledger/lock-store.json` and the new
+`build/ledger/comment-digest.json`** with the re-locks. Until that commit lands,
 every CI run and every hook run starts from the un-crossed store again.
 
 **The gate fails closed.** A missing or unreadable ledger never adopts itself, in
@@ -1294,7 +1317,7 @@ Adoption was the one operation in this design that *manufactured approval out of
 nothing*: it took bytes nobody reviewed and wrote a record saying they were the
 approved baseline. Any rule that performs it automatically hands an attacker the
 same primitive the gate exists to deny — "arrive with no ledger" becomes a
-universal bypass, and `rm .dossierx-lock-store.json` is rewarded with a clean
+universal bypass, and `rm build/ledger/lock-store.json` is rewarded with a clean
 report. The obvious repair is a predicate that tells an honest pre-ledger store
 from a downgraded one, and that repair does not exist: `locked_at` shipped in
 v0.2.0 (`git show v0.2.0:internal/lock/lock.go`), so no field, no timestamp and
@@ -1350,14 +1373,24 @@ viewer:
                                     # the 7 per-layout component partials
                                     # (card.html, table.html, list.html,
                                     # steps.html, tree.html, banner.html,
-                                    # mockup.html), the Build Order partial
-                                    # (build_order.html), plus the outer shell
+                                    # mockup.html), plus the outer shell
                                     # (shell.html) and base stylesheet
-                                    # (style.css). Missing
+                                    # (style.css). The Build order tab is
+                                    # not overridable: a directory still
+                                    # carrying the former build_order.html
+                                    # override is refused by name at render.
+                                    # A style.css override does not carry
+                                    # the tab's .bo-* diagram rules, and
+                                    # check warns when one is in force
+                                    # beside a locked build order. Missing
                                     # individual files inside it fall back
                                     # to engine defaults per-file; a
                                     # configured-and-missing directory itself
-                                    # is a hard load-time error.
+                                    # is a hard load-time error. An overridden
+                                    # style.css does not carry the engine's
+                                    # `.bo-*` diagram rules, and `check` warns
+                                    # when one is in force beside a locked
+                                    # build order.
   theme:                          # optional; a preset, a theme file, and/or
                                     # inline CSS token overrides — see below.
     preset: claude

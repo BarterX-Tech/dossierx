@@ -98,7 +98,7 @@ func sortedLeafNames(m map[string]bool) []string {
 
 // TestRouterSkillNounBlockHeadingMatchesItsContents keeps the section's own
 // heading honest, because that heading is the sentence a reader believes
-// without counting: "The nine nouns, twenty-four leaves".
+// without counting: "The nine nouns, twenty-five leaves".
 //
 // It is checked against the block below it rather than against surface.json, so
 // the failure names the right defect — a heading that has fallen behind the

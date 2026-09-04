@@ -3,10 +3,12 @@ package buildorder
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -412,7 +414,9 @@ func TestPropose_ClaimEntryFile_IsProjectRelativeNotAbsolute(t *testing.T) {
 	if filepath.IsAbs(entries[0].File) {
 		t.Fatalf("expected ClaimEntry.File to be project-relative, got absolute path %q", entries[0].File)
 	}
-	if want := filepath.Join("claims", "schema.yaml"); entries[0].File != want {
+	// A slash literal, not filepath.Join: the artifact is committed and its
+	// paths are slash-separated on every host (displayPath).
+	if want := "claims/schema.yaml"; entries[0].File != want {
 		t.Fatalf("ClaimEntry.File = %q, want %q", entries[0].File, want)
 	}
 }
@@ -425,4 +429,113 @@ func onlyPhase(a *Artifact, role model.BuildRole) []ClaimEntry {
 		}
 	}
 	return nil
+}
+
+// ---------------------------------------------------------------------
+// layeredTopoSort returns LAYERS; computePhases flattens them
+// ---------------------------------------------------------------------
+
+func flattenIDs(layers [][]model.Claim) []string {
+	var out []string
+	for _, l := range layers {
+		for _, c := range l {
+			out = append(out, c.ID)
+		}
+	}
+	return out
+}
+
+// TestLayeredTopoSortFlattensToTheCommittedArtifact is the byte-level
+// regression pin: the sort now returns layers, and their flattening must
+// equal a tracked, ledger-signed artifact the flat-returning code produced.
+// testdata/fixture-theme-flat's panel module is the fixture that carries a
+// committed, locked build order (fixture-graph-demo carries none).
+func TestLayeredTopoSortFlattensToTheCommittedArtifact(t *testing.T) {
+	fixture := filepath.Join("..", "..", "testdata", "fixture-theme-flat")
+	cfg, err := config.LoadConfig(filepath.Join(fixture, "project.config.yaml"))
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	claims, err := loader.LoadClaims(cfg.ClaimsDir)
+	if err != nil {
+		t.Fatalf("LoadClaims: %v", err)
+	}
+	committed, err := LoadArtifact(ArtifactPath(cfg, "panel"))
+	if err != nil {
+		t.Fatalf("LoadArtifact: %v", err)
+	}
+	if !committed.Locked || len(committed.Phases) == 0 {
+		t.Fatalf("fixture precondition: the committed panel artifact must be locked with phases, got %+v", committed)
+	}
+
+	byPhase := make(map[model.BuildRole][]model.Claim)
+	for _, c := range claims {
+		if c.Module == "panel" && c.BuildRole != model.BuildRoleOutOfScope && c.BuildRole != "" {
+			byPhase[c.BuildRole] = append(byPhase[c.BuildRole], c)
+		}
+	}
+	checked := 0
+	for _, p := range committed.Phases {
+		bucket := byPhase[model.BuildRole(p.Phase)]
+		if len(bucket) == 0 {
+			t.Fatalf("committed phase %q has no claims in the fixture's claims dir", p.Phase)
+		}
+		layers, cyclic := layeredTopoSort(stableDisplayOrder(bucket))
+		if len(cyclic) > 0 {
+			t.Fatalf("phase %q: unexpected cycle %v", p.Phase, cyclic)
+		}
+		var want []string
+		for _, c := range p.Claims {
+			want = append(want, c.ID)
+		}
+		if got := flattenIDs(layers); !reflect.DeepEqual(got, want) {
+			t.Errorf("phase %q: flattened layers %v != committed %v", p.Phase, got, want)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("checked no phase; the pin asserted nothing")
+	}
+}
+
+// TestLayeredTopoSortLayerBoundaries hand-writes the layers for two shapes a
+// flat comparison cannot tell apart from an off-by-one in the boundary.
+func TestLayeredTopoSortLayerBoundaries(t *testing.T) {
+	chain := []model.Claim{
+		mc("m.c.a", "m", model.BuildRoleBehavior),
+		mc("m.c.b", "m", model.BuildRoleBehavior, "m.c.a"),
+		mc("m.c.c", "m", model.BuildRoleBehavior, "m.c.b"),
+	}
+	layers, cyclic := layeredTopoSort(chain)
+	if len(cyclic) > 0 {
+		t.Fatalf("chain: cycle %v", cyclic)
+	}
+	if got, want := layerIDs(layers), [][]string{{"m.c.a"}, {"m.c.b"}, {"m.c.c"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("chain layers = %v, want %v", got, want)
+	}
+
+	fanIn := []model.Claim{
+		mc("m.c.a", "m", model.BuildRoleBehavior),
+		mc("m.c.b", "m", model.BuildRoleBehavior),
+		mc("m.c.c", "m", model.BuildRoleBehavior, "m.c.a", "m.c.b"),
+	}
+	layers, cyclic = layeredTopoSort(fanIn)
+	if len(cyclic) > 0 {
+		t.Fatalf("fan-in: cycle %v", cyclic)
+	}
+	if got, want := layerIDs(layers), [][]string{{"m.c.a", "m.c.b"}, {"m.c.c"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("fan-in layers = %v, want %v", got, want)
+	}
+}
+
+func layerIDs(layers [][]model.Claim) [][]string {
+	out := make([][]string, 0, len(layers))
+	for _, l := range layers {
+		var ids []string
+		for _, c := range l {
+			ids = append(ids, c.ID)
+		}
+		out = append(out, ids)
+	}
+	return out
 }

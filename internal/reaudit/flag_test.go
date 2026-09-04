@@ -1,6 +1,7 @@
 package reaudit
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,7 +74,7 @@ func TestProposeFlagDiff_ThenApply_ReplacesBodyWithNowDoes(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestFlagStore_LoadMissingFile_IsEmptyNotError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".dossierx-flag-store.json")
+	path := filepath.Join(t.TempDir(), "build", "ledger", "flag-store.json")
 	store, err := LoadFlagStore(path)
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)
@@ -84,7 +85,7 @@ func TestFlagStore_LoadMissingFile_IsEmptyNotError(t *testing.T) {
 }
 
 func TestFlagStore_SaveLoadRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".dossierx-flag-store.json")
+	path := filepath.Join(t.TempDir(), "build", "ledger", "flag-store.json")
 	store, err := LoadFlagStore(path)
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)
@@ -110,7 +111,7 @@ func TestFlagStore_SaveLoadRoundTrip(t *testing.T) {
 }
 
 func TestFlagStore_DeleteThenSave(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".dossierx-flag-store.json")
+	path := filepath.Join(t.TempDir(), "build", "ledger", "flag-store.json")
 	store, err := LoadFlagStore(path)
 	if err != nil {
 		t.Fatalf("LoadFlagStore: %v", err)
@@ -131,5 +132,31 @@ func TestFlagStore_DeleteThenSave(t *testing.T) {
 	}
 	if len(reloaded.Flags) != 0 {
 		t.Fatalf("expected the flag removed after a confirmed reaudit, got: %v", reloaded.Flags)
+	}
+}
+
+// TestFlagStore_LoadToleratesAnUnknownKeyAndDecodeRefusesIt pins the same
+// split internal/digest and internal/lock draw: LoadFlagStore (the on-disk
+// path) ignores a key a later release adds, so the older binary's check does
+// not fail on a file that is not corrupt; DecodeFlagStore (the index's copy
+// under check --staged) refuses it.
+func TestFlagStore_LoadToleratesAnUnknownKeyAndDecodeRefusesIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "flag-store.json")
+	raw := []byte(`{"version":1,"flags":{"widget.contract.main":{"claim_says":"old","now_does":"new","reason":"why","flagged_at":"2026-01-01T00:00:00Z"}},"future_key":"x"}`)
+	if err := os.WriteFile(path, raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store, err := LoadFlagStore(path)
+	if err != nil {
+		t.Fatalf("LoadFlagStore must tolerate an unknown key: %v", err)
+	}
+	if _, ok := store.Flags["widget.contract.main"]; !ok {
+		t.Fatalf("the known keys must still load beside the unknown one: %+v", store.Flags)
+	}
+	if _, err := DecodeFlagStore(raw); err == nil {
+		t.Fatalf("DecodeFlagStore must refuse an unknown key")
+	}
+	if _, err := DecodeFlagStore([]byte(`{"version":1,"flags":{}}`)); err != nil {
+		t.Fatalf("DecodeFlagStore must accept the exact on-disk shape: %v", err)
 	}
 }

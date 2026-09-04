@@ -148,7 +148,7 @@ func TestGraphEndpoint(t *testing.T) {
 
 	if changes := diffTrees(before, snapshotTree(t, root)); len(changes) > 0 {
 		t.Errorf("GET /api/graph modified the project directory: %v\n"+
-			"A read handler must never write viewer/index.html or .catalog.json: GET is CSRF-exempt, "+
+			"A read handler must never write build/viewer/index.html or build/catalog/catalog.json: GET is CSRF-exempt, "+
 			"so a write-on-read lets a bare unauthenticated poll rewrite the project and race the render pipeline.", changes)
 	}
 

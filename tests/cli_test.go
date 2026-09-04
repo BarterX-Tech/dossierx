@@ -8,7 +8,7 @@
 //     suggesting --config <path>
 //  3. a nested project.config.yaml (a sub-tree with its own config) means
 //     the nearest one wins, never merged with an ancestor's
-//  4. an unwritable .catalog.json target directory produces a clear
+//  4. an unwritable build/catalog/catalog.json target directory produces a clear
 //     permissions error, not a silent no-op
 //  5. lint failures in a CI-style invocation always exit non-zero, with
 //     --json producing machine-readable output
@@ -227,7 +227,7 @@ func TestNestedConfigNearestWins(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------
-// 4. .catalog.json target directory not writable -> clear permissions
+// 4. build/catalog/catalog.json target directory not writable -> clear permissions
 //    error, not a silent no-op
 // ---------------------------------------------------------------------
 
@@ -242,9 +242,9 @@ func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
 	root := t.TempDir()
 	writeFixtureProject(t, root, "readonlymod")
 
-	catalogPath := filepath.Join(root, ".catalog.json")
+	catalogPath := filepath.Join(root, "build", "catalog", "catalog.json")
 
-	// Make the config's own directory (where .catalog.json is written)
+	// Make the config's own directory (where build/catalog/catalog.json is written)
 	// read-only, so the write must fail instead of silently doing nothing.
 	if err := os.Chmod(root, 0o555); err != nil {
 		t.Fatalf("chmod root read-only: %v", err)
@@ -265,7 +265,7 @@ func TestCatalogUnwritableTargetDirFailsLoudly(t *testing.T) {
 	}
 
 	if _, err := os.Stat(catalogPath); err == nil {
-		t.Fatalf(".catalog.json was written despite the unwritable directory (silent no-op or partial write)")
+		t.Fatalf("build/catalog/catalog.json was written despite the unwritable directory (silent no-op or partial write)")
 	}
 }
 

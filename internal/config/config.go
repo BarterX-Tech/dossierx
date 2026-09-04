@@ -194,6 +194,21 @@ type Config struct {
 	DoctrineFacet string   `yaml:"doctrine_facet,omitempty"`
 	Viewer        Viewer   `yaml:"viewer,omitempty"`
 
+	// BuildDir is the directory every runtime-generated file lives under —
+	// the build-order and code-links artifacts, the three ledger stores, the
+	// catalog and the viewer — one subdirectory per kind (see paths.go for the
+	// layout). Optional; it defaults to "build" and, like ClaimsDir, is
+	// resolved against the config file's own directory, never the process
+	// cwd. Read it through BuildDirPath(), which is the resolved form; the
+	// field keeps the YAML name and the accessor keeps the resolved value,
+	// because Go refuses a struct with a field and a method of one name.
+	//
+	// It must not sit inside claims_dir, contain it, equal it, or equal the
+	// config directory itself; DecodeConfig refuses every one of those AFTER
+	// both paths are resolved (see the note on validate for why the rule
+	// cannot live there).
+	BuildDir string `yaml:"build_dir,omitempty"`
+
 	// Tracks is the project's declared registry of cross-cutting concerns —
 	// the second axis claims may join, orthogonal to Modules. See
 	// model.TrackRef for the axis itself.
@@ -324,6 +339,13 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	if !filepath.IsAbs(cfg.ClaimsDir) {
 		cfg.ClaimsDir = filepath.Join(dir, cfg.ClaimsDir)
 	}
+	if strings.TrimSpace(cfg.BuildDir) == "" {
+		cfg.BuildDir = DefaultBuildDir
+	}
+	if !filepath.IsAbs(cfg.BuildDir) {
+		cfg.BuildDir = filepath.Join(dir, cfg.BuildDir)
+	}
+	cfg.BuildDir = filepath.Clean(cfg.BuildDir)
 	if cfg.Viewer.TemplateOverrides != "" && !filepath.IsAbs(cfg.Viewer.TemplateOverrides) {
 		cfg.Viewer.TemplateOverrides = filepath.Join(dir, cfg.Viewer.TemplateOverrides)
 	}
@@ -331,6 +353,20 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 		if !filepath.IsAbs(sd) {
 			cfg.SourceDirs[i] = filepath.Join(dir, sd)
 		}
+	}
+
+	// THE CONTAINMENT RULE, evaluated only now that both paths are absolute
+	// and cleaned. The engine's outputs may not sit inside the claims tree
+	// (serve's watcher polls claims_dir and would re-render on every one of
+	// its own writes, forever), the claims may not sit inside the build
+	// directory (build/.gitignore and the printed recoveries treat everything
+	// under it as engine output), and the two may not be one directory. The
+	// build directory may not be the config directory either: then ViewerPath
+	// is viewer/index.html — the legacy path — and check would write a file
+	// that the legacy-layout refusal then refuses on every following command,
+	// a loop with no exit.
+	if err := checkBuildDirContainment(cfg.BuildDir, cfg.ClaimsDir, dir); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", path, err)
 	}
 
 	// The theme's two path-shaped fields are resolved here and READ
@@ -373,6 +409,14 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	return &cfg, nil
 }
 
+// validate checks the SHAPE of a decoded config: required fields, duplicates,
+// membership, the theme grammar. It runs BEFORE DecodeConfig resolves the
+// path-shaped fields, so inside it claims_dir, build_dir and every other path
+// is still the raw YAML string — "claims/x" against "./claims/../x", or "." —
+// and no comparison here can answer whether two of them overlap. Path
+// RELATIONSHIPS (build_dir against claims_dir, either against the config
+// directory) are therefore checked after resolution in DecodeConfig, and no
+// future path relationship should be checked here either.
 func (c *Config) validate() error {
 	if c.SchemaVersion != CurrentSchemaVersion {
 		return fmt.Errorf("unknown schema_version %d (engine supports %d)", c.SchemaVersion, CurrentSchemaVersion)
@@ -484,6 +528,38 @@ func (c *Config) TrackByID(id string) (Track, bool) {
 		}
 	}
 	return Track{}, false
+}
+
+// checkBuildDirContainment is the resolved-path half of build_dir's
+// validation: buildDir, claimsDir and configDir are absolute and cleaned, and
+// the rule refuses buildDir inside claimsDir, claimsDir inside buildDir, the
+// two equal, or buildDir equal to configDir. filepath.Rel is computed both
+// ways; a result of "." or one that does not start with ".." means one
+// contains the other.
+func checkBuildDirContainment(buildDir, claimsDir, configDir string) error {
+	buildDir = filepath.Clean(buildDir)
+	claimsDir = filepath.Clean(claimsDir)
+	configDir = filepath.Clean(configDir)
+	if buildDir == configDir {
+		return fmt.Errorf("build_dir (%s) is the config file's own directory; the engine's outputs need a directory of their own — leave build_dir unset (it defaults to build) or set it to a subdirectory", buildDir)
+	}
+	if pathContains(claimsDir, buildDir) || pathContains(buildDir, claimsDir) {
+		return fmt.Errorf("build_dir (%s) and claims_dir (%s) overlap; the engine's outputs cannot sit inside the claims tree or contain it — move the claims under a subdirectory (FORMAT.md's claims_dir move procedure) or set build_dir to a path outside claims_dir", buildDir, claimsDir)
+	}
+	return nil
+}
+
+// pathContains reports whether child is dir itself or sits anywhere under it,
+// both already absolute and cleaned.
+func pathContains(dir, child string) bool {
+	rel, err := filepath.Rel(dir, child)
+	if err != nil {
+		return false
+	}
+	if rel == "." {
+		return true
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func isHexDigit(r rune) bool {

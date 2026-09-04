@@ -130,7 +130,17 @@ var parityProbes = []parityProbe{
 	{"13 logo", []string{".logo"}, []string{"border-color", "color"}},
 	{"14 mockup diagram", []string{".mockup-diagram"}, []string{"background-color"}},
 	{"15 console mockup", []string{".gcp-console"}, []string{"background-color", "color", "border-color", "box-shadow"}},
-	{"16 record heads", []string{".system-record-head", ".track-head", ".build-order-module > .system-build-title"}, []string{"border-bottom-color"}},
+	// Row 16 used to carry a third selector, `.build-order-module >
+	// .system-build-title`, the per-module Build Order sub-tab's title. That
+	// sub-tab, its markup and its stylesheet rules were removed when the
+	// top-level Build order tab replaced it (CHANGELOG, Removed), so the
+	// current engine renders no element the selector can match: the probe
+	// resolved to the synthetic subtree in the after-document and to a real
+	// element in the frozen baseline, which the origin check below rightly
+	// refused to compare. Its successor, `.bo-phase__head`, has no pre-change
+	// counterpart in either baseline to hold parity against; the build-order
+	// tab's own suite (build_order_tab_test.go) is where it is exercised.
+	{"16 record heads", []string{".system-record-head", ".track-head"}, []string{"border-bottom-color"}},
 	{"17 comments panel", []string{".comments-panel"}, []string{"box-shadow", "background-color", "border-radius"}},
 	{"18 comments rail", []string{".comments-rail"}, []string{"box-shadow", "background-color", "border-left-color"}},
 	{"19 comments toast", []string{".comments-toast"}, []string{"box-shadow", "background-color", "color", "border-color"}},
@@ -194,7 +204,6 @@ window.__dxParity = (function () {
     '<ul class="claim-edges"><li class="claim-review-pending">review_pending</li></ul>',
     '<div class="mockup-diagram"><div class="gcp-console"><div class="gcp-row">r</div></div></div>',
     '<div class="system-record-head">h</div><div class="track-head">h</div>',
-    '<div class="build-order-module"><div class="system-build-title">t</div></div>',
     '<ul class="claim-source-list"><li class="claim-source" id="dxparity-source">s</li></ul>',
     '<div class="logo">l</div><div class="card">c</div><div class="claim-banner">b</div>',
     '<button type="button" class="sec-tab on">t</button>',
@@ -377,7 +386,7 @@ func probeSpec() string {
 }
 
 // renderFixtureFresh copies testdata/<fixture> to a temp dir, drops the
-// committed viewer/ and .catalog.json, and runs the engine under test over the
+// committed build/viewer/ and build/catalog/, and runs the engine under test over the
 // copy. The file:// URL it returns is the page a reader would open today.
 func renderFixtureFresh(t *testing.T, fixture string) string {
 	t.Helper()
@@ -392,10 +401,10 @@ func renderFixtureFresh(t *testing.T, fixture string) string {
 	if out, err := cp.CombinedOutput(); err != nil {
 		t.Fatalf("copy fixture %s: %v\n%s", fixture, err, out)
 	}
-	if err := os.RemoveAll(filepath.Join(dst, "viewer")); err != nil {
+	if err := os.RemoveAll(filepath.Join(dst, "build", "viewer")); err != nil {
 		t.Fatalf("drop committed viewer: %v", err)
 	}
-	if err := os.Remove(filepath.Join(dst, ".catalog.json")); err != nil && !os.IsNotExist(err) {
+	if err := os.RemoveAll(filepath.Join(dst, "build", "catalog")); err != nil {
 		t.Fatalf("drop committed catalog: %v", err)
 	}
 	cfg := filepath.Join(dst, "project.config.yaml")
@@ -403,7 +412,7 @@ func renderFixtureFresh(t *testing.T, fixture string) string {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("check %s: %v\n%s", fixture, err, out)
 	}
-	out := filepath.Join(dst, "viewer", "index.html")
+	out := filepath.Join(dst, "build", "viewer", "index.html")
 	if _, err := os.Stat(out); err != nil {
 		t.Fatalf("check wrote no viewer for %s: %v", fixture, err)
 	}

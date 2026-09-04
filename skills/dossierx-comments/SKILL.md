@@ -65,12 +65,12 @@ Getting out of that wedge is version control and nothing else. No command in the
 recorded digest that disagrees — `check` adopts only claims the store has never seen — so:
 
 - the block on disk was **hand-edited** → restore the claim file;
-- the block on disk is **right** and a commit carried it without `.dossierx-comment-digest.json`
+- the block on disk is **right** and a commit carried it without `build/ledger/comment-digest.json`
   → restore the digest store;
 - you cannot tell → restore **both from the same commit**. The engine writes them as a pair and
   they only agree as a pair. Re-enter anything written since with `comment add` / `comment reply`.
 
-**Never delete `.dossierx-comment-digest.json` to make the refusal go away.** A claim the store
+**Never delete `build/ledger/comment-digest.json` to make the refusal go away.** A claim the store
 has never seen reads as *unknown*, not *drifted*, so the delete buries this refusal and the
 `comment-ledger-drift` finding beside it — which is precisely the laundering the store exists to
 catch, and `dossierx check` then reports it as `comment-digest-absent`. The `comment` noun is
@@ -79,7 +79,7 @@ the one on disk is right and no commit holds a matching pair, say so plainly and
 here is how the review history gets erased.
 
 **The *comment* erasure `check` cannot see, which is why it is on you.** Deleting a **draft** claim's
-`comments:` block **and** that claim's key in `.dossierx-comment-digest.json` **in the same change**
+`comments:` block **and** that claim's key in `build/ledger/comment-digest.json` **in the same change**
 reports `ok: true`. Either alone is refused — the block alone is `comment-ledger-drift`, the key
 alone is `comment-digest-unrecorded` — but together there is no surviving evidence to name, and the
 claim then **locks cleanly**, because an open thread was the only thing blocking it. That makes this

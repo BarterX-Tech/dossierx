@@ -67,7 +67,7 @@ dossierx claim link --module <name> --claim <id> --file <project-relative-path> 
 
 It takes `--dry-run`, needs no `--reason` (it records a fact, it does not change what is approved),
 and refuses a claim that is not locked (`not_locked`, exit 2). Both paths write the same generated
-`.implementation.<module>.json` — never hand-edit it.
+`build/code-links/<module>.json` — never hand-edit it.
 
 `dossierx check` also reports, non-blocking, the drift count (a linked file changed since it was
 linked) and the unlinked count (locked `schema`/`behavior`/`api`/`verification` claims with zero
@@ -106,10 +106,10 @@ it just move, get renamed, or get refactored with identical behavior?
   prose. Continue from **[`dossierx-claims`](../dossierx-claims/SKILL.md)**'s reaudit section. This is the **only** place a human
   re-enters this otherwise fully autonomous workflow — a genuine mismatch, never routine linking.
 
-  **The before/after lives in `.dossierx-flag-store.json`, and that file is a tracked artifact.**
+  **The before/after lives in `build/ledger/flag-store.json`, and that file is a tracked artifact.**
   Only `review_pending` goes into the claim; the two strings the human is going to review go into
-  the store at the project root, beside `.dossierx-lock-store.json` and
-  `.dossierx-comment-digest.json`. Commit it in the same commit as the flagged claim and never
+  the store at the project root, beside `build/ledger/lock-store.json` and
+  `build/ledger/comment-digest.json`. Commit it in the same commit as the flagged claim and never
   `.gitignore` it. Unlike the other two it has **no gate rule behind it** — nothing compares it to
   anything — so a flag that does not travel is lost in silence: the claim arrives elsewhere
   `review_pending`, `reaudit` proposes an empty diff, and confirming that empty diff clears the

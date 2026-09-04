@@ -12,7 +12,6 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/config"
-	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
@@ -256,7 +255,7 @@ func TestStaged_UntrackedConfigWillNotJudgeTrackedContent(t *testing.T) {
 	gitRepo(t, root)
 	// Everything EXCEPT project.config.yaml. The claims, the archive copy and
 	// the ledger are tracked; the config is not.
-	git(t, root, "add", "claims", "decoy", ".dossierx-lock-store.json")
+	git(t, root, "add", "claims", "decoy", "build/ledger/lock-store.json")
 	git(t, root, "commit", "-qm", "fixture")
 
 	tampered := strings.Replace(string(original), "a locked claim.", "a locked claim, quietly rewritten.", 1)
@@ -444,7 +443,7 @@ func TestStaged_LedgerIsReadFromTheIndex(t *testing.T) {
 	// approval must travel together" includes the coverage the approval
 	// established, or the very next commit could drop the entry that makes an
 	// edited-away review reportable.
-	git(t, cfg.Dir(), "add", ".dossierx-lock-store.json", digest.StoreFileName)
+	git(t, cfg.Dir(), "add", config.LockStoreDisplayPath, config.CommentDigestDisplayPath)
 	sp, err = check.Staged(cfg)
 	if err != nil {
 		t.Fatalf("Staged (after add): %v", err)

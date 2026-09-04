@@ -48,7 +48,7 @@ func armLedgerFixture(t *testing.T, cfgPath string) {
 		// call from a shared project writer.
 		return
 	}
-	path := filepath.Join(cfg.Dir(), ".dossierx-lock-store.json")
+	path := filepath.Join(cfg.Dir(), "build", "ledger", "lock-store.json")
 	store, err := lock.LoadStore(path)
 	if err != nil {
 		t.Fatalf("arm ledger: load store %s: %v", path, err)

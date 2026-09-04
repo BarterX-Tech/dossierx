@@ -36,7 +36,7 @@ func depsAgainst(t *testing.T, p *project, storePath string) *Deps {
 // on an honest, still-pre-ledger v0.2.x project manufactured that contradiction
 // against itself:
 //
-//	dossierx comment add …    succeeds, and creates .dossierx-comment-digest.json
+//	dossierx comment add …    succeeds, and creates build/ledger/comment-digest.json
 //	dossierx check            lock-ledger-downgraded, from now on
 //	the crossing              REFUSED: "restore the lock store from version control"
 //
@@ -49,7 +49,10 @@ func depsAgainst(t *testing.T, p *project, storePath string) *Deps {
 // (the digest store is created) and again at the last (the crossing refuses).
 func TestACommentOpLeavesAPreLedgerProjectAbleToCross(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML, "b.yaml": preLedgerLockedBYAML})
-	storePath := filepath.Join(p.root, ".dossierx-lock-store.json")
+	storePath := filepath.Join(p.root, "build", "ledger", "lock-store.json")
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
+		t.Fatalf("mkdir ledger dir: %v", err)
+	}
 	if err := os.WriteFile(storePath, []byte(`{"version":1,"hashes":{},"locked_at":{"widget.contract.b":"2026-01-01T00:00:00Z"}}`), 0o644); err != nil {
 		t.Fatalf("write v1 store: %v", err)
 	}
@@ -117,10 +120,13 @@ func TestACommentOpLeavesAPreLedgerProjectAbleToCross(t *testing.T) {
 // forged block is recorded).
 func TestACommentWriteStaysRefusedOnADowngradedStore(t *testing.T) {
 	p := newProject(t, map[string]string{"a.yaml": draftAYAML})
-	storePath := filepath.Join(p.root, ".dossierx-lock-store.json")
+	storePath := filepath.Join(p.root, "build", "ledger", "lock-store.json")
 	digestPath := digest.StorePathBeside(storePath)
 
 	// A covered project: a lock store at the ledger schema with a record in it.
+	if err := os.MkdirAll(filepath.Dir(storePath), 0o755); err != nil {
+		t.Fatalf("mkdir ledger dir: %v", err)
+	}
 	if err := os.WriteFile(storePath, []byte(`{"version":2,"hashes":{},"locked_at":{},"ledger":{"widget.contract.z":{"subject":"claim","hash":"h","at":"2026-01-01T00:00:00Z","actor":"alice","reason":"approved"}}}`), 0o644); err != nil {
 		t.Fatalf("write store: %v", err)
 	}

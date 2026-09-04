@@ -9,7 +9,7 @@ import (
 )
 
 // TestDocument_TrackMembershipIsResolved pins the projection of a claim's
-// cross-cutting membership into .catalog.json, and above all that the ROLE is
+// cross-cutting membership into build/catalog/catalog.json, and above all that the ROLE is
 // written out resolved rather than raw. A membership authored without a role
 // means "cites", and a consumer of the index must never have to know that
 // rule to read the file correctly — the same contract Entry.Kind holds for
@@ -61,7 +61,7 @@ func TestDocument_TrackMembershipIsResolved(t *testing.T) {
 }
 
 // TestDocument_TrackMembershipOmittedWhenAbsent is the zero-cost-when-unused
-// half. A project that declares no tracks must produce a .catalog.json
+// half. A project that declares no tracks must produce a build/catalog/catalog.json
 // byte-identical to the one it produced before tracks existed — an empty
 // `"tracks":[]` on every entry would be a diff in every consuming project for
 // a feature none of them use.
@@ -84,7 +84,7 @@ func TestDocument_TrackMembershipOmittedWhenAbsent(t *testing.T) {
 }
 
 // TestDocument_SourcesAreNotProjected pins a deliberate omission, not an
-// oversight. .catalog.json already leaves out body, rows and steps because
+// oversight. build/catalog/catalog.json already leaves out body, rows and steps because
 // they are render concerns rather than catalog structure, and a claim's
 // evidence sits on that same side of the line: it is read by a human on the
 // claim, not resolved by a consumer of the index. If sources ever do belong

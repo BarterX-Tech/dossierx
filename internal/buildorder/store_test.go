@@ -19,7 +19,7 @@ func fixedNow(t *testing.T, ts time.Time) {
 }
 
 func TestLoadArtifact_MissingFile_WrapsErrNotProposed(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".build-order.widget.json")
+	path := filepath.Join(t.TempDir(), "build", "build-order", "widget.json")
 	_, err := LoadArtifact(path)
 	if err == nil || !errors.Is(err, ErrNotProposed) {
 		t.Fatalf("expected an ErrNotProposed-wrapping error, got: %v", err)
@@ -27,7 +27,7 @@ func TestLoadArtifact_MissingFile_WrapsErrNotProposed(t *testing.T) {
 }
 
 func TestStatus_MissingFile_WrapsErrNotProposed(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".build-order.widget.json")
+	path := filepath.Join(t.TempDir(), "build", "build-order", "widget.json")
 	_, err := Status(path, nil, nil)
 	if err == nil || !errors.Is(err, ErrNotProposed) {
 		t.Fatalf("expected an ErrNotProposed-wrapping error, got: %v", err)
@@ -35,7 +35,7 @@ func TestStatus_MissingFile_WrapsErrNotProposed(t *testing.T) {
 }
 
 func TestLock_MissingFile_Refuses(t *testing.T) {
-	path := filepath.Join(t.TempDir(), ".build-order.widget.json")
+	path := filepath.Join(t.TempDir(), "build", "build-order", "widget.json")
 	_, err := Lock(path, nil, nil)
 	if err == nil || !errors.Is(err, ErrNotProposed) {
 		t.Fatalf("expected Lock to refuse against a not-yet-proposed artifact, got: %v", err)
@@ -44,7 +44,7 @@ func TestLock_MissingFile_Refuses(t *testing.T) {
 
 func TestWriteLoadRoundTrip(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -75,7 +75,7 @@ func TestWriteLoadRoundTrip(t *testing.T) {
 // claims, just the artifact file).
 func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.orient", "widget", model.BuildRoleOrientation),
@@ -188,7 +188,7 @@ func TestFullLifecycle_ProposeStatusLockThenStale(t *testing.T) {
 // staleness, not swallowed.
 func TestRecomputeStale_CoveredClaimDeleted_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -240,7 +240,7 @@ func TestRecomputeStale_CoveredClaimDeleted_IsStale(t *testing.T) {
 // set so legitimately out-of-scope claims never false-positive.
 func TestRecomputeStale_AddedClaim_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -287,7 +287,7 @@ func TestRecomputeStale_AddedClaim_IsStale(t *testing.T) {
 // placed in a phase).
 func TestRecomputeStale_AddedOutOfScopeClaim_NoFalsePositive(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -325,7 +325,7 @@ func TestRecomputeStale_AddedOutOfScopeClaim_NoFalsePositive(t *testing.T) {
 // content hash is unchanged.
 func TestRecomputeStale_CoveredClaimBuildRoleChanged_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -383,7 +383,7 @@ func TestRecomputeStale_CoveredClaimBuildRoleChanged_IsStale(t *testing.T) {
 // as staleness, symmetric with the covered-deletion case.
 func TestRecomputeStale_ExcludedClaimDeleted_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -436,7 +436,7 @@ func TestRecomputeStale_ExcludedClaimDeleted_IsStale(t *testing.T) {
 // staleness, mirroring Propose's own out-of-scope-vs-phase classification.
 func TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -491,7 +491,7 @@ func TestRecomputeStale_ExcludedClaimBuildRoleChangedToInPhase_IsStale(t *testin
 // fresh propose would compute the same order. It must NOT be flagged stale.
 func TestRecomputeStale_ExcludedClaimEditedButStillOutOfScope_NoFalsePositive(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -533,7 +533,7 @@ func TestRecomputeStale_ExcludedClaimEditedButStillOutOfScope_NoFalsePositive(t 
 // re-propose first.
 func TestLock_RefusesStaleArtifact(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -588,7 +588,7 @@ func TestLock_RefusesStaleArtifact(t *testing.T) {
 // were invisible to Build Order and never carried a build_role.
 func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	orient := mc("widget.contract.readme", "widget", model.BuildRoleOrientation)
 	orient.Kind = model.KindOrientationNote
@@ -629,7 +629,7 @@ func TestLifecycle_OrientationNoteClaim_ProposesAndLocks(t *testing.T) {
 // unnoticed. Staleness must run for any LOCKED artifact regardless of Hashes.
 func TestRecomputeStale_LockedAllOutOfScope_PromotedClaim_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
@@ -684,7 +684,7 @@ func TestRecomputeStale_LockedAllOutOfScope_PromotedClaim_IsStale(t *testing.T) 
 // excluded count for a claim that's gone.
 func TestRecomputeStale_LockedAllOutOfScope_ExcludedDeleted_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
@@ -724,7 +724,7 @@ func TestRecomputeStale_LockedAllOutOfScope_ExcludedDeleted_IsStale(t *testing.T
 // artifact silently omitted the new claim from the (empty) order forever.
 func TestRecomputeStale_LockedAllOutOfScope_FirstInPhaseAdded_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
@@ -763,7 +763,7 @@ func TestRecomputeStale_LockedAllOutOfScope_FirstInPhaseAdded_IsStale(t *testing
 // false-positive when nothing has changed.
 func TestRecomputeStale_LockedAllOutOfScope_Unchanged_NoFalsePositive(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.futureA", "widget", model.BuildRoleOutOfScope),
@@ -799,7 +799,7 @@ func TestRecomputeStale_LockedAllOutOfScope_Unchanged_NoFalsePositive(t *testing
 // from the covered path. It must flag stale.
 func TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -847,7 +847,7 @@ func TestRecomputeStale_ExcludedClaimEditedToEmptyRole_IsStale(t *testing.T) {
 // than silently staying stale:false.
 func TestRecomputeStale_ExcludedClaimEditedToInvalidRole_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -892,7 +892,7 @@ func TestRecomputeStale_ExcludedClaimEditedToInvalidRole_IsStale(t *testing.T) {
 // len(a.Hashes)) must not start flagging unlocked artifacts.
 func TestRecomputeStale_UnlockedProposedArtifact_NeverStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -936,7 +936,7 @@ func TestRecomputeStale_UnlockedProposedArtifact_NeverStale(t *testing.T) {
 // structural re-derivation.
 func TestRecomputeStale_CoveredClaimOrderEdited_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	// Two independent (no rests_on between them) behavior claims: both land in
 	// the same phase's layer 0, so their relative order is decided purely by
@@ -996,7 +996,7 @@ func TestRecomputeStale_CoveredClaimOrderEdited_IsStale(t *testing.T) {
 // rename must now be surfaced as staleness by the structural re-derivation.
 func TestRecomputeStale_CoveredClaimSourceFileRenamed_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -1049,7 +1049,7 @@ func TestRecomputeStale_CoveredClaimSourceFileRenamed_IsStale(t *testing.T) {
 // the content-hash check.
 func TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.a", "widget", model.BuildRoleBehavior),
@@ -1101,7 +1101,7 @@ func TestRecomputeStale_CoveredClaimRestsOnReordered_IsStale(t *testing.T) {
 // the attacker's.
 func TestLock_RefusesAReversedPhaseSequence(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.orient", "widget", model.BuildRoleOrientation),
@@ -1148,7 +1148,7 @@ func TestLock_RefusesAReversedPhaseSequence(t *testing.T) {
 // for the claim's source.
 func TestLock_RefusesARepointedClaimFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{mc("widget.contract.schema", "widget", model.BuildRoleSchema)}
 	a, err := Propose(claims, nil, "widget")
@@ -1169,7 +1169,7 @@ func TestLock_RefusesARepointedClaimFile(t *testing.T) {
 // entirely — the quietest possible edit, since the phases still read correctly.
 func TestLock_RefusesASmuggledExclusion(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.schema", "widget", model.BuildRoleSchema),
@@ -1193,7 +1193,7 @@ func TestLock_RefusesASmuggledExclusion(t *testing.T) {
 // or it would refuse every legitimate build order in every project.
 func TestLock_AcceptsAFreshlyProposedArtifact(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".build-order.widget.json")
+	path := filepath.Join(dir, "build", "build-order", "widget.json")
 
 	claims := []model.Claim{
 		mc("widget.contract.orient", "widget", model.BuildRoleOrientation),

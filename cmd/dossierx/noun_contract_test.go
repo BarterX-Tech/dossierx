@@ -235,7 +235,7 @@ func TestCheckReconcilesReviewPendingFromTheFlagStore(t *testing.T) {
 	}
 
 	// The hand edit: clear review_pending in the YAML. The flag entry in
-	// .dossierx-flag-store.json is untouched and still pending.
+	// build/ledger/flag-store.json is untouched and still pending.
 	raw, err := os.ReadFile(claimFile)
 	if err != nil {
 		t.Fatalf("read claim: %v", err)
@@ -333,7 +333,7 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 	// comment digest store beside it. The shared helper is what knows the full
 	// list — rewinding only the store reproduces the downgrade attack instead
 	// of an upgrade, and lock.Store.LedgerDowngraded refuses that on purpose.
-	storeFile := filepath.Join(root, ".dossierx-lock-store.json")
+	storeFile := filepath.Join(root, "build", "ledger", "lock-store.json")
 	rewindStoreToPreLedger(t, storeFile)
 
 	// 1. The refusal, on both write paths, and that it IS the refusal.
@@ -380,7 +380,7 @@ func TestAPreLedgerProjectCrossesByEmptyingItself(t *testing.T) {
 			t.Fatalf("%q must hold a real APPROVAL, never a grandfathered adoption: %+v", key, rec)
 		}
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".dossierx-comment-digest.json")); statErr != nil {
+	if _, statErr := os.Stat(filepath.Join(root, "build", "ledger", "comment-digest.json")); statErr != nil {
 		t.Fatalf("the crossing must create the comment digest store in the same act: %v", statErr)
 	}
 
@@ -510,7 +510,7 @@ func TestRetiredCommentVerbsSayResolvingIsTheHumans(t *testing.T) {
 // TestRetiredVerbsAreNotSurface: the stubs answer, and they stay invisible.
 //
 // They must not appear in --help, in requireSubcommand's "run one of:" list, or
-// in the leaf count TestSurfaceIsTwentyFourLeavesUnderNineNouns pins.
+// in the leaf count TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins.
 // A removal explanation that advertises itself is a re-addition.
 func TestRetiredVerbsAreNotSurface(t *testing.T) {
 	env, _, err := execCLIJSON(t, "comment")

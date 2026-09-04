@@ -195,26 +195,31 @@ func TestSSE_ConnectedClientDoesNotDelayPost(t *testing.T) {
 // would sit inside the watched claims tree (a claims_dir of "." makes the tree
 // the whole project dir), which would otherwise drive the watcher in a loop.
 func TestServe_RefusesWhenOutputsInsideClaimsTree(t *testing.T) {
+	// Since the build/ layout, `claims_dir: .` puts the build directory
+	// INSIDE the watched claims tree, and config refuses that at LOAD time
+	// on every verb — serve's own guardrail (assertOutputsOutsideClaimsTree)
+	// is the belt to that brace and is no longer reachable through a loaded
+	// config. What a reader must still see is a refusal that names both
+	// directories, and that no server ever comes up over such a tree.
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "project.config.yaml"),
 		"schema_version: 1\nfacets:\n  - contract\nmodules:\n  - widget\nclaims_dir: .\n")
 	cfg, err := config.LoadConfig(filepath.Join(root, "project.config.yaml"))
-	if err != nil {
-		t.Fatalf("load config: %v", err)
-	}
-	srv := serve.New(cfg, testVersion)
-	if err := srv.Listen(0); err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	// A finite context so a guardrail regression (Serve running instead of
-	// refusing) surfaces as a nil error at timeout rather than hanging the test.
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
-	err = srv.Serve(ctx)
 	if err == nil {
-		t.Fatal("Serve accepted a claims_dir that contains the render/catalog/store outputs")
+		srv := serve.New(cfg, testVersion)
+		if err := srv.Listen(0); err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		// A finite context so a guardrail regression (Serve running instead of
+		// refusing) surfaces as a nil error at timeout rather than hanging the test.
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		err = srv.Serve(ctx)
+		if err == nil {
+			t.Fatal("Serve accepted a claims_dir that contains the build directory")
+		}
 	}
-	if !strings.Contains(err.Error(), "claims_dir") {
-		t.Fatalf("guardrail error = %v, want it to mention claims_dir", err)
+	if !strings.Contains(err.Error(), "claims_dir") || !strings.Contains(err.Error(), "build_dir") {
+		t.Fatalf("refusal = %v, want it to name both claims_dir and build_dir", err)
 	}
 }

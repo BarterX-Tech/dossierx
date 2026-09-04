@@ -116,7 +116,7 @@ func TestStatus_DoesNotWriteLedgerStores(t *testing.T) {
 		}
 	}
 
-	for _, rel := range []string{".dossierx-lock-store.json", ".dossierx-comment-digest.json"} {
+	for _, rel := range []string{"build/ledger/lock-store.json", "build/ledger/comment-digest.json"} {
 		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
 			t.Fatalf("GET /api/status created %s (stat err=%v); the ledger gate is a pure read and serve must never adopt a store on a poll", rel, err)
 		}
