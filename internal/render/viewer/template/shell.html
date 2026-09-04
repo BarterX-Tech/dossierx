@@ -1346,6 +1346,64 @@
         return group;
       }
 
+      // renderClaimReadiness puts the live local-approval/readiness answer on
+      // the claim a reader is looking at. The data is supplied by /api/status,
+      // never re-derived in the browser: dependency paths and independent
+      // causes belong to the policy engine, not a second JavaScript policy.
+      function renderClaimReadiness(assessments) {
+        // Project by the rendered card's canonical id. Claim ids also occur on
+        // graph links, comment controls, and edge references, so heading/link
+        // scans are not a reliable card inventory after the live mount.
+        document.querySelectorAll('.claim[id]').forEach(function (card) {
+          var id = card.id;
+          var assessment = assessments && assessments[id];
+          if (!assessment) { return; }
+          var existing = card.querySelector('.claim-readiness');
+          if (existing) { existing.remove(); }
+          var box = el('div', 'claim-readiness');
+          var summary = 'local approval: ' + (assessment.local_approved ? 'yes' : 'no') +
+            ' · dependency ready: ' + (assessment.dependency_ready ? 'yes' : 'no');
+          box.appendChild(textEl('p', 'claim-readiness-summary', summary));
+          var conditions = assessment.dependency_conditions || [];
+          var causes = assessment.review_causes || [];
+          conditions.forEach(function (condition) {
+            var path = (condition.path || []).join(' → ');
+            box.appendChild(textEl('p', 'claim-readiness-detail', 'dependency condition: ' + condition.kind + (path ? ' · ' + path : '')));
+          });
+          causes.forEach(function (cause) {
+            var path = (cause.path || []).join(' → ');
+            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
+          });
+          var links = card.querySelector('.claim-links');
+          // claim-links lives inside the card's collapse-content wrapper, not
+          // directly under the section. A DOM reference must belong to the
+          // parent receiving the insertion; otherwise Comet raises
+          // NotFoundError and no readiness card is rendered.
+          if (links && links.parentNode) {
+            links.parentNode.insertBefore(box, links);
+          } else {
+            card.appendChild(box);
+          }
+        });
+      }
+
+      // A checked-in/offline viewer has no /api/status endpoint. The rendered
+      // graph payload carries the same readiness projection as .catalog.json,
+      // so turn its node data back into the claim-id map the card renderer
+      // accepts. A live status response below always replaces this snapshot.
+      function offlineReadiness() {
+        var node = document.getElementById('dossierx-graph');
+        if (!node) { return {}; }
+        try {
+          var payload = JSON.parse(node.textContent || '{}');
+          var out = {};
+          (payload.nodes || []).forEach(function (graphNode) {
+            if (graphNode.id && graphNode.readiness) { out[graphNode.id] = graphNode.readiness; }
+          });
+          return out;
+        } catch (_) { return {}; }
+      }
+
       // renderStatusStrip paints one /api/status payload. An empty verdict hides
       // the strip entirely rather than showing a green badge: the viewer already
       // reads as "fine" by default, and a persistent all-clear chip would be one
@@ -1353,6 +1411,7 @@
       function renderStatusStrip(data) {
         if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
         lastStatusData = data || {};
+			renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -1417,7 +1476,7 @@
         if (!mounted) { return; }
         apiGet('/api/status').then(function (data) {
           renderStatusStrip(data);
-        }).catch(function () { /* keep the last verdict; the next tick recovers */ });
+        }, function () { /* keep the last verdict; the next tick recovers */ });
       }
 
       if (stripToggle) {

@@ -10,8 +10,7 @@ DossierX turns a directory of YAML "claims" — atomic, reviewable facts about a
 
 |  | **Agent** — the operator | **Human** — the reviewer |
 |---|---|---|
-| **Surface** | the CLI: 25 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent |
-| **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
+| **Surface** | the CLI: 25 commands under 9 nouns, JSON by default | the viewer: `dossierx serve`, plus chat with the agent || **Does** | writes and restructures draft claims, links code, replies on threads, runs `check`, executes lifecycle actions you approved | reads claims, comments on any card, resolves and reopens threads, says "lock it" |
 | **Cannot** | change a **locked** claim without an approval on the record; resolve or reopen your threads; edit or delete comments — the last three refused outright on the CLI, and [rules rather than walls on the viewer's localhost API](#the-humans-one-command) | (nothing is *prevented* — you are the approver; you simply shouldn't need to type a DossierX command other than `serve`) |
 
 The gate is narrower than "the agent may not touch claims", which would defeat the point. Draft claims are the agent's workshop and stay unfrictioned. The invariant is: **nothing already locked changes without your approval on the record** — see [the lock ledger](#integrity-the-lock-ledger).
@@ -91,7 +90,7 @@ Open the URL it prints. That is a local viewer of every claim, facet, build orde
 3. The agent runs `dossierx comment inbox` — every open thread in the project, one call.
 4. The agent fixes the claim and replies on the thread. Replies are deliberately **ungated**: an agent may reply to a human-opened thread, because that is the entire workflow.
 5. You click **Resolve**. That click *is* the approval — and it is load-bearing, because a claim cannot be locked while it carries an unresolved thread.
-6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>"`.
+6. You say "good, lock it." The agent resolves which card you meant, previews with `--dry-run`, waits for your yes, and runs `dossierx claim lock <id> --reason "<your words>" --proposal "<the preview token>"`.
 
 Closing a thread is yours alone **on the CLI**, and in v0.3.0 that is structural rather than polite: `dossierx comment` is `inbox · list · add · reply` and nothing else. Resolve, reopen, edit and delete were removed from the CLI in v0.3.0 and live only in the viewer and in `dossierx serve`'s HTTP API.
 
@@ -288,7 +287,8 @@ dossierx build-order propose --module <m>
 dossierx claim unlock <id> --reason "<your words>"
 
 # 3. then re-lock only what you still stand behind:
-dossierx claim lock <id> --reason "<your words>"
+dossierx claim lock <id> --dry-run
+dossierx claim lock <id> --reason "<your words>" --proposal "<snapshot>"
 
 # 4. then the build orders again, for every module that is fully locked
 #    again. A module you re-locked only partially has nothing to propose
@@ -342,6 +342,8 @@ Every claim has an `id` (`module.facet.slug`), a `facet`, a `module`, a `status`
 **`check` is the pipeline.** One command runs lint → catalog → render → the ledger gate and stops at the first failure. `--validate` is the read-only form for the authoring loop: it runs the lint gate and the ledger gate in memory and writes nothing — no claim files, no lock store, no `build/catalog/catalog.json`, no viewer. It also does not reconcile `review_pending`, rebuild the catalog or the viewer, or scan source for code links; run plain `check` before trusting what the viewer shows.
 
 **The lock lifecycle.** A `draft` claim is freely editable. `dossierx claim lock <id>` promotes it to `locked` — refused if lint has any error, if doctrine hub-gating blocks it, or if the claim still carries an unresolved comment thread. A locked claim never silently changes: it is flagged `review_pending` on any of three independent triggers — a dependency it `rests_on`, `mirrors` or is `governed_by` drifted, a `dossierx claim flag` recorded that its stated behavior no longer matches reality, or an open comment thread was added — rather than being auto-updated. `governed_by` joined the drift set in v0.4.0 as a **drift** edge only: a claim-valued governor whose content changes flags its dependants `review_pending`, but hub gating still walks `rests_on`/`mirrors` alone, so an unlocked governor named only by `governed_by` still never refuses a lock. There is no backfill — a claim locked before v0.4.0 carries no governance baseline until its next `claim lock` or confirmed `claim reaudit`, so the first governor edit after upgrading does not flag it. `review_pending` is set automatically and never cleared automatically; it clears only once every trigger is gone, via one of three matching clearers: a confirmed `dossierx claim reaudit <id> --confirm --reason "..."` (drift/flag), `dossierx claim unlock`, or the human resolving the last open thread in the viewer.
+
+**Local approval and dependency readiness.** A new project uses lock policy v1. An existing project stays on its recorded policy until a human explicitly runs `dossierx claim migrate-lock-policy --reason "..."`; that migration preserves its approval records, dependency baselines and pending review state. Under v1, `claim lock` evaluates one requested set whether it contains one claim or many. `--dry-run` returns every member's local verdict, dependency conditions and a request-bound `snapshot`; the matching `--proposal` is mandatory on the write, and an omitted, invalid, stale, or wrong-set token refuses before approval storage changes. A locally approved claim may depend on a readable draft, but it reports `dependency_unapproved` and is not dependency-ready. A missing, retired, unreadable, cyclic, or doctrine-gated required dependency refuses approval before any claim or approval storage changes. Local approval, dependency readiness and integrated evidence are different statements. The lock store retains the reviewed dependency content and comparable hash for each new local approval; a hash detects a difference and never proves semantic compatibility.
 
 **`reaudit` is the drift tool, not the general edit tool.** It refuses a claim that is not already `review_pending`, it rewrites only `body`, and it refuses a claim whose only trigger is an open thread (there is no diff to confirm — resolve the thread instead). To change anything else about a locked claim, the path is `unlock → fix → lock`.
 

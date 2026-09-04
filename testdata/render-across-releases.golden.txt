@@ -41,7 +41,6 @@ added      0
 removed    0
 silent     0 rendered differently from byte-identical inputs
 explained  5 rendered differently after their own inputs changed
-
 EXPLAINED BY AN INPUT CHANGE
 ----------------------------
 

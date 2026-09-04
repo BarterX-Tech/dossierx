@@ -50,10 +50,10 @@ const (
 
 // Finding is one problem reported by a Lint against a specific claim.
 type Finding struct {
-	LintName string
-	ClaimID  string
-	Message  string
-	Severity Severity
+	LintName string   `json:"lint"`
+	ClaimID  string   `json:"claim_id"`
+	Message  string   `json:"message"`
+	Severity Severity `json:"severity"`
 }
 
 // Lint is implemented once per rule under internal/lint/. Check must not

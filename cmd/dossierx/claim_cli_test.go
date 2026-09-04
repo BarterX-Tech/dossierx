@@ -100,7 +100,7 @@ func TestEnvelope_ClaimShowAnswersEverythingDepsAndImplinkStatusDid(t *testing.T
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.retry-policy")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.retry-policy")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestClaimShowNextActionsFollowTheLifecycle(t *testing.T) {
 
 	nextActions := func() string {
 		t.Helper()
-		env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
+		env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 		if err != nil {
 			t.Fatalf("claim show: %v", err)
 		}
@@ -172,7 +172,7 @@ func TestClaimShowNextActionsFollowTheLifecycle(t *testing.T) {
 
 	// 2. An open thread on the draft -> the lock gate now names the blocker,
 	// and points at the human, since only they can resolve it.
-	addOut, _, err := execCLI(t, "--config", cfgPath, "comment", "add", id, "--as", "human", "--body", "is three the right number?")
+	addOut, _, err := execReviewedCLI(t, "--config", cfgPath, "comment", "add", id, "--as", "human", "--body", "is three the right number?")
 	if err != nil {
 		t.Fatalf("comment add: %v (out: %s)", err, addOut)
 	}
@@ -183,7 +183,7 @@ func TestClaimShowNextActionsFollowTheLifecycle(t *testing.T) {
 	// 3. Locked and settled -> the ONLY sanctioned way to change it.
 	tid := strings.TrimRight(firstFieldWithPrefix(t, addOut, "c-"), ";,")
 	resolveThreadInProcess(t, cfgPath, id, tid)
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
 	got := nextActions()
@@ -199,7 +199,7 @@ func TestClaimShowUnknownIDIsTheNotFoundFamily(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.ghost")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.ghost")
 	if err == nil {
 		t.Fatal("expected claim show on an unknown id to fail")
 	}
@@ -221,7 +221,7 @@ func TestEnvelope_ClaimListFilters(t *testing.T) {
 
 	listData := func(args ...string) claimListData {
 		t.Helper()
-		env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath, "claim", "list"}, args...)...)
+		env, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath, "claim", "list"}, args...)...)
 		if err != nil {
 			t.Fatalf("claim list %v: %v", args, err)
 		}
@@ -269,7 +269,7 @@ func TestClaimListMatchResolvesWhatAHumanWouldSay(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "list", "--match", "the retry card")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "list", "--match", "the retry card")
 	if err != nil {
 		t.Fatalf("claim list --match: %v", err)
 	}
@@ -292,7 +292,7 @@ func TestClaimListMatchResolvesWhatAHumanWouldSay(t *testing.T) {
 
 	// A query that matches nothing is an EMPTY list, not an error: "no card by
 	// that name" is an answer.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "list", "--match", "zzzzzz")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "list", "--match", "zzzzzz")
 	if err != nil {
 		t.Fatalf("a no-match query must still succeed: %v", err)
 	}
@@ -313,7 +313,7 @@ func TestClaimNewProducesALintCleanClaim(t *testing.T) {
 	root := t.TempDir()
 	cfgPath := claimWriteFixture(t, root)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.circuit-breaker",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.contract.circuit-breaker",
 		"--body", "opens the circuit after five consecutive failures.",
 		"--governed-reason", "a fresh fact, not yet backed by doctrine",
 		"--rests-on", "widget.contract.retry-policy")
@@ -333,7 +333,7 @@ func TestClaimNewProducesALintCleanClaim(t *testing.T) {
 	}
 
 	// Independently confirmed through the gate the agent would actually run.
-	validate, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	validate, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
 	if err != nil {
 		t.Fatalf("check --validate after claim new: %v", err)
 	}
@@ -344,7 +344,7 @@ func TestClaimNewProducesALintCleanClaim(t *testing.T) {
 	}
 
 	// And it is a real claim: show finds it, with the edge it was given.
-	show, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.circuit-breaker")
+	show, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.circuit-breaker")
 	if err != nil {
 		t.Fatalf("claim show on the new claim: %v", err)
 	}
@@ -421,7 +421,7 @@ func TestClaimNewRefusals(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, tc.args...)...)
+			env, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, tc.args...)...)
 			if err == nil {
 				t.Fatalf("expected a refusal, got success: %+v", env)
 			}
@@ -483,15 +483,15 @@ func TestEnvelope_CommentInboxFindsEveryOpenThreadInOneCall(t *testing.T) {
 
 	// Two threads on two different claims: the case the inbox exists for,
 	// where a per-claim "comment list" would cost one call per claim.
-	humanOut, _, err := execCLI(t, "--config", cfgPath, "comment", "add", "widget.contract.retry-policy", "--as", "human", "--body", "is three the right number?")
+	humanOut, _, err := execReviewedCLI(t, "--config", cfgPath, "comment", "add", "widget.contract.retry-policy", "--as", "human", "--body", "is three the right number?")
 	if err != nil {
 		t.Fatalf("comment add (human): %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "comment", "add", "widget.contract.timeout-budget", "--as", "agent", "--body", "flagging my own uncertainty here"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "comment", "add", "widget.contract.timeout-budget", "--as", "agent", "--body", "flagging my own uncertainty here"); err != nil {
 		t.Fatalf("comment add (agent): %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "inbox")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "inbox")
 	if err != nil {
 		t.Fatalf("comment inbox: %v", err)
 	}
@@ -530,7 +530,7 @@ func TestEnvelope_CommentInboxFindsEveryOpenThreadInOneCall(t *testing.T) {
 	// A resolved thread leaves the inbox — it is an inbox, not an archive.
 	tid := strings.TrimRight(firstFieldWithPrefix(t, humanOut, "c-"), ";,")
 	resolveThreadInProcess(t, cfgPath, "widget.contract.retry-policy", tid)
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "comment", "inbox")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "comment", "inbox")
 	if err != nil {
 		t.Fatalf("comment inbox after resolve: %v", err)
 	}
@@ -570,7 +570,7 @@ func TestCommentInboxSinceIsInclusiveAndNeverMissesAThread(t *testing.T) {
 
 	inbox := func(args ...string) commentInboxData {
 		t.Helper()
-		env, _, err := execCLIJSON(t, append([]string{"--config", cfgPath, "comment", "inbox"}, args...)...)
+		env, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath, "comment", "inbox"}, args...)...)
 		if err != nil {
 			t.Fatalf("comment inbox %v: %v", args, err)
 		}
@@ -641,10 +641,10 @@ func TestCheckValidateIsTrulyReadOnly(t *testing.T) {
 	// Set up a state a WRITING check would visibly change: two locked claims
 	// with a drifted dependency, which plain check reconciles to
 	// review_pending and persists back to the claim file.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.retry-policy", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.retry-policy", "--reason", "approved"); err != nil {
 		t.Fatalf("lock base: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.timeout-budget", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.timeout-budget", "--reason", "approved"); err != nil {
 		t.Fatalf("lock dependent: %v", err)
 	}
 	basePath := filepath.Join(root, "claims", "retry.yaml")
@@ -664,7 +664,7 @@ func TestCheckValidateIsTrulyReadOnly(t *testing.T) {
 
 	before := snapshotTree(t, root)
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
 		t.Fatalf("check --validate: %v", err)
 	}
 
@@ -686,7 +686,7 @@ func TestCheckValidateIsTrulyReadOnly(t *testing.T) {
 
 	// The writing form, on the same tree, DOES change it — which is what makes
 	// the assertion above meaningful rather than vacuous.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 	if snapshotTree(t, root)[filepath.Join(root, "claims", "timeout.yaml")] == before[filepath.Join(root, "claims", "timeout.yaml")] {
@@ -823,11 +823,11 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 	cfgPath := buildRoleAdoptedFixture(t)
 
 	// The premise, stated as an assertion: the read-only pass sees nothing.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
 		t.Fatalf("fixture precondition: check --validate must be clean, got %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("locking a claim with no build_role in an adopted module must be refused, got %+v", env)
 	}
@@ -883,7 +883,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 	// the missing rule name the ONLY thing that was ever in the way.
 	claimFile := filepath.Join(filepath.Dir(cfgPath), "claims", "b.yaml")
 	tamper(t, claimFile, "status: draft\n", "status: draft\nbuild_role: behavior\n")
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go"); err != nil {
 		t.Fatalf("with build_role set, the identical lock must succeed: %v", err)
 	}
 }
@@ -896,7 +896,7 @@ func TestLockRefusalNamesTheLintRuleThatBlockedIt(t *testing.T) {
 func TestClaimShowPointsAtACommandThatNamesTheBlockingLint(t *testing.T) {
 	cfgPath := buildRoleAdoptedFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.b")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.b")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}

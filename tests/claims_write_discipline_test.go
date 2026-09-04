@@ -21,6 +21,7 @@
 package tests
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -76,6 +77,24 @@ func runAsync(dir string, args ...string) <-chan asyncResult {
 // held it, which is exactly what the first select catches.
 func assertGatedThenCompletes(t *testing.T, root string, args []string, wantCode int, claimPath string) {
 	t.Helper()
+	// Prepare the reviewed request before the writer is deliberately blocked on
+	// the claims sentinel; deliberate missing-token cases do not use this helper.
+	if len(args) >= 2 && args[0] == "claim" && args[1] == "lock" {
+		previewArgs := append(append([]string(nil), args...), "--format", "json", "--dry-run")
+		stdout, stderr, code := run(t, root, previewArgs...)
+		if code != 0 {
+			t.Fatalf("lock preview before sentinel: exit %d stdout=%s stderr=%s", code, stdout, stderr)
+		}
+		var preview struct {
+			Data struct {
+				Snapshot string `json:"snapshot"`
+			} `json:"data"`
+		}
+		if err := json.Unmarshal([]byte(stdout), &preview); err != nil || preview.Data.Snapshot == "" {
+			t.Fatalf("lock preview before sentinel returned no token: %v (%s)", err, stdout)
+		}
+		args = append(args, "--proposal", preview.Data.Snapshot)
+	}
 
 	var before string
 	if claimPath != "" {
@@ -138,7 +157,7 @@ func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widunlock")
 		id := "widunlock.contract.overview"
-		if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+		if _, stderr, code := reviewedRun(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("setup lock: exit %d: %s", code, stderr)
 		}
 		assertGatedThenCompletes(t, root, []string{"claim", "unlock", id, "--reason", "test fixture"}, 0, claimPathOf(root))
@@ -151,7 +170,7 @@ func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widflag")
 		id := "widflag.contract.overview"
-		if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+		if _, stderr, code := reviewedRun(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("setup lock: exit %d: %s", code, stderr)
 		}
 		assertGatedThenCompletes(t, root, []string{"claim", "flag", id, "--claim-says", "old", "--now-does", "new", "--reason", "because"}, 0, claimPathOf(root))
@@ -164,10 +183,10 @@ func TestClaimsSentinelGatesEveryClaimWriter(t *testing.T) {
 		root := t.TempDir()
 		writeFixtureProject(t, root, "widreaudit")
 		id := "widreaudit.contract.overview"
-		if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+		if _, stderr, code := reviewedRun(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("setup lock: exit %d: %s", code, stderr)
 		}
-		if _, stderr, code := run(t, root, "claim", "flag", id, "--claim-says", "old", "--now-does", "the new truth", "--reason", "because"); code != 0 {
+		if _, stderr, code := reviewedRun(t, root, "claim", "flag", id, "--claim-says", "old", "--now-does", "the new truth", "--reason", "because"); code != 0 {
 			t.Fatalf("setup flag: exit %d: %s", code, stderr)
 		}
 		assertGatedThenCompletes(t, root, []string{"claim", "reaudit", id, "--confirm", "--reason", "test fixture"}, 0, claimPathOf(root))
@@ -256,7 +275,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 		wg.Add(1)
 		go func(id string) {
 			defer wg.Done()
-			if _, stderr, code := run(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+			if _, stderr, code := reviewedRun(t, root, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 				t.Errorf("concurrent lock %s: exit %d: %s", id, code, stderr)
 			}
 		}(id)
@@ -281,11 +300,11 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for k := 0; k < 2; k++ {
-				if _, stderr, code := run(t, root, "claim", "lock", hotID, "--reason", "test fixture"); code != 0 && !strings.Contains(stderr, "already locked") {
+				if _, stderr, code := reviewedRun(t, root, "claim", "lock", hotID, "--reason", "test fixture"); code != 0 && !strings.Contains(stderr, "already locked") {
 					t.Errorf("concurrent lock %s: exit %d: %s", hotID, code, stderr)
 					return
 				}
-				if _, stderr, code := run(t, root, "claim", "unlock", hotID, "--reason", "test fixture"); code != 0 {
+				if _, stderr, code := reviewedRun(t, root, "claim", "unlock", hotID, "--reason", "test fixture"); code != 0 {
 					t.Errorf("concurrent unlock %s: exit %d: %s", hotID, code, stderr)
 					return
 				}
@@ -312,7 +331,7 @@ func TestConcurrentClaimWritersNeverCorruptClaimFiles(t *testing.T) {
 	}
 	// The hot claim must have survived as valid, parseable YAML in a legal end
 	// state (a final "check" both proves it parses and confirms no deadlock).
-	if _, stderr, code := run(t, root, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "check"); code != 0 {
 		t.Fatalf("final check after the storm failed (a corrupt claim file would surface here): exit %d: %s", code, stderr)
 	}
 	hotRaw := llReadFile(t, filepath.Join(claimsDir, "hot.yaml"))

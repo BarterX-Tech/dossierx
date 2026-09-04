@@ -62,7 +62,7 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 	// Nodes. Degrees are filled in a second pass, once the edge set that
 	// actually reached the payload is known.
 	for _, c := range claims {
-		p.Nodes = append(p.Nodes, Node{
+		node := Node{
 			ID:            c.ID,
 			Title:         claimLabel(c.ID),
 			Module:        c.Module,
@@ -74,7 +74,12 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 			ReviewPending: c.ReviewPending,
 			OpenComments:  len(c.OpenThreadIDs()),
 			Tracks:        nodeTracks(c),
-		})
+		}
+		if assessment, ok := cat.Readiness[c.ID]; ok {
+			copy := assessment
+			node.Readiness = &copy
+		}
+		p.Nodes = append(p.Nodes, node)
 	}
 
 	// Edges, in the direction the claim declares them. A declared entry

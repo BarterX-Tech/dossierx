@@ -81,16 +81,35 @@ var nowFunc = time.Now
 // — see it for why the trigger is "the file exists at an older version" and
 // never "the ledger is empty".
 const (
-	storeSchemaVersion      = 2
+	storeSchemaVersion      = 3
 	nestedHashSchemaVersion = 1
 	ledgerSchemaVersion     = 2
+	policySchemaVersion     = 3
 )
+
+// PolicyVersion records which approval semantics a project has explicitly
+// adopted. A missing store is a new project and starts on LocalApprovalV1.
+// A pre-v3 store stays Legacy until the migration command records adoption;
+// loading it never changes existing approvals or baselines.
+type PolicyVersion int
+
+const (
+	PolicyLegacy          PolicyVersion = 0
+	PolicyLocalApprovalV1 PolicyVersion = 1
+)
+
+// DependencyReceipt is the exact readable dependency boundary a local approval
+// reviewed. Hash is a comparison aid only; Content keeps the reviewed text
+// recoverable when the working draft later changes or disappears.
+type DependencyReceipt struct {
+	Hash    string      `json:"hash"`
+	Content model.Claim `json:"content"`
+}
 
 // StoreFileName is the lock store's BASE NAME, an alias of
 // config.LockStoreFileName. The file lives under the project's build directory
 // at config.Config.LockStorePath() (build/ledger/lock-store.json by default),
-// never cwd, beside the comment digest store.
-//
+// never cwd, beside the comment digest store.//
 // It is exported for the same reason digest.StoreFileName is: internal/check's
 // index scan has to RECOGNISE the file by base name. It is the name, not the
 // path, and not the display form either — a message that names the file
@@ -107,6 +126,13 @@ type Store struct {
 	// unversioned break.
 	Version int `json:"version"`
 
+	// PolicyVersion is deliberately separate from Version. Version describes the
+	// JSON shape; this field records a human-visible policy migration and must
+	// never be inferred from the current binary.
+	PolicyVersion         PolicyVersion `json:"policy_version,omitempty"`
+	PolicyMigratedAt      string        `json:"policy_migrated_at,omitempty"`
+	PolicyMigrationReason string        `json:"policy_migration_reason,omitempty"`
+
 	// Hashes records dependency baselines keyed PER DEPENDENT:
 	// Hashes[dependentID][depID] is ContentHash(dep) as observed the last
 	// time dependentID itself was locked or reaudited-and-confirmed. Keying
@@ -115,6 +141,10 @@ type Store struct {
 	// it, so locking/reauditing one never overwrites the other's baseline and
 	// masks real drift the other should have flipped review_pending on.
 	Hashes map[string]map[string]string `json:"hashes"`
+
+	// Receipts preserve each reviewed dependency boundary for local approvals.
+	// They are keyed the same way as Hashes: dependent then dependency id.
+	Receipts map[string]map[string]DependencyReceipt `json:"receipts,omitempty"`
 
 	// LockedAt maps a locked claim's own ID -> the RFC3339Nano timestamp of
 	// its most recent "dossierx lock" or confirmed "dossierx reaudit". Per
@@ -205,6 +235,32 @@ func (s *Store) recordBaseline(dependentID, depID, hash string) {
 	s.Hashes[dependentID][depID] = hash
 }
 
+// recordReceipt keeps the complete readable dependency boundary alongside its
+// comparable hash. It is written only as part of an approval/explicit
+// reapproval snapshot; status and review bookkeeping remain excluded from the
+// comparison hash and never manufacture semantic proof.
+func (s *Store) recordReceipt(dependentID string, dep model.Claim) {
+	if s.Receipts == nil {
+		s.Receipts = map[string]map[string]DependencyReceipt{}
+	}
+	if s.Receipts[dependentID] == nil {
+		s.Receipts[dependentID] = map[string]DependencyReceipt{}
+	}
+	s.Receipts[dependentID][dep.ID] = DependencyReceipt{
+		Hash:    ContentHash(dep),
+		Content: dep,
+	}
+}
+
+// Receipt returns the preserved reviewed boundary for dependentID's dependency.
+func (s *Store) Receipt(dependentID, depID string) (DependencyReceipt, bool) {
+	if s == nil || s.Receipts == nil {
+		return DependencyReceipt{}, false
+	}
+	r, ok := s.Receipts[dependentID][depID]
+	return r, ok
+}
+
 // LoadStore reads the hash store from path. A missing file is not an
 // error: it is treated as an empty, freshly-initialized store (the common
 // case for a project's first "dossierx lock").
@@ -249,11 +305,12 @@ func LoadStore(path string) (*Store, error) {
 // emptyStore is the empty, freshly-initialised store a missing file loads as.
 func emptyStore(path string) *Store {
 	return &Store{
-		Version:  storeSchemaVersion,
-		Hashes:   map[string]map[string]string{},
-		LockedAt: map[string]string{},
-		path:     path,
-	}
+		Version:       storeSchemaVersion,
+		PolicyVersion: PolicyLocalApprovalV1,
+		Hashes:        map[string]map[string]string{},
+		Receipts:      map[string]map[string]DependencyReceipt{},
+		LockedAt:      map[string]string{},
+		path:          path}
 }
 
 // DecodeStore decodes a lock store from bytes already in hand — the git index's
@@ -308,10 +365,14 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 	// cannot answer that — `"ledger": {}` and no ledger key both decode to an
 	// empty map. See Store.ledgerKeyOnDisk.
 	var onDisk struct {
-		Version  int               `json:"version"`
-		Hashes   json.RawMessage   `json:"hashes"`
-		LockedAt map[string]string `json:"locked_at"`
-		Ledger   json.RawMessage   `json:"ledger"`
+		Version               int               `json:"version"`
+		PolicyVersion         PolicyVersion     `json:"policy_version"`
+		PolicyMigratedAt      string            `json:"policy_migrated_at"`
+		PolicyMigrationReason string            `json:"policy_migration_reason"`
+		Hashes                json.RawMessage   `json:"hashes"`
+		Receipts              json.RawMessage   `json:"receipts"`
+		LockedAt              map[string]string `json:"locked_at"`
+		Ledger                json.RawMessage   `json:"ledger"`
 	}
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		return nil, fmt.Errorf("lock: parse store %s: %w", path, err)
@@ -353,6 +414,11 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 	s.fileExists = true
 	s.diskVersion = onDisk.Version
 	s.Version = onDisk.Version
+	// Do not infer policy adoption from a binary upgrade. Existing stores stay
+	// on the legacy doctrine until an explicit migration writes this field.
+	s.PolicyVersion = onDisk.PolicyVersion
+	s.PolicyMigratedAt = onDisk.PolicyMigratedAt
+	s.PolicyMigrationReason = onDisk.PolicyMigrationReason
 
 	// Legacy (pre-versioning, schema 0) store: drop its flat hashes, keep
 	// LockedAt, and present it to callers as an already-migrated
@@ -372,7 +438,35 @@ func decodeStore(raw []byte, path string) (*Store, error) {
 			s.Hashes = nested
 		}
 	}
+	if len(onDisk.Receipts) > 0 {
+		var receipts map[string]map[string]DependencyReceipt
+		if err := json.Unmarshal(onDisk.Receipts, &receipts); err != nil {
+			return nil, fmt.Errorf("lock: parse store %s receipts: %w", path, err)
+		}
+		if receipts != nil {
+			s.Receipts = receipts
+		}
+	}
 	return s, nil
+}
+
+// LocalApprovalEnabled reports whether the explicit local-approval policy has
+// been adopted. It is intentionally false for existing stores missing the
+// policy field, so an engine upgrade cannot reinterpret old locks.
+func (s *Store) LocalApprovalEnabled() bool {
+	return s != nil && s.PolicyVersion >= PolicyLocalApprovalV1
+}
+
+// AdoptLocalApproval records the v1 policy transition without changing any
+// approval record, dependency baseline, pending flag, or claim file.
+func (s *Store) AdoptLocalApproval(reason string) {
+	if s == nil {
+		return
+	}
+	s.PolicyVersion = PolicyLocalApprovalV1
+	s.Version = storeSchemaVersion
+	s.PolicyMigratedAt = nowFunc().UTC().Format(time.RFC3339Nano)
+	s.PolicyMigrationReason = reason
 }
 
 // MigrateLegacyStore re-arms per-dependent hash baselines for a store that
@@ -1046,6 +1140,7 @@ func Lock(claim model.Claim, claims []model.Claim, cfg *config.Config, store *St
 	for _, dep := range BaselineDependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
 			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
+			store.recordReceipt(claim.ID, depClaim)
 		}
 	}
 	if store.LockedAt == nil {
@@ -1124,6 +1219,7 @@ func RefreshBaseline(claim model.Claim, claims []model.Claim, store *Store) {
 	for _, dep := range BaselineDependencyIDs(claim) {
 		if depClaim, ok := findByID(claims, dep); ok {
 			store.recordBaseline(claim.ID, dep, ContentHash(depClaim))
+			store.recordReceipt(claim.ID, depClaim)
 		}
 	}
 	if store.LockedAt == nil {

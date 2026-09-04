@@ -50,8 +50,8 @@ func readLedger(t *testing.T, storeFile string) map[string]lock.LedgerRecord {
 	if err := json.Unmarshal(raw, &onDisk); err != nil {
 		t.Fatalf("parse store: %v\n%s", err, raw)
 	}
-	if onDisk.Version != 2 {
-		t.Fatalf("store version = %d, want the lock-ledger schema version 2:\n%s", onDisk.Version, raw)
+	if onDisk.Version != 3 {
+		t.Fatalf("store version = %d, want the lock-ledger schema version 3:\n%s", onDisk.Version, raw)
 	}
 	return onDisk.Ledger
 }
@@ -66,7 +66,7 @@ func TestCLI_LockUnlockRelockKeepsTheLedgerHonest(t *testing.T) {
 	cfgPath, claimPath, storeFile := ledgerProject(t)
 	const id = "widget.contract.main"
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed with Nitin"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed with Nitin"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
 	rec, ok := readLedger(t, storeFile)[id]
@@ -84,7 +84,7 @@ func TestCLI_LockUnlockRelockKeepsTheLedgerHonest(t *testing.T) {
 	}
 
 	// Unlock RELEASES the record rather than deleting it, and persists that.
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "needs a correction"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "needs a correction"); err != nil {
 		t.Fatalf("claim unlock: %v", err)
 	}
 	rec, ok = readLedger(t, storeFile)[id]
@@ -108,7 +108,7 @@ func TestCLI_LockUnlockRelockKeepsTheLedgerHonest(t *testing.T) {
 	if err := os.WriteFile(claimPath, []byte(edited), 0o644); err != nil {
 		t.Fatalf("edit claim: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "correction approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "correction approved"); err != nil {
 		t.Fatalf("claim lock (relock): %v", err)
 	}
 	rec = readLedger(t, storeFile)[id]
@@ -132,7 +132,7 @@ func TestCLI_HandEditingALockedClaimIsCaught(t *testing.T) {
 	cfgPath, claimPath, _ := ledgerProject(t)
 	const id = "widget.contract.main"
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
 
@@ -162,15 +162,15 @@ func TestCLI_CommentOpsNeverTripTheLedgerGate(t *testing.T) {
 	cfgPath, _, _ := ledgerProject(t)
 	const id = "widget.contract.main"
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "comment", "add", id, "--as", "human", "--body", "is this still true?"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "comment", "add", id, "--as", "human", "--body", "is this still true?"); err != nil {
 		t.Fatalf("comment add: %v", err)
 	}
 	// The comment sets review_pending on the locked claim — a second
 	// engine-managed field the ledger must not sign.
-	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Logf("check reported: %v (expected: the claim is now review_pending)", err)
 	}
 
@@ -188,18 +188,18 @@ func TestCLI_ReauditReSignsTheClaim(t *testing.T) {
 	cfgPath, _, storeFile := ledgerProject(t)
 	const id = "widget.contract.main"
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
 	before := readLedger(t, storeFile)[id]
 
 	// A flag is the trigger reaudit can actually act on: it carries a real,
 	// ready-to-review proposal rather than the dependency-drift stub.
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", id,
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "flag", id,
 		"--claim-says", "the approved body.", "--now-does", "the corrected body.", "--reason", "the code changed"); err != nil {
 		t.Fatalf("claim flag: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "confirmed with Nitin"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "confirmed with Nitin"); err != nil {
 		t.Fatalf("claim reaudit --confirm: %v", err)
 	}
 
@@ -223,13 +223,13 @@ func TestCLI_BuildOrderLockIsOnTheRecord(t *testing.T) {
 	cfgPath, _, storeFile := ledgerProject(t)
 	const id = "widget.contract.main"
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("build-order propose: %v", err)
 	}
-	if _, _, err := execCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "order approved"); err != nil {
 		t.Fatalf("build-order lock: %v", err)
 	}
 
@@ -253,7 +253,7 @@ func TestCLI_DeletingTheLedgerIsNotSilentAdoption(t *testing.T) {
 	cfgPath, _, storeFile := ledgerProject(t)
 	const id = "widget.contract.main"
 
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("claim lock: %v", err)
 	}
 	if err := os.Remove(storeFile); err != nil {
@@ -262,7 +262,7 @@ func TestCLI_DeletingTheLedgerIsNotSilentAdoption(t *testing.T) {
 
 	// Any command may run — check included — but none of them may re-bless the
 	// project on the way past.
-	if _, _, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Logf("check reported: %v", err)
 	}
 

@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+### Fixed
+
+- A viewer opened under `dossierx serve` can now insert each claim's live
+  readiness card after its links without using an ancestor as the insertion
+  reference. The old DOM operation threw `NotFoundError` after `/api/status`
+  returned successfully; the refresh handler swallowed that rendering failure,
+  leaving every card and the status strip absent even though the API payload
+  contained readiness. The status refresh now keeps the response failure and
+  render failure distinct, and the committed fixture viewers are regenerated
+  from that template change.
+- Policy-v1 approval now refuses a `rests_on` dependency that is retired or
+  unreadable. A readable draft remains eligible for conditional local approval
+  with `dependency_unapproved`; retired and unreadable inputs cannot become a
+  new approval premise while showing a non-ready state only after the write.
+
 ## [0.7.7] - 2026-09-03
 
 ### BREAKING — every dossierx artifact moved under build/
@@ -116,7 +133,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup`, decision C5's shared-markup pin — it
   existed to hold the removed sub-tab's list markup to the claim-edge-list's shared footer, and
   goes with the list it was pinning.
-
 ## [0.7.6] - 2026-09-02
 
 ### Added

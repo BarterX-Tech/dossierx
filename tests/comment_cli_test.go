@@ -95,7 +95,7 @@ func TestComment_AddLockRefusedResolveLockSucceeds(t *testing.T) {
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.overview", facet: "contract", module: "widget", status: "draft", body: "a claim under review."})
 
-	addOut, addErr, addCode := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "please clarify the retry policy")
+	addOut, addErr, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "please clarify the retry policy")
 	if addCode != 0 {
 		t.Fatalf("comment add: exit %d\nstdout: %s\nstderr: %s", addCode, addOut, addErr)
 	}
@@ -107,7 +107,7 @@ func TestComment_AddLockRefusedResolveLockSucceeds(t *testing.T) {
 	}
 
 	// Lock refused while the thread is open, and the refusal names the id.
-	lockOut, lockErr, lockCode := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "test fixture")
+	lockOut, lockErr, lockCode := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "test fixture")
 	if lockCode == 0 {
 		t.Fatalf("expected lock refused while an open thread exists, got exit 0\nstdout: %s", lockOut)
 	}
@@ -119,16 +119,16 @@ func TestComment_AddLockRefusedResolveLockSucceeds(t *testing.T) {
 	}
 
 	// A reply (any actor) keeps the thread open, so lock stays refused.
-	if _, stderr, code := run(t, root, "--config", cfgPath, "comment", "reply", "widget.contract.overview", tid, "--as", "agent", "--body", "addressed, please confirm"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "reply", "widget.contract.overview", tid, "--as", "agent", "--body", "addressed, please confirm"); code != 0 {
 		t.Fatalf("comment reply: exit %d, stderr: %s", code, stderr)
 	}
-	if _, _, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "test fixture"); code == 0 {
+	if _, _, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "test fixture"); code == 0 {
 		t.Fatalf("expected lock still refused while the thread remains open after a reply")
 	}
 
 	// Resolve (the human's viewer click), then lock succeeds.
 	resolveThread(t, cfgPath, "widget.contract.overview", tid)
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("expected lock to succeed once the thread is resolved, stderr: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, claimPath), "status: locked") {
@@ -147,12 +147,12 @@ func TestComment_LockBSucceedsWhileLockedAHasOpenThread(t *testing.T) {
 	aPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
 	bPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.b", facet: "contract", module: "widget", status: "draft", body: "claim B."})
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock A: %s", stderr)
 	}
 	// Open a thread on the already-locked A: A is now review_pending with an
 	// open thread.
-	if _, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", "revisit A"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", "revisit A"); code != 0 {
 		t.Fatalf("comment add on A: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, aPath), "review_pending: true") {
@@ -160,7 +160,7 @@ func TestComment_LockBSucceedsWhileLockedAHasOpenThread(t *testing.T) {
 	}
 
 	// Locking the unrelated, thread-free B must still succeed.
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("expected lock of B to succeed while A has an open thread, stderr: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, bPath), "status: locked") {
@@ -181,11 +181,11 @@ func TestComment_OnLockedSetsReviewPendingClearedOnResolve(t *testing.T) {
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a lockable claim."})
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock: %s", stderr)
 	}
 
-	addOut, _, addCode := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "revisit this")
+	addOut, _, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "revisit this")
 	if addCode != 0 {
 		t.Fatalf("comment add on locked claim: %s", addOut)
 	}
@@ -194,7 +194,7 @@ func TestComment_OnLockedSetsReviewPendingClearedOnResolve(t *testing.T) {
 		t.Fatalf("expected review_pending set after commenting on a locked claim, got:\n%s", llReadFile(t, claimPath))
 	}
 
-	staleOut, _, staleCode := run(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
+	staleOut, _, staleCode := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
 	if staleCode != 0 {
 		t.Fatalf("stale exited %d", staleCode)
 	}
@@ -222,10 +222,10 @@ func TestComment_ReauditCommentOnlyRefusedExit2ByteIdentical(t *testing.T) {
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a lockable claim."})
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock: %s", stderr)
 	}
-	if _, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "agent", "--body", "is this still true?"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "agent", "--body", "is this still true?"); code != 0 {
 		t.Fatalf("comment add: %s", stderr)
 	}
 
@@ -234,7 +234,7 @@ func TestComment_ReauditCommentOnlyRefusedExit2ByteIdentical(t *testing.T) {
 		t.Fatalf("precondition: expected the claim review_pending from its open thread")
 	}
 
-	out, stderr, code := run(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main")
+	out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main")
 	if code != 2 {
 		t.Fatalf("expected reaudit on a comment-only review_pending claim to exit 2, got %d\nstdout: %s\nstderr: %s", code, out, stderr)
 	}
@@ -250,7 +250,7 @@ func TestComment_ReauditCommentOnlyRefusedExit2ByteIdentical(t *testing.T) {
 	// No lock leak: a follow-up check (which takes the claims + lock-store
 	// sentinels) must run cleanly, proving reaudit's deferred releases ran
 	// despite the exit-2 refusal.
-	if _, stderr, code := run(t, root, "--config", cfgPath, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "check"); code != 0 {
 		t.Fatalf("expected check to succeed after a refused reaudit (no leaked lock), stderr: %s", stderr)
 	}
 }
@@ -268,7 +268,7 @@ func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 	mainPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "main resting on dep.", restsOn: []string{"widget.contract.dep"}})
 
 	for _, id := range []string{"widget.contract.dep", "widget.contract.main"} {
-		if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
+		if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", id, "--reason", "test fixture"); code != 0 {
 			t.Fatalf("lock %s: %s", id, stderr)
 		}
 	}
@@ -283,7 +283,7 @@ func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 	// the ledger. Re-record it, so the lock-ledger gate sees an approved edit
 	// rather than tampering and this test keeps measuring dependency drift.
 	armLedger(t, root)
-	if _, stderr, code := run(t, root, "--config", cfgPath, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "check"); code != 0 {
 		t.Fatalf("check: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, mainPath), "review_pending: true") {
@@ -291,7 +291,7 @@ func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 	}
 
 	// Now ALSO open a comment thread on main: two independent triggers.
-	addOut, _, addCode := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "double-check this against the new dep")
+	addOut, _, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "double-check this against the new dep")
 	if addCode != 0 {
 		t.Fatalf("comment add: %s", addOut)
 	}
@@ -299,7 +299,7 @@ func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 
 	// reaudit --confirm applies the drift half (audit note) but leaves
 	// review_pending TRUE because the open thread still stands.
-	confirmOut, stderr, confirmCode := run(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture")
+	confirmOut, stderr, confirmCode := reviewedRun(t, root, "--config", cfgPath, "claim", "reaudit", "widget.contract.main", "--confirm", "--reason", "test fixture")
 	if confirmCode != 0 {
 		t.Fatalf("reaudit --confirm on a drift+comment claim should exit 0, got %d\nstdout: %s\nstderr: %s", confirmCode, confirmOut, stderr)
 	}
@@ -317,7 +317,7 @@ func TestComment_DriftPlusComment_ReauditRetainsReviewPending(t *testing.T) {
 		t.Fatalf("expected the claim still locked, got:\n%s", afterConfirm)
 	}
 
-	staleOut, _, _ := run(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
+	staleOut, _, _ := reviewedRun(t, root, "--config", cfgPath, "claim", "list", "--review-pending")
 	if !strings.Contains(staleOut, "widget.contract.main") {
 		t.Fatalf("expected main still stale (open thread), got: %s", staleOut)
 	}
@@ -339,14 +339,14 @@ func TestComment_CheckOnLockedOpenThread(t *testing.T) {
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a lockable claim."})
 
-	if _, stderr, code := run(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock: %s", stderr)
 	}
-	if _, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "revisit"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "revisit"); code != 0 {
 		t.Fatalf("comment add: %s", stderr)
 	}
 
-	out, stderr, code := run(t, root, "--config", cfgPath, "check")
+	out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "check")
 	if code != 0 {
 		t.Fatalf("expected check to exit 0 on a locked+open-thread project, got %d\nstdout: %s\nstderr: %s", code, out, stderr)
 	}
@@ -387,14 +387,14 @@ func TestComment_ListFormatAndEnvelope(t *testing.T) {
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a claim."})
 
-	addOut, _, addCode := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "clarify the retry policy")
+	addOut, _, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "clarify the retry policy")
 	if addCode != 0 {
 		t.Fatalf("comment add: %s", addOut)
 	}
 	tid := firstToken(t, addOut, "c-")
 
 	// Pinned line format: "<tid> <status> <author> <created> replies=<N>: <body>"
-	listOut, _, listCode := run(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main")
+	listOut, _, listCode := reviewedRun(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main")
 	if listCode != 0 {
 		t.Fatalf("comment list exited %d", listCode)
 	}
@@ -423,7 +423,7 @@ func TestComment_ListFormatAndEnvelope(t *testing.T) {
 	// flag emitting a BARE ARRAY on stdout with a prose hint on stderr — a
 	// second, differently-shaped JSON surface on one binary. It is one
 	// envelope now, like every other command, and stdout carries nothing else.
-	jsonOut, jsonErr, jsonCode := run(t, root, "--config", cfgPath, "--format", "json", "comment", "list", "widget.contract.main")
+	jsonOut, jsonErr, jsonCode := reviewedRun(t, root, "--config", cfgPath, "--format", "json", "comment", "list", "widget.contract.main")
 	if jsonCode != 0 {
 		t.Fatalf("comment list --format json exited %d (stderr: %s)", jsonCode, jsonErr)
 	}
@@ -450,7 +450,7 @@ func TestComment_ListFormatAndEnvelope(t *testing.T) {
 
 	// --open filters to unresolved threads only.
 	resolveThread(t, cfgPath, "widget.contract.main", tid)
-	openOut, _, _ := run(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main", "--open")
+	openOut, _, _ := reviewedRun(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main", "--open")
 	if strings.Contains(openOut, tid) {
 		t.Fatalf("expected --open to hide the now-resolved thread, got: %s", openOut)
 	}
@@ -477,7 +477,7 @@ func TestComment_RetiredVerbsAreGoneFromTheCLI(t *testing.T) {
 	// does not offer. (Asserting on an invocation instead would be weaker — a
 	// parent command with no Run prints help and exits 0 for an unrecognized
 	// subcommand, which looks like success.)
-	help, _, code := run(t, root, "--config", cfgPath, "comment", "--help")
+	help, _, code := reviewedRun(t, root, "--config", cfgPath, "comment", "--help")
 	if code != 0 {
 		t.Fatalf("comment --help exited %d", code)
 	}
@@ -498,7 +498,7 @@ func TestComment_RetiredVerbsStillWorkThroughTheirPackage(t *testing.T) {
 	cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 	llWriteClaim(t, root, llClaimSpec{id: "widget.contract.main", facet: "contract", module: "widget", status: "draft", body: "a claim."})
 
-	addOut, _, addCode := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "original")
+	addOut, _, addCode := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.main", "--as", "human", "--body", "original")
 	if addCode != 0 {
 		t.Fatalf("comment add: %s", addOut)
 	}
@@ -519,12 +519,12 @@ func TestComment_RetiredVerbsStillWorkThroughTheirPackage(t *testing.T) {
 	if _, err := deps.Edit("widget.contract.main", tid, "", model.CommentRoleHuman, "edited-root-body"); err != nil {
 		t.Fatalf("edit root: %v", err)
 	}
-	if listOut, _, _ := run(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main"); !strings.Contains(listOut, "edited-root-body") {
+	if listOut, _, _ := reviewedRun(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main"); !strings.Contains(listOut, "edited-root-body") {
 		t.Fatalf("expected the edited body in list, got: %s", listOut)
 	}
 
 	// Reply (still a CLI verb), then edit and delete that reply by id.
-	replyOut, _, replyCode := run(t, root, "--config", cfgPath, "comment", "reply", "widget.contract.main", tid, "--as", "agent", "--body", "a reply")
+	replyOut, _, replyCode := reviewedRun(t, root, "--config", cfgPath, "comment", "reply", "widget.contract.main", tid, "--as", "agent", "--body", "a reply")
 	if replyCode != 0 {
 		t.Fatalf("comment reply: %s", replyOut)
 	}
@@ -540,7 +540,7 @@ func TestComment_RetiredVerbsStillWorkThroughTheirPackage(t *testing.T) {
 	if _, err := deps.Delete("widget.contract.main", tid, "", model.CommentRoleHuman); err != nil {
 		t.Fatalf("delete thread: %v", err)
 	}
-	if finalList, _, _ := run(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main"); strings.Contains(finalList, tid) {
+	if finalList, _, _ := reviewedRun(t, root, "--config", cfgPath, "comment", "list", "widget.contract.main"); strings.Contains(finalList, tid) {
 		t.Fatalf("expected no threads after deleting, got: %s", finalList)
 	}
 }
@@ -555,7 +555,7 @@ func TestComment_AddRefusedOnBannerClaim(t *testing.T) {
 	bannerPath := writeBannerClaim(t, root, "widget.contract.divider", "widget")
 
 	before := llReadFile(t, bannerPath)
-	out, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.divider", "--as", "human", "--body", "no threads here")
+	out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.divider", "--as", "human", "--body", "no threads here")
 	if code == 0 {
 		t.Fatalf("expected comment add on a banner claim to be refused, got exit 0 (stdout: %s)", out)
 	}
@@ -592,7 +592,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 			claimPath := llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
 			before := llReadFile(t, claimPath)
 
-			out, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", tc.body)
+			out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", tc.body)
 			if code == 0 {
 				t.Fatalf("expected a non-zero exit for an unsafe body, got 0 (stdout: %s)", out)
 			}
@@ -614,7 +614,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 			if llReadFile(t, claimPath) != before {
 				t.Fatalf("the claim file changed after a refused unsafe-body add")
 			}
-			if _, listErr, listCode := run(t, root, "--config", cfgPath, "comment", "list", "widget.contract.a"); listCode != 0 {
+			if _, listErr, listCode := reviewedRun(t, root, "--config", cfgPath, "comment", "list", "widget.contract.a"); listCode != 0 {
 				t.Fatalf("claims dir unusable (possibly bricked) after a refused unsafe-body add: %s", listErr)
 			}
 		})
@@ -627,7 +627,7 @@ func TestComment_UnsafeBody_FriendlyErrorNotCryptic(t *testing.T) {
 		cfgPath := llWriteConfig(t, root, []string{"contract"}, []string{"widget"}, "")
 		llWriteClaim(t, root, llClaimSpec{id: "widget.contract.a", facet: "contract", module: "widget", status: "draft", body: "claim A."})
 
-		out, stderr, code := run(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", " \ncontent below a blank first line")
+		out, stderr, code := reviewedRun(t, root, "--config", cfgPath, "comment", "add", "widget.contract.a", "--as", "human", "--body", " \ncontent below a blank first line")
 		if code != 0 {
 			t.Fatalf("expected a body that round-trips (\" \\ncontent\") to be ACCEPTED, got exit %d: stdout: %s stderr: %s", code, out, stderr)
 		}
@@ -689,12 +689,12 @@ func TestComment_StoredBodyNotRoundTrippable_ClaimScopedError(t *testing.T) {
 
 			// Sanity: the poison file loads cleanly (list works) — the exact state a
 			// user reaches by hand-editing a claim YAML; the failure is at SAVE time.
-			if _, e, c := run(t, root, "--config", cfgPath, "comment", "list", claimID); c != 0 {
+			if _, e, c := reviewedRun(t, root, "--config", cfgPath, "comment", "list", claimID); c != 0 {
 				t.Fatalf("precondition: poison claim should LOAD clean (list), got exit %d: %s", c, e)
 			}
 
 			args := append([]string{"--config", cfgPath}, v.args...)
-			out, stderr, code := run(t, root, args...)
+			out, stderr, code := reviewedRun(t, root, args...)
 			msg := stderr + out
 			if code == 0 {
 				t.Fatalf("%s: expected a non-zero exit on a non-round-trippable stored body, got 0 (stdout: %s)", v.name, out)
@@ -721,7 +721,7 @@ func TestComment_StoredBodyNotRoundTrippable_ClaimScopedError(t *testing.T) {
 			if llReadFile(t, claimPath) != before {
 				t.Fatalf("%s: the poison claim file changed after a refused op", v.name)
 			}
-			if _, e, c := run(t, root, "--config", cfgPath, "comment", "list", claimID); c != 0 {
+			if _, e, c := reviewedRun(t, root, "--config", cfgPath, "comment", "list", claimID); c != 0 {
 				t.Fatalf("%s: claims dir unusable after a refused op: %s", v.name, e)
 			}
 		})

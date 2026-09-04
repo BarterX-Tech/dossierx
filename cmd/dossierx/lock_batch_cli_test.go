@@ -52,24 +52,20 @@ func batchDeadlockFixture(t *testing.T) string {
 	})
 }
 
-func TestBatchLockSucceedsWhereSerialLocksDeadlock(t *testing.T) {
+func TestLocalApprovalDoesNotLetUnrelatedLintBlockACandidate(t *testing.T) {
 	cfgPath := batchDeadlockFixture(t)
 
-	// Precondition: the deadlock is real. A single lock of an UNRELATED
-	// claim is refused by the pre-existing, unrelated finding.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go")
-	if err == nil || env.OK {
-		t.Fatalf("fixture precondition: a single lock of an unrelated claim must be refused by the unscoped whole-corpus lint gate, got %+v", env)
-	}
-	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
-		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
+	// Local-approval v1 evaluates the candidate rather than making an
+	// unrelated historical rests_on finding hostage the request.
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "go")
+	if err != nil || !env.OK {
+		t.Fatalf("single locally admissible claim must not be refused by unrelated historical lint: %+v (err=%v)", env, err)
 	}
 
-	// The batch, over the two unrelated claims together, must succeed: the
-	// blocking finding names anchor and sibling, neither of which is
-	// requested.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock",
-		"widget.contract.one", "widget.contract.two", "--reason", "batch relock, unrelated to the anchor/sibling finding")
+	// A set of one takes the same policy path after the first independent
+	// approval, retaining the public group result shape for policy writes.
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
+		"widget.contract.two", "--reason", "batch relock, unrelated to the anchor/sibling finding")
 	if err != nil {
 		t.Fatalf("batch lock over unrelated claims must succeed: %+v (err=%v)", env, err)
 	}
@@ -77,20 +73,15 @@ func TestBatchLockSucceedsWhereSerialLocksDeadlock(t *testing.T) {
 		t.Fatalf("expected ok envelope, got %+v", env)
 	}
 
-	var data batchLockData
+	var data policyLockData
 	envData(t, env, &data)
-	if len(data.Locked) != 2 {
-		t.Fatalf("expected both requested claims locked, got %+v", data)
-	}
-	for _, l := range data.Locked {
-		if l.To != "locked" || l.From != "draft" {
-			t.Fatalf("expected draft -> locked for every batch member, got %+v", l)
-		}
+	if len(data.ClaimIDs) != 1 || data.ClaimIDs[0] != "widget.contract.two" || data.To != "locked" {
+		t.Fatalf("expected policy lock result for requested claim, got %+v", data)
 	}
 
 	// And it is durable: re-reading the claims off disk shows both locked.
 	for _, id := range []string{"widget.contract.one", "widget.contract.two"} {
-		showEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
+		showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 		if err != nil {
 			t.Fatalf("claim show %s: %v", id, err)
 		}
@@ -128,7 +119,7 @@ func batchOpenThreadFixture(t *testing.T) string {
 func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.clean", "widget.contract.flagged", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("a batch with an open-thread member must be refused, got %+v", env)
@@ -137,22 +128,16 @@ func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T
 		t.Fatalf("expected %q, got %+v", cliout.CodeUnresolvedComments, env.Error)
 	}
 
-	var data batchLockRefusedData
+	var data lockRefusedData
 	envData(t, env, &data)
-	if len(data.Offenders) != 1 {
-		t.Fatalf("expected exactly one offender (the flagged claim), got %+v", data.Offenders)
-	}
-	if data.Offenders[0].ClaimID != "widget.contract.flagged" {
-		t.Fatalf("the offender must name the claim carrying the open thread, got %+v", data.Offenders[0])
-	}
-	if data.Offenders[0].Gate != string(cliout.CodeUnresolvedComments) {
-		t.Fatalf("the offender must name its own gate, got %+v", data.Offenders[0])
+	if data.ClaimID != "widget.contract.flagged" || data.Gate != string(cliout.CodeUnresolvedComments) {
+		t.Fatalf("the policy refusal must name the open-thread member and gate, got %+v", data)
 	}
 
 	// NOTHING WAS WRITTEN — not even the clean claim, which on its own has no
 	// gate standing in its way at all. Atomicity: all requested ids lock, or
 	// none do.
-	showEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.clean")
+	showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.contract.clean")
 	if err != nil {
 		t.Fatalf("claim show widget.contract.clean: %v", err)
 	}
@@ -166,16 +151,14 @@ func TestBatchLockRefusedWhenOneMemberHasAnOpenThread_WritesNothing(t *testing.T
 }
 
 // ---------------------------------------------------------------------
-// a requested claim resting on a draft OUTSIDE the requested set still blocks
+// a requested claim resting on a readable draft outside the requested set can
+// be approved locally, with its dependency condition retained for readiness.
 // ---------------------------------------------------------------------
 
 // batchOutsideDraftDependencyFixture: "dependent" rests_on "outsider", and
 // only "dependent" (plus an unrelated "bystander") is requested. "outsider"
-// is draft and stays draft — it is never part of the batch. The scoping rule
-// must still refuse: "dependent" flipping to locked while resting on a still-
-// draft "outsider" is precisely the state rest-on-locked exists to prevent,
-// and it is a finding whose ClaimID ("dependent") IS in the requested set, so
-// it is not scoped away.
+// stays draft and is never part of the batch. Policy v1 admits that readable
+// draft edge locally but carries it as a dependency-readiness condition.
 func batchOutsideDraftDependencyFixture(t *testing.T) string {
 	t.Helper()
 	return writeCheckFixture(t, t.TempDir(), parityConfig, map[string]string{
@@ -192,45 +175,56 @@ func batchOutsideDraftDependencyFixture(t *testing.T) string {
 	})
 }
 
-func TestBatchLockRefusedWhenRequestedClaimRestsOnDraftOutsideTheBatch(t *testing.T) {
+func TestBatchLockLocallyApprovesWhenRequestedClaimRestsOnDraftOutsideTheBatch(t *testing.T) {
 	cfgPath := batchOutsideDraftDependencyFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.dependent", "widget.contract.bystander", "--reason", "go")
-	if err == nil || env.OK {
-		t.Fatalf("a requested claim resting on a draft outside the batch must still refuse the whole batch, got %+v", env)
+	if err != nil || !env.OK {
+		t.Fatalf("readable draft dependency is locally approvable, got %+v (%v)", env, err)
 	}
-	if env.Error == nil || env.Error.Code != cliout.CodeLintFailed {
-		t.Fatalf("expected %q, got %+v", cliout.CodeLintFailed, env.Error)
-	}
-
-	var data batchLockRefusedData
+	var data policyLockData
 	envData(t, env, &data)
-	if len(data.LintFindings) == 0 {
-		t.Fatalf("expected the scoped rest-on-locked finding to ride in data.lint_findings, got %+v", data)
-	}
-	named := false
-	for _, f := range data.LintFindings {
-		if f.Lint == "rest-on-locked" && f.ClaimID == "widget.contract.dependent" && strings.Contains(f.Message, "widget.contract.outsider") {
-			named = true
-		}
-	}
-	if !named {
-		t.Fatalf("the finding must name both the resting claim and the still-draft outsider, got %+v", data.LintFindings)
+	if len(data.Evaluation.Verdicts) != 2 || len(data.Evaluation.Verdicts[0].Conditions)+len(data.Evaluation.Verdicts[1].Conditions) == 0 {
+		t.Fatalf("local approval must disclose the draft dependency condition, got %+v", data.Evaluation)
 	}
 
-	// NOTHING WAS WRITTEN, including "bystander", which has no gate of its own.
-	for _, id := range []string{"widget.contract.dependent", "widget.contract.bystander", "widget.contract.outsider"} {
-		showEnv, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", id)
+	for id, want := range map[string]string{
+		"widget.contract.dependent": "locked",
+		"widget.contract.bystander": "locked",
+		"widget.contract.outsider":  "draft",
+	} {
+		showEnv, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", id)
 		if err != nil {
 			t.Fatalf("claim show %s: %v", id, err)
 		}
 		var show struct {
-			Status string `json:"status"`
+			Status    string `json:"status"`
+			Readiness struct {
+				DependencyReady      bool `json:"dependency_ready"`
+				DependencyConditions []struct {
+					DependencyID string `json:"dependency_id"`
+					Kind         string `json:"kind"`
+				} `json:"dependency_conditions"`
+			} `json:"readiness"`
 		}
 		envData(t, showEnv, &show)
-		if show.Status != "draft" {
-			t.Fatalf("%s: expected status draft (refused batch wrote nothing), got %q", id, show.Status)
+		if show.Status != want {
+			t.Fatalf("%s: status = %q, want %q", id, show.Status, want)
+		}
+		if id == "widget.contract.dependent" {
+			if show.Readiness.DependencyReady {
+				t.Fatalf("dependent must not be dependency-ready while outsider remains draft: %+v", show.Readiness)
+			}
+			conditioned := false
+			for _, condition := range show.Readiness.DependencyConditions {
+				if condition.DependencyID == "widget.contract.outsider" && condition.Kind == "dependency_unapproved" {
+					conditioned = true
+				}
+			}
+			if !conditioned {
+				t.Fatalf("dependent readiness must name the readable draft outsider: %+v", show.Readiness)
+			}
 		}
 	}
 }
@@ -247,7 +241,7 @@ func TestBatchLockRefusedWhenRequestedClaimRestsOnDraftOutsideTheBatch(t *testin
 func TestSingleIDLockStillProducesLockDataNotBatchShape(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.clean", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.clean", "--reason", "go")
 	if err != nil {
 		t.Fatalf("single-id lock: %v (%+v)", err, env)
 	}
@@ -258,18 +252,32 @@ func TestSingleIDLockStillProducesLockDataNotBatchShape(t *testing.T) {
 	}
 }
 
-// TestSingleIDLockDryRunRejectsMultipleIDs pins --dry-run's documented
-// single-claim scope: it previews one claim's gates and does not attempt to
-// approximate a batch preview.
-func TestSingleIDLockDryRunRejectsMultipleIDs(t *testing.T) {
+// TestPolicyLockDryRunPreviewsMultipleIDs pins the policy-v1 set preview. It
+// reports every requested member and mints a token bound to this exact request,
+// while leaving the fixture untouched.
+func TestPolicyLockDryRunPreviewsMultipleIDs(t *testing.T) {
 	cfgPath := batchOpenThreadFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock",
 		"widget.contract.clean", "widget.contract.flagged", "--dry-run")
-	if err == nil || env.OK {
-		t.Fatalf("--dry-run with more than one id must be refused, got %+v", env)
+	if err != nil || !env.OK {
+		t.Fatalf("--dry-run with more than one id must produce the shared set preview, got %+v (%v)", env, err)
 	}
-	if env.Error == nil || env.Error.Code != cliout.CodeBadRequest {
-		t.Fatalf("expected %q, got %+v", cliout.CodeBadRequest, env.Error)
+	var data policyLockPreviewData
+	envData(t, env, &data)
+	if !strings.HasPrefix(data.Snapshot, "v2:") {
+		t.Fatalf("group preview must issue a v2 request-bound proposal, got %q", data.Snapshot)
+	}
+	if len(data.Evaluation.Verdicts) != 2 {
+		t.Fatalf("group preview must return one verdict per requested id, got %+v", data.Evaluation)
+	}
+	flagged := false
+	for _, verdict := range data.Evaluation.Verdicts {
+		if verdict.ClaimID == "widget.contract.flagged" && len(verdict.Refusals) > 0 {
+			flagged = true
+		}
+	}
+	if !flagged {
+		t.Fatalf("group preview must expose the flagged member refusal, got %+v", data.Evaluation)
 	}
 }

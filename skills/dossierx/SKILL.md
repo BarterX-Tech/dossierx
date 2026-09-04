@@ -13,8 +13,6 @@ description: >-
   Load a companion skill only when this one sends you there.
 ---
 
-# DossierX — router and machine contract
-
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
 a linted, dependency-checked HTML viewer. A claim starts `draft` (freely editable) and is promoted
 to `locked` (frozen; changes require a recorded human approval). Everything the tool knows lives in
@@ -28,10 +26,9 @@ viewer, comment, click Resolve and tell you what to do; you run every command, t
 | Never | change a **locked** claim without their recorded approval; lock/unlock/flag/reaudit unasked; resolve or reopen a thread a human opened; edit or delete a comment | — |
 
 ## The nine nouns, twenty-five leaves
-
 ```
 dossierx check                             # the whole pipeline; --validate = read-only, --staged = judge the git index, write nothing
-dossierx claim  show list new lock unlock flag reaudit link
+dossierx claim  show list new lock unlock flag reaudit link migrate-lock-policy
 dossierx comment inbox list add reply
 dossierx build-order propose status lock show
 dossierx track list show status            # read-only: the cross-cutting feature axis
@@ -46,8 +43,6 @@ A claim joins a track via `tracks:` in its own YAML, so changing membership on a
 
 There is no `lint`, `catalog`, `render`, `deps`, `stale`, `coverage`, `implink`, `migrate`, or
 `comment resolve|reopen|edit|delete`; the table at the bottom maps each to its replacement.
-
-## The envelope — every command, every run
 
 `--format json` is the **default**: one envelope per invocation, on stdout, on failure as well as
 success. `--format text` is the prose you paste into chat for a human — except `build-order show`,
@@ -102,6 +97,15 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `banner_claim` / `empty_body` / `unsafe_body` | 1 | the comment you tried to write cannot be stored. Fix the body (`unsafe_body` is now narrow: a first content line led by a TAB. Space-indented first lines store fine as of v0.4.0); `claim_not_serializable` instead means the claim **on disk** is already broken. |
 
 ## --dry-run: "blocked" is a successful answer
+
+### Local-approval policy v1
+
+New projects use one set evaluator for single/group lock preview and write.
+`--dry-run` returns verdicts, conditions and a `snapshot`; `--proposal` is
+required on every lock write, rejecting missing, invalid, stale and wrong-set review. Draft dependencies yield visible
+`dependency_unapproved`, never readiness. Read `claim show` or API `readiness`
+for causes/paths. Existing stores stay legacy until `claim migrate-lock-policy
+--reason "<their words>"`; migration preserves approvals and baselines.
 
 Every mutating verb takes `--dry-run`. It writes nothing and **always exits 0 with `ok: true`**,
 even when the real run would refuse — including when you forgot a required flag.

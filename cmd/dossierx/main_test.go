@@ -288,8 +288,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // The shape of the surface itself
 // ---------------------------------------------------------------------
 
-// TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins the headline of the v0.3.0
-// restructure as a test rather than a promise in a changelog.
+// TestSurfaceIsTwentyFiveLeavesUnderNineNouns pins the headline of the v0.3.0// restructure as a test rather than a promise in a changelog.
 //
 // The number is a design constraint: every verb here is something an AGENT
 // does, and the argument for the release is that the surface got SMALLER while
@@ -318,7 +317,7 @@ func TestPathHelpersResolveAgainstConfigDir(t *testing.T) {
 // touch any lifecycle guarantee the other nineteen make.
 //
 // THE FOURTH MOVE IS THE THEME NOUN, taking twenty-two-under-eight to
-// twenty-four-under-nine. It is the first noun whose subject is not the corpus:
+// twenty-five-under-nine. It is the first noun whose subject is not the corpus:
 // `viewer.theme` had a twenty-eight-token vocabulary and built-in presets with
 // no way to see either from the CLI, so "which palettes ship?" and "what does
 // the claude preset actually set?" were questions answerable only by reading
@@ -344,14 +343,15 @@ func TestSurfaceIsTwentyFiveLeavesUnderNineNouns(t *testing.T) {
 	want := map[string]bool{
 		"check": true,
 
-		"claim show":    true,
-		"claim list":    true,
-		"claim new":     true,
-		"claim lock":    true,
-		"claim unlock":  true,
-		"claim flag":    true,
-		"claim reaudit": true,
-		"claim link":    true,
+		"claim show":                true,
+		"claim list":                true,
+		"claim new":                 true,
+		"claim lock":                true,
+		"claim unlock":              true,
+		"claim flag":                true,
+		"claim reaudit":             true,
+		"claim link":                true,
+		"claim migrate-lock-policy": true,
 
 		"comment inbox": true,
 		"comment list":  true,

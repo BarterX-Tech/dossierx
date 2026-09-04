@@ -65,7 +65,7 @@ func TestFormatDefaultsToJSON(t *testing.T) {
 }
 
 func TestFormatTextReproducesTheProse(t *testing.T) {
-	out, _, err := execCLI(t, "version")
+	out, _, err := execReviewedCLI(t, "version")
 	if err != nil {
 		t.Fatalf("version --format text: %v", err)
 	}
@@ -196,7 +196,7 @@ func TestServeIsTheOnlyTextOnlyCommand(t *testing.T) {
 // ---------------------------------------------------------------------
 
 func TestEnvelope_Version(t *testing.T) {
-	env, _, err := execCLIJSON(t, "version")
+	env, _, err := execReviewedCLIJSON(t, "version")
 	if err != nil {
 		t.Fatalf("version: %v", err)
 	}
@@ -217,7 +217,7 @@ func TestEnvelope_CheckSuccess(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -259,7 +259,7 @@ func TestEnvelope_CheckFailsAtLint(t *testing.T) {
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")
 	if err == nil {
 		t.Fatal("a dangling rests_on must fail check")
 	}
@@ -298,7 +298,7 @@ func TestEnvelope_LockUnlockRoundTrip(t *testing.T) {
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	id := "widget.contract.overview"
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed on the call")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed on the call")
 	if err != nil {
 		t.Fatalf("lock: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestEnvelope_LockUnlockRoundTrip(t *testing.T) {
 		t.Fatalf("lock must report when it happened, got %+v", locked)
 	}
 
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "needs a fix")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "unlock", id, "--reason", "needs a fix")
 	if err != nil {
 		t.Fatalf("unlock: %v", err)
 	}
@@ -338,11 +338,11 @@ func TestEnvelope_FlagThenReaudit(t *testing.T) {
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	id := "widget.contract.overview"
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "flag", id,
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "flag", id,
 		"--claim-says", "it retries twice", "--now-does", "it retries five times", "--reason", "code changed")
 	if err != nil {
 		t.Fatalf("flag: %v", err)
@@ -355,7 +355,7 @@ func TestEnvelope_FlagThenReaudit(t *testing.T) {
 
 	// Bare reaudit is a preview and stays one: applied must be false and the
 	// claim must still be review_pending.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id)
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id)
 	if err != nil {
 		t.Fatalf("reaudit preview: %v", err)
 	}
@@ -371,7 +371,7 @@ func TestEnvelope_FlagThenReaudit(t *testing.T) {
 		t.Fatalf("the preview must carry the proposed body, got %+v", preview)
 	}
 
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "checked the diff")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "checked the diff")
 	if err != nil {
 		t.Fatalf("reaudit --confirm: %v", err)
 	}
@@ -390,7 +390,7 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	id := "widget.contract.overview"
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", id, "--as", "human", "--body", "is this still true?")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "add", id, "--as", "human", "--body", "is this still true?")
 	if err != nil {
 		t.Fatalf("comment add: %v", err)
 	}
@@ -403,7 +403,7 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 		t.Fatalf("add payload drift: %+v", added)
 	}
 
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "comment", "reply", id, added.ThreadID, "--as", "agent", "--body", "fixed, please confirm")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "comment", "reply", id, added.ThreadID, "--as", "agent", "--body", "fixed, please confirm")
 	if err != nil {
 		t.Fatalf("comment reply: %v", err)
 	}
@@ -413,7 +413,7 @@ func TestEnvelope_CommentAddReplyList(t *testing.T) {
 		t.Fatalf("reply payload drift: %+v", replied)
 	}
 
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "comment", "list", id)
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "comment", "list", id)
 	if err != nil {
 		t.Fatalf("comment list: %v", err)
 	}
@@ -431,7 +431,7 @@ func TestEnvelope_BuildOrderStatusNotProposedIsASuccess(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "status", "--module", "widget")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "status", "--module", "widget")
 	if err != nil {
 		t.Fatalf("build-order status: %v", err)
 	}
@@ -450,7 +450,7 @@ func TestEnvelope_BuildOrderStatusNotProposedIsASuccess(t *testing.T) {
 
 func TestEnvelope_SkillsExport(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "skills")
-	env, _, err := execCLIJSON(t, "skills", "export", target)
+	env, _, err := execReviewedCLIJSON(t, "skills", "export", target)
 	if err != nil {
 		t.Fatalf("skills export: %v", err)
 	}
@@ -483,7 +483,7 @@ func TestErrorCodes(t *testing.T) {
 	// A locked claim with an open thread, for the lock gate.
 	gated := t.TempDir()
 	gatedCfg, _ := icWriteFixtureProject(t, gated, "widget")
-	if _, _, err := execCLIJSON(t, "--config", gatedCfg, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "hold on"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", gatedCfg, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "hold on"); err != nil {
 		t.Fatalf("seed comment: %v", err)
 	}
 
@@ -551,7 +551,7 @@ func TestErrorCodes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			env, _, err := execCLIJSON(t, tc.args...)
+			env, _, err := execReviewedCLIJSON(t, tc.args...)
 			if err == nil {
 				t.Fatalf("expected a failure, got envelope %+v", env)
 			}
@@ -576,10 +576,10 @@ func TestLockGateCodes(t *testing.T) {
 	// Open comment thread => unresolved_comments.
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "wait"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "wait"); err != nil {
 		t.Fatalf("seed comment: %v", err)
 	}
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved")
 	if err == nil {
 		t.Fatal("an open thread must refuse the lock")
 	}
@@ -603,7 +603,7 @@ func TestLockGateCodes(t *testing.T) {
 			"body: |\n  a claim.\nrests_on:\n  - widget.contract.nope\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	env, _, err = execCLIJSON(t, "--config", brokenCfg, "claim", "lock", "widget.contract.a", "--reason", "approved")
+	env, _, err = execReviewedCLIJSON(t, "--config", brokenCfg, "claim", "lock", "widget.contract.a", "--reason", "approved")
 	if err == nil {
 		t.Fatal("a dangling dependency must refuse the lock")
 	}
@@ -621,7 +621,7 @@ func TestLockGateCodes(t *testing.T) {
 // nothing.
 func dryRunOf(t *testing.T, args ...string) cliout.DryRun {
 	t.Helper()
-	env, _, err := execCLIJSON(t, append(args, "--dry-run")...)
+	env, _, err := execReviewedCLIJSON(t, append(args, "--dry-run")...)
 	if err != nil {
 		t.Fatalf("%v --dry-run: %v", args, err)
 	}
@@ -705,7 +705,7 @@ func TestDryRun_MissingReasonIsReportedNotRefused(t *testing.T) {
 		t.Fatalf("--reason must appear in missing[], got %v", dr.Missing)
 	}
 	// And the real run does refuse it — the preview is not lying.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview"); err == nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview"); err == nil {
 		t.Fatal("a lock with no --reason must be refused for real")
 	}
 }
@@ -713,7 +713,7 @@ func TestDryRun_MissingReasonIsReportedNotRefused(t *testing.T) {
 func TestDryRun_LockBlockedByAnOpenThread(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "hold on"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "hold on"); err != nil {
 		t.Fatalf("seed comment: %v", err)
 	}
 
@@ -735,10 +735,10 @@ func TestDryRun_WinsOverConfirm(t *testing.T) {
 	cfgPath, claimPath := icWriteFixtureProject(t, root, "widget")
 	id := "widget.contract.overview"
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "flag", id,
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "flag", id,
 		"--claim-says", "old", "--now-does", "new", "--reason", "changed"); err != nil {
 		t.Fatalf("flag: %v", err)
 	}
@@ -747,7 +747,7 @@ func TestDryRun_WinsOverConfirm(t *testing.T) {
 		t.Fatalf("read claim: %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "approved", "--dry-run")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "reaudit", id, "--confirm", "--reason", "approved", "--dry-run")
 	if err != nil {
 		t.Fatalf("reaudit --dry-run --confirm: %v", err)
 	}
@@ -770,7 +770,7 @@ func TestDryRun_CommentAddWarnsThatItFlipsALockedClaim(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 	id := "widget.contract.overview"
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
 
@@ -798,7 +798,7 @@ func buildOrderFixture(t *testing.T) string {
 func TestEnvelope_BuildOrderProposeThenLock(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget")
 	if err != nil {
 		t.Fatalf("build-order propose: %v", err)
 	}
@@ -821,7 +821,7 @@ func TestEnvelope_BuildOrderProposeThenLock(t *testing.T) {
 		t.Fatalf("the ordered claim ids must be in the envelope, got %+v", proposed.Phases)
 	}
 
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "reviewed the order")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "reviewed the order")
 	if err != nil {
 		t.Fatalf("build-order lock: %v", err)
 	}
@@ -848,7 +848,7 @@ func TestEnvelope_BuildOrderProposeThenLock(t *testing.T) {
 func TestBuildOrderLockCodes(t *testing.T) {
 	cfgPath := buildOrderFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
 	if err == nil {
 		t.Fatal("locking an unproposed build order must fail")
 	}
@@ -856,13 +856,13 @@ func TestBuildOrderLockCodes(t *testing.T) {
 		t.Fatalf("expected not_proposed, got %q (%s)", env.Error.Code, env.Error.Message)
 	}
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved"); err != nil {
 		t.Fatalf("first lock: %v", err)
 	}
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved again")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved again")
 	if err == nil {
 		t.Fatal("re-locking a current build order must fail rather than silently succeed")
 	}
@@ -875,7 +875,7 @@ func TestBuildOrderLockCodes(t *testing.T) {
 	for _, args := range [][]string{
 		{"claim", "unlock", "widget.contract.a", "--reason", "reopening to fix the wording"},
 	} {
-		if _, _, err := execCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, append([]string{"--config", cfgPath}, args...)...); err != nil {
 			t.Fatalf("%v: %v", args, err)
 		}
 	}
@@ -891,11 +891,11 @@ func TestBuildOrderLockCodes(t *testing.T) {
 	if err := os.WriteFile(claimFile, []byte(edited), 0o644); err != nil {
 		t.Fatalf("edit claim: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "re-approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "--reason", "re-approved"); err != nil {
 		t.Fatalf("re-lock the edited claim: %v", err)
 	}
 
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock the stale order")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "relock the stale order")
 	if err == nil {
 		t.Fatal("locking a stale build order must fail rather than freezing an outdated order")
 	}
@@ -916,7 +916,7 @@ func TestDryRun_BuildOrderLockNeedsAProposalAndAReason(t *testing.T) {
 		t.Fatalf("expected both the absent input and the failed gate in missing[], got %v", dr.Missing)
 	}
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "build-order", "propose", "--module", "widget"); err != nil {
 		t.Fatalf("propose: %v", err)
 	}
 	dr = dryRunOf(t, "--config", cfgPath, "build-order", "lock", "--module", "widget", "--reason", "approved")
@@ -1010,7 +1010,7 @@ func TestTextModeErrorLineMatchesCobra(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	_, stderr, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.ghost", "--reason", "x")
+	_, stderr, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.ghost", "--reason", "x")
 	if err == nil {
 		t.Fatal("locking a nonexistent claim must fail")
 	}
@@ -1034,7 +1034,7 @@ func TestEnvelopeKeysAreSnakeCase(t *testing.T) {
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check")
 	if err == nil {
 		t.Fatal("expected the fixture to fail lint")
 	}
@@ -1090,10 +1090,10 @@ func TestDryRun_ReauditOnAWrongStateClaimIsBlockedNotBroken(t *testing.T) {
 
 	// A claim whose ONLY pending trigger is discussion is the same shape: the
 	// remedy is a human clicking Resolve, not a diff to confirm.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "wait"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "add", "widget.contract.overview", "--as", "human", "--body", "wait"); err != nil {
 		t.Fatalf("comment add: %v", err)
 	}
 	dr = dryRunOf(t, "--config", cfgPath, "claim", "reaudit", "widget.contract.overview", "--reason", "approved")

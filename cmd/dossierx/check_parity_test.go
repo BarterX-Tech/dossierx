@@ -64,7 +64,7 @@ func writeCheckFixture(t *testing.T, root, cfgBody string, files map[string]stri
 // stderr, and the pass/fail outcome match the golden values exactly.
 func assertCheckParity(t *testing.T, cfgPath, wantStdout, wantStderr string, wantErr bool) {
 	t.Helper()
-	stdout, stderr, err := execCLI(t, "--config", cfgPath, "check")
+	stdout, stderr, err := execReviewedCLI(t, "--config", cfgPath, "check")
 	if (err != nil) != wantErr {
 		t.Fatalf("check error outcome: got err=%v, wantErr=%v\nstdout:\n%s\nstderr:\n%s", err, wantErr, stdout, stderr)
 	}
@@ -258,7 +258,7 @@ func TestCheckParity_DriftFlagReauditHint(t *testing.T) {
 			"body: |\n  a locked claim to flag.\n" +
 			"governed_by:\n  type: none\n  reason: fixture\n",
 	})
-	if _, _, err := execCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.locked",
+	if _, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "flag", "widget.contract.locked",
 		"--claim-says", "old", "--now-does", "new", "--reason", "changed"); err != nil {
 		t.Fatalf("flag setup: %v", err)
 	}
@@ -302,7 +302,7 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 
 	// Lock dep (base is authored locked already) so the store captures dep's
 	// per-dependent baseline for base = ContentHash(base v1).
-	if _, stderr, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
+	if _, stderr, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock dep: %v (stderr=%s)", err, stderr)
 	}
 	// Drift base: change its body so dep's stored baseline no longer matches.
@@ -315,7 +315,7 @@ func TestCheckParity_DriftThenRevertReauditHint(t *testing.T) {
 	// What is under test is the DEPENDENT's review_pending, not base's approval.
 	armLedgerFixture(t, cfgPath)
 	// A check run reconciles dep -> locked+review_pending (drift detected).
-	if _, stderr, err := execCLI(t, "--config", cfgPath, "check"); err != nil {
+	if _, stderr, err := execReviewedCLI(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("drift check: %v (stderr=%s)", err, stderr)
 	}
 	// Revert base to v1 (byte-identical body) so ContentHash matches the stored
@@ -351,7 +351,7 @@ func TestCheckParity_MalformedClaimLoadErrorPrefix(t *testing.T) {
 		// An unclosed YAML flow sequence: a hard parse error in loader.LoadClaims.
 		"claims/broken.yaml": "id: [oops\n",
 	})
-	stdout, stderr, err := execCLI(t, "--config", cfgPath, "check")
+	stdout, stderr, err := execReviewedCLI(t, "--config", cfgPath, "check")
 	if err == nil {
 		t.Fatalf("expected check to fail on a malformed claim; stdout=%q stderr=%q", stdout, stderr)
 	}

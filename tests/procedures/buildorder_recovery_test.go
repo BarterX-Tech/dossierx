@@ -81,10 +81,10 @@ func TestBuildOrderRecovery_SetItThenReproposeMustSurviveCheck(t *testing.T) {
 
 	// "lock them again": the `lock` half of unlock → fix → lock, recording a
 	// fresh approval over the content that now carries build_role.
-	lockOverview := f.Run("dossierx claim lock <id> --reason <words>",
+	lockOverview := f.RunReviewedLock("dossierx claim lock <id> --reason <words>",
 		map[string]string{"id": defaultClaimID, "words": "re-approved with build_role set, per the recovery row"})
 	f.DocumentedSuccess(lockOverview, "the row's recovery locks each claim again with the human's reason")
-	lockAlpha := f.Run("dossierx claim lock <id> --reason <words>",
+	lockAlpha := f.RunReviewedLock("dossierx claim lock <id> --reason <words>",
 		map[string]string{"id": "widget.contract.alpha", "words": "re-approved with build_role set, per the recovery row"})
 	f.DocumentedSuccess(lockAlpha, "the row's recovery locks each claim again with the human's reason")
 

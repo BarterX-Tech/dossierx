@@ -17,6 +17,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,6 +70,66 @@ func execCLIJSON(t *testing.T, args ...string) (env cliout.Envelope, stderr stri
 		t.Fatalf("stdout is not a single JSON envelope (%v):\n%s\nstderr:\n%s", decodeErr, outBuf.String(), errBuf.String())
 	}
 	return env, errBuf.String(), err
+}
+
+// execReviewedCLI performs the explicit two-step approval protocol used by
+// legacy fixture setup: preview the exact requested set, then submit only the
+// returned token. Tests for missing, stale, or wrong-request tokens keep using
+// execCLI directly so they do not accidentally obtain a token here.
+func execReviewedCLI(t *testing.T, args ...string) (stdout, stderr string, err error) {
+	t.Helper()
+	if !policyLockArgs(args) {
+		return execCLI(t, args...)
+	}
+	proposal, err := reviewedProposal(t, args...)
+	if err != nil {
+		return "", "", err
+	}
+	return execCLI(t, append(args, "--proposal", proposal)...)
+}
+
+func execReviewedCLIJSON(t *testing.T, args ...string) (env cliout.Envelope, stderr string, err error) {
+	t.Helper()
+	if !policyLockArgs(args) {
+		return execCLIJSON(t, args...)
+	}
+	proposal, proposalErr := reviewedProposal(t, args...)
+	if proposalErr != nil {
+		return cliout.Envelope{}, "", proposalErr
+	}
+	return execCLIJSON(t, append(args, "--proposal", proposal)...)
+}
+
+func policyLockArgs(args []string) bool {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] == "claim" && args[i+1] == "lock" {
+			for _, arg := range args {
+				if arg == "--dry-run" || arg == "--proposal" {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return false
+}
+
+func reviewedProposal(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	previewArgs := append(append([]string(nil), args...), "--dry-run")
+	env, _, err := execCLIJSON(t, previewArgs...)
+	if err != nil {
+		return "", err
+	}
+	data, ok := env.Data.(map[string]any)
+	if !ok {
+		return "", fmt.Errorf("lock preview did not return an object")
+	}
+	snapshot, ok := data["snapshot"].(string)
+	if !ok || snapshot == "" {
+		return "", fmt.Errorf("lock preview did not return a proposal token")
+	}
+	return snapshot, nil
 }
 
 // icWriteFixtureProject writes a minimal valid project.config.yaml plus one
@@ -358,10 +419,10 @@ func TestCLI_LockCheckStaleReauditUnlockFlow(t *testing.T) {
 		t.Fatalf("write main: %v", err)
 	}
 
-	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
+	if out, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.dep", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock dep: %v (out: %s)", err, out)
 	}
-	if out, _, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
+	if out, _, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.main", "--reason", "test fixture"); err != nil {
 		t.Fatalf("lock main: %v (out: %s)", err, out)
 	}
 
