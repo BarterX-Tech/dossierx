@@ -1133,8 +1133,11 @@ missing file — and then one hand-edit falsifies what the ledger says about it:
 ```sh
 dossierx claim unlock widget.contract.overview --reason "editing"
 $EDITOR claims/widget-overview.yaml           # rewrite the body to say something else
-dossierx claim lock   widget.contract.overview --reason "re-lock"
-$EDITOR build/ledger/lock-store.json             # put the ORIGINAL reason, at and actor back```
+dossierx claim lock   widget.contract.overview --dry-run
+dossierx claim lock   widget.contract.overview --reason "re-lock" --proposal "<snapshot>"
+```
+
+$EDITOR build/ledger/lock-store.json             # put the ORIGINAL reason, at and actor back
 
 `dossierx check` → `ok: true`, zero findings. `dossierx check --staged` →
 `ok: true`. The ledger now reads:
