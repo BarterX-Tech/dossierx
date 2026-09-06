@@ -108,11 +108,13 @@ reviewed receipt for explanation while withholding readiness. A cycle is
 reported with its cycle path (minimizing the complete witness path from the
 evaluated claim through the cycle) and cannot be approved as a required premise.
 Across all condition and cause categories, readiness emits one entry per distinct
-underlying obstacle with its deterministic representative witness path, bounding
-evaluation work to $O(V + E_r)$ per claim rather than the number of dependency
-routes. Serialized catalog output scales polynomially with graph depth $D$ and
-obstacle count $R$ ($O(V \cdot R \cdot D)$ bytes), strictly eliminating
-exponential route proliferation.
+underlying obstacle with its deterministic representative witness path. Graph edge
+exploration visits $O(V + E_r)$ required edges per evaluated claim. Shortest witness
+path construction copies $O(D)$ identifier strings along examined paths, yielding
+polynomial path-construction work ($O(V \cdot D)$ per claim, up to $O(V^2 \cdot D)$
+across all claims on deep chains). Serialized catalog output scales polynomially
+with graph depth $D$ and obstacle count $R \le V + E_b$ ($O(V \cdot R \cdot D)$ bytes),
+strictly eliminating the former exponential route proliferation ($O(k^d)$).
 
 ## Existing projects
 

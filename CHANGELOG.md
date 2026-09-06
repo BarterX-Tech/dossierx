@@ -13,9 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Readiness now collects independent causes and conditions via bounded BFS traversal
   with a deterministic representative witness path (shortest path with a lexicographical
   tie-break, and global cycle witness minimization) rather than enumerating every
-  dependency route. This eliminates exponential path explosion ($O(k^d)$), memory
-  exhaustion, and multi-gigabyte catalog output on dense dependency graphs, bounding
-  traversal work to $O(V + E_r)$ per claim and catalog output to $O(V \cdot R \cdot D)$.
+  dependency route. This eliminates exponential route proliferation ($O(k^d)$) on dense
+  dependency graphs, bounding traversal edge exploration to $O(V + E_r)$ per claim,
+  path-construction work to $O(V \cdot D)$, and catalog output to $O(V \cdot R \cdot D)$ bytes.
 
 ## [0.7.8] - 2026-09-06
 

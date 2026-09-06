@@ -3,7 +3,9 @@ package readiness
 import (
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"reflect"
+	"sort"
 	"testing"
 	"time"
 
@@ -643,6 +645,23 @@ func TestAuditDraftDriftConsistency(t *testing.T) {
 	}
 }
 
+func TestIndependentSourceIdentityCollision(t *testing.T) {
+	a := lockedClaim("a")
+	a.Comments = []model.Comment{{ID: "t1", Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "review"}}
+	b := lockedClaim("b", "a")
+	s := standingStore(a, b)
+	recordBaseline(s, "b", a)
+	flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{"a": {Reason: "t1"}}}
+	gotB := Compute([]model.Claim{a, b}, s, flags)["b"]
+	kinds := map[CauseKind]bool{}
+	for _, c := range gotB.Causes {
+		kinds[c.SourceKind] = true
+	}
+	if !kinds[CauseOwnFlag] || !kinds[CauseOwnThread] {
+		t.Fatalf("independent thread and flag must both survive; got %+v", gotB.Causes)
+	}
+}
+
 func TestAuditShortestSCCWitness(t *testing.T) {
 	x := lockedClaim("x", "a", "z")
 	a := lockedClaim("a", "b")
@@ -650,8 +669,10 @@ func TestAuditShortestSCCWitness(t *testing.T) {
 	z := lockedClaim("z", "a", "z")
 	claims := []model.Claim{x, a, b, z}
 	got := Compute(claims, standingStore(claims...), nil)
+	found := false
 	for _, c := range got[x.ID].DependencyConditions {
 		if c.Kind == ConditionDependencyCycle {
+			found = true
 			if len(c.Path) != 3 {
 				t.Fatalf("shortest cycle witness is [x z z] (len 3), got %v (len %d)", c.Path, len(c.Path))
 			}
@@ -660,90 +681,214 @@ func TestAuditShortestSCCWitness(t *testing.T) {
 			}
 		}
 	}
+	if !found {
+		t.Fatal("expected cycle condition was not found")
+	}
 }
 
-func TestDifferentialParityRandomized(t *testing.T) {
-	// Generative differential test across diverse graph shapes, checking
-	// core readiness invariants, truth values, and path validity.
-	nodes := []string{"n0", "n1", "n2", "n3", "n4", "n5"}
+func auditIdentities(a Assessment) []string {
+	out := []string{}
+	set := map[string]bool{}
+	for _, c := range a.Causes {
+		owner := c.Path[len(c.Path)-1]
+		if c.DependencyID != "" {
+			owner = c.Path[len(c.Path)-2]
+		}
+		set[fmt.Sprintf("cause|%s|%s|%s", owner, c.SourceKind, c.DependencyID)] = true
+	}
+	for _, c := range a.Conditions {
+		owner := ""
+		if c.Kind == ConditionUnknownHistoricalBaseline {
+			owner = c.Path[len(c.Path)-2]
+		}
+		set[fmt.Sprintf("condition|%s|%s|%s", owner, c.Kind, c.DependencyID)] = true
+	}
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
 
-	// Test 20 distinct graph topologies and configurations deterministically
-	for seed := 0; seed < 20; seed++ {
-		var claims []model.Claim
+func TestIndependentDifferentialDAG(t *testing.T) {
+	for seed := int64(0); seed < 200; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		claims := []model.Claim{}
 		flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{}}
-
-		for i, id := range nodes {
-			var deps []string
-			for j := 0; j < len(nodes); j++ {
-				// Deterministic edge inclusion based on seed and node indices
-				if (seed+i*3+j*7)%5 == 0 && i != j {
-					// Only forward edges for acyclic or occasional back edges for cyclic
-					if j > i || (seed%3 == 0 && j < i) {
-						deps = append(deps, nodes[j])
-					}
-				}
-			}
-			c := lockedClaim(id, deps...)
-			if (seed+i)%4 == 0 {
+		for i := 0; i < 6; i++ {
+			c := lockedClaim(fmt.Sprintf("n%d", i))
+			if rng.Intn(3) == 0 {
 				c.Status = model.StatusDraft
 			}
-			if (seed+i)%6 == 0 {
-				// Include flags with both non-empty and empty reasons
+			if rng.Intn(5) == 0 {
+				c.Comments = []model.Comment{{ID: fmt.Sprintf("thread%d", i), Status: model.CommentStatusOpen, Author: model.CommentRoleHuman, Body: "review"}}
+			}
+			if rng.Intn(3) == 0 {
 				reason := ""
-				if (seed+i)%2 == 0 {
-					reason = fmt.Sprintf("flag reason %d", seed)
+				if rng.Intn(2) == 0 {
+					reason = "flag"
 				}
-				flags.Flags[id] = reaudit.PendingFlag{Reason: reason}
+				flags.Flags[c.ID] = reaudit.PendingFlag{Reason: reason}
+			}
+			for j := i + 1; j < 6; j++ {
+				if rng.Intn(2) == 0 {
+					c.RestsOn = append(c.RestsOn, fmt.Sprintf("n%d", j))
+				}
+			}
+			if rng.Intn(4) == 0 {
+				c.Governed.Type = "n5"
 			}
 			claims = append(claims, c)
 		}
-
 		s := standingStore(claims...)
+		if seed%2 == 0 {
+			s.PolicyVersion = lock.PolicyLegacy
+		}
 		for _, c := range claims {
-			for _, depID := range c.RestsOn {
+			for _, dep := range lock.BaselineDependencyIDs(c) {
+				if rng.Intn(5) == 0 {
+					continue
+				}
 				for _, d := range claims {
-					if d.ID == depID {
+					if dep == d.ID {
 						recordBaseline(s, c.ID, d)
-						if (seed)%7 == 0 {
-							// Cause baseline drift
-							s.Hashes[c.ID][depID] = "drifted_hash"
+					}
+				}
+				if rng.Intn(3) == 0 {
+					s.Hashes[c.ID][dep] = "stale"
+				}
+			}
+		}
+		old := oracleCompute(claims, s, flags)
+		got := Compute(claims, s, flags)
+		for id, a := range got {
+			b := old[id]
+			if a.LocalApproved != b.LocalApproved || a.DependencyReady != b.DependencyReady || a.ReviewPending != b.ReviewPending || a.Ready != b.Ready || !reflect.DeepEqual(auditIdentities(a), auditIdentities(b)) {
+				t.Fatalf("seed=%d id=%s candidate=%+v oracle=%+v", seed, id, a, b)
+			}
+		}
+	}
+	t.Log("200 six-node DAGs, seeds 0..199; pinned d115399 oracle; four truth values and normalized independent identities")
+}
+
+func auditLex(a, b []string) bool {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
+		}
+	}
+	return len(a) < len(b)
+}
+
+func TestIndependentCycleOracle(t *testing.T) {
+	for seed := int64(0); seed < 400; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		n := 5
+		claims := make([]model.Claim, n)
+		reach := make([][]bool, n)
+		for i := 0; i < n; i++ {
+			reach[i] = make([]bool, n)
+			claims[i] = lockedClaim(fmt.Sprintf("n%d", i))
+			for j := 0; j < n; j++ {
+				if rng.Intn(4) == 0 {
+					claims[i].RestsOn = append(claims[i].RestsOn, fmt.Sprintf("n%d", j))
+					reach[i][j] = true
+				}
+			}
+		}
+		for k := 0; k < n; k++ {
+			for i := 0; i < n; i++ {
+				for j := 0; j < n; j++ {
+					reach[i][j] = reach[i][j] || (reach[i][k] && reach[k][j])
+				}
+			}
+		}
+		comp := map[string]string{}
+		for i := 0; i < n; i++ {
+			if !reach[i][i] {
+				continue
+			}
+			for j := 0; j < n; j++ {
+				if reach[i][j] && reach[j][i] {
+					comp[claims[i].ID] = claims[j].ID
+					break
+				}
+			}
+		}
+		got := Compute(claims, standingStore(claims...), nil)
+		byID := map[string]model.Claim{}
+		for _, c := range claims {
+			byID[c.ID] = c
+		}
+		for _, root := range claims {
+			best := map[string]Path{}
+			var walk func(Path)
+			walk = func(p Path) {
+				for _, next := range byID[p[len(p)-1]].RestsOn {
+					q := append(append(Path(nil), p...), next)
+					repeated := false
+					for _, prev := range p {
+						if next == prev {
+							repeated = true
+							break
 						}
+					}
+					if repeated {
+						k := comp[next]
+						b := best[k]
+						if b == nil || len(q) < len(b) || (len(q) == len(b) && auditLex(q, b)) {
+							best[k] = q
+						}
+					} else {
+						walk(q)
 					}
 				}
 			}
+			walk(Path{root.ID})
+			actual := map[string]Path{}
+			for _, c := range got[root.ID].Conditions {
+				if c.Kind == ConditionDependencyCycle {
+					actual[comp[c.DependencyID]] = c.Path
+				}
+			}
+			if !reflect.DeepEqual(best, actual) {
+				t.Fatalf("seed=%d root=%s expected=%v actual=%v", seed, root.ID, best, actual)
+			}
 		}
+	}
+	t.Log("400 five-node directed graphs, seeds 0..399; bounded exhaustive simple-walk oracle checks existence, all edges, global length and lexicographic tie-break per SCC")
+}
 
+func TestPermutationInvariance(t *testing.T) {
+	nodes := []string{"n0", "n1", "n2", "n3", "n4"}
+	for seed := 0; seed < 10; seed++ {
+		var claims []model.Claim
+		flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{}}
+		for i, id := range nodes {
+			var deps []string
+			for j := i + 1; j < len(nodes); j++ {
+				if (seed+i+j)%2 == 0 {
+					deps = append(deps, nodes[j])
+				}
+			}
+			c := lockedClaim(id, deps...)
+			if (seed+i)%3 == 0 {
+				c.Status = model.StatusDraft
+			}
+			if (seed+i)%4 == 0 {
+				flags.Flags[id] = reaudit.PendingFlag{Reason: fmt.Sprintf("flag%d", seed)}
+			}
+			claims = append(claims, c)
+		}
+		s := standingStore(claims...)
 		res1 := Compute(claims, s, flags)
-
-		// Assert invariant: Ready == (LocalApproved && DependencyReady && !ReviewPending)
-		for id, a := range res1 {
-			expectedReady := a.LocalApproved && a.DependencyReady && !a.ReviewPending
-			if a.Ready != expectedReady {
-				t.Fatalf("seed %d claim %s: Ready=%v does not match LocalApproved(%v) && DependencyReady(%v) && !ReviewPending(%v)",
-					seed, id, a.Ready, a.LocalApproved, a.DependencyReady, a.ReviewPending)
-			}
-
-			// Path validity: every condition and cause must have non-empty path starting with id
-			for _, cond := range a.Conditions {
-				if len(cond.Path) == 0 || cond.Path[0] != id {
-					t.Fatalf("seed %d claim %s: invalid condition path %v", seed, id, cond.Path)
-				}
-			}
-			for _, cause := range a.Causes {
-				if len(cause.Path) == 0 || cause.Path[0] != id {
-					t.Fatalf("seed %d claim %s: invalid cause path %v", seed, id, cause.Path)
-				}
-			}
-		}
-
-		// Input permutation invariance: reversed claims must produce identical results
 		var reversed []model.Claim
 		for i := len(claims) - 1; i >= 0; i-- {
 			reversed = append(reversed, claims[i])
 		}
 		res2 := Compute(reversed, s, flags)
 		if !reflect.DeepEqual(res1, res2) {
-			t.Fatalf("seed %d: Compute is not invariant to claim order", seed)
+			t.Fatalf("seed %d: Compute is not invariant to claim ordering", seed)
 		}
 	}
 }

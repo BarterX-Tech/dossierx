@@ -138,18 +138,20 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		}
 	}
 
-	// Precompute local summaries for all claims once to avoid repeated hashing
-	// and guarantee single-source-of-truth semantic consistency.
+	// Precompute local summaries and approval states for all claims once to avoid
+	// repeated hashing and guarantee single-source-of-truth semantic consistency.
 	localSummaries := make(map[string]summary, len(byID))
+	approvalStates := make(map[string]approvalCheck, len(byID))
 	for id, c := range byID {
 		localSummaries[id] = localSummary(c, claims, store, flags, byID)
+		approvalStates[id] = approvalState(c, store)
 	}
 
 	cycleCache := make(map[string][]string)
 
 	result := make(map[string]Assessment, len(byID))
 	for id, c := range byID {
-		approval := approvalState(c, store)
+		approval := approvalStates[id]
 		localApproved := c.Status == model.StatusLocked && approval.valid
 		reasons := localReasons(c)
 		if c.Status == model.StatusLocked && !approval.valid {
@@ -168,7 +170,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		for len(currentLevel) > 0 {
 			var nextLevel []string
 			nextLevelSet := make(map[string]bool)
-			candidates := make(map[string][]string)
+			bestParent := make(map[string]string)
 
 			for _, uID := range currentLevel {
 				uClaim := byID[uID]
@@ -179,39 +181,30 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 				for _, depID := range uDeps {
 					_, exists := byID[depID]
 					if !exists {
-						candPath := appendPath(uPath, depID)
-						if existing, seen := bestMissing[depID]; !seen || len(candPath) < len(existing) || (len(candPath) == len(existing) && pathLess(candPath, existing)) {
-							bestMissing[depID] = candPath
+						candLen := len(uPath) + 1
+						if existing, seen := bestMissing[depID]; !seen || candLen < len(existing) || (candLen == len(existing) && pathLess(uPath, existing[:len(existing)-1])) {
+							bestMissing[depID] = appendPath(uPath, depID)
 						}
 						continue
 					}
 
-					d, seen := dist[depID]
-					currDist := dist[uID] + 1
-					if seen && currDist > d {
+					if _, seen := dist[depID]; seen {
 						continue
 					}
 
-					candPath := appendPath(uPath, depID)
-					if !seen {
-						if bestCand, has := candidates[depID]; !has || pathLess(candPath, bestCand) {
-							candidates[depID] = candPath
-						}
-						if !nextLevelSet[depID] {
-							nextLevelSet[depID] = true
-							nextLevel = append(nextLevel, depID)
-						}
-					} else if currDist == d {
-						if pathLess(candPath, paths[depID]) {
-							paths[depID] = candPath
-						}
+					if prevParent, has := bestParent[depID]; !has || pathLess(paths[uID], paths[prevParent]) {
+						bestParent[depID] = uID
+					}
+					if !nextLevelSet[depID] {
+						nextLevelSet[depID] = true
+						nextLevel = append(nextLevel, depID)
 					}
 				}
 			}
 
-			for depID, candPath := range candidates {
-				dist[depID] = len(candPath) - 1
-				paths[depID] = candPath
+			for depID, pID := range bestParent {
+				dist[depID] = dist[pID] + 1
+				paths[depID] = appendPath(paths[pID], depID)
 			}
 
 			currentLevel = nextLevel
@@ -252,7 +245,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 						Path: appendPath(p), Detail: "required dependency is not locally approved",
 					}
 				}
-			} else if app := approvalState(dep, store); !app.valid {
+			} else if app := approvalStates[uID]; !app.valid {
 				key := fmt.Sprintf("%s\x00%s", ConditionDependencyUnapproved, uID)
 				if _, exists := conditionMap[key]; !exists {
 					conditionMap[key] = DependencyCondition{
@@ -805,6 +798,9 @@ func sortCauses(values []Cause) []Cause {
 		if a.Kind != b.Kind {
 			return a.Kind < b.Kind
 		}
+		if a.SourceKind != b.SourceKind {
+			return a.SourceKind < b.SourceKind
+		}
 		if a.DependencyID != b.DependencyID {
 			return a.DependencyID < b.DependencyID
 		}
@@ -837,7 +833,7 @@ func dedupeCauses(values []Cause) []Cause {
 	seen := map[string]bool{}
 	out := make([]Cause, 0, len(values))
 	for _, value := range values {
-		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", value.Kind, value.DependencyID, pathString(value.Path), value.Detail)
+		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", value.Kind, value.SourceKind, value.DependencyID, pathString(value.Path), value.Detail)
 		if seen[key] {
 			continue
 		}
