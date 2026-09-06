@@ -100,7 +100,7 @@ func TestRender_NoTracksEmitsNoTrackMarkup(t *testing.T) {
 	if !strings.Contains(out, "</details>\n        </div>\n      </nav>") {
 		t.Errorf("the sidebar's track guard left markup behind ahead of </nav>")
 	}
-	if !strings.Contains(out, "</section>\n        \n      \n    </main>") {
+	if !strings.Contains(out, "</section>\n\n\n    </main>") {
 		t.Errorf("the content area's track guard left markup behind ahead of </main>")
 	}
 }
