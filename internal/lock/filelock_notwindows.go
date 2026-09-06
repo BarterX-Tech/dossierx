@@ -16,3 +16,5 @@ package lock
 // followed by a vaguer one, which is a worse answer to a question the operating
 // system already answered correctly.
 func lockOpenIsTransient(error) bool { return false }
+
+func lockReadIsTransient(error) bool { return false }

@@ -85,7 +85,7 @@ func TestResolveRejectsNonCommitStableTag(t *testing.T) {
 	writeRepoFile(t, dir, "CHANGELOG.md", "## [0.7.8] - 2026-09-06\n")
 	commitRepo(t, dir, "current")
 	gitRepo(t, dir, "tag", "v0.7.7")
-	blob := strings.TrimSpace(gitRepo(t, dir, "hash-object", "-w", "CHANGELOG.md"))
+	blob := gitRepoStdout(t, dir, "hash-object", "-w", "CHANGELOG.md")
 	gitRepo(t, dir, "tag", "v0.7.6", blob)
 	if _, err := Resolve(Options{RepoDir: dir}); err == nil {
 		t.Fatal("stable tag pointing at a blob unexpectedly accepted")
@@ -136,4 +136,17 @@ func gitRepo(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 	return string(out)
+}
+
+func gitRepoStdout(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	var stdout, stderr strings.Builder
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, stderr.String())
+	}
+	return strings.TrimSpace(stdout.String())
 }

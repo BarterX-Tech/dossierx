@@ -29,3 +29,7 @@ import (
 func lockOpenIsTransient(err error) bool {
 	return errors.Is(err, fs.ErrPermission)
 }
+
+func lockReadIsTransient(err error) bool {
+	return errors.Is(err, fs.ErrPermission)
+}

@@ -288,7 +288,7 @@ func (s *Store) Receipt(dependentID, depID string) (DependencyReceipt, bool) {
 // happened. That is the exact silent drift hole this comparison exists to
 // prevent, so it must stay keyed on the version that changed the SHAPE.
 func LoadStore(path string) (*Store, error) {
-	raw, err := os.ReadFile(path)
+	raw, err := readStoreBytes(path)
 	if os.IsNotExist(err) {
 		return emptyStore(path), nil
 	}
@@ -300,6 +300,27 @@ func LoadStore(path string) (*Store, error) {
 		return nil, err
 	}
 	return s, nil
+}
+
+func readStoreBytes(path string) ([]byte, error) {
+	return readStoreWithRetry(path, os.ReadFile, time.Now, time.Sleep, lockReadIsTransient)
+}
+
+func readStoreWithRetry(path string, read func(string) ([]byte, error), now func() time.Time, sleep func(time.Duration), transient func(error) bool) ([]byte, error) {
+	deadline := now().Add(lockAcquireTimeout)
+	for {
+		raw, err := read(path)
+		if err == nil {
+			return raw, nil
+		}
+		if os.IsNotExist(err) || !transient(err) {
+			return nil, err
+		}
+		if !now().Before(deadline) {
+			return nil, err
+		}
+		sleep(lockPollInterval)
+	}
 }
 
 // emptyStore is the empty, freshly-initialised store a missing file loads as.
