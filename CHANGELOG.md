@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- Bound readiness evaluation and catalog emission under lock policy v1 (issue #62).
+  Readiness now collects independent causes and conditions via bounded BFS traversal
+  with a deterministic representative witness path (shortest path with a lexicographical
+  tie-break, and global cycle witness minimization) rather than enumerating every
+  dependency route. This eliminates exponential route proliferation ($O(k^d)$) on dense
+  dependency graphs. Existing-node BFS path storage/copying is $O(V \cdot D)$ per
+  claim; parent comparisons, sorting, baseline evaluation, and cycle searches add
+  separate work. Catalog readiness witnesses occupy $O(V \cdot R \cdot D)$ identifier
+  slots, with $R = O(V + E_b)$ independent records per claim. Bytes also depend on
+  identifier/detail lengths and aliases. Invalid prerequisites terminate every
+  inherited route, including cycle analysis; alternate readable routes remain active.
+
 ## [0.7.8] - 2026-09-06
 
 ### Changed

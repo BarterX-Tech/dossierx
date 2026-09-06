@@ -56,11 +56,10 @@ func moduleRoot(t *testing.T) string {
 // copyEngineTree copies every file of the engine module (go.mod, go.sum,
 // cmd/, internal/, testdata/) into dst, preserving relative paths. It skips
 // this tests/ directory itself (irrelevant to a downstream consumer of the
-// engine), any already-built artifacts (.git, bin/), and .claude/ (this
-// repo's own Claude Code skill wiring, e.g. .claude/skills/dossierx-*
-// symlinks into skills/ -- local editor tooling, not part of the engine a
-// downstream consumer builds, and filepath.Walk's Lstat-based traversal
-// below does not follow symlinks the way a plain file copy would need to).
+// engine), any already-built artifacts (.git, bin/), and the repo's own agent
+// tooling (.agents/ and .claude/). That tooling is not part of the engine a
+// downstream consumer builds, and filepath.Walk's Lstat-based traversal below
+// does not follow symlinks the way a plain file copy would need to.
 func copyEngineTree(t *testing.T, dst string) {
 	t.Helper()
 	src := moduleRoot(t)
@@ -68,6 +67,7 @@ func copyEngineTree(t *testing.T, dst string) {
 	skipTop := map[string]bool{
 		".git":    true,
 		"bin":     true,
+		".agents": true,
 		".claude": true,
 	}
 

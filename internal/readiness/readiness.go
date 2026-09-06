@@ -48,7 +48,10 @@ const (
 
 // Path is a causal path in the required rests_on graph. The first item is the
 // claim whose assessment is being reported and the final item is the input
-// that caused the condition or review cause.
+// that caused the condition or review cause. When multiple routes reach the
+// same independent cause or condition, readiness emits a single deterministic
+// representative path (the shortest path with a lexicographic tie-break)
+// rather than enumerating every route.
 type Path []string
 
 // Cause is one independent review cause. Direct causes belong to the claim
@@ -107,6 +110,11 @@ type summary struct {
 // map is keyed by claim id. Claims with duplicate IDs are assessed using the
 // first declaration, matching the rest of DossierX's claim lookup behavior.
 // The input slices, store, and flag store are never mutated.
+//
+// Graph traversal is bounded: readiness evaluates independent graph facts
+// and emits a deterministic representative path (shortest path with a stable
+// lexicographic tie-break) for each fact, strictly avoiding exponential path
+// enumeration on dense dependency graphs.
 func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) map[string]Assessment {
 	byID := make(map[string]model.Claim, len(claims))
 	for _, c := range claims {
@@ -115,18 +123,307 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		}
 	}
 
+	// Use one eligibility set for expansion, inherited facts, and cycle analysis.
+	// Invalid prerequisites remain boundary witnesses in BFS, but cannot belong
+	// to or bridge a cycle. An invalid root still assesses its outgoing inputs;
+	// no cycle may re-enter that root as a prerequisite.
+	eligible := make(map[string]model.Claim, len(byID))
+	for id, c := range byID {
+		if dependencyState(c) == "" {
+			eligible[id] = c
+		}
+	}
+	sccs := findSCCs(eligible)
+	sccNodesMap := make(map[string]map[string]bool)
+	for _, scc := range sccs {
+		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
+		if isCyclic {
+			sccID := scc[0] // canonical ID (scc is sorted)
+			nodes := make(map[string]bool, len(scc))
+			for _, node := range scc {
+				nodes[node] = true
+			}
+			sccNodesMap[sccID] = nodes
+		}
+	}
+
+	// Precompute local summaries and approval states for all claims once to avoid
+	// repeated hashing and guarantee single-source-of-truth semantic consistency.
+	localSummaries := make(map[string]summary, len(byID))
+	approvalStates := make(map[string]approvalCheck, len(byID))
+	for id, c := range byID {
+		approvalStates[id] = approvalState(c, store)
+		localSummaries[id] = localSummary(c, claims, store, flags, byID, approvalStates[id])
+	}
+
+	cycleCache := make(map[string][]string)
+
 	result := make(map[string]Assessment, len(byID))
 	for id, c := range byID {
-		local := localSummary(c, claims, store, flags, byID)
-		collected := collect(c.ID, []string{c.ID}, map[string]bool{c.ID: true}, byID, local, claims, store, flags)
-		conditions := sortConditions(collected.conditions)
-		causes := sortCauses(collected.causes)
-		approval := approvalState(c, store)
+		approval := approvalStates[id]
 		localApproved := c.Status == model.StatusLocked && approval.valid
 		reasons := localReasons(c)
 		if c.Status == model.StatusLocked && !approval.valid {
 			reasons = append(reasons, approval.detail)
 		}
+
+		local := localSummaries[id]
+
+		// BFS to find shortest representative paths to all reachable nodes in rests_on.
+		dist := map[string]int{id: 0}
+		paths := map[string][]string{id: {id}}
+		currentLevel := []string{id}
+
+		bestMissing := make(map[string][]string)
+		// The root may be assessed even when invalid, but a return edge consumes
+		// it as a prerequisite. Keep that blocker separately from paths[id],
+		// which must remain the zero-length prefix used to start the traversal.
+		var invalidRootPath Path
+
+		for len(currentLevel) > 0 {
+			var nextLevel []string
+			nextLevelSet := make(map[string]bool)
+			bestParent := make(map[string]string)
+
+			for _, uID := range currentLevel {
+				uClaim := byID[uID]
+				uPath := paths[uID]
+				uDeps := unique(uClaim.RestsOn)
+				sort.Strings(uDeps)
+
+				for _, depID := range uDeps {
+					_, exists := byID[depID]
+					if !exists {
+						candLen := len(uPath) + 1
+						if existing, seen := bestMissing[depID]; !seen || candLen < len(existing) || (candLen == len(existing) && pathLess(uPath, existing[:len(existing)-1])) {
+							bestMissing[depID] = appendPath(uPath, depID)
+						}
+						continue
+					}
+
+					if depID == id {
+						if _, consumable := eligible[id]; !consumable {
+							if invalidRootPath == nil || len(uPath)+1 < len(invalidRootPath) ||
+								(len(uPath)+1 == len(invalidRootPath) && pathLess(uPath, invalidRootPath[:len(invalidRootPath)-1])) {
+								invalidRootPath = appendPath(uPath, id)
+							}
+						}
+					}
+
+					if _, seen := dist[depID]; seen {
+						continue
+					}
+
+					if prevParent, has := bestParent[depID]; !has || pathLess(paths[uID], paths[prevParent]) {
+						bestParent[depID] = uID
+					}
+					_, consumable := eligible[depID]
+					if consumable && !nextLevelSet[depID] {
+						nextLevelSet[depID] = true
+						nextLevel = append(nextLevel, depID)
+					}
+				}
+			}
+
+			for depID, pID := range bestParent {
+				dist[depID] = dist[pID] + 1
+				paths[depID] = appendPath(paths[pID], depID)
+			}
+
+			currentLevel = nextLevel
+		}
+
+		// Assemble deduplicated condition and cause records
+		conditionMap := make(map[string]DependencyCondition)
+		causeMap := make(map[string]Cause)
+
+		// 1. Direct causes and conditions on c itself
+		for _, cause := range local.causes {
+			key := fmt.Sprintf("%s\x00%s\x00%s", cause.SourceKind, id, cause.DependencyID)
+			causeMap[key] = cause
+		}
+		for _, condition := range local.conditions {
+			var key string
+			if condition.Kind == ConditionUnknownHistoricalBaseline {
+				key = fmt.Sprintf("%s\x00%s\x00%s", condition.Kind, id, condition.DependencyID)
+			} else {
+				key = fmt.Sprintf("%s\x00%s", condition.Kind, condition.DependencyID)
+			}
+			conditionMap[key] = condition
+		}
+
+		// 2. Transitive facts from reachable nodes in rests_on
+		for uID, p := range paths {
+			if uID == id {
+				if invalidRootPath == nil {
+					continue
+				}
+				p = invalidRootPath
+			}
+			dep := byID[uID]
+			state := dependencyState(dep)
+
+			// Retired / unreadable dependency
+			if _, consumable := eligible[uID]; !consumable {
+				key := fmt.Sprintf("%s\x00%s", state, uID)
+				if _, exists := conditionMap[key]; !exists {
+					detail := "required dependency cannot be consumed"
+					if len(p) == 2 {
+						if state == ConditionRetiredDependency {
+							detail = "required dependency is retired"
+						} else {
+							detail = "required dependency is unreadable"
+						}
+					}
+					conditionMap[key] = DependencyCondition{
+						Kind: state, DependencyID: uID,
+						Path: appendPath(p), Detail: detail,
+					}
+				}
+				continue
+			}
+
+			// Unapproved dependency
+			if dep.Status != model.StatusLocked {
+				key := fmt.Sprintf("%s\x00%s", ConditionDependencyUnapproved, uID)
+				if _, exists := conditionMap[key]; !exists {
+					conditionMap[key] = DependencyCondition{
+						Kind: ConditionDependencyUnapproved, DependencyID: uID,
+						Path: appendPath(p), Detail: "required dependency is not locally approved",
+					}
+				}
+			} else if app := approvalStates[uID]; !app.valid {
+				key := fmt.Sprintf("%s\x00%s", ConditionDependencyUnapproved, uID)
+				if _, exists := conditionMap[key]; !exists {
+					conditionMap[key] = DependencyCondition{
+						Kind: ConditionDependencyUnapproved, DependencyID: uID,
+						Path: appendPath(p), Detail: "required dependency has no valid standing approval",
+					}
+				}
+			}
+
+			// Upstream review causes from dep: inherit directly from dep's localSummary
+			// to guarantee single-source-of-truth consistency.
+			uSummary := localSummaries[uID]
+			for _, cause := range uSummary.causes {
+				sourceKind := cause.SourceKind
+				if sourceKind == "" {
+					sourceKind = cause.Kind
+				}
+				key := fmt.Sprintf("%s\x00%s\x00%s", sourceKind, uID, cause.DependencyID)
+				if _, exists := causeMap[key]; !exists {
+					var inheritedPath Path
+					if len(cause.Path) > 1 {
+						inheritedPath = appendPath(p, cause.Path[1:]...)
+					} else {
+						inheritedPath = appendPath(p)
+					}
+					causeMap[key] = Cause{
+						Kind:         CauseUpstreamDependencyReview,
+						SourceKind:   sourceKind,
+						DependencyID: cause.DependencyID,
+						Path:         inheritedPath,
+						Detail:       cause.Detail,
+						Direct:       false,
+						Inherited:    true,
+					}
+				}
+			}
+
+			// Direct edge conditions intrinsic to dep (e.g. unknown historical baselines)
+			for _, condition := range uSummary.conditions {
+				if condition.Kind == ConditionUnknownHistoricalBaseline {
+					key := fmt.Sprintf("%s\x00%s\x00%s", condition.Kind, uID, condition.DependencyID)
+					if _, exists := conditionMap[key]; !exists {
+						var inheritedPath Path
+						if len(condition.Path) > 1 {
+							inheritedPath = appendPath(p, condition.Path[1:]...)
+						} else {
+							inheritedPath = appendPath(p)
+						}
+						conditionMap[key] = DependencyCondition{
+							Kind:         condition.Kind,
+							DependencyID: condition.DependencyID,
+							Path:         inheritedPath,
+							Detail:       condition.Detail,
+						}
+					}
+				}
+			}
+		}
+
+		// 3. Missing dependencies
+		for mID, candPath := range bestMissing {
+			key := fmt.Sprintf("%s\x00%s", ConditionMissingDependency, mID)
+			if _, exists := conditionMap[key]; !exists {
+				conditionMap[key] = DependencyCondition{
+					Kind: ConditionMissingDependency, DependencyID: mID,
+					Path: appendPath(candPath), Detail: "required dependency is missing",
+				}
+			}
+		}
+
+		// 4. Reachable cyclic SCCs: globally minimize the complete witness path
+		// len(prefix + cycle) across all reachable entries in the SCC.
+		for _, scc := range sccs {
+			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
+			if !isCyclic {
+				continue
+			}
+			sccID := scc[0]
+			var bestWitness Path
+			var bestEntry string
+
+			for _, entry := range scc {
+				p, ok := paths[entry]
+				if !ok {
+					continue
+				}
+				cycleK, cached := cycleCache[entry]
+				if !cached {
+					cycleK = getShortestCycle(entry, sccNodesMap[sccID], eligible)
+					cycleCache[entry] = cycleK
+				}
+				var candWitness Path
+				if entry == id {
+					candWitness = appendPath(cycleK)
+				} else {
+					candWitness = appendPath(p)
+					if len(cycleK) > 1 {
+						candWitness = append(candWitness, cycleK[1:]...)
+					}
+				}
+				if bestWitness == nil || len(candWitness) < len(bestWitness) || (len(candWitness) == len(bestWitness) && pathLess(candWitness, bestWitness)) {
+					bestWitness = candWitness
+					bestEntry = entry
+				}
+			}
+
+			if bestWitness != nil {
+				key := fmt.Sprintf("%s\x00%s", ConditionDependencyCycle, sccID)
+				if _, exists := conditionMap[key]; !exists {
+					conditionMap[key] = DependencyCondition{
+						Kind:         ConditionDependencyCycle,
+						DependencyID: bestEntry,
+						Path:         bestWitness,
+						Detail:       "required dependency cycle",
+					}
+				}
+			}
+		}
+
+		rawConditions := make([]DependencyCondition, 0, len(conditionMap))
+		for _, cond := range conditionMap {
+			rawConditions = append(rawConditions, cond)
+		}
+		rawCauses := make([]Cause, 0, len(causeMap))
+		for _, cause := range causeMap {
+			rawCauses = append(rawCauses, cause)
+		}
+
+		conditions := sortConditions(rawConditions)
+		causes := sortCauses(rawCauses)
+
 		assessment := Assessment{
 			ClaimID:              id,
 			PolicyVersion:        policyVersion(store),
@@ -188,12 +485,11 @@ func approvalState(c model.Claim, store *lock.Store) approvalCheck {
 }
 
 // localSummary computes only causes owned by id and conditions that are
-// intrinsic to its own dependency evidence. collect adds transitive required
+// intrinsic to its own dependency evidence. Compute adds transitive required
 // chain information and converts child causes into inherited causes.
-func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore, byID map[string]model.Claim) summary {
+func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore, byID map[string]model.Claim, approval approvalCheck) summary {
 	var out summary
 	if c.Status == model.StatusLocked {
-		approval := approvalState(c, store)
 		if !approval.valid {
 			out.causes = append(out.causes, Cause{
 				Kind: approval.kind, SourceKind: approval.kind, Path: Path{c.ID}, Direct: true,
@@ -290,56 +586,6 @@ func policyVersion(store *lock.Store) lock.PolicyVersion {
 	return store.PolicyVersion
 }
 
-// collect walks only rests_on. Its path-relative summaries make each causal
-// path independent, so B->A->C and B->D->C remain two visible causes. The
-// active set cuts cycles before recursion; no malformed graph can recurse
-// forever.
-func collect(id string, path []string, active map[string]bool, byID map[string]model.Claim, out summary, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) summary {
-	c := byID[id]
-	for _, depID := range unique(c.RestsOn) {
-		dep, exists := byID[depID]
-		if !exists {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionMissingDependency, DependencyID: depID, Path: appendPath(currentNode(path), depID), Detail: "required dependency is missing"})
-			continue
-		}
-		state := dependencyState(dep)
-		if state == ConditionRetiredDependency || state == ConditionUnreadableDependency {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: state, DependencyID: depID, Path: appendPath(currentNode(path), depID), Detail: "required dependency cannot be consumed"})
-			continue
-		}
-		if dep.Status != model.StatusLocked {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyUnapproved, DependencyID: depID, Path: appendPath(currentNode(path), depID), Detail: "required dependency is not locally approved"})
-		} else if approval := approvalState(dep, store); !approval.valid {
-			out.conditions = append(out.conditions, DependencyCondition{
-				Kind: ConditionDependencyUnapproved, DependencyID: depID,
-				Path:   appendPath(currentNode(path), depID),
-				Detail: "required dependency has no valid standing approval",
-			})
-		}
-		if active[depID] {
-			out.conditions = append(out.conditions, DependencyCondition{Kind: ConditionDependencyCycle, DependencyID: depID, Path: cyclePath(path, depID), Detail: "required dependency cycle"})
-			continue
-		}
-		child := localSummary(dep, claims, store, flags, byID)
-		child = collect(depID, append(path, depID), withActive(active, depID), byID, child, claims, store, flags)
-		for _, condition := range child.conditions {
-			condition.Path = appendPath(currentNode(path), condition.Path...)
-			out.conditions = append(out.conditions, condition)
-		}
-		for _, cause := range child.causes {
-			cause.Kind = CauseUpstreamDependencyReview
-			if cause.SourceKind == "" {
-				cause.SourceKind = cause.Kind
-			}
-			cause.Direct = false
-			cause.Inherited = true
-			cause.Path = appendPath(currentNode(path), cause.Path...)
-			out.causes = append(out.causes, cause)
-		}
-	}
-	return out
-}
-
 func dependencyState(c model.Claim) ConditionKind {
 	switch strings.ToLower(strings.TrimSpace(string(c.Status))) {
 	case "retired":
@@ -354,34 +600,174 @@ func dependencyState(c model.Claim) ConditionKind {
 	}
 }
 
-func withActive(active map[string]bool, id string) map[string]bool {
-	next := make(map[string]bool, len(active)+1)
-	for k, v := range active {
-		next[k] = v
+// pathLess defines the stable deterministic tie-break for equal-length paths:
+// element-by-element lexicographical comparison, with shorter paths ranking
+// before longer paths.
+func pathLess(a, b []string) bool {
+	n := len(a)
+	if len(b) < n {
+		n = len(b)
 	}
-	next[id] = true
-	return next
-}
-
-func currentNode(path []string) []string {
-	if len(path) == 0 {
-		return nil
-	}
-	return []string{path[len(path)-1]}
-}
-
-func cyclePath(path []string, target string) Path {
-	for i := len(path) - 1; i >= 0; i-- {
-		if path[i] == target {
-			cycle := append([]string(nil), path[i+1:]...)
-			cycle = append(cycle, target)
-			if len(cycle) == 1 {
-				cycle = append(cycle, target)
-			}
-			return Path(cycle)
+	for i := 0; i < n; i++ {
+		if a[i] != b[i] {
+			return a[i] < b[i]
 		}
 	}
-	return Path{target}
+	return len(a) < len(b)
+}
+
+type sccState struct {
+	index   int
+	indices map[string]int
+	lowlink map[string]int
+	onStack map[string]bool
+	stack   []string
+	sccs    [][]string
+}
+
+// findSCCs computes strongly connected components in the rests_on graph using
+// Tarjan's algorithm. Node ordering is deterministic.
+func findSCCs(byID map[string]model.Claim) [][]string {
+	state := &sccState{
+		indices: make(map[string]int, len(byID)),
+		lowlink: make(map[string]int, len(byID)),
+		onStack: make(map[string]bool, len(byID)),
+	}
+	nodes := make([]string, 0, len(byID))
+	for id := range byID {
+		nodes = append(nodes, id)
+	}
+	sort.Strings(nodes)
+
+	var strongconnect func(string)
+	strongconnect = func(v string) {
+		state.indices[v] = state.index
+		state.lowlink[v] = state.index
+		state.index++
+		state.stack = append(state.stack, v)
+		state.onStack[v] = true
+
+		c := byID[v]
+		deps := unique(c.RestsOn)
+		sort.Strings(deps)
+
+		for _, w := range deps {
+			if _, exists := byID[w]; !exists {
+				continue
+			}
+			if _, seen := state.indices[w]; !seen {
+				strongconnect(w)
+				if state.lowlink[w] < state.lowlink[v] {
+					state.lowlink[v] = state.lowlink[w]
+				}
+			} else if state.onStack[w] {
+				if state.indices[w] < state.lowlink[v] {
+					state.lowlink[v] = state.indices[w]
+				}
+			}
+		}
+
+		if state.lowlink[v] == state.indices[v] {
+			var scc []string
+			for {
+				w := state.stack[len(state.stack)-1]
+				state.stack = state.stack[:len(state.stack)-1]
+				state.onStack[w] = false
+				scc = append(scc, w)
+				if w == v {
+					break
+				}
+			}
+			sort.Strings(scc)
+			state.sccs = append(state.sccs, scc)
+		}
+	}
+
+	for _, v := range nodes {
+		if _, seen := state.indices[v]; !seen {
+			strongconnect(v)
+		}
+	}
+	return state.sccs
+}
+
+// getShortestCycle finds the shortest valid directed cycle starting and ending
+// at start using only edges within sccNodes. Every hop is a verified real edge
+// in rests_on, ensuring the emitted cycle witness is valid and closed.
+func getShortestCycle(start string, sccNodes map[string]bool, byID map[string]model.Claim) []string {
+	startClaim, ok := byID[start]
+	if !ok {
+		return []string{start, start}
+	}
+	for _, depID := range unique(startClaim.RestsOn) {
+		if depID == start {
+			return []string{start, start}
+		}
+	}
+
+	type queueItem struct {
+		node string
+		path []string
+	}
+	var queue []queueItem
+	visited := map[string]int{start: 0}
+
+	startNeighbors := unique(startClaim.RestsOn)
+	sort.Strings(startNeighbors)
+
+	for _, depID := range startNeighbors {
+		if sccNodes[depID] {
+			visited[depID] = 1
+			queue = append(queue, queueItem{node: depID, path: []string{start, depID}})
+		}
+	}
+
+	var bestCycle []string
+	foundLen := -1
+
+	for len(queue) > 0 {
+		curr := queue[0]
+		queue = queue[1:]
+
+		if foundLen != -1 && len(curr.path) >= foundLen {
+			break
+		}
+
+		c, exists := byID[curr.node]
+		if !exists {
+			continue
+		}
+
+		cNeighbors := unique(c.RestsOn)
+		sort.Strings(cNeighbors)
+
+		for _, nextID := range cNeighbors {
+			if !sccNodes[nextID] {
+				continue
+			}
+			if nextID == start {
+				cand := append(append([]string(nil), curr.path...), start)
+				if bestCycle == nil || len(cand) < len(bestCycle) || (len(cand) == len(bestCycle) && pathLess(cand, bestCycle)) {
+					bestCycle = cand
+					foundLen = len(cand)
+				}
+				continue
+			}
+			if foundLen != -1 {
+				continue
+			}
+			if _, seen := visited[nextID]; !seen {
+				visited[nextID] = len(curr.path)
+				candPath := append(append([]string(nil), curr.path...), nextID)
+				queue = append(queue, queueItem{node: nextID, path: candPath})
+			}
+		}
+	}
+
+	if bestCycle != nil {
+		return bestCycle
+	}
+	return []string{start, start}
 }
 
 func appendPath(prefix []string, suffix ...string) Path {
@@ -438,6 +824,9 @@ func sortCauses(values []Cause) []Cause {
 		if a.Kind != b.Kind {
 			return a.Kind < b.Kind
 		}
+		if a.SourceKind != b.SourceKind {
+			return a.SourceKind < b.SourceKind
+		}
 		if a.DependencyID != b.DependencyID {
 			return a.DependencyID < b.DependencyID
 		}
@@ -470,7 +859,7 @@ func dedupeCauses(values []Cause) []Cause {
 	seen := map[string]bool{}
 	out := make([]Cause, 0, len(values))
 	for _, value := range values {
-		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s", value.Kind, value.DependencyID, pathString(value.Path), value.Detail)
+		key := fmt.Sprintf("%s\x00%s\x00%s\x00%s\x00%s", value.Kind, value.SourceKind, value.DependencyID, pathString(value.Path), value.Detail)
 		if seen[key] {
 			continue
 		}
