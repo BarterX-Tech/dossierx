@@ -87,7 +87,10 @@ Review causes remain independent:
 * `upstream_dependency_review` means a required prerequisite has an active
   review cause, including an open thread or claim flag with unchanged wording.
   The path identifies every boundary, for example
-  `consumer -> boundary -> foundation`.
+  `consumer -> boundary -> foundation`. When multiple routes reach the same
+  upstream review boundary, readiness emits a deterministic representative path
+  (the shortest path with a lexicographical tie-break) as diagnostic witness
+  evidence rather than enumerating every route.
 * A claim's own open thread or flag remains its own direct cause. Clearing one
   inherited path does not clear another dependency path, a direct change, or
   the claim's own cause.
@@ -103,6 +106,10 @@ Unlocking an unchanged dependency produces an unapproved-dependency condition,
 not semantic drift. Missing, unreadable, or retired inputs retain the last
 reviewed receipt for explanation while withholding readiness. A cycle is
 reported with its cycle path and cannot be approved as a required premise.
+Across all condition and cause categories, readiness emits one entry per distinct
+underlying obstacle with its representative witness path, bounding evaluation
+and catalog generation to the reachable claims and required edges rather than
+the number of dependency routes.
 
 ## Existing projects
 
