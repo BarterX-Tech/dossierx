@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.8] - 2026-09-05
+## [0.7.8] - 2026-09-06
 
 ### Changed
 
@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   of the artifact's claims. The approved node and Mermaid scripts remain
   visible, while the claim payload leaves the missing entry absent so a click
   reports an honest catalog miss.
+- The v0.7.7 render comparison now marks whitespace-only context and real
+  trailing-whitespace changes visibly, keeping report formatting clean without
+  hiding byte-level differences.
 
 ## [0.7.7] - 2026-09-04
 

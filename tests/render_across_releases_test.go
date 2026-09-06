@@ -938,14 +938,76 @@ func writeHunk(b *strings.Builder, ops []diffOp) {
 		switch op.kind {
 		case opEqual:
 			if op.text == "" {
+				// A truly blank context line is already free of trailing
+				// whitespace; the unified-diff prefix would create one.
 				b.WriteString("\n")
 			} else {
-				b.WriteString(" " + op.text + "\n")
+				b.WriteString(" " + reportLineText(op.text) + "\n")
 			}
 		case opDel:
-			b.WriteString("-" + op.text + "\n")
+			b.WriteString("-" + reportLineText(op.text) + "\n")
 		case opAdd:
-			b.WriteString("+" + op.text + "\n")
+			b.WriteString("+" + reportLineText(op.text) + "\n")
 		}
+	}
+}
+
+// reportLineText keeps the compared bytes intact while making whitespace at
+// the end of a report line visible. Space-only context is especially easy to
+// mistake for report formatting, so it receives the same explicit markers as a
+// changed line with trailing whitespace. This is presentation only: diffing,
+// line counts, and the changed artifact bytes remain untouched.
+func reportLineText(text string) string {
+	cut := len(text)
+	for cut > 0 && (text[cut-1] == ' ' || text[cut-1] == '\t') {
+		cut--
+	}
+	if cut == len(text) {
+		return text
+	}
+	var out strings.Builder
+	out.Grow(len(text) + len(text) - cut)
+	out.WriteString(text[:cut])
+	for _, c := range text[cut:] {
+		switch c {
+		case ' ':
+			out.WriteString("␠")
+		case '\t':
+			out.WriteString("⇥")
+		default:
+			out.WriteRune(c)
+		}
+	}
+	return out.String()
+}
+
+func TestWriteHunkMakesWhitespaceVisibleWithoutReportTrailingSpaces(t *testing.T) {
+	var b strings.Builder
+	writeHunk(&b, []diffOp{
+		{kind: opEqual, text: "context", aLine: 1, bLine: 1},
+		{kind: opEqual, text: "   ", aLine: 2, bLine: 2},
+		{kind: opDel, text: "removed  ", aLine: 3},
+		{kind: opAdd, text: "added\t", bLine: 3},
+	})
+	got := b.String()
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+			t.Fatalf("report line has report-only trailing whitespace: %q", line)
+		}
+	}
+	for _, want := range []string{" ␠␠␠\n", "-removed␠␠\n", "+added⇥\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("report %q lacks visible whitespace marker %q", got, want)
+		}
+	}
+}
+
+func TestUnifiedDiffRetainsTrailingWhitespaceChangesAndCounts(t *testing.T) {
+	diff, added, removed, tooLarge := unifiedDiff([]string{"before"}, []string{"before  "})
+	if tooLarge || added != 1 || removed != 1 {
+		t.Fatalf("unifiedDiff = tooLarge=%v added=%d removed=%d, want one changed line each", tooLarge, added, removed)
+	}
+	if !strings.Contains(diff, "-before\n+before␠␠\n") {
+		t.Fatalf("trailing-whitespace change was not visible in report: %q", diff)
 	}
 }

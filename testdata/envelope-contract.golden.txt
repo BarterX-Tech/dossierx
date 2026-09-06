@@ -246,7 +246,7 @@ claim lock / previewed
                   evaluation:{policy_version:number,requested_ids:[string],unrelated_findings:null,verdicts:[{claim_id:string,dependency_conditions:null,local_admissible:bool,refusals:[]}]}
                   from:string
                   missing:null
-                  preconditions:[{name:string,ok:bool}]
+                  preconditions:[{detail:string,name:string,ok:bool}|{name:string,ok:bool}]
                   reviewed:[{content:string,hash:string,id:string}]
                   side_effects:[string]
                   snapshot:string
