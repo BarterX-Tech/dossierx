@@ -125,7 +125,6 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 
 	// Precompute strongly connected components (SCCs) to detect cycles.
 	sccs := findSCCs(byID)
-	nodeToCyclicSCC := make(map[string]string)
 	sccNodesMap := make(map[string]map[string]bool)
 	for _, scc := range sccs {
 		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(byID[scc[0]].RestsOn, scc[0]))
@@ -134,10 +133,16 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			nodes := make(map[string]bool, len(scc))
 			for _, node := range scc {
 				nodes[node] = true
-				nodeToCyclicSCC[node] = sccID
 			}
 			sccNodesMap[sccID] = nodes
 		}
+	}
+
+	// Precompute local summaries for all claims once to avoid repeated hashing
+	// and guarantee single-source-of-truth semantic consistency.
+	localSummaries := make(map[string]summary, len(byID))
+	for id, c := range byID {
+		localSummaries[id] = localSummary(c, claims, store, flags, byID)
 	}
 
 	cycleCache := make(map[string][]string)
@@ -151,7 +156,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			reasons = append(reasons, approval.detail)
 		}
 
-		local := localSummary(c, claims, store, flags, byID)
+		local := localSummaries[id]
 
 		// BFS to find shortest representative paths to all reachable nodes in rests_on.
 		dist := map[string]int{id: 0}
@@ -159,11 +164,6 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		currentLevel := []string{id}
 
 		bestMissing := make(map[string][]string)
-		bestSCCEntry := make(map[string]string)
-
-		if sccID, isCyclic := nodeToCyclicSCC[id]; isCyclic {
-			bestSCCEntry[sccID] = id
-		}
 
 		for len(currentLevel) > 0 {
 			var nextLevel []string
@@ -178,9 +178,8 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 
 				for _, depID := range uDeps {
 					_, exists := byID[depID]
-					candPath := appendPath(uPath, depID)
-
 					if !exists {
+						candPath := appendPath(uPath, depID)
 						if existing, seen := bestMissing[depID]; !seen || len(candPath) < len(existing) || (len(candPath) == len(existing) && pathLess(candPath, existing)) {
 							bestMissing[depID] = candPath
 						}
@@ -189,6 +188,11 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 
 					d, seen := dist[depID]
 					currDist := dist[uID] + 1
+					if seen && currDist > d {
+						continue
+					}
+
+					candPath := appendPath(uPath, depID)
 					if !seen {
 						if bestCand, has := candidates[depID]; !has || pathLess(candPath, bestCand) {
 							candidates[depID] = candPath
@@ -208,16 +212,6 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			for depID, candPath := range candidates {
 				dist[depID] = len(candPath) - 1
 				paths[depID] = candPath
-				if sccID, isCyclic := nodeToCyclicSCC[depID]; isCyclic {
-					if existingEntry, seen := bestSCCEntry[sccID]; !seen {
-						bestSCCEntry[sccID] = depID
-					} else {
-						entryPath := paths[existingEntry]
-						if len(candPath) < len(entryPath) || (len(candPath) == len(entryPath) && pathLess(candPath, entryPath)) {
-							bestSCCEntry[sccID] = depID
-						}
-					}
-				}
 			}
 
 			currentLevel = nextLevel
@@ -288,75 +282,50 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 				}
 			}
 
-			// Upstream review causes from dep
-			if dep.HasOpenThreads() {
-				key := fmt.Sprintf("%s\x00%s\x00", CauseOwnThread, uID)
+			// Upstream review causes from dep: inherit directly from dep's localSummary
+			// to guarantee single-source-of-truth consistency.
+			uSummary := localSummaries[uID]
+			for _, cause := range uSummary.causes {
+				sourceKind := cause.SourceKind
+				if sourceKind == "" {
+					sourceKind = cause.Kind
+				}
+				key := fmt.Sprintf("%s\x00%s\x00%s", sourceKind, uID, cause.DependencyID)
 				if _, exists := causeMap[key]; !exists {
+					var inheritedPath Path
+					if len(cause.Path) > 1 {
+						inheritedPath = appendPath(p, cause.Path[1:]...)
+					} else {
+						inheritedPath = appendPath(p)
+					}
 					causeMap[key] = Cause{
-						Kind: CauseUpstreamDependencyReview, SourceKind: CauseOwnThread,
-						Path: appendPath(p), Detail: strings.Join(dep.OpenThreadIDs(), ","),
-						Direct: false, Inherited: true,
-					}
-				}
-			}
-			if flags != nil {
-				if flag, ok := flags.Flags[uID]; ok && flag.Reason != "" {
-					key := fmt.Sprintf("%s\x00%s\x00", CauseOwnFlag, uID)
-					if _, exists := causeMap[key]; !exists {
-						causeMap[key] = Cause{
-							Kind: CauseUpstreamDependencyReview, SourceKind: CauseOwnFlag,
-							Path: appendPath(p), Detail: flag.Reason,
-							Direct: false, Inherited: true,
-						}
-					}
-				}
-			}
-			if dep.Status == model.StatusLocked {
-				if app := approvalState(dep, store); !app.valid {
-					key := fmt.Sprintf("%s\x00%s\x00", app.kind, uID)
-					if _, exists := causeMap[key]; !exists {
-						causeMap[key] = Cause{
-							Kind: CauseUpstreamDependencyReview, SourceKind: app.kind,
-							Path: appendPath(p), Detail: app.detail,
-							Direct: false, Inherited: true,
-						}
+						Kind:         CauseUpstreamDependencyReview,
+						SourceKind:   sourceKind,
+						DependencyID: cause.DependencyID,
+						Path:         inheritedPath,
+						Detail:       cause.Detail,
+						Direct:       false,
+						Inherited:    true,
 					}
 				}
 			}
 
-			// Direct dependency drift on dep's baselines
-			for _, vID := range lock.BaselineDependencyIDs(dep) {
-				vClaim, vExists := byID[vID]
-				if vExists {
-					if stored, known := baseline(store, uID, vID); known && stored != lock.ContentHash(vClaim) {
-						key := fmt.Sprintf("%s\x00%s\x00%s", CauseDirectDependencyChange, uID, vID)
-						if _, exists := causeMap[key]; !exists {
-							causeMap[key] = Cause{
-								Kind: CauseUpstreamDependencyReview, SourceKind: CauseDirectDependencyChange,
-								DependencyID: vID, Path: appendPath(p, vID),
-								Detail: "dependency content differs from the reviewed baseline",
-								Direct: false, Inherited: true,
-							}
+			// Direct edge conditions intrinsic to dep (e.g. unknown historical baselines)
+			for _, condition := range uSummary.conditions {
+				if condition.Kind == ConditionUnknownHistoricalBaseline {
+					key := fmt.Sprintf("%s\x00%s\x00%s", condition.Kind, uID, condition.DependencyID)
+					if _, exists := conditionMap[key]; !exists {
+						var inheritedPath Path
+						if len(condition.Path) > 1 {
+							inheritedPath = appendPath(p, condition.Path[1:]...)
+						} else {
+							inheritedPath = appendPath(p)
 						}
-					}
-				}
-			}
-
-			// Historical baselines for edges from dep
-			if dep.Status == model.StatusLocked {
-				for _, vID := range lock.BaselineDependencyIDs(dep) {
-					if contains(dep.RestsOn, vID) {
-						vClaim, vExists := byID[vID]
-						if vExists && dependencyState(vClaim) == "" {
-							if _, known := baseline(store, uID, vID); !known {
-								key := fmt.Sprintf("%s\x00%s\x00%s", ConditionUnknownHistoricalBaseline, uID, vID)
-								if _, exists := conditionMap[key]; !exists {
-									conditionMap[key] = DependencyCondition{
-										Kind: ConditionUnknownHistoricalBaseline, DependencyID: vID,
-										Path: appendPath(p, vID), Detail: "no historical content baseline is available",
-									}
-								}
-							}
+						conditionMap[key] = DependencyCondition{
+							Kind:         condition.Kind,
+							DependencyID: condition.DependencyID,
+							Path:         inheritedPath,
+							Detail:       condition.Detail,
 						}
 					}
 				}
@@ -374,28 +343,51 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 			}
 		}
 
-		// 4. Reachable cyclic SCCs
-		for sccID, entryK := range bestSCCEntry {
-			key := fmt.Sprintf("%s\x00%s", ConditionDependencyCycle, sccID)
-			if _, exists := conditionMap[key]; !exists {
-				cycleK, cached := cycleCache[entryK]
+		// 4. Reachable cyclic SCCs: globally minimize the complete witness path
+		// len(prefix + cycle) across all reachable entries in the SCC.
+		for _, scc := range sccs {
+			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(byID[scc[0]].RestsOn, scc[0]))
+			if !isCyclic {
+				continue
+			}
+			sccID := scc[0]
+			var bestWitness Path
+			var bestEntry string
+
+			for _, entry := range scc {
+				p, ok := paths[entry]
+				if !ok {
+					continue
+				}
+				cycleK, cached := cycleCache[entry]
 				if !cached {
-					cycleK = getShortestCycle(entryK, sccNodesMap[sccID], byID)
-					cycleCache[entryK] = cycleK
+					cycleK = getShortestCycle(entry, sccNodesMap[sccID], byID)
+					cycleCache[entry] = cycleK
 				}
-				prefix := paths[entryK]
-				var fullCycle Path
-				if len(prefix) > 0 {
-					fullCycle = appendPath(prefix)
-					if len(cycleK) > 1 {
-						fullCycle = append(fullCycle, cycleK[1:]...)
-					}
+				var candWitness Path
+				if entry == id {
+					candWitness = appendPath(cycleK)
 				} else {
-					fullCycle = appendPath(cycleK)
+					candWitness = appendPath(p)
+					if len(cycleK) > 1 {
+						candWitness = append(candWitness, cycleK[1:]...)
+					}
 				}
-				conditionMap[key] = DependencyCondition{
-					Kind: ConditionDependencyCycle, DependencyID: entryK,
-					Path: fullCycle, Detail: "required dependency cycle",
+				if bestWitness == nil || len(candWitness) < len(bestWitness) || (len(candWitness) == len(bestWitness) && pathLess(candWitness, bestWitness)) {
+					bestWitness = candWitness
+					bestEntry = entry
+				}
+			}
+
+			if bestWitness != nil {
+				key := fmt.Sprintf("%s\x00%s", ConditionDependencyCycle, sccID)
+				if _, exists := conditionMap[key]; !exists {
+					conditionMap[key] = DependencyCondition{
+						Kind:         ConditionDependencyCycle,
+						DependencyID: bestEntry,
+						Path:         bestWitness,
+						Detail:       "required dependency cycle",
+					}
 				}
 			}
 		}

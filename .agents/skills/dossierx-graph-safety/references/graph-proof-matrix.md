@@ -51,6 +51,13 @@ hop is necessarily `rests_on`.
 Check every witness edge against the input. A cycle witness must contain an
 actual closed cycle; any prefix must reach it through real edges. Do not accept
 repeated non-edges just because the previous implementation emitted them.
+Candidate cycle witness selection must globally minimize `len(prefix + cycle)` across
+all reachable entries in an SCC, rather than greedily minimizing prefix distance first.
+
+Include mandatory boundary probes:
+- Empty string / zero-value fields (e.g. `reaudit.PendingFlag{Reason: ""}` must propagate downstream and keep dependents unready).
+- Intermediate draft claims with historical baselines (must not emit inherited drift review causes on dependents).
+- Asymmetric cycle entry depths (where a farther entry from root has a shorter cycle, e.g. a self-loop).
 
 For affected approval mutation paths, additionally prove singleton/batch verdict
 parity on the same candidate snapshot, unrelated-member invariance, explicit
@@ -84,6 +91,8 @@ runtime/toolchain, repetitions, platform, and budget; use reproducible allocatio
 or operation limits for regression assertions where timing is noisy. Timeouts
 are containment and practical budget checks, not complexity proofs. Explain
 measurement limitations; do not silently replace required evidence with a skip.
+Verify actual disk-serialized `catalog.json` and viewer HTML across deep chains
+(lengths 32, 64, 128) and layered dense DAGs under explicit containment budgets (< 64 MB).
 
 Do not run the historical exhaustive algorithm on an unbounded dense production
 corpus or deliberately exhaust the host. For a path-growth repair, demonstrate
@@ -104,6 +113,9 @@ booleans and normalized independent fact identities against a trusted baseline;
 validate witnesses independently and allow changes only under the documented
 candidate representation rule. The normalizer must not use the candidate's
 potentially faulty deduplication key as its only definition of expected identity.
+Do not substitute a single static smoke test for differential proof; require
+generative differential property testing across randomized graphs with varied statuses,
+flags, and drifts.
 
 Known baseline bugs and intentional contract changes require named exceptions
 with concrete contract-based expected results and regression tests. Do not

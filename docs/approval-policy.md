@@ -105,11 +105,14 @@ cause and must review the changed boundary.
 Unlocking an unchanged dependency produces an unapproved-dependency condition,
 not semantic drift. Missing, unreadable, or retired inputs retain the last
 reviewed receipt for explanation while withholding readiness. A cycle is
-reported with its cycle path and cannot be approved as a required premise.
+reported with its cycle path (minimizing the complete witness path from the
+evaluated claim through the cycle) and cannot be approved as a required premise.
 Across all condition and cause categories, readiness emits one entry per distinct
-underlying obstacle with its representative witness path, bounding evaluation
-and catalog generation to the reachable claims and required edges rather than
-the number of dependency routes.
+underlying obstacle with its deterministic representative witness path, bounding
+evaluation work to $O(V + E_r)$ per claim rather than the number of dependency
+routes. Serialized catalog output scales polynomially with graph depth $D$ and
+obstacle count $R$ ($O(V \cdot R \cdot D)$ bytes), strictly eliminating
+exponential route proliferation.
 
 ## Existing projects
 

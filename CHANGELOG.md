@@ -10,10 +10,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Bound readiness evaluation and catalog emission under lock policy v1 (issue #62).
-  Readiness now collects independent causes and conditions with a single deterministic
-  representative witness path (shortest path with a lexicographical tie-break) rather
-  than enumerating every dependency path. This prevents exponential route growth,
-  memory exhaustion, and multi-gigabyte catalog output on dense dependency graphs.
+  Readiness now collects independent causes and conditions via bounded BFS traversal
+  with a deterministic representative witness path (shortest path with a lexicographical
+  tie-break, and global cycle witness minimization) rather than enumerating every
+  dependency route. This eliminates exponential path explosion ($O(k^d)$), memory
+  exhaustion, and multi-gigabyte catalog output on dense dependency graphs, bounding
+  traversal work to $O(V + E_r)$ per claim and catalog output to $O(V \cdot R \cdot D)$.
 
 ## [0.7.8] - 2026-09-06
 

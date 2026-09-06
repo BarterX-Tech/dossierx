@@ -74,6 +74,14 @@ For changes touching approval or readiness, preserve these current boundaries:
 - Singleton and batch locking use the same evaluator and snapshot rules. Refused
   batches write nothing; write failures follow the contract's rollback or
   explicit recovery behavior and never look like successful partial approval.
+- Traversal algorithms must consume the existing local evaluator (`localSummary`)
+  as the single source of truth for claim-owned causes, threads, flags, and direct
+  baseline drift. Never re-implement cause determination or baseline drift checking
+  inline inside a graph traversal. Traversal routes facts; it does not invent or filter them.
+- Representative cycle witnesses must minimize the global complete witness path
+  length across all candidate entry points in an SCC. Never use greedy multi-stage
+  approximations (such as nearest-prefix-first), because minimizing the prefix
+  distance does not minimize the total path `len(prefix + cycle)`.
 
 A skill does not approve a product-contract change. Separate invariants preserved
 from intentionally changed behavior, cite the decision authorizing the latter,
@@ -88,6 +96,11 @@ dependency for edge-owned causes, and any specific source identity. Define
 condition identities separately, including edge-owned unknown baselines and
 cycles. Representative paths are diagnostic witnesses, not clearance authority.
 Diagnostic caps must disclose omissions and must not affect readiness truth.
+Distinguish in-memory struct scale from actual on-disk serialized `catalog.json`
+and viewer HTML. Explicit representative witness paths of depth $D$ on $R$ records
+scale output by $O(R \cdot D)$ bytes; never claim universal linear output when
+explicit witnesses yield polynomial $O(V \cdot (V + E_b) \cdot D)$ catalog bytes
+on deep or dense graphs.
 
 ## Prove semantics and scale
 

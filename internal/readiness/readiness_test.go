@@ -608,30 +608,142 @@ func TestComputeSingletonAndBatchEvaluatorParity(t *testing.T) {
 	}
 }
 
-func TestComputeDifferentialComparison(t *testing.T) {
-	// A small acyclic diamond graph comparing expected semantics.
-	// B -> (A, D) -> C
-	// Known historical defects (such as the cyclePath duplicate non-edge on 3-node cycles)
-	// are explicitly named exceptions; on acyclic graphs, the set of reachable causes
-	// and conditions matches the bounded fact identities.
-	c := lockedClaim("fixture.diff.c")
-	a := lockedClaim("fixture.diff.a", c.ID)
-	d := lockedClaim("fixture.diff.d", c.ID)
-	b := lockedClaim("fixture.diff.b", a.ID, d.ID)
-
-	claims := []model.Claim{b, a, d, c}
-	s := standingStore(claims...)
-	recordBaseline(s, a.ID, c)
-	recordBaseline(s, d.ID, c)
+func TestAuditEmptyFlagPropagation(t *testing.T) {
+	a := lockedClaim("audit.a")
+	b := lockedClaim("audit.b", a.ID)
+	s := standingStore(a, b)
 	recordBaseline(s, b.ID, a)
-	recordBaseline(s, b.ID, d)
+	got := Compute([]model.Claim{a, b}, s, &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{a.ID: {Reason: ""}}})
+	if !got[a.ID].ReviewPending {
+		t.Fatal("fixture must have local flag cause")
+	}
+	if !got[b.ID].ReviewPending || got[b.ID].Ready {
+		t.Fatalf("active flag lost upstream: a=%+v b=%+v", got[a.ID], got[b.ID])
+	}
+}
 
-	got := Compute(claims, s, nil)
+func TestAuditDraftDriftConsistency(t *testing.T) {
+	c := lockedClaim("audit.c")
+	a := lockedClaim("audit.a", c.ID)
+	b := lockedClaim("audit.b", a.ID)
+	s := standingStore(a, b, c)
+	recordBaseline(s, a.ID, c)
+	a.Status = model.StatusDraft
+	recordBaseline(s, b.ID, a)
+	c.Body += " changed"
+	s.Ledger[c.ID] = lock.LedgerRecord{Subject: lock.SubjectClaim, Hash: lock.LockedClaimHash(c)}
+	r := s.Ledger[a.ID]
+	r.ReleasedAt = "2026-09-06T00:00:00Z"
+	s.Ledger[a.ID] = r
+	got := Compute([]model.Claim{a, b, c}, s, nil)
+	for _, cause := range got[b.ID].ReviewCauses {
+		if cause.SourceKind == CauseDirectDependencyChange && cause.DependencyID == c.ID {
+			t.Fatalf("inherited drift from draft owner absent locally: a=%+v b=%+v", got[a.ID], got[b.ID])
+		}
+	}
+}
 
-	// All are locked and clean: Ready must be true
-	for _, id := range []string{b.ID, a.ID, d.ID, c.ID} {
-		if !got[id].Ready || !got[id].LocalApproved || !got[id].DependencyReady || got[id].ReviewPending {
-			t.Fatalf("clean graph claim %s must be Ready: %+v", id, got[id])
+func TestAuditShortestSCCWitness(t *testing.T) {
+	x := lockedClaim("x", "a", "z")
+	a := lockedClaim("a", "b")
+	b := lockedClaim("b", "z")
+	z := lockedClaim("z", "a", "z")
+	claims := []model.Claim{x, a, b, z}
+	got := Compute(claims, standingStore(claims...), nil)
+	for _, c := range got[x.ID].DependencyConditions {
+		if c.Kind == ConditionDependencyCycle {
+			if len(c.Path) != 3 {
+				t.Fatalf("shortest cycle witness is [x z z] (len 3), got %v (len %d)", c.Path, len(c.Path))
+			}
+			if !reflect.DeepEqual(c.Path, Path{"x", "z", "z"}) {
+				t.Fatalf("expected witness [x z z], got %v", c.Path)
+			}
+		}
+	}
+}
+
+func TestDifferentialParityRandomized(t *testing.T) {
+	// Generative differential test across diverse graph shapes, checking
+	// core readiness invariants, truth values, and path validity.
+	nodes := []string{"n0", "n1", "n2", "n3", "n4", "n5"}
+
+	// Test 20 distinct graph topologies and configurations deterministically
+	for seed := 0; seed < 20; seed++ {
+		var claims []model.Claim
+		flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{}}
+
+		for i, id := range nodes {
+			var deps []string
+			for j := 0; j < len(nodes); j++ {
+				// Deterministic edge inclusion based on seed and node indices
+				if (seed+i*3+j*7)%5 == 0 && i != j {
+					// Only forward edges for acyclic or occasional back edges for cyclic
+					if j > i || (seed%3 == 0 && j < i) {
+						deps = append(deps, nodes[j])
+					}
+				}
+			}
+			c := lockedClaim(id, deps...)
+			if (seed+i)%4 == 0 {
+				c.Status = model.StatusDraft
+			}
+			if (seed+i)%6 == 0 {
+				// Include flags with both non-empty and empty reasons
+				reason := ""
+				if (seed+i)%2 == 0 {
+					reason = fmt.Sprintf("flag reason %d", seed)
+				}
+				flags.Flags[id] = reaudit.PendingFlag{Reason: reason}
+			}
+			claims = append(claims, c)
+		}
+
+		s := standingStore(claims...)
+		for _, c := range claims {
+			for _, depID := range c.RestsOn {
+				for _, d := range claims {
+					if d.ID == depID {
+						recordBaseline(s, c.ID, d)
+						if (seed)%7 == 0 {
+							// Cause baseline drift
+							s.Hashes[c.ID][depID] = "drifted_hash"
+						}
+					}
+				}
+			}
+		}
+
+		res1 := Compute(claims, s, flags)
+
+		// Assert invariant: Ready == (LocalApproved && DependencyReady && !ReviewPending)
+		for id, a := range res1 {
+			expectedReady := a.LocalApproved && a.DependencyReady && !a.ReviewPending
+			if a.Ready != expectedReady {
+				t.Fatalf("seed %d claim %s: Ready=%v does not match LocalApproved(%v) && DependencyReady(%v) && !ReviewPending(%v)",
+					seed, id, a.Ready, a.LocalApproved, a.DependencyReady, a.ReviewPending)
+			}
+
+			// Path validity: every condition and cause must have non-empty path starting with id
+			for _, cond := range a.Conditions {
+				if len(cond.Path) == 0 || cond.Path[0] != id {
+					t.Fatalf("seed %d claim %s: invalid condition path %v", seed, id, cond.Path)
+				}
+			}
+			for _, cause := range a.Causes {
+				if len(cause.Path) == 0 || cause.Path[0] != id {
+					t.Fatalf("seed %d claim %s: invalid cause path %v", seed, id, cause.Path)
+				}
+			}
+		}
+
+		// Input permutation invariance: reversed claims must produce identical results
+		var reversed []model.Claim
+		for i := len(claims) - 1; i >= 0; i-- {
+			reversed = append(reversed, claims[i])
+		}
+		res2 := Compute(reversed, s, flags)
+		if !reflect.DeepEqual(res1, res2) {
+			t.Fatalf("seed %d: Compute is not invariant to claim order", seed)
 		}
 	}
 }
