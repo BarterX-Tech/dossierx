@@ -107,14 +107,31 @@ not semantic drift. Missing, unreadable, or retired inputs retain the last
 reviewed receipt for explanation while withholding readiness. A cycle is
 reported with its cycle path (minimizing the complete witness path from the
 evaluated claim through the cycle) and cannot be approved as a required premise.
+Retired and unreadable prerequisites are terminal blockers. Their internal causes
+and cycles are not inherited through that route. Cycle components use only
+readable claims, so an invalid bridge cannot merge independent cycles. A claim's
+own assessment still inspects its direct dependencies even when that claim is
+invalid; a cycle cannot re-enter an invalid claim as a prerequisite. Alternate
+readable routes remain eligible.
+
 Across all condition and cause categories, readiness emits one entry per distinct
-underlying obstacle with its deterministic representative witness path. Graph edge
-exploration visits $O(V + E_r)$ required edges per evaluated claim. Shortest witness
-path construction copies $O(D)$ identifier strings along examined paths, yielding
-polynomial path-construction work ($O(V \cdot D)$ per claim, up to $O(V^2 \cdot D)$
-across all claims on deep chains). Serialized catalog output scales polynomially
-with graph depth $D$ and obstacle count $R \le V + E_b$ ($O(V \cdot R \cdot D)$ bytes),
-strictly eliminating the former exponential route proliferation ($O(k^d)$).
+underlying obstacle with its deterministic representative witness path. Let $V$
+be claims, $E_r$ required edges, $E_b$ baseline/drift edges, and $D$ witness depth.
+BFS visits $O(V + E_r)$ nodes and edges per evaluated claim. Its existing-node
+path storage and copying cost $O(VD)$ per claim, or $O(V^2D)$ across all claims.
+Parent-path comparisons can cost $O(E_rD)$ per claim. Missing-target and emitted
+fact witnesses add $O(RD)$ storage, where $R = O(V + E_b)$ is the number of
+independent records per assessment, including multiple cause kinds per owner.
+Adjacency and record sorting, baseline checks and content hashing, and cached
+cycle searches add separate work. Each cycle entry is searched at most once;
+cycle searches and complete-witness comparisons remain polynomial in nodes,
+edges and depth, independent of the number of routes.
+
+The whole readiness projection holds $O(VRD)$ identifier slots, including the
+depth multiplier in explicit witnesses. Actual catalog bytes also depend on
+identifier/detail lengths and duplicated aliases; source claims and viewer
+markup add further bytes. This eliminates exponential route enumeration, but
+does not guarantee linear work, memory, or serialized output.
 
 ## Existing projects
 

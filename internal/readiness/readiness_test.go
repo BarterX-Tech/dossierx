@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 	"reflect"
+	"slices"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -581,8 +583,8 @@ func TestComputeLayeredDenseDAGScaleBounds(t *testing.T) {
 		len(assessments[roots[0]].DependencyConditions), len(serialized), elapsed, allocs)
 }
 
-func TestComputeSingletonAndBatchEvaluatorParity(t *testing.T) {
-	// Verify that singleton assessment and batch assessment yield identical results.
+// This is repeated-read determinism, not a singleton/batch lock-policy proof.
+func TestComputeRepeatedEvaluationStable(t *testing.T) {
 	c := lockedClaim("fixture.parity.c")
 	a := lockedClaim("fixture.parity.a", c.ID)
 	b := lockedClaim("fixture.parity.b", a.ID)
@@ -590,23 +592,11 @@ func TestComputeSingletonAndBatchEvaluatorParity(t *testing.T) {
 	s := standingStore(claims...)
 	recordBaseline(s, a.ID, c)
 	recordBaseline(s, b.ID, a)
-
-	// Batch compute all 3 claims
-	batchResult := Compute(claims, s, nil)
-
-	// Individual singleton computes (providing full claim corpus for dependency lookups)
-	bSingle := Compute(claims, s, nil)[b.ID]
-	aSingle := Compute(claims, s, nil)[a.ID]
-	cSingle := Compute(claims, s, nil)[c.ID]
-
-	if !reflect.DeepEqual(batchResult[b.ID], bSingle) {
-		t.Fatalf("B batch and singleton assessments differ:\nBatch: %+v\nSingle: %+v", batchResult[b.ID], bSingle)
-	}
-	if !reflect.DeepEqual(batchResult[a.ID], aSingle) {
-		t.Fatalf("A batch and singleton assessments differ:\nBatch: %+v\nSingle: %+v", batchResult[a.ID], aSingle)
-	}
-	if !reflect.DeepEqual(batchResult[c.ID], cSingle) {
-		t.Fatalf("C batch and singleton assessments differ:\nBatch: %+v\nSingle: %+v", batchResult[c.ID], cSingle)
+	want := Compute(claims, s, nil)
+	for repeat := 0; repeat < 3; repeat++ {
+		if got := Compute(claims, s, nil); !reflect.DeepEqual(want, got) {
+			t.Fatalf("readiness changed on repeated evaluation %d: want=%+v got=%+v", repeat, want, got)
+		}
 	}
 }
 
@@ -781,6 +771,14 @@ func auditLex(a, b []string) bool {
 }
 
 func TestIndependentCycleOracle(t *testing.T) {
+	testIndependentCycleOracle(t, false)
+}
+
+func TestIndependentLifecycleCycleOracle(t *testing.T) {
+	testIndependentCycleOracle(t, true)
+}
+
+func testIndependentCycleOracle(t *testing.T, lifecycle bool) {
 	for seed := int64(0); seed < 400; seed++ {
 		rng := rand.New(rand.NewSource(seed))
 		n := 5
@@ -793,6 +791,22 @@ func TestIndependentCycleOracle(t *testing.T) {
 				if rng.Intn(4) == 0 {
 					claims[i].RestsOn = append(claims[i].RestsOn, fmt.Sprintf("n%d", j))
 					reach[i][j] = true
+				}
+			}
+		}
+		// Independent lifecycle predicate: do not reuse production eligibility.
+		consumable := func(c model.Claim) bool {
+			status := strings.ToLower(strings.TrimSpace(string(c.Status)))
+			return status == "locked" || status == "draft" || status == ""
+		}
+		if lifecycle {
+			statuses := []model.Status{model.StatusLocked, model.StatusDraft, "retired", "unreadable", ""}
+			for i := range claims {
+				claims[i].Status = statuses[rng.Intn(len(statuses))]
+			}
+			for i := range claims {
+				for j := range claims {
+					reach[i][j] = reach[i][j] && consumable(claims[i]) && consumable(claims[j])
 				}
 			}
 		}
@@ -820,11 +834,59 @@ func TestIndependentCycleOracle(t *testing.T) {
 		for _, c := range claims {
 			byID[c.ID] = c
 		}
+		permuted := append([]model.Claim(nil), claims...)
+		for i := range permuted {
+			permuted[i].RestsOn = append([]string(nil), permuted[i].RestsOn...)
+			slices.Reverse(permuted[i].RestsOn)
+		}
+		slices.Reverse(permuted)
+		if !reflect.DeepEqual(got, Compute(permuted, standingStore(permuted...), nil)) {
+			t.Fatalf("seed=%d lifecycle=%v reordered claims/edges changed assessment", seed, lifecycle)
+		}
+
 		for _, root := range claims {
+			// Independently collect terminal invalid prerequisites, including a
+			// return to an invalid root. Cycle-only equality cannot detect a lost
+			// blocker after the invalid root is removed from cycle membership.
+			if lifecycle {
+				wantInvalid := map[string]bool{}
+				seen := map[string]bool{}
+				var visit func(string)
+				visit = func(id string) {
+					if seen[id] {
+						return
+					}
+					seen[id] = true
+					for _, dep := range byID[id].RestsOn {
+						if !consumable(byID[dep]) {
+							wantInvalid[dep] = true
+						} else {
+							visit(dep)
+						}
+					}
+				}
+				visit(root.ID)
+				actualInvalid := map[string]bool{}
+				for _, cond := range got[root.ID].Conditions {
+					if cond.Kind == ConditionRetiredDependency || cond.Kind == ConditionUnreadableDependency {
+						actualInvalid[cond.DependencyID] = true
+					}
+				}
+				if !reflect.DeepEqual(wantInvalid, actualInvalid) {
+					t.Fatalf("seed=%d root=%s invalid blockers: want=%v got=%v", seed, root.ID, wantInvalid, actualInvalid)
+				}
+				if len(wantInvalid) > 0 && got[root.ID].DependencyReady {
+					t.Fatalf("seed=%d root=%s invalid prerequisites must block readiness", seed, root.ID)
+				}
+			}
+
 			best := map[string]Path{}
 			var walk func(Path)
 			walk = func(p Path) {
 				for _, next := range byID[p[len(p)-1]].RestsOn {
+					if !consumable(byID[next]) {
+						continue
+					}
 					q := append(append(Path(nil), p...), next)
 					repeated := false
 					for _, prev := range p {
@@ -848,6 +910,13 @@ func TestIndependentCycleOracle(t *testing.T) {
 			actual := map[string]Path{}
 			for _, c := range got[root.ID].Conditions {
 				if c.Kind == ConditionDependencyCycle {
+					component, exists := comp[c.DependencyID]
+					if !exists {
+						t.Fatalf("seed=%d root=%s cycle has no eligible component: %+v", seed, root.ID, c)
+					}
+					if _, duplicate := actual[component]; duplicate {
+						t.Fatalf("seed=%d root=%s duplicate component: %+v", seed, root.ID, c)
+					}
 					actual[comp[c.DependencyID]] = c.Path
 				}
 			}

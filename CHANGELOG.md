@@ -14,8 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   with a deterministic representative witness path (shortest path with a lexicographical
   tie-break, and global cycle witness minimization) rather than enumerating every
   dependency route. This eliminates exponential route proliferation ($O(k^d)$) on dense
-  dependency graphs, bounding traversal edge exploration to $O(V + E_r)$ per claim,
-  path-construction work to $O(V \cdot D)$, and catalog output to $O(V \cdot R \cdot D)$ bytes.
+  dependency graphs. Existing-node BFS path storage/copying is $O(V \cdot D)$ per
+  claim; parent comparisons, sorting, baseline evaluation, and cycle searches add
+  separate work. Catalog readiness witnesses occupy $O(V \cdot R \cdot D)$ identifier
+  slots, with $R = O(V + E_b)$ independent records per claim. Bytes also depend on
+  identifier/detail lengths and aliases. Invalid prerequisites terminate every
+  inherited route, including cycle analysis; alternate readable routes remain active.
 
 ## [0.7.8] - 2026-09-06
 

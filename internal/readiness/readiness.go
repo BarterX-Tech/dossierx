@@ -123,11 +123,20 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		}
 	}
 
-	// Precompute strongly connected components (SCCs) to detect cycles.
-	sccs := findSCCs(byID)
+	// Use one eligibility set for expansion, inherited facts, and cycle analysis.
+	// Invalid prerequisites remain boundary witnesses in BFS, but cannot belong
+	// to or bridge a cycle. An invalid root still assesses its outgoing inputs;
+	// no cycle may re-enter that root as a prerequisite.
+	eligible := make(map[string]model.Claim, len(byID))
+	for id, c := range byID {
+		if dependencyState(c) == "" {
+			eligible[id] = c
+		}
+	}
+	sccs := findSCCs(eligible)
 	sccNodesMap := make(map[string]map[string]bool)
 	for _, scc := range sccs {
-		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(byID[scc[0]].RestsOn, scc[0]))
+		isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
 		if isCyclic {
 			sccID := scc[0] // canonical ID (scc is sorted)
 			nodes := make(map[string]bool, len(scc))
@@ -143,8 +152,8 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 	localSummaries := make(map[string]summary, len(byID))
 	approvalStates := make(map[string]approvalCheck, len(byID))
 	for id, c := range byID {
-		localSummaries[id] = localSummary(c, claims, store, flags, byID)
 		approvalStates[id] = approvalState(c, store)
+		localSummaries[id] = localSummary(c, claims, store, flags, byID, approvalStates[id])
 	}
 
 	cycleCache := make(map[string][]string)
@@ -166,6 +175,10 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		currentLevel := []string{id}
 
 		bestMissing := make(map[string][]string)
+		// The root may be assessed even when invalid, but a return edge consumes
+		// it as a prerequisite. Keep that blocker separately from paths[id],
+		// which must remain the zero-length prefix used to start the traversal.
+		var invalidRootPath Path
 
 		for len(currentLevel) > 0 {
 			var nextLevel []string
@@ -179,13 +192,22 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 				sort.Strings(uDeps)
 
 				for _, depID := range uDeps {
-					dep, exists := byID[depID]
+					_, exists := byID[depID]
 					if !exists {
 						candLen := len(uPath) + 1
 						if existing, seen := bestMissing[depID]; !seen || candLen < len(existing) || (candLen == len(existing) && pathLess(uPath, existing[:len(existing)-1])) {
 							bestMissing[depID] = appendPath(uPath, depID)
 						}
 						continue
+					}
+
+					if depID == id {
+						if _, consumable := eligible[id]; !consumable {
+							if invalidRootPath == nil || len(uPath)+1 < len(invalidRootPath) ||
+								(len(uPath)+1 == len(invalidRootPath) && pathLess(uPath, invalidRootPath[:len(invalidRootPath)-1])) {
+								invalidRootPath = appendPath(uPath, id)
+							}
+						}
 					}
 
 					if _, seen := dist[depID]; seen {
@@ -195,8 +217,8 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 					if prevParent, has := bestParent[depID]; !has || pathLess(paths[uID], paths[prevParent]) {
 						bestParent[depID] = uID
 					}
-					state := dependencyState(dep)
-					if state == "" && !nextLevelSet[depID] {
+					_, consumable := eligible[depID]
+					if consumable && !nextLevelSet[depID] {
 						nextLevelSet[depID] = true
 						nextLevel = append(nextLevel, depID)
 					}
@@ -233,13 +255,16 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		// 2. Transitive facts from reachable nodes in rests_on
 		for uID, p := range paths {
 			if uID == id {
-				continue
+				if invalidRootPath == nil {
+					continue
+				}
+				p = invalidRootPath
 			}
 			dep := byID[uID]
 			state := dependencyState(dep)
 
 			// Retired / unreadable dependency
-			if state == ConditionRetiredDependency || state == ConditionUnreadableDependency {
+			if _, consumable := eligible[uID]; !consumable {
 				key := fmt.Sprintf("%s\x00%s", state, uID)
 				if _, exists := conditionMap[key]; !exists {
 					detail := "required dependency cannot be consumed"
@@ -341,7 +366,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 		// 4. Reachable cyclic SCCs: globally minimize the complete witness path
 		// len(prefix + cycle) across all reachable entries in the SCC.
 		for _, scc := range sccs {
-			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(byID[scc[0]].RestsOn, scc[0]))
+			isCyclic := len(scc) > 1 || (len(scc) == 1 && contains(eligible[scc[0]].RestsOn, scc[0]))
 			if !isCyclic {
 				continue
 			}
@@ -356,7 +381,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 				}
 				cycleK, cached := cycleCache[entry]
 				if !cached {
-					cycleK = getShortestCycle(entry, sccNodesMap[sccID], byID)
+					cycleK = getShortestCycle(entry, sccNodesMap[sccID], eligible)
 					cycleCache[entry] = cycleK
 				}
 				var candWitness Path
@@ -460,12 +485,11 @@ func approvalState(c model.Claim, store *lock.Store) approvalCheck {
 }
 
 // localSummary computes only causes owned by id and conditions that are
-// intrinsic to its own dependency evidence. collect adds transitive required
+// intrinsic to its own dependency evidence. Compute adds transitive required
 // chain information and converts child causes into inherited causes.
-func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore, byID map[string]model.Claim) summary {
+func localSummary(c model.Claim, claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore, byID map[string]model.Claim, approval approvalCheck) summary {
 	var out summary
 	if c.Status == model.StatusLocked {
-		approval := approvalState(c, store)
 		if !approval.valid {
 			out.causes = append(out.causes, Cause{
 				Kind: approval.kind, SourceKind: approval.kind, Path: Path{c.ID}, Direct: true,
