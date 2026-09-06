@@ -117,7 +117,7 @@ func checkGraphSkillEntryPoints(t *testing.T, root string) {
 		if !found {
 			t.Errorf("%s has no resolvable reference to %s", route.from, route.to)
 		}
-		if body, err := os.ReadFile(want); err != nil || len(strings.TrimSpace(string(body))) == 0 {
+		if body, err := os.ReadFile(want); err != nil || strings.TrimSpace(string(body)) == "" {
 			t.Errorf("%s references an unreadable or empty %s: %v", route.from, route.to, err)
 		}
 	}
@@ -151,7 +151,7 @@ func checkGraphSkillEntryPoints(t *testing.T, root string) {
 				t.Errorf("%s references a file outside the checkout: %s", path, target)
 				continue
 			}
-			if raw, err := os.ReadFile(resolved); err != nil || len(strings.TrimSpace(string(raw))) == 0 {
+			if raw, err := os.ReadFile(resolved); err != nil || strings.TrimSpace(string(raw)) == "" {
 				t.Errorf("%s has an unreadable or empty reference %s: %v", path, target, err)
 			}
 		}

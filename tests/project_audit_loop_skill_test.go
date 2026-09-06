@@ -86,7 +86,7 @@ func checkSkillCanBeCopiedAlone(t *testing.T, name string, requireReferences boo
 				continue
 			}
 			body, err := os.ReadFile(resolved)
-			if err != nil || len(strings.TrimSpace(string(body))) == 0 {
+			if err != nil || strings.TrimSpace(string(body)) == "" {
 				t.Errorf("unreadable portable reference %s: %v", local, err)
 			}
 			references++
