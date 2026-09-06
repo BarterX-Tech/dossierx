@@ -31,3 +31,13 @@ built on, because that part was never about the pipeline:
 The procedure lives in `docs/RELEASING.md`. That file is the only description of how this project
 releases, and there is exactly one of them: if you find a second release procedure anywhere in
 this repository, that is a defect to report, not a fallback to use.
+
+## Required project skill
+
+Before planning, implementing, reviewing, or releasing a change to dependency readiness, claim
+locking, review propagation, build-order graphs, catalog or viewer graph projections, or any other
+graph traversal, read and follow `.claude/skills/dossierx-graph-safety/SKILL.md`.
+
+This is a maintainer-only overlay. It is not part of the consumer skill bundle under `skills/` and
+must not be added to `skills/embed.go`. It defines graph proof obligations, not a second release
+procedure; release execution remains exclusively in `docs/RELEASING.md`.

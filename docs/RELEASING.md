@@ -40,6 +40,17 @@ The checklist below asks for each one.
       unset, and a skip proves nothing. Point it at a real Chrome or Chromium
       before you read its result as coverage.
 
+- [ ] **A graph-changing release has passed the project graph-safety skill.** If
+      the candidate changes dependency readiness, claim locking, review
+      propagation, build-order graphs, catalog or viewer graph projections, or
+      any other graph traversal, read
+      `.agents/skills/dossierx-graph-safety/SKILL.md` and record its `PASS` for
+      the exact candidate commit. The evidence must include semantic equivalence,
+      explicit worst-case bounds, an adversarial dense-graph result, and parity
+      across every affected consumer. A normal unit-suite pass without that
+      evidence does not satisfy this item. If the release has no graph change,
+      record that fact instead of inventing a graph result.
+
 - [ ] **`CHANGELOG.md` has a heading for this version** and its entries describe
       what a consumer sees, not what the diff touched. The newest heading is the
       release being tagged; if it still says `[Unreleased]`, the tag is ahead of
