@@ -1,34 +1,28 @@
 # DossierX site
 
-Two static pages, published to GitHub Pages.
+Static HTML, published to GitHub Pages. No bundler, package manager, or build step.
 
-- `index.html` is a memo on why this project exists.
-- `releases.html` is the release ledger.
+- `index.html` is the landing-page memo, including the DossierX vision.
+- `memo.css` and `memo.js` provide its layout and light/dark theme switch.
+- `favicon.svg` is the shared site icon.
+- `releases.html` is the release ledger and uses `styles.css`.
+- `system-record.html`, `where-to-start.html`, and `real-example.html` remain
+  available at their existing URLs, with `proposal.css` and the example assets.
 
-`styles.css` is the whole stylesheet. `favicon.svg` is the whole asset set.
+The homepage follows the typography, narrow column, and cream/charcoal palette
+of nitinkhanna.io. It contains no blog posts or placeholder writing links.
+Product details and installation instructions live in the repository README.
 
-## There is no build
-
-No bundler, no package manager, no generated output. Open `index.html` in a
-browser, or serve the directory with anything at all.
+## Preview
 
 ```bash
 python3 -m http.server --directory site 8000
 ```
 
-Every link between the two pages is relative, so the pages work the same from a
-file path, a local server, and the project-Pages subpath. Nothing here needs to
-know it is served from `/dossierx/`.
-
-**This was a Vite, React and TypeScript application, and the build was removed
-on purpose.** The site had grown into twelve sections and fifteen components
-describing a pre-1.0 tool whose direction is not settled, and describing it in
-prose that had to be re-verified against the binary at every release: counted
-claims, command tables, terminal transcripts, error codes. Four version strings
-and one command count went stale in front of users anyway. The client-facing
-account of what DossierX does now lives in the repository's `README.md`, next to
-the binary that settles it. This site makes the case for the project and stops
-there, which is why nothing on `index.html` states a count or names a version.
+Open `http://localhost:8000/`. The stylesheet, script, and icon use relative
+URLs, so the homepage also works under the GitHub Pages project subpath.
+The theme follows the browser preference until a visitor chooses a theme;
+the switch saves that choice locally when browser storage is available.
 
 ## The ledger is a release precondition
 
