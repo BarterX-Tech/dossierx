@@ -40,6 +40,24 @@ The checklist below asks for each one.
       unset, and a skip proves nothing. Point it at a real Chrome or Chromium
       before you read its result as coverage.
 
+- [ ] **A graph-changing release has passed the project graph-safety skill.** If
+      the complete release diff changes the behavior of dependency readiness,
+      claim locking, review propagation, build-order graphs, catalog or viewer
+      graph projections, or any other graph traversal (including shared inputs
+      and consumers), read
+      `.agents/skills/dossierx-graph-safety/SKILL.md` and record its `PASS` for
+      the exact candidate commit, with a durable evidence path and resolved
+      previous-release comparison range. The evidence must include preserved
+      semantics and explicit approved changes or known-oracle-defect exceptions,
+      worst-case bounds for both individual queries and whole-corpus output,
+      bounded adversarial results, and contract checks across every affected
+      consumer. Record reproduction commands, fixture parameters, environment,
+      executed case counts, and measured resources. `FAIL`, blocked or skipped
+      checks, and missing evidence do not satisfy this item. A normal unit-suite
+      pass alone is insufficient. If the complete release diff has no graph
+      behavior change, record the inspected range and that fact; documentation
+      typos or formatting alone do not require an invented runtime graph result.
+
 - [ ] **`CHANGELOG.md` has a heading for this version** and its entries describe
       what a consumer sees, not what the diff touched. The newest heading is the
       release being tagged; if it still says `[Unreleased]`, the tag is ahead of
@@ -137,6 +155,12 @@ reviewed, and the merge carries it in.
       `--no-ff` is what produces the merge commit the tag needs. A squash or a
       rebase leaves `main` with no merge commit at the tip, and the tag then names
       a branch head that was never merged. Nothing refuses that; check it.
+
+      Before tagging a graph-changing release, bind the graph-safety evidence
+      to this final merge commit. Re-run the applicable proofs on its tree; a
+      result for the release branch alone does not cover changes introduced by
+      merging newer main or resolving conflicts. Do not tag while this evidence
+      is missing or non-passing.
 
 - [ ] **Tag the merge commit and push the tag, in this order.**
 

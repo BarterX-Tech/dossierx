@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.9] - 2026-09-07
+
+### Changed
+
+- Replace the project landing page with the approved memo and vision, using a
+  focused reading layout with light and dark themes. The release history and
+  other existing project pages remain available.
+- Add project-owned maintainer guidance for graph-safety reviews, audit loops,
+  lesson capture, and skill-gap reviews. These files guide work in this
+  repository and are not included in the consumer skill bundle.
+- Regenerate all five committed fixture viewers with the v0.7.9 candidate. Their
+  byte sizes remain unchanged: `fixture-basic` 505,445 -> 505,445,
+  `fixture-graph-demo` 653,233 -> 653,233, `fixture-portability` 507,856 ->
+  507,856, `fixture-theme-flat` 4,130,517 -> 4,130,517, and
+  `fixture-theme-preset` 508,882 -> 508,882.
+
+### Fixed
+
+- Bound readiness evaluation and catalog emission under lock policy v1 (issue #62).
+  Readiness now collects independent causes and conditions via bounded BFS traversal
+  with a deterministic representative witness path (shortest path with a lexicographical
+  tie-break, and global cycle witness minimization) rather than enumerating every
+  dependency route. This eliminates exponential route proliferation ($O(k^d)$) on dense
+  dependency graphs. Existing-node BFS path storage/copying is $O(V \cdot D)$ per
+  claim; parent comparisons, sorting, baseline evaluation, and cycle searches add
+  separate work. Catalog readiness witnesses occupy $O(V \cdot R \cdot D)$ identifier
+  slots, with $R = O(V + E_b)$ independent records per claim. Bytes also depend on
+  identifier/detail lengths and aliases. Invalid prerequisites terminate every
+  inherited route, including cycle analysis; alternate readable routes remain active.
+
 ## [0.7.8] - 2026-09-06
 
 ### Changed

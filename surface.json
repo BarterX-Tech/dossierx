@@ -551,7 +551,7 @@
     "internal/loader": "sha256:04a25e29820e9bb1a023cb09b13904295a3a398897664966950d349a42f7f671",
     "internal/lock": "sha256:0c4aa561a3c6eef4cb17b2405311f7115a62953d5f413d5bb088dd0e4b77490a",
     "internal/model": "sha256:0b1f841bb0e8ae3c6357364c2456f8d50c21cebe201fb3f45264c3bb3e938015",
-    "internal/readiness": "sha256:f5a0e10db8ccc29bd8f949d820018ae4b00834e5dd06f6cd15f00d9bcfa19d8a",
+    "internal/readiness": "sha256:27b94ad2e402403e255aed9a577d82f40abb15bcd1d2973b73f5f4d7abbf3636",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
     "internal/render": "sha256:06d56cdb2445f79df02f3a746610772834abdc7a54e9afa85585bfbf20812cdf",
@@ -560,7 +560,7 @@
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:f2322e007109be10d4769dc5623f0dadfa9f759da1c5a3dedb8d0070f8b372f4",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:e096a5b62a0a3cdc03e97713ab645e0131ad4bffc71649c57999fc253026cdc4"
+    "skills": "sha256:2bc0a30f871fabdc81885e7cef5eb9ff8f46b6ff3f39677beb8d5f491cc91f72"
   },
   "envelope": {
     "keys": [
@@ -927,23 +927,23 @@
   "version_pins": [
     {
       "file": "README.md",
-      "pin": "dossierx/cmd/dossierx@v0.7.8",
-      "version": "v0.7.8"
+      "pin": "dossierx/cmd/dossierx@v0.7.9",
+      "version": "v0.7.9"
     },
     {
       "file": "README.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.8",
-      "version": "v0.7.8"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.9",
+      "version": "v0.7.9"
     },
     {
       "file": "scripts/ci/dossierx-check.yml",
-      "pin": "dossierx/cmd/dossierx@v0.7.8",
-      "version": "v0.7.8"
+      "pin": "dossierx/cmd/dossierx@v0.7.9",
+      "version": "v0.7.9"
     },
     {
       "file": "skills/dossierx/SKILL.md",
-      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.8",
-      "version": "v0.7.8"
+      "pin": "githubusercontent.com/BarterX-Tech/dossierx/v0.7.9",
+      "version": "v0.7.9"
     }
   ],
   "counts": {

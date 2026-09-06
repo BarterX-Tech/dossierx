@@ -50,14 +50,35 @@
         carries this as a checklist item.
       -->
       <div class="ledger">
-        <article class="release release--current" data-version="v0.7.8" data-current="true">
+        <article class="release release--current" data-version="v0.7.9" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.9</span>
+            <time datetime="2026-09-07">2026-09-07</time>
+          </p>
+          <div>
+            <h2 class="release__title">
+              Bounded readiness, and a clearer front door<span class="release__badge">Latest</span>
+            </h2>
+            <p class="release__note">
+              Readiness evaluation now keeps one deterministic witness for each
+              independent obstacle instead of enumerating every dependency
+              route. Dense policy-v1 graphs stay bounded while missing,
+              retired, unreadable, cyclic, and independently clearable causes
+              remain visible. The project also gains maintainer review guidance
+              for graph changes and a new memo-style landing page that states
+              the product's purpose before its mechanics.
+            </p>
+          </div>
+        </article>
+
+        <article class="release" data-version="v0.7.8">
           <p class="release__meta">
             <span class="release__version">v0.7.8</span>
             <time datetime="2026-09-06">2026-09-06</time>
           </p>
           <div>
             <h2 class="release__title">
-              Reviewed local approvals, live dependency readiness<span class="release__badge">Latest</span>
+              Reviewed local approvals, live dependency readiness
             </h2>
             <p class="release__note">
               Lock policy v1 makes a reviewed local approval distinct from an
