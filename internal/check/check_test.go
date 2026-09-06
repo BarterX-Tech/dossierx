@@ -164,6 +164,58 @@ func TestRun_SuccessWritesAndReports(t *testing.T) {
 	}
 }
 
+func TestRun_MalformedFlagStoreStopsBeforeArtifacts(t *testing.T) {
+	cfg, claims := project(t, baseConfig, map[string]string{
+		"claims/one.yaml": draftClaim("widget.contract.one"),
+	})
+	buildDir := cfg.BuildDirPath()
+	catalogPath := filepath.Join(buildDir, "catalog", "catalog.json")
+	viewerPath := filepath.Join(buildDir, "viewer", "index.html")
+	if err := os.MkdirAll(filepath.Dir(catalogPath), 0o755); err != nil {
+		t.Fatalf("mkdir catalog output: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(viewerPath), 0o755); err != nil {
+		t.Fatalf("mkdir viewer output: %v", err)
+	}
+	for _, tc := range []struct {
+		path string
+		body string
+	}{
+		{catalogPath, "catalog sentinel\n"},
+		{viewerPath, "viewer sentinel\n"},
+	} {
+		if err := os.WriteFile(tc.path, []byte(tc.body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", tc.path, err)
+		}
+	}
+	flagPath := filepath.Join(buildDir, "ledger", "flag-store.json")
+	if err := os.MkdirAll(filepath.Dir(flagPath), 0o755); err != nil {
+		t.Fatalf("mkdir ledger output: %v", err)
+	}
+	if err := os.WriteFile(flagPath, []byte("{"), 0o644); err != nil {
+		t.Fatalf("write malformed flag store: %v", err)
+	}
+
+	if _, err := check.Run(claims, cfg); err == nil {
+		t.Fatal("Run with malformed flag store succeeded")
+	}
+	for _, tc := range []struct {
+		path string
+		want string
+	}{
+		{catalogPath, "catalog sentinel\n"},
+		{viewerPath, "viewer sentinel\n"},
+	} {
+		got, err := os.ReadFile(tc.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", tc.path, err)
+		}
+		if string(got) != tc.want {
+			t.Errorf("%s changed to %q, want sentinel %q", tc.path, got, tc.want)
+		}
+	}
+}
+
 // A lint error stops Run at the lint step: OK stays false, the error text is
 // exactly what the CLI wraps "check: %w", and — critically — NEITHER side
 // file is written (fail-fast happens before catalog/render).

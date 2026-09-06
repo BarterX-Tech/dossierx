@@ -327,7 +327,7 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 			Snapshot string `json:"snapshot"`
 		} `json:"data"`
 	}
-	if err := json.Unmarshal([]byte(previewOut), &preview); err != nil || preview.Data.Snapshot == "" {
+	if err := json.Unmarshal(previewOut, &preview); err != nil || preview.Data.Snapshot == "" {
 		t.Fatalf("lock preview token: %v (%s)", err, previewOut)
 	}
 	mustRun(project, "claim lock", binPath, "--format", "text", "claim", "lock", hostileClaimID,

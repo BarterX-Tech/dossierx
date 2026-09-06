@@ -210,8 +210,8 @@ func (cat *Catalog) Document() *Document {
 	for _, c := range cat.Claims {
 		e := entryFor(c)
 		if assessment, ok := cat.Readiness[c.ID]; ok {
-			copy := assessment
-			e.Readiness = &copy
+			assessmentCopy := assessment
+			e.Readiness = &assessmentCopy
 		}
 		doc.Claims = append(doc.Claims, e)
 	}

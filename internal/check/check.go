@@ -292,7 +292,10 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	if err != nil {
 		return res, fmt.Errorf("catalog: build: %w", err)
 	}
-	flags, _ := reaudit.LoadFlagStore(flagStorePath(cfg))
+	flags, err := reaudit.LoadFlagStore(flagStorePath(cfg))
+	if err != nil {
+		return res, fmt.Errorf("catalog: readiness: load flag store: %w", err)
+	}
 	cat.SetReadiness(readiness.Compute(claims, inputs.store, flags))
 	catPath := catalogPath(cfg)
 	if err := catalog.WriteJSON(cat, catPath); err != nil {

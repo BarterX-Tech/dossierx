@@ -76,8 +76,8 @@ func Build(cat *catalog.Catalog, cfg *config.Config) Payload {
 			Tracks:        nodeTracks(c),
 		}
 		if assessment, ok := cat.Readiness[c.ID]; ok {
-			copy := assessment
-			node.Readiness = &copy
+			assessmentCopy := assessment
+			node.Readiness = &assessmentCopy
 		}
 		p.Nodes = append(p.Nodes, node)
 	}

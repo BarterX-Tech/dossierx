@@ -30,21 +30,27 @@ func main() {
 	if *envFile == "" {
 		return
 	}
-	f, err := os.OpenFile(*envFile, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "open github env: %v\n", err)
-		os.Exit(1)
-	}
-	defer f.Close()
-	for _, line := range []string{
+	if err := appendGitHubEnv(*envFile, []string{
 		"DOSSIERX_CURRENT_VERSION=" + result.CurrentVersion,
 		"DOSSIERX_CURRENT_COMMIT=" + result.CurrentCommit,
 		"DOSSIERX_PREV_RELEASE_TAG=" + result.BaselineTag,
 		"DOSSIERX_PREV_RELEASE_COMMIT=" + result.BaselineCommit,
-	} {
+	}); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func appendGitHubEnv(path string, lines []string) error {
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o644)
+	if err != nil {
+		return fmt.Errorf("open github env: %w", err)
+	}
+	defer f.Close()
+	for _, line := range lines {
 		if _, err := fmt.Fprintln(f, line); err != nil {
-			fmt.Fprintf(os.Stderr, "write github env: %v\n", err)
-			os.Exit(1)
+			return fmt.Errorf("write github env: %w", err)
 		}
 	}
+	return nil
 }

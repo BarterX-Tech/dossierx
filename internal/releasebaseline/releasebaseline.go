@@ -29,14 +29,14 @@ type Options struct {
 	EventCommit string
 }
 
-var semverPattern = regexp.MustCompile(`^v([0-9]+)\.([0-9]+)\.([0-9]+)$`)
-var changelogPattern = regexp.MustCompile(`^## \[([0-9]+\.[0-9]+\.[0-9]+)\]`)
+var semverPattern = regexp.MustCompile(`^v(\d+)\.(\d+)\.(\d+)$`)
+var changelogPattern = regexp.MustCompile(`^## \[(\d+\.\d+\.\d+)\]`)
 
 type version struct{ major, minor, patch string }
 
 func parseVersion(tag string) (version, bool) {
 	m := semverPattern.FindStringSubmatch(tag)
-	if m == nil || !canonicalNumber(m[1]) || !canonicalNumber(m[2]) || !canonicalNumber(m[3]) {
+	if len(m) != 4 || !canonicalNumber(m[1]) || !canonicalNumber(m[2]) || !canonicalNumber(m[3]) {
 		return version{}, false
 	}
 	return version{m[1], m[2], m[3]}, true

@@ -33,9 +33,9 @@ import (
 // with the rendered document when rendering succeeds — it never gates the page
 // on lint (duplicate ids, dangling refs, unlocked tags all still render; those
 // are data for the terminal / status endpoint, not a reason to blank the page).
-// The single genuine failure is a template/override parse error from
-// render.Render, which becomes a self-contained 500 HTML page (not a bare
-// string) plus a stderr line, so a broken override is diagnosable in the tab.
+// Render failures, including corrupt readiness stores and template/override
+// parse errors, become a self-contained 500 HTML page (not a bare string) plus
+// a stderr line, so the cause is diagnosable in the tab.
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	htmlBytes, err := s.pipe.get(r.Context())
 	if err != nil {
@@ -261,7 +261,12 @@ func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto := statusToDTO(check.Status(claims, s.cfg))
-	dto.Readiness = s.readinessFor(claims)
+	assessment, err := s.readinessFor(claims)
+	if err != nil {
+		s.writeInternal(w, fmt.Errorf("readiness: %w", err))
+		return
+	}
+	dto.Readiness = assessment
 	writeJSON(w, http.StatusOK, dto)
 }
 
@@ -319,7 +324,12 @@ func (s *Server) handleGraph(w http.ResponseWriter, r *http.Request) {
 		s.writeInternal(w, fmt.Errorf("build catalog: %w", err))
 		return
 	}
-	cat.SetReadiness(s.readinessFor(claims))
+	assessment, err := s.readinessFor(claims)
+	if err != nil {
+		s.writeInternal(w, fmt.Errorf("readiness: %w", err))
+		return
+	}
+	cat.SetReadiness(assessment)
 
 	p := graph.Build(cat, s.cfg)
 	// graph.Build reads no clock — it leaves GeneratedAt empty and every

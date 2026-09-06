@@ -426,9 +426,10 @@ func (s *Server) routes() http.Handler {
 // writes build/viewer/index.html or build/catalog/catalog.json — those are "dossierx render" /
 // "check"'s files, and a truncating per-request write would be readable
 // half-finished. catalog.Build cannot fail structurally (duplicate ids /
-// dangling refs are lint's concern and still render), so the only real failure
-// here is a template/override parse error from render.Render, which the root
-// handler turns into a 500 error page rather than a blank viewer.
+// dangling refs are lint's concern and still render). Store-read failures are
+// also surfaced here, so a corrupt readiness store cannot become an empty
+// readiness assessment. The root handler turns either failure into a 500 error
+// page rather than a blank viewer.
 func (s *Server) renderViewer() ([]byte, error) {
 	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
 	if err != nil {
@@ -438,7 +439,11 @@ func (s *Server) renderViewer() ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("serve: build catalog: %w", err)
 	}
-	cat.SetReadiness(s.readinessFor(claims))
+	assessment, err := s.readinessFor(claims)
+	if err != nil {
+		return nil, fmt.Errorf("serve: readiness: %w", err)
+	}
+	cat.SetReadiness(assessment)
 	if s.themeErr != nil {
 		return nil, fmt.Errorf("serve: theme: %w", s.themeErr)
 	}
@@ -449,10 +454,16 @@ func (s *Server) renderViewer() ([]byte, error) {
 	return []byte(html), nil
 }
 
-func (s *Server) readinessFor(claims []model.Claim) map[string]readiness.Assessment {
-	store, _ := lock.LoadStore(s.storePath())
-	flags, _ := reaudit.LoadFlagStore(s.flagStorePath())
-	return readiness.Compute(claims, store, flags)
+func (s *Server) readinessFor(claims []model.Claim) (map[string]readiness.Assessment, error) {
+	store, err := lock.LoadStore(s.storePath())
+	if err != nil {
+		return nil, fmt.Errorf("load lock store: %w", err)
+	}
+	flags, err := reaudit.LoadFlagStore(s.flagStorePath())
+	if err != nil {
+		return nil, fmt.Errorf("load flag store: %w", err)
+	}
+	return readiness.Compute(claims, store, flags), nil
 }
 
 // disarmUngatedMockups returns claims with RawHTMLReviewed cleared on every
