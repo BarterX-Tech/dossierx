@@ -892,3 +892,160 @@ func TestPermutationInvariance(t *testing.T) {
 		}
 	}
 }
+
+func TestAuditInvalidBoundaryCutoff(t *testing.T) {
+	for _, status := range []model.Status{"retired", "unreadable"} {
+		t.Run(string(status), func(t *testing.T) {
+			c := lockedClaim("c")
+			b := lockedClaim("b", "c")
+			b.Status = status
+			a := lockedClaim("a", "b")
+			s := standingStore(a, b, c)
+			recordBaseline(s, "a", b)
+			recordBaseline(s, "b", c)
+			flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{"c": {Reason: "needs review"}}}
+			claims := []model.Claim{a, b, c}
+
+			old := oracleCompute(claims, s, flags)["a"]
+			got := Compute(claims, s, flags)["a"]
+
+			if old.ReviewPending {
+				t.Fatal("baseline oracle must stop before c")
+			}
+			if got.ReviewPending {
+				t.Fatalf("review traversed non-consumable boundary: baseline=%+v candidate=%+v", old, got)
+			}
+			if got.DependencyReady {
+				t.Fatalf("a should not have dependency ready when prerequisite is %s", status)
+			}
+			if got.Ready {
+				t.Fatalf("a should not be ready when prerequisite is %s", status)
+			}
+
+			// Ensure ConditionRetiredDependency or ConditionUnreadableDependency is present on a
+			var foundCondition bool
+			for _, cond := range got.Conditions {
+				if (status == "retired" && cond.Kind == ConditionRetiredDependency) ||
+					(status == "unreadable" && cond.Kind == ConditionUnreadableDependency) {
+					foundCondition = true
+					if !reflect.DeepEqual(cond.Path, Path{"a", "b"}) {
+						t.Fatalf("expected condition path [a, b], got %v", cond.Path)
+					}
+				}
+			}
+			if !foundCondition {
+				t.Fatalf("expected condition for %s dependency on a", status)
+			}
+
+			// Ensure c's review cause is NOT inherited by a
+			for _, cause := range got.Causes {
+				if cause.DependencyID == "c" {
+					t.Fatalf("a must not inherit review cause from c behind %s prerequisite: %+v", status, cause)
+				}
+			}
+		})
+	}
+}
+
+func TestAuditInvalidBoundaryAlternateRoute(t *testing.T) {
+	for _, status := range []model.Status{"retired", "unreadable"} {
+		t.Run(string(status), func(t *testing.T) {
+			// Diamond graph:
+			// a -> b (retired/unreadable) -> c (flagged)
+			// a -> d (locked, valid)      -> c (flagged)
+			c := lockedClaim("c")
+			b := lockedClaim("b", "c")
+			b.Status = status
+			d := lockedClaim("d", "c")
+			a := lockedClaim("a", "b", "d")
+			s := standingStore(a, b, c, d)
+			recordBaseline(s, "a", b)
+			recordBaseline(s, "a", d)
+			recordBaseline(s, "b", c)
+			recordBaseline(s, "d", c)
+			flags := &reaudit.FlagStore{Flags: map[string]reaudit.PendingFlag{"c": {Reason: "needs review"}}}
+			claims := []model.Claim{a, b, c, d}
+
+			got := Compute(claims, s, flags)["a"]
+			old := oracleCompute(claims, s, flags)["a"]
+
+			if !got.ReviewPending {
+				t.Fatalf("a should have review_pending=true because c is reachable via valid route d: %+v", got)
+			}
+			if !old.ReviewPending {
+				t.Fatalf("oracle should also have review_pending=true via valid route d: %+v", old)
+			}
+			if got.DependencyReady {
+				t.Fatalf("a should not have dependency ready because b is %s", status)
+			}
+
+			// Verify the inherited review cause from c uses path [a, d, c] (not through b)
+			var foundCause bool
+			expectedPath := Path{"a", "d", "c"}
+			for _, cause := range got.Causes {
+				if cause.Kind == CauseUpstreamDependencyReview && reflect.DeepEqual(cause.Path, expectedPath) {
+					foundCause = true
+					if cause.SourceKind != CauseOwnFlag {
+						t.Fatalf("expected SourceKind own_flag, got %v", cause.SourceKind)
+					}
+				}
+			}
+			if !foundCause {
+				t.Fatalf("expected inherited review cause from c on path [a, d, c]: %+v", got.Causes)
+			}
+		})
+	}
+}
+
+func TestAuditShortestDAGWitnesses400(t *testing.T) {
+	for seed := int64(1000); seed < 1400; seed++ {
+		rng := rand.New(rand.NewSource(seed))
+		var claims []model.Claim
+		byID := map[string]model.Claim{}
+		for i := 0; i < 7; i++ {
+			c := model.Claim{ID: fmt.Sprintf("n%d", i), Status: model.StatusDraft, Body: "draft"}
+			for j := i + 1; j < 9; j++ {
+				if rng.Intn(3) == 0 {
+					c.RestsOn = append(c.RestsOn, fmt.Sprintf("n%d", j))
+				}
+			}
+			rng.Shuffle(len(c.RestsOn), func(a, b int) { c.RestsOn[a], c.RestsOn[b] = c.RestsOn[b], c.RestsOn[a] })
+			claims = append(claims, c)
+			byID[c.ID] = c
+		}
+		got := Compute(claims, nil, nil)
+		for _, root := range claims {
+			expected := map[string]Path{}
+			var walk func(Path)
+			walk = func(p Path) {
+				for _, d := range byID[p[len(p)-1]].RestsOn {
+					q := append(append(Path(nil), p...), d)
+					old := expected[d]
+					if old == nil || len(q) < len(old) || (len(q) == len(old) && auditLex(q, old)) {
+						expected[d] = q
+					}
+					if _, ok := byID[d]; ok {
+						walk(q)
+					}
+				}
+			}
+			walk(Path{root.ID})
+			actual := map[string]Path{}
+			for _, c := range got[root.ID].Conditions {
+				actual[c.DependencyID] = c.Path
+			}
+			if !reflect.DeepEqual(expected, actual) {
+				t.Fatalf("seed=%d root=%s expected=%v got=%v", seed, root.ID, expected, actual)
+			}
+		}
+		rng.Shuffle(len(claims), func(a, b int) { claims[a], claims[b] = claims[b], claims[a] })
+		for i := range claims {
+			rng.Shuffle(len(claims[i].RestsOn), func(a, b int) {
+				claims[i].RestsOn[a], claims[i].RestsOn[b] = claims[i].RestsOn[b], claims[i].RestsOn[a]
+			})
+		}
+		if !reflect.DeepEqual(got, Compute(claims, nil, nil)) {
+			t.Fatalf("seed %d: reordered edges/claims changed witnesses", seed)
+		}
+	}
+}

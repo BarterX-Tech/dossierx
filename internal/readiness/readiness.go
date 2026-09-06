@@ -179,7 +179,7 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 				sort.Strings(uDeps)
 
 				for _, depID := range uDeps {
-					_, exists := byID[depID]
+					dep, exists := byID[depID]
 					if !exists {
 						candLen := len(uPath) + 1
 						if existing, seen := bestMissing[depID]; !seen || candLen < len(existing) || (candLen == len(existing) && pathLess(uPath, existing[:len(existing)-1])) {
@@ -195,7 +195,8 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 					if prevParent, has := bestParent[depID]; !has || pathLess(paths[uID], paths[prevParent]) {
 						bestParent[depID] = uID
 					}
-					if !nextLevelSet[depID] {
+					state := dependencyState(dep)
+					if state == "" && !nextLevelSet[depID] {
 						nextLevelSet[depID] = true
 						nextLevel = append(nextLevel, depID)
 					}
@@ -235,6 +236,27 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 				continue
 			}
 			dep := byID[uID]
+			state := dependencyState(dep)
+
+			// Retired / unreadable dependency
+			if state == ConditionRetiredDependency || state == ConditionUnreadableDependency {
+				key := fmt.Sprintf("%s\x00%s", state, uID)
+				if _, exists := conditionMap[key]; !exists {
+					detail := "required dependency cannot be consumed"
+					if len(p) == 2 {
+						if state == ConditionRetiredDependency {
+							detail = "required dependency is retired"
+						} else {
+							detail = "required dependency is unreadable"
+						}
+					}
+					conditionMap[key] = DependencyCondition{
+						Kind: state, DependencyID: uID,
+						Path: appendPath(p), Detail: detail,
+					}
+				}
+				continue
+			}
 
 			// Unapproved dependency
 			if dep.Status != model.StatusLocked {
@@ -251,26 +273,6 @@ func Compute(claims []model.Claim, store *lock.Store, flags *reaudit.FlagStore) 
 					conditionMap[key] = DependencyCondition{
 						Kind: ConditionDependencyUnapproved, DependencyID: uID,
 						Path: appendPath(p), Detail: "required dependency has no valid standing approval",
-					}
-				}
-			}
-
-			// Retired / unreadable dependency
-			state := dependencyState(dep)
-			if state == ConditionRetiredDependency || state == ConditionUnreadableDependency {
-				key := fmt.Sprintf("%s\x00%s", state, uID)
-				if _, exists := conditionMap[key]; !exists {
-					detail := "required dependency cannot be consumed"
-					if len(p) == 2 {
-						if state == ConditionRetiredDependency {
-							detail = "required dependency is retired"
-						} else {
-							detail = "required dependency is unreadable"
-						}
-					}
-					conditionMap[key] = DependencyCondition{
-						Kind: state, DependencyID: uID,
-						Path: appendPath(p), Detail: detail,
 					}
 				}
 			}
