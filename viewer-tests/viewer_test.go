@@ -429,8 +429,11 @@ func TestOverlaysAreMutuallyExclusive(t *testing.T) {
 	// comes. The chip's handler itself is synchronous.
 	pollTrue(t, ctx, `document.body.classList.contains('comments-live') && !!document.querySelector('.comment-chip')`)
 
-	// Open the comment panel.
-	runCDP(t, ctx, chromedp.Click(".comment-chip", chromedp.ByQuery))
+	// Exercise the production delegated click handler without coupling this
+	// state-transition test to coordinate hit-testing after a viewport change.
+	// Hit targets have their own browser tests; here a real DOM click keeps the
+	// mutual-exclusion contract deterministic under a loaded CI runner.
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open')`)
 
 	// Opening the nav drawer closes the comment panel.
@@ -438,7 +441,7 @@ func TestOverlaysAreMutuallyExclusive(t *testing.T) {
 	pollTrue(t, ctx, `document.body.classList.contains('nav-open') && !document.body.classList.contains('comments-open')`)
 
 	// Re-opening the comment panel closes the nav drawer.
-	runCDP(t, ctx, chromedp.Click(".comment-chip", chromedp.ByQuery))
+	runCDP(t, ctx, chromedp.Evaluate(`document.querySelector('.comment-chip').click()`, nil))
 	pollTrue(t, ctx, `document.body.classList.contains('comments-open') && !document.body.classList.contains('nav-open')`)
 }
 
