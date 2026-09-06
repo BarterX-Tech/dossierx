@@ -33,7 +33,7 @@
      unshaped id does. */}}
 <section class="claim claim-tree{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
-  {{if .Body}}<pre class="claim-tree-body">{{.Body}}</pre>{{else}}<p class="claim-empty">No tree content.</p>{{end}}
-  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
-  {{edges .}}
+{{if .Body}}<pre class="claim-tree-body">{{.Body}}</pre>{{else}}<p class="claim-empty">No tree content.</p>{{end}}
+{{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
+{{edges .}}
 </section>

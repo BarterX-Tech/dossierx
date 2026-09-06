@@ -37,7 +37,7 @@
      linted module.facet.slug shape renders verbatim — see ClaimLabel. */}}
 <section class="claim claim-card card{{if .Emphasis}} claim-card--warn{{end}}{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
-  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
-  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
-  {{edges .}}
+{{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+{{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
+{{edges .}}
 </section>

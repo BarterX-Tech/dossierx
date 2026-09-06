@@ -160,6 +160,42 @@ func TestViewerRuntimeIsEngineOwnedVerbatimAndInjectedOnce(t *testing.T) {
 	}
 }
 
+func TestEngineOwnedViewerAssetsHaveNoTrailingWhitespace(t *testing.T) {
+	paths := []string{
+		"viewer/template/system-record.js",
+		"viewer/template/viewer-runtime.js",
+		"viewer/template/graph-core.js",
+		"viewer/template/graph-ui.js",
+		"viewer/template/build-order-ui.js",
+		"viewer/template/vendor/mermaid.min.js",
+	}
+	for _, path := range paths {
+		b, err := shellFS.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read embedded %s: %v", path, err)
+		}
+		for lineNo, line := range strings.Split(string(b), "\n") {
+			if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+				t.Fatalf("engine asset %s has trailing whitespace at line %d", path, lineNo+1)
+			}
+		}
+	}
+
+	// The guarded Mermaid asset is injected as its exact engine-owned bytes,
+	// once, when a locked Build order is present.
+	cfg := buildOrderTestConfig(t, "widget")
+	claims := buildOrderTestClaims("widget")
+	lockBuildOrder(t, cfg, claims, "widget")
+	out := renderClaimsFor(t, cfg, claims)
+	mermaid, err := shellFS.ReadFile(mermaidTemplatePath)
+	if err != nil {
+		t.Fatalf("read embedded Mermaid: %v", err)
+	}
+	if got := strings.Count(out, string(mermaid)); got != 1 {
+		t.Fatalf("rendered Mermaid asset count = %d, want one exact injection", got)
+	}
+}
+
 // TestGraphPayloadBlockParsesAsJSON proves the payload block's contents are
 // JSON a browser can read, not a JS string literal containing JSON.
 func TestGraphPayloadBlockParsesAsJSON(t *testing.T) {

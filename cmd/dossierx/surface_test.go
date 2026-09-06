@@ -1012,9 +1012,10 @@ func expandEmbedPattern(root, dir, pattern string) ([]string, error) {
 // byte-identical: the field whose whole job is to make every code change move
 // this document had a shipped package outside it.
 //
-// scripts/normalize-claims is the one Go package deliberately NOT here — a
-// repository maintenance tool, in nobody's binary — and the meta-test next door
-// names it as an exclusion rather than letting it be absent quietly.
+// scripts/normalize-claims and scripts/resolve-previous-release are the two Go
+// packages deliberately NOT here — standalone repository tools, in nobody's
+// binary — and the meta-test next door names both as exclusions rather than
+// letting either be absent quietly.
 var behaviourRoots = []string{"cmd", "internal", "skills"}
 
 // surfaceBehaviourFingerprint hashes every shipped package's own inputs, keyed

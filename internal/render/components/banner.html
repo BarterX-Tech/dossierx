@@ -22,6 +22,6 @@
      partials use. */}}
 <section class="claim claim-banner card" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></div>
-  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
-  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
+{{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{else}}<p class="claim-empty">No body.</p>{{end}}
+{{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
 </section>

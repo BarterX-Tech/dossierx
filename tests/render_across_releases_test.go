@@ -933,12 +933,12 @@ func reportLineText(text string) string {
 	for cut > 0 && (text[cut-1] == ' ' || text[cut-1] == '\t') {
 		cut--
 	}
-	if cut == len(text) {
+	if cut == len(text) && !strings.Contains(text, "\t") {
 		return text
 	}
 	var out strings.Builder
 	out.Grow(len(text) + len(text) - cut)
-	out.WriteString(text[:cut])
+	out.WriteString(strings.ReplaceAll(text[:cut], "\t", "⇥"))
 	for _, c := range text[cut:] {
 		switch c {
 		case ' ':
