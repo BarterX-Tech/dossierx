@@ -3023,6 +3023,15 @@ body.shell-body {
   white-space: nowrap;
 }
 
+.bo-missing-claim {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+  background: var(--paper-alt);
+  font-weight: 700;
+}
+
 .bo-phase {
   padding: 22px 0 26px;
   border-top: 1px solid var(--border);

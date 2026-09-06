@@ -34,14 +34,14 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
 
-// The three graph paths are named individually rather than embedding the
+// The graph and viewer-runtime paths are named individually rather than embedding the
 // whole directory: //go:embed resolves at COMPILE time, so a directive
 // naming a file that does not exist fails "go build" loudly. Embedding
 // viewer/template/* and reading the graph files at render time would turn
 // exactly the same mistake — a client file deleted, renamed or never
 // written — into a silently empty pane.
 //
-//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/build-order.html viewer/template/build-order-ui.js viewer/template/vendor/mermaid.min.js
+//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/build-order.html viewer/template/build-order-ui.js viewer/template/vendor/mermaid.min.js
 var shellFS embed.FS
 
 // shellFileName and styleFileName are the override-lookup names for the
@@ -57,12 +57,13 @@ var shellFS embed.FS
 // the package doc comment), so their only two uses are the embed directive
 // and the ReadFile below.
 const (
-	shellFileName        = "shell.html"
-	styleFileName        = "style.css"
-	graphCoreFileName    = "graph-core.js"
-	graphUIFileName      = "graph-ui.js"
-	graphCSSFileName     = "graph.css"
-	systemRecordFileName = "system-record.js"
+	shellFileName         = "shell.html"
+	styleFileName         = "style.css"
+	graphCoreFileName     = "graph-core.js"
+	graphUIFileName       = "graph-ui.js"
+	graphCSSFileName      = "graph.css"
+	systemRecordFileName  = "system-record.js"
+	viewerRuntimeFileName = "viewer-runtime.js"
 
 	// buildOrderFileName is the Build order tab's per-module partial. It is
 	// parsed from the embedded FS ONLY — it is not an override point (see
@@ -83,15 +84,16 @@ const (
 // reference these constants (viewer/template/ + the corresponding
 // *FileName constant) instead of repeating the path as a separate literal.
 const (
-	shellTemplatePath        = "viewer/template/" + shellFileName
-	styleTemplatePath        = "viewer/template/" + styleFileName
-	graphCoreTemplatePath    = "viewer/template/" + graphCoreFileName
-	graphUITemplatePath      = "viewer/template/" + graphUIFileName
-	graphCSSTemplatePath     = "viewer/template/" + graphCSSFileName
-	systemRecordTemplatePath = "viewer/template/" + systemRecordFileName
-	buildOrderTemplatePath   = "viewer/template/" + buildOrderFileName
-	buildOrderUITemplatePath = "viewer/template/" + buildOrderUIFileName
-	mermaidTemplatePath      = "viewer/template/" + mermaidFileName
+	shellTemplatePath         = "viewer/template/" + shellFileName
+	styleTemplatePath         = "viewer/template/" + styleFileName
+	graphCoreTemplatePath     = "viewer/template/" + graphCoreFileName
+	graphUITemplatePath       = "viewer/template/" + graphUIFileName
+	graphCSSTemplatePath      = "viewer/template/" + graphCSSFileName
+	systemRecordTemplatePath  = "viewer/template/" + systemRecordFileName
+	viewerRuntimeTemplatePath = "viewer/template/" + viewerRuntimeFileName
+	buildOrderTemplatePath    = "viewer/template/" + buildOrderFileName
+	buildOrderUITemplatePath  = "viewer/template/" + buildOrderUIFileName
+	mermaidTemplatePath       = "viewer/template/" + mermaidFileName
 )
 
 // generatedHeader returns the comment prepended to every rendered document
@@ -179,9 +181,10 @@ type shellData struct {
 	// GraphCoreJS and GraphUIJS are the pane's two script files, injected in
 	// that order (core exports the namespace ui consumes) after the shell's
 	// own inline runtime.
-	GraphCoreJS    template.JS
-	GraphUIJS      template.JS
-	SystemRecordJS template.JS
+	GraphCoreJS     template.JS
+	GraphUIJS       template.JS
+	SystemRecordJS  template.JS
+	ViewerRuntimeJS template.JS
 
 	// BuildOrders is the Build order tab: one entry per module with a LOCKED
 	// build-order artifact, in module order (see build_order_view.go). Its
@@ -435,17 +438,18 @@ func RenderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.Resolv
 	}
 
 	data := buildShellData(shellInputs{
-		cat:            cat,
-		cfg:            cfg,
-		css:            tmpl.css,
-		graphCSS:       tmpl.graphCSS,
-		graphCoreJS:    tmpl.graphCore,
-		graphUIJS:      tmpl.graphUI,
-		systemRecordJS: tmpl.systemRecord,
-		graphPayload:   graphPayload,
-		renderedByID:   renderedByID,
-		generatedAt:    generatedAt,
-		theme:          rt,
+		cat:             cat,
+		cfg:             cfg,
+		css:             tmpl.css,
+		graphCSS:        tmpl.graphCSS,
+		graphCoreJS:     tmpl.graphCore,
+		graphUIJS:       tmpl.graphUI,
+		systemRecordJS:  tmpl.systemRecord,
+		viewerRuntimeJS: tmpl.viewerRuntime,
+		graphPayload:    graphPayload,
+		renderedByID:    renderedByID,
+		generatedAt:     generatedAt,
+		theme:           rt,
 
 		buildOrders:       buildOrders,
 		buildOrderPayload: buildOrderPayload,
@@ -494,10 +498,11 @@ type loadedTemplates struct {
 	// no override branch at all — see the package doc comment. They are kept
 	// as raw []byte here and typed (template.JS / template.CSS) only at the
 	// shellData boundary, which is the one place the typing is load-bearing.
-	graphCore    []byte
-	graphUI      []byte
-	graphCSS     []byte
-	systemRecord []byte
+	graphCore     []byte
+	graphUI       []byte
+	graphCSS      []byte
+	systemRecord  []byte
+	viewerRuntime []byte
 }
 
 // loadTemplates resolves all of Render's template and CSS inputs, applying
@@ -574,6 +579,10 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", systemRecordFileName, err)
 	}
+	viewerRuntime, err := shellFS.ReadFile(viewerRuntimeTemplatePath)
+	if err != nil {
+		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", viewerRuntimeFileName, err)
+	}
 	mermaidJS, err := shellFS.ReadFile(mermaidTemplatePath)
 	if err != nil {
 		return loadedTemplates{}, fmt.Errorf("render: load %s: %w", mermaidFileName, err)
@@ -584,16 +593,17 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	}
 
 	return loadedTemplates{
-		partials:     partials,
-		css:          css,
-		shell:        shell,
-		buildOrder:   buildOrderTmpl,
-		graphCore:    graphCore,
-		graphUI:      graphUI,
-		graphCSS:     graphCSS,
-		systemRecord: systemRecord,
-		mermaidJS:    mermaidJS,
-		buildOrderUI: buildOrderUI,
+		partials:      partials,
+		css:           css,
+		shell:         shell,
+		buildOrder:    buildOrderTmpl,
+		graphCore:     graphCore,
+		graphUI:       graphUI,
+		graphCSS:      graphCSS,
+		systemRecord:  systemRecord,
+		viewerRuntime: viewerRuntime,
+		mermaidJS:     mermaidJS,
+		buildOrderUI:  buildOrderUI,
 	}, nil
 }
 
@@ -675,11 +685,12 @@ type shellInputs struct {
 	// backing the graph pane, always the engine's own copies — they carry no
 	// override branch (design section 7.2). graphPayload is the JSON graph
 	// payload for cat, already stamped and encoded by graphPayloadJSON.
-	graphCSS       []byte
-	graphCoreJS    []byte
-	graphUIJS      []byte
-	systemRecordJS []byte
-	graphPayload   template.JS
+	graphCSS        []byte
+	graphCoreJS     []byte
+	graphUIJS       []byte
+	systemRecordJS  []byte
+	viewerRuntimeJS []byte
+	graphPayload    template.JS
 
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
@@ -724,17 +735,18 @@ func buildShellData(in shellInputs) shellData {
 	}
 
 	return shellData{
-		Title:          title,
-		Eyebrow:        eyebrow,
-		CSS:            template.CSS(in.css),
-		ThemeCSS:       themeOverrideCSS(in.theme),
-		GeneratedAt:    in.generatedAt.Format("2006-01-02 15:04 UTC"),
-		GraphCSS:       template.CSS(in.graphCSS),
-		GraphPayload:   in.graphPayload,
-		GraphCoreJS:    template.JS(in.graphCoreJS),
-		GraphUIJS:      template.JS(in.graphUIJS),
-		SystemRecordJS: template.JS(in.systemRecordJS),
-		ModuleGroups:   moduleGroups,
+		Title:           title,
+		Eyebrow:         eyebrow,
+		CSS:             template.CSS(in.css),
+		ThemeCSS:        themeOverrideCSS(in.theme),
+		GeneratedAt:     in.generatedAt.Format("2006-01-02 15:04 UTC"),
+		GraphCSS:        template.CSS(in.graphCSS),
+		GraphPayload:    in.graphPayload,
+		GraphCoreJS:     template.JS(in.graphCoreJS),
+		GraphUIJS:       template.JS(in.graphUIJS),
+		SystemRecordJS:  template.JS(in.systemRecordJS),
+		ViewerRuntimeJS: template.JS(in.viewerRuntimeJS),
+		ModuleGroups:    moduleGroups,
 		// The Build order tab. Typed template.JS on the way out like the
 		// graph fields, for the same silent-failure reason.
 		BuildOrders:       in.buildOrders,

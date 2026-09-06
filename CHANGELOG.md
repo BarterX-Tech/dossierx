@@ -50,6 +50,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The v0.7.7 render comparison now marks whitespace-only context and real
   trailing-whitespace changes visibly, keeping report formatting clean without
   hiding byte-level differences.
+- Generated viewers now keep the engine runtime as a dedicated JavaScript
+  asset, preserving authored whitespace while retaining runtime comments and
+  executing the script once on both full pages and live fragments.
+- Build order now places the visible `Claim not found` status before diagrams
+  when a locked artifact outlives a catalog claim; its graph and missing-node
+  click path remain available without fabricating a claim card.
+- Release comparisons share a changelog and canonical semver tag resolver
+  across CI and render reports, with explicit baseline tags validated against
+  the automatically selected immediate predecessor.
 
 ## [0.7.7] - 2026-09-04
 

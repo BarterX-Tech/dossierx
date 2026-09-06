@@ -99,10 +99,11 @@ type buildOrderCross struct {
 }
 
 type buildOrderModuleData struct {
-	ID     string
-	Module string
-	Label  string
-	Phases []buildOrderPhaseData
+	ID                     string
+	Module                 string
+	Label                  string
+	HasMissingCatalogClaim bool
+	Phases                 []buildOrderPhaseData
 }
 
 // ---- the JSON payload ----
@@ -235,7 +236,14 @@ func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.
 
 		id := slugify(module)
 		label := components.DisplayCase(module)
-		data := buildOrderModuleData{ID: id, Module: module, Label: label}
+		hasMissingCatalogClaim := false
+		for _, claimID := range artifact.ClaimIDs() {
+			if _, ok := byID[claimID]; !ok {
+				hasMissingCatalogClaim = true
+				break
+			}
+		}
+		data := buildOrderModuleData{ID: id, Module: module, Label: label, HasMissingCatalogClaim: hasMissingCatalogClaim}
 		pm := buildOrderPayloadModule{
 			ID: id, Module: module, Label: label, LockedAt: artifact.LockedAt, Stale: artifact.Stale,
 			Artifact: artifact, Claims: map[string]buildOrderPayloadClaim{}, PhaseViews: []buildOrderPayloadView{}, NodeIDs: nodeIDs,

@@ -22,6 +22,9 @@
      package's, not a documented contract), and a project still carrying the
      old build_order.html override is refused by name in loadTemplates. */}}
 <section class="claim-group bo-module" id="dossierx-build-order-{{.ID}}" hidden>
+  {{- if .HasMissingCatalogClaim}}
+  <p class="bo-missing-claim" role="status">Claim not found</p>
+  {{- end}}
   {{- range .Phases}}
   <section class="bo-phase" data-phase="{{.Name}}" data-number="{{.Number}}" data-count="{{.Count}}" data-levels="{{.Levels}}" data-locked="{{.Locked}}">
     <header class="bo-phase__head">

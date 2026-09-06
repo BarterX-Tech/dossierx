@@ -95,6 +95,11 @@ func TestRender_BuildOrderTab_RetainsArtifactNodesWhenCatalogClaimIsMissing(t *t
 	if !strings.Contains(out, `id="dossierx-build-order-widget"`) {
 		t.Fatal("a locked artifact with a missing catalog claim must keep the Build order module")
 	}
+	messageAt := strings.Index(out, `<p class="bo-missing-claim" role="status">Claim not found</p>`)
+	phaseAt := strings.Index(out, `<section class="bo-phase"`)
+	if messageAt < 0 || phaseAt < 0 || messageAt > phaseAt {
+		t.Fatalf("missing-catalog message must be visible before the affected diagrams: message=%d phase=%d", messageAt, phaseAt)
+	}
 	if !strings.Contains(out, `data-phase="behavior"`) || !strings.Contains(out, "widget.contract.behavior") {
 		t.Fatal("the artifact's missing behavior claim must remain drawable for a click miss")
 	}
@@ -176,6 +181,9 @@ func TestRender_BuildOrderPayloadShape(t *testing.T) {
 	claims := buildOrderTestClaims(module)
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
+	if strings.Contains(out, `class="bo-missing-claim"`) {
+		t.Fatal("a sound artifact must not render a missing-catalog warning")
+	}
 
 	open := `<script type="application/json" id="dossierx-build-orders">`
 	at := strings.Index(out, open)

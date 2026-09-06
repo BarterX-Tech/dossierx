@@ -219,6 +219,30 @@ func waitDiagrams(t *testing.T, ctx context.Context, moduleID string, n int) {
 	pollTrue(t, ctx, fmt.Sprintf(`%s === %d && document.querySelectorAll('#dossierx-build-order-%s .bo-diagram pre.mermaid:not([data-processed])').length === 0`, svgCountExpr(moduleID), n, moduleID))
 }
 
+func assertBuildOrderLiveDocument(t *testing.T, ctx context.Context) {
+	t.Helper()
+	var state struct {
+		Ready, Mermaid, Payload, Section, Visible bool
+	}
+	evalInto(t, ctx, `(function(){var s=document.getElementById('dossierx-build-order');return {Ready:document.readyState==='complete',Mermaid:typeof window.mermaid==='object',Payload:!!document.getElementById('dossierx-build-orders'),Section:!!s,Visible:!!s&&!s.hidden};})()`, &state)
+	if !state.Ready || !state.Mermaid || !state.Payload || !state.Section || !state.Visible {
+		t.Fatalf("live Build order state after document-ready = %+v", state)
+	}
+}
+
+func assertMissingCatalogPresentation(t *testing.T, ctx context.Context) {
+	t.Helper()
+	var state struct {
+		Text   string
+		Before bool
+		SVGs   int
+	}
+	evalInto(t, ctx, `(function(){var m=document.querySelector('#dossierx-build-order-widget .bo-missing-claim'),p=document.querySelector('#dossierx-build-order-widget .bo-phase');return {Text:m?m.textContent:'',Before:!!m&&!!p&&!!(m.compareDocumentPosition(p)&Node.DOCUMENT_POSITION_FOLLOWING),SVGs:document.querySelectorAll('#dossierx-build-order-widget .bo-phase svg').length};})()`, &state)
+	if state.Text != "Claim not found" || !state.Before || state.SVGs != widgetSVGs {
+		t.Fatalf("missing-catalog presentation = %+v, want visible message before %d surviving diagrams", state, widgetSVGs)
+	}
+}
+
 // staticBuildOrderTab renders p statically, opens the file:// URL with the
 // error listener attached before navigation, and returns the context.
 func staticBuildOrderTab(t *testing.T, p *project) (context.Context, *pageErrors, string) {
@@ -753,9 +777,10 @@ func TestBuildOrderTabNodeClickHitAndMiss(t *testing.T) {
 	// an immediate poll races parsing/execution even though the response already
 	// contains the Build order section, payload, and scripts.
 	pollTrue(t, ctx2, `document.readyState === 'complete'`)
-	pollTrue(t, ctx2, `!!window.mermaid && !!document.getElementById('dossierx-build-orders') && !!document.getElementById('dossierx-build-order') && !document.getElementById('dossierx-build-order').hidden`)
+	assertBuildOrderLiveDocument(t, ctx2)
 	desktopViewport(t, ctx2)
 	waitDiagrams(t, ctx2, "widget", widgetSVGs)
+	assertMissingCatalogPresentation(t, ctx2)
 
 	assertMissingBuildOrderNode := func() {
 		t.Helper()
@@ -782,10 +807,20 @@ func TestBuildOrderTabNodeClickHitAndMiss(t *testing.T) {
 	// passing only because the tab was already warm.
 	runCDP(t, ctx2, chromedp.Reload())
 	pollTrue(t, ctx2, `document.readyState === 'complete'`)
-	pollTrue(t, ctx2, `!!window.mermaid && !!document.getElementById('dossierx-build-orders') && !!document.getElementById('dossierx-build-order') && !document.getElementById('dossierx-build-order').hidden`)
+	assertBuildOrderLiveDocument(t, ctx2)
 	desktopViewport(t, ctx2)
 	waitDiagrams(t, ctx2, "widget", widgetSVGs)
+	assertMissingCatalogPresentation(t, ctx2)
 	assertMissingBuildOrderNode()
+
+	// A live fragment swap must preserve the same honest missing-claim message
+	// and surviving graph. Add an unrelated claim so the swapped DOM has a
+	// deterministic witness that this was an SSE /api/fragment update.
+	p.writeClaim("single-extra.yaml", boClaim("single.contract.extra", "contract", "single", "orientation"))
+	pollTrue(t, ctx2, `!!document.getElementById('single.contract.extra')`)
+	assertBuildOrderLiveDocument(t, ctx2)
+	waitDiagrams(t, ctx2, "widget", widgetSVGs)
+	assertMissingCatalogPresentation(t, ctx2)
 	assertNoPageErrors(t, ctx2, pe2)
 }
 

@@ -138,6 +138,28 @@ func TestGraphClientFilesReachTheDocumentVerbatim(t *testing.T) {
 	}
 }
 
+func TestViewerRuntimeIsEngineOwnedVerbatimAndInjectedOnce(t *testing.T) {
+	doc := graphRenderedDoc(t)
+	if got := strings.Count(doc, "Navigation lookup maps + view state"); got != 1 {
+		t.Fatalf("viewer runtime witness count = %d, want one script", got)
+	}
+	if !strings.Contains(doc, "Initial render. This script tag sits at the end of <body>") {
+		t.Fatal("viewer runtime comments were stripped from generated output")
+	}
+	witness := strings.Index(doc, "Navigation lookup maps + view state")
+	start := strings.LastIndex(doc[:witness], "<script>")
+	end := strings.Index(doc[start+len("<script>"):], "</script>")
+	if start < 0 || end < 0 {
+		t.Fatal("viewer runtime script block is missing")
+	}
+	runtime := doc[start+len("<script>") : start+len("<script>")+end]
+	for n, line := range strings.Split(runtime, "\n") {
+		if strings.HasSuffix(line, " ") {
+			t.Fatalf("generated viewer runtime line %d has a new trailing space", n+1)
+		}
+	}
+}
+
 // TestGraphPayloadBlockParsesAsJSON proves the payload block's contents are
 // JSON a browser can read, not a JS string literal containing JSON.
 func TestGraphPayloadBlockParsesAsJSON(t *testing.T) {
