@@ -137,10 +137,13 @@
 # that holds nothing locked is not a finding, because its next lock crosses the
 # store onto the ledger schema by itself — and records a real approval doing it.
 #
-# There is no migration command any more. v0.4.0 removed `dossierx migrate`
-# outright, because adoption is the one operation that manufactures approval out
-# of nothing, and no evidence inside a repository distinguishes an honest
-# pre-ledger store from a downgraded one. So if you are upgrading a project that
+# There is no **ledger** migration command any more. v0.4.0 removed `dossierx
+# migrate` outright, because ledger adoption would manufacture approval out of
+# nothing, and no evidence inside a repository distinguishes an honest pre-ledger
+# store from a downgraded one. `dossierx claim migrate-lock-policy --reason "..."`
+# is separate: it adopts policy v1 only after the ledger crossing, and preserves
+# existing approval records, baselines, receipts, and pending review state. So if
+# you are upgrading a project that
 # locked claims before v0.3.0, this job will fail until you do this ONCE,
 # locally, at a keyboard, IN THIS ORDER. Decide per module, before the first
 # command, whether you will re-lock every claim in it: a build order exists
@@ -151,7 +154,8 @@
 #
 #   dossierx build-order propose --module <m>    # every LOCKED build order, re-proposed
 #   dossierx claim unlock <id> --reason "..."    # every locked claim
-#   dossierx claim lock   <id> --reason "..."    # re-lock only what you still stand
+#   dossierx claim lock   <id> --dry-run          # review the exact draft first
+#   dossierx claim lock   <id> --reason "..." --proposal "<snapshot>"    # re-lock only what you still stand
 #                                                # behind; the first lock in a project
 #                                                # holding nothing locked is what
 #                                                # crosses the store onto the ledger
@@ -204,7 +208,7 @@ jobs:
       # you adopt on purpose, in a commit someone reviewed — not something that
       # arrives on a Tuesday and starts failing everyone's builds.
       - name: Install dossierx
-        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.7
+        run: go install github.com/BarterX-Tech/dossierx/cmd/dossierx@v0.7.8
 
       # The full pipeline: lint, catalog, render, and the lock-ledger gate.
       # --format text because the audience here is a human reading a failed

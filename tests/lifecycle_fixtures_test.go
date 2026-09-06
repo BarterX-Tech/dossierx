@@ -100,7 +100,7 @@ func TestLifecycle_DoctrineGateFixture(t *testing.T) {
 
 	// Hub still draft: locking the child (which mirrors the hub) must be
 	// refused by hub-gating, mentioning the doctrine facet.
-	_, stderr, code := run(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture")
+	_, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture")
 	if code == 0 {
 		t.Fatalf("expected lock of child to be refused while doctrine hub is still draft")
 	}
@@ -112,13 +112,13 @@ func TestLifecycle_DoctrineGateFixture(t *testing.T) {
 	}
 
 	// Lock the hub, then the child locks successfully.
-	if _, stderr, code := run(t, root, "claim", "lock", "dgatemod.doctrine.hub", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.doctrine.hub", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("expected hub to lock successfully: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, hubPath), "status: locked") {
 		t.Fatalf("expected hub to be locked on disk")
 	}
-	if _, stderr, code := run(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "dgatemod.contract.child", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("expected child lock to succeed once hub is locked: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, childPath), "status: locked") {
@@ -135,7 +135,7 @@ func TestLifecycle_UndeclaredFacetFixture(t *testing.T) {
 	dir := filepath.Join(lifecycleFixturesRoot(t), "undeclared-facet")
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 
-	stdout, stderr, code := run(t, dir, "--config", cfgPath, "check", "--validate")
+	stdout, stderr, code := reviewedRun(t, dir, "--config", cfgPath, "check", "--validate")
 	if code == 0 {
 		t.Fatalf("expected non-zero exit for a claim whose facet is not declared in config.facets, got 0 (stdout: %s)", stdout)
 	}
@@ -154,7 +154,7 @@ func TestLifecycle_EmptyClaimsFixture(t *testing.T) {
 	dir := filepath.Join(lifecycleFixturesRoot(t), "empty-claims")
 	cfgPath := filepath.Join(dir, "project.config.yaml")
 
-	stdout, stderr, code := run(t, dir, "--config", cfgPath, "check", "--validate")
+	stdout, stderr, code := reviewedRun(t, dir, "--config", cfgPath, "check", "--validate")
 	if code != 0 {
 		t.Fatalf("expected exit 0 for an empty claims_dir, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -175,10 +175,10 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 	root := t.TempDir()
 	aPath, bPath := writeRestOnLockedFixture(t, root, "lifecycledriftmod")
 
-	if _, stderr, code := run(t, root, "claim", "lock", "lifecycledriftmod.contract.a", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "lifecycledriftmod.contract.a", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock A: %s", stderr)
 	}
-	if _, stderr, code := run(t, root, "claim", "lock", "lifecycledriftmod.contract.b", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "lifecycledriftmod.contract.b", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock B: %s", stderr)
 	}
 
@@ -196,7 +196,7 @@ func TestLifecycle_DependencyDriftFlipsReviewPending(t *testing.T) {
 	// rather than tampering and this test keeps measuring dependency drift.
 	armLedger(t, root)
 
-	if _, stderr, code := run(t, root, "check"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "check"); code != 0 {
 		t.Fatalf("check: %s", stderr)
 	}
 
@@ -225,7 +225,7 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 		body: "the claim's original, soon-to-be-flagged assertion.",
 	})
 
-	if _, stderr, code := run(t, root, "claim", "lock", "flagmod.contract.a", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "flagmod.contract.a", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock: %s", stderr)
 	}
 	if !strings.Contains(llReadFile(t, claimPath), "status: locked") {
@@ -234,7 +234,7 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 
 	claimSays := "OLD: legacy assumption text"
 	nowDoes := "NEW: corrected fact text"
-	_, stderr, code := run(t, root, "claim", "flag", "flagmod.contract.a",
+	_, stderr, code := reviewedRun(t, root, "claim", "flag", "flagmod.contract.a",
 		"--claim-says", claimSays,
 		"--now-does", nowDoes,
 		"--reason", "corrected during code review",
@@ -251,7 +251,7 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 		t.Fatalf("expected \"dossierx flag\" to set review_pending: true, got:\n%s", afterFlag)
 	}
 
-	staleOut, staleErr, staleCode := run(t, root, "claim", "list", "--review-pending")
+	staleOut, staleErr, staleCode := reviewedRun(t, root, "claim", "list", "--review-pending")
 	if staleCode != 0 {
 		t.Fatalf("stale: %s", staleErr)
 	}
@@ -261,7 +261,7 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 
 	// "dossierx claim reaudit" (propose-only, no --confirm) must produce a real diff
 	// sourced from the flag -- not ProposeDiff's dependency-diff stub.
-	reauditOut, reauditErr, reauditCode := run(t, root, "claim", "reaudit", "flagmod.contract.a")
+	reauditOut, reauditErr, reauditCode := reviewedRun(t, root, "claim", "reaudit", "flagmod.contract.a")
 	if reauditCode != 0 {
 		t.Fatalf("reaudit: %s", reauditErr)
 	}
@@ -288,7 +288,7 @@ func TestLifecycle_DocsFlagTriggersReviewPendingWithRealDiff(t *testing.T) {
 
 	// Now confirm it, and check the flag's now-does text actually lands as
 	// the claim's new body, review_pending clears, and status stays locked.
-	confirmOut, confirmErr, confirmCode := run(t, root, "claim", "reaudit", "flagmod.contract.a", "--confirm", "--reason", "test fixture")
+	confirmOut, confirmErr, confirmCode := reviewedRun(t, root, "claim", "reaudit", "flagmod.contract.a", "--confirm", "--reason", "test fixture")
 	if confirmCode != 0 {
 		t.Fatalf("confirmed reaudit: %s", confirmErr)
 	}

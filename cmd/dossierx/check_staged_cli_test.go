@@ -58,7 +58,7 @@ func stagedProject(t *testing.T) (cfgPath, root, claimPath string) {
 	if err := os.WriteFile(claimPath, []byte(src), 0o644); err != nil {
 		t.Fatalf("write claim: %v", err)
 	}
-	if _, stderr, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "approved in review"); err != nil {
+	if _, stderr, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "approved in review"); err != nil {
 		t.Fatalf("lock: %v (stderr=%s)", err, stderr)
 	}
 
@@ -77,7 +77,7 @@ func TestCLI_CheckStaged_LeavesGitStatusByteIdentical(t *testing.T) {
 	cfgPath, root, _ := stagedProject(t)
 
 	before := stagedGit(t, root, "status", "--porcelain")
-	if _, stderr, err := execCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
+	if _, stderr, err := execReviewedCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
 		t.Fatalf("check --staged: %v (stderr=%s)", err, stderr)
 	}
 	after := stagedGit(t, root, "status", "--porcelain")
@@ -112,13 +112,13 @@ func TestCLI_CheckStaged_VerdictFollowsTheIndex(t *testing.T) {
 	}
 
 	// Worktree tampered, index clean: the commit is fine.
-	if out, stderr, err := execCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
+	if out, stderr, err := execReviewedCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
 		t.Fatalf("a tampered WORKTREE with a clean index must pass: %v\nstdout:%s\nstderr:%s", err, out, stderr)
 	}
 
 	// Stage the tamper: refused, with the stable integrity code.
 	stagedGit(t, root, "add", "claims/one.yaml")
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--staged")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--staged")
 	if err == nil {
 		t.Fatalf("staging a tampered locked claim must be refused")
 	}
@@ -128,7 +128,7 @@ func TestCLI_CheckStaged_VerdictFollowsTheIndex(t *testing.T) {
 	if env.StoppedAt != "ledger" {
 		t.Fatalf("expected stopped_at=ledger, got %q", env.StoppedAt)
 	}
-	out, _, _ := execCLI(t, "--config", cfgPath, "check", "--staged") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
+	out, _, _ := execReviewedCLI(t, "--config", cfgPath, "check", "--staged") //nolint:errcheck // the command under test is EXPECTED to fail; the envelope it still emits is the assertion
 	if !strings.Contains(out, "lock-content-drift") {
 		t.Fatalf("expected the finding's rule name in the terminal block, got:\n%s", out)
 	}
@@ -147,12 +147,12 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 	if err := os.WriteFile(second, []byte(src), 0o644); err != nil {
 		t.Fatalf("write second claim: %v", err)
 	}
-	if _, stderr, err := execCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved"); err != nil {
+	if _, stderr, err := execReviewedCLI(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved"); err != nil {
 		t.Fatalf("lock second: %v (stderr=%s)", err, stderr)
 	}
 
 	stagedGit(t, root, "add", "claims/two.yaml") // the ledger update stays unstaged
-	out, _, err := execCLI(t, "--config", cfgPath, "check", "--staged")
+	out, _, err := execReviewedCLI(t, "--config", cfgPath, "check", "--staged")
 	if err == nil {
 		t.Fatalf("a locked claim staged without its approval record must be refused, got:\n%s", out)
 	}
@@ -169,7 +169,7 @@ func TestCLI_CheckStaged_RefusesAClaimCommittedWithoutItsApproval(t *testing.T) 
 	// stores for exactly this reason, so staging one of them is the fixture being
 	// out of date, not the gate being strict.
 	stagedGit(t, root, "add", "build/ledger/lock-store.json", "build/ledger/comment-digest.json")
-	if out, stderr, err := execCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
+	if out, stderr, err := execReviewedCLI(t, "--config", cfgPath, "check", "--staged"); err != nil {
 		t.Fatalf("claim + approval staged together must pass: %v\nstdout:%s\nstderr:%s", err, out, stderr)
 	}
 }
@@ -195,7 +195,7 @@ func TestCLI_CheckStaged_OutsideAWorkTreeWarnsAndSucceeds(t *testing.T) {
 		t.Fatalf("write claim: %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--staged")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--staged")
 	if err != nil {
 		t.Fatalf("expected exit 0 outside a work tree, got %v", err)
 	}
@@ -219,7 +219,7 @@ func TestCLI_CheckStaged_OutsideAWorkTreeWarnsAndSucceeds(t *testing.T) {
 // validated something other than what it validated.
 func TestCLI_CheckStaged_RefusesToCombineWithValidate(t *testing.T) {
 	cfgPath, _, _ := stagedProject(t)
-	_, _, err := execCLI(t, "--config", cfgPath, "check", "--staged", "--validate")
+	_, _, err := execReviewedCLI(t, "--config", cfgPath, "check", "--staged", "--validate")
 	if err == nil {
 		t.Fatalf("expected --staged --validate to be refused")
 	}

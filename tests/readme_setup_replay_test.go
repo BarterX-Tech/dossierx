@@ -288,7 +288,7 @@ func replayPasteBlock(t *testing.T, module string, sayYes bool) string {
 	// STEP 1 — install the binary, then run `dossierx version`. The install is
 	// the substituted half (see the package comment: binPath is built from this
 	// tree by TestMain); the version invocation the step also demands is real.
-	if _, stderr, code := run(t, consumer, "version"); code != 0 {
+	if _, stderr, code := reviewedRun(t, consumer, "version"); code != 0 {
 		t.Fatalf("step 1's `dossierx version` exited %d: %s", code, stderr)
 	}
 
@@ -314,7 +314,7 @@ func replayPasteBlock(t *testing.T, module string, sayYes bool) string {
 		switch {
 		case exportRE.MatchString(step):
 			dir := exportRE.FindStringSubmatch(step)[1]
-			if _, stderr, code := run(t, consumer, "skills", "export", dir); code != 0 {
+			if _, stderr, code := reviewedRun(t, consumer, "skills", "export", dir); code != 0 {
 				t.Fatalf("step %d's `dossierx skills export %s` exited %d: %s", n, dir, code, stderr)
 			}
 			sawExport = true
@@ -352,7 +352,7 @@ func replayPasteBlock(t *testing.T, module string, sayYes bool) string {
 
 	// STEP 6 — `dossierx check --format text`, exiting 0, shown rather than
 	// asserted by the agent. (run() itself passes --format text.)
-	if stdout, stderr, code := run(t, consumer, "check"); code != 0 {
+	if stdout, stderr, code := reviewedRun(t, consumer, "check"); code != 0 {
 		t.Fatalf("step 6's `dossierx check --format text` exited %d over the project the block's own steps produced:\n%s%s", code, stdout, stderr)
 	}
 
@@ -546,7 +546,7 @@ func TestREADME_DigestStoreCommitTimingMatchesTheEngine(t *testing.T) {
 	gitInConsumer(t, root, "commit", "-m", "project setup, nothing locked")
 
 	// The first lock in the project. Nobody has commented, and nobody will.
-	if _, stderr, code := run(t, root, "claim", "lock", "digesttm.contract.overview", "--reason", "digest-timing fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "digesttm.contract.overview", "--reason", "digest-timing fixture"); code != 0 {
 		t.Fatalf("claim lock exited %d: %s", code, stderr)
 	}
 
@@ -564,7 +564,7 @@ func TestREADME_DigestStoreCommitTimingMatchesTheEngine(t *testing.T) {
 	// digest waits for a comment that has not happened. Stage exactly that.
 	gitInConsumer(t, root, "add", "claims", "build/ledger/lock-store.json")
 
-	stdout, _, code := run(t, root, "check", "--staged", "--format", "json")
+	stdout, _, code := reviewedRun(t, root, "check", "--staged", "--format", "json")
 	var envelope struct {
 		OK   bool `json:"ok"`
 		Data struct {

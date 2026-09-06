@@ -120,7 +120,7 @@ func TestPreLedgerCrossing_PartialRelockThenBuildOrders(t *testing.T) {
 	// behind" — the human stands behind one claim of two. The first lock in a
 	// project holding nothing locked is what crosses the store; the fence says
 	// so, and this lock is it.
-	step3 := f.Run("dossierx claim lock <idA> --reason <words>",
+	step3 := f.RunReviewedLock("dossierx claim lock <idA> --reason <words>",
 		map[string]string{"idA": defaultClaimID, "words": "still standing behind this one"})
 	f.DocumentedSuccess(step3, "crossing step 3: the first re-lock, which stamps the store onto the ledger")
 
@@ -142,7 +142,7 @@ func TestPreLedgerCrossing_PartialRelockThenBuildOrders(t *testing.T) {
 	// The lock is the documented trigger, and the deferred step 4 must then
 	// succeed exactly as written, or the licensed branch still has no reachable
 	// way back to a locked build order.
-	lockLast := f.Run("dossierx claim lock <idB> --reason <words>",
+	lockLast := f.RunReviewedLock("dossierx claim lock <idB> --reason <words>",
 		map[string]string{"idB": "widget.contract.alpha", "words": "now standing behind this one too"})
 	f.DocumentedSuccess(lockLast, "the day the module's last claim locks — the fence's trigger for the deferred step 4")
 
@@ -186,10 +186,10 @@ func TestPreLedgerCrossing_FullRelockStaysGreen(t *testing.T) {
 		map[string]string{"idB": "widget.contract.alpha", "words": "crossing: releasing the pre-ledger approval"})
 	f.DocumentedSuccess(u2, "crossing step 2")
 
-	l1 := f.Run("dossierx claim lock <idA> --reason <words>",
+	l1 := f.RunReviewedLock("dossierx claim lock <idA> --reason <words>",
 		map[string]string{"idA": defaultClaimID, "words": "still standing behind this one"})
 	f.DocumentedSuccess(l1, "crossing step 3: the first re-lock crosses the store")
-	l2 := f.Run("dossierx claim lock <idB> --reason <words>",
+	l2 := f.RunReviewedLock("dossierx claim lock <idB> --reason <words>",
 		map[string]string{"idB": "widget.contract.alpha", "words": "still standing behind this one too"})
 	f.DocumentedSuccess(l2, "crossing step 3: the second re-lock")
 

@@ -81,6 +81,36 @@ func TestRender_BuildOrderTab_SkipsAModuleWhoseArtifactDoesNotLoad(t *testing.T)
 	}
 }
 
+// TestRender_BuildOrderTab_RetainsArtifactNodesWhenCatalogClaimIsMissing
+// pins the stale-but-readable path: the locked artifact still supplies the
+// node and Mermaid diagram, while the current catalog controls claim-card
+// payload entries and therefore leaves the deleted claim as a client-side
+// miss.
+func TestRender_BuildOrderTab_RetainsArtifactNodesWhenCatalogClaimIsMissing(t *testing.T) {
+	cfg := buildOrderTestConfig(t, "widget")
+	claims := buildOrderTestClaims("widget")
+	lockBuildOrder(t, cfg, claims, "widget")
+
+	out := renderClaimsFor(t, cfg, claims[:1])
+	if !strings.Contains(out, `id="dossierx-build-order-widget"`) {
+		t.Fatal("a locked artifact with a missing catalog claim must keep the Build order module")
+	}
+	messageAt := strings.Index(out, `<p class="bo-missing-claim" role="status">Claim not found</p>`)
+	phaseAt := strings.Index(out, `<section class="bo-phase"`)
+	if messageAt < 0 || phaseAt < 0 || messageAt > phaseAt {
+		t.Fatalf("missing-catalog message must be visible before the affected diagrams: message=%d phase=%d", messageAt, phaseAt)
+	}
+	if !strings.Contains(out, `data-phase="behavior"`) || !strings.Contains(out, "widget.contract.behavior") {
+		t.Fatal("the artifact's missing behavior claim must remain drawable for a click miss")
+	}
+	if !strings.Contains(out, `id="dossierx-build-orders"`) || !strings.Contains(out, "__esbuild_esm_mermaid_nm") {
+		t.Fatal("the retained module must keep the Mermaid payload and scripts")
+	}
+	if strings.Contains(out, `"widget.contract.behavior":{"facet"`) {
+		t.Fatal("the missing catalog claim must not gain a fabricated claim-card payload entry")
+	}
+}
+
 // TestRender_BuildOrderTab_SkipsAnArtifactThatContradictsThePhasesAndWarns
 // pins the other half: a hand-edited locked artifact whose stored edges
 // name a later phase costs THAT module its tab entry — never drawn (a
@@ -151,6 +181,9 @@ func TestRender_BuildOrderPayloadShape(t *testing.T) {
 	claims := buildOrderTestClaims(module)
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
+	if strings.Contains(out, `class="bo-missing-claim"`) {
+		t.Fatal("a sound artifact must not render a missing-catalog warning")
+	}
 
 	open := `<script type="application/json" id="dossierx-build-orders">`
 	at := strings.Index(out, open)

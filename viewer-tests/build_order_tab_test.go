@@ -219,6 +219,30 @@ func waitDiagrams(t *testing.T, ctx context.Context, moduleID string, n int) {
 	pollTrue(t, ctx, fmt.Sprintf(`%s === %d && document.querySelectorAll('#dossierx-build-order-%s .bo-diagram pre.mermaid:not([data-processed])').length === 0`, svgCountExpr(moduleID), n, moduleID))
 }
 
+func assertBuildOrderLiveDocument(t *testing.T, ctx context.Context) {
+	t.Helper()
+	var state struct {
+		Ready, Mermaid, Payload, Section, Visible bool
+	}
+	evalInto(t, ctx, `(function(){var s=document.getElementById('dossierx-build-order');return {Ready:document.readyState==='complete',Mermaid:typeof window.mermaid==='object',Payload:!!document.getElementById('dossierx-build-orders'),Section:!!s,Visible:!!s&&!s.hidden};})()`, &state)
+	if !state.Ready || !state.Mermaid || !state.Payload || !state.Section || !state.Visible {
+		t.Fatalf("live Build order state after document-ready = %+v", state)
+	}
+}
+
+func assertMissingCatalogPresentation(t *testing.T, ctx context.Context) {
+	t.Helper()
+	var state struct {
+		Text   string
+		Before bool
+		SVGs   int
+	}
+	evalInto(t, ctx, `(function(){var m=document.querySelector('#dossierx-build-order-widget .bo-missing-claim'),p=document.querySelector('#dossierx-build-order-widget .bo-phase');return {Text:m?m.textContent:'',Before:!!m&&!!p&&!!(m.compareDocumentPosition(p)&Node.DOCUMENT_POSITION_FOLLOWING),SVGs:document.querySelectorAll('#dossierx-build-order-widget .bo-phase svg').length};})()`, &state)
+	if state.Text != "Claim not found" || !state.Before || state.SVGs != widgetSVGs {
+		t.Fatalf("missing-catalog presentation = %+v, want visible message before %d surviving diagrams", state, widgetSVGs)
+	}
+}
+
 // staticBuildOrderTab renders p statically, opens the file:// URL with the
 // error listener attached before navigation, and returns the context.
 func staticBuildOrderTab(t *testing.T, p *project) (context.Context, *pageErrors, string) {
@@ -740,25 +764,63 @@ func TestBuildOrderTabNodeClickHitAndMiss(t *testing.T) {
 	base := p.ensureServe()
 	ctx2 := browserContext(t)
 	pe2 := watchPageErrors(t, ctx2)
+	requests2 := watchRequests(t, ctx2)
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("live Build order document requests: %v", requests2.fromDocument(base+"/"))
+			t.Logf("live Build order page errors: %v", pe2.snapshot())
+		}
+	})
 	runCDP(t, ctx2, chromedp.Navigate(base+"/#dossierx-build-order-widget"))
-	pollTrue(t, ctx2, `!!window.mermaid`)
+	// The served document carries a multi-megabyte Mermaid bundle inline. Wait
+	// for the browser's document-ready boundary before observing its exports;
+	// an immediate poll races parsing/execution even though the response already
+	// contains the Build order section, payload, and scripts.
+	pollTrue(t, ctx2, `document.readyState === 'complete'`)
+	assertBuildOrderLiveDocument(t, ctx2)
 	desktopViewport(t, ctx2)
 	waitDiagrams(t, ctx2, "widget", widgetSVGs)
+	assertMissingCatalogPresentation(t, ctx2)
+
+	assertMissingBuildOrderNode := func() {
+		t.Helper()
+		if !dispatchNodeClick(t, ctx2, `#dossierx-build-order-widget .bo-phase[data-phase="api"] g.node.draft_con`) {
+			t.Fatal("no draft_con node in the api block: a claim gone from the catalog must still draw, as not locked")
+		}
+		pollTrue(t, ctx2, `!!document.querySelector('#dossierx-build-order-widget .bo-phase[data-phase="api"] g.node.bo-missing')`)
+		if got := evalString(t, ctx2, `window.location.hash`); got != "#dossierx-build-order-widget" {
+			t.Fatalf("a miss changed the hash to %q", got)
+		}
+		if evalBool(t, ctx2, `document.getElementById('dossierx-build-order').hidden`) {
+			t.Fatal("a miss switched module")
+		}
+		if got := evalString(t, ctx2, `document.querySelector('#dossierx-build-order-widget .bo-phase[data-phase="api"] g.node.bo-missing').getAttribute('title')`); !strings.Contains(got, "no longer in the catalog") {
+			t.Errorf("miss title = %q", got)
+		}
+	}
 	// The api claim is gone from the catalog: its node draws (the artifact
 	// still lists it) as not locked, and clicking it is a miss.
-	if !dispatchNodeClick(t, ctx2, `#dossierx-build-order-widget .bo-phase[data-phase="api"] g.node.draft_con`) {
-		t.Fatal("no draft_con node in the api block: a claim gone from the catalog must still draw, as not locked")
-	}
-	pollTrue(t, ctx2, `!!document.querySelector('#dossierx-build-order-widget .bo-phase[data-phase="api"] g.node.bo-missing')`)
-	if got := evalString(t, ctx2, `window.location.hash`); got != "#dossierx-build-order-widget" {
-		t.Fatalf("a miss changed the hash to %q", got)
-	}
-	if evalBool(t, ctx2, `document.getElementById('dossierx-build-order').hidden`) {
-		t.Fatal("a miss switched module")
-	}
-	if got := evalString(t, ctx2, `document.querySelector('#dossierx-build-order-widget .bo-phase[data-phase="api"] g.node.bo-missing').getAttribute('title')`); !strings.Contains(got, "no longer in the catalog") {
-		t.Errorf("miss title = %q", got)
-	}
+	assertMissingBuildOrderNode()
+
+	// A real refresh must preserve the same complete document contract and the
+	// same honest miss behavior; otherwise the first-load assertion could be
+	// passing only because the tab was already warm.
+	runCDP(t, ctx2, chromedp.Reload())
+	pollTrue(t, ctx2, `document.readyState === 'complete'`)
+	assertBuildOrderLiveDocument(t, ctx2)
+	desktopViewport(t, ctx2)
+	waitDiagrams(t, ctx2, "widget", widgetSVGs)
+	assertMissingCatalogPresentation(t, ctx2)
+	assertMissingBuildOrderNode()
+
+	// A live fragment swap must preserve the same honest missing-claim message
+	// and surviving graph. Add an unrelated claim so the swapped DOM has a
+	// deterministic witness that this was an SSE /api/fragment update.
+	p.writeClaim("single-extra.yaml", boClaim("single.contract.extra", "contract", "single", "orientation"))
+	pollTrue(t, ctx2, `!!document.getElementById('single.contract.extra')`)
+	assertBuildOrderLiveDocument(t, ctx2)
+	waitDiagrams(t, ctx2, "widget", widgetSVGs)
+	assertMissingCatalogPresentation(t, ctx2)
 	assertNoPageErrors(t, ctx2, pe2)
 }
 

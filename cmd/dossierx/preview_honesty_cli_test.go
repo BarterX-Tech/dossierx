@@ -28,7 +28,7 @@ import (
 func TestServeFailureEmitsAnEnvelope(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nowhere", "project.config.yaml")
 
-	env, _, err := execCLIJSON(t, "--config", missing, "serve")
+	env, _, err := execReviewedCLIJSON(t, "--config", missing, "serve")
 	if err == nil {
 		t.Fatalf("serve must fail when its config does not exist")
 	}
@@ -49,7 +49,7 @@ func TestServeFailureEmitsAnEnvelope(t *testing.T) {
 func TestServeFailureUnderTextIsUnchanged(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "nowhere", "project.config.yaml")
 
-	stdout, stderr, err := execCLI(t, "--config", missing, "serve")
+	stdout, stderr, err := execReviewedCLI(t, "--config", missing, "serve")
 	if err == nil {
 		t.Fatalf("serve must fail when its config does not exist")
 	}
@@ -75,7 +75,7 @@ func TestClaimNewInTheOverviewFacetIsLintClean(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.router",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.router",
 		"--body", "read the contract claims below in order.",
 		"--governed-reason", "an orientation note is not backed by doctrine")
 	if err != nil {
@@ -98,7 +98,7 @@ func TestClaimNewInTheOverviewFacetIsLintClean(t *testing.T) {
 	if !strings.Contains(string(written), "layout: banner") {
 		t.Fatalf("the written claim must carry the banner layout:\n%s", written)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
 		t.Fatalf("the project must still validate after claim new: %v", err)
 	}
 }
@@ -111,7 +111,7 @@ func TestClaimNewHonoursAnExplicitLayoutInTheOverviewFacet(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _ := icWriteFixtureProject(t, root, "widget")
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.explicit",
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "new", "widget.overview.explicit",
 		"--layout", "card",
 		"--body", "deliberately not a banner.",
 		"--governed-reason", "fixture")
@@ -155,7 +155,7 @@ func TestValidateTextPrintsLedgerFindingsAlongsideLintErrors(t *testing.T) {
 		t.Fatalf("write broken claim: %v", err)
 	}
 
-	out, _, err := execCLI(t, "--config", cfgPath, "check", "--validate")
+	out, _, err := execReviewedCLI(t, "--config", cfgPath, "check", "--validate")
 	if err == nil {
 		t.Fatalf("a project with a lint error and a tampered locked claim must fail")
 	}
@@ -200,7 +200,7 @@ func TestDryRunDetailsDescribeTheVerdictTheyStandNextTo(t *testing.T) {
 
 	// claim flag, on a locked body-only claim: claim_is_body_only passes, and its
 	// detail must not read as the structured-layout refusal.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
 		t.Fatalf("lock: %v", err)
 	}
 	dr = dryRunOf(t, "--config", cfgPath, "claim", "flag", "widget.contract.overview",

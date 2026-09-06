@@ -12,6 +12,19 @@
           "type": "none",
           "reason": "fixture claim, not backed by any real doctrine"
         }
+      },
+      "readiness": {
+        "claim_id": "widget.contract.overview",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     },
     {
@@ -29,6 +42,41 @@
           "type": "none",
           "reason": "fixture claim, not backed by any real doctrine"
         }
+      },
+      "readiness": {
+        "claim_id": "widget.internals.fields",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": false,
+        "ready": false,
+        "review_pending": false,
+        "dependency_conditions": [
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "widget.contract.overview",
+            "path": [
+              "widget.internals.fields",
+              "widget.contract.overview"
+            ],
+            "detail": "required dependency is not locally approved"
+          }
+        ],
+        "conditions": [
+          {
+            "kind": "dependency_unapproved",
+            "dependency_id": "widget.contract.overview",
+            "path": [
+              "widget.internals.fields",
+              "widget.contract.overview"
+            ],
+            "detail": "required dependency is not locally approved"
+          }
+        ],
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
       }
     }
   ],

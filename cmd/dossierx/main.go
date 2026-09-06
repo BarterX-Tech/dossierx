@@ -165,10 +165,10 @@ func newRootCmd() *cobra.Command {
 		}
 	}
 
-	// The whole surface: nine nouns, twenty-five leaves, and not one more.
+	// The whole surface: nine nouns, twenty-six leaves, and not one more.
 	//
 	//	check                                                            1
-	//	claim   show list new lock unlock flag reaudit link               8
+	//	claim   show list new lock unlock flag reaudit link migrate-lock-policy 9
 	//	comment inbox list add reply                                      4
 	//	build-order propose status lock show                              4
 	//	track   list show status                                          3
@@ -182,7 +182,7 @@ func newRootCmd() *cobra.Command {
 	// implink set/status, comment edit/delete/resolve/reopen) were either
 	// pipeline stages of check, filters wearing a verb's clothes, or — for the
 	// four comment verbs — surfaces that belong where the rights holder is.
-	// TestSurfaceIsTwentyFiveLeavesUnderNineNouns in main_test.go pins it, so
+	// TestSurfaceIsTwentySixLeavesUnderNineNouns in main_test.go pins it, so
 	// adding a leaf is a decision someone has to make on purpose.
 	//
 	// "track" is the eighth noun, and it was the first addition since v0.3.0
@@ -253,7 +253,7 @@ func newRootCmd() *cobra.Command {
 	// The GROUP itself gets the same requireSubcommand treatment as the product's
 	// own nouns, because bare "dossierx completion" is the identical hole: cobra
 	// prints help prose on stdout and exits 0, so an agent that assembled the
-	// wrong argv is told it succeeded. TestSurfaceIsTwentyFiveLeavesUnderNineNouns
+	// wrong argv is told it succeeded. TestSurfaceIsTwentySixLeavesUnderNineNouns
 	// already skips "completion" as framework furniture, so materializing it
 	// early does not change the pinned surface.
 	root.InitDefaultCompletionCmd()
@@ -2267,11 +2267,17 @@ func lockDryRun(claim model.Claim, claims []model.Claim, cfg *config.Config, rea
 func newLockCmd() *cobra.Command {
 	var reason string
 	var dryRun bool
+	var proposal string
+	var semanticConflict []string
 	cmd := &cobra.Command{
 		Use:   "lock <id> [id...]",
 		Short: "Lock one or more draft claims (refused if lint fails); --reason records the human approval it executes",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: envelopeRunE(func(cmd *cobra.Command, args []string) (cmdResult, error) {
+			conflicts, err := parseSemanticConflicts(semanticConflict)
+			if err != nil {
+				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest, "lock: %w", err)
+			}
 			// --dry-run answers a question; it never writes and never takes a
 			// sentinel, so it runs entirely off a plain read here, before the
 			// write path below is entered at all. It previews exactly ONE
@@ -2282,17 +2288,18 @@ func newLockCmd() *cobra.Command {
 			// single-claim shape or require a second, batch-shaped preview
 			// format for a flag no caller in this release's Part 2 workflow
 			// actually needs. Refusing cleanly is honest; approximating is not.
-			if dryRun && len(args) > 1 {
-				return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest,
-					"lock: --dry-run previews exactly one claim at a time; run it once per id (dossierx claim lock <id> --dry-run), then run the batch itself without --dry-run")
-			}
-
 			if dryRun {
-				id := args[0]
 				cfg, claims, err := loadConfigAndClaims()
 				if err != nil {
 					return cmdResult{}, err
 				}
+				if policyEnabledForConfig(cfg) {
+					return previewPolicyLock(cmd, args, reason, conflicts)
+				}
+				if len(args) > 1 {
+					return cmdResult{}, cliout.Errorf(cliout.CodeBadRequest, "lock: grouped previews require the local-approval policy migration")
+				}
+				id := args[0]
 				claim, ok := loader.FindByID(claims, id)
 				if !ok {
 					return cmdResult{}, cliout.Errorf(cliout.CodeClaimNotFound, "lock: claim %q not found: %w", id, errClaimNotFound)
@@ -2319,15 +2326,17 @@ func newLockCmd() *cobra.Command {
 			// before any of the single-lock code runs, so len(args) == 1 always
 			// falls straight through to exactly the code that ran before batch
 			// locking existed.
-			if len(args) > 1 {
-				return runBatchLock(cmd, args, reason)
-			}
-			id := args[0]
-
 			cfg, err := loadConfig()
 			if err != nil {
 				return cmdResult{}, err
 			}
+			if policyEnabledForConfig(cfg) {
+				return runPolicySetLock(cmd, args, reason, proposal, conflicts)
+			}
+			if len(args) > 1 {
+				return runBatchLock(cmd, args, reason)
+			}
+			id := args[0]
 
 			// The gitignore guard, BEFORE any sentinel: an approval whose only
 			// carrier is the repository must not be written under a pattern
@@ -2553,6 +2562,8 @@ func newLockCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&reason, "reason", "", "the human approval this lock executes, in their words (required)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "report what locking would do — transition, preconditions, side effects, what is missing — and write nothing")
+	cmd.Flags().StringVar(&proposal, "proposal", "", "required token returned by --dry-run for this exact requested set; refuse if missing, stale, or wrong-request")
+	cmd.Flags().StringArrayVar(&semanticConflict, "semantic-conflict", nil, "known contradiction as claim-id=dependency-id=reason; refuse for human review")
 	return cmd
 }
 

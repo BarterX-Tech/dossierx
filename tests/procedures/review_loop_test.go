@@ -89,7 +89,7 @@ func TestReviewLoop_Step4RelockRunsBeforeTheHumanResolves(t *testing.T) {
 	// reach. For the claim unlocked at step 4, THIS is the `lock` half of
 	// unlock → fix → lock — after the human's Resolve, which is what makes it
 	// succeed where a step-4 lock could not.
-	final := f.Run("dossierx claim lock <id> --reason <words>",
+	final := f.RunReviewedLock("dossierx claim lock <id> --reason <words>",
 		map[string]string{"id": defaultClaimID, "words": "good, lock it"})
 	f.DocumentedSuccess(final, "loop step 7: the lock the whole loop exists to reach, after the human's Resolve")
 }

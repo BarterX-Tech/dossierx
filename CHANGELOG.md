@@ -5,9 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.8] - 2026-09-06
 
-## [0.7.7] - 2026-09-03
+### Changed
+
+- Lock policy v1 separates local approval from dependency readiness. A readable
+  draft `rests_on` input can receive a conditional local approval with a visible
+  `dependency_unapproved` condition; missing, retired, unreadable, cyclic, and
+  doctrine-gated required inputs refuse a new approval. Existing projects stay
+  on their recorded policy until `dossierx claim migrate-lock-policy --reason
+  "..."` records the human adoption without rewriting standing approvals.
+- `claim lock --dry-run` now returns the reviewed requested set, dependency
+  conditions, and a request-bound proposal token. Every singleton or group
+  write needs its matching `--proposal`; omitted, malformed, stale, or
+  wrong-request tokens refuse before an approval, receipt, baseline, or claim
+  write. The generated viewer and API show local approval, readiness conditions
+  and review-cause paths on each claim.
+- Inline emphasis and strikethrough now work in the inline-only markdown
+  surfaces used by rows and table cells, with a dedicated golden case so the
+  construct remains covered in the exported surface inventory.
+- v0.7.7's `build/` artifact layout, Build order tab, Mermaid renderer and
+  `build-order show` remain part of the release. The v0.7.7 comparison records
+  ten intentional policy-v1 render changes: all five fixture catalogs gain
+  readiness records and all five viewers gain readiness-card markup. Viewer
+  bytes move as follows: `fixture-basic` 462,735 -> 468,304,
+  `fixture-graph-demo` 589,713 -> 618,856, `fixture-portability` 464,414 ->
+  470,693, `fixture-theme-flat` 4,084,957 -> 4,093,831, and
+  `fixture-theme-preset` 466,204 -> 471,773. These are the otherwise-silent
+  changes recorded in `testdata/render-across-releases.golden.txt` against
+  v0.7.7; they make policy readiness visible in generated artifacts.
+
+### Fixed
+
+- A live viewer can insert each readiness card below a claim's links without
+  using the section as an invalid DOM insertion parent. A rendering failure in
+  the status refresh is no longer folded into the fetch failure path.
+- Local approval previews and writes now enforce the `stores_are_tracked`
+  repository guard for the policy-enabled lock path, so an ignored or
+  unanswerable store is disclosed before review and refused before any write.
+- A locked Build order artifact keeps rendering when its catalog has lost one
+  of the artifact's claims. The approved node and Mermaid scripts remain
+  visible, while the claim payload leaves the missing entry absent so a click
+  reports an honest catalog miss.
+- The v0.7.7 render comparison now marks whitespace-only context and real
+  trailing-whitespace changes visibly, keeping report formatting clean without
+  hiding byte-level differences.
+- Generated viewers now keep the engine runtime as a dedicated JavaScript
+  asset, preserving authored whitespace while retaining runtime comments and
+  executing the script once on both full pages and live fragments.
+- Build order now places the visible `Claim not found` status before diagrams
+  when a locked artifact outlives a catalog claim; its graph and missing-node
+  click path remain available without fabricating a claim card.
+- Release comparisons share a changelog and canonical semver tag resolver
+  across CI and render reports, with explicit baseline tags validated against
+  the automatically selected immediate predecessor.
+
+## [0.7.7] - 2026-09-04
 
 ### BREAKING — every dossierx artifact moved under build/
 
@@ -116,7 +169,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TestClaimEdgeListHTML_MatchesTheSharedFooterMarkup`, decision C5's shared-markup pin — it
   existed to hold the removed sub-tab's list markup to the claim-edge-list's shared footer, and
   goes with the list it was pinning.
-
 ## [0.7.6] - 2026-09-02
 
 ### Added
@@ -2279,7 +2331,8 @@ This is DossierX's first public release. It ships the `dossierx` CLI (`lint`, `c
 in `skills/` for projects that consume DossierX to author claims, derive build order, and link
 code back to claims from within an agentic workflow.
 
-[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.7...HEAD
+[Unreleased]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.8...HEAD
+[0.7.8]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.7...v0.7.8
 [0.7.7]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.6...v0.7.7
 [0.7.6]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.5...v0.7.6
 [0.7.5]: https://github.com/BarterX-Tech/dossierx/compare/v0.7.4...v0.7.5

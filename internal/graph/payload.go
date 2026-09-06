@@ -58,6 +58,8 @@
 //     encode_test.go's TestEncodeEscapesScriptClose for the executable half.
 package graph
 
+import "github.com/BarterX-Tech/dossierx/internal/readiness"
+
 // SchemaVersion is bumped when the payload shape changes in a way a browser
 // built against an older shape cannot read. It rides on the wire as the
 // payload's "schema" key so the client can refuse a payload it does not
@@ -132,7 +134,8 @@ type Node struct {
 
 	// ReviewPending is model.Claim.ReviewPending — engine-managed, and
 	// only meaningful on a locked claim.
-	ReviewPending bool `json:"review_pending"`
+	ReviewPending bool                  `json:"review_pending"`
+	Readiness     *readiness.Assessment `json:"readiness,omitempty"`
 
 	// OpenComments is len(model.Claim.OpenThreadIDs()).
 	OpenComments int `json:"open_comments"`

@@ -44,25 +44,25 @@
      unshaped id does. */}}
 <section class="claim claim-table card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
-  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
-  {{if .Rows}}
-  {{$keys := rowKeys .Rows}}
+{{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
+{{if .Rows}}
+{{$keys := rowKeys .Rows}}
   <div class="claim-table-scroll">
     <table>
       <thead>
         <tr>{{range $keys}}<th>{{.}}</th>{{end}}</tr>
       </thead>
       <tbody>
-        {{range .Rows}}
-        {{$row := .}}
+{{range .Rows}}
+{{$row := .}}
         <tr>{{range $keys}}{{$cls := colClass .}}<td{{if $cls}} class="{{$cls}}"{{end}}>{{cell (index $row .)}}</td>{{end}}</tr>
-        {{end}}
+{{end}}
       </tbody>
     </table>
   </div>
-  {{else}}
+{{else}}
   <p class="claim-empty">No rows.</p>
-  {{end}}
-  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
-  {{edges .}}
+{{end}}
+{{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
+{{edges .}}
 </section>

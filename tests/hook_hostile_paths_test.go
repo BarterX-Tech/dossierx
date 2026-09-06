@@ -76,6 +76,7 @@ package tests
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -316,8 +317,21 @@ func newHostileRepo(t *testing.T, hostile string, env []string) string {
 		"--body", "the widget answers within 200ms.",
 		"--governed-reason", "hostile-path fixture, not backed by any doctrine claim")
 	mustRun(project, "check", binPath, "--format", "text", "check")
+	previewOut, previewErr, previewCode := hostileExec(t, project, env, binPath, "--format", "json", "claim", "lock", hostileClaimID,
+		"--reason", "approved for the hostile-path corpus", "--dry-run")
+	if previewCode != 0 {
+		t.Fatalf("lock preview failed: %s %s", previewOut, previewErr)
+	}
+	var preview struct {
+		Data struct {
+			Snapshot string `json:"snapshot"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(previewOut), &preview); err != nil || preview.Data.Snapshot == "" {
+		t.Fatalf("lock preview token: %v (%s)", err, previewOut)
+	}
 	mustRun(project, "claim lock", binPath, "--format", "text", "claim", "lock", hostileClaimID,
-		"--reason", "approved for the hostile-path corpus")
+		"--reason", "approved for the hostile-path corpus", "--proposal", preview.Data.Snapshot)
 	mustRun(repo, "git add -A", "git", "add", "-A")
 
 	// The probe. -z in the TEST is fine — Go reads raw bytes; the constraint

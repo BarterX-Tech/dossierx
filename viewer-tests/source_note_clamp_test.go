@@ -34,8 +34,11 @@ package viewertests
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 )
 
@@ -67,6 +70,175 @@ tracks:
 // three. requireOverflowingFixture below asserts that on every run, so the next
 // person to shorten it gets told which thing broke.
 const longNote = "The provider documents at-least-once delivery for transactional mail, with de-duplication keyed on an idempotency header the sender supplies, retained for twenty-four hours after the first accepted submission; messages submitted with the same key inside that window are accepted and discarded rather than rejected, so a caller that retries after a timeout cannot tell from the response whether the first attempt landed. The same page describes the retry schedule as exponential with jitter, bounded at six attempts over roughly seventy-two hours, after which the message is recorded as permanently failed and surfaced on the delivery webhook rather than in the submission response. It says nothing about ordering between distinct keys, and nothing about what happens to a key reused after the retention window has closed, which are the two questions this claim would most like answered."
+
+// sourceNoteProbeScript wraps only the browser's ResizeObserver constructor and
+// records its deliveries. It does not change the callback, entries, or page
+// state; the positive assertions below read the same geometry and state a
+// reader sees after the real observer has delivered. Keeping the probe at the
+// new-document boundary also covers both file:// and served documents, plus a
+// refresh, instead of measuring a warmed document after the fact.
+const sourceNoteProbeScript = `(function () {
+  var Native = window.ResizeObserver;
+  window.__sourceNoteProbe = { hadObserver: typeof Native === 'function', deliveries: [], states: [] };
+  if (typeof Native !== 'function') { return; }
+  function Probe(callback) {
+    return new Native(function (entries, observer) {
+      var rows = [];
+      for (var i = 0; i < entries.length; i++) {
+        var target = entries[i].target;
+        var rect = target.getBoundingClientRect();
+        rows.push({
+          className: target.className,
+          width: target.clientWidth,
+          height: target.clientHeight,
+          rectWidth: rect.width,
+          rectHeight: rect.height
+        });
+      }
+      window.__sourceNoteProbe.deliveries.push(rows);
+      return callback(entries, observer);
+    });
+  }
+  Probe.prototype = Native.prototype;
+  window.ResizeObserver = Probe;
+})();`
+
+const sourceNoteNoObserverScript = `(function () {
+  window.__sourceNoteProbe = { hadObserver: false, deliveries: [], states: [] };
+  window.ResizeObserver = undefined;
+})();`
+
+type sourceNoteRect struct {
+	X      float64 `json:"x"`
+	Y      float64 `json:"y"`
+	Width  float64 `json:"width"`
+	Height float64 `json:"height"`
+}
+
+type sourceNoteState struct {
+	Stage      string         `json:"stage"`
+	Class      string         `json:"class"`
+	Label      string         `json:"label"`
+	Aria       string         `json:"aria"`
+	Display    string         `json:"display"`
+	Active     string         `json:"active"`
+	Hit        string         `json:"hit"`
+	BodyClient int            `json:"bodyClient"`
+	BodyScroll int            `json:"bodyScroll"`
+	BodyWidth  int            `json:"bodyWidth"`
+	Deliveries int            `json:"deliveries"`
+	NoteRect   sourceNoteRect `json:"noteRect"`
+	ButtonRect sourceNoteRect `json:"buttonRect"`
+}
+
+func installSourceNoteProbe(t *testing.T, ctx context.Context, noObserver bool) {
+	t.Helper()
+	script := sourceNoteProbeScript
+	if noObserver {
+		script = sourceNoteNoObserverScript
+	}
+	runCDP(t, ctx, chromedp.ActionFunc(func(c context.Context) error {
+		_, err := page.AddScriptToEvaluateOnNewDocument(script).Do(c)
+		return err
+	}))
+}
+
+func settleSourceNoteProbe(t *testing.T, ctx context.Context) {
+	t.Helper()
+	runCDP(t, ctx, chromedp.Evaluate(
+		`new Promise(function (resolve) { requestAnimationFrame(function () { requestAnimationFrame(resolve); }); })`,
+		nil,
+		func(p *runtime.EvaluateParams) *runtime.EvaluateParams { return p.WithAwaitPromise(true) },
+	))
+}
+
+func sourceNoteStateAt(t *testing.T, ctx context.Context, note, stage string) sourceNoteState {
+	t.Helper()
+	var state sourceNoteState
+	evalInto(t, ctx, fmt.Sprintf(`(function () {
+		var n = %s;
+		var b = n.querySelector('.claim-source-note-body');
+		var btn = n.querySelector('.claim-source-note-toggle');
+		var nr = n.getBoundingClientRect();
+		var br = btn.getBoundingClientRect();
+		var hit = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);
+		var p = window.__sourceNoteProbe || { deliveries: [], states: [] };
+		var state = {
+			stage: %q,
+			class: n.className,
+			label: btn.textContent,
+			aria: btn.getAttribute('aria-expanded'),
+			display: getComputedStyle(btn).display,
+			active: document.activeElement ? document.activeElement.tagName + '.' + document.activeElement.className : '',
+			hit: hit ? hit.tagName + '.' + hit.className : '',
+			bodyClient: b.clientHeight,
+			bodyScroll: b.scrollHeight,
+			bodyWidth: b.clientWidth,
+			deliveries: p.deliveries.length,
+			noteRect: { x: nr.x, y: nr.y, width: nr.width, height: nr.height },
+			buttonRect: { x: br.x, y: br.y, width: br.width, height: br.height }
+		};
+		p.states.push(state);
+		return state;
+	})()`, note, stage), &state)
+	return state
+}
+
+func assertSourceNoteGeometry(t *testing.T, state sourceNoteState) {
+	t.Helper()
+	if state.NoteRect.Width <= 0 || state.NoteRect.Height <= 0 || state.ButtonRect.Width <= 0 || state.ButtonRect.Height <= 0 {
+		t.Fatalf("%s: note/button geometry is not laid out: %+v", state.Stage, state)
+	}
+	if state.BodyClient <= 0 || state.BodyWidth <= 0 {
+		t.Fatalf("%s: body geometry is not laid out: %+v", state.Stage, state)
+	}
+	if state.Deliveries == 0 {
+		t.Fatalf("%s: no ResizeObserver delivery was recorded: %+v", state.Stage, state)
+	}
+	if state.Hit == "" || !strings.Contains(state.Hit, "claim-source-note-toggle") {
+		t.Fatalf("%s: elementFromPoint did not hit the visible note control: %+v", state.Stage, state)
+	}
+}
+
+func assertSourceNoteCollapsed(t *testing.T, state sourceNoteState, height int) {
+	t.Helper()
+	assertSourceNoteGeometry(t, state)
+	if !strings.Contains(state.Class, "is-clamped") || state.Aria != "false" || state.Label != "show more" {
+		t.Fatalf("%s: collapsed state drifted: %+v", state.Stage, state)
+	}
+	if state.BodyClient != height || state.BodyScroll <= state.BodyClient {
+		t.Fatalf("%s: collapsed geometry = client %d scroll %d, want client %d and overflow", state.Stage, state.BodyClient, state.BodyScroll, height)
+	}
+}
+
+func assertSourceNoteExpanded(t *testing.T, state sourceNoteState, collapsedHeight int) {
+	t.Helper()
+	assertSourceNoteGeometry(t, state)
+	if strings.Contains(state.Class, "is-clamped") || state.Aria != "true" || state.Label != "show less" {
+		t.Fatalf("%s: expanded state drifted: %+v", state.Stage, state)
+	}
+	if state.BodyClient <= collapsedHeight || state.BodyScroll != state.BodyClient {
+		t.Fatalf("%s: expanded geometry = client %d scroll %d, want client > %d and no overflow", state.Stage, state.BodyClient, state.BodyScroll, collapsedHeight)
+	}
+}
+
+func clampTabWithProbe(t *testing.T, p *project, noObserver bool) context.Context {
+	t.Helper()
+	url := p.renderStatic()
+	ctx := browserContext(t)
+	installSourceNoteProbe(t, ctx, noObserver)
+	runCDP(t, ctx, chromedp.Navigate(url))
+	pollTrue(t, ctx, `document.readyState === 'complete'`)
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Evaluate(
+		`document.querySelectorAll('details.claim-links').forEach(function (d) { d.open = true; })`, nil))
+	settleFor(t, ctx, noteDecidedExpr)
+	if !noObserver {
+		settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
+	}
+	settleSourceNoteProbe(t, ctx)
+	return ctx
+}
 
 // newClampProject writes one claim carrying two sources: the first has a note
 // that overflows and a second note that does not, the second has one short note.
@@ -237,39 +409,98 @@ func TestSourceNoteClampIsThreeLines(t *testing.T) {
 // label itself is checked too, because a control whose text still says "show
 // more" after expanding is telling the reader the opposite of what it did.
 func TestSourceNoteControlExpandsAndCollapses(t *testing.T) {
-	ctx := clampTab(t, newClampProject(t))
+	ctx := clampTabWithProbe(t, newClampProject(t), false)
 	long := noteAt("document", 0)
 	requireOverflowingFixture(t, ctx, long)
 
-	clamped := evalInt(t, ctx, long+`.querySelector('.claim-source-note-body').clientHeight`)
+	initial := sourceNoteStateAt(t, ctx, long, "initial after observer")
+	clamped := initial.BodyClient
+	assertSourceNoteCollapsed(t, initial, clamped)
 
 	runCDP(t, ctx, chromedp.Click(".claim-source-note-toggle", chromedp.ByQuery))
-	if evalBool(t, ctx, long+`.classList.contains('is-clamped')`) {
-		t.Fatal("the note is still clamped after the control was pressed")
-	}
-	if got := evalString(t, ctx, long+`.querySelector('.claim-source-note-toggle').textContent`); got != "show less" {
-		t.Errorf("expanded label = %q, want \"show less\"", got)
-	}
-	if got := evalString(t, ctx, long+`.querySelector('.claim-source-note-toggle').getAttribute('aria-expanded')`); got != "true" {
-		t.Errorf("aria-expanded = %q, want \"true\" — the state a screen reader is told", got)
-	}
-	expanded := evalInt(t, ctx, long+`.querySelector('.claim-source-note-body').clientHeight`)
-	if expanded <= clamped {
-		t.Fatalf("expanded height %d is not greater than clamped height %d", expanded, clamped)
-	}
+	settleSourceNoteProbe(t, ctx)
+	expanded := sourceNoteStateAt(t, ctx, long, "mouse expanded after observer")
+	assertSourceNoteExpanded(t, expanded, clamped)
 	if noteOverflows(t, ctx, long) {
 		t.Error("the expanded note still overflows; some of the citation is still hidden")
 	}
 
 	runCDP(t, ctx, chromedp.Click(".claim-source-note-toggle", chromedp.ByQuery))
-	if !evalBool(t, ctx, long+`.classList.contains('is-clamped')`) {
-		t.Fatal("the note did not re-clamp when the control was pressed again")
+	settleSourceNoteProbe(t, ctx)
+	collapsed := sourceNoteStateAt(t, ctx, long, "mouse collapsed after observer")
+	assertSourceNoteCollapsed(t, collapsed, clamped)
+
+	// Keyboard activation exercises the same delegated handler through the
+	// browser's native button semantics, rather than calling click() in JS.
+	runCDP(t, ctx, chromedp.SendKeys(".claim-source-note-toggle", "\n", chromedp.ByQuery))
+	settleSourceNoteProbe(t, ctx)
+	keyboardExpanded := sourceNoteStateAt(t, ctx, long, "keyboard expanded after observer")
+	assertSourceNoteExpanded(t, keyboardExpanded, clamped)
+	runCDP(t, ctx, chromedp.SendKeys(".claim-source-note-toggle", " ", chromedp.ByQuery))
+	settleSourceNoteProbe(t, ctx)
+	keyboardCollapsed := sourceNoteStateAt(t, ctx, long, "keyboard collapsed after observer")
+	assertSourceNoteCollapsed(t, keyboardCollapsed, clamped)
+}
+
+// TestSourceNoteControlWorksOverHTTPAndRefresh keeps the file:// proof above
+// separate from the served path. The page is freshly instrumented before the
+// first live navigation, then refreshed and driven by keyboard activation so a
+// warm document cannot hide a load or re-mount regression.
+func TestSourceNoteControlWorksOverHTTPAndRefresh(t *testing.T) {
+	p := newClampProject(t)
+	base := p.ensureServe()
+	ctx := browserContext(t)
+	installSourceNoteProbe(t, ctx, false)
+	runCDP(t, ctx, chromedp.Navigate(base+"/"))
+	pollTrue(t, ctx, `document.readyState === 'complete'`)
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Evaluate(
+		`document.querySelectorAll('details.claim-links').forEach(function (d) { d.open = true; })`, nil))
+	settleFor(t, ctx, noteDecidedExpr)
+	settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
+	settleSourceNoteProbe(t, ctx)
+	long := noteAt("document", 0)
+	initial := sourceNoteStateAt(t, ctx, long, "http initial after observer")
+	assertSourceNoteCollapsed(t, initial, initial.BodyClient)
+
+	runCDP(t, ctx, chromedp.Click(".claim-source-note-toggle", chromedp.ByQuery))
+	settleSourceNoteProbe(t, ctx)
+	assertSourceNoteExpanded(t, sourceNoteStateAt(t, ctx, long, "http mouse expanded after observer"), initial.BodyClient)
+
+	runCDP(t, ctx, chromedp.Reload())
+	pollTrue(t, ctx, `document.readyState === 'complete'`)
+	desktopViewport(t, ctx)
+	runCDP(t, ctx, chromedp.Evaluate(
+		`document.querySelectorAll('details.claim-links').forEach(function (d) { d.open = true; })`, nil))
+	settleFor(t, ctx, noteDecidedExpr)
+	settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
+	settleSourceNoteProbe(t, ctx)
+	long = noteAt("document", 0)
+	refreshed := sourceNoteStateAt(t, ctx, long, "http refreshed after observer")
+	assertSourceNoteCollapsed(t, refreshed, refreshed.BodyClient)
+	runCDP(t, ctx, chromedp.SendKeys(".claim-source-note-toggle", "\n", chromedp.ByQuery))
+	settleSourceNoteProbe(t, ctx)
+	assertSourceNoteExpanded(t, sourceNoteStateAt(t, ctx, long, "http keyboard expanded after refresh"), refreshed.BodyClient)
+}
+
+// TestSourceNoteWithoutResizeObserverLeavesTextWhole pins the safe fallback:
+// an engine with no observer keeps the complete note visible and hides the
+// control, while the ordinary short-note path remains free of dead chrome.
+func TestSourceNoteWithoutResizeObserverLeavesTextWhole(t *testing.T) {
+	ctx := clampTabWithProbe(t, newClampProject(t), true)
+	long := noteAt("document", 0)
+	short := noteAt("document", 1)
+	if evalBool(t, ctx, long+`.classList.contains('is-clamped')`) || noteOverflows(t, ctx, long) {
+		t.Fatal("without ResizeObserver, the long note must remain whole and unclamped")
 	}
-	if got := evalString(t, ctx, long+`.querySelector('.claim-source-note-toggle').textContent`); got != "show more" {
-		t.Errorf("collapsed label = %q, want \"show more\"", got)
+	if controlPaints(t, ctx, long) || controlPaints(t, ctx, short) {
+		t.Fatal("without ResizeObserver, source-note controls must remain hidden")
 	}
-	if got := evalInt(t, ctx, long+`.querySelector('.claim-source-note-body').clientHeight`); got != clamped {
-		t.Errorf("re-clamped height = %d, want the original %d", got, clamped)
+	if evalBool(t, ctx, short+`.classList.contains('is-clamped')`) {
+		t.Fatal("without ResizeObserver, the short note must remain unclamped")
+	}
+	if got := evalInt(t, ctx, `window.__sourceNoteProbe.deliveries.length`); got != 0 {
+		t.Fatalf("the no-observer fixture recorded %d deliveries", got)
 	}
 }
 

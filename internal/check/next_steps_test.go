@@ -151,7 +151,7 @@ func TestNextSteps_FixturePreconditions(t *testing.T) {
 //
 // "aaa" rests on "zzz" and sorts first, so the un-gated example was always the
 // one command that could not work.
-func TestNextSteps_DraftExampleSkipsALintBlockedClaim(t *testing.T) {
+func TestNextSteps_LocalApprovalMayNameADraftDependencyClaim(t *testing.T) {
 	cfg, claims := project(t, baseConfig, map[string]string{
 		"claims/a.yaml": "id: widget.contract.aaa\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\n" +
 			"body: |\n  rests on a still-draft sibling.\n" +
@@ -167,11 +167,8 @@ func TestNextSteps_DraftExampleSkipsALintBlockedClaim(t *testing.T) {
 	}
 
 	hint := draftHint(t, check.Status(claims, cfg))
-	if strings.Contains(hint, "widget.contract.aaa") {
-		t.Fatalf("the example named a claim whose lock would fail lint_failed: %q", hint)
-	}
-	if !strings.Contains(hint, "widget.contract.zzz") {
-		t.Fatalf("the dependency IS lockable and must be the example, got %q", hint)
+	if !strings.Contains(hint, "widget.contract.aaa") {
+		t.Fatalf("local approval permits the readable draft dependency condition, got %q", hint)
 	}
 }
 

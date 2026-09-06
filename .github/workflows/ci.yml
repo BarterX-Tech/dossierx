@@ -69,75 +69,21 @@ jobs:
       # runs `go test ./...` there. A mention anywhere else proves nothing and
       # costs nothing, and a mention in a COMMENT is not read at all: that file
       # parses this workflow rather than searching it.
-      - name: Name the previous release
+      - name: Fetch complete release history
+        shell: bash
+        run: |
+          if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+            git fetch --unshallow --tags origin
+          else
+            git fetch --tags origin
+          fi
+          test "$(git rev-parse --is-shallow-repository)" = false
+
+      - name: Resolve the previous release
         shell: bash
         env:
-          # Honoured rather than overwritten, because the failure message below
-          # names this variable as the way out and a named fix that does not
-          # work is the same defect as no fix at all. Set it at job or
-          # repository level and this step reports the choice instead of
-          # re-deriving one.
           DOSSIERX_PREV_RELEASE_TAG: ${{ vars.DOSSIERX_PREV_RELEASE_TAG }}
-        # GitHub runs `shell: bash` as `bash --noprofile --norc -eo pipefail {0}`,
-        # so -e is on for this body whether or not it says so. Every capture below
-        # is therefore written to exit zero on its own — `|| true`, `wc -l` rather
-        # than `grep -c` — because under -e a bare `x="$(cmd)"` whose command
-        # substitution exits non-zero kills the step at that line, before the
-        # branch that exists to explain it. That hazard was found the expensive
-        # way, in a step that failed with ZERO OUTPUT for three of its own
-        # diagnostics because each was a `grep` that legitimately matched nothing.
-        run: |
-          tag="${DOSSIERX_PREV_RELEASE_TAG:-}"
-          if [ -n "$tag" ]; then
-            echo "baseline named explicitly: $tag"
-          else
-            tag="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-          fi
-          if [ -z "$tag" ]; then
-            # ANSWERED, not asserted. An earlier version of this message told the
-            # maintainer as a FACT that "the checkout in this job already uses
-            # fetch-depth: 0, so the checkout is NOT the cause" — a sentence this
-            # step never checked, and which is false in the one case that actually
-            # happens: a shallow, tagless checkout, where the checkout is the ONLY
-            # cause. Naming a fix that does not work and excluding the fix that
-            # does are the same defect. The step already runs git, so it can look.
-            shallow="$(git rev-parse --is-shallow-repository 2>/dev/null || echo unknown)"
-            tags="$(git tag 2>/dev/null | wc -l | tr -d ' ')"
-            echo "no release tag is reachable from HEAD, so the cross-release render" >&2
-            echo "comparison has no baseline and this job would be asserting nothing" >&2
-            echo "about the one release class a consumer's own gate cannot detect." >&2
-            echo "" >&2
-            echo "What this checkout actually looks like, observed just now:" >&2
-            echo "    git rev-parse --is-shallow-repository -> $shallow" >&2
-            echo "    git tag                                -> $tags tag(s) present" >&2
-            echo "" >&2
-            if [ "$shallow" = "true" ]; then
-              echo "It is SHALLOW, so history was truncated and 'git describe' has nothing" >&2
-              echo "to walk back to. That is a checkout problem and it is the cause here:" >&2
-              echo "this job declares 'fetch-depth: 0' on actions/checkout, so a shallow" >&2
-              echo "tree means that setting was removed, overridden, or this body is not" >&2
-              echo "running under that checkout at all. Restore it before looking further." >&2
-            elif [ "$tags" = "0" ]; then
-              echo "History is complete but this checkout holds NO TAGS AT ALL, so there is" >&2
-              echo "nothing for 'git describe' to name. With 'fetch-depth: 0' actions/checkout" >&2
-              echo "fetches tags, so either that setting was removed or the remote genuinely" >&2
-              echo "has none — a fork whose tags were never pushed, or a clone of a" >&2
-              echo "repository that has not cut its first release. Fix it at the source:" >&2
-              echo "    git fetch upstream --tags && git push --tags" >&2
-            else
-              echo "History is complete and $tags tag(s) were fetched, so the checkout is not" >&2
-              echo "the cause: none of those tags is an ancestor of this commit. That is a" >&2
-              echo "branch built from an unrelated root, or a tag set that belongs to a" >&2
-              echo "different lineage than HEAD." >&2
-            fi
-            echo "" >&2
-            echo "Or, if this repository deliberately compares against a release other than" >&2
-            echo "the newest reachable one, set the repository variable" >&2
-            echo "DOSSIERX_PREV_RELEASE_TAG to that tag; this step reads it." >&2
-            exit 1
-          fi
-          echo "comparing rendered output against $tag"
-          echo "DOSSIERX_PREV_RELEASE_TAG=$tag" >>"$GITHUB_ENV"
+        run: go run ./scripts/resolve-previous-release --github-env "$GITHUB_ENV"
 
       - name: Build
         run: go build ./...

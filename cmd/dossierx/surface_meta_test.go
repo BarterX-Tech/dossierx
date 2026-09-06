@@ -202,14 +202,14 @@ func TestSurfaceEmbeddedFilesMatchTheToolchain(t *testing.T) {
 // is wrong — in which case fixing this expectation would hide a broken gate —
 // or the surface really moved, in which case the number is a thing somebody
 // changes on purpose and writes down, exactly the way
-// TestSurfaceIsTwentyFiveLeavesUnderNineNouns treats the leaf count.
+// TestSurfaceIsTwentySixLeavesUnderNineNouns treats the leaf count.
 func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 	root := surfaceRepoRoot(t)
 	doc := buildSurfaceDoc(t, root)
 
 	want := map[string]int{
 		"nouns":       9,
-		"commands":    25,
+		"commands":    26,
 		"lint_rules":  38,
 		"error_codes": 48,
 		"http_routes": 14,
@@ -445,8 +445,9 @@ func TestSurfaceRenderFingerprintHashesEveryRenderSource(t *testing.T) {
 // behaviourRoots — which is how skills/ came to be missing, one line — leaves
 // its packages in neither column and this test red.
 var behaviourExclusions = map[string]string{
-	"scripts/normalize-claims": "a one-off repository maintenance tool. It is in nobody's binary and is not embedded, so nothing it does can reach a client.",
-	"tests/procedures":         "the procedure replay suite: it EXECUTES the documented procedures against a fixture project and asserts the outcome each one promises. Nothing here is compiled into the shipped binary. It is excluded for the same reason the rest of tests/ is, and named here rather than left absent so that deleting the suite is a deliberate edit a human reviews rather than a package quietly leaving both columns.",
+	"scripts/normalize-claims":         "a one-off repository maintenance tool. It is in nobody's binary and is not embedded, so nothing it does can reach a client.",
+	"scripts/resolve-previous-release": "a standalone CI/repository adapter for resolving the comparison baseline and writing GitHub Actions environment values; it is not compiled into the shipped binary or embedded. The shared internal/releasebaseline package remains fingerprinted.",
+	"tests/procedures":                 "the procedure replay suite: it EXECUTES the documented procedures against a fixture project and asserts the outcome each one promises. Nothing here is compiled into the shipped binary. It is excluded for the same reason the rest of tests/ is, and named here rather than left absent so that deleting the suite is a deliberate edit a human reviews rather than a package quietly leaving both columns.",
 }
 
 // TestSurfaceBehaviourFingerprintCoversEveryPackage requires an entry for every

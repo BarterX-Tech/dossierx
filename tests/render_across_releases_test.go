@@ -61,6 +61,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/BarterX-Tech/dossierx/internal/releasebaseline"
 )
 
 // regenerateGoldens rewrites this package's committed snapshots instead of
@@ -123,52 +125,19 @@ func repoRootDir(t *testing.T) string {
 	return root
 }
 
-// resolveBaseline returns the previous release tag and the commit it points at.
-//
-// The two ways in are DOSSIERX_PREV_RELEASE_TAG, which names the baseline
-// outright, and `git describe`, which finds the newest tag reachable from HEAD.
-// Neither of them can decline to answer. An unresolvable baseline is a FAILURE,
-// in the same words CLAUDE.md uses for a missing browser and an uninstalled
-// tool: there is no result here that means "we did not check" and reads as "it
-// is fine".
-//
-// This was a t.Skip until it was measured. A clone with no tags — which is
-// exactly what actions/checkout produces at its default depth — took the skip,
-// `go test` printed `ok`, and the detector for the release class this project
-// actually ships ran in no automated context at all. The environment that
-// cannot answer is not the environment that should be reassured; it is the one
-// that has to be fixed, so the message names the fix and the build stays red
-// until it lands. .github/workflows/ci.yml checks out with fetch-depth: 0 and
-// resolves this variable explicitly, the same shape as the viewer job's
-// DOSSIERX_TEST_BROWSER.
+// resolveBaseline uses the same changelog/tag/ancestry resolver as CI and the
+// release adapter. An explicit tag is accepted only as validation of the
+// automatically selected immediate predecessor.
 func resolveBaseline(t *testing.T) (tag, commit string) {
 	t.Helper()
-	declared := os.Getenv(prevReleaseTagEnv)
-	if declared == "" {
-		probe := exec.Command("git", "describe", "--tags", "--abbrev=0")
-		probe.Dir = repoRootDir(t)
-		out, err := probe.Output()
-		if err != nil || strings.TrimSpace(string(out)) == "" {
-			t.Fatalf("no release tag is reachable from HEAD, so the previous release's rendered output cannot\n"+
-				"be read and NOTHING WAS COMPARED. This is a failure, not a skip: a checkout with no tags\n"+
-				"(which is what actions/checkout does at its default depth) cannot run the one check that\n"+
-				"detects an already-locked, byte-identical claim rendering differently.\n\n"+
-				"Fetch the tags, or name the baseline outright:\n"+
-				"    git fetch --tags --force\n"+
-				"    %s=<previous release tag> go test ./tests -run TestRenderedOutputAcrossReleases\n\n"+
-				"In CI, check out with `fetch-depth: 0` and resolve %s in a step that fails when it finds\n"+
-				"no tag — the shape .github/workflows/ci.yml already uses for DOSSIERX_TEST_BROWSER.",
-				prevReleaseTagEnv, prevReleaseTagEnv)
-		}
-		declared = strings.TrimSpace(string(out))
+	result, err := releasebaseline.Resolve(releasebaseline.Options{
+		RepoDir:     repoRootDir(t),
+		OverrideTag: strings.TrimSpace(os.Getenv(prevReleaseTagEnv)),
+	})
+	if err != nil {
+		t.Fatalf("resolve previous release: %v", err)
 	}
-	// ^{commit} so an annotated tag resolves to the commit and not to the tag
-	// object, whose sha is not the tree anybody released.
-	commit = strings.TrimSpace(gitOut(t, "rev-parse", declared+"^{commit}"))
-	if commit == "" {
-		t.Fatalf("%s names %q, which resolves to no commit", prevReleaseTagEnv, declared)
-	}
-	return declared, commit
+	return result.BaselineTag, result.BaselineCommit
 }
 
 // ---------------------------------------------------------------------
@@ -349,9 +318,10 @@ type renderComparison struct {
 // resolved one and passed an identity down, and a second resolver inside the
 // same run is a second answer to "which release is this being compared against"
 // that can disagree without either side being wrong on its own terms. Worse,
-// once the release's own tag exists `git describe --tags --abbrev=0` names IT,
-// and the comparison becomes the release against itself, reporting zero silent
-// changes with perfect confidence.
+// once the release's own tag exists a naive nearest-tag lookup could name IT,
+// and the comparison would become the release against itself, reporting zero
+// silent changes with perfect confidence. The shared resolver excludes that
+// self tag and chooses the immediate predecessor instead.
 // Deliberately NOT a t.Helper: the four refusals below are the load-bearing part
 // of this function, and attributing them to the caller's line would point a
 // reader at the report or at the capture instead of at the refusal that fired.
@@ -625,11 +595,12 @@ const renderAcrossReleasesHeader = `# render-across-releases.golden.txt — how 
 #
 # THE BASELINE LINE IS PART OF THE SNAPSHOT. It records which release this was
 # compared against, so the comparison is auditable rather than implied. The
-# baseline defaults to the newest tag reachable from HEAD; DOSSIERX_PREV_RELEASE_TAG
-# overrides it, and an override that names a different release must be
-# regenerated, because a report whose header says one release and whose diffs
-# describe another would be worse than no report. Regenerating after a tag is a
-# release step, in the same breath as regenerating surface.json.
+# shared resolver reads the newest stable changelog heading, enumerates canonical
+# stable semver tags, and chooses the greatest reachable predecessor below it.
+# DOSSIERX_PREV_RELEASE_TAG is validation-only: it must equal that automatic
+# predecessor, so a report cannot silently compare against a stale, future, or
+# self tag. Regenerating after a tag is a release step, in the same breath as
+# regenerating surface.json.
 #
 # An empty report is the expected steady state immediately after a release.
 `
@@ -938,14 +909,76 @@ func writeHunk(b *strings.Builder, ops []diffOp) {
 		switch op.kind {
 		case opEqual:
 			if op.text == "" {
+				// A truly blank context line is already free of trailing
+				// whitespace; the unified-diff prefix would create one.
 				b.WriteString("\n")
 			} else {
-				b.WriteString(" " + op.text + "\n")
+				b.WriteString(" " + reportLineText(op.text) + "\n")
 			}
 		case opDel:
-			b.WriteString("-" + op.text + "\n")
+			b.WriteString("-" + reportLineText(op.text) + "\n")
 		case opAdd:
-			b.WriteString("+" + op.text + "\n")
+			b.WriteString("+" + reportLineText(op.text) + "\n")
 		}
+	}
+}
+
+// reportLineText keeps the compared bytes intact while making whitespace at
+// the end of a report line visible. Space-only context is especially easy to
+// mistake for report formatting, so it receives the same explicit markers as a
+// changed line with trailing whitespace. This is presentation only: diffing,
+// line counts, and the changed artifact bytes remain untouched.
+func reportLineText(text string) string {
+	cut := len(text)
+	for cut > 0 && (text[cut-1] == ' ' || text[cut-1] == '\t') {
+		cut--
+	}
+	if cut == len(text) && !strings.Contains(text, "\t") {
+		return text
+	}
+	var out strings.Builder
+	out.Grow(len(text) + len(text) - cut)
+	out.WriteString(strings.ReplaceAll(text[:cut], "\t", "⇥"))
+	for _, c := range text[cut:] {
+		switch c {
+		case ' ':
+			out.WriteString("␠")
+		case '\t':
+			out.WriteString("⇥")
+		default:
+			out.WriteRune(c)
+		}
+	}
+	return out.String()
+}
+
+func TestWriteHunkMakesWhitespaceVisibleWithoutReportTrailingSpaces(t *testing.T) {
+	var b strings.Builder
+	writeHunk(&b, []diffOp{
+		{kind: opEqual, text: "context", aLine: 1, bLine: 1},
+		{kind: opEqual, text: "   ", aLine: 2, bLine: 2},
+		{kind: opDel, text: "removed  ", aLine: 3},
+		{kind: opAdd, text: "added\t", bLine: 3},
+	})
+	got := b.String()
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+			t.Fatalf("report line has report-only trailing whitespace: %q", line)
+		}
+	}
+	for _, want := range []string{" ␠␠␠\n", "-removed␠␠\n", "+added⇥\n"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("report %q lacks visible whitespace marker %q", got, want)
+		}
+	}
+}
+
+func TestUnifiedDiffRetainsTrailingWhitespaceChangesAndCounts(t *testing.T) {
+	diff, added, removed, tooLarge := unifiedDiff([]string{"before"}, []string{"before  "})
+	if tooLarge || added != 1 || removed != 1 {
+		t.Fatalf("unifiedDiff = tooLarge=%v added=%d removed=%d, want one changed line each", tooLarge, added, removed)
+	}
+	if !strings.Contains(diff, "-before\n+before␠␠\n") {
+		t.Fatalf("trailing-whitespace change was not visible in report: %q", diff)
 	}
 }

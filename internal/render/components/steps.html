@@ -26,14 +26,14 @@
      unshaped id does. */}}
 <section class="claim claim-steps card{{if .HasOpenThreads}} claim-card--commented{{end}}" id="{{.ID}}" data-status="{{.Status}}">
   <div class="k" data-claim-id="{{.ID}}" title="{{.ID}}"><span class="label">{{claimLabel .ID}} <span class="pill {{pillClass .Status .ReviewPending}}">{{.Status}}</span></span>{{commentChip .}}</div>
-  {{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
-  {{if .Steps}}
-  {{range $i, $s := .Steps}}
+{{if .Body}}<div class="claim-body">{{claimMarkdown . .Body}}</div>{{end}}
+{{if .Steps}}
+{{range $i, $s := .Steps}}
   <div class="step"><div class="snum">{{inc $i}}</div><div class="sbody">{{claimMarkdown $ $s}}</div></div>
-  {{end}}
-  {{else}}
+{{end}}
+{{else}}
   <p class="claim-empty">No steps.</p>
-  {{end}}
-  {{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
-  {{edges .}}
+{{end}}
+{{if .RawHTML}}<div class="claim-mockup-body">{{mockupHTML .}}</div>{{end}}
+{{edges .}}
 </section>

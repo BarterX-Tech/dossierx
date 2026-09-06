@@ -113,6 +113,30 @@ func TestRender_OnePerLayout(t *testing.T) {
 	}
 }
 
+func TestRender_PreservesAuthoredSignificantWhitespace(t *testing.T) {
+	claims := []model.Claim{
+		{ID: "widget.contract.card", Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard, Body: "hard break  \nnext\n\n```text\n  code value  \n```"},
+		{ID: "widget.contract.tree", Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutTree, Body: "tree value  \n  nested value"},
+	}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	out, err := Render(cat, &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "hard break<br") {
+		t.Fatal("authored Markdown hard-break spaces were changed")
+	}
+	if !strings.Contains(out, "<pre><code class=\"language-text\">  code value  \n</code></pre>") {
+		t.Fatal("authored fenced code whitespace was changed")
+	}
+	if !strings.Contains(out, "<pre class=\"claim-tree-body\">tree value  \n  nested value</pre>") {
+		t.Fatal("authored tree whitespace was changed")
+	}
+}
+
 // TestRender_TableExplicitEmptyRows covers a table claim whose rows is a
 // present-but-empty array (rows: [] on disk, decoded to a zero-length,
 // non-nil []model.Row) — not simply omitted/nil. It must still be valid

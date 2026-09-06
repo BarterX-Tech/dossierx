@@ -26,7 +26,7 @@ import (
 func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 	cfgPath := buildRoleAdoptedFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("fixture precondition: this lock must be refused, got %+v", env)
 	}
@@ -79,7 +79,7 @@ func TestLockLintRefusalCarriesFindingsInTopLevelData(t *testing.T) {
 func TestLockRefusalMessageDoesNotDoubleItsVerb(t *testing.T) {
 	cfgPath := buildRoleAdoptedFixture(t)
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.b", "--reason", "go")
 	if err == nil {
 		t.Fatalf("fixture precondition: this lock must be refused")
 	}
@@ -134,15 +134,15 @@ func TestRollUpDoesNotDeadlockAModule(t *testing.T) {
 	// The read-only gates pass: a locked banner whose module gained a draft is
 	// reached by editing DRAFT claims, which this release deliberately does not
 	// gate. It is reported, not refused.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate"); err != nil {
 		t.Fatalf("check --validate must not fail on a locked banner with draft siblings: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check must not fail on a locked banner with draft siblings: %v", err)
 	}
 
 	// And it IS reported — demoting the rule must not silence it.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
 	if err != nil {
 		t.Fatalf("check --validate: %v", err)
 	}
@@ -152,10 +152,10 @@ func TestRollUpDoesNotDeadlockAModule(t *testing.T) {
 
 	// The legal move exists: a draft sibling locks. That is the whole fix —
 	// under the old rule this was refused, and so was the other one.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "approved on the call"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.one", "--reason", "approved on the call"); err != nil {
 		t.Fatalf("locking a draft sibling must be legal: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved on the call"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved on the call"); err != nil {
 		t.Fatalf("locking the last draft sibling must be legal: %v", err)
 	}
 }
@@ -172,7 +172,7 @@ func TestRollUpStillRefusesTheBannersOwnLock(t *testing.T) {
 	// would (correctly) refuse first, testing the wrong gate.
 	cfgPath := rollUpDeadlockFixture(t, "draft")
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.overview.router", "--reason", "go")
 	if err == nil || env.OK {
 		t.Fatalf("a banner must not lock while its module holds a draft, got %+v", env)
 	}
@@ -222,7 +222,7 @@ func TestRollUpBlockerNamesBothClaimsInThePreviewAndInShow(t *testing.T) {
 		t.Fatalf("the lint_clean detail must name the blocking sibling, got %q", detail)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.overview.router")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", "widget.overview.router")
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}

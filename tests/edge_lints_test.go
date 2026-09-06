@@ -71,16 +71,16 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 	aPath, bPath := writeRestOnLockedFixture(t, root, "restlockmod")
 
 	// Step 1: lint is clean while both are draft.
-	stdout, stderr, code := run(t, root, "check", "--validate")
+	stdout, stderr, code := reviewedRun(t, root, "check", "--validate")
 	if code != 0 {
 		t.Fatalf("lint before locking: expected exit 0, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 
 	// Step 2: lock A, then lock B (which rests_on the now-locked A).
-	if _, stderr, code := run(t, root, "claim", "lock", "restlockmod.contract.a", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "restlockmod.contract.a", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock A: expected exit 0, got %d\nstderr: %s", code, stderr)
 	}
-	if _, stderr, code := run(t, root, "claim", "lock", "restlockmod.contract.b", "--reason", "test fixture"); code != 0 {
+	if _, stderr, code := reviewedRun(t, root, "claim", "lock", "restlockmod.contract.b", "--reason", "test fixture"); code != 0 {
 		t.Fatalf("lock B (rests_on locked A): expected exit 0 via rest-on-locked, got %d\nstderr: %s", code, stderr)
 	}
 
@@ -107,7 +107,7 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 	// Step 4: "dossierx check" must detect the drift and flag B review_pending,
 	// while B stays locked. Run "dossierx claim list --review-pending" afterward to confirm via the
 	// CLI's own reporting surface, not just the raw file.
-	if stdout, stderr, code := run(t, root, "check"); code == 0 {
+	if stdout, stderr, code := reviewedRun(t, root, "check"); code == 0 {
 		// "dossierx check" is expected to still report clean lint/catalog/render
 		// (a review_pending flag by itself isn't a lint finding), so a
 		// successful exit here is fine — what matters is what it persisted.
@@ -126,7 +126,7 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 		t.Fatalf("expected B's dependency drift on A to flip review_pending: true, got:\n%s", raw)
 	}
 
-	stdout, stderr, code = run(t, root, "claim", "list", "--review-pending")
+	stdout, stderr, code = reviewedRun(t, root, "claim", "list", "--review-pending")
 	if code != 0 {
 		t.Fatalf("stale: expected exit 0 (report-only), got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -134,37 +134,38 @@ func TestRestOnLockedTracksDependentForReviewPending(t *testing.T) {
 		t.Fatalf("expected \"dossierx claim list --review-pending\" to list restlockmod.contract.b, got: %s", stdout)
 	}
 
-	// A itself must NOT be flagged: nothing A depends on changed.
-	if strings.Contains(stdout, "restlockmod.contract.a") {
-		t.Fatalf("did not expect A to be flagged stale (only B depends on something that changed), got: %s", stdout)
+	// A carries its own approval drift after its authored content changes.
+	if !strings.Contains(stdout, "restlockmod.contract.a") {
+		t.Fatalf("expected A's own approval drift to remain visible, got: %s", stdout)
 	}
 }
 
-// TestRestOnLockedRejectsLockingDependentOnDraftTarget is the negative
-// half of scenario 4: locking a claim whose rests_on target is still draft
-// must be refused by the rest-on-locked lint (via "dossierx claim lock"'s lint
-// gate), proving the lint is actually load-bearing for the CLI's lock
-// command and not just checked in isolation.
-func TestRestOnLockedRejectsLockingDependentOnDraftTarget(t *testing.T) {
+// TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget pins the policy-v1
+// replacement for the old write gate: a readable draft prerequisite leaves a
+// visible dependency_unapproved condition, not an unapproved local claim.
+func TestRestOnLockedAllowsLocalApprovalAgainstDraftTarget(t *testing.T) {
 	root := t.TempDir()
 	writeRestOnLockedFixture(t, root, "restlockneg")
 
-	// Lock B while A is still draft: must be refused.
-	stdout, stderr, code := run(t, root, "claim", "lock", "restlockneg.contract.b", "--reason", "test fixture")
-	if code == 0 {
-		t.Fatalf("expected \"dossierx lock\" to refuse locking B while its rests_on target A is still draft, got exit 0\nstdout: %s", stdout)
+	// The reviewed write locally approves B while A remains draft.
+	stdout, stderr, code := reviewedRun(t, root, "claim", "lock", "restlockneg.contract.b", "--reason", "test fixture")
+	if code != 0 {
+		t.Fatalf("expected local approval against a readable draft dependency, got exit %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
-	combined := stdout + stderr
-	if !strings.Contains(combined, "rest-on-locked") && !strings.Contains(combined, "lint") {
-		t.Fatalf("expected refusal to mention the lint gate, got stdout: %q stderr: %q", stdout, stderr)
+	show, showErr, showCode := run(t, root, "claim", "show", "restlockneg.contract.b")
+	if showCode != 0 {
+		t.Fatalf("show locally approved dependent: exit %d stdout=%s stderr=%s", showCode, show, showErr)
+	}
+	if !strings.Contains(show, "local/dependency ready: true / false") || !strings.Contains(show, "dependency_unapproved") {
+		t.Fatalf("local approval must expose the draft dependency condition, got: %s", show)
 	}
 
 	raw, err := os.ReadFile(filepath.Join(root, "claims", "b.yaml"))
 	if err != nil {
 		t.Fatalf("read b.yaml: %v", err)
 	}
-	if strings.Contains(string(raw), "status: locked") {
-		t.Fatalf("B must remain draft after a refused lock, got:\n%s", raw)
+	if !strings.Contains(string(raw), "status: locked") {
+		t.Fatalf("B must be locally approved after the reviewed write, got:\n%s", raw)
 	}
 }
 
@@ -198,7 +199,7 @@ func TestLockSucceedsWithOnlyWarningSeverityFinding(t *testing.T) {
 
 	// Sanity: "dossierx check --validate" reports the orphan finding but exits 0 (warning,
 	// not error).
-	lintOut, lintErr, lintCode := run(t, root, "check", "--validate")
+	lintOut, lintErr, lintCode := reviewedRun(t, root, "check", "--validate")
 	if lintCode != 0 {
 		t.Fatalf("expected \"dossierx check --validate\" to exit 0 for a warning-only orphan finding, got %d\nstdout: %s\nstderr: %s", lintCode, lintOut, lintErr)
 	}
@@ -206,7 +207,7 @@ func TestLockSucceedsWithOnlyWarningSeverityFinding(t *testing.T) {
 		t.Fatalf("expected the orphan finding to be reported (even though it doesn't fail), got: %s", lintOut)
 	}
 
-	stdout, stderr, code := run(t, root, "claim", "lock", "orphanmod.contract.lonely", "--reason", "test fixture")
+	stdout, stderr, code := reviewedRun(t, root, "claim", "lock", "orphanmod.contract.lonely", "--reason", "test fixture")
 	if code != 0 {
 		t.Fatalf("expected \"dossierx lock\" to succeed with only a warning-severity finding outstanding, got %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}

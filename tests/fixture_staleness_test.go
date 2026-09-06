@@ -214,6 +214,8 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 			regenCmd := "go run ./cmd/dossierx check --config testdata/" + fx.name + "/project.config.yaml"
 
 			// build/viewer/index.html: timestamps normalized, everything else exact.
+			assertNoTrailingViewerWhitespace(t, fx.name, filepath.Join(tmp, "build", "viewer", "index.html"), "fresh output")
+			assertNoTrailingViewerWhitespace(t, fx.name, filepath.Join(fx.dir, "build", "viewer", "index.html"), "committed output")
 			assertRegeneratedMatches(t, fx, tmp, filepath.Join("build", "viewer", "index.html"), true, regenCmd)
 
 			// build/catalog/catalog.json carries no timestamp at all, so it is
@@ -262,6 +264,19 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+func assertNoTrailingViewerWhitespace(t *testing.T, fixture, path, label string) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s %s: %v", label, fixture, err)
+	}
+	for lineNo, line := range strings.Split(string(b), "\n") {
+		if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+			t.Fatalf("%s %s has trailing whitespace at physical line %d", label, fixture, lineNo+1)
+		}
 	}
 }
 

@@ -21,17 +21,27 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
 )
 
 // Catalog is the built, render-ready view over a set of claims.
 type Catalog struct {
-	Claims []model.Claim
+	Claims    []model.Claim
+	Readiness map[string]readiness.Assessment
 
 	// ByFacet and ByModule group claim IDs for convenient lookup by later
 	// render/lint stages. Populated by Build. Each slice of IDs is sorted so
 	// callers never need to re-sort before using or serializing them.
 	ByFacet  map[string][]string
 	ByModule map[string][]string
+}
+
+// SetReadiness attaches a current read-only approval projection for exports
+// and offline rendering. Build remains a pure authored-claim projection.
+func (cat *Catalog) SetReadiness(assessments map[string]readiness.Assessment) {
+	if cat != nil {
+		cat.Readiness = assessments
+	}
 }
 
 // Build validates nothing beyond what's needed to construct a Catalog
@@ -128,7 +138,8 @@ type Entry struct {
 	// structure, and a claim's evidence sits on that same side of the line —
 	// it is read by a human on the claim, not resolved by a consumer of the
 	// index.
-	Tracks []TrackMembership `json:"tracks,omitempty"`
+	Tracks    []TrackMembership     `json:"tracks,omitempty"`
+	Readiness *readiness.Assessment `json:"readiness,omitempty"`
 }
 
 // TrackMembership is the serialized form of one claim's membership in one
@@ -197,7 +208,12 @@ func (cat *Catalog) Document() *Document {
 	}
 
 	for _, c := range cat.Claims {
-		doc.Claims = append(doc.Claims, entryFor(c))
+		e := entryFor(c)
+		if assessment, ok := cat.Readiness[c.ID]; ok {
+			copy := assessment
+			e.Readiness = &copy
+		}
+		doc.Claims = append(doc.Claims, e)
 	}
 	sort.Slice(doc.Claims, func(i, j int) bool { return doc.Claims[i].ID < doc.Claims[j].ID })
 

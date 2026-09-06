@@ -453,7 +453,7 @@ func envLockedOrder(t *testing.T, dir string) map[string]string {
 // holding would look like a contract change and be a broken fixture.
 func envMustRun(t *testing.T, dir string, args ...string) string {
 	t.Helper()
-	stdout, stderr, code := run(t, dir, append([]string{"--format", "json"}, args...)...)
+	stdout, stderr, code := reviewedRun(t, dir, append([]string{"--format", "json"}, args...)...)
 	if code != 0 {
 		t.Fatalf("fixture setup %v exited %d\nstdout: %s\nstderr: %s", args, code, stdout, stderr)
 	}
@@ -496,6 +496,7 @@ func envelopeCases() []envelopeCase {
 		{"claim lock / refused by an open human thread", envOpenHumanThread, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved"}},
 		{"claim lock / previewed", envFresh, []string{"claim", "lock", "widget.contract.overview", "--reason", "approved", "--dry-run"}},
 		{"claim lock / already locked", envLocked, []string{"claim", "lock", "widget.contract.overview", "--reason", "again"}},
+		{"claim migrate-lock-policy / preview", envFresh, []string{"claim", "migrate-lock-policy", "--dry-run"}},
 
 		{"claim unlock / a locked claim", envLocked, []string{"claim", "unlock", "widget.contract.overview", "--reason", "fixing it"}},
 		{"claim flag / a locked claim", envLocked, []string{"claim", "flag", "widget.contract.overview", "--claim-says", "a", "--now-does", "b", "--reason", "c"}},
@@ -901,7 +902,7 @@ func TestEnvelopeContractGolden(t *testing.T) {
 			}
 		}
 
-		stdout, stderr, code := run(t, dir, append([]string{"--format", "json"}, live...)...)
+		stdout, stderr, code := reviewedRun(t, dir, append([]string{"--format", "json"}, live...)...)
 		if strings.TrimSpace(stdout) == "" {
 			t.Fatalf("%s: no envelope on stdout (exit %d)\nstderr: %s", c.name, code, stderr)
 		}

@@ -267,7 +267,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 		if _, present := blGitignoreCheck(t, env); present {
 			t.Fatalf("a verdict was reached, so gitignore_check must be absent: %+v", env.Data)
 		}
-		env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved")
+		env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved")
 		if err == nil || env.Error == nil || env.Error.Code != cliout.CodeStoreGitignored {
 			t.Fatalf("claim lock must refuse with store_gitignored, got err=%v env=%+v", err, env)
 		}
@@ -308,7 +308,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 		// that split is pinned in internal/check's gitignore_test.go.)
 		root, cfgPath := blIgnoredRepo(t)
 		blWrite(t, filepath.Join(root, ".gitignore"), "")
-		if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.overview", "--reason", "approved"); err != nil {
 			t.Fatalf("seed lock: %v", err)
 		}
 		blGit(t, root, "add", "-A")
@@ -336,7 +336,7 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 		}
 		// And claim lock succeeds with the warning in its envelope.
 		blWrite(t, filepath.Join(root, "claims", "two.yaml"), "id: widget.contract.two\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  a second claim.\ngoverned_by:\n  type: none\n  reason: fixture\n")
-		env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved")
+		env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.two", "--reason", "approved")
 		if err != nil || !env.OK {
 			t.Fatalf("claim lock over a force-added ledger must succeed, got err=%v env=%+v", err, env)
 		}
@@ -354,8 +354,8 @@ func TestStoreGitignoredIsAnErrorFindingAndARefusal(t *testing.T) {
 
 // TestDryRun_StoreGitignoredIsAFailingPrecondition: each single-id approval
 // verb's --dry-run reports stores_are_tracked ok:false where the real run
-// refuses with store_gitignored; the batch has no preview twin and refuses
-// before the claims sentinel.
+// refuses with store_gitignored; a policy-enabled batch preview reports the
+// same failing store precondition before the real run refuses.
 func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	// A project locked and flagged BEFORE build/ is ignored, so reaudit and
 	// flag have a claim in the state they require.
@@ -367,7 +367,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 		blWrite(t, filepath.Join(root, "claims", "overview.yaml"), "id: widget.contract.overview\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: orientation\nbody: |\n  fixture claim.\ngoverned_by:\n  type: none\n  reason: fixture\n")
 		blGitInit(t, root)
 		for _, id := range []string{"widget.contract.one", "widget.contract.overview"} {
-			if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
+			if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "approved"); err != nil {
 				t.Fatalf("seed lock %s: %v", id, err)
 			}
 		}
@@ -393,7 +393,7 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 	}
 	t.Run("claim lock", func(t *testing.T) {
 		root, cfgPath := seed(t)
-		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  three.\ngoverned_by:\n  type: none\n  reason: fixture\n")
+		blWrite(t, filepath.Join(root, "claims", "three.yaml"), "id: widget.contract.three\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  three.\ngoverned_by:\n  type: none\n  reason: fixture\n")
 		refusedAndBlocked(t, cfgPath,
 			[]string{"claim", "lock", "widget.contract.three", "--dry-run", "--reason", "ok"},
 			[]string{"claim", "lock", "widget.contract.three", "--reason", "ok"})
@@ -416,17 +416,16 @@ func TestDryRun_StoreGitignoredIsAFailingPrecondition(t *testing.T) {
 			[]string{"build-order", "lock", "--module", "widget", "--dry-run", "--reason", "ok"},
 			[]string{"build-order", "lock", "--module", "widget", "--reason", "ok"})
 	})
-	t.Run("batch claim lock has no preview and refuses before the sentinel", func(t *testing.T) {
+	t.Run("batch claim lock preview and refusal before the sentinel", func(t *testing.T) {
 		root, cfgPath := seed(t)
 		for _, id := range []string{"a", "b"} {
-			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbody: |\n  "+id+".\ngoverned_by:\n  type: none\n  reason: fixture\n")
+			blWrite(t, filepath.Join(root, "claims", id+".yaml"), "id: widget.contract."+id+"\nfacet: contract\nmodule: widget\nstatus: draft\nlayout: card\nbuild_role: schema\nbody: |\n  "+id+".\ngoverned_by:\n  type: none\n  reason: fixture\n")
 		}
-		env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--dry-run", "--reason", "ok")
-		if err == nil || env.Error == nil || env.Error.Code != cliout.CodeBadRequest ||
-			!strings.Contains(env.Error.Message, "--dry-run previews exactly one claim at a time") {
-			t.Fatalf("the batch dry-run refusal must be unchanged, got err=%v env=%+v", err, env)
+		dr := dryRunOf(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--dry-run", "--reason", "ok")
+		if !dr.Blocked || !hasPrecondition(dr, "stores_are_tracked", false) {
+			t.Fatalf("the batch dry-run must report stores_are_tracked ok:false, got %+v", dr)
 		}
-		env, _, err = execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--reason", "ok")
+		env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", "widget.contract.a", "widget.contract.b", "--reason", "ok")
 		if err == nil || env.Error == nil || env.Error.Code != cliout.CodeStoreGitignored {
 			t.Fatalf("batch lock must refuse with store_gitignored, got err=%v env=%+v", err, env)
 		}
@@ -635,7 +634,7 @@ func TestCheckWarnsWhenAStyleOverrideIsInForceBesideALockedOrder(t *testing.T) {
 	}
 
 	for _, id := range []string{"widget.contract.alpha", "widget.contract.beta"} {
-		if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
 			t.Fatalf("claim lock %s: %v", id, err)
 		}
 	}
@@ -697,7 +696,7 @@ func TestCheckWarnsAndStillRendersWhenALockedOrderCannotBeDrawn(t *testing.T) {
 	root := t.TempDir()
 	cfgPath, _, _ := restsOnPairProject(t, root)
 	for _, id := range []string{"widget.contract.alpha", "widget.contract.beta"} {
-		if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "reviewed"); err != nil {
 			t.Fatalf("claim lock %s: %v", id, err)
 		}
 	}

@@ -30,6 +30,31 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 }
 
+func TestDefaultPartialsHaveNoStructuralTrailingWhitespace(t *testing.T) {
+	partials, err := Load("")
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	for _, layout := range []model.Layout{
+		model.LayoutCard, model.LayoutTable, model.LayoutList,
+		model.LayoutSteps, model.LayoutTree, model.LayoutBanner,
+		model.LayoutMockup,
+	} {
+		t.Run(string(layout), func(t *testing.T) {
+			claim := model.Claim{ID: "widget.contract.empty", Module: "widget", Facet: "contract", Layout: layout, Status: model.StatusDraft}
+			var buf bytes.Buffer
+			if err := partials[layout].Execute(&buf, claim); err != nil {
+				t.Fatalf("execute %s: %v", layout, err)
+			}
+			for lineNo, line := range strings.Split(buf.String(), "\n") {
+				if strings.HasSuffix(line, " ") || strings.HasSuffix(line, "\t") {
+					t.Fatalf("default %s partial has trailing whitespace at line %d", layout, lineNo+1)
+				}
+			}
+		})
+	}
+}
+
 func TestLoad_OverrideDirMissingEntirely(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	_, err := Load(missing)

@@ -110,7 +110,7 @@ func governedDriftFixture(t *testing.T) (cfgPath, projectDir string) {
 func lockGovernedFixture(t *testing.T, cfgPath string) {
 	t.Helper()
 	for _, id := range []string{govHub, govChild, govTwoEdge, govDownstream, govUngoverned} {
-		if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "the human approved "+id); err != nil {
+		if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", id, "--reason", "the human approved "+id); err != nil {
 			t.Fatalf("claim lock %s: %v", id, err)
 		}
 	}
@@ -123,7 +123,7 @@ func lockGovernedFixture(t *testing.T, cfgPath string) {
 // different test.
 func rewordGovernor(t *testing.T, cfgPath, projectDir string) {
 	t.Helper()
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "unlock", govHub, "--reason", "reword the doctrine"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "unlock", govHub, "--reason", "reword the doctrine"); err != nil {
 		t.Fatalf("claim unlock %s: %v", govHub, err)
 	}
 	path := filepath.Join(projectDir, "claims", "hub.yaml")
@@ -138,7 +138,7 @@ func rewordGovernor(t *testing.T, cfgPath, projectDir string) {
 	if err := os.WriteFile(path, []byte(reworded), 0o644); err != nil {
 		t.Fatalf("write hub: %v", err)
 	}
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", govHub, "--reason", "the human approved the reworded doctrine"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", govHub, "--reason", "the human approved the reworded doctrine"); err != nil {
 		t.Fatalf("re-lock %s: %v", govHub, err)
 	}
 }
@@ -182,7 +182,7 @@ func countReviewPendingTrue(t *testing.T, projectDir, file string) int {
 func TestGovernedByIsNotAGatingEdge(t *testing.T) {
 	cfgPath, _ := governedDriftFixture(t)
 
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", govChild, "--reason", "the doctrine hub is still draft and that is fine"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", govChild, "--reason", "the doctrine hub is still draft and that is fine"); err != nil {
 		t.Fatalf("a claim naming an unlocked doctrine claim ONLY through governed_by must still lock; got %v", err)
 	}
 
@@ -199,7 +199,7 @@ func TestGovernedByIsNotAGatingEdge(t *testing.T) {
 	// to CodeInternal ("file a bug") whenever a refusal fires that the dry-run
 	// twin did not predict, which is exactly what widening dependencyIDs would
 	// have produced.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "lock", govTwoEdge, "--reason", "should be refused")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "lock", govTwoEdge, "--reason", "should be refused")
 	if err == nil {
 		t.Fatalf("rests_on an unlocked doctrine claim must still be refused")
 	}
@@ -252,7 +252,7 @@ func TestTwoEdgeTargetIsOneBaselineEntry(t *testing.T) {
 
 	// Determinism: a second full pipeline run over the same project must not
 	// reorder or duplicate it.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 	second := lockStoreOf(t, projectDir).Hashes[govTwoEdge]
@@ -271,7 +271,7 @@ func TestGovernorEditFlagsTheGovernedClaimEverywhere(t *testing.T) {
 	rewordGovernor(t, cfgPath, projectDir)
 
 	// done-when 3: check writes review_pending to the governed claim's FILE.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 	if n := countReviewPendingTrue(t, projectDir, "child.yaml"); n != 1 {
@@ -292,7 +292,7 @@ func TestGovernorEditFlagsTheGovernedClaimEverywhere(t *testing.T) {
 	// done-when 5: claim show names the trigger. Never "none" — that is the
 	// state the hand-copied dependency list produced, and it tells an agent
 	// reaudit has nothing to offer.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "show", govChild)
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "show", govChild)
 	if err != nil {
 		t.Fatalf("claim show: %v", err)
 	}
@@ -309,7 +309,7 @@ func TestGovernorEditFlagsTheGovernedClaimEverywhere(t *testing.T) {
 
 	// done-when 6: check's next_steps routes it to reaudit as a drift/flag
 	// trigger, never to the triggerless bucket.
-	env, _, err = execCLIJSON(t, "--config", cfgPath, "check")
+	env, _, err = execReviewedCLIJSON(t, "--config", cfgPath, "check")
 	if err != nil {
 		t.Fatalf("check: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestCommentOpsDoNotEraseGovernanceDrift(t *testing.T) {
 	cfgPath, projectDir := governedDriftFixture(t)
 	lockGovernedFixture(t, cfgPath)
 	rewordGovernor(t, cfgPath, projectDir)
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 	if n := countReviewPendingTrue(t, projectDir, "child.yaml"); n != 1 {
@@ -340,14 +340,14 @@ func TestCommentOpsDoNotEraseGovernanceDrift(t *testing.T) {
 	}
 
 	// A human opens a thread, the agent replies — both through the CLI.
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "add", govChild,
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "add", govChild,
 		"--as", "human", "--body", "does the reworded doctrine still cover this?")
 	if err != nil {
 		t.Fatalf("comment add: %v", err)
 	}
 	var added commentWriteData
 	envData(t, env, &added)
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "comment", "reply", govChild, added.ThreadID,
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "comment", "reply", govChild, added.ThreadID,
 		"--as", "agent", "--body", "it does; the change was editorial"); err != nil {
 		t.Fatalf("comment reply: %v", err)
 	}
@@ -382,7 +382,7 @@ func TestReauditNamesTheGovernorAndRefreshesItsBaseline(t *testing.T) {
 	cfgPath, projectDir := governedDriftFixture(t)
 	lockGovernedFixture(t, cfgPath)
 	rewordGovernor(t, cfgPath, projectDir)
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 
@@ -412,7 +412,7 @@ func TestReauditNamesTheGovernorAndRefreshesItsBaseline(t *testing.T) {
 
 	// done-when 9: a confirmed reaudit re-snapshots the governor.
 	before := lockStoreOf(t, projectDir).Hashes[govChild][govHub]
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "claim", "reaudit", govChild,
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "claim", "reaudit", govChild,
 		"--confirm", "--reason", "the human read the reworded doctrine and agreed"); err != nil {
 		t.Fatalf("claim reaudit --confirm: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestReauditNamesTheGovernorAndRefreshesItsBaseline(t *testing.T) {
 	}
 
 	// And the drift is gone: a fresh check leaves review_pending cleared.
-	if _, _, err := execCLIJSON(t, "--config", cfgPath, "check"); err != nil {
+	if _, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check"); err != nil {
 		t.Fatalf("check: %v", err)
 	}
 	if n := countReviewPendingTrue(t, projectDir, "child.yaml"); n != 0 {
@@ -446,7 +446,7 @@ func TestDanglingGovernedByIsALintFindingNotAPanic(t *testing.T) {
 		t.Fatalf("write child: %v", err)
 	}
 
-	env, _, err := execCLIJSON(t, "--config", cfgPath, "check", "--validate")
+	env, _, err := execReviewedCLIJSON(t, "--config", cfgPath, "check", "--validate")
 	if err == nil {
 		t.Fatalf("check --validate must fail on a dangling governed_by")
 	}

@@ -743,6 +743,27 @@ th {
   border-top: 1px solid var(--border);
 }
 
+/* Live approval/readiness facts arrive from /api/status after the static card
+   renders. They stay compact on healthy cards and expand into one line per
+   condition/cause only when the policy engine reports a real obstacle. */
+.claim-readiness {
+  margin: 0.55rem 0 0;
+  padding: 0.45rem 0.6rem;
+  border-left: 3px solid var(--border-strong, var(--border));
+  background: var(--hover-bg, transparent);
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.claim-readiness-summary,
+.claim-readiness-detail {
+  margin: 0;
+}
+
+.claim-readiness-detail {
+  margin-top: 0.25rem;
+}
+
 /* The summary is the disclosure's only click target and reads as a mono
    count strip ("4 links - 2 files - 1 drifted"), sharing .k's and
    .claim-edges' register rather than the card body's prose. The UA
@@ -3000,6 +3021,15 @@ body.shell-body {
 .bo-modules .subtab {
   flex: 0 0 auto;
   white-space: nowrap;
+}
+
+.bo-missing-claim {
+  margin: 0 0 18px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--ink);
+  background: var(--paper-alt);
+  font-weight: 700;
 }
 
 .bo-phase {
