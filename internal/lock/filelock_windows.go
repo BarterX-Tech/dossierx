@@ -5,7 +5,13 @@ package lock
 import (
 	"errors"
 	"io/fs"
+	"syscall"
 )
+
+// ERROR_SHARING_VIOLATION is returned when another process has the store open
+// without a compatible share mode. It is distinct from ERROR_ACCESS_DENIED, so
+// errors.Is(err, fs.ErrPermission) does not recognize the CI failure it names.
+const windowsErrorSharingViolation = syscall.Errno(32)
 
 // lockOpenIsTransient reports whether a failed O_CREATE|O_EXCL open of the lock
 // sentinel names a state that clears on its own, and so is a reason to keep
@@ -31,5 +37,5 @@ func lockOpenIsTransient(err error) bool {
 }
 
 func lockReadIsTransient(err error) bool {
-	return errors.Is(err, fs.ErrPermission)
+	return errors.Is(err, fs.ErrPermission) || errors.Is(err, windowsErrorSharingViolation)
 }
