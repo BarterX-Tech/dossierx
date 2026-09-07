@@ -549,7 +549,7 @@
     "internal/layout": "sha256:5cdfa2ab0f86908c3a7b82579f951e7eaa41b877a68edbc839513db4657ec1e2",
     "internal/lint": "sha256:acd68d118785e05d058091b2c26171bb6a129449624476adee6a8df101f5d215",
     "internal/loader": "sha256:04a25e29820e9bb1a023cb09b13904295a3a398897664966950d349a42f7f671",
-    "internal/lock": "sha256:c925e6c28b02c6b39b3179d0b418e6505af1bb02313c5af722f9192c26b086e1",
+    "internal/lock": "sha256:0d8cacd858e7c7d2d6a61ad2784892f9cedeaee4db5cc0072ac9d74d75a9e7c6",
     "internal/model": "sha256:0b1f841bb0e8ae3c6357364c2456f8d50c21cebe201fb3f45264c3bb3e938015",
     "internal/readiness": "sha256:27b94ad2e402403e255aed9a577d82f40abb15bcd1d2973b73f5f4d7abbf3636",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",

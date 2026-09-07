@@ -8,9 +8,8 @@ import (
 	"syscall"
 )
 
-// ERROR_SHARING_VIOLATION is returned when another process has the store open
-// without a compatible share mode. It is distinct from ERROR_ACCESS_DENIED, so
-// errors.Is(err, fs.ErrPermission) does not recognize the CI failure it names.
+// ERROR_SHARING_VIOLATION is 32 in the Windows API. syscall.Errno is only the
+// portable error-code type here; no syscall is invoked.
 const windowsErrorSharingViolation = syscall.Errno(32)
 
 // lockOpenIsTransient reports whether a failed O_CREATE|O_EXCL open of the lock
@@ -37,5 +36,7 @@ func lockOpenIsTransient(err error) bool {
 }
 
 func lockReadIsTransient(err error) bool {
+	// ERROR_SHARING_VIOLATION is distinct from ERROR_ACCESS_DENIED, so the
+	// fs.ErrPermission check alone does not recognize this transient race.
 	return errors.Is(err, fs.ErrPermission) || errors.Is(err, windowsErrorSharingViolation)
 }
