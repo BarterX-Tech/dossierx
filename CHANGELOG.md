@@ -13,8 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claim can be locked (issue #68). A readable draft prerequisite remains a visible
   dependency condition instead of being reported as a false locking blocker.
   Genuine approval blockers and legacy-policy behavior remain enforced.
-- Stabilize viewer overlay and navigation disclosure state tests so layout
-  movement does not turn a simulated click into a missed interaction. Viewer
+- Retry transient Windows file-sharing conflicts when reading the lock store,
+  so concurrent claim operations do not fail immediately while another process
+  briefly holds the file. Persistent failures still produce an error.
+- Stabilize viewer overlay and navigation disclosure tests by waiting for layout
+  and navigation callbacks before checking real pointer interactions. Viewer
   behavior and the tests' visibility and state assertions remain unchanged.
 
 ### Maintenance
