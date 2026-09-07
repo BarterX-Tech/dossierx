@@ -280,9 +280,42 @@ func TestNoHardcodedPathSeparatorsOrOSSpecificSyscalls(t *testing.T) {
 // target (including Windows), so — unlike a genuinely platform-specific
 // syscall — they do NOT make a cross-compiled binary diverge per OS; they are
 // the idiomatic, portable way to handle Ctrl-C / `kill`, and "dossierx serve"
-// needs them for its SIGINT/SIGTERM shutdown handler. Only these two constants
-// are exempted below; any OTHER syscall.* reference still trips the guard.
+// needs them for its SIGINT/SIGTERM shutdown handler. These constants and the
+// portable syscall.Errno type are exempted below; every other syscall.*
+// reference still trips the guard.
 var portableSignalConst = regexp.MustCompile(`syscall\.SIG(TERM|INT)\b`)
+
+// syscall.Errno is a portable integer error type. Naming it does not invoke an
+// OS syscall; Windows-tagged code uses it to compare a documented error code.
+// The scanner still rejects every syscall function and every other symbol.
+var portableErrnoType = regexp.MustCompile(`syscall\.Errno\b`)
+
+func TestPortableSyscallExceptionsStayNarrow(t *testing.T) {
+	syscallUse := regexp.MustCompile(`\bsyscall\.`)
+	for _, tc := range []struct {
+		name string
+		line string
+		want bool
+	}{
+		{name: "errno type", line: `const sharing = syscall.Errno(32)`, want: false},
+		{name: "portable signal", line: `signal.Notify(ch, syscall.SIGTERM)`, want: false},
+		{name: "syscall function", line: `syscall.Open(path, 0, 0)`, want: true},
+		{name: "other symbol", line: `const lock = syscall.ERROR_LOCK_VIOLATION`, want: true},
+		{name: "errno does not mask function", line: `var _ = syscall.Errno(syscall.Open(path, 0, 0))`, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := hasDisallowedSyscall(tc.line, syscallUse); got != tc.want {
+				t.Fatalf("hasDisallowedSyscall(%q) = %v, want %v", tc.line, got, tc.want)
+			}
+		})
+	}
+}
+
+func hasDisallowedSyscall(line string, syscallUse *regexp.Regexp) bool {
+	residual := portableSignalConst.ReplaceAllString(line, "")
+	residual = portableErrnoType.ReplaceAllString(residual, "")
+	return syscallUse.MatchString(residual)
+}
 
 func scanForPatterns(t *testing.T, hardcodedSep, syscallUse *regexp.Regexp, offenders *[]string) filepath.WalkFunc {
 	return func(path string, info os.FileInfo, err error) error {
@@ -304,10 +337,9 @@ func scanForPatterns(t *testing.T, hardcodedSep, syscallUse *regexp.Regexp, offe
 				*offenders = append(*offenders, path+":"+itoa(i+1)+": hardcoded path separator: "+strings.TrimSpace(line))
 			}
 			if syscallUse.MatchString(line) {
-				// Exempt only the portable termination-signal constants: strip
-				// them and re-test, so any other syscall use on the same line
-				// still fails.
-				if residual := portableSignalConst.ReplaceAllString(line, ""); syscallUse.MatchString(residual) {
+				// Strip the narrow portable exceptions and re-test, so another
+				// syscall use on the same line still fails.
+				if hasDisallowedSyscall(line, syscallUse) {
 					*offenders = append(*offenders, path+":"+itoa(i+1)+": raw syscall use: "+strings.TrimSpace(line))
 				}
 			}
