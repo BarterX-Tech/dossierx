@@ -16,9 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Retry transient Windows file-sharing conflicts when reading the lock store,
   so concurrent claim operations do not fail immediately while another process
   briefly holds the file. Persistent failures still produce an error.
-- Stabilize viewer overlay and navigation disclosure tests by waiting for layout
-  and navigation callbacks before checking real pointer interactions. Viewer
-  behavior and the tests' visibility and state assertions remain unchanged.
+- Stabilize viewer overlay and navigation disclosure tests so asynchronous
+  navigation and viewport changes do not cause intermittent test failures.
+  Viewer behavior and the tests' state assertions remain unchanged.
 
 ### Maintenance
 
