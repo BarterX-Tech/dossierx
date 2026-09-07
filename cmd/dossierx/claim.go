@@ -411,14 +411,24 @@ func claimReviewTrigger(claim model.Claim, claims []model.Claim, store *lock.Sto
 // unlock->fix->lock to change anything locked, reaudit only for drift — and an
 // agent that has to re-derive which step it is on from status + review_pending
 // + open threads + lint state will get it wrong sooner or later. This computes
-// it once, in the binary, from the same gates the write paths enforce
-// (evaluateLockGates is literally lock.Lock's refusal order), so the advice can
-// never disagree with what the command would actually do.
-func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Config, trigger string, links []claimLinkView, ledger *claimLedgerView) []string {
+// it once, in the binary, from the same policy evaluator the preview and write
+// paths enforce, so the advice cannot reinterpret a dependency condition as a
+// refusal. Legacy stores retain the legacy gate until explicit migration.
+func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Config, store *lock.Store, storeErr error, trigger string, links []claimLinkView, ledger *claimLedgerView) []string {
 	var actions []string
 	id := claim.ID
 
 	if claim.Status != model.StatusLocked {
+		if storeErr != nil {
+			return []string{"local approval cannot be assessed because " + config.LockStoreDisplayPath + " is unreadable -> restore the ledger from version control; dossierx check --validate names the integrity finding"}
+		}
+		if store != nil && store.LocalApprovalEnabled() {
+			evaluation := lock.EvaluateSetWithSemanticConflicts(claims, []string{id}, cfg, store, nil)
+			if len(evaluation.Verdicts) != 1 {
+				return []string{fmt.Sprintf("local approval cannot be assessed because the policy evaluator returned no verdict for %s -> dossierx claim lock %s --dry-run", id, id)}
+			}
+			return policyVerdictNextActions(evaluation.Verdicts[0])
+		}
 		gate := evaluateLockGates(claim, claims, cfg)
 		switch {
 		// The rules NAMED, and the next command pointed at the one that can
@@ -516,6 +526,61 @@ func claimNextActions(claim model.Claim, claims []model.Claim, cfg *config.Confi
 	return actions
 }
 
+// policyVerdictNextActions is a presentation adapter over the shared policy
+// answer. It does not infer gates from conditions, and its conservative default
+// keeps an unfamiliar refusal from becoming ready advice.
+func policyVerdictNextActions(verdict lock.CandidateVerdict) []string {
+	id := verdict.ClaimID
+	preview := fmt.Sprintf("dossierx claim lock %s --dry-run", id)
+	if !verdict.LocalAdmissible {
+		if len(verdict.Refusals) == 0 {
+			return []string{"local approval is refused for an unknown reason -> " + preview}
+		}
+		actions := make([]string, 0, len(verdict.Refusals))
+		lintReported := false
+		for _, refusal := range verdict.Refusals {
+			switch {
+			case strings.HasPrefix(refusal, "lint:"):
+				if lintReported {
+					continue
+				}
+				lintReported = true
+				details := []string{}
+				for _, finding := range verdict.LintFindings {
+					details = append(details, fmt.Sprintf("%s on %s: %s", finding.LintName, finding.ClaimID, finding.Message))
+				}
+				if len(details) == 0 {
+					for _, candidate := range verdict.Refusals {
+						if strings.HasPrefix(candidate, "lint:") {
+							details = append(details, strings.TrimPrefix(candidate, "lint:"))
+						}
+					}
+				}
+				actions = append(actions, fmt.Sprintf("%d blocking lint finding(s): %s block local approval -> %s", len(details), strings.Join(details, "; "), preview))
+			case refusal == "unresolved_comments":
+				actions = append(actions, fmt.Sprintf("%d open comment thread(s) block local approval -> the human resolves them in the viewer; that click is the approval", len(verdict.OpenThreads)))
+			case strings.HasPrefix(refusal, "doctrine_dependency_not_locked:"):
+				parts := strings.SplitN(refusal, ":", 3)
+				depID := refusal
+				if len(parts) == 3 {
+					depID = parts[2]
+				}
+				actions = append(actions, fmt.Sprintf("dependency %s is doctrine and still draft -> lock it first", depID))
+			default:
+				actions = append(actions, fmt.Sprintf("local approval refused (%s) -> %s", refusal, preview))
+			}
+		}
+		return actions
+	}
+
+	actions := []string{}
+	for _, condition := range verdict.Conditions {
+		actions = append(actions, fmt.Sprintf("local approval is conditional: %s on %s; integrated readiness waits for the dependency chain", condition.Kind, condition.DependencyID))
+	}
+	actions = append(actions, fmt.Sprintf("ready for local approval (ready to lock after preview and human review) -> %s, then use its proposal with --reason \"<their words>\"", preview))
+	return actions
+}
+
 func newClaimShowCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "show <id>",
@@ -599,7 +664,7 @@ func newClaimShowCmd() *cobra.Command {
 				ImplementedIn: links,
 				Comments:      counts,
 				Ledger:        ledger,
-				NextActions:   claimNextActions(claim, claims, cfg, trigger, links, ledger),
+				NextActions:   claimNextActions(claim, claims, cfg, store, storeErr, trigger, links, ledger),
 			}
 			if data.ImplementedIn == nil {
 				data.ImplementedIn = []claimLinkView{}
