@@ -1,11 +1,84 @@
 package viewertests
 
 import (
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/chromedp/chromedp"
 )
+
+// clickNavigationGroupSummary keeps the real pointer hit-target assertion and
+// waits for the native <details> toggle event, the open property, and the
+// reader-owned preference written by the production handler.
+func clickNavigationGroupSummary(t *testing.T, ctx context.Context, selector string, wantOpen bool) {
+	t.Helper()
+	var before int
+	observe := fmt.Sprintf(`(function(){
+		var summary = document.querySelector(%q);
+		var group = summary && summary.parentElement;
+		if (!group) { return -1; }
+		if (group.dataset.testToggleObserved !== 'true') {
+			group.dataset.testToggleObserved = 'true';
+			group.dataset.testToggleCount = '0';
+			group.dataset.testSummaryClickCount = '0';
+			summary.addEventListener('click', function (event) {
+				group.dataset.testSummaryClickCount = String(Number(group.dataset.testSummaryClickCount || '0') + 1);
+				group.dataset.testOpenDuringClick = String(group.open);
+				group.dataset.testClickPrevented = String(event.defaultPrevented);
+			});
+			group.addEventListener('toggle', function () {
+				group.dataset.testToggleCount = String(Number(group.dataset.testToggleCount || '0') + 1);
+			});
+		}
+		return Number(group.dataset.testToggleCount || '0');
+	})()`, selector)
+	runCDP(t, ctx, chromedp.Evaluate(observe, &before))
+	if before < 0 {
+		t.Fatalf("navigation summary %q was not found", selector)
+	}
+	// The navigation itself scrolls. A summary can still be DOM-visible while
+	// its centre is clipped by that scrollport, and chromedp's page-level
+	// visibility check does not establish that the pointer will hit it.
+	runCDP(t, ctx, chromedp.Evaluate(fmt.Sprintf(`document.querySelector(%q).scrollIntoView({block:'nearest', inline:'nearest'})`, selector), nil))
+	pollTrue(t, ctx, fmt.Sprintf(`(function(){
+		var summary = document.querySelector(%q);
+		var nav = document.getElementById('nav');
+		if (!summary || !nav) { return false; }
+		var r = summary.getBoundingClientRect();
+		var n = nav.getBoundingClientRect();
+		var x = r.left + r.width / 2;
+		var y = r.top + r.height / 2;
+		var hit = document.elementFromPoint(x, y);
+		return r.width > 0 && r.height > 0 && r.top >= n.top && r.bottom <= n.bottom &&
+			!!hit && (hit === summary || summary.contains(hit));
+	})()`, selector))
+	runCDP(t, ctx, chromedp.Click(selector, chromedp.ByQuery))
+	wantReaderClosed := !wantOpen
+	settled := fmt.Sprintf(`(function(){
+		var summary = document.querySelector(%q);
+		var group = summary && summary.parentElement;
+		return !!group && Number(group.dataset.testSummaryClickCount || '0') > %d &&
+			Number(group.dataset.testToggleCount || '0') > %d &&
+			group.open === %t && group.dataset.readerClosed === %q;
+	})()`, selector, before, before, wantOpen, fmt.Sprint(wantReaderClosed))
+	var ok bool
+	if err := chromedp.Run(ctx, chromedp.Poll(settled, &ok,
+		chromedp.WithPollingInterval(40*time.Millisecond),
+		chromedp.WithPollingTimeout(20*time.Second))); err != nil {
+		var state string
+		diagnostic := fmt.Sprintf(`(function(){
+			var summary = document.querySelector(%q);
+			var group = summary && summary.parentElement;
+			return group ? JSON.stringify({open:group.open, readerClosed:group.dataset.readerClosed,
+				clicks:group.dataset.testSummaryClickCount, toggles:group.dataset.testToggleCount,
+				openDuringClick:group.dataset.testOpenDuringClick, clickPrevented:group.dataset.testClickPrevented}) : 'missing';
+		})()`, selector)
+		diagnosticErr := chromedp.Run(ctx, chromedp.Evaluate(diagnostic, &state))
+		t.Fatalf("navigation summary %q did not settle open=%t after a real pointer click: %v; state=%s; diagnostic=%v", selector, wantOpen, err, state, diagnosticErr)
+	}
+}
 
 const navigationGroupsConfigYAML = `schema_version: 1
 facets:
@@ -120,8 +193,7 @@ func TestActiveNavigationGroupsCanStayCollapsed(t *testing.T) {
 		t.Fatal("large module list must reproduce Tracks starting below the visible navigation area")
 	}
 
-	runCDP(t, ctx, chromedp.Click(".system-nav-group:first-child > summary", chromedp.ByQuery))
-	pollTrue(t, ctx, `!document.querySelectorAll('.system-nav-group')[0].open`)
+	clickNavigationGroupSummary(t, ctx, ".system-nav-group:first-child > summary", false)
 	if !evalBool(t, ctx, `(function(){
 		var nav = document.getElementById('nav').getBoundingClientRect();
 		var tracks = document.querySelectorAll('.system-nav-group')[1].querySelector('summary').getBoundingClientRect();
@@ -130,12 +202,35 @@ func TestActiveNavigationGroupsCanStayCollapsed(t *testing.T) {
 		t.Fatal("collapsing Modules must bring the Tracks header into the visible navigation area")
 	}
 
-	runCDP(t, ctx, chromedp.Click(".system-nav-group:nth-child(2) .sec-tab", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelectorAll('.system-nav-group')[1].querySelector('.sec-tab').classList.contains('on')`)
+	// The first track owns the initially active module-01 claim, so it already
+	// has .on before any click. Use the second track: waiting for .on then proves
+	// that the pointer action selected it instead of accepting stale readiness.
+	const secondTrack = ".system-nav-group:nth-child(2) .sec-tab:nth-child(2)"
+	if evalBool(t, ctx, `document.querySelector("`+secondTrack+`").classList.contains('on')`) {
+		t.Fatal("the track click fixture must start on a different track")
+	}
+	// Register after production's document listener. Its zero-delay marker is
+	// queued after production's zero-delay forced-open task, so this observes
+	// the real navigation boundary instead of guessing with elapsed time.
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){
+		document.documentElement.dataset.testNavigationSettled = 'false';
+		function afterNavigation(event) {
+			if (!event.target.closest("`+secondTrack+`")) { return; }
+			document.removeEventListener('click', afterNavigation);
+			setTimeout(function(){ document.documentElement.dataset.testNavigationSettled = 'true'; }, 0);
+		}
+		document.addEventListener('click', afterNavigation);
+	})()`, nil))
+	runCDP(t, ctx, chromedp.Click(secondTrack, chromedp.ByQuery))
+	// Navigation marks the tab synchronously, then syncs its disclosure from a
+	// zero-delay callback. Waiting only for .on can therefore race that pending
+	// callback with the next summary click.
+	pollTrue(t, ctx, `document.documentElement.dataset.testNavigationSettled === 'true' &&
+		document.querySelector("`+secondTrack+`").classList.contains('on') &&
+		document.querySelectorAll('.system-nav-group')[1].open &&
+		document.querySelectorAll('.system-nav-group')[1].dataset.readerClosed === 'false'`)
 
-	runCDP(t, ctx, chromedp.Click(".system-nav-group:nth-child(2) > summary", chromedp.ByQuery))
-	pollTrue(t, ctx, `!document.querySelectorAll('.system-nav-group')[1].open`)
+	clickNavigationGroupSummary(t, ctx, ".system-nav-group:nth-child(2) > summary", false)
 
-	runCDP(t, ctx, chromedp.Click(".system-nav-group:nth-child(2) > summary", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelectorAll('.system-nav-group')[1].open`)
+	clickNavigationGroupSummary(t, ctx, ".system-nav-group:nth-child(2) > summary", true)
 }

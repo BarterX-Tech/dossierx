@@ -13,8 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claim can be locked (issue #68). A readable draft prerequisite remains a visible
   dependency condition instead of being reported as a false locking blocker.
   Genuine approval blockers and legacy-policy behavior remain enforced.
-- Make the viewer overlay state test use a deterministic DOM click, removing a
-  coordinate-click race under loaded CI without changing viewer behavior.
+- Stabilize viewer overlay and navigation disclosure state tests so layout
+  movement does not turn a simulated click into a missed interaction. Viewer
+  behavior and the tests' visibility and state assertions remain unchanged.
 
 ### Maintenance
 
