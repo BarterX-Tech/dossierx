@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.10] - 2026-09-07
+
+### Fixed
+
+- Make `claim show` use the local-approval policy when advising whether a draft
+  claim can be locked (issue #68). A readable draft prerequisite remains a visible
+  dependency condition instead of being reported as a false locking blocker.
+  Genuine approval blockers and legacy-policy behavior remain enforced.
+- Make the viewer overlay state test use a deterministic DOM click, removing a
+  coordinate-click race under loaded CI without changing viewer behavior.
+
+### Maintenance
+
+- Regenerate all five fixture viewers. Byte sizes are unchanged:
+  `fixture-basic` 505,445 -> 505,445; `fixture-graph-demo` 653,233 -> 653,233;
+  `fixture-portability` 507,856 -> 507,856; `fixture-theme-flat` 4,130,517 ->
+  4,130,517; `fixture-theme-preset` 508,882 -> 508,882.
+
 ## [0.7.9] - 2026-09-07
 
 ### Changed
