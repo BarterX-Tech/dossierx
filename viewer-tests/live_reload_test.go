@@ -170,8 +170,11 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 
 	// A subtab click STILL switches facets after the reload: the listener is
 	// delegated on document (the swapped sub-nav buttons carry none) and reads the
-	// facetToModule map initViewer just rebuilt. Switch back to contract.
-	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-contract"]`, chromedp.ByQuery))
+	// facetToModule map initViewer just rebuilt. Resolve and click the CURRENT
+	// post-swap node in one browser task: coordinate-based input can otherwise
+	// retain a pre-settle target while the restored page is still laying out on a
+	// slow headless runner, which tests hit-testing rather than delegation.
+	evalVoid(t, ctx, `document.querySelector('.subtab[data-target="#widget-contract"]').click()`)
 	pollTrue(t, ctx, facetVisibleExpr("widget-contract"))
 	if !evalBool(t, ctx, `document.getElementById('widget-design').hidden`) {
 		t.Fatal("a post-reload subtab click must switch the visible facet")
