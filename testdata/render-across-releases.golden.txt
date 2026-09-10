@@ -36,7 +36,7 @@
 #
 # An empty report is the expected steady state immediately after a release.
 
-baseline   v0.7.9 (5031821c651724b2c5dcd7ce127d25c48c32fed5)
+baseline   v0.7.10 (4fe85dc68c4c34bf67969df8fc21f8d14f172eea)
 compared   153 rendered artifacts present at both revisions
 added      0
 removed    0
@@ -52,7 +52,7 @@ testdata/fixture-basic/build/viewer/index.html  (rewritten)
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
     against the baseline directly:
-        git diff v0.7.9 -- testdata/fixture-basic/build/viewer/index.html
+        git diff v0.7.10 -- testdata/fixture-basic/build/viewer/index.html
 
 testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
     size            14134 lines / 653233 bytes -> 18613 lines / 4257854 bytes
@@ -60,7 +60,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
     against the baseline directly:
-        git diff v0.7.9 -- testdata/fixture-graph-demo/build/viewer/index.html
+        git diff v0.7.10 -- testdata/fixture-graph-demo/build/viewer/index.html
 
 testdata/fixture-portability/build/viewer/index.html  (rewritten)
     size            13389 lines / 507856 bytes -> 17868 lines / 4112477 bytes
@@ -68,7 +68,7 @@ testdata/fixture-portability/build/viewer/index.html  (rewritten)
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
     against the baseline directly:
-        git diff v0.7.9 -- testdata/fixture-portability/build/viewer/index.html
+        git diff v0.7.10 -- testdata/fixture-portability/build/viewer/index.html
 
 testdata/fixture-theme-flat/build/viewer/index.html  (+671 -51)
     size            17539 lines / 4130517 bytes -> 18159 lines / 4152106 bytes
@@ -903,4 +903,4 @@ testdata/fixture-theme-preset/build/viewer/index.html  (rewritten)
     document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
     artifact IS reported, with its sizes, and it still rendered differently. Read it
     against the baseline directly:
-        git diff v0.7.9 -- testdata/fixture-theme-preset/build/viewer/index.html
+        git diff v0.7.10 -- testdata/fixture-theme-preset/build/viewer/index.html
