@@ -50,13 +50,30 @@
         carries this as a checklist item.
       -->
       <div class="ledger">
-        <article class="release release--current" data-version="v0.7.10" data-current="true">
+        <article class="release release--current" data-version="v0.7.11" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.11</span>
+            <time datetime="2026-09-11">2026-09-11</time>
+          </p>
+          <div>
+            <h2 class="release__title">Readable claim readiness<span class="release__badge">Latest</span></h2>
+            <p class="release__note">
+              Claim pages now turn readiness diagnostics into a reviewer work
+              queue: a plain-language summary, blockers grouped by the direct
+              dependency that introduces them, expandable representative paths,
+              and a focused dependency map on demand. The complete structured
+              blocker list remains authoritative, with exact engine fields kept
+              in Raw diagnostics. Static and live viewers use the same layout.
+            </p>
+          </div>
+        </article>
+        <article class="release" data-version="v0.7.10">
           <p class="release__meta">
             <span class="release__version">v0.7.10</span>
             <time datetime="2026-09-07">2026-09-07</time>
           </p>
           <div>
-            <h2 class="release__title">Consistent local-approval advice<span class="release__badge">Latest</span></h2>
+            <h2 class="release__title">Consistent local-approval advice</h2>
             <p class="release__note">
               Claim inspection now follows the same local-approval policy as the
               lock preview. A readable draft prerequisite stays visible as a

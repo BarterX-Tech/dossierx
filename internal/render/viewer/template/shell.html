@@ -273,12 +273,11 @@
        parse time and does nothing else until a reader opens the pane. -->
   <script>{{.SystemRecordJS}}</script>
   <script>{{.GraphCoreJS}}</script>
-  <script>{{.GraphUIJS}}</script>{{if .BuildOrders.Modules}}
-<!-- The Build order tab's two client files: the vendored mermaid build
-       (~3.5 MB) and the engine's renderer glue, GUARDED on the same condition
-       as the sidebar group and the section, because build orders are opt-in
-       and an unguarded tag would take every viewer that has never locked an
-       order from ~450 KB to ~4 MB of dead renderer. -->
+  <script>{{.GraphUIJS}}</script>{{if or .BuildOrders.Modules .HasReadinessMaps}}
+<!-- The shared Mermaid renderer: the vendored build (~3.5 MB) and the
+       engine's lazy renderer glue are included only when a locked Build order
+       or a traceable readiness obstacle exists. Healthy projects with neither
+       retain the small viewer instead of carrying a dead renderer. -->
   <script>{{.MermaidJS}}</script>
   <script>{{.BuildOrderUIJS}}</script>{{end}}
 </body>

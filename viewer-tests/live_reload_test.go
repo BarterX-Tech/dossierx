@@ -170,8 +170,11 @@ func TestReloadKeepsActiveFacetVisible(t *testing.T) {
 
 	// A subtab click STILL switches facets after the reload: the listener is
 	// delegated on document (the swapped sub-nav buttons carry none) and reads the
-	// facetToModule map initViewer just rebuilt. Switch back to contract.
-	runCDP(t, ctx, chromedp.Click(`.subtab[data-target="#widget-contract"]`, chromedp.ByQuery))
+	// facetToModule map initViewer just rebuilt. Resolve and click the CURRENT
+	// post-swap node in one browser task: coordinate-based input can otherwise
+	// retain a pre-settle target while the restored page is still laying out on a
+	// slow headless runner, which tests hit-testing rather than delegation.
+	evalVoid(t, ctx, `document.querySelector('.subtab[data-target="#widget-contract"]').click()`)
 	pollTrue(t, ctx, facetVisibleExpr("widget-contract"))
 	if !evalBool(t, ctx, `document.getElementById('widget-design').hidden`) {
 		t.Fatal("a post-reload subtab click must switch the visible facet")
@@ -472,6 +475,12 @@ func TestReloadZeroToOneLockedOrderReloadsForTheRenderer(t *testing.T) {
 	p.writeClaim("widget-schema.yaml", boClaim("widget.contract.schema", "contract", "widget", "schema"))
 	p.writeClaim("widget-behavior.yaml", boClaim("widget.contract.behavior", "contract", "widget", "behavior", "widget.contract.schema"))
 	p.writeClaim("single-only.yaml", boClaim("single.contract.only", "contract", "single", "orientation"))
+	// Lock the dependency chain before opening the page. Draft prerequisites
+	// now legitimately load Mermaid for readiness traces, so the old fixture no
+	// longer represented a zero-renderer page. Locked claims with no Build order
+	// retain that exact transition and keep this reload contract meaningful.
+	p.run("claim", "lock", "widget.contract.schema", "--reason", "viewer-test fixture")
+	p.run("claim", "lock", "widget.contract.behavior", "--reason", "viewer-test fixture")
 	ctx := serveAndOpenLive(t, p)
 	if !evalBool(t, ctx, `typeof window.mermaid === 'undefined'`) {
 		t.Fatal("a project with no locked order must not carry the renderer")
@@ -481,8 +490,6 @@ func TestReloadZeroToOneLockedOrderReloadsForTheRenderer(t *testing.T) {
 	}
 	runCDP(t, ctx, chromedp.Evaluate(`window.__boMarker = true;`, nil))
 
-	p.run("claim", "lock", "widget.contract.schema", "--reason", "viewer-test fixture")
-	p.run("claim", "lock", "widget.contract.behavior", "--reason", "viewer-test fixture")
 	p.run("build-order", "propose", "--module", "widget")
 	p.run("build-order", "lock", "--module", "widget", "--reason", "viewer-test fixture")
 	// The artifact write fires no "changed"; a draft claim is the trigger.

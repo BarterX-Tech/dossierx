@@ -193,6 +193,11 @@ type shellData struct {
 	// payload block and the two script tags — on that, so such a project
 	// renders not one byte of it and never carries the vendored renderer.
 	BuildOrders BuildOrderTab
+	// HasReadinessMaps is true when at least one assessment carries a
+	// dependency condition or review cause that the claim view can trace. It
+	// extends the Mermaid asset guard without charging healthy projects the
+	// vendored renderer's ~3.5 MB cost.
+	HasReadinessMaps bool
 	// BuildOrderPayload is the tab's JSON payload (buildOrderPayloadJSON),
 	// injected into <script type="application/json" id="dossierx-build-orders">
 	// under the same escaping contract as GraphPayload: encoding/json's
@@ -201,8 +206,8 @@ type shellData struct {
 	// swap re-delivers it beside the diagrams it describes.
 	BuildOrderPayload template.JS
 	// MermaidJS is the vendored mermaid build and BuildOrderUIJS the engine's
-	// renderer glue, both engine-owned bytes off the embedded FS, injected
-	// after GraphUIJS and only inside the {{if .BuildOrders.Modules}} guard.
+	// shared lazy renderer glue, both engine-owned bytes off the embedded FS.
+	// shell.html injects them for a locked Build order or readiness map.
 	MermaidJS      template.JS
 	BuildOrderUIJS template.JS
 
@@ -724,6 +729,14 @@ func buildShellData(in shellInputs) shellData {
 	// via ModuleGroups below).
 	groups := buildGroups(cat, cfg, in.renderedByID)
 	moduleGroups := buildModuleGroups(groups)
+	hasReadinessMaps := false
+	for _, assessment := range cat.Readiness {
+		if len(assessment.DependencyConditions) > 0 || len(assessment.Conditions) > 0 ||
+			len(assessment.ReviewCauses) > 0 || len(assessment.Causes) > 0 {
+			hasReadinessMaps = true
+			break
+		}
+	}
 
 	title := "dossierx viewer"
 	eyebrow := ""
@@ -750,6 +763,7 @@ func buildShellData(in shellInputs) shellData {
 		// The Build order tab. Typed template.JS on the way out like the
 		// graph fields, for the same silent-failure reason.
 		BuildOrders:       in.buildOrders,
+		HasReadinessMaps:  hasReadinessMaps,
 		BuildOrderPayload: in.buildOrderPayload,
 		MermaidJS:         template.JS(in.mermaidJS),
 		BuildOrderUIJS:    template.JS(in.buildOrderUIJS),

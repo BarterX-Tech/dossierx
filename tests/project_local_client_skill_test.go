@@ -4,7 +4,9 @@ import (
 	"errors"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	dxskills "github.com/BarterX-Tech/dossierx/skills"
@@ -35,12 +37,20 @@ func TestProjectLocalClientSkillIsWiredButNotEmbedded(t *testing.T) {
 	}
 
 	runner := filepath.Join(filepath.Dir(canonical), "scripts", "run-local-client.sh")
-	info, err := os.Stat(runner)
+	if _, err := os.Stat(runner); err != nil {
+		t.Fatal(err)
+	}
+	relRunner, err := filepath.Rel(root, runner)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode()&0o111 == 0 {
-		t.Fatal("local-client runner is not executable")
+	mode, err := exec.Command("git", "-C", root, "ls-files", "--stage", "--", filepath.ToSlash(relRunner)).Output()
+	if err != nil {
+		t.Fatalf("read local-client runner mode from git index: %v", err)
+	}
+	fields := strings.Fields(string(mode))
+	if len(fields) == 0 || fields[0] != "100755" {
+		t.Fatalf("local-client runner git mode = %q, want 100755", strings.TrimSpace(string(mode)))
 	}
 
 	if _, err := fs.Stat(dxskills.FS, "dossierx-local-client"); err == nil {
