@@ -105,6 +105,65 @@ For example, against one of the fixtures under `testdata/`:
 go run ./cmd/dossierx check --config testdata/fixture-basic/project.config.yaml
 ```
 
+## Testing an unreleased change in a client project
+
+A client that declares DossierX as a Go tool can run the source from any local
+DossierX checkout, including a feature worktree with uncommitted changes. Run
+the helper **from the DossierX checkout that contains the change**:
+
+```sh
+./scripts/run-local-client.sh /absolute/path/to/client/dossierx \
+  check --validate --format text
+
+./scripts/run-local-client.sh /absolute/path/to/client/dossierx serve
+```
+
+The client module must contain this tool declaration (normally created with
+`go get -tool github.com/BarterX-Tech/dossierx/cmd/dossierx@<released-version>`):
+
+```go
+tool github.com/BarterX-Tech/dossierx/cmd/dossierx
+```
+
+The helper creates a temporary Go workspace and replaces
+`github.com/BarterX-Tech/dossierx` with the checkout that contains the helper.
+It prints that source path, commit, and dirty state before running the command,
+then removes the workspace. It does not edit the client's `go.mod`, `go.sum`, or
+create a persistent `go.work`. The DossierX command itself keeps its normal
+behavior: `check --validate` is read-only, while `check` regenerates client
+artifacts.
+
+Keep the client's committed `go.mod` pinned to a released version for ordinary
+work and CI. This prevents a machine-local absolute path from entering a
+commit, and makes using unreleased source an explicit choice on every run.
+
+A coding agent with the `dossierx-local-client` skill available needs only a
+request such as:
+
+> Use the unreleased DossierX source at `/absolute/path/to/dossierx-worktree` to
+> verify this client project.
+
+The canonical skill is `.agents/skills/dossierx-local-client/SKILL.md`. Hosts
+that do not discover the project skill automatically can be told to read that
+file from the supplied checkout before they start.
+
+If a client CI job must test an unreleased DossierX revision, first push the
+DossierX revision, then pin its commit on a temporary client integration branch:
+
+```sh
+go get -tool github.com/BarterX-Tech/dossierx/cmd/dossierx@<commit-sha>
+go tool dossierx check --validate --format text
+```
+
+Commit the resulting `go.mod` and `go.sum` on that integration branch. Go
+records an immutable pseudo-version for the commit. Use a commit SHA rather
+than a moving branch name, and replace it with the public version when the
+release exists.
+
+Do not use `go install ...@<branch>` for this loop. The client invokes
+`go tool dossierx`, so a binary installed elsewhere on `PATH` is not the tool
+the client is testing.
+
 ## Commit and PR conventions
 
 - **Conventional Commits.** Commit subjects must follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, ...) — `.goreleaser.yaml`'s changelog grouping and any future release tooling depend on this.
