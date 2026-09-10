@@ -85,14 +85,15 @@ func startServerWatch(t *testing.T, cfgBody string, files map[string]string, pol
 		t.Fatalf("listen: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		srv.Serve(ctx) //nolint:errcheck // test server; Serve returns ErrServerClosed on cancel
-		close(done)
+		done <- srv.Serve(ctx)
 	}()
 	t.Cleanup(func() {
 		cancel()
-		<-done
+		if serveErr := <-done; serveErr != nil {
+			t.Errorf("test server stopped unexpectedly: %v", serveErr)
+		}
 	})
 	base = fmt.Sprintf("http://127.0.0.1:%d", srv.Port())
 	// Listen has bound the socket, but Serve runs in the goroutine above. Prove
@@ -168,6 +169,30 @@ func do(t *testing.T, method, url, body string, mods ...reqMod) (res *http.Respo
 		t.Fatalf("read body %s %s: %v", method, url, err)
 	}
 	return resp, data
+}
+
+func doWithClient(client *http.Client, method, url, body string, mods ...reqMod) (res *http.Response, raw []byte, err error) {
+	var rdr io.Reader
+	if body != "" {
+		rdr = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, rdr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new request %s %s: %w", method, url, err)
+	}
+	for _, m := range mods {
+		m(req)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("do %s %s: %w", method, url, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp, nil, fmt.Errorf("read body %s %s: %w", method, url, err)
+	}
+	return resp, data, nil
 }
 
 // --- claim-file byte-identity ------------------------------------------------
@@ -707,6 +732,14 @@ func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
 	const n = 30
 	var wg sync.WaitGroup
 	start := make(chan struct{})
+	errs := make(chan error, n+1)
+	// Each -count repetition starts a new server on an ephemeral port. A fresh
+	// transport keeps this test's socket pool inside the test lifetime instead
+	// of letting http.DefaultTransport retain idle connections across repeated
+	// servers whose ports the OS may later reuse.
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	client := &http.Client{Transport: transport}
+	t.Cleanup(transport.CloseIdleConnections)
 
 	// N concurrent GET / — all released at once so many land during one render.
 	for i := 0; i < n; i++ {
@@ -714,13 +747,17 @@ func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			resp, data := do(t, http.MethodGet, base+"/", "")
+			resp, data, err := doWithClient(client, http.MethodGet, base+"/", "")
+			if err != nil {
+				errs <- err
+				return
+			}
 			if resp.StatusCode != http.StatusOK {
-				t.Errorf("concurrent GET /: got %d, want 200", resp.StatusCode)
+				errs <- fmt.Errorf("concurrent GET /: got %d, want 200", resp.StatusCode)
 				return
 			}
 			if !strings.Contains(string(data), "widget.contract.one") {
-				t.Errorf("concurrent GET / returned an incomplete document (%d bytes)", len(data))
+				errs <- fmt.Errorf("concurrent GET / returned an incomplete document (%d bytes)", len(data))
 			}
 		}()
 	}
@@ -729,15 +766,26 @@ func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		resp, data := do(t, http.MethodPost, base+"/api/claims/widget.contract.one/comments",
+		resp, data, err := doWithClient(client, http.MethodPost, base+"/api/claims/widget.contract.one/comments",
 			`{"body":"survivor"}`, allowedMutating(base)...)
+		if err != nil {
+			errs <- err
+			return
+		}
 		if resp.StatusCode != http.StatusOK {
-			t.Errorf("concurrent POST: got %d, want 200 (body=%s)", resp.StatusCode, data)
+			errs <- fmt.Errorf("concurrent POST: got %d, want 200 (body=%s)", resp.StatusCode, data)
 		}
 	}()
 
 	close(start)
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+	if t.Failed() {
+		return
+	}
 
 	if runs := srv.RenderRuns(); runs >= n {
 		t.Fatalf("single-flight failed: %d renders for %d GET / requests (want fewer)", runs, n)
