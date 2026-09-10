@@ -1102,10 +1102,187 @@
         return group;
       }
 
-      // renderClaimReadiness puts the live local-approval/readiness answer on
-      // the claim a reader is looking at. The data is supplied by /api/status,
-      // never re-derived in the browser: dependency paths and independent
-      // causes belong to the policy engine, not a second JavaScript policy.
+      function readinessClaimLabel(id) {
+        var card = id ? document.getElementById(id) : null;
+        var label = card && card.querySelector('.k .label');
+        if (label) {
+          var copy = label.cloneNode(true);
+          copy.querySelectorAll('.pill, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
+          var rendered = (copy.textContent || '').replace(/\s+/g, ' ').trim();
+          if (rendered) { return rendered; }
+        }
+        var part = String(id || 'unknown dependency').split('.').pop();
+        return part.replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      }
+
+      function readinessFactLabel(record, type, rootID) {
+        var path = record.path || [];
+        var targetID = record.dependency_id || path[path.length - 1] || rootID;
+        var target = readinessClaimLabel(targetID);
+        var labels = type === 'condition' ? {
+          dependency_unapproved: target + ' is not locally approved',
+          missing_dependency: target + ' is missing',
+          unreadable_dependency: target + ' cannot be read',
+          retired_dependency: target + ' is retired',
+          unknown_historical_baseline: 'The historical approval baseline is unknown',
+          dependency_cycle: 'A required dependency cycle reaches ' + target
+        } : {
+          direct_dependency_change: target + ' changed after approval',
+          upstream_dependency_review: target + ' requires upstream review',
+          own_thread: 'This claim has an open review thread',
+          own_flag: 'This claim has an active review flag',
+          approval_content_drift: 'This claim changed after approval',
+          approval_missing: 'This claim has no approval record',
+          approval_released: 'This claim\'s approval was released',
+          approval_unknown: 'This claim\'s approval state is unknown'
+        };
+        return labels[record.kind] || String(record.kind || 'Readiness obstacle').replace(/_/g, ' ');
+      }
+
+      function readinessRouteKey(record, type, rootID) {
+        if (type === 'cause' && record.direct) { return rootID; }
+        var path = record.path || [];
+        return path[1] || record.dependency_id || rootID;
+      }
+
+      function readinessHopLabel(record, type) {
+        var path = record.path || [];
+        var hops = Math.max(0, path.length - 1);
+        var relation = (type === 'cause' && record.direct) || hops <= 1 ? 'direct' : 'upstream';
+        return relation + ' · ' + hops + ' ' + (hops === 1 ? 'hop' : 'hops');
+      }
+
+      // Mermaid node identifiers are synthetic. Authored claim ids and engine
+      // details are labels only, escaped under the same character contract as
+      // internal/buildorder's exporter so they cannot become diagram syntax.
+      function readinessMermaidEscape(value) {
+        var replacements = { '"': '#quot;', '#': '#35;', ';': '#59;', '<': '#lt;', '>': '#gt;', '&': '#amp;' };
+        return String(value || '').replace(/["#;<>&]/g, function (c) { return replacements[c]; });
+      }
+
+      function readinessMermaidSource(rootID, records) {
+        var limited = records.slice(0, 12);
+        var nodeIDs = {};
+        var nodeLines = [];
+        var edgeLines = [];
+        var edgeSeen = {};
+        var dependencyClasses = [];
+        var factClasses = [];
+
+        function pathNode(id) {
+          if (!Object.prototype.hasOwnProperty.call(nodeIDs, id)) {
+            var nodeID = 'n' + Object.keys(nodeIDs).length;
+            nodeIDs[id] = nodeID;
+            nodeLines.push('  ' + nodeID + '["' + readinessMermaidEscape(readinessClaimLabel(id)) + '"]');
+            if (id !== rootID) { dependencyClasses.push(nodeID); }
+          }
+          return nodeIDs[id];
+        }
+
+        pathNode(rootID);
+        limited.forEach(function (item, index) {
+          var path = (item.record.path || []).slice();
+          if (!path.length || path[0] !== rootID) { path.unshift(rootID); }
+          for (var i = 0; i + 1 < path.length; i += 1) {
+            var from = pathNode(path[i]);
+            var to = pathNode(path[i + 1]);
+            var edge = from + ' --> ' + to;
+            if (!edgeSeen[edge]) { edgeSeen[edge] = true; edgeLines.push('  ' + edge); }
+          }
+          var terminal = pathNode(path[path.length - 1]);
+          var factID = 'f' + index;
+          nodeLines.push('  ' + factID + '(["' + readinessMermaidEscape(readinessFactLabel(item.record, item.type, rootID)) + '"])');
+          edgeLines.push('  ' + terminal + ' --> ' + factID);
+          factClasses.push(factID);
+        });
+
+        var lines = ['flowchart LR'].concat(nodeLines, edgeLines, [
+          '  classDef current stroke-width:3px',
+          '  classDef dependency stroke-width:1px',
+          '  classDef fact stroke-width:2px',
+          '  class ' + nodeIDs[rootID] + ' current'
+        ]);
+        if (dependencyClasses.length) { lines.push('  class ' + dependencyClasses.join(',') + ' dependency'); }
+        if (factClasses.length) { lines.push('  class ' + factClasses.join(',') + ' fact'); }
+        return lines.join('\n');
+      }
+
+      function readinessPathDetails(record) {
+        var details = el('details', 'claim-readiness-path');
+        details.appendChild(textEl('summary', '', 'Show representative path'));
+        details.appendChild(textEl('p', '', (record.path || []).join(' → ') || 'No path supplied'));
+        return details;
+      }
+
+      function readinessFactRow(item, rootID) {
+        var li = el('li', 'claim-readiness-blocker');
+        var copy = el('div', 'claim-readiness-blocker-copy');
+        copy.appendChild(textEl('strong', '', readinessFactLabel(item.record, item.type, rootID)));
+        if (item.record.detail) { copy.appendChild(textEl('p', '', item.record.detail)); }
+        copy.appendChild(readinessPathDetails(item.record));
+        li.appendChild(copy);
+        li.appendChild(textEl('span', 'claim-readiness-relation', readinessHopLabel(item.record, item.type)));
+        return li;
+      }
+
+      function readinessRoute(group, rootID, index) {
+        var details = el('details', 'claim-readiness-route');
+        if (index === 0) { details.open = true; }
+        var summary = el('summary');
+        var identity = el('span', 'claim-readiness-route-id');
+        identity.appendChild(textEl('strong', '', group.key === rootID ? 'This claim' : readinessClaimLabel(group.key)));
+        identity.appendChild(textEl('small', '', group.key));
+        summary.appendChild(identity);
+        var isDirect = group.items.every(function (item) { return (item.record.path || []).length <= 2; });
+        summary.appendChild(textEl('span', 'claim-readiness-route-via', group.key === rootID ? 'local review' : (isDirect ? 'direct dependency' : 'shown via this dependency')));
+        summary.appendChild(textEl('span', 'claim-readiness-route-count', group.items.length + ' ' + (group.items.length === 1 ? 'blocker' : 'blockers')));
+        summary.appendChild(el('span', 'claim-readiness-chevron'));
+        details.appendChild(summary);
+
+        var body = el('div', 'claim-readiness-route-body');
+        var list = el('ul', 'claim-readiness-blockers');
+        group.items.forEach(function (item) { list.appendChild(readinessFactRow(item, rootID)); });
+        body.appendChild(list);
+
+        var trace = el('details', 'claim-readiness-trace');
+        trace.appendChild(textEl('summary', '', 'Trace this route in a dependency map'));
+        var map = el('div', 'claim-readiness-map');
+        map.appendChild(textEl('p', 'claim-readiness-map-caption', 'Representative routes · scroll horizontally'));
+        var scroll = el('div', 'claim-readiness-map-scroll');
+        scroll.appendChild(textEl('pre', 'mermaid', readinessMermaidSource(rootID, group.items)));
+        map.appendChild(scroll);
+        if (group.items.length > 12) {
+          map.appendChild(textEl('p', 'claim-readiness-map-limit', 'Showing 12 of ' + group.items.length + ' blocker facts in the map. The complete list remains above.'));
+        }
+        trace.appendChild(map);
+        body.appendChild(trace);
+        details.appendChild(body);
+        return details;
+      }
+
+      function readinessRawDiagnostics(assessment) {
+        var details = el('details', 'claim-readiness-raw');
+        details.appendChild(textEl('summary', '', 'Raw diagnostics'));
+        details.appendChild(textEl('p', '', 'Exact engine fields and representative path arrays.'));
+        details.appendChild(textEl('pre', '', JSON.stringify({
+          claim_id: assessment.claim_id,
+          policy_version: assessment.policy_version,
+          local_approved: assessment.local_approved,
+          dependency_ready: assessment.dependency_ready,
+          ready: assessment.ready,
+          review_pending: assessment.review_pending,
+          local_reasons: assessment.local_reasons || [],
+          local_approval_issue: assessment.local_approval_issue || '',
+          dependency_conditions: assessment.dependency_conditions || assessment.conditions || [],
+          review_causes: assessment.review_causes || assessment.causes || []
+        }, null, 2)));
+        return details;
+      }
+
+      // renderClaimReadiness reorganizes the policy engine's facts for review.
+      // It never re-derives a verdict, merges independent facts, walks the
+      // dependency graph, or treats a representative path as exclusive cause
+      // ownership. The complete records remain available in list and raw form.
       function renderClaimReadiness(assessments) {
         // Project by the rendered card's canonical id. Claim ids also occur on
         // graph links, comment controls, and edge references, so heading/link
@@ -1115,27 +1292,91 @@
           var assessment = assessments && assessments[id];
           if (!assessment) { return; }
           var existing = card.querySelector('.claim-readiness');
-          if (existing) { existing.remove(); }
-          var box = el('div', 'claim-readiness');
-          var summary = 'local approval: ' + (assessment.local_approved ? 'yes' : 'no') +
-            ' · dependency ready: ' + (assessment.dependency_ready ? 'yes' : 'no');
-          box.appendChild(textEl('p', 'claim-readiness-summary', summary));
-          var conditions = assessment.dependency_conditions || [];
-          var causes = assessment.review_causes || [];
-          conditions.forEach(function (condition) {
-            var path = (condition.path || []).join(' → ');
-            box.appendChild(textEl('p', 'claim-readiness-detail', 'dependency condition: ' + condition.kind + (path ? ' · ' + path : '')));
-          });
-          causes.forEach(function (cause) {
-            var path = (cause.path || []).join(' → ');
-            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
-          });
+          var box = el('section', 'claim-readiness');
+          if (assessment.ready) { box.classList.add('claim-readiness--ready'); }
+          box.setAttribute('aria-label', 'Claim readiness');
+          var conditions = assessment.dependency_conditions || assessment.conditions || [];
+          var causes = assessment.review_causes || assessment.causes || [];
+          var facts = conditions.map(function (record) { return { type: 'condition', record: record }; })
+            .concat(causes.map(function (record) { return { type: 'cause', record: record }; }));
+
+          var header = el('header', 'claim-readiness-head');
+          var identity = el('div', 'claim-readiness-id');
+          var title = el('div', 'claim-readiness-title');
+          title.appendChild(document.createTextNode('Readiness '));
+          var state = assessment.ready
+            ? 'Ready'
+            : (assessment.review_pending
+              ? 'Review required'
+              : (!assessment.local_approved && assessment.dependency_ready ? 'Approval required' : 'Dependencies not ready'));
+          title.appendChild(textEl('span', 'claim-readiness-state', state));
+          identity.appendChild(title);
+          var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
+          var dependencySentence = assessment.dependency_ready
+            ? (causes.length
+              ? 'Its dependencies are ready, but ' + causes.length + ' ' + (causes.length === 1 ? 'review cause still needs' : 'review causes still need') + ' attention.'
+              : 'Its required dependency chain is ready.')
+            : facts.length + ' ' + (facts.length === 1 ? 'blocking fact is' : 'blocking facts are') + ' shown below.';
+          identity.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
+          header.appendChild(identity);
+          var counts = el('div', 'claim-readiness-counts');
+          var blockerCount = el('span', 'claim-readiness-count');
+          blockerCount.appendChild(textEl('strong', '', String(facts.length)));
+          blockerCount.appendChild(document.createTextNode(' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
+          counts.appendChild(blockerCount);
+          header.appendChild(counts);
+          box.appendChild(header);
+
+          var localNotes = (assessment.local_reasons || []).slice();
+          // local_approval_issue is a concise alias and may repeat the reason
+          // already present in local_reasons. Collapse that one presentation
+          // duplicate while retaining both exact fields in Raw diagnostics.
+          if (assessment.local_approval_issue && localNotes.indexOf(assessment.local_approval_issue) < 0) {
+            localNotes.push(assessment.local_approval_issue);
+          }
+          if (localNotes.length) {
+            var local = el('div', 'claim-readiness-local');
+            local.appendChild(textEl('p', 'claim-readiness-label', 'Local approval'));
+            var localList = el('ul');
+            localNotes.forEach(function (note) { localList.appendChild(textEl('li', '', note)); });
+            local.appendChild(localList);
+            box.appendChild(local);
+          }
+
+          if (facts.length) {
+            var byKey = {};
+            var groups = [];
+            facts.forEach(function (item) {
+              var key = readinessRouteKey(item.record, item.type, id);
+              if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
+                byKey[key] = { key: key, items: [] };
+                groups.push(byKey[key]);
+              }
+              byKey[key].items.push(item);
+            });
+            var routeHeader = el('div', 'claim-readiness-section-head');
+            routeHeader.appendChild(textEl('p', 'claim-readiness-label', 'Readiness blockers'));
+            routeHeader.appendChild(textEl('span', '', groups.length + ' shown ' + (groups.length === 1 ? 'route' : 'routes')));
+            box.appendChild(routeHeader);
+            var routes = el('div', 'claim-readiness-routes');
+            groups.forEach(function (group, index) { routes.appendChild(readinessRoute(group, id, index)); });
+            box.appendChild(routes);
+          }
+
+          if (facts.length || localNotes.length || !assessment.ready) {
+            box.appendChild(readinessRawDiagnostics(assessment));
+          }
           var links = card.querySelector('.claim-links');
           // claim-links lives inside the card's collapse-content wrapper, not
           // directly under the section. A DOM reference must belong to the
           // parent receiving the insertion; otherwise Comet raises
           // NotFoundError and no readiness card is rendered.
-          if (links && links.parentNode) {
+          // Replace an existing panel atomically. Removing it and inserting a
+          // new one in two steps makes scroll anchoring compensate for the
+          // temporary height loss during live refreshes.
+          if (existing && existing.parentNode) {
+            existing.replaceWith(box);
+          } else if (links && links.parentNode) {
             links.parentNode.insertBefore(box, links);
           } else {
             card.appendChild(box);
@@ -1590,6 +1831,13 @@
         var savedWinScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
         var savedContentScroll = oldContent.scrollTop;
         var reopenClaimID = commentPanelOpen() ? currentClaimID : null;
+        // Browser scroll anchoring reacts to the temporary height difference
+        // between the old enhanced subtree and the fresh static fragment. Hold
+        // it off until the readiness panel has been restored and layout has
+        // settled, then put the reader back at the exact captured coordinate.
+        var htmlRoot = document.documentElement;
+        var savedOverflowAnchor = htmlRoot.style.overflowAnchor;
+        htmlRoot.style.overflowAnchor = 'none';
 
         // ---- swap both subtrees (server fragment — a permitted sink) ----
         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
@@ -1626,7 +1874,21 @@
         // above, so the document has regained its full height ----
         var freshContent = document.querySelector('.content-area');
         if (freshContent && savedContentScroll) { freshContent.scrollTop = savedContentScroll; }
-        if (savedWinScroll) { window.scrollTo(0, savedWinScroll); }
+        function restoreWindowScroll() {
+          // html uses smooth scrolling for reader navigation, but restoration
+          // is state, not navigation. Applying a smooth scroll here lets a
+          // taller replacement subtree leave the reader between positions
+          // when the refresh completes. Disable it for this synchronous write.
+          var rootScrollBehavior = htmlRoot.style.scrollBehavior;
+          htmlRoot.style.scrollBehavior = 'auto';
+          window.scrollTo(0, savedWinScroll);
+          htmlRoot.style.scrollBehavior = rootScrollBehavior;
+        }
+        restoreWindowScroll();
+        window.requestAnimationFrame(function () {
+          restoreWindowScroll();
+          htmlRoot.style.overflowAnchor = savedOverflowAnchor;
+        });
 
         // ---- re-open the panel by (claim/thread) id. The panel node itself lives
         // OUTSIDE the swapped subtree so it survived, but its chips were replaced,
@@ -1731,5 +1993,8 @@
       // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
       initViewer();
       showFromHash({ skipHash: true });
+      // Static file:// viewers never receive /api/status. Paint the assessment
+      // carried by the graph payload now; a live response replaces it later.
+      renderClaimReadiness(offlineReadiness());
       probeAndMount();
     })();

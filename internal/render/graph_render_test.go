@@ -8,6 +8,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
 )
 
 // ---------------------------------------------------------------------
@@ -40,6 +41,48 @@ var graphInjectionWitnesses = map[string]string{
 	"graph.css":     "\n#dxgPane {\n",
 	"graph-core.js": "\n  root.dossierxGraphCore = api;\n",
 	"graph-ui.js":   "\n  var PANE_ID = 'dxgPane';\n",
+}
+
+func TestMermaidAssetsAreGuardedByTraceableReadiness(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("widget.contract.one", "widget", "contract", model.StatusDraft),
+		groupedClaim("widget.contract.two", "widget", "contract", model.StatusDraft),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract"}}
+	cat, err := catalog.Build(claims, cfg)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+
+	healthy, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render healthy catalog: %v", err)
+	}
+	if strings.Contains(healthy, "__esbuild_esm_mermaid_nm") {
+		t.Fatal("a catalog with no readiness routes must not carry the Mermaid bundle")
+	}
+
+	cat.SetReadiness(map[string]readiness.Assessment{
+		"widget.contract.one": {
+			ClaimID:         "widget.contract.one",
+			DependencyReady: false,
+			DependencyConditions: []readiness.DependencyCondition{{
+				Kind:         readiness.ConditionDependencyUnapproved,
+				DependencyID: "widget.contract.two",
+				Path:         readiness.Path{"widget.contract.one", "widget.contract.two"},
+			}},
+		},
+	})
+	blocked, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatalf("Render blocked catalog: %v", err)
+	}
+	if !strings.Contains(blocked, "__esbuild_esm_mermaid_nm") {
+		t.Fatal("a traceable readiness condition must include the Mermaid bundle")
+	}
+	if got := strings.Count(blocked, "shared lazy Mermaid renderer"); got != 1 {
+		t.Fatalf("shared renderer source count = %d, want one", got)
+	}
 }
 
 const (

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Replace the claim view's flat readiness diagnostics with a grouped reviewer
+  work queue. Every dependency condition and review cause remains visible and
+  keeps its full representative path, while exact engine fields move behind a
+  Raw diagnostics disclosure. Each first-hop route can render a focused Mermaid
+  map on demand; a map shows at most 12 facts with an explicit notice while the
+  authoritative list remains complete. Static viewers now mount the readiness
+  view from their embedded graph payload as well as live viewers from
+  `/api/status`.
+- Include the existing vendored Mermaid runtime when a viewer has traceable
+  readiness obstacles but no locked Build order. This adds about 3.60 MB to
+  those self-contained HTML viewers; healthy viewers with neither readiness
+  routes nor Build orders remain free of the renderer.
+
+### Maintenance
+
+- Regenerate the five committed fixture viewers for the grouped readiness view.
+  Byte sizes move as follows: `fixture-basic` 505,445 -> 4,110,066;
+  `fixture-graph-demo` 653,233 -> 4,257,854; `fixture-portability` 507,856 ->
+  4,112,477; `fixture-theme-flat` 4,130,517 -> 4,152,106; and
+  `fixture-theme-preset` 508,882 -> 4,113,503. The silent render changes are
+  recorded against v0.7.9 in `testdata/render-across-releases.golden.txt`.
+
 ## [0.7.10] - 2026-09-07
 
 ### Fixed

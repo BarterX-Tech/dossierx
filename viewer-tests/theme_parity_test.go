@@ -1225,6 +1225,10 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		pollTrue(t, ctx, `document.readyState === 'complete'`)
 		waitVisible(t, ctx, ".content-area")
 		emulateColorScheme(t, ctx, "light")
+		// This frozen-baseline test isolates an older fenced-code paint change.
+		// Readiness is new page content, not a theme repaint, so remove it from
+		// both captures before comparing identical text, geometry and pixels.
+		evalVoid(t, ctx, `document.querySelectorAll('.claim-readiness').forEach(function(n){n.remove();})`)
 		// FREEZE THE ANIMATIONS AND HIDE THE FACET TOC, identically in both
 		// documents, and say what that costs.
 		//

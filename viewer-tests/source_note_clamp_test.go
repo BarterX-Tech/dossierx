@@ -159,6 +159,14 @@ func sourceNoteStateAt(t *testing.T, ctx context.Context, note, stage string) so
 		var n = %s;
 		var b = n.querySelector('.claim-source-note-body');
 		var btn = n.querySelector('.claim-source-note-toggle');
+		// A claim may now carry a readiness work queue above its evidence.
+		// Keep this hit-test about the control itself by bringing the expanded
+		// button back into the viewport before elementFromPoint reads it. Disable
+		// the page's smooth-scroll rule for this synchronous geometry sample.
+		var oldScrollBehavior = document.documentElement.style.scrollBehavior;
+		document.documentElement.style.scrollBehavior = 'auto';
+		btn.scrollIntoView({block: 'center'});
+		document.documentElement.style.scrollBehavior = oldScrollBehavior;
 		var nr = n.getBoundingClientRect();
 		var br = btn.getBoundingClientRect();
 		var hit = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2);

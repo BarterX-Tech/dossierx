@@ -94,7 +94,26 @@ func startServerWatch(t *testing.T, cfgBody string, files map[string]string, pol
 		cancel()
 		<-done
 	})
-	return srv, fmt.Sprintf("http://127.0.0.1:%d", srv.Port()), root
+	base = fmt.Sprintf("http://127.0.0.1:%d", srv.Port())
+	// Listen has bound the socket, but Serve runs in the goroutine above. Prove
+	// its accept loop is answering before a test releases a concurrent request
+	// storm; otherwise the race build can test goroutine scheduling rather than
+	// the handler it meant to exercise.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		resp, pingErr := http.Get(base + "/api/ping") //nolint:gosec // loopback test server
+		if pingErr == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server did not become ready at %s/api/ping: %v", base, pingErr)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return srv, base, root
 }
 
 func writeFile(t *testing.T, path, content string) {
@@ -677,7 +696,13 @@ func assertEscaped(t *testing.T, where, bodyHTML string) {
 // =============================================================================
 
 func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
-	srv, base, _ := startServer(t, baseConfig, standardFiles())
+	// This case measures the render pipeline rather than payload throughput.
+	// Keep its fixture free of readiness routes: those intentionally inline the
+	// 3.5 MB Mermaid runtime, and sending 30 copies under the race detector
+	// turns this single-flight assertion into an unrelated socket stress test.
+	srv, base, _ := startServer(t, baseConfig, map[string]string{
+		"claims/one.yaml": draftClaim("widget.contract.one"),
+	})
 
 	const n = 30
 	var wg sync.WaitGroup

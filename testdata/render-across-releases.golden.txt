@@ -40,7 +40,867 @@ baseline   v0.7.9 (5031821c651724b2c5dcd7ce127d25c48c32fed5)
 compared   153 rendered artifacts present at both revisions
 added      0
 removed    0
-silent     0 rendered differently from byte-identical inputs
+silent     5 rendered differently from byte-identical inputs
 explained  0 rendered differently after their own inputs changed
 
-no rendered artifact has moved since the baseline.
+SILENT RENDER CHANGES
+---------------------
+
+testdata/fixture-basic/build/viewer/index.html  (rewritten)
+    size            13398 lines / 505445 bytes -> 17877 lines / 4110066 bytes
+    more than 3000 lines differ, so these two are not variants of one
+    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
+    artifact IS reported, with its sizes, and it still rendered differently. Read it
+    against the baseline directly:
+        git diff v0.7.9 -- testdata/fixture-basic/build/viewer/index.html
+
+testdata/fixture-graph-demo/build/viewer/index.html  (rewritten)
+    size            14134 lines / 653233 bytes -> 18613 lines / 4257854 bytes
+    more than 3000 lines differ, so these two are not variants of one
+    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
+    artifact IS reported, with its sizes, and it still rendered differently. Read it
+    against the baseline directly:
+        git diff v0.7.9 -- testdata/fixture-graph-demo/build/viewer/index.html
+
+testdata/fixture-portability/build/viewer/index.html  (rewritten)
+    size            13389 lines / 507856 bytes -> 17868 lines / 4112477 bytes
+    more than 3000 lines differ, so these two are not variants of one
+    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
+    artifact IS reported, with its sizes, and it still rendered differently. Read it
+    against the baseline directly:
+        git diff v0.7.9 -- testdata/fixture-portability/build/viewer/index.html
+
+testdata/fixture-theme-flat/build/viewer/index.html  (+671 -51)
+    size            17539 lines / 4130517 bytes -> 18159 lines / 4152106 bytes
+@@ -1899,27 +1899,383 @@
+   border-top: 1px solid var(--border);
+ }
+
+-/* Live approval/readiness facts arrive from /api/status after the static card
+-   renders. They stay compact on healthy cards and expand into one line per
+-   condition/cause only when the policy engine reports a real obstacle. */
++/* Claim readiness is a reviewer-facing work queue. The policy engine remains
++   authoritative; this surface groups its complete fact list by the first hop
++   of each representative path, with an optional focused Mermaid trace. */
+ .claim-readiness {
+-  margin: 0.55rem 0 0;
+-  padding: 0.45rem 0.6rem;
+-  border-left: 3px solid var(--border-strong, var(--border));
+-  background: var(--hover-bg, transparent);
++  overflow: hidden;
++  margin: 1.05rem 0 0;
++  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border));
++  border-radius: 8px;
++  background: color-mix(in srgb, var(--paper) 55%, var(--card-bg));
++}
++
++.claim-readiness-head {
++  display: flex;
++  align-items: flex-start;
++  justify-content: space-between;
++  gap: 1rem;
++  min-height: 72px;
++  padding: 0.8rem;
++  border-bottom: 1px solid var(--border);
++}
++
++.claim-readiness-id {
++  min-width: 0;
++}
++
++.claim-readiness-title {
++  display: flex;
++  flex-wrap: wrap;
++  align-items: center;
++  gap: 0.45rem;
++  color: var(--ink);
++  font-size: 0.82rem;
++  font-weight: 700;
++}
++
++.claim-readiness-state {
++  padding: 0.25rem 0.45rem;
++  border-radius: 3px;
++  background: var(--warn-bg);
++  color: var(--warn);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++  font-weight: 700;
++  letter-spacing: 0.045em;
++  line-height: 1.2;
++  text-transform: uppercase;
++}
++
++.claim-readiness--ready {
++  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
++}
++
++.claim-readiness--ready .claim-readiness-state {
++  background: var(--accent-bg);
++  color: var(--accent);
++}
++
++.claim-readiness-summary {
++  margin: 0.3rem 0 0;
+   color: var(--muted);
+-  font-size: 0.78rem;
++  font-size: 0.7rem;
+ }
+
+-.claim-readiness-summary,
+-.claim-readiness-detail {
++.claim-readiness-counts {
++  display: flex;
++  flex: 0 0 auto;
++  gap: 0.4rem;
++}
++
++.claim-readiness-count {
++  min-width: 64px;
++  padding: 0.4rem 0.45rem;
++  border: 1px solid var(--border);
++  border-radius: 5px;
++  background: var(--card-bg);
++  color: var(--faint);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++  line-height: 1.3;
++  text-align: center;
++  white-space: nowrap;
++}
++
++.claim-readiness-count strong {
++  color: var(--ink);
++  font-size: 0.7rem;
++}
++
++.claim-readiness-label {
+   margin: 0;
++  color: var(--faint);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++  font-weight: 700;
++  letter-spacing: 0.07em;
++  line-height: 1.3;
++  text-transform: uppercase;
+ }
+
+-.claim-readiness-detail {
+-  margin-top: 0.25rem;
++.claim-readiness-section-head {
++  display: flex;
++  align-items: baseline;
++  justify-content: space-between;
++  gap: 0.8rem;
++  padding: 0.65rem 0.8rem 0.45rem;
+ }
+
++.claim-readiness-section-head > span {
++  color: var(--faint);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++}
++
++.claim-readiness-local {
++  padding: 0.65rem 0.8rem;
++  border-bottom: 1px solid var(--border);
++}
++
++.claim-readiness-local ul {
++  margin: 0.45rem 0 0;
++  padding-left: 1.1rem;
++  color: var(--muted);
++  font-size: 0.66rem;
++}
++
++.claim-readiness-routes {
++  display: flex;
++  flex-direction: column;
++  gap: 0.45rem;
++  padding: 0 0.75rem 0.75rem;
++}
++
++.claim-readiness-route {
++  overflow: hidden;
++  border: 1px solid var(--border);
++  border-radius: 6px;
++  background: var(--card-bg);
++}
++
++.claim-readiness-route > summary {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) auto auto auto;
++  align-items: center;
++  gap: 0.75rem;
++  min-height: 54px;
++  padding: 0.55rem 0.7rem;
++  color: var(--muted);
++  cursor: pointer;
++  list-style: none;
++}
++
++.claim-readiness-route > summary::-webkit-details-marker {
++  display: none;
++}
++
++.claim-readiness-route > summary:hover,
++.claim-readiness-route > summary:focus-visible {
++  background: color-mix(in srgb, var(--muted) 7%, transparent);
++}
++
++.claim-readiness-route-id {
++  min-width: 0;
++}
++
++.claim-readiness-route-id strong {
++  display: block;
++  color: var(--ink);
++  font-size: 0.75rem;
++  font-weight: 650;
++}
++
++.claim-readiness-route-id small {
++  display: block;
++  overflow: hidden;
++  margin-top: 0.12rem;
++  color: var(--faint);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++  line-height: 1.35;
++  text-overflow: ellipsis;
++  white-space: nowrap;
++}
++
++.claim-readiness-route-via,
++.claim-readiness-route-count,
++.claim-readiness-relation {
++  color: var(--faint);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++  line-height: 1.3;
++}
++
++.claim-readiness-route-count {
++  color: var(--warn);
++  font-weight: 700;
++  white-space: nowrap;
++}
++
++.claim-readiness-chevron {
++  width: 8px;
++  height: 8px;
++  margin: -4px 3px 0 2px;
++  border-right: 1.5px solid var(--faint);
++  border-bottom: 1.5px solid var(--faint);
++  transform: rotate(45deg);
++}
++
++.claim-readiness-route[open] .claim-readiness-chevron {
++  margin-top: 2px;
++  transform: rotate(225deg);
++}
++
++.claim-readiness-route-body {
++  padding: 0 0.7rem 0.65rem;
++  border-top: 1px solid var(--border);
++}
++
++.claim-readiness-blockers {
++  margin: 0;
++  padding: 0;
++  list-style: none;
++}
++
++.claim-readiness-blocker {
++  display: grid;
++  grid-template-columns: minmax(0, 1fr) auto;
++  gap: 0.75rem;
++  padding: 0.65rem 0;
++  border-bottom: 1px solid var(--border);
++}
++
++.claim-readiness-blocker strong {
++  display: block;
++  color: var(--ink);
++  font-size: 0.69rem;
++  font-weight: 650;
++}
++
++.claim-readiness-blocker-copy > p,
++.claim-readiness-path p {
++  margin: 0.18rem 0 0;
++  color: var(--muted);
++  font-size: 0.63rem;
++}
++
++.claim-readiness-relation {
++  white-space: nowrap;
++}
++
++.claim-readiness-path {
++  margin-top: 0.35rem;
++}
++
++.claim-readiness-path summary,
++.claim-readiness-trace > summary,
++.claim-readiness-raw > summary {
++  color: var(--link);
++  cursor: pointer;
++  font-family: var(--font-mono);
++  font-size: 0.58rem;
++  font-weight: 650;
++}
++
++.claim-readiness-path p {
++  overflow-wrap: anywhere;
++  font-family: var(--font-mono);
++}
++
++.claim-readiness-trace {
++  padding-top: 0.6rem;
++}
++
++.claim-readiness-map {
++  margin-top: 0.55rem;
++}
++
++.claim-readiness-map-caption,
++.claim-readiness-map-limit,
++.claim-readiness-map-error {
++  margin: 0 0 0.45rem;
++  color: var(--faint);
++  font-family: var(--font-mono);
++  font-size: 0.56rem;
++}
++
++.claim-readiness-map-scroll {
++  overflow: auto;
++  border: 1px solid var(--border);
++  border-radius: 6px;
++  background: var(--card-bg);
++}
++
++.claim-readiness-map pre.mermaid {
++  min-width: 720px;
++  margin: 0;
++  padding: 1rem;
++  background: transparent;
++}
++
++.claim-readiness-map svg {
++  max-width: none !important;
++}
++
++.claim-readiness-map .node.current rect,
++.claim-readiness-map .node.current path,
++.claim-readiness-map .node.current polygon {
++  fill: var(--accent-bg) !important;
++  stroke: var(--accent) !important;
++}
++
++.claim-readiness-map .node.dependency rect,
++.claim-readiness-map .node.dependency path,
++.claim-readiness-map .node.dependency polygon {
++  fill: var(--card-bg) !important;
++  stroke: var(--border-strong, var(--border)) !important;
++}
++
++.claim-readiness-map .node.fact rect,
++.claim-readiness-map .node.fact path,
++.claim-readiness-map .node.fact polygon {
++  fill: var(--warn-bg) !important;
++  stroke: var(--warn) !important;
++}
++
++.claim-readiness-map .nodeLabel,
++.claim-readiness-map .label {
++  color: var(--ink) !important;
++}
++
++.claim-readiness-raw {
++  padding: 0.65rem 0.8rem;
++  border-top: 1px solid var(--border);
++}
++
++.claim-readiness-raw > p {
++  margin: 0.4rem 0;
++  color: var(--muted);
++  font-size: 0.63rem;
++}
++
++.claim-readiness-raw pre {
++  overflow: auto;
++  max-height: 22rem;
++  margin: 0.5rem 0 0;
++  padding: 0.7rem;
++  border: 1px solid var(--border);
++  border-radius: 6px;
++  background: var(--card-bg);
++  color: var(--muted);
++  font-size: 0.58rem;
++  white-space: pre;
++}
++
++@media (max-width: 860px) {
++  .claim-readiness-head {
++    display: block;
++  }
++  .claim-readiness-counts {
++    margin-top: 0.65rem;
++  }
++  .claim-readiness-route > summary {
++    grid-template-columns: minmax(0, 1fr) auto auto;
++  }
++  .claim-readiness-route-via {
++    display: none;
++  }
++}
++
++@media (max-width: 520px) {
++  .claim-readiness-blocker {
++    grid-template-columns: 1fr;
++  }
++  .claim-readiness-relation {
++    white-space: normal;
++  }
++}
++
+ /* The summary is the disclosure's only click target and reads as a mono
+    count strip ("4 links - 2 files - 1 drifted"), sharing .k's and
+    .claim-edges' register rather than the card body's prose. The UA
+@@ -6990,10 +7346,187 @@
+         return group;
+       }
+
+-      // renderClaimReadiness puts the live local-approval/readiness answer on
+-      // the claim a reader is looking at. The data is supplied by /api/status,
+-      // never re-derived in the browser: dependency paths and independent
+-      // causes belong to the policy engine, not a second JavaScript policy.
++      function readinessClaimLabel(id) {
++        var card = id ? document.getElementById(id) : null;
++        var label = card && card.querySelector('.k .label');
++        if (label) {
++          var copy = label.cloneNode(true);
++          copy.querySelectorAll('.pill, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
++          var rendered = (copy.textContent || '').replace(/\s+/g, ' ').trim();
++          if (rendered) { return rendered; }
++        }
++        var part = String(id || 'unknown dependency').split('.').pop();
++        return part.replace(/[-_]+/g, ' ').replace(/\b\w/g, function (c) { return c.toUpperCase(); });
++      }
++
++      function readinessFactLabel(record, type, rootID) {
++        var path = record.path || [];
++        var targetID = record.dependency_id || path[path.length - 1] || rootID;
++        var target = readinessClaimLabel(targetID);
++        var labels = type === 'condition' ? {
++          dependency_unapproved: target + ' is not locally approved',
++          missing_dependency: target + ' is missing',
++          unreadable_dependency: target + ' cannot be read',
++          retired_dependency: target + ' is retired',
++          unknown_historical_baseline: 'The historical approval baseline is unknown',
++          dependency_cycle: 'A required dependency cycle reaches ' + target
++        } : {
++          direct_dependency_change: target + ' changed after approval',
++          upstream_dependency_review: target + ' requires upstream review',
++          own_thread: 'This claim has an open review thread',
++          own_flag: 'This claim has an active review flag',
++          approval_content_drift: 'This claim changed after approval',
++          approval_missing: 'This claim has no approval record',
++          approval_released: 'This claim\'s approval was released',
++          approval_unknown: 'This claim\'s approval state is unknown'
++        };
++        return labels[record.kind] || String(record.kind || 'Readiness obstacle').replace(/_/g, ' ');
++      }
++
++      function readinessRouteKey(record, type, rootID) {
++        if (type === 'cause' && record.direct) { return rootID; }
++        var path = record.path || [];
++        return path[1] || record.dependency_id || rootID;
++      }
++
++      function readinessHopLabel(record, type) {
++        var path = record.path || [];
++        var hops = Math.max(0, path.length - 1);
++        var relation = (type === 'cause' && record.direct) || hops <= 1 ? 'direct' : 'upstream';
++        return relation + ' · ' + hops + ' ' + (hops === 1 ? 'hop' : 'hops');
++      }
++
++      // Mermaid node identifiers are synthetic. Authored claim ids and engine
++      // details are labels only, escaped under the same character contract as
++      // internal/buildorder's exporter so they cannot become diagram syntax.
++      function readinessMermaidEscape(value) {
++        var replacements = { '"': '#quot;', '#': '#35;', ';': '#59;', '<': '#lt;', '>': '#gt;', '&': '#amp;' };
++        return String(value || '').replace(/["#;<>&]/g, function (c) { return replacements[c]; });
++      }
++
++      function readinessMermaidSource(rootID, records) {
++        var limited = records.slice(0, 12);
++        var nodeIDs = {};
++        var nodeLines = [];
++        var edgeLines = [];
++        var edgeSeen = {};
++        var dependencyClasses = [];
++        var factClasses = [];
++
++        function pathNode(id) {
++          if (!Object.prototype.hasOwnProperty.call(nodeIDs, id)) {
++            var nodeID = 'n' + Object.keys(nodeIDs).length;
++            nodeIDs[id] = nodeID;
++            nodeLines.push('  ' + nodeID + '["' + readinessMermaidEscape(readinessClaimLabel(id)) + '"]');
++            if (id !== rootID) { dependencyClasses.push(nodeID); }
++          }
++          return nodeIDs[id];
++        }
++
++        pathNode(rootID);
++        limited.forEach(function (item, index) {
++          var path = (item.record.path || []).slice();
++          if (!path.length || path[0] !== rootID) { path.unshift(rootID); }
++          for (var i = 0; i + 1 < path.length; i += 1) {
++            var from = pathNode(path[i]);
++            var to = pathNode(path[i + 1]);
++            var edge = from + ' --> ' + to;
++            if (!edgeSeen[edge]) { edgeSeen[edge] = true; edgeLines.push('  ' + edge); }
++          }
++          var terminal = pathNode(path[path.length - 1]);
++          var factID = 'f' + index;
++          nodeLines.push('  ' + factID + '(["' + readinessMermaidEscape(readinessFactLabel(item.record, item.type, rootID)) + '"])');
++          edgeLines.push('  ' + terminal + ' --> ' + factID);
++          factClasses.push(factID);
++        });
++
++        var lines = ['flowchart LR'].concat(nodeLines, edgeLines, [
++          '  classDef current stroke-width:3px',
++          '  classDef dependency stroke-width:1px',
++          '  classDef fact stroke-width:2px',
++          '  class ' + nodeIDs[rootID] + ' current'
++        ]);
++        if (dependencyClasses.length) { lines.push('  class ' + dependencyClasses.join(',') + ' dependency'); }
++        if (factClasses.length) { lines.push('  class ' + factClasses.join(',') + ' fact'); }
++        return lines.join('\n');
++      }
++
++      function readinessPathDetails(record) {
++        var details = el('details', 'claim-readiness-path');
++        details.appendChild(textEl('summary', '', 'Show representative path'));
++        details.appendChild(textEl('p', '', (record.path || []).join(' → ') || 'No path supplied'));
++        return details;
++      }
++
++      function readinessFactRow(item, rootID) {
++        var li = el('li', 'claim-readiness-blocker');
++        var copy = el('div', 'claim-readiness-blocker-copy');
++        copy.appendChild(textEl('strong', '', readinessFactLabel(item.record, item.type, rootID)));
++        if (item.record.detail) { copy.appendChild(textEl('p', '', item.record.detail)); }
++        copy.appendChild(readinessPathDetails(item.record));
++        li.appendChild(copy);
++        li.appendChild(textEl('span', 'claim-readiness-relation', readinessHopLabel(item.record, item.type)));
++        return li;
++      }
++
++      function readinessRoute(group, rootID, index) {
++        var details = el('details', 'claim-readiness-route');
++        if (index === 0) { details.open = true; }
++        var summary = el('summary');
++        var identity = el('span', 'claim-readiness-route-id');
++        identity.appendChild(textEl('strong', '', group.key === rootID ? 'This claim' : readinessClaimLabel(group.key)));
++        identity.appendChild(textEl('small', '', group.key));
++        summary.appendChild(identity);
++        var isDirect = group.items.every(function (item) { return (item.record.path || []).length <= 2; });
++        summary.appendChild(textEl('span', 'claim-readiness-route-via', group.key === rootID ? 'local review' : (isDirect ? 'direct dependency' : 'shown via this dependency')));
++        summary.appendChild(textEl('span', 'claim-readiness-route-count', group.items.length + ' ' + (group.items.length === 1 ? 'blocker' : 'blockers')));
++        summary.appendChild(el('span', 'claim-readiness-chevron'));
++        details.appendChild(summary);
++
++        var body = el('div', 'claim-readiness-route-body');
++        var list = el('ul', 'claim-readiness-blockers');
++        group.items.forEach(function (item) { list.appendChild(readinessFactRow(item, rootID)); });
++        body.appendChild(list);
++
++        var trace = el('details', 'claim-readiness-trace');
++        trace.appendChild(textEl('summary', '', 'Trace this route in a dependency map'));
++        var map = el('div', 'claim-readiness-map');
++        map.appendChild(textEl('p', 'claim-readiness-map-caption', 'Representative routes · scroll horizontally'));
++        var scroll = el('div', 'claim-readiness-map-scroll');
++        scroll.appendChild(textEl('pre', 'mermaid', readinessMermaidSource(rootID, group.items)));
++        map.appendChild(scroll);
++        if (group.items.length > 12) {
++          map.appendChild(textEl('p', 'claim-readiness-map-limit', 'Showing 12 of ' + group.items.length + ' blocker facts in the map. The complete list remains above.'));
++        }
++        trace.appendChild(map);
++        body.appendChild(trace);
++        details.appendChild(body);
++        return details;
++      }
++
++      function readinessRawDiagnostics(assessment) {
++        var details = el('details', 'claim-readiness-raw');
++        details.appendChild(textEl('summary', '', 'Raw diagnostics'));
++        details.appendChild(textEl('p', '', 'Exact engine fields and representative path arrays.'));
++        details.appendChild(textEl('pre', '', JSON.stringify({
++          claim_id: assessment.claim_id,
++          policy_version: assessment.policy_version,
++          local_approved: assessment.local_approved,
++          dependency_ready: assessment.dependency_ready,
++          ready: assessment.ready,
++          review_pending: assessment.review_pending,
++          local_reasons: assessment.local_reasons || [],
++          local_approval_issue: assessment.local_approval_issue || '',
++          dependency_conditions: assessment.dependency_conditions || assessment.conditions || [],
++          review_causes: assessment.review_causes || assessment.causes || []
++        }, null, 2)));
++        return details;
++      }
++
++      // renderClaimReadiness reorganizes the policy engine's facts for review.
++      // It never re-derives a verdict, merges independent facts, walks the
++      // dependency graph, or treats a representative path as exclusive cause
++      // ownership. The complete records remain available in list and raw form.
+       function renderClaimReadiness(assessments) {
+         // Project by the rendered card's canonical id. Claim ids also occur on
+         // graph links, comment controls, and edge references, so heading/link
+@@ -7003,27 +7536,91 @@
+           var assessment = assessments && assessments[id];
+           if (!assessment) { return; }
+           var existing = card.querySelector('.claim-readiness');
+-          if (existing) { existing.remove(); }
+-          var box = el('div', 'claim-readiness');
+-          var summary = 'local approval: ' + (assessment.local_approved ? 'yes' : 'no') +
+-            ' · dependency ready: ' + (assessment.dependency_ready ? 'yes' : 'no');
+-          box.appendChild(textEl('p', 'claim-readiness-summary', summary));
+-          var conditions = assessment.dependency_conditions || [];
+-          var causes = assessment.review_causes || [];
+-          conditions.forEach(function (condition) {
+-            var path = (condition.path || []).join(' → ');
+-            box.appendChild(textEl('p', 'claim-readiness-detail', 'dependency condition: ' + condition.kind + (path ? ' · ' + path : '')));
+-          });
+-          causes.forEach(function (cause) {
+-            var path = (cause.path || []).join(' → ');
+-            box.appendChild(textEl('p', 'claim-readiness-detail', 'review cause: ' + cause.kind + (path ? ' · ' + path : '')));
+-          });
++          var box = el('section', 'claim-readiness');
++          if (assessment.ready) { box.classList.add('claim-readiness--ready'); }
++          box.setAttribute('aria-label', 'Claim readiness');
++          var conditions = assessment.dependency_conditions || assessment.conditions || [];
++          var causes = assessment.review_causes || assessment.causes || [];
++          var facts = conditions.map(function (record) { return { type: 'condition', record: record }; })
++            .concat(causes.map(function (record) { return { type: 'cause', record: record }; }));
++
++          var header = el('header', 'claim-readiness-head');
++          var identity = el('div', 'claim-readiness-id');
++          var title = el('div', 'claim-readiness-title');
++          title.appendChild(document.createTextNode('Readiness '));
++          var state = assessment.ready
++            ? 'Ready'
++            : (assessment.review_pending
++              ? 'Review required'
++              : (!assessment.local_approved && assessment.dependency_ready ? 'Approval required' : 'Dependencies not ready'));
++          title.appendChild(textEl('span', 'claim-readiness-state', state));
++          identity.appendChild(title);
++          var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
++          var dependencySentence = assessment.dependency_ready
++            ? (causes.length
++              ? 'Its dependencies are ready, but ' + causes.length + ' ' + (causes.length === 1 ? 'review cause still needs' : 'review causes still need') + ' attention.'
++              : 'Its required dependency chain is ready.')
++            : facts.length + ' ' + (facts.length === 1 ? 'blocking fact is' : 'blocking facts are') + ' shown below.';
++          identity.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
++          header.appendChild(identity);
++          var counts = el('div', 'claim-readiness-counts');
++          var blockerCount = el('span', 'claim-readiness-count');
++          blockerCount.appendChild(textEl('strong', '', String(facts.length)));
++          blockerCount.appendChild(document.createTextNode(' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
++          counts.appendChild(blockerCount);
++          header.appendChild(counts);
++          box.appendChild(header);
++
++          var localNotes = (assessment.local_reasons || []).slice();
++          // local_approval_issue is a concise alias and may repeat the reason
++          // already present in local_reasons. Collapse that one presentation
++          // duplicate while retaining both exact fields in Raw diagnostics.
++          if (assessment.local_approval_issue && localNotes.indexOf(assessment.local_approval_issue) < 0) {
++            localNotes.push(assessment.local_approval_issue);
++          }
++          if (localNotes.length) {
++            var local = el('div', 'claim-readiness-local');
++            local.appendChild(textEl('p', 'claim-readiness-label', 'Local approval'));
++            var localList = el('ul');
++            localNotes.forEach(function (note) { localList.appendChild(textEl('li', '', note)); });
++            local.appendChild(localList);
++            box.appendChild(local);
++          }
++
++          if (facts.length) {
++            var byKey = {};
++            var groups = [];
++            facts.forEach(function (item) {
++              var key = readinessRouteKey(item.record, item.type, id);
++              if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
++                byKey[key] = { key: key, items: [] };
++                groups.push(byKey[key]);
++              }
++              byKey[key].items.push(item);
++            });
++            var routeHeader = el('div', 'claim-readiness-section-head');
++            routeHeader.appendChild(textEl('p', 'claim-readiness-label', 'Readiness blockers'));
++            routeHeader.appendChild(textEl('span', '', groups.length + ' shown ' + (groups.length === 1 ? 'route' : 'routes')));
++            box.appendChild(routeHeader);
++            var routes = el('div', 'claim-readiness-routes');
++            groups.forEach(function (group, index) { routes.appendChild(readinessRoute(group, id, index)); });
++            box.appendChild(routes);
++          }
++
++          if (facts.length || localNotes.length || !assessment.ready) {
++            box.appendChild(readinessRawDiagnostics(assessment));
++          }
+           var links = card.querySelector('.claim-links');
+           // claim-links lives inside the card's collapse-content wrapper, not
+           // directly under the section. A DOM reference must belong to the
+           // parent receiving the insertion; otherwise Comet raises
+           // NotFoundError and no readiness card is rendered.
+-          if (links && links.parentNode) {
++          // Replace an existing panel atomically. Removing it and inserting a
++          // new one in two steps makes scroll anchoring compensate for the
++          // temporary height loss during live refreshes.
++          if (existing && existing.parentNode) {
++            existing.replaceWith(box);
++          } else if (links && links.parentNode) {
+             links.parentNode.insertBefore(box, links);
+           } else {
+             card.appendChild(box);
+@@ -7478,6 +8075,13 @@
+         var savedWinScroll = window.pageYOffset || document.documentElement.scrollTop || 0;
+         var savedContentScroll = oldContent.scrollTop;
+         var reopenClaimID = commentPanelOpen() ? currentClaimID : null;
++        // Browser scroll anchoring reacts to the temporary height difference
++        // between the old enhanced subtree and the fresh static fragment. Hold
++        // it off until the readiness panel has been restored and layout has
++        // settled, then put the reader back at the exact captured coordinate.
++        var htmlRoot = document.documentElement;
++        var savedOverflowAnchor = htmlRoot.style.overflowAnchor;
++        htmlRoot.style.overflowAnchor = 'none';
+
+         // ---- swap both subtrees (server fragment — a permitted sink) ----
+         oldContent.outerHTML = frag.content;   // replaces <main class="content-area">
+@@ -7514,7 +8118,21 @@
+         // above, so the document has regained its full height ----
+         var freshContent = document.querySelector('.content-area');
+         if (freshContent && savedContentScroll) { freshContent.scrollTop = savedContentScroll; }
+-        if (savedWinScroll) { window.scrollTo(0, savedWinScroll); }
++        function restoreWindowScroll() {
++          // html uses smooth scrolling for reader navigation, but restoration
++          // is state, not navigation. Applying a smooth scroll here lets a
++          // taller replacement subtree leave the reader between positions
++          // when the refresh completes. Disable it for this synchronous write.
++          var rootScrollBehavior = htmlRoot.style.scrollBehavior;
++          htmlRoot.style.scrollBehavior = 'auto';
++          window.scrollTo(0, savedWinScroll);
++          htmlRoot.style.scrollBehavior = rootScrollBehavior;
++        }
++        restoreWindowScroll();
++        window.requestAnimationFrame(function () {
++          restoreWindowScroll();
++          htmlRoot.style.overflowAnchor = savedOverflowAnchor;
++        });
+
+         // ---- re-open the panel by (claim/thread) id. The panel node itself lives
+         // OUTSIDE the swapped subtree so it survived, but its chips were replaced,
+@@ -7619,6 +8237,9 @@
+       // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
+       initViewer();
+       showFromHash({ skipHash: true });
++      // Static file:// viewers never receive /api/status. Paint the assessment
++      // carried by the graph payload now; a live response replaces it later.
++      renderClaimReadiness(offlineReadiness());
+       probeAndMount();
+     })();
+ </script>
+@@ -17317,13 +17938,11 @@
+   <script>(function () {
+   'use strict';
+
+-  // build-order-ui.js — the Build order tab's renderer glue. It is injected
+-  // AFTER the vendored mermaid build, and only into a viewer with at least one
+-  // locked build order (shell.html guards both script tags). It owns no
+-  // markup: the diagrams' text is produced server-side by internal/buildorder
+-  // (one <pre class="mermaid"> per non-empty phase, inside .bo-diagram), and
+-  // this file only turns visible, not-yet-rendered blocks into SVG and wires
+-  // node clicks to claim cards.
++  // build-order-ui.js — shared lazy Mermaid renderer for Build order diagrams
++  // and claim-readiness route traces. It is injected AFTER the vendored build
++  // only when shell.html has at least one of those surfaces. It owns no
++  // readiness semantics: route source is projected from policy-engine records
++  // by viewer-runtime.js, while Build order source remains server-rendered.
+   //
+   // Rendering is a STATE observation, not an event. One MutationObserver on
+   // .layout — a node that survives a serve fragment swap, which replaces
+@@ -17384,20 +18003,21 @@
+     return true;
+   }
+
+-  function writeBoError(el, err) {
++  function writeDiagramError(el, err) {
+     var message = (err && err.message) ? err.message : String(err);
+     var p = document.createElement('p');
+-    p.className = 'bo-error';
++    p.className = el.closest('.claim-readiness-map') ? 'claim-readiness-map-error' : 'bo-error';
+     p.textContent = 'diagram failed to render: ' + message;
+-    var host = el.closest('.bo-diagram') || el.parentNode;
++    var host = el.closest('.bo-diagram, .claim-readiness-map') || el.parentNode;
+     if (host) { host.appendChild(p); }
+     window.__boErrors.push(message);
+-    console.error('build order: diagram failed to render:', err);
++    console.error('dossierx: diagram failed to render:', err);
+   }
+
+   function visibleUnrendered() {
+-    return Array.prototype.slice.call(document.querySelectorAll('.bo-diagram pre.mermaid')).filter(function (el) {
+-      return el.offsetParent !== null && !el.hasAttribute('data-processed');
++    return Array.prototype.slice.call(document.querySelectorAll('.bo-diagram pre.mermaid, .claim-readiness-map pre.mermaid')).filter(function (el) {
++      var closedDisclosure = el.closest('details:not([open])');
++      return !closedDisclosure && el.offsetParent !== null && el.getClientRects().length > 0 && !el.hasAttribute('data-processed');
+     });
+   }
+
+@@ -17420,7 +18040,7 @@
+         try {
+           await window.mermaid.run({ nodes: [el] });
+         } catch (e) {
+-          writeBoError(el, e);
++          writeDiagramError(el, e);
+           (function (err) { window.setTimeout(function () { throw err; }, 0); })(e);
+         }
+       }
+@@ -17447,12 +18067,12 @@
+   // and stamp a .bo-error into every block the moment the OS flips to dark.
+   function rerenderAll() {
+     initialised = false;
+-    document.querySelectorAll('.bo-diagram pre.mermaid[data-processed]').forEach(function (el) {
++    document.querySelectorAll('.bo-diagram pre.mermaid[data-processed], .claim-readiness-map pre.mermaid[data-processed]').forEach(function (el) {
+       if (el.dataset.src === undefined) { return; }
+       el.textContent = el.dataset.src;
+       el.removeAttribute('data-processed');
+-      var host = el.closest('.bo-diagram');
+-      if (host) { host.querySelectorAll('.bo-error').forEach(function (n) { n.remove(); }); }
++      var host = el.closest('.bo-diagram, .claim-readiness-map');
++      if (host) { host.querySelectorAll('.bo-error, .claim-readiness-map-error').forEach(function (n) { n.remove(); }); }
+     });
+     schedule();
+   }
+@@ -17515,7 +18135,7 @@
+
+   var root = document.querySelector('.layout') || document.body;
+   new MutationObserver(function () { schedule(); })
+-    .observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
++    .observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open'] });
+
+   // Initialise SYNCHRONOUSLY at parse time, not in the first frame: mermaid
+   // registers its own window "load" handler at parse and, with the default
+
+testdata/fixture-theme-preset/build/viewer/index.html  (rewritten)
+    size            13400 lines / 508882 bytes -> 17879 lines / 4113503 bytes
+    more than 3000 lines differ, so these two are not variants of one
+    document and a line diff would not be readable. NOTHING HERE IS NARROWED: the
+    artifact IS reported, with its sizes, and it still rendered differently. Read it
+    against the baseline directly:
+        git diff v0.7.9 -- testdata/fixture-theme-preset/build/viewer/index.html
