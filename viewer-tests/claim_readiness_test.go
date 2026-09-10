@@ -1,12 +1,220 @@
 package viewertests
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/chromedp/chromedp"
 )
+
+const (
+	// These are browser-product budgets, separate from the engine's 64 MiB
+	// serialized-output containment gate. They deliberately leave headroom for
+	// slower CI runners while still catching an eager Mermaid render, duplicated
+	// blocker lists, or a projection that makes the claim page impractical.
+	readinessScaleMaxLoadMS      = 10_000
+	readinessScaleMaxMapMS       = 5_000
+	readinessScaleMaxDOMNodes    = 100_000
+	readinessScaleMaxJSHeapBytes = 512 * 1024 * 1024
+)
+
+func readinessScaleProject(t *testing.T, layers, width int) *project {
+	t.Helper()
+	p := newProjectRaw(t, defaultConfigYAML)
+	for layer := layers - 1; layer >= 0; layer-- {
+		for node := 0; node < width; node++ {
+			id := fmt.Sprintf("widget.contract.l%03d-n%02d", layer, node)
+			var restsOn strings.Builder
+			if layer+1 < layers {
+				restsOn.WriteString("rests_on:\n")
+				for dependency := 0; dependency < width; dependency++ {
+					fmt.Fprintf(&restsOn, "  - widget.contract.l%03d-n%02d\n", layer+1, dependency)
+				}
+			}
+			p.writeClaim(id+".yaml", fmt.Sprintf(`id: %s
+facet: contract
+module: widget
+status: draft
+body: |
+  browser scale fixture at layer %d, node %d.
+governed_by:
+  type: none
+  reason: viewer-test fixture, not backed by any doctrine claim
+%s`, id, layer, node, restsOn.String()))
+		}
+	}
+	return p
+}
+
+func readinessScaleFacts(layers, width int) int {
+	// Every node owns one condition for every unique node in every later layer.
+	// Full inter-layer fan-out creates exponentially many routes, but readiness
+	// retains one condition per independently clearable dependency identity.
+	return width * width * layers * (layers - 1) / 2
+}
+
+type readinessScaleMetrics struct {
+	LoadMS         float64 `json:"load_ms"`
+	DOMNodes       int     `json:"dom_nodes"`
+	JSHeapBytes    float64 `json:"js_heap_bytes"`
+	ReadinessCards int     `json:"readiness_cards"`
+	BlockerRows    int     `json:"blocker_rows"`
+	RawFacts       int     `json:"raw_facts"`
+	RawPanels      int     `json:"raw_panels"`
+	RouteGroups    int     `json:"route_groups"`
+	MermaidSources int     `json:"mermaid_sources"`
+	ProcessedMaps  int     `json:"processed_maps"`
+	SVGs           int     `json:"svgs"`
+}
+
+func readReadinessScaleMetrics(t *testing.T, ctx context.Context) readinessScaleMetrics {
+	t.Helper()
+	var metrics readinessScaleMetrics
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){
+		var nav = performance.getEntriesByType('navigation')[0];
+		var raws = Array.from(document.querySelectorAll('.claim-readiness-raw pre'));
+		return {
+			load_ms: nav ? nav.loadEventEnd - nav.startTime : -1,
+			dom_nodes: document.querySelectorAll('*').length,
+			js_heap_bytes: performance.memory ? performance.memory.usedJSHeapSize : -1,
+			readiness_cards: document.querySelectorAll('.claim-readiness').length,
+			blocker_rows: document.querySelectorAll('.claim-readiness-blocker').length,
+			raw_facts: raws.reduce(function(total, pre){
+				var raw = JSON.parse(pre.textContent);
+				return total + (raw.dependency_conditions || []).length + (raw.review_causes || []).length;
+			}, 0),
+			raw_panels: raws.length,
+			route_groups: document.querySelectorAll('.claim-readiness-route').length,
+			mermaid_sources: document.querySelectorAll('.claim-readiness-map pre.mermaid').length,
+			processed_maps: document.querySelectorAll('.claim-readiness-map pre.mermaid[data-processed]').length,
+			svgs: document.querySelectorAll('.claim-readiness-map svg').length
+		};
+	})()`, &metrics))
+	return metrics
+}
+
+func TestReadinessBrowserScaleBudgets(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		layers        int
+		width         int
+		maxRouteFacts int
+	}{
+		{name: "deep-chain-128", layers: 128, width: 1, maxRouteFacts: 127},
+		{name: "layered-dense-24x5", layers: 24, width: 5, maxRouteFacts: 111},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := readinessScaleProject(t, tc.layers, tc.width)
+			claimCount := tc.layers * tc.width
+			factCount := readinessScaleFacts(tc.layers, tc.width)
+			routeCount := (tc.layers - 1) * tc.width * tc.width
+
+			ctx := browserContext(t)
+			runCDP(t, ctx,
+				chromedp.Navigate(p.renderStatic()+"#widget.contract.l000-n00"),
+				chromedp.WaitVisible("#widget\\.contract\\.l000-n00 .claim-readiness", chromedp.ByQuery),
+			)
+			pollTrue(t, ctx, fmt.Sprintf(`
+				document.readyState === 'complete' &&
+				performance.getEntriesByType('navigation')[0].loadEventEnd > 0 &&
+				document.querySelectorAll('.claim-readiness-blocker').length === %d`, factCount))
+
+			before := readReadinessScaleMetrics(t, ctx)
+			if before.LoadMS < 0 || before.LoadMS > readinessScaleMaxLoadMS {
+				t.Fatalf("viewer load %.0fms exceeded %dms budget", before.LoadMS, readinessScaleMaxLoadMS)
+			}
+			if before.DOMNodes > readinessScaleMaxDOMNodes {
+				t.Fatalf("mounted DOM has %d nodes, exceeded %d-node budget", before.DOMNodes, readinessScaleMaxDOMNodes)
+			}
+			if before.JSHeapBytes < 0 || before.JSHeapBytes > readinessScaleMaxJSHeapBytes {
+				t.Fatalf("mounted JS heap %.0f bytes outside required 0..%d budget", before.JSHeapBytes, readinessScaleMaxJSHeapBytes)
+			}
+			if before.ReadinessCards != claimCount {
+				t.Fatalf("readiness cards = %d, want every one of %d claims", before.ReadinessCards, claimCount)
+			}
+			if before.BlockerRows != factCount {
+				t.Fatalf("authoritative blocker rows = %d, want all %d engine facts", before.BlockerRows, factCount)
+			}
+			if before.RawPanels != claimCount || before.RawFacts != factCount {
+				t.Fatalf("raw diagnostics have %d panels and %d facts, want %d panels and all %d facts", before.RawPanels, before.RawFacts, claimCount, factCount)
+			}
+			if before.RouteGroups != routeCount || before.MermaidSources != routeCount {
+				t.Fatalf("route groups / map sources = %d / %d, want %d / %d", before.RouteGroups, before.MermaidSources, routeCount, routeCount)
+			}
+			if before.ProcessedMaps != 0 || before.SVGs != 0 {
+				t.Fatalf("closed maps processed %d sources and rendered %d SVGs, want lazy zero / zero", before.ProcessedMaps, before.SVGs)
+			}
+
+			var opened struct {
+				Facts int `json:"facts"`
+			}
+			runCDP(t, ctx, chromedp.Evaluate(`(function(){
+				var routes = Array.from(document.querySelectorAll('.claim-readiness-route'));
+				var route = routes.reduce(function(best, item){
+					return item.querySelectorAll('.claim-readiness-blocker').length > best.querySelectorAll('.claim-readiness-blocker').length ? item : best;
+				});
+				var facts = route.querySelectorAll('.claim-readiness-blocker').length;
+				window.__readinessScaleMapStarted = performance.now();
+				route.open = true;
+				route.querySelector('.claim-readiness-trace').open = true;
+				return { facts: facts };
+			})()`, &opened))
+			if opened.Facts != tc.maxRouteFacts {
+				t.Fatalf("largest route group has %d facts, want %d", opened.Facts, tc.maxRouteFacts)
+			}
+			pollTrue(t, ctx, `document.querySelectorAll('.claim-readiness-map svg').length === 1`)
+
+			var after struct {
+				MapMS         float64 `json:"map_ms"`
+				FactNodes     int     `json:"fact_nodes"`
+				ProcessedMaps int     `json:"processed_maps"`
+				SVGs          int     `json:"svgs"`
+				Errors        int     `json:"errors"`
+				CapText       string  `json:"cap_text"`
+				JSHeapBytes   float64 `json:"js_heap_bytes"`
+			}
+			runCDP(t, ctx, chromedp.Evaluate(`(function(){
+				var svg = document.querySelector('.claim-readiness-map svg');
+				var map = svg.closest('.claim-readiness-map');
+				var cap = map.querySelector('.claim-readiness-map-limit');
+				return {
+					map_ms: performance.now() - window.__readinessScaleMapStarted,
+					fact_nodes: svg.querySelectorAll('.node.fact').length,
+					processed_maps: document.querySelectorAll('.claim-readiness-map pre.mermaid[data-processed]').length,
+					svgs: document.querySelectorAll('.claim-readiness-map svg').length,
+					errors: (window.__boErrors || []).length,
+					cap_text: cap ? cap.textContent : '',
+					js_heap_bytes: performance.memory ? performance.memory.usedJSHeapSize : -1
+				};
+			})()`, &after))
+			if after.MapMS > readinessScaleMaxMapMS {
+				t.Fatalf("focused Mermaid map took %.0fms, exceeded %dms budget", after.MapMS, readinessScaleMaxMapMS)
+			}
+			if after.FactNodes != 12 {
+				t.Fatalf("focused Mermaid map has %d fact nodes, want explicit cap of 12", after.FactNodes)
+			}
+			if after.ProcessedMaps != 1 || after.SVGs != 1 {
+				t.Fatalf("opening one map processed %d sources and rendered %d SVGs, want one / one", after.ProcessedMaps, after.SVGs)
+			}
+			if after.Errors != 0 {
+				t.Fatalf("Mermaid renderer recorded %d errors", after.Errors)
+			}
+			wantCap := fmt.Sprintf("Showing 12 of %d blocker facts", opened.Facts)
+			if !strings.Contains(after.CapText, wantCap) {
+				t.Fatalf("map cap disclosure = %q, want it to contain %q", after.CapText, wantCap)
+			}
+			if after.JSHeapBytes < 0 || after.JSHeapBytes > readinessScaleMaxJSHeapBytes {
+				t.Fatalf("post-map JS heap %.0f bytes outside required 0..%d budget", after.JSHeapBytes, readinessScaleMaxJSHeapBytes)
+			}
+
+			t.Logf("claims=%d facts=%d routes=%d load=%.0fms domNodes=%d heapBefore=%.1fMiB map=%.0fms heapAfter=%.1fMiB",
+				claimCount, factCount, routeCount, before.LoadMS, before.DOMNodes,
+				before.JSHeapBytes/(1024*1024), after.MapMS, after.JSHeapBytes/(1024*1024))
+		})
+	}
+}
 
 const readinessRootYAML = `id: widget.contract.root
 facet: contract
