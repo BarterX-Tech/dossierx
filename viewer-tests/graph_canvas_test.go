@@ -650,15 +650,30 @@ func TestGraphEmptyOverlayIsStatedAndDoesNotGhostTheGraph(t *testing.T) {
 // in one module, chained, with derived titles seven words long. At the fitted
 // zoom their label boxes come nowhere near all fitting, which is the state that
 // used to render as glyph soup — about a third of the labels overprinting each
-// other and running through the node discs.
+// other and running through the node discs. Keep this claim set out of
+// readiness dependencies: this is a canvas-label fixture, and draft rests_on
+// edges now correctly opt the generated viewer into the independent readiness
+// UI (and its deliberately complete diagnostic payload), which would make this
+// test measure that workload too. Reciprocal mirrors keep the graph connected
+// without creating readiness dependencies.
 func newLabelProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, graphConfig)
-	prev := ""
+	ids := make([]string, 80)
 	for i := 0; i < 80; i++ {
-		id := fmt.Sprintf("widget.contract.the-claim-that-carries-a-long-title-%02d", i)
-		p.writeClaim(fmt.Sprintf("c%02d.yaml", i), graphClaim(id, "contract", prev))
-		prev = id
+		ids[i] = fmt.Sprintf("widget.contract.the-claim-that-carries-a-long-title-%02d", i)
+	}
+	for i, id := range ids {
+		var mirrors []string
+		if i > 0 {
+			mirrors = append(mirrors, ids[i-1])
+		}
+		if i+1 < len(ids) {
+			mirrors = append(mirrors, ids[i+1])
+		}
+		claim := graphClaim(id, "contract", "")
+		claim = strings.Replace(claim, "body: |\n", "mirrors:\n  - "+strings.Join(mirrors, "\n  - ")+"\nbody: |\n", 1)
+		p.writeClaim(fmt.Sprintf("c%02d.yaml", i), claim)
 	}
 	return p
 }
