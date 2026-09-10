@@ -90,6 +90,12 @@ func startServerWatch(t *testing.T, cfgBody string, files map[string]string, pol
 		done <- srv.Serve(ctx)
 	}()
 	t.Cleanup(func() {
+		select {
+		case serveErr := <-done:
+			t.Errorf("test server stopped before cleanup (err=%v)", serveErr)
+			return
+		default:
+		}
 		cancel()
 		if serveErr := <-done; serveErr != nil {
 			t.Errorf("test server stopped unexpectedly: %v", serveErr)
@@ -190,7 +196,10 @@ func doWithClient(client *http.Client, method, url, body string, mods ...reqMod)
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return resp, nil, fmt.Errorf("read body %s %s: %w", method, url, err)
+		return resp, data, fmt.Errorf(
+			"read body %s %s: %w (read=%d content_length=%d transfer_encoding=%v)",
+			method, url, err, len(data), resp.ContentLength, resp.TransferEncoding,
+		)
 	}
 	return resp, data, nil
 }
@@ -717,19 +726,19 @@ func assertEscaped(t *testing.T, where, bodyHTML string) {
 }
 
 // =============================================================================
-// (10) Single-flight: N concurrent GET / + a concurrent POST.
+// (10) Concurrent full viewer GETs + a concurrent POST survive together.
 // =============================================================================
 
 func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
-	// This case measures the render pipeline rather than payload throughput.
-	// Keep its fixture free of readiness routes: those intentionally inline the
-	// 3.5 MB Mermaid runtime, and sending 30 copies under the race detector
-	// turns this single-flight assertion into an unrelated socket stress test.
+	// The package-local pipeline test proves the 30-caller batching contract
+	// deterministically. This real-listener case instead proves that several
+	// full multi-megabyte viewer responses and one mutation survive together,
+	// without turning the race test into a 30-socket throughput benchmark.
 	srv, base, _ := startServer(t, baseConfig, map[string]string{
 		"claims/one.yaml": draftClaim("widget.contract.one"),
 	})
 
-	const n = 30
+	const n = 4
 	var wg sync.WaitGroup
 	start := make(chan struct{})
 	errs := make(chan error, n+1)
@@ -737,11 +746,16 @@ func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
 	// transport keeps this test's socket pool inside the test lifetime instead
 	// of letting http.DefaultTransport retain idle connections across repeated
 	// servers whose ports the OS may later reuse.
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("http.DefaultTransport has type %T, want *http.Transport", http.DefaultTransport)
+	}
+	transport := defaultTransport.Clone()
 	client := &http.Client{Transport: transport}
 	t.Cleanup(transport.CloseIdleConnections)
 
-	// N concurrent GET / — all released at once so many land during one render.
+	// N concurrent full-document GETs — all released with the POST so the
+	// response and mutation paths overlap on a realistic local reviewer load.
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
