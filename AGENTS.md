@@ -24,3 +24,6 @@
 - **Skill Gaps ([skill-gap-review](.agents/skills/skill-gap-review/SKILL.md))**:
   - Use when asked which skills are missing or what a collection of past work should teach.
   - Identify and prioritize evidence-backed improvements before creating more skills.
+- **Local Client Verification ([dossierx-local-client](.agents/skills/dossierx-local-client/SKILL.md))**:
+  - Use when the user supplies a local DossierX checkout or worktree and asks to verify its unreleased source against a client project.
+  - Keep the client's released Go tool pin unchanged; the skill owns the temporary local-source override and proof boundary.
