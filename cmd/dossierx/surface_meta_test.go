@@ -211,7 +211,7 @@ func TestSurfaceCountsAreTheEnforcedNumbers(t *testing.T) {
 		"nouns":       9,
 		"commands":    26,
 		"lint_rules":  38,
-		"error_codes": 48,
+		"error_codes": 50,
 		"http_routes": 14,
 	}
 	for name, expected := range want {

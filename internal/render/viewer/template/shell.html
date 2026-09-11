@@ -262,7 +262,8 @@
        these bytes exist. Do not add escaping here and do not remove it there. -->
   <script type="application/json" id="dossierx-graph">{{.GraphPayload}}</script>
 
-  <script>{{.ViewerRuntimeJS}}</script>
+{{if .ConformanceStatusGuardJS}}  <script>{{.ConformanceStatusGuardJS}}</script>
+{{end}}  <script>{{.ViewerRuntimeJS}}</script>
 
 <!-- The graph pane's two client files, in dependency order: graph-core.js
        exports window.dossierxGraphCore, graph-ui.js consumes it. Both are

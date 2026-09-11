@@ -1,0 +1,12 @@
+id: widget.contract.declared-none
+facet: contract
+module: widget
+status: draft
+layout: card
+body: This claim deliberately has no software embodiment.
+governed_by:
+  type: none
+  reason: neutral fixture
+embodiment:
+  mode: none
+  reason: this fixture claim describes documentation only

@@ -333,6 +333,15 @@ const (
 	// CodeWriteFailed is a filesystem write that failed outright (permissions,
 	// a missing directory, a full disk).
 	CodeWriteFailed Code = "write_failed"
+	// CodeConformanceCapacityExceeded is a deterministic pre-write refusal:
+	// the opted-in status/catalog/viewer projection cannot fit the documented
+	// resource budget. No generated artifact was replaced.
+	CodeConformanceCapacityExceeded Code = "conformance_capacity_exceeded"
+	// CodeConformanceFailed is the opt-in conformance gate refusing because at
+	// least one authored compare check is owed, mismatched, or uncheckable. The
+	// completed report and, in write mode, its generated projections remain the
+	// evidence for recovery; this code never describes claim approval/readiness.
+	CodeConformanceFailed Code = "conformance_failed"
 )
 
 // ExitCode is the DEFAULT process exit status for a code.

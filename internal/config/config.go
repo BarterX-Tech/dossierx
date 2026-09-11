@@ -87,6 +87,70 @@ type Viewer struct {
 	Theme Theme `yaml:"theme,omitempty"`
 }
 
+// Conformance configures the project-owned normalized observation input. The
+// engine resolves Observations relative to project.config.yaml but does not
+// require it to exist at config-load time: an unreadable configured snapshot is
+// an explicit uncheckable result, not a missing viewer.
+type Conformance struct {
+	Observations string `yaml:"observations,omitempty"`
+	// Blocking turns unsatisfied compare checks into a check-command gate. It is
+	// deliberately opt-in: the zero value preserves the report-only v1 behavior.
+	Blocking bool `yaml:"blocking,omitempty"`
+}
+
+// UnmarshalYAML keeps the observation path textual. yaml.v3 otherwise coerces
+// numbers and booleans into strings, which would turn a malformed declaration
+// into a different filesystem lookup instead of rejecting the config.
+func (c *Conformance) UnmarshalYAML(node *yaml.Node) error {
+	n := deref(node)
+	if n == nil || isNull(n) {
+		return fmt.Errorf("conformance: expected a mapping, got null")
+	}
+	if n.Kind != yaml.MappingNode {
+		return fmt.Errorf("conformance: expected a mapping, got %s", nodeKindName(n))
+	}
+	*c = Conformance{}
+	seen := map[string]bool{}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		key, value := n.Content[i], n.Content[i+1]
+		if key.Kind != yaml.ScalarNode || key.Tag != "!!str" {
+			return fmt.Errorf("conformance: key on line %d is not a name", key.Line)
+		}
+		if key.Value != "observations" && key.Value != "blocking" {
+			return fmt.Errorf("conformance: field %q not found", key.Value)
+		}
+		if seen[key.Value] {
+			return fmt.Errorf("conformance: key %q is defined twice", key.Value)
+		}
+		seen[key.Value] = true
+		switch key.Value {
+		case "observations":
+			v := deref(value)
+			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!str" {
+				kind := "null"
+				if v != nil {
+					kind = nodeKindName(v)
+				}
+				return fmt.Errorf("conformance.observations: expected a string, got %s", kind)
+			}
+			c.Observations = v.Value
+		case "blocking":
+			v := deref(value)
+			if v == nil || v.Kind != yaml.ScalarNode || v.Tag != "!!bool" {
+				kind := "null"
+				if v != nil {
+					kind = nodeKindName(v)
+				}
+				return fmt.Errorf("conformance.blocking: expected a boolean, got %s", kind)
+			}
+			if err := v.Decode(&c.Blocking); err != nil {
+				return fmt.Errorf("conformance.blocking: decode boolean: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
 // ThemeTokenAllowlist is the fixed, engine-owned set of viewer.theme keys.
 // Any key in viewer.theme not present here is a load-time error. This list
 // is intentionally the only place that defines the engine's theme
@@ -187,12 +251,13 @@ type Config struct {
 	// mirroring the reference docs explainer page's .eyebrow line. Unset means no
 	// eyebrow line is rendered at all — it is not required the way Title's
 	// generic fallback is.
-	Eyebrow       string   `yaml:"eyebrow,omitempty"`
-	Facets        []string `yaml:"facets"`
-	Modules       []string `yaml:"modules"`
-	ClaimsDir     string   `yaml:"claims_dir"`
-	DoctrineFacet string   `yaml:"doctrine_facet,omitempty"`
-	Viewer        Viewer   `yaml:"viewer,omitempty"`
+	Eyebrow       string      `yaml:"eyebrow,omitempty"`
+	Facets        []string    `yaml:"facets"`
+	Modules       []string    `yaml:"modules"`
+	ClaimsDir     string      `yaml:"claims_dir"`
+	DoctrineFacet string      `yaml:"doctrine_facet,omitempty"`
+	Viewer        Viewer      `yaml:"viewer,omitempty"`
+	Conformance   Conformance `yaml:"conformance,omitempty"`
 
 	// BuildDir is the directory every runtime-generated file lives under —
 	// the build-order and code-links artifacts, the three ledger stores, the
@@ -349,6 +414,9 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	if cfg.Viewer.TemplateOverrides != "" && !filepath.IsAbs(cfg.Viewer.TemplateOverrides) {
 		cfg.Viewer.TemplateOverrides = filepath.Join(dir, cfg.Viewer.TemplateOverrides)
 	}
+	if cfg.Conformance.Observations != "" && !filepath.IsAbs(cfg.Conformance.Observations) {
+		cfg.Conformance.Observations = filepath.Join(dir, cfg.Conformance.Observations)
+	}
 	for i, sd := range cfg.SourceDirs {
 		if !filepath.IsAbs(sd) {
 			cfg.SourceDirs[i] = filepath.Join(dir, sd)
@@ -367,6 +435,11 @@ func DecodeConfig(raw []byte, dir, name string) (*Config, error) {
 	// a loop with no exit.
 	if err := checkBuildDirContainment(cfg.BuildDir, cfg.ClaimsDir, dir); err != nil {
 		return nil, fmt.Errorf("config: %s: %w", path, err)
+	}
+	if cfg.Conformance.Observations != "" {
+		if pathContains(cfg.BuildDir, filepath.Clean(cfg.Conformance.Observations)) {
+			return nil, fmt.Errorf("config: %s: conformance.observations (%s) must be outside build_dir (%s); generated output cannot be used as observation input", path, cfg.Conformance.Observations, cfg.BuildDir)
+		}
 	}
 
 	// The theme's two path-shaped fields are resolved here and READ

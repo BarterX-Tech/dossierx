@@ -137,6 +137,50 @@ func TestSSE_ExternalNestedWriteDeliversChanged(t *testing.T) {
 	waitChanged(t, events, 3*time.Second)
 }
 
+func TestSSE_ObservationOnlyWriteRefreshesConformance(t *testing.T) {
+	cfg := baseConfig + "conformance:\n  observations: observations.json\n"
+	files := map[string]string{
+		"claims/state.yaml": draftClaim("widget.contract.state") + "embodiment:\n  mode: compare\n  checks:\n    - id: state\n      adapter: neutral/v1\n      target: widget://state\n      expectation:\n        shape: set\n        value: [ready]\n",
+		"observations.json": `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["blocked"]}]}`,
+	}
+	_, base, root := startServerWatch(t, cfg, files, fastPoll, fastDebounce)
+	resp, before := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(before), `data-conformance-state="mismatch"`) || !strings.Contains(string(before), `data-implementation-ready="false"`) {
+		t.Fatalf("initial viewer = %d %s", resp.StatusCode, before)
+	}
+	events, cancel := sseClient(t, base)
+	defer cancel()
+	writeFile(t, filepath.Join(root, "observations.json"), `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["ready"]}]}`)
+	waitChanged(t, events, 3*time.Second)
+	resp, after := do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), `data-conformance-state="matched"`) || !strings.Contains(string(after), `data-implementation-ready="true"`) || strings.Contains(string(after), "missing:</span>") {
+		t.Fatalf("refreshed viewer = %d %s", resp.StatusCode, after)
+	}
+
+	if err := os.Remove(filepath.Join(root, "observations.json")); err != nil {
+		t.Fatal(err)
+	}
+	waitChanged(t, events, 3*time.Second)
+	resp, after = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), `data-conformance-state="uncheckable"`) || !strings.Contains(string(after), `data-implementation-ready="false"`) {
+		t.Fatalf("deleted-input viewer = %d %s", resp.StatusCode, after)
+	}
+
+	writeFile(t, filepath.Join(root, "observations.json"), `{"format_version":1`)
+	waitChanged(t, events, 3*time.Second)
+	resp, after = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), `data-conformance-state="uncheckable"`) {
+		t.Fatalf("malformed-input viewer = %d %s", resp.StatusCode, after)
+	}
+
+	writeFile(t, filepath.Join(root, "observations.json"), `{"format_version":1,"observations":[{"adapter":"neutral/v1","target":"widget://state","shape":"set","value":["ready"]}]}`)
+	waitChanged(t, events, 3*time.Second)
+	resp, after = do(t, http.MethodGet, base+"/", "")
+	if resp.StatusCode != http.StatusOK || !strings.Contains(string(after), `data-conformance-state="matched"`) || !strings.Contains(string(after), `data-implementation-ready="true"`) {
+		t.Fatalf("recovered viewer = %d %s", resp.StatusCode, after)
+	}
+}
+
 // A *.tmp-* file appearing then vanishing (the atomic-writer scratch pattern)
 // delivers no event at all.
 func TestSSE_TmpFileDeliversNoChanged(t *testing.T) {

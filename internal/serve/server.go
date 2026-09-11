@@ -38,6 +38,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -119,7 +120,10 @@ type Server struct {
 
 	// pipe serializes viewer renders (single-flight); see pipeline.go.
 	pipe *pipeline
-
+	// statusPipe applies the same start-at-or-after coalescing rule to the full
+	// read-only status projection. Dense catalog/render capacity grading must
+	// never run once per concurrent browser poll.
+	statusPipe *pipeline
 	// hub fans a "changed" signal out to every live /api/events subscriber; the
 	// watcher drives it on each debounced claim-file change. See sse.go.
 	hub *hub
@@ -213,6 +217,7 @@ func New(cfg *config.Config, version string) *Server {
 		warnw:            os.Stderr,
 	}
 	s.pipe = newPipeline(s.renderViewer)
+	s.statusPipe = newPipeline(s.renderStatus)
 	s.httpSrv = &http.Server{
 		Handler: s.admission(s.routes()),
 		// ReadHeaderTimeout guards against a slow-loris client dribbling
@@ -259,6 +264,10 @@ func (s *Server) URL() string { return fmt.Sprintf("http://127.0.0.1:%d/", s.Por
 // to call it.
 func (s *Server) RenderRuns() int64 { return s.pipe.runCount() }
 
+// StatusRuns is the number of full status projections executed. It is exposed
+// only so concurrency tests can prove GET/HEAD bursts cost at most two runs.
+func (s *Server) StatusRuns() int64 { return s.statusPipe.runCount() }
+
 // AssetTreeScans is the number of times the claim-image allowlist has stat-walked
 // the claims tree to verify its own freshness. It exists for the one test that
 // can catch a return to per-request walking — the walk is O(claims) and a page
@@ -291,11 +300,15 @@ func (s *Server) Serve(ctx context.Context) error {
 	// detected (the baseline reflects the pre-serve state). Then poll in the
 	// background until ctx is cancelled, feeding the render pipeline and the SSE
 	// hub on each debounced change.
-	baseline, err := scanFingerprint(s.cfg.ClaimsDir)
+	extraFiles := []string(nil)
+	if s.cfg.Conformance.Observations != "" {
+		extraFiles = append(extraFiles, s.cfg.Conformance.Observations)
+	}
+	w := newWatcherWithFiles(s.cfg.ClaimsDir, extraFiles, s.pollInterval, s.debounceInterval, s.onChange)
+	baseline, err := w.scan()
 	if err != nil {
 		baseline = map[string]fileStamp{}
 	}
-	w := newWatcher(s.cfg.ClaimsDir, s.pollInterval, s.debounceInterval, s.onChange)
 	go w.run(ctx, baseline)
 
 	errCh := make(chan error, 1)
@@ -326,6 +339,7 @@ func (s *Server) Serve(ctx context.Context) error {
 // watcher.
 func (s *Server) onChange() {
 	s.pipe.refresh()
+	s.statusPipe.refresh()
 	s.hub.broadcast()
 }
 
@@ -444,10 +458,22 @@ func (s *Server) renderViewer() ([]byte, error) {
 		return nil, fmt.Errorf("serve: readiness: %w", err)
 	}
 	cat.SetReadiness(assessment)
+	report, err := conformance.Evaluate(claims, s.cfg.Conformance.Observations, func(path string) ([]byte, error) {
+		return conformance.ReadFileOutside(path, s.cfg.BuildDirPath())
+	})
+	if err != nil {
+		return nil, fmt.Errorf("serve: conformance: %w", err)
+	}
+	cat.SetConformance(report)
 	if s.themeErr != nil {
 		return nil, fmt.Errorf("serve: theme: %w", s.themeErr)
 	}
-	html, err := render.RenderWithTheme(cat, s.cfg, s.theme)
+	var html string
+	if report != nil {
+		html, err = render.RenderWithThemeBounded(cat, s.cfg, s.theme, conformance.MaxOutputBytes)
+	} else {
+		html, err = render.RenderWithTheme(cat, s.cfg, s.theme)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("serve: render: %w", err)
 	}

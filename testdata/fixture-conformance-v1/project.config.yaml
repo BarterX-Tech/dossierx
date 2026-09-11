@@ -1,0 +1,7 @@
+schema_version: 1
+title: Structured conformance v1 fixture
+facets: [contract]
+modules: [widget]
+claims_dir: claims
+conformance:
+  observations: observations.json

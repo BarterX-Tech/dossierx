@@ -470,6 +470,9 @@ func TestEnsureBuildGitignoreWritesOnce(t *testing.T) {
 			t.Fatalf("build/.gitignore lacks %q", line)
 		}
 	}
+	if strings.Contains(string(got), "conformance/") {
+		t.Fatal("a project that has not opted in must keep the historical build/.gitignore bytes")
+	}
 	if err := os.WriteFile(cfg.BuildGitignorePath(), []byte("edited\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -482,6 +485,27 @@ func TestEnsureBuildGitignoreWritesOnce(t *testing.T) {
 	}
 	if string(got) != "edited\n" {
 		t.Fatalf("an existing build/.gitignore must never be rewritten, got %q", got)
+	}
+}
+
+func TestEnsureBuildGitignoreConformanceTransitionIsConditional(t *testing.T) {
+	cfg := legacyProject(t, nil, "")
+	if err := layout.EnsureBuildGitignoreForConformance(cfg, true); err != nil {
+		t.Fatal(err)
+	}
+	withFeature, err := os.ReadFile(cfg.BuildGitignorePath())
+	if err != nil || !strings.Contains(string(withFeature), "conformance/\n") {
+		t.Fatalf("opted-in build/.gitignore = %q err=%v", withFeature, err)
+	}
+	if err := layout.EnsureBuildGitignoreForConformance(cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	withoutFeature, err := os.ReadFile(cfg.BuildGitignorePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(withoutFeature) != layout.BuildGitignoreContent {
+		t.Fatalf("transition to zero did not restore historical bytes: %q", withoutFeature)
 	}
 }
 

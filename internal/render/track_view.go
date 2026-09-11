@@ -97,8 +97,13 @@ type TrackSection struct {
 // byte of track markup — the zero-cost contract this feature is held to, and
 // the thing tests/fixture_staleness_test.go would turn red over.
 func buildTrackSections(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML) []TrackSection {
+	sections, _ := buildTrackSectionsWithBudget(cat, cfg, renderedByID, nil)
+	return sections
+}
+
+func buildTrackSectionsWithBudget(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML, budget *renderByteBudget) ([]TrackSection, error) {
 	if cfg == nil || len(cfg.Tracks) == 0 || cat == nil {
-		return nil
+		return nil, nil
 	}
 
 	out := make([]TrackSection, 0, len(cfg.Tracks))
@@ -121,8 +126,11 @@ func buildTrackSections(cat *catalog.Catalog, cfg *config.Config, renderedByID m
 		section.StateClass, section.StateLabel = trackCompletion(owned, cited)
 
 		for _, c := range owned {
-			section.OwnedClaims = append(section.OwnedClaims,
-				stripDuplicateClaimIDs(renderedByID[c.ID], c))
+			claimHTML := stripDuplicateClaimIDs(renderedByID[c.ID], c)
+			if err := budget.consume(len(claimHTML)); err != nil {
+				return nil, err
+			}
+			section.OwnedClaims = append(section.OwnedClaims, claimHTML)
 		}
 
 		rows := make([]components.TrackCitedClaim, 0, len(cited))
@@ -134,10 +142,13 @@ func buildTrackSections(cat *catalog.Catalog, cfg *config.Config, renderedByID m
 			})
 		}
 		section.CitedHTML = components.TrackCitedListHTML(rows)
+		if err := budget.consume(len(section.CitedHTML)); err != nil {
+			return nil, err
+		}
 
 		out = append(out, section)
 	}
-	return out
+	return out, nil
 }
 
 // partitionTrackClaims splits the claims belonging to one track into the ones

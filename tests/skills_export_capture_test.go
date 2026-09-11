@@ -275,8 +275,9 @@ func TestCaptureSkillsExport_NoRawWikilinksSurvive(t *testing.T) {
 //
 // it runs the export against a fresh fixture and writes the full capture to
 // -skills-export-capture-out. With the flag unset (the default `go test`
-// invocation, and every CI run of this suite) it writes nothing — the
-// capture's correctness is the two tests above's job, not this one's.
+// invocation, and every CI run of this suite) it writes nothing, but still
+// performs a self-contained export and asserts that all three forms exist and
+// contain no unresolved cross-reference syntax.
 //
 // The check below keys off PRESENCE (flag.CommandLine.Visit), not VALUE
 // (*skillsExportCaptureOut == ""): a driver invoking
@@ -295,7 +296,32 @@ func TestCaptureSkillsExport_G1Capture(t *testing.T) {
 		}
 	})
 	if !outGiven {
-		t.Skip("no -skills-export-capture-out given; this test is a capture entry point, not a correctness check (see TestCaptureSkillsExport_AllThreeFormsPresent for that)")
+		root := newSkillsExportFixture(t)
+		capture := captureSkillsExport(t, root)
+		if len(capture.SkillTree) != len(wantSkillsExportNames) {
+			t.Fatalf("flagless capture exported %d skill files, want %d: %v", len(capture.SkillTree), len(wantSkillsExportNames), sortedSkillTreeKeys(capture.SkillTree))
+		}
+		for _, name := range wantSkillsExportNames {
+			if _, ok := capture.SkillTree[name+"/SKILL.md"]; !ok {
+				t.Errorf("flagless capture missing %s/SKILL.md", name)
+			}
+			if !strings.Contains(capture.AgentGuide, `<a id="`+name+`"></a>`) {
+				t.Errorf("flagless capture agent guide missing %s anchor", name)
+			}
+		}
+		for _, form := range []struct{ name, body string }{{"agent guide", capture.AgentGuide}, {"AGENTS.md section", capture.AgentsMDSection}} {
+			if match := rawWikilinkPattern.FindString(form.body); match != "" {
+				t.Errorf("flagless %s contains unresolved wikilink %q", form.name, match)
+			}
+			if match := siblingSkillLinkPattern.FindString(form.body); match != "" {
+				t.Errorf("flagless %s contains unresolved sibling skill link %q", form.name, match)
+			}
+		}
+		if !strings.HasPrefix(capture.AgentsMDSection, skillsExportAgentsBeginMarker) || !strings.HasSuffix(strings.TrimRight(capture.AgentsMDSection, "\n"), skillsExportAgentsEndMarker) {
+			t.Fatalf("flagless AGENTS.md capture does not preserve its exact marker boundaries:\n%s", capture.AgentsMDSection)
+		}
+		t.Log("no capture-output flag: verified all three exported forms locally")
+		return
 	}
 	if *skillsExportCaptureOut == "" {
 		// -skills-export-capture-out WAS passed but its value is empty — the
@@ -409,16 +435,13 @@ func TestCaptureSkillsExport_G1Capture_RequiresNonEmptyValueWhenFlagGiven(t *tes
 		}
 	})
 
-	t.Run("flag not given at all still skips cleanly", func(t *testing.T) {
-		// Negative control: the fix must not turn the ordinary, flagless
-		// `go test ./tests` invocation (every CI run of this suite) into a
-		// failure.
+	t.Run("flag not given runs local assertions", func(t *testing.T) {
 		out, code := runG1Capture(t)
 		if code != 0 {
 			t.Fatalf("expected exit 0 when the flag is not given at all, got exit %d:\n%s", code, out)
 		}
-		if !strings.Contains(out, "--- SKIP") {
-			t.Errorf("expected the test to SKIP when the flag is not given, got:\n%s", out)
+		if strings.Contains(out, "--- SKIP") || !strings.Contains(out, "--- PASS: TestCaptureSkillsExport_G1Capture") || !strings.Contains(out, "verified all three exported forms locally") {
+			t.Errorf("expected the flagless entrypoint to run and pass local assertions, got:\n%s", out)
 		}
 	})
 

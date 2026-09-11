@@ -1,0 +1,11 @@
+{
+  "format_version": 1,
+  "snapshot": "neutral-fixture-1",
+  "observations": [
+    {"adapter": "neutral/v1", "target": "widget://matched-values", "shape": "set", "value": ["ready", "waiting"]},
+    {"adapter": "neutral/v1", "target": "widget://matched-version", "shape": "scalar", "value": "3"},
+    {"adapter": "neutral/v1", "target": "widget://mismatch", "shape": "set", "value": ["paused", "ready"]},
+    {"adapter": "neutral/v1", "target": "widget://mismatch-version", "shape": "scalar", "value": "4"},
+    {"adapter": "neutral/v1", "target": "widget://uncheckable", "error": {"code": "fixture_unavailable", "message": "the neutral fixture has no snapshot"}}
+  ]
+}

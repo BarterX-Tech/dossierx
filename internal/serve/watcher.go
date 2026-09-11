@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -32,14 +33,37 @@ const (
 // and rename all read as "changed" with no per-event bookkeeping and no fsnotify
 // dependency.
 type watcher struct {
-	root     string
-	poll     time.Duration
-	debounce time.Duration
-	onChange func()
+	root       string
+	poll       time.Duration
+	debounce   time.Duration
+	onChange   func()
+	extraFiles []string
 }
 
 func newWatcher(root string, poll, debounce time.Duration, onChange func()) *watcher {
 	return &watcher{root: root, poll: poll, debounce: debounce, onChange: onChange}
+}
+
+func newWatcherWithFiles(root string, extraFiles []string, poll, debounce time.Duration, onChange func()) *watcher {
+	return &watcher{root: root, extraFiles: append([]string(nil), extraFiles...), poll: poll, debounce: debounce, onChange: onChange}
+}
+
+func (w *watcher) scan() (map[string]fileStamp, error) {
+	fp, err := scanFingerprint(w.root)
+	if err != nil {
+		return nil, err
+	}
+	for _, file := range w.extraFiles {
+		info, statErr := os.Stat(file)
+		if errors.Is(statErr, fs.ErrNotExist) {
+			continue
+		}
+		if statErr != nil {
+			return nil, statErr
+		}
+		fp[file] = fileStamp{modNano: info.ModTime().UnixNano(), size: info.Size()}
+	}
+	return fp, nil
 }
 
 // run polls until ctx is cancelled, starting from the given baseline
@@ -65,7 +89,7 @@ func (w *watcher) run(ctx context.Context, baseline map[string]fileStamp) {
 			}
 			return
 		case <-ticker.C:
-			cur, err := scanFingerprint(w.root)
+			cur, err := w.scan()
 			if err != nil {
 				// A transient walk error (the tree briefly gone, a file racing a
 				// rename) is not fatal to a long-lived watcher: keep the prior

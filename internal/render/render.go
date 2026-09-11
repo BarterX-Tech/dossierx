@@ -21,8 +21,10 @@ import (
 	"bytes"
 	"embed"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -30,6 +32,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/render/components"
 )
@@ -185,6 +188,10 @@ type shellData struct {
 	GraphUIJS       template.JS
 	SystemRecordJS  template.JS
 	ViewerRuntimeJS template.JS
+	// ConformanceStatusGuardJS is an engine-owned fetch freshness guard emitted
+	// only for viewers with structured conformance. It intentionally is not
+	// part of ViewerRuntimeJS so no-feature viewer bytes remain unchanged.
+	ConformanceStatusGuardJS template.JS
 
 	// BuildOrders is the Build order tab: one entry per module with a LOCKED
 	// build-order artifact, in module order (see build_order_view.go). Its
@@ -394,6 +401,20 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 // need and hand the result here. Keeping Render's signature unchanged keeps
 // every other caller — and every existing test — untouched.
 func RenderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme) (string, error) {
+	return renderWithTheme(cat, cfg, rt, 0)
+}
+
+// RenderWithThemeBounded renders through a capped writer. Opted-in check and
+// serve use it so facet/track copies cannot first build an arbitrarily large
+// in-memory viewer and only then discover the 64 MiB artifact limit.
+func RenderWithThemeBounded(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme, maxBytes int) (string, error) {
+	if maxBytes <= 0 {
+		return "", fmt.Errorf("render: max bytes must be positive")
+	}
+	return renderWithTheme(cat, cfg, rt, maxBytes)
+}
+
+func renderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme, maxBytes int) (string, error) {
 	if cat == nil {
 		cat = &catalog.Catalog{}
 	}
@@ -414,62 +435,148 @@ func RenderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.Resolv
 	// called "dossierx implink set" and has no claim any other claim rests
 	// on.
 	attachEdgesOverride(tmpl.partials, buildImplinkLookup(cfg), buildDependedByLookup(cat), buildTargetStatusLookup(cat))
-
 	// Rebind mockup.html's "mockupHTML" func with the project's
 	// mockup_modules allowlist so its defense-in-depth gate (DX-AUD-08) can
 	// verify module membership; the default binding always escapes.
 	attachMockupOverride(tmpl.partials, cfg)
 
-	renderedByID, err := renderClaims(cat, tmpl.partials)
-	if err != nil {
-		return "", err
-	}
-
 	generatedAt := time.Now().UTC()
-
-	graphPayload, err := graphPayloadJSON(cat, cfg, generatedAt)
-	if err != nil {
-		return "", err
+	header := generatedHeader(generatedAt)
+	if maxBytes > 0 && len(header) >= maxBytes {
+		return "", viewerCapacityError(maxBytes)
+	}
+	inputs := shellInputs{
+		cat:                      cat,
+		cfg:                      cfg,
+		css:                      viewerCSSWithConformance(tmpl.css, cat.Conformance),
+		graphCSS:                 tmpl.graphCSS,
+		graphCoreJS:              tmpl.graphCore,
+		graphUIJS:                tmpl.graphUI,
+		systemRecordJS:           tmpl.systemRecord,
+		viewerRuntimeJS:          tmpl.viewerRuntime,
+		conformanceStatusGuardJS: statusFetchGuardWithConformance(cat.Conformance),
+		generatedAt:              generatedAt,
+		theme:                    rt,
+		mermaidJS:                tmpl.mermaidJS,
+		buildOrderUIJS:           tmpl.buildOrderUI,
 	}
 
-	buildOrders, buildOrderPayload, err := buildOrderTabData(cat, cfg, tmpl.buildOrder, generatedAt)
-	if err != nil {
-		return "", err
-	}
-
-	data := buildShellData(shellInputs{
-		cat:             cat,
-		cfg:             cfg,
-		css:             tmpl.css,
-		graphCSS:        tmpl.graphCSS,
-		graphCoreJS:     tmpl.graphCore,
-		graphUIJS:       tmpl.graphUI,
-		systemRecordJS:  tmpl.systemRecord,
-		viewerRuntimeJS: tmpl.viewerRuntime,
-		graphPayload:    graphPayload,
-		renderedByID:    renderedByID,
-		generatedAt:     generatedAt,
-		theme:           rt,
-
-		buildOrders:       buildOrders,
-		buildOrderPayload: buildOrderPayload,
-		mermaidJS:         tmpl.mermaidJS,
-		buildOrderUIJS:    tmpl.buildOrderUI,
-	})
-
-	// The tab's section and per-module group ids are namespaced out of the
-	// module slug space; the one shape slugify can still produce is refused
-	// by name here, the way loadTemplates refuses a legacy override.
-	if err := buildOrderIDCollision(data.BuildOrders, data.ModuleGroups); err != nil {
-		return "", err
+	var data any
+	if tmpl.shellOverridden {
+		var memoryBudget *renderByteBudget
+		if maxBytes > 0 {
+			// loadTemplates has already loaded the engine's fixed embedded assets;
+			// their bounded size is constant overhead, not corpus projection data.
+			// This guard applies only to lazily requested, corpus-sized values.
+			memoryBudget = &renderByteBudget{remaining: maxBoundedRenderIntermediateBytes, exceeded: ErrIntermediateCapacityExceeded}
+		}
+		data = newLazyShellData(inputs, tmpl.partials, tmpl.buildOrder, memoryBudget)
+	} else {
+		var outputBudget *renderByteBudget
+		if maxBytes > 0 {
+			// The embedded shell emits every dynamic projection. Charging them
+			// against the output budget is therefore exact lower-bound containment.
+			outputBudget = &renderByteBudget{remaining: maxBytes - len(header), exceeded: conformance.ErrCapacityExceeded}
+		}
+		eager, err := buildEagerShellData(inputs, tmpl.partials, tmpl.buildOrder, outputBudget)
+		if err != nil {
+			if errors.Is(err, conformance.ErrCapacityExceeded) {
+				return "", viewerCapacityError(maxBytes)
+			}
+			return "", err
+		}
+		data = eager
 	}
 
 	var out bytes.Buffer
-	if err := tmpl.shell.Execute(&out, data); err != nil {
+	var dst io.Writer = &out
+	if maxBytes > 0 {
+		dst = &capacityWriter{Buffer: &out, remaining: maxBytes - len(header)}
+	}
+	if err := tmpl.shell.Execute(dst, data); err != nil {
+		if errors.Is(err, conformance.ErrCapacityExceeded) {
+			return "", viewerCapacityError(maxBytes)
+		}
+		if errors.Is(err, ErrIntermediateCapacityExceeded) {
+			return "", renderIntermediateCapacityError()
+		}
 		return "", fmt.Errorf("render: execute shell template: %w", err)
 	}
 
-	return generatedHeader(generatedAt) + out.String(), nil
+	return header + out.String(), nil
+}
+
+func viewerCapacityError(maxBytes int) error {
+	return fmt.Errorf("%w: viewer requires more than %d bytes", conformance.ErrCapacityExceeded, maxBytes)
+}
+
+const maxBoundedRenderIntermediateBytes = 128 << 20
+
+// ErrIntermediateCapacityExceeded is distinct from the output-capacity error:
+// it means pre-shell retained data crossed the renderer's memory-safety guard,
+// not that the selected shell would necessarily have emitted too many bytes.
+var ErrIntermediateCapacityExceeded = errors.New("render intermediate memory capacity exceeded")
+
+func renderIntermediateCapacityError() error {
+	return fmt.Errorf("%w: retained render data exceeds the %d-byte safety limit", ErrIntermediateCapacityExceeded, maxBoundedRenderIntermediateBytes)
+}
+
+// renderByteBudget caps bytes retained by pre-shell render stages. It is
+// deliberately shared: a per-claim cap would still allow an unbounded number
+// of small claims to accumulate before the final capacityWriter sees them.
+type renderByteBudget struct {
+	remaining int
+	exceeded  error
+}
+
+func (b *renderByteBudget) consume(n int) error {
+	if b == nil {
+		return nil
+	}
+	if n < 0 || n > b.remaining {
+		if b.exceeded != nil {
+			return b.exceeded
+		}
+		return ErrIntermediateCapacityExceeded
+	}
+	b.remaining -= n
+	return nil
+}
+
+// budgetBuffer checks the shared budget before bytes.Buffer grows. Template
+// execution can therefore never allocate a claim or build-order fragment past
+// the remaining honest viewer-output budget.
+type budgetBuffer struct {
+	bytes.Buffer
+	budget *renderByteBudget
+}
+
+func (b *budgetBuffer) Write(p []byte) (int, error) {
+	if err := b.budget.consume(len(p)); err != nil {
+		return 0, err
+	}
+	return b.Buffer.Write(p)
+}
+
+func (b *budgetBuffer) WriteString(s string) (int, error) {
+	if err := b.budget.consume(len(s)); err != nil {
+		return 0, err
+	}
+	return b.Buffer.WriteString(s)
+}
+
+type capacityWriter struct {
+	Buffer    *bytes.Buffer
+	remaining int
+}
+
+func (w *capacityWriter) Write(p []byte) (int, error) {
+	if len(p) > w.remaining {
+		return 0, conformance.ErrCapacityExceeded
+	}
+	n, err := w.Buffer.Write(p)
+	w.remaining -= n
+	return n, err
 }
 
 // loadedTemplates bundles every override-able render input resolved by
@@ -481,6 +588,10 @@ type loadedTemplates struct {
 	partials map[model.Layout]*template.Template
 	css      []byte
 	shell    *template.Template
+	// shellOverridden selects the runtime-lazy data facade. The embedded shell
+	// has a fixed, audited projection contract; a project shell may reference
+	// any subset and must pay only for fields its executed branches request.
+	shellOverridden bool
 	// buildOrder is the Build order tab's per-module partial
 	// (viewer/template/build-order.html), parsed off the embedded FS with NO
 	// override branch — see loadTemplates for the refusal a legacy
@@ -593,17 +704,18 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 	}
 
 	return loadedTemplates{
-		partials:      partials,
-		css:           css,
-		shell:         shell,
-		buildOrder:    buildOrderTmpl,
-		graphCore:     graphCore,
-		graphUI:       graphUI,
-		graphCSS:      graphCSS,
-		systemRecord:  systemRecord,
-		viewerRuntime: viewerRuntime,
-		mermaidJS:     mermaidJS,
-		buildOrderUI:  buildOrderUI,
+		partials:        partials,
+		css:             css,
+		shell:           shell,
+		shellOverridden: shellOverridden,
+		buildOrder:      buildOrderTmpl,
+		graphCore:       graphCore,
+		graphUI:         graphUI,
+		graphCSS:        graphCSS,
+		systemRecord:    systemRecord,
+		viewerRuntime:   viewerRuntime,
+		mermaidJS:       mermaidJS,
+		buildOrderUI:    buildOrderUI,
 	}, nil
 }
 
@@ -652,16 +764,28 @@ func ShellHasViewerRuntime(cfg *config.Config) (bool, error) {
 // it afterwards. shell.html has no top-level "all claims, unordered" view
 // (it renders exclusively via ModuleGroups' nested Facets[].Claims), so
 // renderClaims does not also keep a flat catalog-order slice around for it.
-func renderClaims(cat *catalog.Catalog, partials map[model.Layout]*template.Template) (map[string]template.HTML, error) {
+func renderClaims(cat *catalog.Catalog, partials map[model.Layout]*template.Template, conformanceResults map[string]conformance.Result) (map[string]template.HTML, error) {
+	return renderClaimsWithBudget(cat, partials, conformanceResults, nil)
+}
+
+func renderClaimsWithBudget(cat *catalog.Catalog, partials map[model.Layout]*template.Template, conformanceResults map[string]conformance.Result, budget *renderByteBudget) (map[string]template.HTML, error) {
 	renderedByID := make(map[string]template.HTML, len(cat.Claims))
 	for _, c := range cat.Claims {
 		tmpl, ok := partials[c.Layout]
 		if !ok {
 			return nil, fmt.Errorf("render: claim %q has unsupported layout %q", c.ID, c.Layout)
 		}
-		var buf bytes.Buffer
+		buf := budgetBuffer{budget: budget}
 		if err := tmpl.Execute(&buf, c); err != nil {
 			return nil, fmt.Errorf("render: claim %q: %w", c.ID, err)
+		}
+		// Conformance is engine-owned generated evidence, not a replaceable
+		// presentation partial. Appending it after the selected layout keeps the
+		// projection visible even when a project overrides that entire partial.
+		if result, ok := conformanceResults[c.ID]; ok {
+			if _, err := buf.WriteString(string(components.ConformanceHTML(result))); err != nil {
+				return nil, fmt.Errorf("render: claim %q conformance: %w", c.ID, err)
+			}
 		}
 		renderedByID[c.ID] = template.HTML(buf.String())
 	}
@@ -685,12 +809,13 @@ type shellInputs struct {
 	// backing the graph pane, always the engine's own copies — they carry no
 	// override branch (design section 7.2). graphPayload is the JSON graph
 	// payload for cat, already stamped and encoded by graphPayloadJSON.
-	graphCSS        []byte
-	graphCoreJS     []byte
-	graphUIJS       []byte
-	systemRecordJS  []byte
-	viewerRuntimeJS []byte
-	graphPayload    template.JS
+	graphCSS                 []byte
+	graphCoreJS              []byte
+	graphUIJS                []byte
+	systemRecordJS           []byte
+	viewerRuntimeJS          []byte
+	conformanceStatusGuardJS []byte
+	graphPayload             template.JS
 
 	renderedByID map[string]template.HTML
 	generatedAt  time.Time
@@ -717,13 +842,15 @@ type shellInputs struct {
 // shellData.GraphCSS and the block of comments there for why plain strings
 // at those injection sites fail silently.
 func buildShellData(in shellInputs) shellData {
-	cat, cfg := in.cat, in.cfg
+	groups := buildGroups(in.cat, in.cfg, in.renderedByID)
+	data := buildShellStaticData(in)
+	data.ModuleGroups = buildModuleGroups(groups)
+	data.Tracks = buildTrackSections(in.cat, in.cfg, in.renderedByID)
+	return data
+}
 
-	// groups is buildModuleGroups' input only — the flat, facet-level
-	// grouping is not exposed on shellData (shell.html renders exclusively
-	// via ModuleGroups below).
-	groups := buildGroups(cat, cfg, in.renderedByID)
-	moduleGroups := buildModuleGroups(groups)
+func buildShellStaticData(in shellInputs) shellData {
+	cfg := in.cfg
 
 	title := "dossierx viewer"
 	eyebrow := ""
@@ -735,18 +862,19 @@ func buildShellData(in shellInputs) shellData {
 	}
 
 	return shellData{
-		Title:           title,
-		Eyebrow:         eyebrow,
-		CSS:             template.CSS(in.css),
-		ThemeCSS:        themeOverrideCSS(in.theme),
-		GeneratedAt:     in.generatedAt.Format("2006-01-02 15:04 UTC"),
-		GraphCSS:        template.CSS(in.graphCSS),
-		GraphPayload:    in.graphPayload,
-		GraphCoreJS:     template.JS(in.graphCoreJS),
-		GraphUIJS:       template.JS(in.graphUIJS),
-		SystemRecordJS:  template.JS(in.systemRecordJS),
-		ViewerRuntimeJS: template.JS(in.viewerRuntimeJS),
-		ModuleGroups:    moduleGroups,
+		Title:                    title,
+		Eyebrow:                  eyebrow,
+		CSS:                      template.CSS(in.css),
+		ThemeCSS:                 themeOverrideCSS(in.theme),
+		GeneratedAt:              in.generatedAt.Format("2006-01-02 15:04 UTC"),
+		GraphCSS:                 template.CSS(in.graphCSS),
+		GraphPayload:             in.graphPayload,
+		GraphCoreJS:              template.JS(in.graphCoreJS),
+		GraphUIJS:                template.JS(in.graphUIJS),
+		SystemRecordJS:           template.JS(in.systemRecordJS),
+		ViewerRuntimeJS:          template.JS(in.viewerRuntimeJS),
+		ConformanceStatusGuardJS: template.JS(in.conformanceStatusGuardJS),
+		ModuleGroups:             nil,
 		// The Build order tab. Typed template.JS on the way out like the
 		// graph fields, for the same silent-failure reason.
 		BuildOrders:       in.buildOrders,
@@ -756,7 +884,7 @@ func buildShellData(in shellInputs) shellData {
 		// Built from the SAME renderedByID the module groups read, so a claim
 		// a track owns is rendered exactly once no matter how many sections
 		// point at it — the property newGroup's own lookup exists to hold.
-		Tracks: buildTrackSections(cat, cfg, in.renderedByID),
+		Tracks: nil,
 	}
 }
 

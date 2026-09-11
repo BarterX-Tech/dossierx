@@ -46,10 +46,12 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/implink"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
@@ -60,6 +62,30 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 	"github.com/BarterX-Tech/dossierx/internal/render"
 )
+
+func conformanceObservationPath(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Conformance.Observations
+}
+
+func conformanceWorktreeReader(cfg *config.Config) conformance.ReadFunc {
+	return func(path string) ([]byte, error) {
+		return conformance.ReadFileOutside(path, cfg.BuildDirPath())
+	}
+}
+
+func removeStaleConformanceStatus(cfg *config.Config) error {
+	if cfg == nil {
+		return nil
+	}
+	err := os.Remove(cfg.ConformanceStatusPath())
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
 
 // Result is the value form of one "dossierx check" run — everything the
 // terminal reporter prints and everything serve shows as page data, computed
@@ -82,9 +108,36 @@ type Result struct {
 	// CatalogPath/CatalogCount and RenderPath record check's two disk writes.
 	// CatalogPath/RenderPath are empty when the run stopped before that write
 	// (e.g. a lint error), which is exactly the "did this line print?" test.
-	CatalogPath  string
-	CatalogCount int
-	RenderPath   string
+	CatalogPath      string
+	CatalogCount     int
+	RenderPath       string
+	ConformancePath  string
+	Conformance      *conformance.Report
+	ConformanceError string
+	// ConformanceBlockingEnabled and ConformanceBlockingChecks expose the
+	// project policy and, when enabled, its current active blocking-check count
+	// without conflating this optional gate with claim approval or readiness.
+	ConformanceBlockingEnabled bool
+	ConformanceBlockingChecks  int
+	// ConformanceGateFailed is true only when Run reached and refused at the
+	// optional gate. A populated non-matched report is not enough: an earlier
+	// scan, projection, theme, lint, or ledger failure remains authoritative.
+	ConformanceGateFailed bool
+	// CatalogError and RenderError keep ordinary projection failures out of the
+	// conformance input domain. FailurePhase names which pipeline boundary
+	// refused; capacity uses one stable machine code across all three phases.
+	CatalogError string
+	RenderError  string
+	// ConformanceCapacityExceeded distinguishes a deterministic, pre-write
+	// resource refusal from an ordinary projection/write failure. The historical
+	// name is retained as an additive API compatibility boundary; it applies to
+	// conformance, catalog, or render according to ConformanceFailurePhase.
+	ConformanceCapacityExceeded bool
+	ConformanceFailurePhase     string
+
+	// Readiness is the exact snapshot used for catalog/viewer capacity grading.
+	// Serve projects this same map instead of re-reading stores after Status.
+	Readiness map[string]readiness.Assessment
 
 	// ScanFilesScanned/ScanSummary/ScanErrors capture the impl-link scan.
 	// ScanErrors is printed (to stderr) whether or not the run then failed;
@@ -284,58 +337,200 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 		res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, inputs))
 		return res, fmt.Errorf("lint: %d error-level finding(s)", len(res.LintErrors))
 	}
-
 	// 2. Catalog: build then persist build/catalog/catalog.json. The built catalog is
 	// reused for the render below (deterministic — rebuilding would only
 	// repeat work and could not diverge).
 	cat, err := catalog.Build(claims, cfg)
 	if err != nil {
+		res.CatalogError = err.Error()
+		res.ConformanceFailurePhase = "catalog"
 		return res, fmt.Errorf("catalog: build: %w", err)
 	}
 	flags, err := reaudit.LoadFlagStore(flagStorePath(cfg))
 	if err != nil {
+		res.CatalogError = "readiness projection is unavailable"
+		res.ConformanceFailurePhase = "catalog"
 		return res, fmt.Errorf("catalog: readiness: load flag store: %w", err)
 	}
-	cat.SetReadiness(readiness.Compute(claims, inputs.store, flags))
+	res.Readiness = readiness.Compute(claims, inputs.store, flags)
+	cat.SetReadiness(res.Readiness)
+	res.Conformance, err = conformance.Evaluate(claims, conformanceObservationPath(cfg), conformanceWorktreeReader(cfg))
+	if err != nil {
+		res.ConformanceError = err.Error()
+		res.ConformanceCapacityExceeded = errors.Is(err, conformance.ErrCapacityExceeded)
+		res.ConformanceFailurePhase = "conformance"
+		return res, fmt.Errorf("conformance: %w", err)
+	}
+	res.ConformanceBlockingEnabled = conformanceBlockingEnabled(cfg)
+	if res.ConformanceBlockingEnabled {
+		res.ConformanceBlockingChecks = conformanceBlockingChecks(res.Conformance)
+	}
+	cat.SetConformance(res.Conformance)
 	catPath := catalogPath(cfg)
-	if err := catalog.WriteJSON(cat, catPath); err != nil {
-		return res, fmt.Errorf("catalog: %w", err)
-	}
-	res.CatalogPath = catPath
-	res.CatalogCount = len(claims)
-	// The build directory's own .gitignore, written once, after the first
-	// write that creates the directory.
-	if err := layout.EnsureBuildGitignore(cfg); err != nil {
-		return res, fmt.Errorf("catalog: %w", err)
-	}
-
-	// 3. Render the viewer to build/viewer/index.html.
-	//
-	// The theme is resolved HERE rather than inside render.Render so that the
-	// same numbers the read-only modes report — how many fonts the reader
-	// downloads and how many bytes of them — are on this Result too, and so
-	// that a theme refusal is one error rather than one per rebuild.
-	rt, err := config.ResolveTheme(cfg, os.ReadFile)
-	if err != nil {
-		res.ThemeError = err.Error()
-		return res, fmt.Errorf("render: %w", err)
-	}
-	res.ThemeFontCount = len(rt.Fonts)
-	for _, f := range rt.Fonts {
-		res.ThemeFontBytes += int64(len(f.Data))
-	}
-	html, err := render.RenderWithTheme(cat, cfg, rt)
-	if err != nil {
-		return res, fmt.Errorf("render: %w", err)
-	}
 	renderPath := renderOutPath(cfg)
-	if err := os.MkdirAll(filepath.Dir(renderPath), 0o755); err != nil {
-		return res, fmt.Errorf("render: create output dir: %w", err)
+
+	// Opted-in projects preflight all three agreeing artifacts before replacing
+	// the first one. Projects that do not use conformance retain the historical
+	// catalog-then-render failure boundary byte for byte.
+	if res.Conformance != nil {
+		statusData, encodeErr := conformance.EncodeJSON(res.Conformance)
+		if encodeErr != nil {
+			res.ConformanceError = encodeErr.Error()
+			res.ConformanceCapacityExceeded = errors.Is(encodeErr, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "conformance"
+			return res, fmt.Errorf("conformance: %w", encodeErr)
+		}
+		catalogData, encodeErr := catalog.EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+		if encodeErr != nil {
+			res.CatalogError = encodeErr.Error()
+			res.ConformanceCapacityExceeded = errors.Is(encodeErr, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "catalog"
+			return res, fmt.Errorf("catalog: %w", encodeErr)
+		}
+		rt, resolveErr := config.ResolveTheme(cfg, os.ReadFile)
+		if resolveErr != nil {
+			res.ThemeError = resolveErr.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", resolveErr)
+		}
+		res.ThemeFontCount = len(rt.Fonts)
+		for _, f := range rt.Fonts {
+			res.ThemeFontBytes += int64(len(f.Data))
+		}
+		html, renderErr := render.RenderWithThemeBounded(cat, cfg, rt, conformance.MaxOutputBytes)
+		if renderErr != nil {
+			res.RenderError = renderErr.Error()
+			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", renderErr)
+		}
+		viewerData := []byte(html)
+		if err := conformanceOutputBound("render: viewer", viewerData); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceCapacityExceeded = errors.Is(err, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "render"
+			return res, err
+		}
+
+		statusPath := cfg.ConformanceStatusPath()
+		if err := layout.PrepareConformanceStatusOwnership(cfg); err != nil {
+			res.ConformanceError = err.Error()
+			res.ConformanceFailurePhase = "conformance"
+			return res, fmt.Errorf("conformance: %w", err)
+		}
+		if err := catalog.WriteEncoded(catPath, catalogData); err != nil {
+			res.CatalogError = err.Error()
+			res.ConformanceFailurePhase = "catalog"
+			return res, fmt.Errorf("catalog: %w", err)
+		}
+		res.CatalogPath = catPath
+		res.CatalogCount = len(claims)
+		if err := layout.EnsureBuildGitignoreForConformance(cfg, true); err != nil {
+			res.CatalogError = err.Error()
+			res.ConformanceFailurePhase = "catalog"
+			return res, fmt.Errorf("catalog: %w", err)
+		}
+		if err := conformance.WriteEncoded(statusPath, statusData); err != nil {
+			res.ConformanceError = err.Error()
+			res.ConformanceFailurePhase = "conformance"
+			return res, err
+		}
+		res.ConformancePath = statusPath
+		if err := atomicfile.Write(renderPath, viewerData, 0o644); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: write %s: %w", renderPath, err)
+		}
+		res.RenderPath = renderPath
+	} else {
+		wasConformanceEnabled, markerErr := layout.ConformanceStatusOwned(cfg)
+		if markerErr != nil {
+			res.CatalogError = markerErr.Error()
+			res.ConformanceFailurePhase = "catalog"
+			return res, fmt.Errorf("catalog: %w", markerErr)
+		}
+		catalogData, encodeErr := catalog.EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+		if encodeErr != nil {
+			res.CatalogError = encodeErr.Error()
+			res.ConformanceCapacityExceeded = errors.Is(encodeErr, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "catalog"
+			return res, fmt.Errorf("catalog: %w", encodeErr)
+		}
+		rt, resolveErr := config.ResolveTheme(cfg, os.ReadFile)
+		if resolveErr != nil {
+			res.ThemeError = resolveErr.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", resolveErr)
+		}
+		res.ThemeFontCount = len(rt.Fonts)
+		for _, f := range rt.Fonts {
+			res.ThemeFontBytes += int64(len(f.Data))
+		}
+		html, renderErr := render.RenderWithThemeBounded(cat, cfg, rt, conformance.MaxOutputBytes)
+		if renderErr != nil {
+			res.RenderError = renderErr.Error()
+			res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: %w", renderErr)
+		}
+		viewerData := []byte(html)
+		if err := conformanceOutputBound("render: viewer", viewerData); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceCapacityExceeded = errors.Is(err, conformance.ErrCapacityExceeded)
+			res.ConformanceFailurePhase = "render"
+			return res, err
+		}
+
+		// Both generated payloads are now fully bounded before either existing
+		// artifact is replaced. This keeps the capacity recovery promise true for
+		// plain projects as well as conformance-enabled ones.
+		if err := catalog.WriteEncoded(catPath, catalogData); err != nil {
+			res.CatalogError = err.Error()
+			res.ConformanceFailurePhase = "catalog"
+			return res, fmt.Errorf("catalog: %w", err)
+		}
+		res.CatalogPath = catPath
+		res.CatalogCount = len(claims)
+		if !wasConformanceEnabled {
+			if err := layout.EnsureBuildGitignore(cfg); err != nil {
+				res.CatalogError = err.Error()
+				res.ConformanceFailurePhase = "catalog"
+				return res, fmt.Errorf("catalog: %w", err)
+			}
+		}
+		if err := os.MkdirAll(filepath.Dir(renderPath), 0o755); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: create output dir: %w", err)
+		}
+		if err := atomicfile.Write(renderPath, viewerData, 0o644); err != nil {
+			res.RenderError = err.Error()
+			res.ConformanceFailurePhase = "render"
+			return res, fmt.Errorf("render: write %s: %w", renderPath, err)
+		}
+		res.RenderPath = renderPath
+		if wasConformanceEnabled {
+			if err := removeStaleConformanceStatus(cfg); err != nil {
+				res.ConformanceError = "failed to remove stale conformance status"
+				res.ConformanceFailurePhase = "conformance"
+				return res, fmt.Errorf("conformance: remove stale status: %w", err)
+			}
+			// Keep the ownership marker until every transition step succeeds. If
+			// status removal or gitignore downgrade fails, the next run must still
+			// know it is retrying an opted-in-to-zero lifecycle rather than seeing
+			// an unknown path and silently abandoning cleanup.
+			if err := layout.EnsureBuildGitignore(cfg); err != nil {
+				res.CatalogError = err.Error()
+				res.ConformanceFailurePhase = "catalog"
+				return res, fmt.Errorf("catalog: %w", err)
+			}
+			if err := layout.RemoveConformanceStatusOwnership(cfg); err != nil {
+				res.ConformanceError = err.Error()
+				res.ConformanceFailurePhase = "conformance"
+				return res, fmt.Errorf("conformance: remove ownership marker: %w", err)
+			}
+		}
 	}
-	if err := os.WriteFile(renderPath, []byte(html), 0o644); err != nil {
-		return res, fmt.Errorf("render: write %s: %w", renderPath, err)
-	}
-	res.RenderPath = renderPath
 
 	// 4. Impl-link scan: reconcile every "dossierx-claim: <id>" source tag.
 	// A scan I/O error stops the run; per-tag reconciliation errors are
@@ -356,8 +551,9 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	// somebody approved, and does every claim's comment history still match
 	// what the engine last wrote?
 	//
-	// Its position — dead last, AFTER the catalog and the viewer are already on
-	// disk — is the whole design. These rules are deliberately not lints
+	// Its position — after the catalog and the viewer are already on disk, and
+	// before the additive conformance refusal — is the whole design. These rules
+	// are deliberately not lints
 	// (internal/lock/audit.go says why at length), and the practical expression
 	// of that decision is right here: a tampered claim must not take a
 	// project's documentation offline. Everything a reader needs in order to
@@ -366,6 +562,16 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	res.LedgerFindings = withGitignoreFindings(gitignoreFindings, ledgerGate(claims, loadLedgerInputs(cfg)))
 	if len(res.LedgerFindings) > 0 {
 		return res, fmt.Errorf("ledger: %d integrity finding(s)", len(res.LedgerFindings))
+	}
+
+	// The optional conformance gate is deliberately after every established
+	// check gate. In particular, an unsatisfied comparison must never hide a
+	// lock-ledger integrity failure. All agreeing generated projections have
+	// already landed, so a conformance refusal still leaves its evidence
+	// inspectable without changing approval, readiness, or ledger behavior.
+	if res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0 {
+		res.ConformanceGateFailed = true
+		return res, fmt.Errorf("conformance: %d blocking compare check(s)", res.ConformanceBlockingChecks)
 	}
 
 	// 6. Success. Everything below is non-blocking per-module reporting,
@@ -380,6 +586,13 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 	res.ImplinkStatusStderr = stderr
 	res.NextSteps = nextSteps(cfg, claims, implinkHints, res.BuildOrders)
 	return res, nil
+}
+
+func conformanceOutputBound(kind string, data []byte) error {
+	if len(data) > conformance.MaxOutputBytes {
+		return fmt.Errorf("%w: %s output is %d bytes; maximum is %d", conformance.ErrCapacityExceeded, kind, len(data), conformance.MaxOutputBytes)
+	}
+	return nil
 }
 
 // Status computes the subset of Result the serve status strip renders — the
@@ -407,8 +620,14 @@ func Run(claims []model.Claim, cfg *config.Config) (Result, error) {
 // refusing is what lets one function serve both a browser-facing status poll
 // and the two enforcing read-only CLI paths (--validate, --staged), which read
 // the same field and decide for themselves.
+//
+// Projects with no embodiment declaration retain the pre-conformance read-only
+// path: lint, theme validation, and ledger reporting, without constructing a
+// catalog or viewer. An opted-in project additionally builds those projections
+// in memory so its conformance status, catalog, and viewer can be capacity-
+// checked as one agreeing set.
 func Status(claims []model.Claim, cfg *config.Config) Result {
-	return status(claims, cfg, loadLedgerInputs(cfg), os.ReadFile)
+	return status(claims, cfg, loadLedgerInputs(cfg), os.ReadFile, conformanceWorktreeReader(cfg))
 }
 
 // StatusStaged is Status evaluated against the GIT INDEX: the claim registry
@@ -444,7 +663,13 @@ func StatusStaged(sp StagedProject, cfg *config.Config) Result {
 			return nil, fmt.Errorf("%s: no git index reader (this StagedProject was not built by Staged)", path)
 		}
 	}
-	return status(sp.Claims, cfg, sp.ledger, read)
+	readObservations := sp.readConformanceIndex
+	if readObservations == nil {
+		readObservations = func(string) ([]byte, error) {
+			return nil, errors.New("no git index observation reader")
+		}
+	}
+	return status(sp.Claims, cfg, sp.ledger, read, readObservations)
 }
 
 // status is the shared body of Status and StatusStaged. The only thing that
@@ -453,21 +678,18 @@ func StatusStaged(sp StagedProject, cfg *config.Config) Result {
 // identical by construction, which is what keeps "what --staged checks" and
 // "what --validate checks" the same set of rules rather than two lists that
 // have to be kept in step by hand.
-func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func(string) ([]byte, error)) Result {
+func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func(string) ([]byte, error), readObservations conformance.ReadFunc) Result {
 	var res Result
-
-	// The theme is evaluated through an INJECTED reader, which is the whole
-	// reason this parameter exists: --staged passes a reader that answers
-	// from the git index, so the theme file's content, every font's
-	// signature and the total size cap are judged against the bytes the
-	// commit will carry rather than against the working tree beside it. All
-	// three modes therefore run one rule set (config.ValidateTheme) instead
-	// of a strict one and a lenient one that have to be kept in step by hand.
-	if rep, err := config.ValidateTheme(cfg, read); err != nil {
-		res.ThemeError = err.Error()
-	} else {
-		res.ThemeFontCount = rep.FontCount
-		res.ThemeFontBytes = rep.FontBytes
+	var err error
+	res.Conformance, err = conformance.Evaluate(claims, conformanceObservationPath(cfg), readObservations)
+	if err != nil {
+		res.ConformanceError = err.Error()
+		res.ConformanceCapacityExceeded = errors.Is(err, conformance.ErrCapacityExceeded)
+		res.ConformanceFailurePhase = "conformance"
+	}
+	res.ConformanceBlockingEnabled = conformanceBlockingEnabled(cfg)
+	if res.ConformanceBlockingEnabled {
+		res.ConformanceBlockingChecks = conformanceBlockingChecks(res.Conformance)
 	}
 
 	res.LintFindings = policyLintFindings(lint.RunAll(claims, cfg), in.store)
@@ -514,12 +736,90 @@ func status(claims []model.Claim, cfg *config.Config, in ledgerInputs, read func
 		return res
 	}
 
-	if res.ThemeError != "" {
-		// Same shape as the lint fail-fast above: report the refusal, leave
-		// the best-effort reporting below empty.
+	if res.ConformanceError != "" {
+		return res
+	}
+	if res.Conformance == nil {
+		// This is the compatibility boundary for projects that did not opt in.
+		// Before structured conformance, read-only checks validated the theme but
+		// never built or encoded the catalog/viewer. Applying the new projection
+		// cap here made an unchanged large client fail --validate even though its
+		// existing catalog was below the cap. Keep the historical path exact.
+		if in.flagsErr != nil {
+			res.CatalogError = "readiness projection is unavailable"
+			res.ConformanceFailurePhase = "catalog"
+			return res
+		}
+		res.Readiness = readiness.Compute(claims, in.store, in.flags)
+		if rep, themeErr := config.ValidateTheme(cfg, read); themeErr != nil {
+			res.ThemeError = themeErr.Error()
+			res.ConformanceFailurePhase = "render"
+			return res
+		} else {
+			res.ThemeFontCount = rep.FontCount
+			res.ThemeFontBytes = rep.FontBytes
+		}
+		return finishStatus(res, claims, cfg)
+	}
+	cat, buildErr := catalog.Build(claims, cfg)
+	if buildErr != nil {
+		res.CatalogError = "catalog projection is unavailable"
+		res.ConformanceFailurePhase = "catalog"
+		return res
+	}
+	cat.SetConformance(res.Conformance)
+	if in.flagsErr != nil {
+		res.CatalogError = "readiness projection is unavailable"
+		res.ConformanceFailurePhase = "catalog"
+		return res
+	}
+	res.Readiness = readiness.Compute(claims, in.store, in.flags)
+	cat.SetReadiness(res.Readiness)
+	if _, encodeErr := catalog.EncodeJSONBounded(cat, conformance.MaxOutputBytes); encodeErr != nil {
+		res.CatalogError = encodeErr.Error()
+		res.ConformanceCapacityExceeded = errors.Is(encodeErr, conformance.ErrCapacityExceeded)
+		res.ConformanceFailurePhase = "catalog"
 		return res
 	}
 
+	// Resolve the theme only after the conformance and catalog preflights. That
+	// is the exact ordering used by Run, so a project with two independent
+	// faults gets one stable primary failure through normal check, --validate,
+	// --staged and /api/status. The injected reader remains load-bearing:
+	// --staged answers from the index, never the adjacent working tree.
+	resolvedTheme, themeErr := config.ResolveTheme(cfg, read)
+	if themeErr != nil {
+		res.ThemeError = themeErr.Error()
+		res.ConformanceFailurePhase = "render"
+		return res
+	}
+	res.ThemeFontCount = len(resolvedTheme.Fonts)
+	for _, font := range resolvedTheme.Fonts {
+		res.ThemeFontBytes += int64(len(font.Data))
+	}
+	_, renderErr := render.RenderWithThemeBounded(cat, cfg, resolvedTheme, conformance.MaxOutputBytes)
+	if renderErr != nil {
+		res.RenderError = renderErr.Error()
+		res.ConformanceCapacityExceeded = errors.Is(renderErr, conformance.ErrCapacityExceeded)
+		res.ConformanceFailurePhase = "render"
+		return res
+	}
+
+	return finishStatus(res, claims, cfg)
+}
+
+func conformanceBlockingEnabled(cfg *config.Config) bool {
+	return cfg != nil && cfg.Conformance.Blocking
+}
+
+func conformanceBlockingChecks(report *conformance.Report) int {
+	if report == nil {
+		return 0
+	}
+	return report.Summary.Owed + report.Summary.Mismatch + report.Summary.Uncheckable
+}
+
+func finishStatus(res Result, claims []model.Claim, cfg *config.Config) Result {
 	res.OK = true
 	res.OpenComments = openCommentCounts(claims)
 	// Build-order state is recomputed here too, for --validate, --staged and the

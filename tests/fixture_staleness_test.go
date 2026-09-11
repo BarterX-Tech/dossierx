@@ -185,6 +185,18 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 	for _, fx := range fixtures {
 		fx := fx
 		t.Run(fx.name, func(t *testing.T) {
+			statusPath := filepath.Join(fx.dir, "build", "conformance", "status.json")
+			if _, err := os.Stat(statusPath); err == nil {
+				markerPath := filepath.Join(fx.dir, "build", "conformance", ".dossierx-owned")
+				marker, err := os.ReadFile(markerPath)
+				if err != nil {
+					t.Fatalf("committed conformance status requires its ownership marker %s: %v", markerPath, err)
+				}
+				if string(marker) != "dossierx-generated-conformance-status-v1\n" {
+					t.Fatalf("unexpected conformance ownership marker %s: %q", markerPath, marker)
+				}
+			}
+
 			tmp := filepath.Join(t.TempDir(), fx.name)
 			if err := os.MkdirAll(tmp, 0o755); err != nil {
 				t.Fatal(err)
@@ -204,6 +216,9 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 			if err := os.RemoveAll(filepath.Join(tmp, "build", "catalog")); err != nil {
 				t.Fatalf("remove copied build/catalog/: %v", err)
 			}
+			if err := os.Remove(filepath.Join(tmp, "build", "conformance", "status.json")); err != nil && !os.IsNotExist(err) {
+				t.Fatalf("remove copied build/conformance/status.json: %v", err)
+			}
 
 			cfgPath := filepath.Join(tmp, "project.config.yaml")
 			stdout, stderr, code := run(t, tmp, "--config", cfgPath, "check")
@@ -221,6 +236,13 @@ func TestCommittedFixtureViewersAreNotStale(t *testing.T) {
 			// build/catalog/catalog.json carries no timestamp at all, so it is
 			// compared raw. Normalizing it would only be able to hide something.
 			assertRegeneratedMatches(t, fx, tmp, filepath.Join("build", "catalog", "catalog.json"), false, regenCmd)
+
+			// A committed conformance status is generated evidence too. Removing it
+			// above prevents a physical but untracked ownership marker from making
+			// this test pass without proving clean-checkout regeneration.
+			if _, err := os.Stat(filepath.Join(fx.dir, "build", "conformance", "status.json")); err == nil {
+				assertRegeneratedMatches(t, fx, tmp, filepath.Join("build", "conformance", "status.json"), false, regenCmd)
+			}
 
 			// build/ledger/comment-digest.json is written by check for a fixture
 			// without a ledger and is a tracked fixture input since the build/

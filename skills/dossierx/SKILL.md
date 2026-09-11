@@ -6,8 +6,7 @@ description: >-
   and ALWAYS in any repo that has a project.config.yaml plus a claims/ directory, before running
   any DossierX command. It is short on purpose: the nine nouns, JSON envelope, exit codes, error.code
   recovery table, dry-run rule, five rules that never bend, legacy ledger adoption (`dossierx claim
-  migrate-lock-policy`, not `dossierx migrate`), mixed-cycle guidance, and companion skill routing.
-  Load a companion skill only when this one sends you there.
+  migrate-lock-policy`, not `dossierx migrate`), mixed-cycle guidance, and companion skill routing. Load a companion skill only when this one sends you there.
 ---
 
 DossierX turns a project's `claims/` directory — one atomic, reviewable YAML fact per file — into
@@ -53,7 +52,7 @@ which also accepts `--format mermaid` to render the module's diagram — propose
 
 Branch on `error.code` and on fields inside `data`. **Never** regex `message` or `hint`: `code` is
 a promise, prose is not. `stopped_at` names the pipeline step a partial run reached (`config`,
-`load`, `reconcile`, `lint`, `catalog`, `render`, `scan`, `ledger`), and `data` still carries what
+`load`, `reconcile`, `lint`, `catalog`, `conformance`, `render`, `scan`, `ledger`), and `data` still carries what
 it produced. `ledger` is the one to read closely: the catalog and viewer WERE regenerated and only
 the commit is refused — a gate, not an outage. A **noun with no leaf** (`dossierx claim` alone) is
 an ordinary failed invocation — one envelope, `usage`, exit 1 — not help text at exit 0.
@@ -89,6 +88,8 @@ refused gate, a write error) · `2` not found, or not in the state the command r
 | `store_gitignored` | 1 | `claim lock`, `claim flag`, `claim reaudit --confirm` or `build-order lock` refused, one of two arms, and the recovery differs: **ignored and untracked** — same recovery as the `store-gitignored` finding above, replace the `.gitignore` pattern (or repoint `build_dir`); do not retry the same command unchanged, it fails identically. **git could not be consulted** (missing from PATH, a bare or corrupt repository, a `.git` file whose gitdir is missing) — no pattern or `build_dir` edit touches this; install git, or fix the repository, and run again. |
 | `unknown_module` / `unsupported_format` / `usage` | 1 | fix your own invocation. |
 | `write_failed` | 1 | a write did not land: a permission, a missing directory, a full disk — or, from `skills export`, "no directory given and no `project.config.yaml` found", which is your invocation and not the filesystem. Give the export an explicit directory (`dossierx skills export .claude/skills`). Show the human anything else; retrying an unwritable path just fails again. |
+| `conformance_capacity_exceeded` | 1 | a status, whole catalog (including readiness), or viewer projection cannot fit DossierX's bounded output budget. No generated artifact was replaced. Read `stopped_at`: reduce total declared checks or check-ID/value bytes at `conformance`, projected catalog/readiness/conformance volume at `catalog`, or viewer content/facet/track duplication at `render`, then run the same check again. The matching detail remains in `data.conformance_error`, `data.catalog_error`, or `data.render_error`; do not treat a catalog/render refusal as an observation failure. |
+| `conformance_failed` | 1 | `conformance.blocking: true` found at least one owed, mismatch, or uncheckable named check. Read the grouped results in `data.conformance`: each check carries its stable id and exact state; set mismatches carry missing/extra members and scalar mismatches carry expected/observed strings. A plain `check` has already refreshed the inspectable status, catalog, and viewer; `--validate` and `--staged` wrote nothing. Fix or produce the project-owned observation and rerun the same command. Do not unlock or relock claims: this gate does not change approval. |
 | `write_conflict` | 1 | another process (often `dossierx serve`) holds the lock. Retry. If the retry stalls the same ~10s and fails identically, nobody is holding it: a process died inside the critical section and left the sentinel file behind, and no timeout clears it — the acquire timeout only makes each failure arrive faster. The message names the file (`build/ledger/claims.lock`, or the `.lock` sitting beside whichever store it names); delete that file and retry. Do not loop on it. |
 | `claim_file_changed` | 1 | someone wrote while you were deciding. Re-read the claim and redo the decision — do **not** retry blindly. |
 | `banner_claim` / `empty_body` / `unsafe_body` | 1 | the comment you tried to write cannot be stored. Fix the body (`unsafe_body` is now narrow: a first content line led by a TAB. Space-indented first lines store fine as of v0.4.0); `claim_not_serializable` instead means the claim **on disk** is already broken. |

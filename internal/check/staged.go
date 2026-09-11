@@ -160,6 +160,7 @@ import (
 
 	"github.com/BarterX-Tech/dossierx/internal/buildorder"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
@@ -284,6 +285,10 @@ type StagedProject struct {
 	// real blob bytes, the font signature and total-size checks are answered
 	// from the content the commit will carry.
 	readIndex func(string) ([]byte, error)
+
+	// readConformanceIndex is deliberately separate from readIndex: normalized
+	// evidence has a 16 MiB contract, while theme assets use their own limits.
+	readConformanceIndex func(string) ([]byte, error)
 }
 
 // stagedThemeReader returns the reader config.ValidateTheme runs the theme's
@@ -315,6 +320,42 @@ func stagedThemeReader(g *gitRunner) func(string) ([]byte, error) {
 			return nil, fmt.Errorf("%q is not staged (git add it)", spec)
 		}
 		return g.showIndexBlob(tracked[0])
+	}
+}
+
+// stagedConformanceReader reads exactly one literal regular-file entry from
+// the index. It first applies the same physical build-directory containment
+// boundary as the worktree reader, without reading observation content from
+// disk. It then asks git for the blob size before fetching content, preventing
+// an oversized staged observation from being buffered first.
+func stagedConformanceReader(g *gitRunner, excludedDir string) func(string) ([]byte, error) {
+	return func(target string) ([]byte, error) {
+		if err := conformance.CheckPathOutside(target, excludedDir); err != nil {
+			return nil, err
+		}
+		spec, err := g.spec(target)
+		if err != nil {
+			return nil, err
+		}
+		entries, err := g.indexEntries(":(top,literal)" + spec)
+		if err != nil {
+			return nil, err
+		}
+		if len(entries) != 1 || entries[0].path != spec {
+			return nil, fmt.Errorf("%q is not staged as one regular file (git add it)", spec)
+		}
+		sizeRaw, err := g.run("cat-file", "-s", entries[0].oid)
+		if err != nil {
+			return nil, err
+		}
+		size, err := strconv.ParseInt(strings.TrimSpace(string(sizeRaw)), 10, 64)
+		if err != nil || size < 0 {
+			return nil, fmt.Errorf("cannot determine staged observation size")
+		}
+		if size > conformance.MaxInputBytes {
+			return nil, fmt.Errorf("%w: maximum is %d bytes", conformance.ErrInputTooLarge, conformance.MaxInputBytes)
+		}
+		return g.run("cat-file", "blob", entries[0].oid)
 	}
 }
 
@@ -352,6 +393,7 @@ func Staged(cfg *config.Config) (StagedProject, error) {
 		return StagedProject{}, err
 	}
 	cfg = sp.Config
+	sp.readConformanceIndex = stagedConformanceReader(g, cfg.BuildDirPath())
 
 	// claims_dir as a git pathspec, anchored at the REPOSITORY TOP LEVEL rather
 	// than at the config file's own directory — see gitRunner.spec. It fails
@@ -833,6 +875,16 @@ func stagedLedgerInputs(g *gitRunner, cfg *config.Config) (ledgerInputs, error) 
 		in.digests = digests
 	}
 
+	flagPath, err := materializeIndexFile(g, dir, cfg.FlagStorePath())
+	if err != nil {
+		return ledgerInputs{}, err
+	}
+	if flags, err := reaudit.LoadFlagStore(flagPath); err != nil {
+		in.flagsErr = err
+	} else {
+		in.flags = flags
+	}
+
 	// The build-order artifacts come from the index for the same reason the
 	// ledger does. A locked build order read from the WORKTREE and compared
 	// against an INDEX ledger record would refuse commits over edits that are
@@ -906,6 +958,9 @@ func decodeClaim(sourcePath string, raw []byte) (model.Claim, error) {
 	dec := yaml.NewDecoder(strings.NewReader(string(raw)))
 	dec.KnownFields(true)
 	if err := dec.Decode(&c); err != nil {
+		return model.Claim{}, fmt.Errorf("loader: parse %s: %w", sourcePath, err)
+	}
+	if err := model.ValidateEmbodiment(&c); err != nil {
 		return model.Claim{}, fmt.Errorf("loader: parse %s: %w", sourcePath, err)
 	}
 	var extra yaml.Node

@@ -1,0 +1,24 @@
+id: widget.contract.matched
+facet: contract
+module: widget
+status: draft
+layout: card
+body: Every observed value matches its authored expectation.
+governed_by:
+  type: none
+  reason: neutral fixture
+embodiment:
+  mode: compare
+  checks:
+    - id: public-values
+      adapter: neutral/v1
+      target: widget://matched-values
+      expectation:
+        shape: set
+        value: [waiting, ready]
+    - id: schema-version
+      adapter: neutral/v1
+      target: widget://matched-version
+      expectation:
+        shape: scalar
+        value: "3"

@@ -42,6 +42,10 @@ import (
 // caller stamps it, which is what keeps the payload a pure function of the
 // corpus and keeps a moving byte out of the unit under test.
 func graphPayloadJSON(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time) (template.JS, error) {
+	return graphPayloadJSONWithBudget(cat, cfg, generatedAt, nil)
+}
+
+func graphPayloadJSONWithBudget(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time, budget *renderByteBudget) (template.JS, error) {
 	p := graph.Build(cat, cfg)
 	p.GeneratedAt = generatedAt.UTC().Format(time.RFC3339)
 
@@ -53,6 +57,9 @@ func graphPayloadJSON(cat *catalog.Catalog, cfg *config.Config, generatedAt time
 	b, err := graph.Encode(p)
 	if err != nil {
 		return "", fmt.Errorf("render: encode graph payload: %w", err)
+	}
+	if err := budget.consume(len(b)); err != nil {
+		return "", fmt.Errorf("render: graph payload: %w", err)
 	}
 	return template.JS(b), nil
 }

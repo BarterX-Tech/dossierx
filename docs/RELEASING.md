@@ -86,7 +86,10 @@ The checklist below asks for each one.
       run from the repository root, exit 0 required for each. This rewrites
       `build/viewer/index.html` and `build/catalog/catalog.json` for every
       fixture, and `build/ledger/comment-digest.json` for a fixture that has
-      no ledger yet. Afterwards `git status --porcelain testdata` may show
+      no ledger yet. A fixture with an authored `embodiment` also rewrites
+      `build/conformance/status.json` and its ignored private ownership marker;
+      a fixture with no declaration must not grow either. Afterwards
+      `git status --porcelain testdata` may show
       only the viewers — each differing in its generation stamp alone, which
       `go test ./tests -run TestCommittedFixtureViewersAreNotStale -count=1 -v`
       passing on the uncommitted tree is the check for — and nothing
@@ -97,6 +100,15 @@ The checklist below asks for each one.
       is visible rather than discovered later from
       `TestCommittedFixtureViewersAreNotStale` failing — the way the fixture
       viewers went stale through v0.3.0 and v0.3.1.
+
+      The structured-conformance fixture is a contract fixture, not a smoke
+      sample: it must keep one compare claim with multiple stable check IDs,
+      exercise both set and scalar shapes, cover all four per-check states plus
+      `mode: none`, and prove claim implementation readiness is the conjunction
+      of its checks. Release verification must also exercise blocking on and off
+      in write, validate, and staged modes. Count and bound total nested checks
+      and total value bytes; a per-claim count alone does not cover projection
+      growth.
 
 - [ ] **Every release-version pin points at the version being released.** Sweep
       with `git grep`, never a plain `grep -r`: on some machines `grep` resolves
