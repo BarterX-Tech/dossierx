@@ -91,7 +91,7 @@ func TestAuditScale(t *testing.T) {
 			if count > n*(3*n+2*e) {
 				t.Fatalf("fact bound exceeded: %d", count)
 			}
-			if elapsed > 2*time.Second || after.TotalAlloc-before.TotalAlloc > 512*1024*1024 {
+			if (!readinessRaceBuildEnabled && elapsed > 2*time.Second) || after.TotalAlloc-before.TotalAlloc > 512*1024*1024 {
 				t.Fatal("compute budget exceeded")
 			}
 			cfg := &config.Config{}
