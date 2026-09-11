@@ -99,6 +99,11 @@ func browserAllocOpts(browser string) []chromedp.ExecAllocatorOption {
 		chromedp.Flag("no-sandbox", true),
 		chromedp.Flag("no-first-run", true),
 		chromedp.Flag("no-default-browser-check", true),
+		// The readiness scale gate asserts a coarse product budget against the
+		// tab's actual JS heap. Chrome otherwise rounds performance.memory so
+		// aggressively that a large regression can report the same number as a
+		// small fixture and turn the assertion into theatre.
+		chromedp.Flag("enable-precise-memory-info", true),
 	)
 	return opts
 }

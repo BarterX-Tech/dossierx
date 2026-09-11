@@ -85,16 +85,42 @@ func startServerWatch(t *testing.T, cfgBody string, files map[string]string, pol
 		t.Fatalf("listen: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
+	done := make(chan error, 1)
 	go func() {
-		srv.Serve(ctx) //nolint:errcheck // test server; Serve returns ErrServerClosed on cancel
-		close(done)
+		done <- srv.Serve(ctx)
 	}()
 	t.Cleanup(func() {
+		select {
+		case serveErr := <-done:
+			t.Errorf("test server stopped before cleanup (err=%v)", serveErr)
+			return
+		default:
+		}
 		cancel()
-		<-done
+		if serveErr := <-done; serveErr != nil {
+			t.Errorf("test server stopped unexpectedly: %v", serveErr)
+		}
 	})
-	return srv, fmt.Sprintf("http://127.0.0.1:%d", srv.Port()), root
+	base = fmt.Sprintf("http://127.0.0.1:%d", srv.Port())
+	// Listen has bound the socket, but Serve runs in the goroutine above. Prove
+	// its accept loop is answering before a test releases a concurrent request
+	// storm; otherwise the race build can test goroutine scheduling rather than
+	// the handler it meant to exercise.
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		resp, pingErr := http.Get(base + "/api/ping") //nolint:gosec // loopback test server
+		if pingErr == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				break
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("server did not become ready at %s/api/ping: %v", base, pingErr)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	return srv, base, root
 }
 
 func writeFile(t *testing.T, path, content string) {
@@ -149,6 +175,33 @@ func do(t *testing.T, method, url, body string, mods ...reqMod) (res *http.Respo
 		t.Fatalf("read body %s %s: %v", method, url, err)
 	}
 	return resp, data
+}
+
+func doWithClient(client *http.Client, method, url, body string, mods ...reqMod) (res *http.Response, raw []byte, err error) {
+	var rdr io.Reader
+	if body != "" {
+		rdr = strings.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, rdr)
+	if err != nil {
+		return nil, nil, fmt.Errorf("new request %s %s: %w", method, url, err)
+	}
+	for _, m := range mods {
+		m(req)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, nil, fmt.Errorf("do %s %s: %w", method, url, err)
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp, data, fmt.Errorf(
+			"read body %s %s: %w (read=%d content_length=%d transfer_encoding=%v)",
+			method, url, err, len(data), resp.ContentLength, resp.TransferEncoding,
+		)
+	}
+	return resp, data, nil
 }
 
 // --- claim-file byte-identity ------------------------------------------------
@@ -673,29 +726,52 @@ func assertEscaped(t *testing.T, where, bodyHTML string) {
 }
 
 // =============================================================================
-// (10) Single-flight: N concurrent GET / + a concurrent POST.
+// (10) Concurrent full viewer GETs + a concurrent POST survive together.
 // =============================================================================
 
 func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
-	srv, base, _ := startServer(t, baseConfig, standardFiles())
+	// The package-local pipeline test proves the 30-caller batching contract
+	// deterministically. This real-listener case instead proves that several
+	// full multi-megabyte viewer responses and one mutation survive together,
+	// without turning the race test into a 30-socket throughput benchmark.
+	srv, base, _ := startServer(t, baseConfig, map[string]string{
+		"claims/one.yaml": draftClaim("widget.contract.one"),
+	})
 
-	const n = 30
+	const n = 4
 	var wg sync.WaitGroup
 	start := make(chan struct{})
+	errs := make(chan error, n+1)
+	// Each -count repetition starts a new server on an ephemeral port. A fresh
+	// transport keeps this test's socket pool inside the test lifetime instead
+	// of letting http.DefaultTransport retain idle connections across repeated
+	// servers whose ports the OS may later reuse.
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("http.DefaultTransport has type %T, want *http.Transport", http.DefaultTransport)
+	}
+	transport := defaultTransport.Clone()
+	client := &http.Client{Transport: transport}
+	t.Cleanup(transport.CloseIdleConnections)
 
-	// N concurrent GET / — all released at once so many land during one render.
+	// N concurrent full-document GETs — all released with the POST so the
+	// response and mutation paths overlap on a realistic local reviewer load.
 	for i := 0; i < n; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			<-start
-			resp, data := do(t, http.MethodGet, base+"/", "")
+			resp, data, err := doWithClient(client, http.MethodGet, base+"/", "")
+			if err != nil {
+				errs <- err
+				return
+			}
 			if resp.StatusCode != http.StatusOK {
-				t.Errorf("concurrent GET /: got %d, want 200", resp.StatusCode)
+				errs <- fmt.Errorf("concurrent GET /: got %d, want 200", resp.StatusCode)
 				return
 			}
 			if !strings.Contains(string(data), "widget.contract.one") {
-				t.Errorf("concurrent GET / returned an incomplete document (%d bytes)", len(data))
+				errs <- fmt.Errorf("concurrent GET / returned an incomplete document (%d bytes)", len(data))
 			}
 		}()
 	}
@@ -704,15 +780,26 @@ func TestConcurrency_SingleFlightAndSurvival(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		<-start
-		resp, data := do(t, http.MethodPost, base+"/api/claims/widget.contract.one/comments",
+		resp, data, err := doWithClient(client, http.MethodPost, base+"/api/claims/widget.contract.one/comments",
 			`{"body":"survivor"}`, allowedMutating(base)...)
+		if err != nil {
+			errs <- err
+			return
+		}
 		if resp.StatusCode != http.StatusOK {
-			t.Errorf("concurrent POST: got %d, want 200 (body=%s)", resp.StatusCode, data)
+			errs <- fmt.Errorf("concurrent POST: got %d, want 200 (body=%s)", resp.StatusCode, data)
 		}
 	}()
 
 	close(start)
 	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Error(err)
+	}
+	if t.Failed() {
+		return
+	}
 
 	if runs := srv.RenderRuns(); runs >= n {
 		t.Fatalf("single-flight failed: %d renders for %d GET / requests (want fewer)", runs, n)
