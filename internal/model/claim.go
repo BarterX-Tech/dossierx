@@ -291,6 +291,12 @@ type Claim struct {
 	// consumer, and only once every claim in a module is locked.
 	BuildRole BuildRole `yaml:"build_role,omitempty"`
 
+	// Embodiment optionally declares one structured implementation expectation,
+	// or deliberately records that this claim has no software embodiment. It is
+	// project-neutral: adapter and target are opaque strings interpreted only by
+	// the project-owned adapter that emits observations.
+	Embodiment *Embodiment `yaml:"embodiment,omitempty"`
+
 	Body string `yaml:"body,omitempty"`
 	Rows []Row  `yaml:"rows,omitempty"`
 

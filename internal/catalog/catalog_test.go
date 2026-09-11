@@ -2,13 +2,244 @@ package catalog
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/readiness"
 )
+
+func TestSetConformanceProjectsExactResult(t *testing.T) {
+	claim := model.Claim{ID: "widget.contract.state", Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard}
+	cat, err := Build([]model.Claim{claim}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := conformance.Result{ClaimID: claim.ID, Mode: model.EmbodimentModeCompare, ImplementationReady: false, Checks: []conformance.CheckResult{
+		{ID: "public-values", Shape: model.ExpectationShapeSet, State: conformance.StateMismatch, Expected: []string{"blocked", "ready"}, Observed: []string{"paused", "ready"}, Missing: []string{"blocked"}, Extra: []string{"paused"}},
+		{ID: "schema-version", Shape: model.ExpectationShapeScalar, State: conformance.StateMismatch, Expected: "3", Observed: "4"},
+	}}
+	cat.SetConformance(&conformance.Report{Results: []conformance.Result{result}})
+	doc := cat.Document()
+	if len(doc.Claims) != 1 || doc.Claims[0].Conformance == nil || len(doc.Claims[0].Conformance.Checks) != 2 {
+		t.Fatalf("projection = %+v", doc.Claims)
+	}
+	if got := doc.Claims[0].Conformance.Checks[0]; got.ID != "public-values" || len(got.Missing) != 1 || got.Missing[0] != "blocked" || len(got.Extra) != 1 || got.Extra[0] != "paused" {
+		t.Fatalf("difference = %+v", got)
+	}
+	if got := doc.Claims[0].Conformance.Checks[1]; got.ID != "schema-version" || got.Expected != "3" || got.Observed != "4" || len(got.Missing) != 0 || len(got.Extra) != 0 {
+		t.Fatalf("scalar projection = %+v", got)
+	}
+}
+
+func TestEncodeJSONBoundedRefusesRepeatedReadinessBeforeRecordSizedAllocation(t *testing.T) {
+	claim := model.Claim{ID: "widget.contract.capacity", Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard}
+	cat, err := Build([]model.Claim{claim}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := strings.Repeat("x", 1<<20)
+	causes := make([]readiness.Cause, 80)
+	for i := range causes {
+		causes[i] = readiness.Cause{Kind: readiness.CauseOwnFlag, Path: readiness.Path{shared}}
+	}
+	cat.Readiness = map[string]readiness.Assessment{claim.ID: {ClaimID: claim.ID, Causes: causes}}
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	data, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	runtime.ReadMemStats(&after)
+	if data != nil || !errors.Is(err, conformance.ErrCapacityExceeded) {
+		t.Fatalf("data=%d err=%v", len(data), err)
+	}
+	if !strings.Contains(err.Error(), "mandatory JSON content exceeds") || !strings.Contains(err.Error(), "actual output would be larger") {
+		t.Fatalf("preflight described an unmeasured size as actual: %v", err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 8<<20 {
+		t.Fatalf("preflight allocated %d bytes before refusal", allocated)
+	}
+}
+
+func TestEncodeJSONBoundedCountsEveryNestedScalarCheckBeforeAllocation(t *testing.T) {
+	claim := model.Claim{ID: "widget.contract.check-capacity", Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard}
+	cat, err := Build([]model.Claim{claim}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shared := strings.Repeat("x", 1<<20)
+	checks := make([]conformance.CheckResult, 80)
+	for i := range checks {
+		checks[i] = conformance.CheckResult{
+			ID: fmt.Sprintf("scalar-%03d", i), Shape: model.ExpectationShapeScalar,
+			State: conformance.StateMismatch, Expected: shared, Observed: "different",
+		}
+	}
+	cat.SetConformance(&conformance.Report{Results: []conformance.Result{{
+		ClaimID: claim.ID, Mode: model.EmbodimentModeCompare, Checks: checks,
+	}}})
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	data, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	runtime.ReadMemStats(&after)
+	if data != nil || !errors.Is(err, conformance.ErrCapacityExceeded) {
+		t.Fatalf("data=%d err=%v", len(data), err)
+	}
+	if !strings.Contains(err.Error(), "mandatory JSON content exceeds") {
+		t.Fatalf("nested checks did not reach string preflight: %v", err)
+	}
+	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 8<<20 {
+		t.Fatalf("nested-check preflight allocated %d bytes before refusal", allocated)
+	}
+}
+
+func TestEncodeJSONBoundedMeasuresAmbiguousUpperBound(t *testing.T) {
+	const claimCount = 11000
+	claims := make([]model.Claim, claimCount)
+	assessments := make(map[string]readiness.Assessment, claimCount)
+	for i := range claims {
+		id := fmt.Sprintf("widget.contract.c%05d", i)
+		claims[i] = model.Claim{ID: id, Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard}
+		assessments[id] = readiness.Assessment{ClaimID: id}
+	}
+	cat, err := Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat.Readiness = assessments
+	if bound := catalogProjectionUpperBound(cat, conformance.MaxOutputBytes); !bound.exceeded {
+		t.Fatalf("fixture no longer reaches the ambiguous estimate path: %+v", bound)
+	}
+
+	want, err := EncodeJSON(cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(want) >= conformance.MaxOutputBytes {
+		t.Fatalf("fixture actual output is not below the limit: %d", len(want))
+	}
+	got, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	if err != nil {
+		t.Fatalf("ambiguous upper bound rejected an actual %d-byte catalog: %v", len(want), err)
+	}
+	if string(got) != string(want) {
+		t.Fatal("bounded encoding changed catalog bytes")
+	}
+	t.Logf("ambiguous estimate measured exactly: actual=%d bytes, upper bound exceeds %d bytes", len(want), conformance.MaxOutputBytes)
+}
+
+func TestEncodeJSONBoundedLargeSparseCatalogDoesNotFalseRefuse(t *testing.T) {
+	const claimCount = 21000
+	claims := make([]model.Claim, claimCount)
+	assessments := make(map[string]readiness.Assessment, claimCount)
+	for i := range claims {
+		id := fmt.Sprintf("widget.contract.c%05d", i)
+		claims[i] = model.Claim{ID: id, Module: "widget", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard}
+		assessments[id] = readiness.Assessment{ClaimID: id}
+	}
+	cat, err := Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat.Readiness = assessments
+	if bound := catalogProjectionUpperBound(cat, 2*conformance.MaxOutputBytes); !bound.exceeded {
+		t.Fatalf("regression fixture no longer reaches the former padded-refusal path: %+v", bound)
+	}
+	want, err := EncodeJSON(cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(want) >= conformance.MaxOutputBytes {
+		t.Fatalf("regression fixture is invalid: measured=%d cap=%d", len(want), conformance.MaxOutputBytes)
+	}
+	got, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	if err != nil {
+		t.Fatalf("padded estimate falsely refused a valid %d-byte catalog: %v", len(want), err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatal("bounded measurement changed deterministic catalog bytes")
+	}
+	t.Logf("ambiguous catalog estimate measured exactly: claims=%d catalog_bytes=%d cap=%d", claimCount, len(got), conformance.MaxOutputBytes)
+}
+
+func TestEncodeJSONBoundedRejectsManyShortEntriesOnMandatoryStructure(t *testing.T) {
+	const claimCount = 420000
+	claims := make([]model.Claim, claimCount)
+	var stringsOnly uint64
+	for i := range claims {
+		id := fmt.Sprintf("c%06d", i)
+		claims[i] = model.Claim{ID: id, Facet: "f", Module: "m", Status: model.StatusDraft, Layout: model.LayoutCard}
+		for _, value := range []string{id, "f", "m", string(model.StatusDraft), string(model.LayoutCard), string(claims[i].EffectiveKind())} {
+			stringsOnly += jsonQuotedUpperBound(value)
+		}
+	}
+	if stringsOnly >= conformance.MaxOutputBytes {
+		t.Fatalf("fixture strings alone reached the cap: %d", stringsOnly)
+	}
+	cat := &Catalog{Claims: claims}
+	lower := catalogProjectionStringLowerBound(cat, conformance.MaxOutputBytes)
+	if !lower.exceeded {
+		t.Fatalf("mandatory entry structure did not prove overflow: strings=%d lower=%+v", stringsOnly, lower)
+	}
+
+	runtime.GC()
+	var before, after runtime.MemStats
+	runtime.ReadMemStats(&before)
+	started := time.Now()
+	data, err := EncodeJSONBounded(cat, conformance.MaxOutputBytes)
+	elapsed := time.Since(started)
+	runtime.ReadMemStats(&after)
+	allocated := after.TotalAlloc - before.TotalAlloc
+	if data != nil || !errors.Is(err, conformance.ErrCapacityExceeded) || !strings.Contains(err.Error(), "mandatory JSON content") {
+		t.Fatalf("data=%d err=%v", len(data), err)
+	}
+	if allocated >= 512<<20 {
+		t.Fatalf("structural preflight allocated %d bytes; maximum is under %d", allocated, 512<<20)
+	}
+	t.Logf("short-entry structural refusal: claims=%d string_bytes=%d elapsed=%s TotalAlloc=%d", claimCount, stringsOnly, elapsed, allocated)
+}
+
+func TestCatalogProjectionUpperBoundCoversEscapedIndentedOutput(t *testing.T) {
+	claim := model.Claim{
+		ID: "widget.contract.escaped", Module: "widget<&>", Facet: "contract", Status: model.StatusDraft, Layout: model.LayoutCard,
+		Mirrors: []string{"widget.contract.\x00quoted\""}, RestsOn: []string{"widget.contract.<rest>"},
+		Governed: model.Governed{Type: string(model.GovernedNone), Reason: "<&>\\\"\n"},
+	}
+	cat, err := Build([]model.Claim{claim}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat.Readiness = map[string]readiness.Assessment{claim.ID: {
+		ClaimID: claim.ID,
+		Causes:  []readiness.Cause{{Kind: readiness.CauseOwnFlag, Detail: "<&>\x00", Path: readiness.Path{claim.ID, "widget.contract.\"cause"}}},
+	}}
+	cat.SetConformance(&conformance.Report{Results: []conformance.Result{{
+		ClaimID: claim.ID, Mode: model.EmbodimentModeCompare, Checks: []conformance.CheckResult{{
+			ID: "escaped", Shape: model.ExpectationShapeSet, State: conformance.StateMismatch,
+			Expected: []string{"<&>\x00"}, Missing: []string{"<&>\x00"},
+		}},
+	}}})
+	encoded, err := EncodeJSON(cat)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lower := catalogProjectionStringLowerBound(cat, 1<<62)
+	if lower.exceeded || lower.total > uint64(len(encoded)) {
+		t.Fatalf("encoded=%d lower=%+v", len(encoded), lower)
+	}
+	bound := catalogProjectionUpperBound(cat, 1<<62)
+	if bound.exceeded || uint64(len(encoded)) > bound.total {
+		t.Fatalf("encoded=%d bound=%+v", len(encoded), bound)
+	}
+}
 
 func TestBuild_Empty(t *testing.T) {
 	cat, err := Build(nil, nil)

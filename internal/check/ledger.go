@@ -40,6 +40,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/lock"
 	"github.com/BarterX-Tech/dossierx/internal/model"
+	"github.com/BarterX-Tech/dossierx/internal/reaudit"
 )
 
 // RuleLedgerUnreadable is the one gate finding internal/lock cannot raise,
@@ -577,6 +578,7 @@ type ledgerInputs struct {
 	// Note that a store file that is merely ABSENT is not nil: it loads as an
 	// empty store, which reports every claim as unknown rather than drifted.
 	digests *digest.Store
+	flags   *reaudit.FlagStore
 
 	// buildOrders is every module's build-order artifact, reduced to the state
 	// the gate needs — including the modules whose artifact is absent, which is
@@ -591,6 +593,7 @@ type ledgerInputs struct {
 	// wrong".
 	storeErr  error
 	digestErr error
+	flagsErr  error
 
 	// THERE ARE NO HISTORY FIELDS HERE ANY MORE, and that is deliberate. This
 	// struct used to carry scopeFindings, parentFindings and scopeNote — refusals
@@ -632,6 +635,13 @@ func loadLedgerInputs(cfg *config.Config) ledgerInputs {
 		in.digestErr = err
 	} else {
 		in.digests = digests
+	}
+
+	flags, err := reaudit.LoadFlagStore(flagStorePath(cfg))
+	if err != nil {
+		in.flagsErr = err
+	} else {
+		in.flags = flags
 	}
 
 	in.buildOrders = collectBuildOrderStates(cfg, func(module string) (*buildorder.Artifact, error) {

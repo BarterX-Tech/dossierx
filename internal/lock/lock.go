@@ -34,10 +34,12 @@ package lock
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"os"
 	"path/filepath"
 	"sort"
@@ -815,21 +817,21 @@ func ContentHash(c model.Claim) string {
 	// computed from it — so a field is only ever added the way raw_html is
 	// added below: gated so that a claim that does not carry it keeps hashing
 	// byte-identically to before.
-	h := sha256.New()
-	fmt.Fprintf(h, "id=%s\nfacet=%s\nmodule=%s\nlayout=%s\nbody=%s\n", c.ID, c.Facet, c.Module, c.Layout, c.Body)
+	legacy := sha256.New()
+	fmt.Fprintf(legacy, "id=%s\nfacet=%s\nmodule=%s\nlayout=%s\nbody=%s\n", c.ID, c.Facet, c.Module, c.Layout, c.Body)
 	for _, r := range c.Rows {
-		fmt.Fprintf(h, "row=%v\n", r)
+		fmt.Fprintf(legacy, "row=%v\n", r)
 	}
 	for _, s := range c.Steps {
-		fmt.Fprintf(h, "step=%s\n", s)
+		fmt.Fprintf(legacy, "step=%s\n", s)
 	}
 	for _, m := range c.Mirrors {
-		fmt.Fprintf(h, "mirrors=%s\n", m)
+		fmt.Fprintf(legacy, "mirrors=%s\n", m)
 	}
 	for _, r := range c.RestsOn {
-		fmt.Fprintf(h, "rests_on=%s\n", r)
+		fmt.Fprintf(legacy, "rests_on=%s\n", r)
 	}
-	fmt.Fprintf(h, "governed=%s/%s\n", c.Governed.Type, c.Governed.Reason)
+	fmt.Fprintf(legacy, "governed=%s/%s\n", c.Governed.Type, c.Governed.Reason)
 
 	// raw_html is in the allowlist, but ONLY WHEN NON-EMPTY. The conditional
 	// is the whole point of this stanza and must not be "simplified" into an
@@ -855,9 +857,88 @@ func ContentHash(c model.Claim) string {
 	// only once. TestContentHash_RawHTMLIsHashedOnlyWhenPresent pins both
 	// halves of that against a hash constant captured before the change.
 	if c.RawHTML != "" {
-		fmt.Fprintf(h, "raw_html=%s\n", c.RawHTML)
+		fmt.Fprintf(legacy, "raw_html=%s\n", c.RawHTML)
+	}
+	legacyDigest := legacy.Sum(nil)
+
+	// The nil branch returns the completed historical digest literally. That is
+	// the compatibility contract for every claim written before embodiment
+	// existed and for every current claim that does not opt in.
+	if c.Embodiment == nil {
+		return hex.EncodeToString(legacyDigest)
+	}
+
+	// An opted-in claim moves into a separate, versioned domain. Hashing the
+	// completed historical digest (rather than appending to its authored byte
+	// stream) makes the boundary unforgeable by raw_html or any other legacy
+	// string field. The remainder is a closed, length-framed canonical encoding
+	// of semantic embodiment content. Adapter and Target stay excluded: they are
+	// opaque observation addresses, not meaning a dependent relies upon. Check
+	// IDs remain included because they are stable authored semantic identity.
+	h := sha256.New()
+	h.Write([]byte("dossierx/content-hash/embodiment/v1\x00")) //nolint:errcheck // hash.Hash.Write cannot fail
+	h.Write(legacyDigest)                                      //nolint:errcheck // hash.Hash.Write cannot fail
+	writeContentHashString(h, string(c.Embodiment.Mode))
+	switch c.Embodiment.Mode {
+	case model.EmbodimentModeCompare:
+		h.Write([]byte{1}) //nolint:errcheck // compare arm
+		checks := append([]model.EmbodimentCheck(nil), c.Embodiment.Checks...)
+		sort.Slice(checks, func(i, j int) bool { return checks[i].ID < checks[j].ID })
+		writeContentHashUint64(h, uint64(len(checks)))
+		for _, check := range checks {
+			writeContentHashString(h, check.ID)
+			if check.Expectation == nil {
+				h.Write([]byte{0}) //nolint:errcheck // invalid-but-closed nil expectation
+				continue
+			}
+			h.Write([]byte{1}) //nolint:errcheck // expectation present
+			writeContentHashString(h, string(check.Expectation.Shape))
+			switch check.Expectation.Shape {
+			case model.ExpectationShapeSet:
+				h.Write([]byte{1}) //nolint:errcheck // set arm
+				members, ok := check.Expectation.Value.([]string)
+				if !ok {
+					h.Write([]byte{0}) //nolint:errcheck // invalid-but-closed wrong value type
+					continue
+				}
+				h.Write([]byte{1}) //nolint:errcheck // correctly typed set
+				members = append([]string(nil), members...)
+				sort.Strings(members)
+				writeContentHashUint64(h, uint64(len(members)))
+				for _, member := range members {
+					writeContentHashString(h, member)
+				}
+			case model.ExpectationShapeScalar:
+				h.Write([]byte{2}) //nolint:errcheck // scalar arm
+				value, ok := check.Expectation.Value.(string)
+				if !ok {
+					h.Write([]byte{0}) //nolint:errcheck // invalid-but-closed wrong value type
+					continue
+				}
+				h.Write([]byte{1}) //nolint:errcheck // correctly typed scalar
+				writeContentHashString(h, value)
+			default:
+				h.Write([]byte{0}) //nolint:errcheck // invalid-but-closed unknown shape
+			}
+		}
+	case model.EmbodimentModeNone:
+		h.Write([]byte{2}) //nolint:errcheck // none arm
+		writeContentHashString(h, c.Embodiment.Reason)
+	default:
+		h.Write([]byte{0}) //nolint:errcheck // invalid-but-closed unknown arm
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func writeContentHashString(w hash.Hash, value string) {
+	writeContentHashUint64(w, uint64(len(value)))
+	w.Write([]byte(value)) //nolint:errcheck // hash.Hash.Write cannot fail
+}
+
+func writeContentHashUint64(w hash.Hash, value uint64) {
+	var framed [8]byte
+	binary.BigEndian.PutUint64(framed[:], value)
+	w.Write(framed[:]) //nolint:errcheck // hash.Hash.Write cannot fail
 }
 
 // ErrAlreadyLocked is Lock's refusal of a claim that is already locked. It is a

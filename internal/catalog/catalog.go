@@ -15,25 +15,40 @@ package catalog
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
+	"unicode/utf8"
 
+	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 	"github.com/BarterX-Tech/dossierx/internal/readiness"
 )
 
 // Catalog is the built, render-ready view over a set of claims.
 type Catalog struct {
-	Claims    []model.Claim
-	Readiness map[string]readiness.Assessment
+	Claims      []model.Claim
+	Readiness   map[string]readiness.Assessment
+	Conformance map[string]conformance.Result
 
 	// ByFacet and ByModule group claim IDs for convenient lookup by later
 	// render/lint stages. Populated by Build. Each slice of IDs is sorted so
 	// callers never need to re-sort before using or serializing them.
 	ByFacet  map[string][]string
 	ByModule map[string][]string
+}
+
+// SetConformance attaches the read-only structured implementation projection.
+// A nil report leaves the catalog byte-compatible for projects that do not use
+// the feature.
+func (cat *Catalog) SetConformance(report *conformance.Report) {
+	if cat == nil || report == nil {
+		return
+	}
+	cat.Conformance = make(map[string]conformance.Result, len(report.Results))
+	for _, result := range report.Results {
+		cat.Conformance[result.ClaimID] = result
+	}
 }
 
 // SetReadiness attaches a current read-only approval projection for exports
@@ -138,8 +153,9 @@ type Entry struct {
 	// structure, and a claim's evidence sits on that same side of the line —
 	// it is read by a human on the claim, not resolved by a consumer of the
 	// index.
-	Tracks    []TrackMembership     `json:"tracks,omitempty"`
-	Readiness *readiness.Assessment `json:"readiness,omitempty"`
+	Tracks      []TrackMembership     `json:"tracks,omitempty"`
+	Readiness   *readiness.Assessment `json:"readiness,omitempty"`
+	Conformance *conformance.Result   `json:"conformance,omitempty"`
 }
 
 // TrackMembership is the serialized form of one claim's membership in one
@@ -213,6 +229,10 @@ func (cat *Catalog) Document() *Document {
 			assessmentCopy := assessment
 			e.Readiness = &assessmentCopy
 		}
+		if result, ok := cat.Conformance[c.ID]; ok {
+			resultCopy := result
+			e.Conformance = &resultCopy
+		}
 		doc.Claims = append(doc.Claims, e)
 	}
 	sort.Slice(doc.Claims, func(i, j int) bool { return doc.Claims[i].ID < doc.Claims[j].ID })
@@ -238,29 +258,464 @@ func (cat *Catalog) MarshalJSON() ([]byte, error) {
 	return json.Marshal(cat.Document())
 }
 
+// EncodeJSON serializes cat without touching its destination.
+func EncodeJSON(cat *Catalog) ([]byte, error) {
+	return encodeJSON(cat, 0)
+}
+
+// EncodeJSONBounded rejects early only when unavoidable encoded values and
+// mandatory JSON structure prove overflow, then measures the actual
+// deterministic document.
+func EncodeJSONBounded(cat *Catalog, maxBytes int) ([]byte, error) {
+	if maxBytes <= 0 {
+		return nil, fmt.Errorf("catalog: max bytes must be positive")
+	}
+	if err := preflightCatalogCapacity(cat, uint64(maxBytes)); err != nil {
+		return nil, err
+	}
+	return encodeJSON(cat, maxBytes)
+}
+
+// preflightCatalogCapacity walks without constructing a Document or JSON
+// buffer. Only a lower bound is refusal authority: padding in the separate
+// upper-bound diagnostic can never reject valid output.
+func preflightCatalogCapacity(cat *Catalog, outputLimit uint64) error {
+	lower := catalogProjectionStringLowerBound(cat, outputLimit)
+	if lower.exceeded {
+		return fmt.Errorf("%w: catalog output is at least %d bytes: mandatory JSON content exceeds %d bytes, so actual output would be larger; output was not encoded", conformance.ErrCapacityExceeded, outputLimit+1, outputLimit)
+	}
+	return nil
+}
+
+// catalogProjectionStringLowerBound counts exact encoded string values plus
+// only field names, delimiters, and indentation that MarshalIndent must emit.
+// It deliberately omits optional structure and separators where proving their
+// presence would complicate the walk, so crossing the limit remains proof that
+// the real document is larger without constructing it.
+func catalogProjectionStringLowerBound(cat *Catalog, limit uint64) catalogBudget {
+	b := catalogBudget{limit: limit}
+	b.add(minimalCatalogJSONBytes)
+	add := func(value string) {
+		if value != "" {
+			b.addString(value)
+		}
+	}
+	addStrings := func(values []string) {
+		for _, value := range values {
+			add(value)
+			if b.exceeded {
+				return
+			}
+		}
+	}
+	addCondition := func(condition readiness.DependencyCondition) {
+		b.add(dependencyConditionStructureBytes)
+		add(string(condition.Kind))
+		add(condition.DependencyID)
+		add(condition.Detail)
+		addStrings(condition.Path)
+	}
+	addCause := func(cause readiness.Cause) {
+		b.add(readinessCauseStructureBytes)
+		add(string(cause.Kind))
+		add(string(cause.SourceKind))
+		add(cause.DependencyID)
+		add(cause.Detail)
+		addStrings(cause.Path)
+	}
+	if cat == nil {
+		return b
+	}
+	for _, claim := range cat.Claims {
+		b.add(catalogEntryStructureBytes)
+		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind())} {
+			add(value)
+		}
+		if claim.Governed.Type != "" {
+			add(claim.Governed.Type)
+			add(claim.Governed.Reason)
+		}
+		addStrings(claim.Mirrors)
+		addStrings(claim.RestsOn)
+		for _, track := range claim.Tracks {
+			b.add(trackStructureBytes)
+			add(track.ID)
+			add(string(track.EffectiveRole()))
+		}
+		if assessment, ok := cat.Readiness[claim.ID]; ok {
+			b.add(readinessAssessmentStructureBytes)
+			add(assessment.ClaimID)
+			add(assessment.LocalApprovalIssue)
+			addStrings(assessment.LocalReasons)
+			for _, condition := range assessment.DependencyConditions {
+				addCondition(condition)
+			}
+			for _, condition := range assessment.Conditions {
+				addCondition(condition)
+			}
+			for _, cause := range assessment.ReviewCauses {
+				addCause(cause)
+			}
+			for _, cause := range assessment.Causes {
+				addCause(cause)
+			}
+		}
+		if result, ok := cat.Conformance[claim.ID]; ok {
+			b.add(conformanceResultStructureBytes)
+			if len(result.Checks) > 0 {
+				b.add(conformanceChecksFieldStructureBytes)
+			}
+			if result.Reason != "" {
+				b.add(optionalStringFieldStructureBytes)
+			}
+			for _, value := range []string{result.ClaimID, string(result.Mode), result.Reason} {
+				add(value)
+			}
+			for _, check := range result.Checks {
+				b.add(conformanceCheckStructureBytes)
+				if check.Expected != nil {
+					b.add(optionalValueFieldStructureBytes)
+				}
+				if check.Observed != nil {
+					b.add(optionalValueFieldStructureBytes)
+				}
+				if len(check.Missing) > 0 {
+					b.add(optionalArrayFieldStructureBytes)
+				}
+				if len(check.Extra) > 0 {
+					b.add(optionalArrayFieldStructureBytes)
+				}
+				if check.Reason != "" {
+					b.add(optionalStringFieldStructureBytes)
+				}
+				if check.ObservationError != nil {
+					b.add(observationErrorStructureBytes)
+				}
+				for _, value := range []string{check.ID, check.Adapter, check.Target, string(check.Shape), string(check.State), check.Reason} {
+					add(value)
+				}
+				switch expected := check.Expected.(type) {
+				case string:
+					add(expected)
+				case []string:
+					b.add(2)
+					addStrings(expected)
+				}
+				switch observed := check.Observed.(type) {
+				case string:
+					add(observed)
+				case []string:
+					b.add(2)
+					addStrings(observed)
+				}
+				addStrings(check.Missing)
+				addStrings(check.Extra)
+				if check.ObservationError != nil {
+					add(check.ObservationError.Code)
+					add(check.ObservationError.Message)
+				}
+			}
+		}
+		if b.exceeded {
+			return b
+		}
+	}
+	for key, ids := range cat.ByFacet {
+		b.add(mapArrayEntryStructureBytes)
+		add(key)
+		addStrings(ids)
+		if b.exceeded {
+			return b
+		}
+	}
+	for key, ids := range cat.ByModule {
+		b.add(mapArrayEntryStructureBytes)
+		add(key)
+		addStrings(ids)
+		if b.exceeded {
+			return b
+		}
+	}
+	return b
+}
+
+// The empty document is exactly what MarshalIndent emits before any records
+// are inserted, including its trailing newline.
+const minimalCatalogJSONBytes = uint64(len(`{
+  "claims": [],
+  "by_facet": {},
+  "by_module": {}
+}
+`))
+
+const (
+	// Catalog entries are array elements at indentation depth two. Values
+	// counted separately are intentionally blank in the skeleton.
+	catalogEntryStructureBytes  = uint64(len(`{"id":,"facet":,"module":,"status":,"layout":,"kind":,"edges":{}}`) + 5 + 7*(1+6) + 7 + (1 + 4))
+	trackStructureBytes         = uint64(len(`{"id":,"role":}`))
+	mapArrayEntryStructureBytes = uint64(len(`:[]`))
+
+	readinessAssessmentStructureBytes = uint64(len(`{"claim_id":,"policy_version":0,"local_approved":true,"locally_approved":true,"dependency_ready":true,"ready":true,"review_pending":true}`))
+	dependencyConditionStructureBytes = uint64(len(`{"kind":,"path":[]}`))
+	readinessCauseStructureBytes      = uint64(len(`{"kind":,"path":[],"direct":true,"inherited":true}`))
+
+	conformanceResultStructureBytes      = uint64(len(`{"claim_id":,"mode":,"implementation_ready":true}`))
+	conformanceChecksFieldStructureBytes = uint64(len(`,"checks":[]`))
+	conformanceCheckStructureBytes       = uint64(len(`{"id":,"adapter":,"target":,"shape":,"state":,"implementation_ready":true}`))
+	optionalStringFieldStructureBytes    = uint64(len(`,"reason":`))
+	optionalValueFieldStructureBytes     = uint64(len(`,"expected":`))
+	// "extra" is the shortest of the two array field names; using it for both
+	// missing and extra keeps the shared charge a strict lower bound.
+	optionalArrayFieldStructureBytes = uint64(len(`,"extra":[]`))
+	observationErrorStructureBytes   = uint64(len(`,"observation_error":{"code":,"message":}`))
+)
+
+func catalogProjectionUpperBound(cat *Catalog, limit uint64) catalogBudget {
+	b := catalogBudget{limit: limit}
+	b.add(8192)
+	if cat == nil {
+		return b
+	}
+	for _, claim := range cat.Claims {
+		b.add(2048)
+		for _, value := range []string{claim.ID, claim.Facet, claim.Module, string(claim.Status), string(claim.Layout), string(claim.EffectiveKind()), claim.Governed.Type, claim.Governed.Reason} {
+			b.addString(value)
+		}
+		for _, value := range claim.Mirrors {
+			b.addString(value)
+			b.add(64)
+		}
+		for _, value := range claim.RestsOn {
+			b.addString(value)
+			b.add(64)
+		}
+		for _, track := range claim.Tracks {
+			b.addString(track.ID)
+			b.addString(string(track.EffectiveRole()))
+			b.add(128)
+		}
+		if assessment, ok := cat.Readiness[claim.ID]; ok {
+			b.addReadiness(assessment)
+		}
+		if result, ok := cat.Conformance[claim.ID]; ok {
+			b.addConformance(result)
+		}
+		if b.exceeded {
+			break
+		}
+	}
+	if !b.exceeded {
+		for key, ids := range cat.ByFacet {
+			b.addString(key)
+			for _, id := range ids {
+				b.addString(id)
+				b.add(64)
+				if b.exceeded {
+					break
+				}
+			}
+			if b.exceeded {
+				break
+			}
+		}
+		for key, ids := range cat.ByModule {
+			if b.exceeded {
+				break
+			}
+			b.addString(key)
+			for _, id := range ids {
+				b.addString(id)
+				b.add(64)
+				if b.exceeded {
+					break
+				}
+			}
+		}
+	}
+	if b.exceeded {
+		return b
+	}
+	return b
+}
+
+type catalogBudget struct {
+	limit, total uint64
+	exceeded     bool
+}
+
+func (b *catalogBudget) add(n uint64) {
+	if b.exceeded || n > b.limit || b.total > b.limit-n {
+		b.exceeded = true
+		b.total = b.limit
+		return
+	}
+	b.total += n
+}
+
+func (b *catalogBudget) addString(value string) {
+	b.add(jsonQuotedUpperBound(value))
+}
+
+func jsonQuotedUpperBound(value string) uint64 {
+	n := uint64(2)
+	for i := 0; i < len(value); {
+		c := value[i]
+		if c < utf8.RuneSelf {
+			switch c {
+			case '\\', '"', '\b', '\f', '\n', '\r', '\t':
+				n += 2
+			case '<', '>', '&':
+				n += 6
+			default:
+				if c < 0x20 {
+					n += 6
+				} else {
+					n++
+				}
+			}
+			i++
+			continue
+		}
+		r, size := utf8.DecodeRuneInString(value[i:])
+		if r == utf8.RuneError && size == 1 {
+			n += 6
+			i++
+			continue
+		}
+		if r == '\u2028' || r == '\u2029' {
+			n += 6
+		} else {
+			n += uint64(size)
+		}
+		i += size
+	}
+	return n
+}
+
+func (b *catalogBudget) addStrings(values []string) {
+	for _, value := range values {
+		b.addString(value)
+		b.add(32)
+		if b.exceeded {
+			return
+		}
+	}
+}
+
+func (b *catalogBudget) addConformance(result conformance.Result) {
+	b.add(4096)
+	for _, value := range []string{result.ClaimID, string(result.Mode), result.Reason} {
+		b.addString(value)
+	}
+	for _, check := range result.Checks {
+		b.add(2048)
+		for _, value := range []string{check.ID, check.Adapter, check.Target, string(check.Shape), string(check.State), check.Reason} {
+			b.addString(value)
+		}
+		b.addConformanceValue(check.Expected)
+		b.addConformanceValue(check.Observed)
+		b.addStrings(check.Missing)
+		b.addStrings(check.Extra)
+		if check.ObservationError != nil {
+			b.addString(check.ObservationError.Code)
+			b.addString(check.ObservationError.Message)
+		}
+		if b.exceeded {
+			return
+		}
+	}
+}
+
+func (b *catalogBudget) addConformanceValue(value any) {
+	switch value := value.(type) {
+	case nil:
+	case string:
+		b.addString(value)
+	case []string:
+		b.addStrings(value)
+	default:
+		// The conformance result contract is closed to string and []string.
+		// Refuse an impossible in-memory value rather than underestimating it.
+		b.exceeded = true
+	}
+}
+
+func (b *catalogBudget) addReadiness(assessment readiness.Assessment) {
+	b.add(4096)
+	b.addString(assessment.ClaimID)
+	b.addString(assessment.LocalApprovalIssue)
+	b.addStrings(assessment.LocalReasons)
+	addCondition := func(condition readiness.DependencyCondition) {
+		b.add(256)
+		b.addString(string(condition.Kind))
+		b.addString(condition.DependencyID)
+		b.addString(condition.Detail)
+		b.addStrings(condition.Path)
+	}
+	for _, condition := range assessment.DependencyConditions {
+		addCondition(condition)
+		if b.exceeded {
+			return
+		}
+	}
+	for _, condition := range assessment.Conditions {
+		addCondition(condition)
+		if b.exceeded {
+			return
+		}
+	}
+	addCause := func(cause readiness.Cause) {
+		b.add(320)
+		b.addString(string(cause.Kind))
+		b.addString(string(cause.SourceKind))
+		b.addString(cause.DependencyID)
+		b.addString(cause.Detail)
+		b.addStrings(cause.Path)
+	}
+	for _, cause := range assessment.ReviewCauses {
+		addCause(cause)
+		if b.exceeded {
+			return
+		}
+	}
+	for _, cause := range assessment.Causes {
+		addCause(cause)
+		if b.exceeded {
+			return
+		}
+	}
+}
+
+func encodeJSON(cat *Catalog, maxBytes int) ([]byte, error) {
+	if cat == nil {
+		cat = &Catalog{}
+	}
+	data, err := json.MarshalIndent(cat.Document(), "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("catalog: marshal: %w", err)
+	}
+	data = append(data, '\n')
+	if maxBytes > 0 && len(data) > maxBytes {
+		return nil, fmt.Errorf("%w: catalog output is %d bytes; maximum is %d", conformance.ErrCapacityExceeded, len(data), maxBytes)
+	}
+	return data, nil
+}
+
+// WriteEncoded atomically replaces one preflighted catalog artifact.
+func WriteEncoded(path string, data []byte) error {
+	if err := atomicfile.Write(path, data, 0o644); err != nil {
+		return fmt.Errorf("catalog: write %q: %w", path, err)
+	}
+	return nil
+}
+
 // WriteJSON serializes cat's Document to path as indented JSON, creating
 // path's parent directory if needed. Output is deterministic: building the
 // same claims twice and writing both produces byte-identical files.
 func WriteJSON(cat *Catalog, path string) error {
-	if cat == nil {
-		cat = &Catalog{}
-	}
-
-	data, err := json.MarshalIndent(cat.Document(), "", "  ")
+	data, err := EncodeJSON(cat)
 	if err != nil {
-		return fmt.Errorf("catalog: marshal: %w", err)
+		return err
 	}
-	data = append(data, '\n')
-
-	if dir := filepath.Dir(path); dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("catalog: create output dir %q: %w", dir, err)
-		}
-	}
-
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("catalog: write %q: %w", path, err)
-	}
-
-	return nil
+	return WriteEncoded(path, data)
 }

@@ -10,6 +10,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/model"
 )
 
@@ -37,12 +38,21 @@ type claimFieldDecision struct {
 // The three exclusions exist only because the ENGINE itself rewrites those
 // fields as routine bookkeeping — see lockedClaimHashExcluded's doc comment.
 var claimFieldDecisions = map[string]claimFieldDecision{
-	"id":                {hashed: true, mutate: func(c *model.Claim) { c.ID = "widget.contract.other" }},
-	"facet":             {hashed: true, mutate: func(c *model.Claim) { c.Facet = "internals" }},
-	"module":            {hashed: true, mutate: func(c *model.Claim) { c.Module = "gadget" }},
-	"layout":            {hashed: true, mutate: func(c *model.Claim) { c.Layout = model.LayoutTable }},
-	"kind":              {hashed: true, mutate: func(c *model.Claim) { c.Kind = model.KindOrientationNote }},
-	"build_role":        {hashed: true, mutate: func(c *model.Claim) { c.BuildRole = model.BuildRoleAPI }},
+	"id":         {hashed: true, mutate: func(c *model.Claim) { c.ID = "widget.contract.other" }},
+	"facet":      {hashed: true, mutate: func(c *model.Claim) { c.Facet = "internals" }},
+	"module":     {hashed: true, mutate: func(c *model.Claim) { c.Module = "gadget" }},
+	"layout":     {hashed: true, mutate: func(c *model.Claim) { c.Layout = model.LayoutTable }},
+	"kind":       {hashed: true, mutate: func(c *model.Claim) { c.Kind = model.KindOrientationNote }},
+	"build_role": {hashed: true, mutate: func(c *model.Claim) { c.BuildRole = model.BuildRoleAPI }},
+	"embodiment": {hashed: true, mutate: func(c *model.Claim) {
+		c.Embodiment = &model.Embodiment{
+			Mode: model.EmbodimentModeCompare,
+			Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "source-symbols/v1", Target: "source://widget/state", Expectation: &model.EmbodimentExpectation{
+				Shape: model.ExpectationShapeSet,
+				Value: []string{"blocked", "ready"},
+			}}},
+		}
+	}},
 	"body":              {hashed: true, mutate: func(c *model.Claim) { c.Body = "a different body" }},
 	"rows":              {hashed: true, mutate: func(c *model.Claim) { c.Rows = []model.Row{{"col": "changed"}} }},
 	"section":           {hashed: true, mutate: func(c *model.Claim) { c.Section = "9 - elsewhere" }},
@@ -317,6 +327,135 @@ func TestContentHashIsUnchangedByTheLedger(t *testing.T) {
 			"Changing it flips every locked claim to review_pending on the day they upgrade. If the ledger\n"+
 			"needs to cover more fields, that is what LockedClaimHash is for — it is a separate hash for\n"+
 			"exactly this reason. If this change really is intended, update `want` deliberately.", got, want)
+	}
+}
+
+func TestContentHashEmbodimentCompatibilityAndMeaning(t *testing.T) {
+	base := model.Claim{
+		ID: "widget.contract.state", Facet: "contract", Module: "widget",
+		Status: model.StatusDraft, Layout: model.LayoutCard, Body: "A state vocabulary.",
+		Governed: model.Governed{Type: "none", Reason: "standalone fixture"},
+	}
+	without := ContentHash(base)
+	if got := ContentHash(base); got != without {
+		t.Fatalf("an omitted embodiment changed ContentHash: %s != %s", got, without)
+	}
+
+	with := base
+	with.Embodiment = &model.Embodiment{
+		Mode: model.EmbodimentModeCompare,
+		Checks: []model.EmbodimentCheck{
+			{ID: "z.scalar", Adapter: "source-symbols/v1", Target: "source://widget/scalar", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeScalar, Value: "ready"}},
+			{ID: "a.set", Adapter: "source-symbols/v1", Target: "source://widget/state", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{"waiting", "blocked", "ready"}}},
+		},
+	}
+	semanticHash := ContentHash(with)
+	if semanticHash == without {
+		t.Fatal("a semantic embodiment declaration must change ContentHash")
+	}
+
+	reordered := with
+	reordered.Embodiment = &model.Embodiment{
+		Mode: with.Embodiment.Mode,
+		Checks: []model.EmbodimentCheck{
+			{ID: "a.set", Adapter: "source-symbols/v1", Target: "source://widget/state", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{"ready", "waiting", "blocked"}}},
+			{ID: "z.scalar", Adapter: "source-symbols/v1", Target: "source://widget/scalar", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeScalar, Value: "ready"}},
+		},
+	}
+	if got := ContentHash(reordered); got != semanticHash {
+		t.Fatalf("check/set order changed ContentHash: %s != %s", got, semanticHash)
+	}
+	canonicalWith, canonicalReordered := with, reordered
+	if err := model.ValidateEmbodiment(&canonicalWith); err != nil {
+		t.Fatal(err)
+	}
+	if err := model.ValidateEmbodiment(&canonicalReordered); err != nil {
+		t.Fatal(err)
+	}
+	if LockedClaimHash(canonicalWith) != LockedClaimHash(canonicalReordered) {
+		t.Fatal("canonical check/set order changed LockedClaimHash")
+	}
+
+	readdressed := with
+	readdressed.Embodiment = &model.Embodiment{
+		Mode: with.Embodiment.Mode,
+		Checks: []model.EmbodimentCheck{
+			{ID: "z.scalar", Adapter: "different-adapter/v1", Target: "source://elsewhere/scalar", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeScalar, Value: "ready"}},
+			{ID: "a.set", Adapter: "different-adapter/v1", Target: "source://elsewhere/state", Expectation: &model.EmbodimentExpectation{Shape: model.ExpectationShapeSet, Value: []string{"waiting", "blocked", "ready"}}},
+		},
+	}
+	if got := ContentHash(readdressed); got != semanticHash {
+		t.Fatalf("opaque adapter/target changed ContentHash: %s != %s", got, semanticHash)
+	}
+	if LockedClaimHash(readdressed) == LockedClaimHash(with) {
+		t.Fatal("opaque adapter/target edit must change LockedClaimHash")
+	}
+
+	edited := with
+	edited.Embodiment = &model.Embodiment{Mode: with.Embodiment.Mode, Checks: append([]model.EmbodimentCheck(nil), with.Embodiment.Checks...)}
+	edited.Embodiment.Checks[0].Expectation = &model.EmbodimentExpectation{Shape: model.ExpectationShapeScalar, Value: "retired"}
+	if ContentHash(edited) == semanticHash {
+		t.Fatal("scalar edit must change ContentHash")
+	}
+	if LockedClaimHash(edited) == LockedClaimHash(with) {
+		t.Fatal("scalar edit must change LockedClaimHash")
+	}
+
+	rename := with
+	rename.Embodiment = &model.Embodiment{Mode: with.Embodiment.Mode, Checks: append([]model.EmbodimentCheck(nil), with.Embodiment.Checks...)}
+	rename.Embodiment.Checks[0].ID = "renamed.scalar"
+	if ContentHash(rename) == semanticHash || LockedClaimHash(rename) == LockedClaimHash(with) {
+		t.Fatal("check id edit must change both hashes")
+	}
+
+	none := base
+	none.Embodiment = &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: "no software embodiment"}
+	noneHash := ContentHash(none)
+	if noneHash == without || noneHash == semanticHash {
+		t.Fatal("mode:none must have its own semantic ContentHash")
+	}
+	noneEdited := none
+	noneEdited.Embodiment = &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: "different authored reason"}
+	if ContentHash(noneEdited) == noneHash || LockedClaimHash(noneEdited) == LockedClaimHash(none) {
+		t.Fatal("mode:none reason edit must change both hashes")
+	}
+
+	contentBefore, lockedBefore := ContentHash(with), LockedClaimHash(with)
+	for _, raw := range [][]byte{
+		[]byte(`{"format_version":1,"observations":[{"adapter":"source-symbols/v1","target":"source://widget/state","shape":"set","value":["blocked","ready","waiting"]},{"adapter":"source-symbols/v1","target":"source://widget/scalar","shape":"scalar","value":"ready"}]}`),
+		[]byte(`{"format_version":1,"observations":[{"adapter":"source-symbols/v1","target":"source://widget/state","shape":"set","value":["paused"]},{"adapter":"source-symbols/v1","target":"source://widget/scalar","shape":"scalar","value":"blocked"}]}`),
+	} {
+		if _, err := conformance.Evaluate([]model.Claim{with}, "observations.json", func(string) ([]byte, error) { return raw, nil }); err != nil {
+			t.Fatal(err)
+		}
+		if ContentHash(with) != contentBefore || LockedClaimHash(with) != lockedBefore {
+			t.Fatal("observation content changed a claim hash")
+		}
+	}
+}
+
+func TestContentHashEmbodimentDomainCannotBeInjectedByRawHTML(t *testing.T) {
+	base := model.Claim{
+		ID: "hash-domain", Facet: "contract", Module: "widget",
+		Layout: model.LayoutCard, Body: "body",
+	}
+	embodied := base
+	embodied.RawHTML = "x"
+	embodied.Embodiment = &model.Embodiment{
+		Mode: model.EmbodimentModeCompare,
+		Checks: []model.EmbodimentCheck{{ID: "state", Adapter: "a", Target: "t", Expectation: &model.EmbodimentExpectation{
+			Shape: model.ExpectationShapeSet,
+			Value: []string{"a"},
+		}}},
+	}
+
+	// This is the exact suffix the pre-domain-separation implementation
+	// appended after raw_html. Without a completed-digest boundary, the omitted
+	// claim and the embodied claim feed byte-identical input to SHA-256.
+	injected := base
+	injected.RawHTML = "x\nembodiment_mode=7:compare\nembodiment_shape=3:set\nembodiment_member=1:a"
+	if got, wantDifferent := ContentHash(injected), ContentHash(embodied); got == wantDifferent {
+		t.Fatalf("authored raw_html injected the embodiment hash domain: both claims hashed to %s", got)
 	}
 }
 

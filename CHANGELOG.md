@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.12] - 2026-09-11
+
+### Added
+
+- Add project-neutral structured claim embodiment v1: claims may declare one or
+  more stably named set/scalar checks or an explicit no-embodiment decision,
+  while project-owned normalized observations produce deterministic matched,
+  owed, mismatch, or uncheckable projections grouped by claim in status JSON,
+  catalog output, and the generated viewer. Optional blocking makes any
+  non-matched check fail `check` without changing claim approval, locking, or
+  dependency readiness.
+- Add bounded conformance input/output handling and the stable
+  `conformance_capacity_exceeded` recovery code. Oversized projections refuse
+  before replacing generated artifacts; projects without declarations preserve
+  their existing hashes and generated behavior.
+- Domain-separate opted-in embodiment dependency hashes from the completed
+  legacy digest, coalesce live status projections, and keep readiness, capacity,
+  and error-phase data on one snapshot. Stale status cleanup uses a private
+  atomic ownership marker rather than editable ignore policy; conformance-only
+  live viewers reject superseded status responses without changing ordinary
+  viewer runtime bytes.
+
+### Changed
+
+- Keep the grouped reviewer work queue and on-demand Mermaid trace from v0.7.11
+  while adding conformance results to claim, catalog, serve, and viewer
+  projections. The structured blocker list and exact readiness fields remain
+  authoritative and separate from implementation evidence.
+
+### Maintenance
+
+- Regenerate all six committed fixture viewers. Byte sizes are: `fixture-basic`
+  4110066 -> 4110066; `fixture-graph-demo` 4257854 -> 4257854;
+  `fixture-portability` 4112477 -> 4112477; `fixture-theme-flat` 4152106 ->
+  4152106; `fixture-theme-preset` 4113503 -> 4113503; and the new
+  `fixture-conformance-v1` 0 -> 537928. The silent render changes are recorded
+  in `testdata/render-across-releases.golden.txt`.
+
+Existing projects should rerun `dossierx check` after upgrading to regenerate
+their self-contained viewer with the structured conformance panel.
+
 ## [0.7.11] - 2026-09-11
 
 ### Changed

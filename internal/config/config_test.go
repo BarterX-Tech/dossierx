@@ -590,6 +590,123 @@ build_dir: out/dossierx
 	}
 }
 
+func TestLoadConfig_ConformanceObservationCannotAliasGeneratedOutput(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, observation := range []string{"build/observations.json", "build/catalog/catalog.json", "build/conformance/status.json", "build/viewer/index.html"} {
+		t.Run(observation, func(t *testing.T) {
+			p := writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: "+observation+"\n")
+			_, err := LoadConfig(p)
+			if err == nil || !strings.Contains(err.Error(), "outside build_dir") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_ConformanceObservationsRequiresExplicitYAMLString(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"number":   "123",
+		"boolean":  "true",
+		"null":     "null",
+		"mapping":  "{path: observations.json}",
+		"sequence": "[observations.json]",
+	}
+	for name, value := range cases {
+		t.Run(name, func(t *testing.T) {
+			body := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: " + value + "\n"
+			_, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", body))
+			if err == nil || !strings.Contains(err.Error(), "conformance.observations: expected a string") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+
+	cfg, err := LoadConfig(writeConfig(t, dir, "project.config.yaml", "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  observations: \"123\"\n"))
+	if err != nil {
+		t.Fatalf("quoted string rejected: %v", err)
+	}
+	if got, want := cfg.Conformance.Observations, filepath.Join(dir, "123"); got != want {
+		t.Fatalf("observations = %q, want %q", got, want)
+	}
+}
+
+func TestLoadConfig_ConformanceBlockingDefaultsFalseAndAcceptsExplicitBoolean(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	base := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\n"
+
+	for _, tc := range []struct {
+		name string
+		body string
+		want bool
+	}{
+		{name: "conformance omitted", body: base, want: false},
+		{name: "blocking omitted", body: base + "conformance:\n  observations: observations.json\n", want: false},
+		{name: "explicit false", body: base + "conformance:\n  blocking: false\n", want: false},
+		{name: "explicit true", body: base + "conformance:\n  blocking: true\n", want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := LoadConfig(writeConfig(t, dir, tc.name+".yaml", tc.body))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.Conformance.Blocking != tc.want {
+				t.Fatalf("conformance.blocking = %v, want %v", cfg.Conformance.Blocking, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_ConformanceBlockingRequiresExplicitYAMLBoolean(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	base := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n  blocking: "
+	for name, value := range map[string]string{
+		"quoted":   `"true"`,
+		"number":   "1",
+		"null":     "null",
+		"mapping":  "{enabled: true}",
+		"sequence": "[true]",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, dir, name+".yaml", base+value+"\n"))
+			if err == nil || !strings.Contains(err.Error(), "conformance.blocking: expected a boolean") {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadConfig_ConformanceKeysRejectDuplicatesIndependently(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "claims"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	base := "schema_version: 1\nfacets: [contract]\nmodules: [ledger]\nclaims_dir: claims\nconformance:\n"
+	for name, fields := range map[string]string{
+		"observations": "  observations: one.json\n  observations: two.json\n",
+		"blocking":     "  blocking: true\n  blocking: false\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := LoadConfig(writeConfig(t, dir, name+".yaml", base+fields))
+			if err == nil || !strings.Contains(err.Error(), `key "`+name+`" is defined twice`) {
+				t.Fatalf("error = %v", err)
+			}
+		})
+	}
+}
+
 // TestLoadConfig_BuildDirInsideClaimsDirIsRefused walks every overlap the
 // containment rule refuses, plus one accepted row so the table is not vacuous.
 // The rule runs after resolution (see the note on validate), which is what

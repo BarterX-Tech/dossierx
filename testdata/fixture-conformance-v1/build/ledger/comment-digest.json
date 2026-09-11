@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "digests": {
+    "widget.contract.declared-none": "8406289763ccd1d7f45061b9f734c7ee34df26df3be9e9fe8335070896635f05",
+    "widget.contract.matched": "37b1031e0cff5dee3776974d298352bb71d488fb1c0903ac0daf0f93e54b9e3a",
+    "widget.contract.mismatch": "eaf38a627373bbe61d57aae33c45dc16ccea4956ba0f076cea42628e31c87901",
+    "widget.contract.owed": "6e32f8baa42fbce7cdaee56fd5a6f9394bd7df6cbc723b06f9db74669294d404",
+    "widget.contract.uncheckable": "8713c088f21b5fa16b344f553a642c33cd8e592dc7c0636427a458ebac47737f"
+  }
+}

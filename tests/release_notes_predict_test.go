@@ -1456,13 +1456,9 @@ func TestCompareReleaseNotesPrediction(t *testing.T) {
 // and checks it with the last prediction's PublishedBodyMatches (NOT Body ==
 // publishedBody — see ReleaseNotesPrediction's doc comment in
 // release_notes_predict_lib_test.go for why a breaking release's hand-written
-// prefix makes that the wrong check too). With none of the three
-// flags set (the default `go test` invocation, and every CI run of this
-// suite) this test does nothing beyond confirming the flags parse — the
-// predictor's correctness is TestPredictReleaseNotesForRange_MergeCommitExcluded,
-// TestPredictReleaseNotesForRange_PublishedEqualAcrossMergeBoundary,
-// TestPublishedEqual_CatchesNewlyDroppedCommit and
-// TestPredictReleaseNotes_FixedFixture's job, not this test's.
+// prefix makes that the wrong check too). With none of the three flags set
+// (the default `go test` invocation, and every CI run of this suite), it runs a
+// small self-contained prediction assertion and performs no capture write.
 func TestPredictReleaseNotesForRange_G1Capture(t *testing.T) {
 	// VALUE (*releaseNotesRange == "") can never tell "this flag was never
 	// passed" apart from "this flag was passed with an empty value" (e.g. a
@@ -1490,12 +1486,26 @@ func TestPredictReleaseNotesForRange_G1Capture(t *testing.T) {
 		// -release-notes-predict-compare/-release-notes-predict-out each
 		// IMPLY -release-notes-range: a caller that set either one but left
 		// range unset meant to run G1 or G2's actual check, not to no-op.
-		// Only skip when NEITHER flag was given at all — the ordinary
-		// `go test ./tests` invocation and every CI run of this suite.
+		// When no related flag was given, run a hermetic algorithm assertion so
+		// the ordinary suite performs real work without requiring release-only
+		// range input.
 		if compareGiven || outGiven {
 			t.Fatalf("-release-notes-predict-compare (given=%v) or -release-notes-predict-out (given=%v) was given without -release-notes-range; both imply -release-notes-range and must not silently skip", compareGiven, outGiven)
 		}
-		t.Skip("no -release-notes-range given; this test is a capture entry point, not a correctness check (see TestPredictReleaseNotesForRange_MergeCommitExcluded for that)")
+		prediction, err := PredictReleaseNotes([]string{
+			"bbb2222 fix: repair flagless prediction",
+			"aaa1111 feat: exercise flagless prediction",
+			"ccc3333 docs: exclude flagless fixture prose",
+		}, fixtureReleaseNotesConfig())
+		if err != nil {
+			t.Fatalf("flagless PredictReleaseNotes: %v", err)
+		}
+		wantBody := "## Changelog\n### Features\n* aaa1111 feat: exercise flagless prediction\n### Bug fixes\n* bbb2222 fix: repair flagless prediction\n"
+		if prediction.Body != wantBody || len(prediction.Groups) != 2 || len(prediction.Dropped) != 1 || prediction.Dropped[0].ExcludedBy != "^docs:" {
+			t.Fatalf("flagless prediction disagrees with its self-contained contract:\ngot=%+v\nwant body:\n%s", prediction, wantBody)
+		}
+		t.Log("no release-note capture flags: verified deterministic local prediction")
+		return
 	}
 	if *releaseNotesRange == "" {
 		// -release-notes-range WAS passed on the command line but its value
@@ -1639,17 +1649,13 @@ func TestPredictReleaseNotesForRange_G1Capture_RequiresRangeWhenCompareOrOutGive
 		}
 	})
 
-	t.Run("neither flag given still skips cleanly", func(t *testing.T) {
-		// Negative control: the fix must not turn the ordinary, flagless `go
-		// test ./tests` invocation (every CI run of this suite) into a
-		// failure — only the case where -release-notes-predict-compare or
-		// -release-notes-predict-out was given without -release-notes-range.
+	t.Run("neither flag given runs local assertions", func(t *testing.T) {
 		out, code := runG1CaptureSubprocess(t)
 		if code != 0 {
 			t.Fatalf("expected exit 0 when no flags are given at all, got exit %d:\n%s", code, out)
 		}
-		if !strings.Contains(out, "--- SKIP") {
-			t.Errorf("expected the test to SKIP when no flags are given, got:\n%s", out)
+		if strings.Contains(out, "--- SKIP") || !strings.Contains(out, "--- PASS: TestPredictReleaseNotesForRange_G1Capture") || !strings.Contains(out, "verified deterministic local prediction") {
+			t.Errorf("expected the flagless entrypoint to run and pass local assertions, got:\n%s", out)
 		}
 	})
 }
@@ -1956,10 +1962,9 @@ func TestPredictReleaseNotesForRange_G1Capture_MismatchFailsTheGate(t *testing.T
 // process may not have run as expected" apart from "the release doesn't say
 // what was predicted" — see PublishedBodyCheck's doc comment for the fuller
 // account of why that distinction exists and is not derivable from Matched
-// alone. With neither flag set (the default `go test` invocation and every
-// CI run of this suite) this test does nothing beyond confirming the flags
-// parse — PublishedBodyMatches's own correctness is pinned by the
-// TestPublishedBodyMatches_* tests above, not this one.
+// alone. With neither flag set (the default `go test` invocation and every CI
+// run of this suite), it performs a self-contained positive published-body
+// assertion and reads no release-only external input.
 //
 // The "given together" check below keys off PRESENCE (flag.CommandLine.Visit),
 // not VALUE (*flag == ""): a driver that passes both
@@ -1984,7 +1989,14 @@ func TestReleaseNotesPublishedBodyCheck(t *testing.T) {
 	})
 
 	if !predictedGiven && !publishedGiven {
-		t.Skip("no -release-notes-predicted-json/-release-notes-published-body given; this test is a capture entry point, not a correctness check (see the TestPublishedBodyMatches_* tests for that)")
+		prediction := ReleaseNotesPrediction{Body: "## Changelog\n### Features\n* aaa1111 feat: exercise flagless published-body check\n"}
+		published := "Human-written release summary.\n\n" + prediction.Body + "\n"
+		check := prediction.PublishedBodyMatches(published)
+		if !check.AnchorFound || !check.Matched {
+			t.Fatalf("flagless published-body assertion failed: %+v\npublished:\n%s", check, published)
+		}
+		t.Log("no published-body flags: verified local published-body matching")
+		return
 	}
 	if !predictedGiven || !publishedGiven {
 		t.Fatalf("-release-notes-predicted-json and -release-notes-published-body must both be given together (predicted-json given=%v, published-body given=%v)", predictedGiven, publishedGiven)
@@ -2069,16 +2081,13 @@ func TestReleaseNotesPublishedBodyCheck_RequiresBothFlagsGivenWithNonEmptyValues
 		}
 	})
 
-	t.Run("neither flag given still skips cleanly", func(t *testing.T) {
-		// Negative control: the fix must not turn the ordinary, flagless `go
-		// test ./tests` invocation (every CI run of this suite) into a
-		// failure.
+	t.Run("neither flag given runs local assertions", func(t *testing.T) {
 		out, code := runG3PublishedBodySubprocess(t)
 		if code != 0 {
 			t.Fatalf("expected exit 0 when no flags are given at all, got exit %d:\n%s", code, out)
 		}
-		if !strings.Contains(out, "--- SKIP") {
-			t.Errorf("expected the test to SKIP when no flags are given, got:\n%s", out)
+		if strings.Contains(out, "--- SKIP") || !strings.Contains(out, "--- PASS: TestReleaseNotesPublishedBodyCheck") || !strings.Contains(out, "verified local published-body matching") {
+			t.Errorf("expected the flagless entrypoint to run and pass local assertions, got:\n%s", out)
 		}
 	})
 

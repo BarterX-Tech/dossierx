@@ -87,6 +87,26 @@ func TestComputeStandingApprovalAndDraftDependency(t *testing.T) {
 	}
 }
 
+func TestComputeReadinessIsIndependentOfEmbodimentProjection(t *testing.T) {
+	a := lockedClaim("fixture.contract.a")
+	b := lockedClaim("fixture.contract.b", a.ID)
+	plainClaims := []model.Claim{a, b}
+	plainStore := standingStore(plainClaims...)
+	recordBaseline(plainStore, b.ID, a)
+	plain := Compute(plainClaims, plainStore, nil)
+
+	embodiedClaims := append([]model.Claim(nil), plainClaims...)
+	for i := range embodiedClaims {
+		embodiedClaims[i].Embodiment = &model.Embodiment{Mode: model.EmbodimentModeNone, Reason: "no software embodiment in readiness fixture"}
+	}
+	embodiedStore := standingStore(embodiedClaims...)
+	recordBaseline(embodiedStore, embodiedClaims[1].ID, embodiedClaims[0])
+	embodied := Compute(embodiedClaims, embodiedStore, nil)
+	if !reflect.DeepEqual(plain, embodied) {
+		t.Fatalf("embodiment changed existing readiness:\nplain=%+v\nembodied=%+v", plain, embodied)
+	}
+}
+
 func TestComputeNestedCausesAndSelectivePathClearing(t *testing.T) {
 	c := lockedClaim("fixture.contract.c")
 	a := lockedClaim("fixture.contract.a", c.ID)

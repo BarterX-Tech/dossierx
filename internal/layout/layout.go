@@ -30,6 +30,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/BarterX-Tech/dossierx/internal/atomicfile"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/config"
 )
@@ -492,7 +493,7 @@ const RecommendedGitignore = `build/*
 !build/code-links/*`
 
 // BuildGitignoreContent is what EnsureBuildGitignore writes into
-// <build_dir>/.gitignore: the generated kinds (catalog, viewer) and the
+// <build_dir>/.gitignore: the historical generated kinds (catalog, viewer) and the
 // transient files (sentinels, temp and probe files) are ignored; the tracked
 // kinds under ledger/, build-order/ and code-links/ are not.
 const BuildGitignoreContent = `# Written by dossierx check. Generated kinds are ignored; tracked kinds are not.
@@ -503,21 +504,139 @@ viewer/
 *.probe-*
 `
 
+const buildGitignoreConformanceContent = `# Written by dossierx check. Generated kinds are ignored; tracked kinds are not.
+catalog/
+conformance/
+viewer/
+*.lock
+*.tmp-*
+*.probe-*
+`
+
+const conformanceOwnershipContent = "dossierx-generated-conformance-status-v1\n"
+
+// ConformanceOwnershipPath is the private ownership record for the generated
+// status artifact. It is deliberately independent of build/.gitignore: that
+// file is project-editable ignore policy, not authority to delete data.
+func ConformanceOwnershipPath(cfg *config.Config) string {
+	return filepath.Join(filepath.Dir(cfg.ConformanceStatusPath()), ".dossierx-owned")
+}
+
+// ConformanceStatusOwned reports only an exact DossierX ownership record. A
+// status file, or a matching/spoofed ignore rule, is never deletion authority.
+func ConformanceStatusOwned(cfg *config.Config) (bool, error) {
+	marker := ConformanceOwnershipPath(cfg)
+	data, err := os.ReadFile(marker)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("layout: read %s: %w", marker, err)
+	}
+	return string(data) == conformanceOwnershipContent, nil
+}
+
+// PrepareConformanceStatusOwnership establishes deletion authority before the
+// first generated status replacement. It never adopts an unmarked existing
+// status: only an absent status path, or one already carrying the exact marker,
+// can proceed. Writing the marker first makes a failed status write retryable;
+// the marker can then authorize cleanup of an absent or partially completed
+// engine-owned lifecycle without ever claiming unknown user data.
+func PrepareConformanceStatusOwnership(cfg *config.Config) error {
+	owned, err := ConformanceStatusOwned(cfg)
+	if err != nil {
+		return err
+	}
+	if owned {
+		return nil
+	}
+	marker := ConformanceOwnershipPath(cfg)
+	if _, err := os.Lstat(marker); err == nil {
+		return fmt.Errorf("layout: refuse to replace unrecognized ownership record %s", marker)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("layout: inspect %s: %w", marker, err)
+	}
+	status := cfg.ConformanceStatusPath()
+	if _, err := os.Lstat(status); err == nil {
+		return fmt.Errorf("layout: refuse to claim existing unowned %s", status)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("layout: inspect %s: %w", status, err)
+	}
+	return MarkConformanceStatusOwned(cfg)
+}
+
+// MarkConformanceStatusOwned atomically records that status.json is generated
+// by DossierX. Call it only through PrepareConformanceStatusOwnership for a
+// status path whose ownership boundary has already been checked.
+func MarkConformanceStatusOwned(cfg *config.Config) error {
+	marker := ConformanceOwnershipPath(cfg)
+	if err := atomicfile.Write(marker, []byte(conformanceOwnershipContent), 0o644); err != nil {
+		return fmt.Errorf("layout: write %s: %w", marker, err)
+	}
+	return nil
+}
+
+// RemoveConformanceStatusOwnership removes the ownership record last during an
+// opted-in-to-zero transition. Failure leaves the record retryable.
+func RemoveConformanceStatusOwnership(cfg *config.Config) error {
+	marker := ConformanceOwnershipPath(cfg)
+	if err := os.Remove(marker); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("layout: remove %s: %w", marker, err)
+	}
+	return nil
+}
+
 // EnsureBuildGitignore writes <build_dir>/.gitignore with BuildGitignoreContent
-// when the file is absent, creating the build directory if needed. An existing
-// file is never rewritten: it is the project's to edit. The tracked kinds it
+// when the file is absent, creating the build directory if needed. A custom
+// existing file is never rewritten; the two exact engine-generated forms may
+// transition through EnsureBuildGitignoreForConformance. The tracked kinds it
 // leaves un-ignored are exactly the negations in RecommendedGitignore.
 func EnsureBuildGitignore(cfg *config.Config) error {
+	return EnsureBuildGitignoreForConformance(cfg, false)
+}
+
+var writeBuildGitignore = atomicfile.Write
+
+// GeneratedConformanceGitignore reports whether the exact engine-generated
+// opted-in form is present. It controls only restoration of the historical
+// ignore bytes; ConformanceStatusOwned is the deletion-authority boundary.
+func GeneratedConformanceGitignore(cfg *config.Config) (bool, error) {
 	path := cfg.BuildGitignorePath()
-	if _, err := os.Stat(path); err == nil {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("layout: read %s: %w", path, err)
+	}
+	return string(data) == buildGitignoreConformanceContent, nil
+}
+
+// EnsureBuildGitignoreForConformance writes the conformance rule only for an
+// opted-in project. It rewrites only one of DossierX's two exact generated
+// forms, so a transition back to zero declarations restores the historical
+// bytes while a project-owned existing file remains untouched.
+func EnsureBuildGitignoreForConformance(cfg *config.Config, enabled bool) error {
+	path := cfg.BuildGitignorePath()
+	want := BuildGitignoreContent
+	if enabled {
+		want = buildGitignoreConformanceContent
+	}
+	if data, err := os.ReadFile(path); err == nil {
+		if string(data) == want {
+			return nil
+		}
+		if string(data) != BuildGitignoreContent && string(data) != buildGitignoreConformanceContent {
+			return nil
+		}
+		if err := writeBuildGitignore(path, []byte(want), 0o644); err != nil {
+			return fmt.Errorf("layout: write %s: %w", path, err)
+		}
 		return nil
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("layout: stat %s: %w", path, err)
+		return fmt.Errorf("layout: read %s: %w", path, err)
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return fmt.Errorf("layout: create %s: %w", filepath.Dir(path), err)
-	}
-	if err := os.WriteFile(path, []byte(BuildGitignoreContent), 0o644); err != nil {
+	if err := writeBuildGitignore(path, []byte(want), 0o644); err != nil {
 		return fmt.Errorf("layout: write %s: %w", path, err)
 	}
 	return nil

@@ -590,8 +590,7 @@ check / a theme naming a font whose bytes are not its extension, writing
     ok            false
     envelope      command data error ok stopped_at warnings
     command       check
-    data          catalog_count:number
-                  catalog_path:string
+    data          failure_phase:string
                   ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
@@ -610,7 +609,8 @@ check --validate / the same broken theme, read-only
     ok            false
     envelope      command data error ok stopped_at warnings
     command       check
-    data          ledger_finding_count:number
+    data          failure_phase:string
+                  ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
                   lint_warning_count:number
@@ -629,7 +629,8 @@ check --staged / the same broken theme, judged from the git index
     ok            false
     envelope      command data error ok stopped_at warnings
     command       check
-    data          ledger_finding_count:number
+    data          failure_phase:string
+                  ledger_finding_count:number
                   lint_error_count:number
                   lint_findings:[{claim_id:string,lint:string,message:string,severity:string}]
                   lint_warning_count:number
@@ -727,7 +728,7 @@ usage / a format nothing renders
 
 ERROR-CODE COVERAGE
 -------------------
-    pinned by an invocation above (14 of 48)
+    pinned by an invocation above (14 of 50)
         already_locked            exit 1
         claim_not_found           exit 2
         config_not_found          exit 2
@@ -742,7 +743,7 @@ ERROR-CODE COVERAGE
         unresolved_comments       exit 1
         unsupported_format        exit 1
         usage                     exit 1
-    reachable only from states no fixture here builds (34)
+    reachable only from states no fixture here builds (36)
         their exit status is held by surface.json's static table alone; nothing
         below has been observed coming out of a real process.
         bad_request
@@ -754,6 +755,8 @@ ERROR-CODE COVERAGE
         claim_not_serializable
         comment_digest_drift
         comment_digest_unavailable
+        conformance_capacity_exceeded
+        conformance_failed
         dependency_not_locked
         empty_body
         implink_refused

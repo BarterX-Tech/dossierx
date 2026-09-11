@@ -104,7 +104,7 @@ func TestExitCodesStayInTheDocumentedThreeFamilies(t *testing.T) {
 		CodeBuildOrderStale, CodeBuildOrderRefused, CodeBuildOrderHandEdited,
 		CodeNoArtifact, CodeImplinkRefused,
 		CodeUnknownModule, CodeMissingFlag, CodeUnsupportedFormat, CodeUsage, CodeWriteConflict,
-		CodeWriteFailed,
+		CodeWriteFailed, CodeConformanceCapacityExceeded, CodeConformanceFailed,
 	}
 	for _, c := range all {
 		if got := ExitCode(c); got != 1 && got != 2 {
@@ -128,7 +128,7 @@ func TestExitCodeFamilyMembership(t *testing.T) {
 	}
 	// The one tests/check_exit_test.go asserts loudest: a check failure must
 	// never be mistaken for a missing claim or config.
-	generic := []Code{CodeLintFailed, CodeWriteFailed, CodeImplinkRefused, CodeRightsDenied, CodeInternal}
+	generic := []Code{CodeLintFailed, CodeWriteFailed, CodeConformanceCapacityExceeded, CodeConformanceFailed, CodeImplinkRefused, CodeRightsDenied, CodeInternal}
 	for _, c := range generic {
 		if ExitCode(c) != 1 {
 			t.Fatalf("%q is a generic-failure code and must exit 1, got %d", c, ExitCode(c))

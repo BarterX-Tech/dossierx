@@ -1,0 +1,275 @@
+{
+  "claims": [
+    {
+      "id": "widget.contract.declared-none",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "neutral fixture"
+        }
+      },
+      "readiness": {
+        "claim_id": "widget.contract.declared-none",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      },
+      "conformance": {
+        "claim_id": "widget.contract.declared-none",
+        "mode": "none",
+        "implementation_ready": true,
+        "reason": "this fixture claim describes documentation only"
+      }
+    },
+    {
+      "id": "widget.contract.matched",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "neutral fixture"
+        }
+      },
+      "readiness": {
+        "claim_id": "widget.contract.matched",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      },
+      "conformance": {
+        "claim_id": "widget.contract.matched",
+        "mode": "compare",
+        "implementation_ready": true,
+        "checks": [
+          {
+            "id": "public-values",
+            "adapter": "neutral/v1",
+            "target": "widget://matched-values",
+            "shape": "set",
+            "state": "matched",
+            "implementation_ready": true,
+            "expected": [
+              "ready",
+              "waiting"
+            ],
+            "observed": [
+              "ready",
+              "waiting"
+            ]
+          },
+          {
+            "id": "schema-version",
+            "adapter": "neutral/v1",
+            "target": "widget://matched-version",
+            "shape": "scalar",
+            "state": "matched",
+            "implementation_ready": true,
+            "expected": "3",
+            "observed": "3"
+          }
+        ]
+      }
+    },
+    {
+      "id": "widget.contract.mismatch",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "neutral fixture"
+        }
+      },
+      "readiness": {
+        "claim_id": "widget.contract.mismatch",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      },
+      "conformance": {
+        "claim_id": "widget.contract.mismatch",
+        "mode": "compare",
+        "implementation_ready": false,
+        "checks": [
+          {
+            "id": "public-values",
+            "adapter": "neutral/v1",
+            "target": "widget://mismatch",
+            "shape": "set",
+            "state": "mismatch",
+            "implementation_ready": false,
+            "expected": [
+              "blocked",
+              "ready"
+            ],
+            "observed": [
+              "paused",
+              "ready"
+            ],
+            "missing": [
+              "blocked"
+            ],
+            "extra": [
+              "paused"
+            ],
+            "reason": "expected and observed sets differ"
+          },
+          {
+            "id": "schema-version",
+            "adapter": "neutral/v1",
+            "target": "widget://mismatch-version",
+            "shape": "scalar",
+            "state": "mismatch",
+            "implementation_ready": false,
+            "expected": "3",
+            "observed": "4",
+            "reason": "expected and observed scalars differ"
+          }
+        ]
+      }
+    },
+    {
+      "id": "widget.contract.owed",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "neutral fixture"
+        }
+      },
+      "readiness": {
+        "claim_id": "widget.contract.owed",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      },
+      "conformance": {
+        "claim_id": "widget.contract.owed",
+        "mode": "compare",
+        "implementation_ready": false,
+        "checks": [
+          {
+            "id": "current-value",
+            "adapter": "neutral/v1",
+            "target": "widget://owed",
+            "shape": "scalar",
+            "state": "owed",
+            "implementation_ready": false,
+            "expected": "ready",
+            "reason": "no observation for the declared adapter and target"
+          }
+        ]
+      }
+    },
+    {
+      "id": "widget.contract.uncheckable",
+      "facet": "contract",
+      "module": "widget",
+      "status": "draft",
+      "layout": "card",
+      "kind": "fact",
+      "edges": {
+        "governed_by": {
+          "type": "none",
+          "reason": "neutral fixture"
+        }
+      },
+      "readiness": {
+        "claim_id": "widget.contract.uncheckable",
+        "policy_version": 1,
+        "local_approved": false,
+        "locally_approved": false,
+        "dependency_ready": true,
+        "ready": false,
+        "review_pending": false,
+        "local_reasons": [
+          "claim status \"draft\" is not locally approved"
+        ],
+        "local_approval_issue": "claim status \"draft\" is not locally approved"
+      },
+      "conformance": {
+        "claim_id": "widget.contract.uncheckable",
+        "mode": "compare",
+        "implementation_ready": false,
+        "checks": [
+          {
+            "id": "current-value",
+            "adapter": "neutral/v1",
+            "target": "widget://uncheckable",
+            "shape": "scalar",
+            "state": "uncheckable",
+            "implementation_ready": false,
+            "expected": "ready",
+            "reason": "adapter reported an observation error",
+            "observation_error": {
+              "code": "fixture_unavailable",
+              "message": "the neutral fixture has no snapshot"
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "by_facet": {
+    "contract": [
+      "widget.contract.declared-none",
+      "widget.contract.matched",
+      "widget.contract.mismatch",
+      "widget.contract.owed",
+      "widget.contract.uncheckable"
+    ]
+  },
+  "by_module": {
+    "widget": [
+      "widget.contract.declared-none",
+      "widget.contract.matched",
+      "widget.contract.mismatch",
+      "widget.contract.owed",
+      "widget.contract.uncheckable"
+    ]
+  }
+}

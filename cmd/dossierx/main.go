@@ -18,6 +18,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
 	"github.com/BarterX-Tech/dossierx/internal/config"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/digest"
 	"github.com/BarterX-Tech/dossierx/internal/layout"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
@@ -1151,14 +1152,22 @@ type checkData struct {
 	// (omitted) when the guard ran and answered.
 	GitignoreCheck string `json:"gitignore_check,omitempty"`
 
-	CatalogPath      string          `json:"catalog_path,omitempty"`
-	CatalogCount     int             `json:"catalog_count,omitempty"`
-	ViewerPath       string          `json:"viewer_path,omitempty"`
-	ScanFilesScanned int             `json:"scan_files_scanned"`
-	ScanErrors       []scanErrorData `json:"scan_errors"`
-	OpenComments     map[string]int  `json:"open_comments,omitempty"`
-	OrientationNotes []string        `json:"orientation_notes,omitempty"`
-	NextSteps        []string        `json:"next_steps,omitempty"`
+	CatalogPath                string              `json:"catalog_path,omitempty"`
+	CatalogCount               int                 `json:"catalog_count,omitempty"`
+	ViewerPath                 string              `json:"viewer_path,omitempty"`
+	ConformancePath            string              `json:"conformance_path,omitempty"`
+	Conformance                *conformance.Report `json:"conformance,omitempty"`
+	ConformanceBlockingEnabled bool                `json:"conformance_blocking_enabled,omitempty"`
+	ConformanceBlockingChecks  int                 `json:"conformance_blocking_checks,omitempty"`
+	ConformanceError           string              `json:"conformance_error,omitempty"`
+	CatalogError               string              `json:"catalog_error,omitempty"`
+	RenderError                string              `json:"render_error,omitempty"`
+	FailurePhase               string              `json:"failure_phase,omitempty"`
+	ScanFilesScanned           int                 `json:"scan_files_scanned"`
+	ScanErrors                 []scanErrorData     `json:"scan_errors"`
+	OpenComments               map[string]int      `json:"open_comments,omitempty"`
+	OrientationNotes           []string            `json:"orientation_notes,omitempty"`
+	NextSteps                  []string            `json:"next_steps,omitempty"`
 }
 
 // newCheckData projects a check.Result into the machine payload. Nil slices are
@@ -1180,23 +1189,31 @@ func newCheckData(res check.Result) checkData {
 		scanErrors = append(scanErrors, scanErrorData{File: e.File, Line: e.Line, ClaimID: e.ClaimID, Message: e.Message})
 	}
 	return checkData{
-		ThemeError:         res.ThemeError,
-		ThemeFontCount:     res.ThemeFontCount,
-		ThemeFontBytes:     res.ThemeFontBytes,
-		GitignoreCheck:     res.GitignoreCheck,
-		LintFindings:       findings,
-		LintErrorCount:     len(res.LintErrors),
-		LintWarningCount:   len(res.LintWarnings),
-		LedgerFindings:     res.LedgerFindings,
-		LedgerFindingCount: len(res.LedgerFindings),
-		CatalogPath:        res.CatalogPath,
-		CatalogCount:       res.CatalogCount,
-		ViewerPath:         res.RenderPath,
-		ScanFilesScanned:   res.ScanFilesScanned,
-		ScanErrors:         scanErrors,
-		OpenComments:       res.OpenComments,
-		OrientationNotes:   res.OrientationNotes,
-		NextSteps:          res.NextSteps,
+		ThemeError:                 res.ThemeError,
+		ThemeFontCount:             res.ThemeFontCount,
+		ThemeFontBytes:             res.ThemeFontBytes,
+		GitignoreCheck:             res.GitignoreCheck,
+		LintFindings:               findings,
+		LintErrorCount:             len(res.LintErrors),
+		LintWarningCount:           len(res.LintWarnings),
+		LedgerFindings:             res.LedgerFindings,
+		LedgerFindingCount:         len(res.LedgerFindings),
+		CatalogPath:                res.CatalogPath,
+		CatalogCount:               res.CatalogCount,
+		ViewerPath:                 res.RenderPath,
+		ConformancePath:            res.ConformancePath,
+		Conformance:                res.Conformance,
+		ConformanceBlockingEnabled: res.ConformanceBlockingEnabled,
+		ConformanceBlockingChecks:  res.ConformanceBlockingChecks,
+		ConformanceError:           res.ConformanceError,
+		CatalogError:               res.CatalogError,
+		RenderError:                res.RenderError,
+		FailurePhase:               res.ConformanceFailurePhase,
+		ScanFilesScanned:           res.ScanFilesScanned,
+		ScanErrors:                 scanErrors,
+		OpenComments:               res.OpenComments,
+		OrientationNotes:           res.OrientationNotes,
+		NextSteps:                  res.NextSteps,
 	}
 }
 
@@ -1206,8 +1223,8 @@ func newCheckData(res check.Result) checkData {
 // from "nothing was written and the viewer is whatever it was" (stopped at
 // lint), and those call for different next moves.
 //
-// The value set is: config, load, reconcile, lint, catalog, render, scan,
-// ledger. It is derived from which Result fields the run managed to fill rather
+// The value set is: config, load, reconcile, lint, catalog, conformance,
+// render, scan, ledger. It is derived from which Result fields the run managed to fill rather
 // than tracked separately, because check.Run's contract already IS "a field
 // left zero is a step the run never reached" — deriving keeps the two from
 // drifting apart.
@@ -1222,12 +1239,22 @@ func checkStoppedAt(res check.Result, err error) string {
 		return ""
 	case len(res.LintErrors) > 0:
 		return "lint"
+	case res.ConformanceFailurePhase != "":
+		return res.ConformanceFailurePhase
+	case res.ThemeError != "":
+		return "render"
+	case res.ConformanceError != "":
+		return "conformance"
 	case res.CatalogPath == "":
 		return "catalog"
+	case res.Conformance != nil && res.ConformancePath == "":
+		return "conformance"
 	case res.RenderPath == "":
 		return "render"
 	case len(res.LedgerFindings) > 0:
 		return "ledger"
+	case res.ConformanceGateFailed:
+		return "conformance"
 	default:
 		return "scan"
 	}
@@ -1249,6 +1276,12 @@ func checkStoppedAt(res check.Result, err error) string {
 // different code depending on which door the caller came through — which is
 // exactly what a stable code is supposed to make impossible.
 func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
+	if res.ConformanceCapacityExceeded {
+		return cliout.CodeConformanceCapacityExceeded
+	}
+	if projectionError(res) != "" {
+		return cliout.CodeWriteFailed
+	}
 	if res.ThemeError != "" {
 		return cliout.CodeInvalidConfig
 	}
@@ -1259,9 +1292,11 @@ func checkFailureCode(res check.Result, stoppedAt string) cliout.Code {
 		return cliout.CodeIntegrityFailed
 	case "scan":
 		return cliout.CodeImplinkRefused
-	default:
-		return cliout.CodeWriteFailed
 	}
+	if res.ConformanceGateFailed {
+		return cliout.CodeConformanceFailed
+	}
+	return cliout.CodeWriteFailed
 }
 
 // ledgerRecoveryHint is the ONE line an agent acts on when the ledger gate
@@ -1469,6 +1504,12 @@ func newCheckCmd() *cobra.Command {
 				// reproduces fmt.Errorf's string precisely, so attaching the
 				// code costs nothing on the text side.
 				failure := cliout.Errorf(checkFailureCode(res, stoppedAt), "check: %w", runErr)
+				if projectionError(res) != "" || res.ConformanceCapacityExceeded {
+					failure = failure.WithHint(projectionRecoveryHint(res))
+				}
+				if res.ConformanceGateFailed {
+					failure = failure.WithHint(conformanceBlockingRecoveryHint(res))
+				}
 				if stoppedAt == "ledger" {
 					// The one failure family whose WRONG recovery is
 					// destructive, so it is the one that must not arrive with
@@ -1565,6 +1606,15 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "lint"
 		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
 	}
+	if projectionError(res) != "" {
+		out.StoppedAt = projectionStoppedAt(res)
+		code := cliout.CodeWriteFailed
+		if res.ConformanceCapacityExceeded {
+			code = cliout.CodeConformanceCapacityExceeded
+		}
+		return out, cliout.Errorf(code, "check: %s: %s", out.StoppedAt, projectionError(res)).
+			WithHint(projectionRecoveryHint(res))
+	}
 	if res.ThemeError != "" {
 		// Same enforcement as --validate, and it is sharper here: --staged runs
 		// the theme rules against the INDEX's bytes, so this is the refusal
@@ -1577,6 +1627,11 @@ func runCheckStaged(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "ledger"
 		return out, cliout.Errorf(cliout.CodeIntegrityFailed, "check: ledger: %d integrity finding(s)", len(res.LedgerFindings)).
 			WithHint(ledgerRecoveryHint(res.LedgerFindings))
+	}
+	if res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0 {
+		out.StoppedAt = "conformance"
+		return out, cliout.Errorf(cliout.CodeConformanceFailed, "check: conformance: %d blocking compare check(s)", res.ConformanceBlockingChecks).
+			WithHint(conformanceBlockingRecoveryHint(res))
 	}
 	return out, nil
 }
@@ -1610,11 +1665,13 @@ func formatCheckStagedResult(cmd *cobra.Command, sp check.StagedProject, res che
 	reportLintFindings(cmd, res.LintFindings) //nolint:errcheck // intentionally discarded (see comment above)
 	reportLedgerFindings(cmd, res.LedgerFindings)
 	reportThemeError(cmd, res)
+	reportProjectionError(cmd, res)
+	reportConformanceBlocking(cmd, res)
 	reportGitignoreCheck(cmd, res)
 	for _, step := range res.NextSteps {
 		fmt.Fprintf(out, "  next: %s\n", step)
 	}
-	if len(res.LintErrors) > 0 || len(res.LedgerFindings) > 0 || res.ThemeError != "" {
+	if !res.OK || len(res.LintErrors) > 0 || len(res.LedgerFindings) > 0 || res.ThemeError != "" || projectionError(res) != "" || (res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0) {
 		return
 	}
 	fmt.Fprintln(out, "check --staged: OK (read-only: nothing written)")
@@ -1675,6 +1732,15 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "lint"
 		return out, cliout.Errorf(cliout.CodeLintFailed, "check: lint: %d error-level finding(s)", len(res.LintErrors))
 	}
+	if projectionError(res) != "" {
+		out.StoppedAt = projectionStoppedAt(res)
+		code := cliout.CodeWriteFailed
+		if res.ConformanceCapacityExceeded {
+			code = cliout.CodeConformanceCapacityExceeded
+		}
+		return out, cliout.Errorf(code, "check: %s: %s", out.StoppedAt, projectionError(res)).
+			WithHint(projectionRecoveryHint(res))
+	}
 	if res.ThemeError != "" {
 		// The read-only modes ENFORCE the theme rules, for the reason they
 		// enforce the ledger gate two paragraphs down: a mode that quietly
@@ -1701,6 +1767,11 @@ func runCheckValidate(cmd *cobra.Command) (cmdResult, error) {
 		out.StoppedAt = "ledger"
 		return out, cliout.Errorf(cliout.CodeIntegrityFailed, "check: ledger: %d integrity finding(s)", len(res.LedgerFindings)).
 			WithHint(ledgerRecoveryHint(res.LedgerFindings))
+	}
+	if res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0 {
+		out.StoppedAt = "conformance"
+		return out, cliout.Errorf(cliout.CodeConformanceFailed, "check: conformance: %d blocking compare check(s)", res.ConformanceBlockingChecks).
+			WithHint(conformanceBlockingRecoveryHint(res))
 	}
 	return out, nil
 }
@@ -1738,6 +1809,68 @@ func reportThemeError(cmd *cobra.Command, res check.Result) {
 	fmt.Fprintf(cmd.OutOrStdout(), "  [error] viewer.theme: %s\n", res.ThemeError)
 }
 
+func reportProjectionError(cmd *cobra.Command, res check.Result) {
+	message := projectionError(res)
+	if message == "" {
+		return
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "  [error] %s: %s\n", projectionStoppedAt(res), message)
+}
+
+func reportConformanceBlocking(cmd *cobra.Command, res check.Result) {
+	if !res.ConformanceBlockingEnabled || res.ConformanceBlockingChecks == 0 || res.Conformance == nil {
+		return
+	}
+	summary := res.Conformance.Summary
+	fmt.Fprintf(cmd.OutOrStdout(), "  [error] conformance: %d blocking compare check(s) (%d owed, %d mismatch, %d uncheckable)\n",
+		res.ConformanceBlockingChecks, summary.Owed, summary.Mismatch, summary.Uncheckable)
+}
+
+func conformanceBlockingRecoveryHint(res check.Result) string {
+	return fmt.Sprintf("inspect data.conformance.results[].checks and refresh the project-owned observations until all %d blocking compare check(s) are matched", res.ConformanceBlockingChecks)
+}
+
+func projectionRecoveryHint(res check.Result) string {
+	if res.ConformanceCapacityExceeded {
+		var action string
+		switch res.ConformanceFailurePhase {
+		case "catalog":
+			action = "reduce projected catalog, readiness, or conformance volume"
+		case "render":
+			action = "reduce projected viewer content or facet/track duplication"
+		default:
+			action = "reduce declared conformance result multiplicity or member size"
+		}
+		return action + ", then run the same check again; no generated artifact was replaced"
+	}
+	switch projectionStoppedAt(res) {
+	case "catalog":
+		return "fix the catalog or readiness projection failure, then run the same check again"
+	case "render":
+		return "fix the viewer projection failure, then run the same check again"
+	default:
+		return "fix the conformance input or output failure, then run the same check again"
+	}
+}
+
+func projectionStoppedAt(res check.Result) string {
+	if res.ConformanceFailurePhase != "" {
+		return res.ConformanceFailurePhase
+	}
+	return "conformance"
+}
+
+func projectionError(res check.Result) string {
+	switch projectionStoppedAt(res) {
+	case "catalog":
+		return res.CatalogError
+	case "render":
+		return res.RenderError
+	default:
+		return res.ConformanceError
+	}
+}
+
 // formatCheckValidateResult is --validate's terminal rendering.
 //
 // It is deliberately NOT formatCheckResult: that function prints "check: OK"
@@ -1761,8 +1894,10 @@ func formatCheckValidateResult(cmd *cobra.Command, res check.Result) {
 	// are the ones a reader must not have to run a second command to see.
 	reportLedgerFindings(cmd, res.LedgerFindings)
 	reportThemeError(cmd, res)
+	reportProjectionError(cmd, res)
+	reportConformanceBlocking(cmd, res)
 	reportGitignoreCheck(cmd, res)
-	if !res.OK || len(res.LedgerFindings) > 0 {
+	if !res.OK || len(res.LedgerFindings) > 0 || (res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0) {
 		return
 	}
 
@@ -1808,6 +1943,9 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	if res.CatalogPath != "" {
 		fmt.Fprintf(out, "catalog: wrote %s (%d claim(s))\n", res.CatalogPath, res.CatalogCount)
 	}
+	if res.ConformancePath != "" {
+		fmt.Fprintf(out, "conformance: wrote %s (%d declaration(s))\n", res.ConformancePath, res.Conformance.Summary.Declared)
+	}
 	if res.RenderPath != "" {
 		fmt.Fprintf(out, "render: wrote %s\n", res.RenderPath)
 	}
@@ -1824,6 +1962,8 @@ func formatCheckResult(cmd *cobra.Command, res check.Result) {
 	// is still refused. It prints nothing when the gate found nothing, which is
 	// why every passing project's output is unchanged.
 	reportLedgerFindings(cmd, res.LedgerFindings)
+	reportProjectionError(cmd, res)
+	reportConformanceBlocking(cmd, res)
 	reportGitignoreCheck(cmd, res)
 
 	if !res.OK {

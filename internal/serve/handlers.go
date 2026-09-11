@@ -16,6 +16,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/check"
 	"github.com/BarterX-Tech/dossierx/internal/cliout"
 	"github.com/BarterX-Tech/dossierx/internal/comments"
+	"github.com/BarterX-Tech/dossierx/internal/conformance"
 	"github.com/BarterX-Tech/dossierx/internal/graph"
 	"github.com/BarterX-Tech/dossierx/internal/lint"
 	"github.com/BarterX-Tech/dossierx/internal/loader"
@@ -255,19 +256,27 @@ func (s *Server) handleListComments(w http.ResponseWriter, r *http.Request) {
 // is the outcome a tamperer wants. Nothing here changes that; the endpoint only
 // stops HIDING what the gate found (see statusToDTO).
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	result, err := s.statusPipe.get(r.Context())
+	if err != nil {
+		s.writeInternal(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	w.Write(result) //nolint:errcheck // headers already sent; a client write error mid-response is unrecoverable
+}
+
+// renderStatus computes one internally consistent read-only snapshot. The
+// readiness map is the exact map check.Status used for catalog/viewer capacity
+// grading; there is deliberately no second store read after the verdict.
+func (s *Server) renderStatus() ([]byte, error) {
 	claims, err := loader.LoadClaims(s.cfg.ClaimsDir)
 	if err != nil {
-		s.writeInternal(w, fmt.Errorf("load claims: %w", err))
-		return
+		return nil, fmt.Errorf("load claims: %w", err)
 	}
 	dto := statusToDTO(check.Status(claims, s.cfg))
-	assessment, err := s.readinessFor(claims)
-	if err != nil {
-		s.writeInternal(w, fmt.Errorf("readiness: %w", err))
-		return
-	}
-	dto.Readiness = assessment
-	writeJSON(w, http.StatusOK, dto)
+	return json.Marshal(dto)
 }
 
 // ---------------------------------------------------------------------
@@ -818,6 +827,26 @@ type statusDTO struct {
 	// lock counts rather than being derived from them: a locked/build-order
 	// count cannot imply that required dependencies are approved and clear.
 	Readiness map[string]readiness.Assessment `json:"readiness"`
+
+	// Conformance is refreshed from the configured observation snapshot on each
+	// status poll. Its implementation_ready field is scoped to the declared
+	// expectation only and is not the existing claim readiness assessment.
+	Conformance *conformance.Report `json:"conformance,omitempty"`
+	// Blocking policy is reported for operators and makes the status headline
+	// fail closed, but never changes endpoint availability. Serve remains the
+	// inspection surface for fixing the evidence.
+	ConformanceBlockingEnabled bool `json:"conformance_blocking_enabled,omitempty"`
+	ConformanceBlockingChecks  int  `json:"conformance_blocking_checks,omitempty"`
+	// Projection failures stay in their actual domain. ConformanceCode is kept
+	// for the additive v1 capacity surface; ErrorCode and FailurePhase are the
+	// phase-neutral branch points shared with CLI envelopes.
+	ConformanceError string      `json:"conformance_error,omitempty"`
+	ConformanceCode  cliout.Code `json:"conformance_code,omitempty"`
+	CatalogError     string      `json:"catalog_error,omitempty"`
+	RenderError      string      `json:"render_error,omitempty"`
+	ThemeError       string      `json:"theme_error,omitempty"`
+	FailurePhase     string      `json:"failure_phase,omitempty"`
+	ErrorCode        cliout.Code `json:"error_code,omitempty"`
 }
 
 // statusToDTO projects a check.Result into the strip's wire form.
@@ -830,10 +859,10 @@ type statusDTO struct {
 // headline sitting on top of a populated ledger_findings array is a worse lie
 // than the omission was. So the two are conjoined here, at the presentation
 // seam, where failing closed costs nothing: the page still renders, every claim
-// is still readable, and the strip says why it is red. That is also exactly the
-// verdict the CLI reaches from the same Result (checkStoppedAt maps a non-empty
-// LedgerFindings to stopped_at "ledger" with ok:false), so a human reading the
-// viewer and an agent reading the envelope are never told different things.
+// is still readable, and the strip says why it is red. The same applies to an
+// enabled conformance gate with unsatisfied checks. That is also exactly the
+// verdict the CLI reaches from the same Result, so a human reading the viewer
+// and an agent reading the envelope are never told different things.
 //
 // This projection is a pure read: it neither loads nor writes the lock and
 // comment-digest stores (check.Status already read them, read-only), because
@@ -857,15 +886,57 @@ func statusToDTO(res check.Result) statusDTO {
 	if orders == nil {
 		orders = []check.BuildOrderReport{}
 	}
+	var conformanceCode cliout.Code
+	var errorCode cliout.Code
+	conformanceBlocked := res.ConformanceBlockingEnabled && res.ConformanceBlockingChecks > 0
+	failurePhase := res.ConformanceFailurePhase
+	if res.ConformanceCapacityExceeded {
+		// Keep the secondary conformance diagnosis available even when an
+		// earlier lint failure is the primary recovery branch.
+		conformanceCode = cliout.CodeConformanceCapacityExceeded
+	}
+	switch {
+	case len(res.LintErrors) > 0:
+		errorCode = cliout.CodeLintFailed
+		failurePhase = "lint"
+	case res.ConformanceCapacityExceeded:
+		errorCode = cliout.CodeConformanceCapacityExceeded
+	case res.ConformanceError != "" || res.CatalogError != "" || res.RenderError != "":
+		errorCode = cliout.CodeWriteFailed
+	case res.ThemeError != "":
+		errorCode = cliout.CodeInvalidConfig
+	case len(ledger) > 0:
+		errorCode = cliout.CodeIntegrityFailed
+		if failurePhase == "" {
+			failurePhase = "ledger"
+		}
+	case conformanceBlocked:
+		errorCode = cliout.CodeConformanceFailed
+		failurePhase = "conformance"
+	}
+	assessment := res.Readiness
+	if assessment == nil {
+		assessment = map[string]readiness.Assessment{}
+	}
 	return statusDTO{
-		OK:             res.OK && len(ledger) == 0,
-		LintErrors:     findingsToDTO(res.LintErrors),
-		LintWarnings:   findingsToDTO(res.LintWarnings),
-		OpenComments:   open,
-		NextSteps:      next,
-		LedgerFindings: ledger,
-		BuildOrders:    orders,
-		Readiness:      map[string]readiness.Assessment{},
+		OK:                         res.OK && len(ledger) == 0 && !conformanceBlocked,
+		LintErrors:                 findingsToDTO(res.LintErrors),
+		LintWarnings:               findingsToDTO(res.LintWarnings),
+		OpenComments:               open,
+		NextSteps:                  next,
+		LedgerFindings:             ledger,
+		BuildOrders:                orders,
+		Readiness:                  assessment,
+		Conformance:                res.Conformance,
+		ConformanceBlockingEnabled: res.ConformanceBlockingEnabled,
+		ConformanceBlockingChecks:  res.ConformanceBlockingChecks,
+		ConformanceError:           res.ConformanceError,
+		ConformanceCode:            conformanceCode,
+		CatalogError:               res.CatalogError,
+		RenderError:                res.RenderError,
+		ThemeError:                 res.ThemeError,
+		FailurePhase:               failurePhase,
+		ErrorCode:                  errorCode,
 	}
 }
 

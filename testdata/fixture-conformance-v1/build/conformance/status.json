@@ -1,0 +1,135 @@
+{
+  "format_version": 1,
+  "snapshot": "neutral-fixture-1",
+  "summary": {
+    "declared": 5,
+    "declared_none": 1,
+    "checks": 6,
+    "matched": 2,
+    "owed": 1,
+    "mismatch": 2,
+    "uncheckable": 1,
+    "implementation_ready": 2,
+    "implementation_blocked": 3
+  },
+  "results": [
+    {
+      "claim_id": "widget.contract.declared-none",
+      "mode": "none",
+      "implementation_ready": true,
+      "reason": "this fixture claim describes documentation only"
+    },
+    {
+      "claim_id": "widget.contract.matched",
+      "mode": "compare",
+      "implementation_ready": true,
+      "checks": [
+        {
+          "id": "public-values",
+          "adapter": "neutral/v1",
+          "target": "widget://matched-values",
+          "shape": "set",
+          "state": "matched",
+          "implementation_ready": true,
+          "expected": [
+            "ready",
+            "waiting"
+          ],
+          "observed": [
+            "ready",
+            "waiting"
+          ]
+        },
+        {
+          "id": "schema-version",
+          "adapter": "neutral/v1",
+          "target": "widget://matched-version",
+          "shape": "scalar",
+          "state": "matched",
+          "implementation_ready": true,
+          "expected": "3",
+          "observed": "3"
+        }
+      ]
+    },
+    {
+      "claim_id": "widget.contract.mismatch",
+      "mode": "compare",
+      "implementation_ready": false,
+      "checks": [
+        {
+          "id": "public-values",
+          "adapter": "neutral/v1",
+          "target": "widget://mismatch",
+          "shape": "set",
+          "state": "mismatch",
+          "implementation_ready": false,
+          "expected": [
+            "blocked",
+            "ready"
+          ],
+          "observed": [
+            "paused",
+            "ready"
+          ],
+          "missing": [
+            "blocked"
+          ],
+          "extra": [
+            "paused"
+          ],
+          "reason": "expected and observed sets differ"
+        },
+        {
+          "id": "schema-version",
+          "adapter": "neutral/v1",
+          "target": "widget://mismatch-version",
+          "shape": "scalar",
+          "state": "mismatch",
+          "implementation_ready": false,
+          "expected": "3",
+          "observed": "4",
+          "reason": "expected and observed scalars differ"
+        }
+      ]
+    },
+    {
+      "claim_id": "widget.contract.owed",
+      "mode": "compare",
+      "implementation_ready": false,
+      "checks": [
+        {
+          "id": "current-value",
+          "adapter": "neutral/v1",
+          "target": "widget://owed",
+          "shape": "scalar",
+          "state": "owed",
+          "implementation_ready": false,
+          "expected": "ready",
+          "reason": "no observation for the declared adapter and target"
+        }
+      ]
+    },
+    {
+      "claim_id": "widget.contract.uncheckable",
+      "mode": "compare",
+      "implementation_ready": false,
+      "checks": [
+        {
+          "id": "current-value",
+          "adapter": "neutral/v1",
+          "target": "widget://uncheckable",
+          "shape": "scalar",
+          "state": "uncheckable",
+          "implementation_ready": false,
+          "expected": "ready",
+          "reason": "adapter reported an observation error",
+          "observation_error": {
+            "code": "fixture_unavailable",
+            "message": "the neutral fixture has no snapshot"
+          }
+        }
+      ]
+    }
+  ]
+}

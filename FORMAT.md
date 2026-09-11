@@ -56,6 +56,21 @@ raw_html: string               # optional on its own, legal on any layout (revie
 raw_html_reviewed: bool        # optional, human-set gate for raw_html
 section: string                # optional, in-content section heading (see below)
 emphasis: bool                 # optional, renders the claim as a warn / hard-boundary card
+embodiment:                    # optional project-neutral implementation expectation
+  mode: compare                # compare | none
+  checks:                      # compare only; one or more, stable id unique in claim
+    - id: public-values
+      adapter: opaque-string
+      target: opaque-string
+      expectation:
+        shape: set
+        value: [member, ...]
+    - id: schema-version
+      adapter: opaque-string
+      target: opaque-string
+      expectation:
+        shape: scalar
+        value: "3"
 mirrors: [ id, ... ]           # optional
 rests_on: [ id, ... ]          # optional
 governed_by:                    # REQUIRED — a doctrine id, or type: none with a reason
@@ -95,6 +110,35 @@ comments:                       # optional, engine-managed review threads — au
     reopened_by: human | agent  # optional, set when the thread is reopened
     reopened_at: 2026-07-24T11:10:00Z   # optional, RFC 3339 UTC
 ```
+
+### Structured embodiment conformance
+
+An optional `embodiment` records authored implementation expectations directly
+on a claim. `mode: compare` requires one or more `checks`, each with a stable
+non-empty `id`, non-empty opaque `adapter` and `target` strings, and one
+expectation. Check IDs and adapter/target pairs are unique within the claim;
+check order has no meaning. `shape: set` has one or more unique, non-empty
+string members and ignores order. `shape: scalar` has one non-empty string and
+uses exact comparison; DossierX does not interpret versions, durations, units,
+or numbers. These fields and every value must be YAML strings; numeric, boolean,
+null, mapping, and mixed-type values are rejected rather than coerced.
+`mode: none` instead requires a `reason` and forbids `checks`, including a key
+whose value is null or empty. Omitting `embodiment` means the claim has not
+opted into this feature; it is different from deliberately declaring
+`mode: none`.
+
+A project-owned adapter writes the strict, versioned observation envelope;
+DossierX never runs or interprets the adapter. Configure its one literal path
+with `conformance.observations`. `check` produces matched, owed, mismatch, or
+uncheckable state per check and groups checks beneath their claim in status,
+catalog, and viewer output. Set results show exact sorted missing/extra members;
+scalar results show exact expected/observed strings. Claim-level
+`implementation_ready` requires every check to match and does not change claim
+approval, dependency readiness, or release readiness. Optional
+`conformance.blocking: true` makes any non-matched check fail `check` without
+changing approval or lock policy. The complete normative contract and JSON
+envelope are in
+[`docs/structured-claim-conformance.md`](docs/structured-claim-conformance.md).
 
 ### `id` grammar
 
@@ -848,7 +892,7 @@ resolved against the config file's directory like `claims_dir`), in its
 `ledger/` subdirectory. **Commit them; never `.gitignore` them.** Every other
 generated kind lives under the same directory too — `build/build-order/<module>.json`,
 `build/code-links/<module>.json`, `build/catalog/catalog.json`, `build/viewer/index.html` —
-and `check` writes `build/.gitignore` once so the regenerated kinds are ignored
+and `check` writes `build/.gitignore` so the regenerated kinds are ignored
 and the tracked kinds are not. A project whose repository `.gitignore` matches
 any tracked path under `build/` is refused (see `store-gitignored`), and a
 project that still keeps these files at the project root — every release
@@ -1379,6 +1423,11 @@ tracks:                          # optional; the whole vocabulary of cross-cutti
 claims_dir: path                 # resolved relative to this file's own directory
                                   # (directory layout inside it is not part of
                                   # this spec — see "Directory layout" below)
+conformance:                     # optional; read only with declared embodiment
+  observations: path             # one literal normalized JSON file, resolved
+                                  # relative to this config and outside build_dir
+  blocking: bool                 # optional; default false. If true, any owed,
+                                  # mismatch, or uncheckable check fails check
 doctrine_facet: string           # optional; omitted disables hub-gating entirely
 source_dirs: [path, ...]         # optional; directories scanned for
                                   # "dossierx-claim: <id>" comments, resolved

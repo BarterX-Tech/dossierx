@@ -1,0 +1,24 @@
+id: widget.contract.mismatch
+facet: contract
+module: widget
+status: draft
+layout: card
+body: Set and scalar observations differ from their authored expectations.
+governed_by:
+  type: none
+  reason: neutral fixture
+embodiment:
+  mode: compare
+  checks:
+    - id: public-values
+      adapter: neutral/v1
+      target: widget://mismatch
+      expectation:
+        shape: set
+        value: [blocked, ready]
+    - id: schema-version
+      adapter: neutral/v1
+      target: widget://mismatch-version
+      expectation:
+        shape: scalar
+        value: "3"

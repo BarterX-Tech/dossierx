@@ -35,7 +35,6 @@ package render
 //     is a defect in this package's own template, not in a project's file.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -200,6 +199,10 @@ func buildOrderViewClaims(artifact *buildorder.Artifact, claims []model.Claim) [
 // the config does not declare has no artifact path of its own and is not
 // visited). A nil cfg is a project with no modules: an empty tab.
 func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.Template, generatedAt time.Time) (BuildOrderTab, template.JS, error) {
+	return buildOrderTabDataWithBudget(cat, cfg, tmpl, generatedAt, nil)
+}
+
+func buildOrderTabDataWithBudget(cat *catalog.Catalog, cfg *config.Config, tmpl *template.Template, generatedAt time.Time, budget *renderByteBudget) (BuildOrderTab, template.JS, error) {
 	var tab BuildOrderTab
 	if cfg == nil || tmpl == nil {
 		return tab, "", nil
@@ -291,7 +294,7 @@ func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.
 			pm.PhaseViews = append(pm.PhaseViews, pv)
 		}
 
-		var buf bytes.Buffer
+		buf := budgetBuffer{budget: budget}
 		if err := tmpl.Execute(&buf, data); err != nil {
 			return BuildOrderTab{}, "", fmt.Errorf("render: execute %s for module %q: %w", buildOrderFileName, module, err)
 		}
@@ -309,6 +312,9 @@ func buildOrderTabData(cat *catalog.Catalog, cfg *config.Config, tmpl *template.
 	b, err := json.Marshal(payload)
 	if err != nil {
 		return BuildOrderTab{}, "", fmt.Errorf("render: encode build-order payload: %w", err)
+	}
+	if err := budget.consume(len(b)); err != nil {
+		return BuildOrderTab{}, "", fmt.Errorf("render: build-order payload: %w", err)
 	}
 	return tab, template.JS(b), nil
 }
