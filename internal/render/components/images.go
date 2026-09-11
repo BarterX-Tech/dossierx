@@ -109,7 +109,7 @@ func ClaimAssetURLPrefix(c model.Claim) (markdown.AssetPrefix, bool) {
 // ground truth by EXECUTING each partial and comparing.
 //
 // An unknown layout gets nothing. internal/render treats one as a hard error
-// (see renderClaims), so a claim that reaches here with a layout this package
+// (see renderClaimsWithBudget), so a claim that reaches here with a layout this package
 // has no partial for renders no page at all, let alone an image.
 //
 // KNOWN CEILING: a project that overrides a partial via

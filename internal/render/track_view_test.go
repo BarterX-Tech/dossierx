@@ -243,7 +243,10 @@ func TestPartitionTrackClaims_OwnershipWins(t *testing.T) {
 // information and config.TrackIDs and the CLI already read it that way.
 func TestBuildTrackSections_DeclarationOrder(t *testing.T) {
 	cfg := trackTestConfig(t, "tracks:\n  - id: zeta\n    title: Zeta\n  - id: alpha\n    title: Alpha\n")
-	sections := buildTrackSections(&catalog.Catalog{}, cfg, nil)
+	sections, err := buildTrackSections(&catalog.Catalog{}, cfg, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(sections) != 2 {
 		t.Fatalf("got %d sections, want 2", len(sections))
 	}

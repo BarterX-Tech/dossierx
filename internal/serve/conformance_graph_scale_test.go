@@ -77,8 +77,8 @@ func TestLiveServerPluralConformanceIsBoundedAcrossGraphShapes(t *testing.T) {
 	}
 }
 
-func liveGraphScaleFiles(layers, width int) (map[string]string, int) {
-	files := make(map[string]string, layers*width+1)
+func liveGraphScaleFiles(layers, width int) (files map[string]string, claimCount int) {
+	files = make(map[string]string, layers*width+1)
 	for layer := 0; layer < layers; layer++ {
 		for column := 0; column < width; column++ {
 			index := layer*width + column

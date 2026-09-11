@@ -109,7 +109,7 @@ const (
 //
 // generatedAt is threaded in from Render rather than each stamping its own
 // time.Now(), so the comment and the sidebar's visible timestamp (shellData
-// .GeneratedAt, see buildShellData) always agree — a reviewer comparing the
+// .GeneratedAt, see buildShellStaticData) always agree — a reviewer comparing the
 // two never sees a mismatch from two clock reads a few instructions apart.
 func generatedHeader(generatedAt time.Time) string {
 	// The banner names "dossierx check", not the "dossierx render" it named
@@ -379,8 +379,8 @@ const ungroupedModuleName = "ungrouped"
 //
 // The work is split into three independently testable stages: loadTemplates
 // resolves every override-able input (component partials, CSS, the shell
-// template itself) against cfg.Viewer.TemplateOverrides; renderClaims turns
-// each catalog claim into HTML via those partials; buildShellData assembles
+// template itself) against cfg.Viewer.TemplateOverrides; renderClaimsWithBudget
+// turns each catalog claim into HTML via those partials; buildShellStaticData assembles
 // the resulting shellData (title/eyebrow/groups) ready for shell.Execute.
 // Render itself is left as the sequencing of those three calls plus the
 // final template execution, so a future fourth input or grouping level only
@@ -762,17 +762,13 @@ func ShellHasViewerRuntime(cfg *config.Config) (bool, error) {
 	return bytes.Contains(src, []byte(ViewerRuntimeMarker)), nil
 }
 
-// renderClaims executes each cat.Claims entry through its layout's partial
+// renderClaimsWithBudget executes each cat.Claims entry through its layout's partial
 // template in partials (as loaded by loadTemplates), returning a
 // claim-ID-keyed lookup (renderedByID, consumed by buildGroups/newGroup) so
 // a claim is rendered exactly once regardless of how many places reference
 // it afterwards. shell.html has no top-level "all claims, unordered" view
 // (it renders exclusively via ModuleGroups' nested Facets[].Claims), so
-// renderClaims does not also keep a flat catalog-order slice around for it.
-func renderClaims(cat *catalog.Catalog, partials map[model.Layout]*template.Template, conformanceResults map[string]conformance.Result) (map[string]template.HTML, error) {
-	return renderClaimsWithBudget(cat, partials, conformanceResults, nil)
-}
-
+// renderClaimsWithBudget does not also keep a flat catalog-order slice around for it.
 func renderClaimsWithBudget(cat *catalog.Catalog, partials map[model.Layout]*template.Template, conformanceResults map[string]conformance.Result, budget *renderByteBudget) (map[string]template.HTML, error) {
 	renderedByID := make(map[string]template.HTML, len(cat.Claims))
 	for _, c := range cat.Claims {
@@ -797,7 +793,7 @@ func renderClaimsWithBudget(cat *catalog.Catalog, partials map[model.Layout]*tem
 	return renderedByID, nil
 }
 
-// shellInputs is buildShellData's single argument: everything Render has
+// shellInputs is buildShellStaticData's single argument: everything Render has
 // already computed by the time the shell is assembled. It replaced six
 // positional parameters when the graph pane added four more values to thread
 // through — ten positional arguments at one call site is a shape where a
@@ -813,7 +809,7 @@ type shellInputs struct {
 	// graphCSS, graphCoreJS and graphUIJS are the three embedded client files
 	// backing the graph pane, always the engine's own copies — they carry no
 	// override branch (design section 7.2). graphPayload is the JSON graph
-	// payload for cat, already stamped and encoded by graphPayloadJSON.
+	// payload for cat, already stamped and encoded by graphPayloadJSONWithBudget.
 	graphCSS                 []byte
 	graphCoreJS              []byte
 	graphUIJS                []byte
@@ -835,25 +831,17 @@ type shellInputs struct {
 	buildOrderUIJS    []byte
 }
 
-// buildShellData assembles the shellData passed to shell.Execute: cfg's
+// buildShellStaticData assembles the shellData passed to shell.Execute: cfg's
 // title/eyebrow/theme (with the same fallbacks Render has always applied
 // when cfg is nil or leaves a field blank) and the module/facet groups
 // computed from in.cat via buildGroups/buildModuleGroups, combined with the
-// css/renderedByID inputs loadTemplates and renderClaims already produced.
+// css/renderedByID inputs loadTemplates and renderClaimsWithBudget already produced.
 // The Build order tab's data arrives already computed (buildOrderTabData,
 // which does the artifact reads) and is copied through.
 //
 // The four graph fields are typed on the way OUT, not on the way in: see
 // shellData.GraphCSS and the block of comments there for why plain strings
 // at those injection sites fail silently.
-func buildShellData(in shellInputs) shellData {
-	groups := buildGroups(in.cat, in.cfg, in.renderedByID)
-	data := buildShellStaticData(in)
-	data.ModuleGroups = buildModuleGroups(groups)
-	data.Tracks = buildTrackSections(in.cat, in.cfg, in.renderedByID)
-	return data
-}
-
 func buildShellStaticData(in shellInputs) shellData {
 	cfg := in.cfg
 	hasReadinessMaps := false
@@ -1081,7 +1069,7 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 
 // renderOverviewHTML pulls the already-rendered HTML (from renderedByID,
 // keyed by claim ID, same lookup newGroup itself uses) for a module's
-// overview claims, in the given order. It never re-renders — renderClaims
+// overview claims, in the given order. It never re-renders — renderClaimsWithBudget
 // already rendered every catalog claim, including overview-facet ones,
 // exactly once.
 func renderOverviewHTML(overview []model.Claim, renderedByID map[string]template.HTML) []template.HTML {
