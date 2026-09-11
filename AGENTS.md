@@ -21,6 +21,9 @@
 - **Lesson Capture ([learning-to-skill](.agents/skills/learning-to-skill/SKILL.md))**:
   - Mandatory when asked to capture lessons, turn experience into skills, or refine reusable instructions.
   - Consult [the maintainer skills guide](docs/MAINTAINER_SKILLS.md) for canonical locations, portability rules, and project-specific bindings.
+- **Release Safety ([dossierx-release-safety](.agents/skills/dossierx-release-safety/SKILL.md))**:
+  - Mandatory when preparing, tagging, publishing, repairing, or declaring a DossierX release ready or live.
+  - The skill supplies release decision rules and stop conditions; [docs/RELEASING.md](docs/RELEASING.md) remains the sole release procedure.
 - **Skill Gaps ([skill-gap-review](.agents/skills/skill-gap-review/SKILL.md))**:
   - Use when asked which skills are missing or what a collection of past work should teach.
   - Identify and prioritize evidence-backed improvements before creating more skills.

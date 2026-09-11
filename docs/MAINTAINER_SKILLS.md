@@ -71,6 +71,13 @@ for release authority. The path under `.agents/workflows/` is only a forwarding
 pointer for existing callers. On another project, provide that project's gates
 and commands in the run contract.
 
+The [dossierx-release-safety](../.agents/skills/dossierx-release-safety/SKILL.md)
+skill is a DossierX maintainer overlay, not a portable release recipe. It decides
+when release evidence is stale or incomplete and routes the maintainer to
+`docs/RELEASING.md`; it must not duplicate tagging or publishing commands. Its
+incident evidence lives in
+`docs/lessons/2026-09-11-post-tag-release-gaps.md`.
+
 Project-specific facts belong in a reference or lesson, not in a generic rule.
 To reuse a generic skill elsewhere, copy its whole directory at a named revision
 and supply that project's bindings. Track the upstream revision when vendoring;

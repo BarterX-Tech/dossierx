@@ -40,6 +40,40 @@ The checklist below asks for each one.
       unset, and a skip proves nothing. Point it at a real Chrome or Chromium
       before you read its result as coverage.
 
+- [ ] **The final candidate passes the same linter and race surfaces as CI.**
+      The four suites above do not run root lint and `make test` is not the race
+      command used by CI. Run both lint modules with the exact version pinned in
+      `.github/workflows/ci.yml`, then run the root suite with the race detector
+      and the immediate previous release explicitly resolved:
+
+      DOSSIERX_LINT_BIN="$(mktemp -d)"
+      GOBIN="$DOSSIERX_LINT_BIN" go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
+      "$DOSSIERX_LINT_BIN/golangci-lint" run ./...
+      (cd viewer-tests && "$DOSSIERX_LINT_BIN/golangci-lint" run ./...)
+      DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test -race -json ./...
+
+      Replace `vPREVIOUS` with the greatest stable release below the version
+      being prepared. The resolver must agree:
+
+      DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go run ./scripts/resolve-previous-release
+
+      Do not copy `v1.64.8` forward on memory alone: first confirm that it still
+      matches both lint steps in `.github/workflows/ci.yml`. A missing linter,
+      absent release history, skipped test, or successful command that executed
+      zero assertions is missing evidence, not a pass.
+
+- [ ] **The across-release render report names the immediate previous release.**
+      Regenerate it only after the candidate's changelog version is final, then
+      run it again as an assertion:
+
+      DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test ./tests \
+        -run '^TestRenderedOutputAcrossReleases$' -regenerate-goldens
+      DOSSIERX_PREV_RELEASE_TAG=vPREVIOUS go test ./tests \
+        -run '^TestRenderedOutputAcrossReleases$' -count=1 -v
+
+      Read the report and its diff. A green report against an older baseline is
+      not evidence for this release.
+
 - [ ] **A graph-changing release has passed the project graph-safety skill.** If
       the complete release diff changes the behavior of dependency readiness,
       claim locking, review propagation, build-order graphs, catalog or viewer
@@ -77,7 +111,7 @@ The checklist below asks for each one.
       Read the diff. A command, flag or exit code that moved and is not in
       `CHANGELOG.md` is the thing this step exists to catch.
 
-- [ ] **Every rendered fixture is regenerated and re-committed.** `ls -d
+- [ ] **Every rendered fixture is regenerated and reviewed.** `ls -d
       testdata/fixture-*/` minus `fixture-coverage` — every one of them, not a
       sample — with:
 
@@ -93,7 +127,9 @@ The checklist below asks for each one.
       only the viewers — each differing in its generation stamp alone, which
       `go test ./tests -run TestCommittedFixtureViewersAreNotStale -count=1 -v`
       passing on the uncommitted tree is the check for — and nothing
-      untracked. Because the vendored mermaid renderer changes every rendered
+      untracked. Restore stamp-only viewer diffs; do not commit them. Commit a
+      generated artifact only when its semantic content changed, and inspect that
+      diff before continuing. Because the vendored mermaid renderer changes every rendered
       viewer this release, a fixture with a locked build order commits a
       viewer noticeably larger than before: record each fixture viewer's
       before/after `wc -c` in the CHANGELOG entry so the repository's growth
@@ -174,6 +210,15 @@ reviewed, and the merge carries it in.
       merging newer main or resolving conflicts. Do not tag while this evidence
       is missing or non-passing.
 
+- [ ] **Re-run every tree- and history-dependent pre-tag check on the merge
+      commit.** A passing release-branch run is evidence for the branch head,
+      not for the commit that will be tagged. At minimum, repeat the pinned root
+      and viewer lint, the race suite with `DOSSIERX_PREV_RELEASE_TAG`, the
+      across-release render assertion, and any graph-safety proofs required by
+      the complete merge diff. Confirm `git status --porcelain` is empty after
+      those checks. Do not create or push a tag while any result is failing,
+      skipped, unexecuted, or attached only to another commit.
+
 - [ ] **Tag the merge commit and push the tag, in this order.**
 
       MERGE=$(git rev-parse HEAD)
@@ -216,6 +261,12 @@ not prove the edit reached the built output, that the output deployed, or that
 the deployed page renders it. Those are four claims and only the last one matters.
 
 - [ ] **The release page** lists all six archives plus `checksums.txt`.
+
+- [ ] **Exactly one Release publisher owns the tag.** Immediately after the tag
+      push, list `Release` workflow runs for that tag. If duplicate runs appear,
+      stop one before either can race to publish assets. One successful run plus
+      one deliberately cancelled duplicate is acceptable only when the remaining
+      run owns all expected assets; two concurrent publishers are not.
 
 - [ ] **A clean install reports the new version:**
 
