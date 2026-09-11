@@ -3,9 +3,9 @@ package render
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/BarterX-Tech/dossierx/internal/catalog"
 	"github.com/BarterX-Tech/dossierx/internal/config"
@@ -70,20 +70,17 @@ func TestRenderNoConformanceIsExactNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	before, err := Render(cat, nil)
+	generatedAt := time.Unix(1_700_000_000, 0).UTC()
+	before, err := renderAt(cat, nil, generatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
 	cat.SetConformance(nil)
-	after, err := Render(cat, nil)
+	after, err := renderAt(cat, nil, generatedAt)
 	if err != nil {
 		t.Fatal(err)
 	}
-	normalizeTime := func(value string) string {
-		value = regexp.MustCompile(`at \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z`).ReplaceAllString(value, "at <time>")
-		return regexp.MustCompile(`Generated \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC`).ReplaceAllString(value, "Generated <time>")
-	}
-	if normalizeTime(before) != normalizeTime(after) || strings.Contains(after, "claim-conformance") || strings.Contains(after, "dossierx-conformance-status-freshness") {
+	if before != after || strings.Contains(after, "claim-conformance") || strings.Contains(after, "dossierx-conformance-status-freshness") {
 		t.Fatal("an omitted conformance projection changed viewer bytes")
 	}
 }

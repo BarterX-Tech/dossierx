@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.14] - 2026-09-11
+
+### Fixed
+
+- Keep the release comparison fixture aligned with the immediate predecessor,
+  make the no-conformance render proof use one explicit clock sample, and keep
+  the graph scale performance and allocation budgets meaningful under the race
+  detector. Runtime output and viewer behavior are unchanged.
+
 ## [0.7.13] - 2026-09-11
 
 ### Fixed
