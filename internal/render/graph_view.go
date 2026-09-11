@@ -10,7 +10,7 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/graph"
 )
 
-// graphPayloadJSON builds the claims-graph payload for cat and returns it
+// graphPayloadJSONWithBudget builds the claims-graph payload for cat and returns it
 // ready for injection into shell.html's
 // <script type="application/json" id="dossierx-graph"> block.
 //
@@ -41,10 +41,6 @@ import (
 // itself never reads a clock at all — it leaves GeneratedAt empty and every
 // caller stamps it, which is what keeps the payload a pure function of the
 // corpus and keeps a moving byte out of the unit under test.
-func graphPayloadJSON(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time) (template.JS, error) {
-	return graphPayloadJSONWithBudget(cat, cfg, generatedAt, nil)
-}
-
 func graphPayloadJSONWithBudget(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time, budget *renderByteBudget) (template.JS, error) {
 	p := graph.Build(cat, cfg)
 	p.GeneratedAt = generatedAt.UTC().Format(time.RFC3339)

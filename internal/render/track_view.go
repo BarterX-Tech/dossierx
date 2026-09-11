@@ -86,7 +86,8 @@ type TrackSection struct {
 }
 
 // buildTrackSections turns cfg.Tracks into the sections shell.html renders, in
-// DECLARATION ORDER.
+// DECLARATION ORDER. It is the unbounded-budget convenience seam used by the
+// focused renderer tests; the production path uses the budgeted variant.
 //
 // Declaration order, never sorted: the order tracks appear in project config is
 // authored information (a reader put the feature they care about first), and it
@@ -96,9 +97,8 @@ type TrackSection struct {
 // A project that declares no tracks gets nil, and shell.html then emits not one
 // byte of track markup — the zero-cost contract this feature is held to, and
 // the thing tests/fixture_staleness_test.go would turn red over.
-func buildTrackSections(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML) []TrackSection {
-	sections, _ := buildTrackSectionsWithBudget(cat, cfg, renderedByID, nil)
-	return sections
+func buildTrackSections(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML) ([]TrackSection, error) {
+	return buildTrackSectionsWithBudget(cat, cfg, renderedByID, nil)
 }
 
 func buildTrackSectionsWithBudget(cat *catalog.Catalog, cfg *config.Config, renderedByID map[string]template.HTML, budget *renderByteBudget) ([]TrackSection, error) {
