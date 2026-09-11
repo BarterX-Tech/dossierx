@@ -386,11 +386,15 @@ const ungroupedModuleName = "ungrouped"
 // final template execution, so a future fourth input or grouping level only
 // has to touch the stage it belongs to.
 func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
+	return renderAt(cat, cfg, time.Now().UTC())
+}
+
+func renderAt(cat *catalog.Catalog, cfg *config.Config, generatedAt time.Time) (string, error) {
 	rt, err := config.ResolveTheme(cfg, os.ReadFile)
 	if err != nil {
 		return "", err
 	}
-	return RenderWithTheme(cat, cfg, rt)
+	return renderWithThemeAt(cat, cfg, rt, generatedAt, 0)
 }
 
 // RenderWithTheme is Render with the theme already resolved. It is the real
@@ -406,7 +410,7 @@ func Render(cat *catalog.Catalog, cfg *config.Config) (string, error) {
 // need and hand the result here. Keeping Render's signature unchanged keeps
 // every other caller — and every existing test — untouched.
 func RenderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme) (string, error) {
-	return renderWithTheme(cat, cfg, rt, 0)
+	return renderWithThemeAt(cat, cfg, rt, time.Now().UTC(), 0)
 }
 
 // RenderWithThemeBounded renders through a capped writer. Opted-in check and
@@ -416,10 +420,10 @@ func RenderWithThemeBounded(cat *catalog.Catalog, cfg *config.Config, rt *config
 	if maxBytes <= 0 {
 		return "", fmt.Errorf("render: max bytes must be positive")
 	}
-	return renderWithTheme(cat, cfg, rt, maxBytes)
+	return renderWithThemeAt(cat, cfg, rt, time.Now().UTC(), maxBytes)
 }
 
-func renderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme, maxBytes int) (string, error) {
+func renderWithThemeAt(cat *catalog.Catalog, cfg *config.Config, rt *config.ResolvedTheme, generatedAt time.Time, maxBytes int) (string, error) {
 	if cat == nil {
 		cat = &catalog.Catalog{}
 	}
@@ -445,7 +449,6 @@ func renderWithTheme(cat *catalog.Catalog, cfg *config.Config, rt *config.Resolv
 	// verify module membership; the default binding always escapes.
 	attachMockupOverride(tmpl.partials, cfg)
 
-	generatedAt := time.Now().UTC()
 	header := generatedHeader(generatedAt)
 	if maxBytes > 0 && len(header) >= maxBytes {
 		return "", viewerCapacityError(maxBytes)

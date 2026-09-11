@@ -42,12 +42,21 @@ func TestConformanceEndToEndGraphScaleBounds(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if elapsed > 2*time.Second {
-				t.Fatalf("end-to-end run took %s, limit 2s", elapsed)
+			limit := 2 * time.Second
+			allocationLimit := int64(512 << 20)
+			if raceBuildEnabled {
+				limit = 5 * time.Second
+				// The race runtime retains shadow state for every instrumented
+				// access. Keep a generous race-only ceiling while preserving the
+				// production 512 MiB bound for normal builds and graph proofs.
+				allocationLimit = 1 << 30
+			}
+			if elapsed > limit {
+				t.Fatalf("end-to-end run took %s, limit %s", elapsed, limit)
 			}
 			allocated := after.TotalAlloc - before.TotalAlloc
-			if allocated > 512<<20 {
-				t.Fatalf("end-to-end run allocated %d bytes, limit %d", allocated, 512<<20)
+			if allocated > uint64(allocationLimit) {
+				t.Fatalf("end-to-end run allocated %d bytes, limit %d", allocated, allocationLimit)
 			}
 			if res.Conformance == nil || len(res.Conformance.Results) != declared || res.Conformance.Summary != (conformance.Summary{Declared: declared, DeclaredNone: declared - checks/2, Checks: checks, Matched: checks, Ready: declared}) {
 				t.Fatalf("results=%v, want %d", res.Conformance, declared)
