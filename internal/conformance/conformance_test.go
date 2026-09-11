@@ -394,7 +394,7 @@ func TestEvaluateBoundedScale5000ClaimsMixedPluralChecks(t *testing.T) {
 	if len(status) >= MaxOutputBytes {
 		t.Fatalf("encoded status is %d bytes, cap %d", len(status), MaxOutputBytes)
 	}
-	if elapsed >= 2*time.Second {
+	if !raceBuildEnabled && elapsed >= 2*time.Second {
 		t.Fatalf("evaluation took %s, maximum is under 2s", elapsed)
 	}
 	if allocated >= 512<<20 {
@@ -516,8 +516,10 @@ func TestEvaluateBoundedPluralCheckCount(t *testing.T) {
 	if got, want := report.Summary.Checks, claimCount*checksPerClaim; got != want || report.Summary.Matched != want || report.Summary.Ready != claimCount {
 		t.Fatalf("summary=%+v, want %d matched checks and %d ready claims", report.Summary, want, claimCount)
 	}
-	if elapsed := time.Since(started); elapsed > 2*time.Second {
-		t.Fatalf("plural evaluation took %s, maximum is 2s", elapsed)
+	if !raceBuildEnabled {
+		if elapsed := time.Since(started); elapsed > 2*time.Second {
+			t.Fatalf("plural evaluation took %s, maximum is 2s", elapsed)
+		}
 	}
 }
 
@@ -539,7 +541,7 @@ func TestEvaluateBoundedRejectsSharedTargetFanoutBeforeDifferenceCopies(t *testi
 	if err == nil || report != nil || !strings.Contains(err.Error(), "projection requires more than") || !strings.Contains(err.Error(), "at least") {
 		t.Fatalf("report=%+v err=%v", report, err)
 	}
-	if elapsed > 2*time.Second {
+	if !raceBuildEnabled && elapsed > 2*time.Second {
 		t.Fatalf("shared target preflight took %s", elapsed)
 	}
 	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 64<<20 {
@@ -600,8 +602,10 @@ func TestEvaluateCapacityStopsHighCardinalitySharedAccountingEarly(t *testing.T)
 	if report != nil || !errors.Is(err, ErrCapacityExceeded) {
 		t.Fatalf("report=%v err=%v", report, err)
 	}
-	if elapsed := time.Since(started); elapsed > 3*time.Second {
-		t.Fatalf("capacity accounting did not stop early: %s", elapsed)
+	if !raceBuildEnabled {
+		if elapsed := time.Since(started); elapsed > 3*time.Second {
+			t.Fatalf("capacity accounting did not stop early: %s", elapsed)
+		}
 	}
 	if allocated := after.TotalAlloc - before.TotalAlloc; allocated > 128<<20 {
 		t.Fatalf("capacity accounting allocated %d bytes", allocated)

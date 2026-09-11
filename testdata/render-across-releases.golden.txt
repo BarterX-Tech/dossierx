@@ -36,7 +36,7 @@
 #
 # An empty report is the expected steady state immediately after a release.
 
-baseline   v0.7.13 (1ba3f1d7d9696fdfeb1c46bc9f19a8db33392aef)
+baseline   v0.7.14 (ac6ce0260ad7e7b1e97ab14c2bbb516c649425f7)
 compared   155 rendered artifacts present at both revisions
 added      0
 removed    0

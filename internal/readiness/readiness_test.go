@@ -559,7 +559,7 @@ func TestComputeLayeredDenseDAGScaleBounds(t *testing.T) {
 	elapsed := time.Since(start)
 
 	// Runtime bound: 40 claims must finish well under 100ms
-	if elapsed > 200*time.Millisecond {
+	if !readinessInternalRaceBuildEnabled && elapsed > 200*time.Millisecond {
 		t.Fatalf("dense DAG traversal took too long: %v (expected < 200ms)", elapsed)
 	}
 

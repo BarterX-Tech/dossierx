@@ -359,7 +359,7 @@ func TestClaimShowPolicyEvaluationScaleBounds(t *testing.T) {
 			if len(verdict.Conditions) != s.wantConditions || len(actions) != s.wantConditions+1 {
 				t.Fatalf("condition/advice records = %d/%d, want %d/%d", len(verdict.Conditions), len(actions), s.wantConditions, s.wantConditions+1)
 			}
-			if elapsed > 250*time.Millisecond {
+			if !dossierxRaceBuildEnabled && elapsed > 250*time.Millisecond {
 				t.Fatalf("singleton evaluation took %v, budget 250ms", elapsed)
 			}
 			if allocs > 50000 {

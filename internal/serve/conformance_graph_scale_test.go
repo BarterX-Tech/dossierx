@@ -66,7 +66,7 @@ func TestLiveServerPluralConformanceIsBoundedAcrossGraphShapes(t *testing.T) {
 			if len(statusBody) >= conformance.MaxOutputBytes || len(viewerBody) >= conformance.MaxOutputBytes {
 				t.Fatalf("status=%d viewer=%d bytes, cap=%d", len(statusBody), len(viewerBody), conformance.MaxOutputBytes)
 			}
-			if elapsed >= 2*time.Second {
+			if !serveRaceBuildEnabled && elapsed >= 2*time.Second {
 				t.Fatalf("live status+viewer took %s, maximum is under 2s", elapsed)
 			}
 			if allocated >= 512<<20 {

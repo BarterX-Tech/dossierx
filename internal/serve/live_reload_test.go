@@ -230,7 +230,7 @@ func TestSSE_ConnectedClientDoesNotDelayPost(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("POST: got %d, want 200 (%s)", resp.StatusCode, data)
 	}
-	if elapsed > 2*time.Second {
+	if !serveRaceBuildEnabled && elapsed > 2*time.Second {
 		t.Fatalf("POST took %s with a live SSE subscriber; the write path must not block on fan-out", elapsed)
 	}
 }
