@@ -109,9 +109,12 @@
               </div>
 {{end}}
 {{range .Facets}}
-              <section class="claim-group" id="{{.ID}}" hidden>
+              <section class="claim-group" id="{{.ID}}" hidden data-dossierx-surface="{{.ID}}">
+                <div class="claim-group-host" data-dossierx-surface-host></div>
+                <template class="dossierx-surface-template">
 {{range .Claims}}{{.}}
 {{end}}
+                </template>
               </section>
 {{end}}
           </section>
@@ -141,9 +144,12 @@
             <span class="pill {{.StateClass}}">{{.StateLabel}}</span>
 {{if .Summary}}<p class="track-summary">{{.Summary}}</p>{{end}}
           </header>
-          <section class="claim-group" id="{{.ClaimsID}}" hidden>
+          <section class="claim-group" id="{{.ClaimsID}}" hidden data-dossierx-surface="{{.ClaimsID}}">
+            <div class="claim-group-host" data-dossierx-surface-host></div>
+            <template class="dossierx-surface-template">
 {{range .OwnedClaims}}{{.}}
 {{end}}
+            </template>
 {{if .CitedHTML}}<h4 class="section-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
 {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
           </section>

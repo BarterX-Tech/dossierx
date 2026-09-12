@@ -301,7 +301,20 @@
     updateFacetClaimControl(active, claims);
   }
 
+  var tocObserver = null;
+
+  function setTocActiveLink(current) {
+    var toc = document.getElementById('systemFacetToc');
+    if (!toc || toc.hidden || !current) { return; }
+    var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
+    links.forEach(function (link) { link.classList.toggle('on', link === current); });
+    var select = toc.querySelector('.facet-toc__select');
+    if (select) { select.value = current.dataset.claimTarget; }
+  }
+
   function updateTocActive() {
+    // Fallback used before IntersectionObserver has a positive hit: last claim
+    // whose top has crossed the sticky-header band.
     var toc = document.getElementById('systemFacetToc');
     if (!toc || toc.hidden) { return; }
     var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
@@ -311,9 +324,49 @@
       var claim = document.getElementById(link.dataset.claimTarget);
       if (claim && claim.getBoundingClientRect().top <= 190) { current = link; }
     });
-    links.forEach(function (link) { link.classList.toggle('on', link === current); });
-    var select = toc.querySelector('.facet-toc__select');
-    if (select) { select.value = current.dataset.claimTarget; }
+    setTocActiveLink(current);
+  }
+
+  function observeTocClaims(claims) {
+    if (tocObserver) {
+      tocObserver.disconnect();
+      tocObserver = null;
+    }
+    claims = claims || [];
+    if (!claims.length || typeof IntersectionObserver !== 'function') {
+      updateTocActive();
+      return;
+    }
+    var ratios = new Map();
+    tocObserver = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        ratios.set(entry.target.id, entry.isIntersecting ? entry.intersectionRatio : 0);
+      });
+      var toc = document.getElementById('systemFacetToc');
+      if (!toc || toc.hidden) { return; }
+      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
+      if (!links.length) { return; }
+      var best = null;
+      var bestRatio = -1;
+      var bestTop = Infinity;
+      links.forEach(function (link) {
+        var claim = document.getElementById(link.dataset.claimTarget);
+        if (!claim) { return; }
+        var ratio = ratios.has(claim.id) ? ratios.get(claim.id) : 0;
+        var top = claim.getBoundingClientRect().top;
+        if (ratio > bestRatio || (ratio === bestRatio && ratio > 0 && top < bestTop)) {
+          best = link;
+          bestRatio = ratio;
+          bestTop = top;
+        }
+      });
+      if (!best || bestRatio <= 0) {
+        updateTocActive();
+        return;
+      }
+      setTocActiveLink(best);
+    }, { root: null, rootMargin: '-160px 0px -55% 0px', threshold: [0, 0.1, 0.25, 0.5, 1] });
+    claims.forEach(function (claim) { tocObserver.observe(claim); });
   }
 
   function renderToc() {
@@ -367,7 +420,7 @@
       option.textContent = number + ' · ' + label;
       select.appendChild(option);
     });
-    updateTocActive();
+    observeTocClaims(claims);
   }
 
   function addModuleHeaders() {
