@@ -120,7 +120,7 @@ func TestRender_TrackSectionRendersOwnedAndCited(t *testing.T) {
 	for _, want := range []string{
 		`<button class="sec-tab" data-target="#track-checkout" data-default-target="#track-checkout-claims">Checkout</button>`,
 		`<section class="module-section track-section" id="track-checkout" hidden>`,
-		`<section class="claim-group" id="track-checkout-claims" hidden>`,
+		`<section class="claim-group" id="track-checkout-claims" hidden data-dossierx-surface="track-checkout-claims">`,
 		`<p class="track-summary">What a buyer goes through.</p>`,
 		`the owned body text`,
 		`<ul class="track-cites">`,
