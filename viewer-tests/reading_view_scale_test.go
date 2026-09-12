@@ -49,10 +49,9 @@ func readingScaleConfigYAML() string {
 	return b.String()
 }
 
-func readingScaleProject(t *testing.T) (*project, int) {
+func readingScaleProject(t *testing.T) (p *project, totalClaims int) {
 	t.Helper()
-	p := newProjectRaw(t, readingScaleConfigYAML())
-	total := 0
+	p = newProjectRaw(t, readingScaleConfigYAML())
 	for mi := 0; mi < readingScaleModules; mi++ {
 		for fi := 0; fi < readingScaleFacets; fi++ {
 			for ci := 0; ci < readingScaleClaimsPerFacet; ci++ {
@@ -71,11 +70,11 @@ governed_by:
   type: none
   reason: viewer-test scale fixture, not backed by any doctrine claim
 %s`, id, fi, mi, id, trackBlock))
-				total++
+				totalClaims++
 			}
 		}
 	}
-	return p, total
+	return p, totalClaims
 }
 
 type readingScaleMetrics struct {

@@ -367,6 +367,12 @@
       setTocActiveLink(best);
     }, { root: null, rootMargin: '-160px 0px -55% 0px', threshold: [0, 0.1, 0.25, 0.5, 1] });
     claims.forEach(function (claim) { tocObserver.observe(claim); });
+    // IntersectionObserver callbacks are asynchronous. Soft-mounted surfaces
+    // (and any MutationObserver-driven renderToc) rebuild the TOC often enough
+    // that a reader — or a probe — can observe the list in the gap before the
+    // first callback. Paint the scroll-position fallback synchronously so an
+    // .on marker is present on the same turn the items appear.
+    updateTocActive();
   }
 
   function renderToc() {
