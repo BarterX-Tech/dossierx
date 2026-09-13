@@ -146,9 +146,12 @@ func TestReadingViewBrowserScaleBudgets(t *testing.T) {
 	ctx := browserContext(t)
 	url := p.renderStatic()
 
+	// Soft-mount hosts use display:contents, so WaitVisible on the host itself
+	// never succeeds (no box). Wait for a claim card inside a host instead —
+	// that is the first painted soft-mount witness.
 	runCDP(t, ctx,
 		chromedp.Navigate(url),
-		chromedp.WaitVisible("[data-dossierx-surface-host]", chromedp.ByQuery),
+		chromedp.WaitVisible("[data-dossierx-surface-host] .claim", chromedp.ByQuery),
 	)
 	pollTrue(t, ctx, `document.readyState === 'complete' && document.querySelectorAll('[data-dossierx-surface-host] .claim').length > 0`)
 

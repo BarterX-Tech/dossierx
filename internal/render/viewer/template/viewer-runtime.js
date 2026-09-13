@@ -192,7 +192,13 @@
       }
 
       function mountAllSurfaces() {
+        // Track claim-groups always soft-mount (see shell.html) and must stay
+        // inert until the reader opens them — mounting them here would
+        // materialize off-screen track copies and break first-paint measurers
+        // (source-note clamps). Only module/facet surfaces are remounted for
+        // the small-corpus getElementById witnesses.
         document.querySelectorAll('.claim-group[data-dossierx-surface]').forEach(function (g) {
+          if (g.closest('.track-section')) { return; }
           mountSurface(g.getAttribute('data-dossierx-surface') || g.id);
         });
       }
