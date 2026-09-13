@@ -10,11 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Defer claim-card mounting in large viewers so Curtainly-scale corpora stay
-  interactive on first paint. Module facets soft-mount only when the corpus has
-  at least 80 claims; track owned-claim copies always soft-mount so off-screen
-  track duplicates are not measured until the reader opens them. Soft-mount
-  hosts use `display: contents` so card spacing matches the pre-soft-mount box
-  tree.
+  interactive on first paint. Module facets and track owned-claim copies
+  soft-mount only when the corpus has at least 80 claims, so small fixtures keep
+  eager track DOM and theme-parity baselines stay comparable. Soft-mount hosts
+  use `display: contents` so card spacing matches the pre-soft-mount box tree.
 
 ### Maintenance
 
@@ -22,7 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Byte sizes move as follows: `fixture-basic` 4110066 -> 4116665;
   `fixture-conformance-v1` 537928 -> 544528; `fixture-graph-demo` 4257854 ->
   4264431; `fixture-portability` 4112477 -> 4119076; `fixture-theme-flat`
-  4152106 -> 4158905; `fixture-theme-preset` 4113503 -> 4120102. The silent
+  4152106 -> 4158701; `fixture-theme-preset` 4113503 -> 4120102. The silent
   render changes are recorded against v0.7.14 in
   `testdata/render-across-releases.golden.txt`.
 

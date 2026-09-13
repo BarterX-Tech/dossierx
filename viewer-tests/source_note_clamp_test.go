@@ -526,21 +526,11 @@ func TestSourceNoteWithoutResizeObserverLeavesTextWhole(t *testing.T) {
 func TestSourceNoteClampWorksInATrackCopy(t *testing.T) {
 	ctx := clampTab(t, newClampProject(t))
 
-	// Deferred surface mounting keeps inactive claim copies inside <template>
-	// payloads, so querySelectorAll only sees the active surface at first
-	// paint. Count live notes plus inert template notes to cover both copies.
-	if n := evalInt(t, ctx, `(function(){
-		var live = document.querySelectorAll('.claim-source-note').length;
-		var inert = 0;
-		document.querySelectorAll('[data-dossierx-surface]').forEach(function(group){
-			var host = group.querySelector('[data-dossierx-surface-host]');
-			if (host && host.querySelector('.claim')) { return; }
-			var tmpl = group.querySelector('template.dossierx-surface-template');
-			if (tmpl) { inert += tmpl.content.querySelectorAll('.claim-source-note').length; }
-		});
-		return live + inert;
-	})()`); n != 6 {
-		t.Fatalf("notes in mounted hosts + unmounted templates = %d, want 6 — three per copy of the claim", n)
+	// SoftMount is off for this small fixture, so module and track claim
+	// copies are both eager in the live DOM. Count every note: three on the
+	// canonical card and three on the track copy.
+	if n := evalInt(t, ctx, `document.querySelectorAll('.claim-source-note').length`); n != 6 {
+		t.Fatalf("notes in the live DOM = %d, want 6 — three per copy of the claim", n)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('.claim-source-note-toggle[id]').length`); n != 0 {
 		t.Fatalf("%d note controls carry an id; a track copy would duplicate it", n)
@@ -554,16 +544,18 @@ func TestSourceNoteClampWorksInATrackCopy(t *testing.T) {
 	if !controlPaints(t, ctx, canonical) {
 		t.Fatal("the canonical note offers no control")
 	}
-	// The track copy still lives in an inert <template> until its surface is
-	// mounted — there is no live note to mis-judge yet.
-	if evalInt(t, ctx, `document.querySelectorAll('.track-section .claim-source-note').length`) != 0 {
-		t.Error("a note in a never-opened track section was materialized before visit")
+	// The track copy is in a [hidden] section: it has never been laid out, so
+	// the clamp script has nothing to measure and correctly leaves the control
+	// unpainted until the reader arrives.
+	copiedHidden := noteAt(`document.querySelector('.track-section')`, 0)
+	if controlPaints(t, ctx, copiedHidden) {
+		t.Error("a note in a never-opened track section offered a control before visit")
 	}
 
-	// Arrive at the track. The copy mounts, gains a box, is measured, and earns
-	// the same control — through DOM position alone, since it carries no id.
+	// Arrive at the track. The copy gains a box, is measured, and earns the
+	// same control — through DOM position alone, since it carries no id.
 	runCDP(t, ctx, chromedp.Click(`.sec-tab[data-target="#track-checkout"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelectorAll('.track-section .claim-source-note').length > 0`)
+	pollTrue(t, ctx, `!document.querySelector('.track-section').hidden`)
 	copied := noteAt(`document.querySelector('.track-section')`, 0)
 	runCDP(t, ctx, chromedp.Evaluate(
 		`document.querySelectorAll('.track-section details.claim-links').forEach(function (d) { d.open = true; })`, nil))
