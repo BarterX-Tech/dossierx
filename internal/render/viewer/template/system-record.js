@@ -302,6 +302,10 @@
   }
 
   function updateTocActive() {
+    // Last claim whose top has crossed the sticky-header band. Soft-mounted
+    // surfaces call dossierxEnhanceSystemRecord after clone, which re-runs
+    // renderToc → updateTocActive so .on is present without an IntersectionObserver
+    // that would disagree with this scroll-position rule (theme-parity hover).
     var toc = document.getElementById('systemFacetToc');
     if (!toc || toc.hidden) { return; }
     var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));

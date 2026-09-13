@@ -109,10 +109,14 @@
               </div>
 {{end}}
 {{range .Facets}}
-              <section class="claim-group" id="{{.ID}}" hidden>
+              <section class="claim-group" id="{{.ID}}" hidden{{if $.SoftMount}} data-dossierx-surface="{{.ID}}"{{end}}>
+{{if $.SoftMount}}                <div class="claim-group-host" data-dossierx-surface-host></div>
+                <template class="dossierx-surface-template">
 {{range .Claims}}{{.}}
 {{end}}
-              </section>
+                </template>
+{{else}}{{range .Claims}}{{.}}
+{{end}}{{end}}              </section>
 {{end}}
           </section>
 {{end}}
@@ -141,10 +145,21 @@
             <span class="pill {{.StateClass}}">{{.StateLabel}}</span>
 {{if .Summary}}<p class="track-summary">{{.Summary}}</p>{{end}}
           </header>
-          <section class="claim-group" id="{{.ClaimsID}}" hidden>
+{{/* Tracks follow the same SoftMount gate as module facets. Soft-mounting
+     tracks while SoftMount is off leaves the frozen theme-parity baseline
+     with a live hidden <pre> (owned claim fenced block) that the current
+     render would keep inside a <template>, which makes the screenshot
+     fenced-box lists disagree. When SoftMount is on, deferring the track
+     copy until visit is still correct. An HTML comment here would leave a
+     spaces-only line after html/template strips it. */}}
+          <section class="claim-group" id="{{.ClaimsID}}" hidden{{if $.SoftMount}} data-dossierx-surface="{{.ClaimsID}}"{{end}}>
+{{if $.SoftMount}}            <div class="claim-group-host" data-dossierx-surface-host></div>
+            <template class="dossierx-surface-template">
 {{range .OwnedClaims}}{{.}}
 {{end}}
-{{if .CitedHTML}}<h4 class="section-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
+            </template>
+{{else}}{{range .OwnedClaims}}{{.}}
+{{end}}{{end}}{{if .CitedHTML}}<h4 class="section-heading">Cited claims</h4>{{.CitedHTML}}{{end}}
 {{if .Empty}}<p class="claims-empty">No claims in this track yet.</p>{{end}}
           </section>
         </section>

@@ -2687,6 +2687,14 @@ body.shell-body {
   display: none;
 }
 
+/* Soft-mount host: claim cards are cloned into this wrapper. display:contents
+   keeps the host out of the box tree so card spacing matches the pre-soft-mount
+   shape (claim-group → claims). Selectors still see the host in the DOM. */
+.claim-group-host,
+[data-dossierx-surface-host] {
+  display: contents;
+}
+
 /* section-heading is an in-content break inside .content-area, injected by
    render.newGroup ahead of the first claim of each run of consecutive,
    same-Section claims (model.Claim.Section) — a close visual cousin of the
@@ -2705,7 +2713,14 @@ body.shell-body {
   color: var(--faint);
 }
 
-.section-heading:first-child {
+/* Only the claim-group's first heading (or the first heading inside a
+   soft-mount host that is itself the claim-group's first child) drops the
+   leading rule. A bare .section-heading:first-child would also match a
+   heading that is merely first inside the host while a facet control sits
+   above the host — that wrongly removed the rule and shortened the page. */
+.claim-group > .section-heading:first-child,
+.claim-group > .claim-group-host:first-child > .section-heading:first-child,
+.claim-group > [data-dossierx-surface-host]:first-child > .section-heading:first-child {
   margin-top: 0;
   padding-top: 0;
   border-top: 0;

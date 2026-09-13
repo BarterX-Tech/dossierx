@@ -18,6 +18,8 @@
       // each SSE re-render. It attaches NO listeners — those are delegated once
       // on surviving nodes below, so re-running this never double-binds.
       function initViewer() {
+        // Fragment swaps replace <main>; drop the stale mount pointer.
+        mountedSurfaceID = null;
         // Two-level show/hide: one .module-section per sidebar .sec-tab, and
         // (when a module has more than one facet) one .claim-group per .subtab
         // inside that module's .sub-nav. A single-facet module still has exactly
@@ -49,8 +51,17 @@
         // the comment JS keying off data-claim-id (never id) for state fan-out.
         claimToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
-          g.querySelectorAll('.claim[id]').forEach(function (c) {
-            claimToFacet[c.id] = g.id;
+          // Index both live-mounted cards and inert <template> payloads so a
+          // deep link to an unmounted surface still resolves to that facet.
+          var roots = [g];
+          var tmpl = g.querySelector(':scope > template.dossierx-surface-template');
+          if (tmpl) { roots.push(tmpl.content); }
+          roots.forEach(function (root) {
+            root.querySelectorAll('.claim[id]').forEach(function (c) {
+              if (!Object.prototype.hasOwnProperty.call(claimToFacet, c.id)) {
+                claimToFacet[c.id] = g.id;
+              }
+            });
           });
         });
 
@@ -67,8 +78,15 @@
         // one-to-one for the same reason claimToFacet is.
         sourceToFacet = {};
         document.querySelectorAll('.claim-group').forEach(function (g) {
-          g.querySelectorAll('.claim-source[id]').forEach(function (s) {
-            sourceToFacet[s.id] = g.id;
+          var roots = [g];
+          var tmpl = g.querySelector(':scope > template.dossierx-surface-template');
+          if (tmpl) { roots.push(tmpl.content); }
+          roots.forEach(function (root) {
+            root.querySelectorAll('.claim-source[id]').forEach(function (s) {
+              if (!Object.prototype.hasOwnProperty.call(sourceToFacet, s.id)) {
+                sourceToFacet[s.id] = g.id;
+              }
+            });
           });
         });
 
@@ -121,6 +139,70 @@
         return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
       }
 
+
+      // Deferred surface mounting: claim card HTML lives in <template
+      // class="dossierx-surface-template"> nodes (inert — not in the live DOM).
+      // Large corpora (Curtainly-scale, ~80+ claim cards) mount only the active
+      // surface on first paint; smaller fixtures mount every surface so print,
+      // theme probes, and live-reload witnesses that call getElementById keep
+      // working without visiting every facet first.
+      var mountedSurfaceID = null;
+      var SOFT_MOUNT_MIN_CLAIMS = 80;
+
+      function claimCorpusSize() {
+        var n = 0;
+        document.querySelectorAll('template.dossierx-surface-template').forEach(function (tmpl) {
+          n += tmpl.content.querySelectorAll('.claim').length;
+        });
+        return n;
+      }
+
+      function softMountEnabled() {
+        return claimCorpusSize() >= SOFT_MOUNT_MIN_CLAIMS;
+      }
+
+      // Surfaces mount on first visit and STAY mounted. Clearing inactive
+      // hosts would drop in-memory UI state (source-note clamps, open
+      // disclosures) and break tests that compare a module card with its
+      // track copy. The load-time win is still intact for large corpora: only
+      // the first surface is cloned during init; the rest remain inert
+      // <template>s until navigated to (or until mountAllSurfaces runs).
+      function mountSurface(surfaceID) {
+        if (!surfaceID) { return; }
+        var group = document.getElementById(surfaceID);
+        if (!group) { return; }
+        var host = group.querySelector(':scope > [data-dossierx-surface-host]');
+        var tmpl = group.querySelector(':scope > template.dossierx-surface-template');
+        if (!host || !tmpl) {
+          mountedSurfaceID = surfaceID;
+          return;
+        }
+        if (!host.querySelector('.claim')) {
+          host.appendChild(tmpl.content.cloneNode(true));
+          if (typeof window.dossierxEnhanceSystemRecord === 'function') {
+            window.dossierxEnhanceSystemRecord();
+          }
+          // Source-note clamps observe live nodes only; re-arm after every
+          // first-time mount so a freshly revealed surface is measured.
+          if (typeof mountSourceNoteClamps === 'function') {
+            mountSourceNoteClamps();
+          }
+        }
+        mountedSurfaceID = surfaceID;
+      }
+
+      function mountAllSurfaces() {
+        // Track claim-groups always soft-mount (see shell.html) and must stay
+        // inert until the reader opens them — mounting them here would
+        // materialize off-screen track copies and break first-paint measurers
+        // (source-note clamps). Only module/facet surfaces are remounted for
+        // the small-corpus getElementById witnesses.
+        document.querySelectorAll('.claim-group[data-dossierx-surface]').forEach(function (g) {
+          if (g.closest('.track-section')) { return; }
+          mountSurface(g.getAttribute('data-dossierx-surface') || g.id);
+        });
+      }
+
       function showModuleFacet(moduleID, facetID, opts) {
         if (!moduleID) { return; }
 
@@ -143,6 +225,12 @@
             b.classList.toggle('on', b.dataset.target === '#' + facetID);
           });
         }
+
+        // Materialize the active surface BEFORE status-strip filtering and
+        // before resolving a deep-linked claim id: getElementById / query
+        // cannot see cards that still live only in a <template>. Build-order
+        // sections have no surface template and no-op.
+        mountSurface(facetID);
 
         if (lastStatusData) {
           renderStatusStrip(lastStatusData);
@@ -1869,6 +1957,23 @@
         // and the viewport is not yanked. skipHash keeps the URL untouched.
         var target = resolve(hashId());
         showModuleFacet(target.module, target.facet, { skipHash: true });
+        // Small corpora remount every surface after a swap so hidden-facet
+        // witnesses (live-reload tests, cross-facet getElementById) keep
+        // working. Large corpora stay soft-mounted: only the active surface
+        // above is live, matching first-paint behaviour.
+        if (!softMountEnabled()) { mountAllSurfaces(); }
+        // initViewer ran syncEmptyChips before hosts were filled; re-run now
+        // that claim cards (and their zero-thread chips) are in the live DOM.
+        syncEmptyChips();
+        if (typeof window.dossierxEnhanceSystemRecord === 'function') {
+          window.dossierxEnhanceSystemRecord();
+        }
+        // refreshStatus races the fragment fetch; if it painted the old DOM
+        // before this swap, re-apply the last verdict onto the fresh cards.
+        if (lastStatusData) {
+          renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
+          renderStatusStrip(lastStatusData);
+        }
 
         // ---- restore the reader's scroll AFTER the active section is un-hidden
         // above, so the document has regained its full height ----
@@ -1993,6 +2098,10 @@
       // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
       initViewer();
       showFromHash({ skipHash: true });
+      // Soft-mount is for Curtainly-scale corpora. Ordinary fixtures mount
+      // every surface up front so print, theme parity, and getElementById
+      // witnesses behave as they did with eager DOM.
+      if (!softMountEnabled()) { mountAllSurfaces(); }
       // Static file:// viewers never receive /api/status. Paint the assessment
       // carried by the graph payload now; a live response replaces it later.
       renderClaimReadiness(offlineReadiness());

@@ -229,6 +229,14 @@ type shellData struct {
 	// of truth without being duplicated here.
 	ModuleGroups []ModuleGroup
 
+	// SoftMount is true when the corpus is large enough that claim cards should
+	// ship inside inert <template class="dossierx-surface-template"> nodes and
+	// be cloned into a host on first visit (see softMountClaimThreshold). Small
+	// corpora keep the historical eager DOM so theme-parity baselines, print
+	// probes, and getElementById witnesses see the same box tree they always
+	// have. The client threshold in viewer-runtime.js must stay in lockstep.
+	SoftMount bool
+
 	// Tracks is the project's declared cross-cutting tracks, one section each,
 	// rendered after every module section and listed after every module in the
 	// sidebar. NIL FOR A PROJECT THAT DECLARES NONE, and shell.html guards
@@ -865,6 +873,10 @@ func buildShellStaticData(in shellInputs) shellData {
 		eyebrow = strings.TrimSpace(cfg.Eyebrow)
 	}
 
+	claimCount := 0
+	if in.cat != nil {
+		claimCount = len(in.cat.Claims)
+	}
 	return shellData{
 		Title:                    title,
 		Eyebrow:                  eyebrow,
@@ -879,6 +891,7 @@ func buildShellStaticData(in shellInputs) shellData {
 		ViewerRuntimeJS:          template.JS(in.viewerRuntimeJS),
 		ConformanceStatusGuardJS: template.JS(in.conformanceStatusGuardJS),
 		ModuleGroups:             nil,
+		SoftMount:                claimCount >= softMountClaimThreshold,
 		// The Build order tab. Typed template.JS on the way out like the
 		// graph fields, for the same silent-failure reason.
 		BuildOrders:       in.buildOrders,
@@ -892,6 +905,11 @@ func buildShellStaticData(in shellInputs) shellData {
 		Tracks: nil,
 	}
 }
+
+// softMountClaimThreshold is the corpus size at which shell.html starts
+// emitting deferred surface templates. Keep in lockstep with
+// SOFT_MOUNT_MIN_CLAIMS in viewer-runtime.js.
+const softMountClaimThreshold = 80
 
 // themeOverrideCSS builds the project's theme stylesheet from an already
 // resolved theme: the @font-face rules for its inlined fonts, then up to

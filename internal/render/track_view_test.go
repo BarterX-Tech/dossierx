@@ -120,6 +120,9 @@ func TestRender_TrackSectionRendersOwnedAndCited(t *testing.T) {
 	for _, want := range []string{
 		`<button class="sec-tab" data-target="#track-checkout" data-default-target="#track-checkout-claims">Checkout</button>`,
 		`<section class="module-section track-section" id="track-checkout" hidden>`,
+		// SoftMount is off for this two-claim corpus, so the track claim-group
+		// stays eager — same gate as module facets. Soft-mount markup appears
+		// only when the corpus reaches softMountClaimThreshold.
 		`<section class="claim-group" id="track-checkout-claims" hidden>`,
 		`<p class="track-summary">What a buyer goes through.</p>`,
 		`the owned body text`,
@@ -129,6 +132,9 @@ func TestRender_TrackSectionRendersOwnedAndCited(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in the rendered track page", want)
 		}
+	}
+	if strings.Contains(out, `data-dossierx-surface="track-checkout-claims"`) {
+		t.Error("small corpora must keep eager track claim DOM; soft-mount surface attrs must stay off")
 	}
 
 	// A CITED CLAIM'S BODY APPEARS EXACTLY ONCE ON THE PAGE — in its own
