@@ -50,13 +50,27 @@
         carries this as a checklist item.
       -->
       <div class="ledger">
-        <article class="release release--current" data-version="v0.7.15" data-current="true">
+        <article class="release release--current" data-version="v0.7.16" data-current="true">
+          <p class="release__meta">
+            <span class="release__version">v0.7.16</span>
+            <time datetime="2026-09-13">2026-09-13</time>
+          </p>
+          <div>
+            <h2 class="release__title">SoftMount viewer performance<span class="release__badge">Latest</span></h2>
+            <p class="release__note">
+              Large reading viewers defer claim-card mounting until a surface is
+              first visited, so Curtainly-scale corpora stay interactive on
+              first paint. Smaller corpora keep eager DOM.
+            </p>
+          </div>
+        </article>
+        <article class="release" data-version="v0.7.15">
           <p class="release__meta">
             <span class="release__version">v0.7.15</span>
             <time datetime="2026-09-11">2026-09-11</time>
           </p>
           <div>
-            <h2 class="release__title">Race-stable corrective release<span class="release__badge">Latest</span></h2>
+            <h2 class="release__title">Race-stable corrective release</h2>
             <p class="release__note">
               This maintenance release keeps performance-only checks honest
               under CI's race detector while preserving production bounds and

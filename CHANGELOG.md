@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.16] - 2026-09-13
 
 ### Added
 
@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fixture-conformance-v1` 537928 -> 544528; `fixture-graph-demo` 4257854 ->
   4264431; `fixture-portability` 4112477 -> 4119076; `fixture-theme-flat`
   4152106 -> 4158701; `fixture-theme-preset` 4113503 -> 4120102. The silent
-  render changes are recorded against v0.7.14 in
+  render changes are recorded against v0.7.15 in
   `testdata/render-across-releases.golden.txt`.
 
 Existing projects should rerun `dossierx check` after upgrading to regenerate
