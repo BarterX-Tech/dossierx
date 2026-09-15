@@ -2648,7 +2648,7 @@ body.shell-body {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 6px;
+  margin: 0 10px 6px 0;
 }
 
 .theme-control button {

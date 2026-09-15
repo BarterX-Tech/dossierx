@@ -11,22 +11,13 @@ import (
 	"github.com/chromedp/chromedp"
 )
 
-const twoFacetConfigYAML = `schema_version: 1
-facets:
-  - contract
-  - internals
-modules:
-  - widget
-claims_dir: claims
-`
-
 func softMountFitProject(t *testing.T) *project {
 	t.Helper()
 	p := newProjectRaw(t, twoFacetConfigYAML)
 	for i := 0; i < 80; i++ {
 		facet := "contract"
 		if i >= 40 {
-			facet = "internals"
+			facet = "interface"
 		}
 		id := fmt.Sprintf("widget.%s.c%02d", facet, i)
 		p.writeClaim(fmt.Sprintf("%s.yaml", id), fmt.Sprintf(`id: %s
@@ -56,7 +47,7 @@ func TestSoftMountLockMetricUsesCatalogAttrs(t *testing.T) {
 	}
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.Navigate(url))
-	pollTrue(t, ctx, `document.querySelector('.module-section#widget') && document.querySelector('.system-record-head__metric')`)
+	pollTrue(t, ctx, `!!(document.querySelector('.module-section#widget') && document.querySelector('.system-record-head__metric'))`)
 	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '80' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '2'`) {
 		t.Fatal("soft-mounted module must stamp catalog lock counts on the section")
 	}
@@ -98,7 +89,7 @@ func TestReadyConformanceStaysInsideCollapsedClaim(t *testing.T) {
 	writeConformanceObservation(t, p, `["blocked","ready"]`)
 	ctx := browserContext(t)
 	runCDP(t, ctx, chromedp.Navigate(p.renderStatic()))
-	pollTrue(t, ctx, `document.querySelector('.claim-conformance') && document.querySelector('.claim .claim-conformance')`)
+	pollTrue(t, ctx, `!!(document.querySelector('.claim-conformance') && document.querySelector('.claim .claim-conformance'))`)
 	if evalBool(t, ctx, `document.querySelector('.claim-conformance').open`) {
 		t.Fatal("ready implementation checks must render closed")
 	}
@@ -116,20 +107,38 @@ func TestReadyConformanceStaysInsideCollapsedClaim(t *testing.T) {
 
 func TestThemeControlDarkOverridesLightOS(t *testing.T) {
 	p := newProject(t)
+	url := p.renderStatic()
+	raw, err := os.ReadFile(filepath.Join(p.dir, "build", "viewer", "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `data-theme-choice="dark"`) {
+		t.Fatal("rendered viewer is missing the Dark theme control")
+	}
 	ctx := browserContext(t)
-	runCDP(t, ctx,
-		emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{
-			{Name: "prefers-color-scheme", Value: "light"},
-		}),
-		chromedp.Navigate(p.renderStatic()),
-	)
-	pollTrue(t, ctx, `document.querySelector('[data-theme-choice="dark"]')`)
+	runCDP(t, ctx, chromedp.Navigate(url))
+	pollTrue(t, ctx, `document.readyState === 'complete'`)
+	if !evalBool(t, ctx, `!!document.querySelector('.theme-control')`) {
+		t.Fatalf("loaded page has no .theme-control; title=%q body=%d", evalString(t, ctx, `document.title`), evalInt(t, ctx, `document.body ? document.body.innerHTML.length : -1`))
+	}
+	runCDP(t, ctx, emulation.SetEmulatedMedia().WithFeatures([]*emulation.MediaFeature{
+		{Name: "prefers-color-scheme", Value: "light"},
+	}))
 	if !evalBool(t, ctx, `window.matchMedia('(prefers-color-scheme: light)').matches`) {
 		t.Fatal("OS must stay light so Dark is a real override")
 	}
 	lightPaper := evalString(t, ctx, `getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()`)
-	runCDP(t, ctx, chromedp.Click(`[data-theme-choice="dark"]`, chromedp.ByQuery))
-	pollTrue(t, ctx, `document.documentElement.getAttribute('data-theme') === 'dark'`)
+	evalVoid(t, ctx, `(function(){
+		var button = document.querySelector('.theme-control [data-theme-choice="dark"]');
+		if (!button) { throw new Error('dark theme control is missing'); }
+		button.click();
+	})()`)
+	if !evalBool(t, ctx, `document.documentElement.getAttribute('data-theme') === 'dark'`) {
+		t.Fatalf("Dark control did not set data-theme=dark (got %q, bound=%v, buttons=%d)",
+			evalString(t, ctx, `document.documentElement.getAttribute('data-theme') || ''`),
+			evalBool(t, ctx, `document.documentElement.dataset.themeControlBound === 'true'`),
+			evalInt(t, ctx, `document.querySelectorAll('.theme-control [data-theme-choice]').length`))
+	}
 	darkPaper := evalString(t, ctx, `getComputedStyle(document.documentElement).getPropertyValue('--paper').trim()`)
 	if darkPaper == "" || darkPaper == lightPaper {
 		t.Fatalf("Dark toggle left --paper at %q under a light OS (was %q)", darkPaper, lightPaper)
@@ -166,9 +175,9 @@ func TestPhone390SoftMountSmoke(t *testing.T) {
 	}
 
 	runCDP(t, ctx, chromedp.Navigate(ready.renderStatic()))
-	pollTrue(t, ctx, `document.querySelector('.claim-conformance')`)
+	pollTrue(t, ctx, `!!document.querySelector('.claim-conformance')`)
 	runCDP(t, ctx, chromedp.Click(".claim-collapse-toggle", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.querySelector('.claim.claim--collapsed')`)
+	pollTrue(t, ctx, `!!document.querySelector('.claim.claim--collapsed')`)
 	if evalBool(t, ctx, `(function(){
 		var panel = document.querySelector('.claim-conformance');
 		return !!(panel && panel.getClientRects().length);

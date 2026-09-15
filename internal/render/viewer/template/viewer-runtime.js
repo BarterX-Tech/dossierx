@@ -1632,7 +1632,8 @@
           conformanceNotReadyIDs(claimIDs)
         );
 
-        if (!groups.length) {
+        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
+        if (!groups.length || !actionable) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
@@ -2250,6 +2251,6 @@
       if (!softMountEnabled()) { mountAllSurfaces(); }
       // Static file:// viewers never receive /api/status. Paint the assessment
       // carried by the graph payload now; a live response replaces it later.
-      renderClaimReadiness(offlineReadiness());
+      renderStatusStrip({ readiness: offlineReadiness() });
       probeAndMount();
     })();

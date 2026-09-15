@@ -46,8 +46,8 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (+483 -104)
-    size            17877 lines / 4110066 bytes -> 18256 lines / 4125109 bytes
+testdata/fixture-basic/build/viewer/index.html  (+492 -111)
+    size            17877 lines / 4110066 bytes -> 18258 lines / 4125440 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -322,7 +322,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
 +  display: flex;
 +  flex-wrap: wrap;
 +  gap: 6px;
-+  margin-bottom: 6px;
++  margin: 0 10px 6px 0;
 +}
 +
 +.theme-control button {
@@ -746,7 +746,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7374,52 +7681,76 @@
+@@ -7374,52 +7681,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -762,7 +762,8 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
 +        );
 
 -        if (!ledger.length && !lintErrors.length && !readiness.length) {
-+        if (!groups.length) {
++        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
++        if (!groups.length || !actionable) {
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
@@ -852,7 +853,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7831,6 +8162,23 @@
+@@ -7831,6 +8163,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -876,7 +877,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7955,6 +8303,10 @@
+@@ -7955,9 +8304,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -886,8 +887,31 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
 +      if (!softMountEnabled()) { mountAllSurfaces(); }
        // Static file:// viewers never receive /api/status. Paint the assessment
        // carried by the graph payload now; a live response replaces it later.
-       renderClaimReadiness(offlineReadiness());
-@@ -8267,6 +8619,10 @@
+-      renderClaimReadiness(offlineReadiness());
++      renderStatusStrip({ readiness: offlineReadiness() });
+       probeAndMount();
+     })();
+ </script>
+@@ -7982,12 +8335,12 @@
+   }
+
+   function enhanceTimestamp() {
+-    var footer = document.querySelector('.sidebar-footer');
+-    if (!footer || footer.dataset.localTime === 'true') { return; }
+-    var original = footer.textContent.trim();
+-    footer.dataset.localTime = 'true';
+-    footer.title = original + ' · shown in your local time';
+-    footer.textContent = formatGeneratedTime(original);
++    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
++    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
++    var original = stamp.textContent.trim();
++    stamp.dataset.localTime = 'true';
++    stamp.title = original + ' · shown in your local time';
++    stamp.textContent = formatGeneratedTime(original);
+   }
+
+   function bindResizer() {
+@@ -8267,6 +8620,10 @@
    }
 
    function updateTocActive() {
@@ -898,7 +922,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8341,12 +8697,12 @@
+@@ -8341,12 +8698,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -917,7 +941,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8355,15 +8711,37 @@
+@@ -8355,15 +8712,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -942,14 +966,15 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
 +  }
 +
 +  function bindThemeControl() {
-+    var control = document.querySelector('.theme-control');
-+    if (!control || control.dataset.bound === 'true') { return; }
-+    control.dataset.bound = 'true';
 +    var current = document.documentElement.getAttribute('data-theme') || 'system';
 +    applyThemeChoice(current);
-+    control.addEventListener('click', function (event) {
-+      var button = event.target.closest('[data-theme-choice]');
-+      if (!button) { return; }
++    if (document.documentElement.dataset.themeControlBound === 'true') { return; }
++    document.documentElement.dataset.themeControlBound = 'true';
++    document.addEventListener('click', function (event) {
++      var target = event.target;
++      if (!target || typeof target.closest !== 'function') { return; }
++      var button = target.closest('[data-theme-choice]');
++      if (!button || !button.closest('.theme-control')) { return; }
 +      applyThemeChoice(button.getAttribute('data-theme-choice'));
 +    });
 +  }
@@ -957,7 +982,7 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8390,6 +8768,7 @@
+@@ -8390,6 +8770,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -966,8 +991,8 @@ testdata/fixture-basic/build/viewer/index.html  (+483 -104)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
-    size            14052 lines / 537928 bytes -> 14434 lines / 553364 bytes
+testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
+    size            14052 lines / 537928 bytes -> 14436 lines / 553695 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -1242,7 +1267,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
 +  display: flex;
 +  flex-wrap: wrap;
 +  gap: 6px;
-+  margin-bottom: 6px;
++  margin: 0 10px 6px 0;
 +}
 +
 +.theme-control button {
@@ -1715,7 +1740,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7407,52 +7717,76 @@
+@@ -7407,52 +7717,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -1731,7 +1756,8 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
 +        );
 
 -        if (!ledger.length && !lintErrors.length && !readiness.length) {
-+        if (!groups.length) {
++        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
++        if (!groups.length || !actionable) {
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
@@ -1821,7 +1847,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7864,6 +8198,23 @@
+@@ -7864,6 +8199,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -1845,7 +1871,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7988,6 +8339,10 @@
+@@ -7988,9 +8340,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -1855,8 +1881,31 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
 +      if (!softMountEnabled()) { mountAllSurfaces(); }
        // Static file:// viewers never receive /api/status. Paint the assessment
        // carried by the graph payload now; a live response replaces it later.
-       renderClaimReadiness(offlineReadiness());
-@@ -8300,6 +8655,10 @@
+-      renderClaimReadiness(offlineReadiness());
++      renderStatusStrip({ readiness: offlineReadiness() });
+       probeAndMount();
+     })();
+ </script>
+@@ -8015,12 +8371,12 @@
+   }
+
+   function enhanceTimestamp() {
+-    var footer = document.querySelector('.sidebar-footer');
+-    if (!footer || footer.dataset.localTime === 'true') { return; }
+-    var original = footer.textContent.trim();
+-    footer.dataset.localTime = 'true';
+-    footer.title = original + ' · shown in your local time';
+-    footer.textContent = formatGeneratedTime(original);
++    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
++    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
++    var original = stamp.textContent.trim();
++    stamp.dataset.localTime = 'true';
++    stamp.title = original + ' · shown in your local time';
++    stamp.textContent = formatGeneratedTime(original);
+   }
+
+   function bindResizer() {
+@@ -8300,6 +8656,10 @@
    }
 
    function updateTocActive() {
@@ -1867,7 +1916,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8374,12 +8733,12 @@
+@@ -8374,12 +8734,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -1886,7 +1935,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8388,15 +8747,37 @@
+@@ -8388,15 +8748,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -1911,14 +1960,15 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
 +  }
 +
 +  function bindThemeControl() {
-+    var control = document.querySelector('.theme-control');
-+    if (!control || control.dataset.bound === 'true') { return; }
-+    control.dataset.bound = 'true';
 +    var current = document.documentElement.getAttribute('data-theme') || 'system';
 +    applyThemeChoice(current);
-+    control.addEventListener('click', function (event) {
-+      var button = event.target.closest('[data-theme-choice]');
-+      if (!button) { return; }
++    if (document.documentElement.dataset.themeControlBound === 'true') { return; }
++    document.documentElement.dataset.themeControlBound = 'true';
++    document.addEventListener('click', function (event) {
++      var target = event.target;
++      if (!target || typeof target.closest !== 'function') { return; }
++      var button = target.closest('[data-theme-choice]');
++      if (!button || !button.closest('.theme-control')) { return; }
 +      applyThemeChoice(button.getAttribute('data-theme-choice'));
 +    });
 +  }
@@ -1926,7 +1976,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8423,6 +8804,7 @@
+@@ -8423,6 +8806,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -1935,8 +1985,8 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+506 -124)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
-    size            18613 lines / 4257854 bytes -> 18970 lines / 4273144 bytes
+testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
+    size            18613 lines / 4257854 bytes -> 18972 lines / 4273475 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -2211,7 +2261,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
 +  display: flex;
 +  flex-wrap: wrap;
 +  gap: 6px;
-+  margin-bottom: 6px;
++  margin: 0 10px 6px 0;
 +}
 +
 +.theme-control button {
@@ -3425,7 +3475,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -8110,52 +8395,76 @@
+@@ -8110,52 +8395,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -3441,7 +3491,8 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
 +        );
 
 -        if (!ledger.length && !lintErrors.length && !readiness.length) {
-+        if (!groups.length) {
++        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
++        if (!groups.length || !actionable) {
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
@@ -3531,7 +3582,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -8567,6 +8876,23 @@
+@@ -8567,6 +8877,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -3555,7 +3606,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -8691,6 +9017,10 @@
+@@ -8691,9 +9018,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -3565,8 +3616,31 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
 +      if (!softMountEnabled()) { mountAllSurfaces(); }
        // Static file:// viewers never receive /api/status. Paint the assessment
        // carried by the graph payload now; a live response replaces it later.
-       renderClaimReadiness(offlineReadiness());
-@@ -9003,6 +9333,10 @@
+-      renderClaimReadiness(offlineReadiness());
++      renderStatusStrip({ readiness: offlineReadiness() });
+       probeAndMount();
+     })();
+ </script>
+@@ -8718,12 +9049,12 @@
+   }
+
+   function enhanceTimestamp() {
+-    var footer = document.querySelector('.sidebar-footer');
+-    if (!footer || footer.dataset.localTime === 'true') { return; }
+-    var original = footer.textContent.trim();
+-    footer.dataset.localTime = 'true';
+-    footer.title = original + ' · shown in your local time';
+-    footer.textContent = formatGeneratedTime(original);
++    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
++    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
++    var original = stamp.textContent.trim();
++    stamp.dataset.localTime = 'true';
++    stamp.title = original + ' · shown in your local time';
++    stamp.textContent = formatGeneratedTime(original);
+   }
+
+   function bindResizer() {
+@@ -9003,6 +9334,10 @@
    }
 
    function updateTocActive() {
@@ -3577,7 +3651,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -9077,12 +9411,12 @@
+@@ -9077,12 +9412,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -3596,7 +3670,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -9091,15 +9425,37 @@
+@@ -9091,15 +9426,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -3621,14 +3695,15 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
 +  }
 +
 +  function bindThemeControl() {
-+    var control = document.querySelector('.theme-control');
-+    if (!control || control.dataset.bound === 'true') { return; }
-+    control.dataset.bound = 'true';
 +    var current = document.documentElement.getAttribute('data-theme') || 'system';
 +    applyThemeChoice(current);
-+    control.addEventListener('click', function (event) {
-+      var button = event.target.closest('[data-theme-choice]');
-+      if (!button) { return; }
++    if (document.documentElement.dataset.themeControlBound === 'true') { return; }
++    document.documentElement.dataset.themeControlBound = 'true';
++    document.addEventListener('click', function (event) {
++      var target = event.target;
++      if (!target || typeof target.closest !== 'function') { return; }
++      var button = target.closest('[data-theme-choice]');
++      if (!button || !button.closest('.theme-control')) { return; }
 +      applyThemeChoice(button.getAttribute('data-theme-choice'));
 +    });
 +  }
@@ -3636,7 +3711,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -9126,6 +9482,7 @@
+@@ -9126,6 +9484,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -3645,8 +3720,8 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+586 -229)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-portability/build/viewer/index.html  (+485 -106)
-    size            17868 lines / 4112477 bytes -> 18247 lines / 4127520 bytes
+testdata/fixture-portability/build/viewer/index.html  (+494 -113)
+    size            17868 lines / 4112477 bytes -> 18249 lines / 4127851 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -3921,7 +3996,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
 +  display: flex;
 +  flex-wrap: wrap;
 +  gap: 6px;
-+  margin-bottom: 6px;
++  margin: 0 10px 6px 0;
 +}
 +
 +.theme-control button {
@@ -4352,7 +4427,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7365,52 +7672,76 @@
+@@ -7365,52 +7672,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -4368,7 +4443,8 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
 +        );
 
 -        if (!ledger.length && !lintErrors.length && !readiness.length) {
-+        if (!groups.length) {
++        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
++        if (!groups.length || !actionable) {
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
@@ -4458,7 +4534,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7822,6 +8153,23 @@
+@@ -7822,6 +8154,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -4482,7 +4558,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7946,6 +8294,10 @@
+@@ -7946,9 +8295,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -4492,8 +4568,31 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
 +      if (!softMountEnabled()) { mountAllSurfaces(); }
        // Static file:// viewers never receive /api/status. Paint the assessment
        // carried by the graph payload now; a live response replaces it later.
-       renderClaimReadiness(offlineReadiness());
-@@ -8258,6 +8610,10 @@
+-      renderClaimReadiness(offlineReadiness());
++      renderStatusStrip({ readiness: offlineReadiness() });
+       probeAndMount();
+     })();
+ </script>
+@@ -7973,12 +8326,12 @@
+   }
+
+   function enhanceTimestamp() {
+-    var footer = document.querySelector('.sidebar-footer');
+-    if (!footer || footer.dataset.localTime === 'true') { return; }
+-    var original = footer.textContent.trim();
+-    footer.dataset.localTime = 'true';
+-    footer.title = original + ' · shown in your local time';
+-    footer.textContent = formatGeneratedTime(original);
++    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
++    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
++    var original = stamp.textContent.trim();
++    stamp.dataset.localTime = 'true';
++    stamp.title = original + ' · shown in your local time';
++    stamp.textContent = formatGeneratedTime(original);
+   }
+
+   function bindResizer() {
+@@ -8258,6 +8611,10 @@
    }
 
    function updateTocActive() {
@@ -4504,7 +4603,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8332,12 +8688,12 @@
+@@ -8332,12 +8689,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -4523,7 +4622,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8346,15 +8702,37 @@
+@@ -8346,15 +8703,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -4548,14 +4647,15 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
 +  }
 +
 +  function bindThemeControl() {
-+    var control = document.querySelector('.theme-control');
-+    if (!control || control.dataset.bound === 'true') { return; }
-+    control.dataset.bound = 'true';
 +    var current = document.documentElement.getAttribute('data-theme') || 'system';
 +    applyThemeChoice(current);
-+    control.addEventListener('click', function (event) {
-+      var button = event.target.closest('[data-theme-choice]');
-+      if (!button) { return; }
++    if (document.documentElement.dataset.themeControlBound === 'true') { return; }
++    document.documentElement.dataset.themeControlBound = 'true';
++    document.addEventListener('click', function (event) {
++      var target = event.target;
++      if (!target || typeof target.closest !== 'function') { return; }
++      var button = target.closest('[data-theme-choice]');
++      if (!button || !button.closest('.theme-control')) { return; }
 +      applyThemeChoice(button.getAttribute('data-theme-choice'));
 +    });
 +  }
@@ -4563,7 +4663,7 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8381,6 +8759,7 @@
+@@ -8381,6 +8761,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -4572,8 +4672,8 @@ testdata/fixture-portability/build/viewer/index.html  (+485 -106)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
-    size            18159 lines / 4152106 bytes -> 18534 lines / 4167217 bytes
+testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
+    size            18159 lines / 4152106 bytes -> 18536 lines / 4167548 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -4848,7 +4948,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
 +  display: flex;
 +  flex-wrap: wrap;
 +  gap: 6px;
-+  margin-bottom: 6px;
++  margin: 0 10px 6px 0;
 +}
 +
 +.theme-control button {
@@ -5406,7 +5506,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7656,52 +7959,76 @@
+@@ -7656,52 +7959,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -5422,7 +5522,8 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
 +        );
 
 -        if (!ledger.length && !lintErrors.length && !readiness.length) {
-+        if (!groups.length) {
++        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
++        if (!groups.length || !actionable) {
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
@@ -5512,7 +5613,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -8113,6 +8440,23 @@
+@@ -8113,6 +8441,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -5536,7 +5637,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -8237,6 +8581,10 @@
+@@ -8237,9 +8582,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -5546,8 +5647,31 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
 +      if (!softMountEnabled()) { mountAllSurfaces(); }
        // Static file:// viewers never receive /api/status. Paint the assessment
        // carried by the graph payload now; a live response replaces it later.
-       renderClaimReadiness(offlineReadiness());
-@@ -8549,6 +8897,10 @@
+-      renderClaimReadiness(offlineReadiness());
++      renderStatusStrip({ readiness: offlineReadiness() });
+       probeAndMount();
+     })();
+ </script>
+@@ -8264,12 +8613,12 @@
+   }
+
+   function enhanceTimestamp() {
+-    var footer = document.querySelector('.sidebar-footer');
+-    if (!footer || footer.dataset.localTime === 'true') { return; }
+-    var original = footer.textContent.trim();
+-    footer.dataset.localTime = 'true';
+-    footer.title = original + ' · shown in your local time';
+-    footer.textContent = formatGeneratedTime(original);
++    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
++    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
++    var original = stamp.textContent.trim();
++    stamp.dataset.localTime = 'true';
++    stamp.title = original + ' · shown in your local time';
++    stamp.textContent = formatGeneratedTime(original);
+   }
+
+   function bindResizer() {
+@@ -8549,6 +8898,10 @@
    }
 
    function updateTocActive() {
@@ -5558,7 +5682,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8623,12 +8975,12 @@
+@@ -8623,12 +8976,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -5577,7 +5701,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8637,15 +8989,37 @@
+@@ -8637,15 +8990,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -5602,14 +5726,15 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
 +  }
 +
 +  function bindThemeControl() {
-+    var control = document.querySelector('.theme-control');
-+    if (!control || control.dataset.bound === 'true') { return; }
-+    control.dataset.bound = 'true';
 +    var current = document.documentElement.getAttribute('data-theme') || 'system';
 +    applyThemeChoice(current);
-+    control.addEventListener('click', function (event) {
-+      var button = event.target.closest('[data-theme-choice]');
-+      if (!button) { return; }
++    if (document.documentElement.dataset.themeControlBound === 'true') { return; }
++    document.documentElement.dataset.themeControlBound = 'true';
++    document.addEventListener('click', function (event) {
++      var target = event.target;
++      if (!target || typeof target.closest !== 'function') { return; }
++      var button = target.closest('[data-theme-choice]');
++      if (!button || !button.closest('.theme-control')) { return; }
 +      applyThemeChoice(button.getAttribute('data-theme-choice'));
 +    });
 +  }
@@ -5617,7 +5742,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8672,6 +9046,7 @@
+@@ -8672,6 +9048,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -5626,8 +5751,8 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+498 -123)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
-    size            17879 lines / 4113503 bytes -> 18258 lines / 4129805 bytes
+testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
+    size            17879 lines / 4113503 bytes -> 18260 lines / 4130136 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -5902,7 +6027,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
 +  display: flex;
 +  flex-wrap: wrap;
 +  gap: 6px;
-+  margin-bottom: 6px;
++  margin: 0 10px 6px 0;
 +}
 +
 +.theme-control button {
@@ -6329,7 +6454,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7376,52 +7683,76 @@
+@@ -7376,52 +7683,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -6345,7 +6470,8 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
 +        );
 
 -        if (!ledger.length && !lintErrors.length && !readiness.length) {
-+        if (!groups.length) {
++        var actionable = groups.some(function (group) { return group.severity !== 'later'; });
++        if (!groups.length || !actionable) {
            stripEl.hidden = true;
            stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
            stripBody.textContent = '';
@@ -6435,7 +6561,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7833,6 +8164,23 @@
+@@ -7833,6 +8165,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -6459,7 +6585,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7957,6 +8305,10 @@
+@@ -7957,9 +8306,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -6469,8 +6595,31 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
 +      if (!softMountEnabled()) { mountAllSurfaces(); }
        // Static file:// viewers never receive /api/status. Paint the assessment
        // carried by the graph payload now; a live response replaces it later.
-       renderClaimReadiness(offlineReadiness());
-@@ -8269,6 +8621,10 @@
+-      renderClaimReadiness(offlineReadiness());
++      renderStatusStrip({ readiness: offlineReadiness() });
+       probeAndMount();
+     })();
+ </script>
+@@ -7984,12 +8337,12 @@
+   }
+
+   function enhanceTimestamp() {
+-    var footer = document.querySelector('.sidebar-footer');
+-    if (!footer || footer.dataset.localTime === 'true') { return; }
+-    var original = footer.textContent.trim();
+-    footer.dataset.localTime = 'true';
+-    footer.title = original + ' · shown in your local time';
+-    footer.textContent = formatGeneratedTime(original);
++    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
++    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
++    var original = stamp.textContent.trim();
++    stamp.dataset.localTime = 'true';
++    stamp.title = original + ' · shown in your local time';
++    stamp.textContent = formatGeneratedTime(original);
+   }
+
+   function bindResizer() {
+@@ -8269,6 +8622,10 @@
    }
 
    function updateTocActive() {
@@ -6481,7 +6630,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8343,12 +8699,12 @@
+@@ -8343,12 +8700,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -6500,7 +6649,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8357,15 +8713,37 @@
+@@ -8357,15 +8714,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -6525,14 +6674,15 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
 +  }
 +
 +  function bindThemeControl() {
-+    var control = document.querySelector('.theme-control');
-+    if (!control || control.dataset.bound === 'true') { return; }
-+    control.dataset.bound = 'true';
 +    var current = document.documentElement.getAttribute('data-theme') || 'system';
 +    applyThemeChoice(current);
-+    control.addEventListener('click', function (event) {
-+      var button = event.target.closest('[data-theme-choice]');
-+      if (!button) { return; }
++    if (document.documentElement.dataset.themeControlBound === 'true') { return; }
++    document.documentElement.dataset.themeControlBound = 'true';
++    document.addEventListener('click', function (event) {
++      var target = event.target;
++      if (!target || typeof target.closest !== 'function') { return; }
++      var button = target.closest('[data-theme-choice]');
++      if (!button || !button.closest('.theme-control')) { return; }
 +      applyThemeChoice(button.getAttribute('data-theme-choice'));
 +    });
 +  }
@@ -6540,7 +6690,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+484 -105)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8392,6 +8770,7 @@
+@@ -8392,6 +8772,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
