@@ -46,8 +46,8 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (+492 -111)
-    size            17877 lines / 4110066 bytes -> 18258 lines / 4125440 bytes
+testdata/fixture-basic/build/viewer/index.html  (+501 -111)
+    size            17877 lines / 4110066 bytes -> 18267 lines / 4125822 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -585,7 +585,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -6997,26 +7182,148 @@
+@@ -6997,26 +7182,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -694,10 +694,16 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
 +        return Object.keys(group.claimIDs).length;
 +      }
 +
++      function uniqueClaimCount(groups) {
++        var ids = Object.create(null);
++        groups.forEach(function (group) {
++          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
++        });
++        return Object.keys(ids).length;
++      }
++
 +      function countSeverity(groups, id) {
-+        return groups.reduce(function (sum, group) {
-+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-+        }, 0);
++        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
 +      }
 +
 +      function statusChipLine(groups) {
@@ -711,10 +717,13 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
 +        if (!blockers.length) { return ''; }
 +        var byKind = {};
 +        blockers.forEach(function (group) {
-+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
++          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
++          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
 +        });
-+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-+        var n = byKind[topKind];
++        var topKind = Object.keys(byKind).sort(function (a, b) {
++          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
++        })[0];
++        var n = Object.keys(byKind[topKind]).length;
 +        if (topKind === 'dependency_unapproved') {
 +          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
 +        }
@@ -746,7 +755,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7374,52 +7681,77 @@
+@@ -7374,52 +7690,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -853,7 +862,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7831,6 +8163,23 @@
+@@ -7831,6 +8172,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -877,7 +886,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7955,9 +8304,13 @@
+@@ -7955,9 +8313,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -892,7 +901,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
        probeAndMount();
      })();
  </script>
-@@ -7982,12 +8335,12 @@
+@@ -7982,12 +8344,12 @@
    }
 
    function enhanceTimestamp() {
@@ -911,7 +920,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
    }
 
    function bindResizer() {
-@@ -8267,6 +8620,10 @@
+@@ -8267,6 +8629,10 @@
    }
 
    function updateTocActive() {
@@ -922,7 +931,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8341,12 +8698,12 @@
+@@ -8341,12 +8707,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -941,7 +950,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8355,15 +8712,38 @@
+@@ -8355,15 +8721,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -982,7 +991,7 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8390,6 +8770,7 @@
+@@ -8390,6 +8779,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -991,8 +1000,8 @@ testdata/fixture-basic/build/viewer/index.html  (+492 -111)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
-    size            14052 lines / 537928 bytes -> 14436 lines / 553695 bytes
+testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
+    size            14052 lines / 537928 bytes -> 14445 lines / 554077 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -1579,7 +1588,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -7030,26 +7218,148 @@
+@@ -7030,26 +7218,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -1688,10 +1697,16 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
 +        return Object.keys(group.claimIDs).length;
 +      }
 +
++      function uniqueClaimCount(groups) {
++        var ids = Object.create(null);
++        groups.forEach(function (group) {
++          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
++        });
++        return Object.keys(ids).length;
++      }
++
 +      function countSeverity(groups, id) {
-+        return groups.reduce(function (sum, group) {
-+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-+        }, 0);
++        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
 +      }
 +
 +      function statusChipLine(groups) {
@@ -1705,10 +1720,13 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
 +        if (!blockers.length) { return ''; }
 +        var byKind = {};
 +        blockers.forEach(function (group) {
-+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
++          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
++          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
 +        });
-+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-+        var n = byKind[topKind];
++        var topKind = Object.keys(byKind).sort(function (a, b) {
++          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
++        })[0];
++        var n = Object.keys(byKind[topKind]).length;
 +        if (topKind === 'dependency_unapproved') {
 +          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
 +        }
@@ -1740,7 +1758,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7407,52 +7717,77 @@
+@@ -7407,52 +7726,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -1847,7 +1865,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7864,6 +8199,23 @@
+@@ -7864,6 +8208,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -1871,7 +1889,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7988,9 +8340,13 @@
+@@ -7988,9 +8349,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -1886,7 +1904,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
        probeAndMount();
      })();
  </script>
-@@ -8015,12 +8371,12 @@
+@@ -8015,12 +8380,12 @@
    }
 
    function enhanceTimestamp() {
@@ -1905,7 +1923,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
    }
 
    function bindResizer() {
-@@ -8300,6 +8656,10 @@
+@@ -8300,6 +8665,10 @@
    }
 
    function updateTocActive() {
@@ -1916,7 +1934,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8374,12 +8734,12 @@
+@@ -8374,12 +8743,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -1935,7 +1953,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8388,15 +8748,38 @@
+@@ -8388,15 +8757,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -1976,7 +1994,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8423,6 +8806,7 @@
+@@ -8423,6 +8815,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -1985,8 +2003,8 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+515 -131)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
-    size            18613 lines / 4257854 bytes -> 18972 lines / 4273475 bytes
+testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
+    size            18613 lines / 4257854 bytes -> 18981 lines / 4273857 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -3314,7 +3332,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -7733,26 +7896,148 @@
+@@ -7733,26 +7896,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -3423,10 +3441,16 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
 +        return Object.keys(group.claimIDs).length;
 +      }
 +
++      function uniqueClaimCount(groups) {
++        var ids = Object.create(null);
++        groups.forEach(function (group) {
++          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
++        });
++        return Object.keys(ids).length;
++      }
++
 +      function countSeverity(groups, id) {
-+        return groups.reduce(function (sum, group) {
-+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-+        }, 0);
++        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
 +      }
 +
 +      function statusChipLine(groups) {
@@ -3440,10 +3464,13 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
 +        if (!blockers.length) { return ''; }
 +        var byKind = {};
 +        blockers.forEach(function (group) {
-+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
++          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
++          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
 +        });
-+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-+        var n = byKind[topKind];
++        var topKind = Object.keys(byKind).sort(function (a, b) {
++          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
++        })[0];
++        var n = Object.keys(byKind[topKind]).length;
 +        if (topKind === 'dependency_unapproved') {
 +          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
 +        }
@@ -3475,7 +3502,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -8110,52 +8395,77 @@
+@@ -8110,52 +8404,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -3582,7 +3609,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -8567,6 +8877,23 @@
+@@ -8567,6 +8886,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -3606,7 +3633,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -8691,9 +9018,13 @@
+@@ -8691,9 +9027,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -3621,7 +3648,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
        probeAndMount();
      })();
  </script>
-@@ -8718,12 +9049,12 @@
+@@ -8718,12 +9058,12 @@
    }
 
    function enhanceTimestamp() {
@@ -3640,7 +3667,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
    }
 
    function bindResizer() {
-@@ -9003,6 +9334,10 @@
+@@ -9003,6 +9343,10 @@
    }
 
    function updateTocActive() {
@@ -3651,7 +3678,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -9077,12 +9412,12 @@
+@@ -9077,12 +9421,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -3670,7 +3697,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -9091,15 +9426,38 @@
+@@ -9091,15 +9435,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -3711,7 +3738,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -9126,6 +9484,7 @@
+@@ -9126,6 +9493,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -3720,8 +3747,8 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+595 -236)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-portability/build/viewer/index.html  (+494 -113)
-    size            17868 lines / 4112477 bytes -> 18249 lines / 4127851 bytes
+testdata/fixture-portability/build/viewer/index.html  (+503 -113)
+    size            17868 lines / 4112477 bytes -> 18258 lines / 4128233 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -4266,7 +4293,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -6988,26 +7173,148 @@
+@@ -6988,26 +7173,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -4375,10 +4402,16 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
 +        return Object.keys(group.claimIDs).length;
 +      }
 +
++      function uniqueClaimCount(groups) {
++        var ids = Object.create(null);
++        groups.forEach(function (group) {
++          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
++        });
++        return Object.keys(ids).length;
++      }
++
 +      function countSeverity(groups, id) {
-+        return groups.reduce(function (sum, group) {
-+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-+        }, 0);
++        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
 +      }
 +
 +      function statusChipLine(groups) {
@@ -4392,10 +4425,13 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
 +        if (!blockers.length) { return ''; }
 +        var byKind = {};
 +        blockers.forEach(function (group) {
-+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
++          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
++          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
 +        });
-+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-+        var n = byKind[topKind];
++        var topKind = Object.keys(byKind).sort(function (a, b) {
++          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
++        })[0];
++        var n = Object.keys(byKind[topKind]).length;
 +        if (topKind === 'dependency_unapproved') {
 +          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
 +        }
@@ -4427,7 +4463,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7365,52 +7672,77 @@
+@@ -7365,52 +7681,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -4534,7 +4570,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7822,6 +8154,23 @@
+@@ -7822,6 +8163,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -4558,7 +4594,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7946,9 +8295,13 @@
+@@ -7946,9 +8304,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -4573,7 +4609,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
        probeAndMount();
      })();
  </script>
-@@ -7973,12 +8326,12 @@
+@@ -7973,12 +8335,12 @@
    }
 
    function enhanceTimestamp() {
@@ -4592,7 +4628,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
    }
 
    function bindResizer() {
-@@ -8258,6 +8611,10 @@
+@@ -8258,6 +8620,10 @@
    }
 
    function updateTocActive() {
@@ -4603,7 +4639,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8332,12 +8689,12 @@
+@@ -8332,12 +8698,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -4622,7 +4658,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8346,15 +8703,38 @@
+@@ -8346,15 +8712,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -4663,7 +4699,7 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8381,6 +8761,7 @@
+@@ -8381,6 +8770,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -4672,8 +4708,8 @@ testdata/fixture-portability/build/viewer/index.html  (+494 -113)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
-    size            18159 lines / 4152106 bytes -> 18536 lines / 4167548 bytes
+testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
+    size            18159 lines / 4152106 bytes -> 18545 lines / 4167930 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -5345,7 +5381,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -7279,26 +7460,148 @@
+@@ -7279,26 +7460,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -5454,10 +5490,16 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
 +        return Object.keys(group.claimIDs).length;
 +      }
 +
++      function uniqueClaimCount(groups) {
++        var ids = Object.create(null);
++        groups.forEach(function (group) {
++          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
++        });
++        return Object.keys(ids).length;
++      }
++
 +      function countSeverity(groups, id) {
-+        return groups.reduce(function (sum, group) {
-+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-+        }, 0);
++        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
 +      }
 +
 +      function statusChipLine(groups) {
@@ -5471,10 +5513,13 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
 +        if (!blockers.length) { return ''; }
 +        var byKind = {};
 +        blockers.forEach(function (group) {
-+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
++          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
++          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
 +        });
-+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-+        var n = byKind[topKind];
++        var topKind = Object.keys(byKind).sort(function (a, b) {
++          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
++        })[0];
++        var n = Object.keys(byKind[topKind]).length;
 +        if (topKind === 'dependency_unapproved') {
 +          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
 +        }
@@ -5506,7 +5551,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7656,52 +7959,77 @@
+@@ -7656,52 +7968,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -5613,7 +5658,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -8113,6 +8441,23 @@
+@@ -8113,6 +8450,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -5637,7 +5682,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -8237,9 +8582,13 @@
+@@ -8237,9 +8591,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -5652,7 +5697,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
        probeAndMount();
      })();
  </script>
-@@ -8264,12 +8613,12 @@
+@@ -8264,12 +8622,12 @@
    }
 
    function enhanceTimestamp() {
@@ -5671,7 +5716,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
    }
 
    function bindResizer() {
-@@ -8549,6 +8898,10 @@
+@@ -8549,6 +8907,10 @@
    }
 
    function updateTocActive() {
@@ -5682,7 +5727,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8623,12 +8976,12 @@
+@@ -8623,12 +8985,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -5701,7 +5746,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8637,15 +8990,38 @@
+@@ -8637,15 +8999,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -5742,7 +5787,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8672,6 +9048,7 @@
+@@ -8672,6 +9057,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -5751,8 +5796,8 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+507 -130)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
-    size            17879 lines / 4113503 bytes -> 18260 lines / 4130136 bytes
+testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
+    size            17879 lines / 4113503 bytes -> 18269 lines / 4130518 bytes
 @@ -1260,8 +1260,28 @@
    --mockup-bg: #fff;
  }
@@ -6293,7 +6338,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -6999,26 +7184,148 @@
+@@ -6999,26 +7184,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -6402,10 +6447,16 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
 +        return Object.keys(group.claimIDs).length;
 +      }
 +
++      function uniqueClaimCount(groups) {
++        var ids = Object.create(null);
++        groups.forEach(function (group) {
++          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
++        });
++        return Object.keys(ids).length;
++      }
++
 +      function countSeverity(groups, id) {
-+        return groups.reduce(function (sum, group) {
-+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-+        }, 0);
++        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
 +      }
 +
 +      function statusChipLine(groups) {
@@ -6419,10 +6470,13 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
 +        if (!blockers.length) { return ''; }
 +        var byKind = {};
 +        blockers.forEach(function (group) {
-+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
++          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
++          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
 +        });
-+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-+        var n = byKind[topKind];
++        var topKind = Object.keys(byKind).sort(function (a, b) {
++          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
++        })[0];
++        var n = Object.keys(byKind[topKind]).length;
 +        if (topKind === 'dependency_unapproved') {
 +          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
 +        }
@@ -6454,7 +6508,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7376,52 +7683,77 @@
+@@ -7376,52 +7692,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -6561,7 +6615,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7833,6 +8165,23 @@
+@@ -7833,6 +8174,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -6585,7 +6639,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7957,9 +8306,13 @@
+@@ -7957,9 +8315,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -6600,7 +6654,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
        probeAndMount();
      })();
  </script>
-@@ -7984,12 +8337,12 @@
+@@ -7984,12 +8346,12 @@
    }
 
    function enhanceTimestamp() {
@@ -6619,7 +6673,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
    }
 
    function bindResizer() {
-@@ -8269,6 +8622,10 @@
+@@ -8269,6 +8631,10 @@
    }
 
    function updateTocActive() {
@@ -6630,7 +6684,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8343,12 +8700,12 @@
+@@ -8343,12 +8709,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -6649,7 +6703,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8357,15 +8714,38 @@
+@@ -8357,15 +8723,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -6690,7 +6744,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+493 -112)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8392,6 +8772,7 @@
+@@ -8392,6 +8781,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();

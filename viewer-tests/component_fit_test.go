@@ -81,6 +81,18 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	if evalBool(t, ctx, `document.getElementById('statusStrip').classList.contains('status-strip--open')`) {
 		t.Fatal("blocker-only strip must stay collapsed")
 	}
+	if !evalBool(t, ctx, `(function(){
+		var claims = document.querySelectorAll('.module-section:not([hidden]) .claim-group:not([hidden]) .claim').length;
+		var title = document.getElementById('statusStripTitle').textContent;
+		var note = document.getElementById('statusStripNote').textContent;
+		var blocked = title.match(/(\d+) claims? blocked/);
+		var chip = note.match(/Blocker (\d+)/);
+		return blocked && chip && Number(blocked[1]) <= claims && Number(chip[1]) <= claims;
+	})()`) {
+		t.Fatalf("blocker counts must be unique claims, not summed paths (title=%q note=%q)",
+			evalString(t, ctx, `document.getElementById('statusStripTitle').textContent`),
+			evalString(t, ctx, `document.getElementById('statusStripNote').textContent`))
+	}
 }
 
 func TestReadyConformanceStaysInsideCollapsedClaim(t *testing.T) {

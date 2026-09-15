@@ -1216,10 +1216,16 @@
         return Object.keys(group.claimIDs).length;
       }
 
+      function uniqueClaimCount(groups) {
+        var ids = Object.create(null);
+        groups.forEach(function (group) {
+          Object.keys(group.claimIDs).forEach(function (id) { ids[id] = true; });
+        });
+        return Object.keys(ids).length;
+      }
+
       function countSeverity(groups, id) {
-        return groups.reduce(function (sum, group) {
-          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
-        }, 0);
+        return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
       }
 
       function statusChipLine(groups) {
@@ -1233,10 +1239,13 @@
         if (!blockers.length) { return ''; }
         var byKind = {};
         blockers.forEach(function (group) {
-          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
+          if (!byKind[group.kind]) { byKind[group.kind] = Object.create(null); }
+          Object.keys(group.claimIDs).forEach(function (id) { byKind[group.kind][id] = true; });
         });
-        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
-        var n = byKind[topKind];
+        var topKind = Object.keys(byKind).sort(function (a, b) {
+          return Object.keys(byKind[b]).length - Object.keys(byKind[a]).length;
+        })[0];
+        var n = Object.keys(byKind[topKind]).length;
         if (topKind === 'dependency_unapproved') {
           return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
         }
