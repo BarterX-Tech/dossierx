@@ -46,9 +46,9 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (+501 -111)
-    size            17877 lines / 4110066 bytes -> 18267 lines / 4125822 bytes
-@@ -1260,8 +1260,28 @@
+testdata/fixture-basic/build/viewer/index.html  (+499 -110)
+    size            17877 lines / 4110066 bytes -> 18266 lines / 4125775 bytes
+@@ -1260,6 +1260,26 @@
    --mockup-bg: #fff;
  }
 
@@ -73,11 +73,8 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
 +}
 +
  @media screen and (prefers-color-scheme: dark) {
--  :root {
-+  html:not([data-theme="light"]) {
+   :root {
      --ink: #e8eef8;
-     --muted: #a9b5c8;
-     --faint: #75839a;
 @@ -1905,8 +1925,8 @@
  .claim-readiness {
    overflow: hidden;
@@ -284,7 +281,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
      min-height: 44px;
    }
  }
-@@ -3330,9 +3361,18 @@
+@@ -3330,9 +3361,17 @@
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
    }
@@ -292,8 +289,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
 -    margin-top: -4px;
 +  .status-strip,
 +  .claim-group,
-+  .claim,
-+  .claim-conformance {
++  .claim {
 +    width: 100%;
 +    max-width: 100%;
 +    box-sizing: border-box;
@@ -305,7 +301,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
    .status-strip-head {
      display: grid;
      grid-template-columns: minmax(0, 1fr) 10px;
-@@ -3754,12 +3794,40 @@
+@@ -3754,12 +3793,40 @@
    flex-shrink: 0;
    padding: 8px 14px 12px;
    border-top: 1px solid var(--border);
@@ -349,7 +345,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
  .nav-toggle, .nav-overlay {
    display: none;
  }
-@@ -3843,6 +3911,14 @@
+@@ -3843,6 +3910,14 @@
    display: none;
  }
 
@@ -364,7 +360,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
  /* section-heading is an in-content break inside .content-area, injected by
     render.newGroup ahead of the first claim of each run of consecutive,
     same-Section claims (model.Claim.Section) — a close visual cousin of the
-@@ -3861,7 +3937,14 @@
+@@ -3861,7 +3936,14 @@
    color: var(--faint);
  }
 
@@ -380,7 +376,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
    margin-top: 0;
    padding-top: 0;
    border-top: 0;
-@@ -5836,6 +5919,15 @@
+@@ -5836,6 +5918,15 @@
  }
  </style>
    <style></style>
@@ -396,7 +392,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
  </head>
  <body class="shell-body">
    <div class="layout">
-@@ -5864,13 +5956,20 @@
+@@ -5864,13 +5955,20 @@
          </div>
        </nav>
        <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
@@ -419,7 +415,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
 
                <div class="sub-nav">
 
-@@ -5884,19 +5983,18 @@
+@@ -5884,19 +5982,18 @@
                <section class="claim-group" id="widget-contract" hidden>
 
  <section class="claim claim-card card" id="widget.contract.overview" data-status="draft">
@@ -442,7 +438,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
 
 
 
-@@ -5918,10 +6016,9 @@
+@@ -5918,10 +6015,9 @@
    </div>
 
 
@@ -454,7 +450,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
                </section>
 
            </section>
-@@ -5980,6 +6077,8 @@
+@@ -5980,6 +6076,8 @@
        // each SSE re-render. It attaches NO listeners — those are delegated once
        // on surviving nodes below, so re-running this never double-binds.
        function initViewer() {
@@ -463,7 +459,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
          // Two-level show/hide: one .module-section per sidebar .sec-tab, and
          // (when a module has more than one facet) one .claim-group per .subtab
          // inside that module's .sub-nav. A single-facet module still has exactly
-@@ -6011,8 +6110,17 @@
+@@ -6011,8 +6109,17 @@
          // the comment JS keying off data-claim-id (never id) for state fan-out.
          claimToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -483,7 +479,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
            });
          });
 
-@@ -6029,8 +6137,15 @@
+@@ -6029,8 +6136,15 @@
          // one-to-one for the same reason claimToFacet is.
          sourceToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -501,7 +497,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
            });
          });
 
-@@ -6083,6 +6198,70 @@
+@@ -6083,6 +6197,70 @@
          return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
        }
 
@@ -572,7 +568,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
        function showModuleFacet(moduleID, facetID, opts) {
          if (!moduleID) { return; }
 
-@@ -6106,6 +6285,12 @@
+@@ -6106,6 +6284,12 @@
            });
          }
 
@@ -585,7 +581,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -6997,26 +7182,157 @@
+@@ -6997,26 +7181,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -755,7 +751,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7374,52 +7690,77 @@
+@@ -7374,52 +7689,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -862,7 +858,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7831,6 +8172,23 @@
+@@ -7831,6 +8171,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -886,7 +882,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7955,9 +8313,13 @@
+@@ -7955,9 +8312,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -901,7 +897,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
        probeAndMount();
      })();
  </script>
-@@ -7982,12 +8344,12 @@
+@@ -7982,12 +8343,12 @@
    }
 
    function enhanceTimestamp() {
@@ -920,7 +916,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
    }
 
    function bindResizer() {
-@@ -8267,6 +8629,10 @@
+@@ -8267,6 +8628,10 @@
    }
 
    function updateTocActive() {
@@ -931,7 +927,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8341,12 +8707,12 @@
+@@ -8341,12 +8706,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -950,7 +946,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8355,15 +8721,38 @@
+@@ -8355,15 +8720,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -991,7 +987,7 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8390,6 +8779,7 @@
+@@ -8390,6 +8778,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -1000,9 +996,9 @@ testdata/fixture-basic/build/viewer/index.html  (+501 -111)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
-    size            14052 lines / 537928 bytes -> 14445 lines / 554077 bytes
-@@ -1260,8 +1260,28 @@
+testdata/fixture-conformance-v1/build/viewer/index.html  (+522 -130)
+    size            14052 lines / 537928 bytes -> 14444 lines / 554030 bytes
+@@ -1260,6 +1260,26 @@
    --mockup-bg: #fff;
  }
 
@@ -1027,11 +1023,8 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
 +}
 +
  @media screen and (prefers-color-scheme: dark) {
--  :root {
-+  html:not([data-theme="light"]) {
+   :root {
      --ink: #e8eef8;
-     --muted: #a9b5c8;
-     --faint: #75839a;
 @@ -1905,8 +1925,8 @@
  .claim-readiness {
    overflow: hidden;
@@ -1238,7 +1231,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
      min-height: 44px;
    }
  }
-@@ -3330,9 +3361,18 @@
+@@ -3330,9 +3361,17 @@
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
    }
@@ -1246,8 +1239,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
 -    margin-top: -4px;
 +  .status-strip,
 +  .claim-group,
-+  .claim,
-+  .claim-conformance {
++  .claim {
 +    width: 100%;
 +    max-width: 100%;
 +    box-sizing: border-box;
@@ -1259,7 +1251,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
    .status-strip-head {
      display: grid;
      grid-template-columns: minmax(0, 1fr) 10px;
-@@ -3754,12 +3794,40 @@
+@@ -3754,12 +3793,40 @@
    flex-shrink: 0;
    padding: 8px 14px 12px;
    border-top: 1px solid var(--border);
@@ -1303,7 +1295,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
  .nav-toggle, .nav-overlay {
    display: none;
  }
-@@ -3843,6 +3911,14 @@
+@@ -3843,6 +3910,14 @@
    display: none;
  }
 
@@ -1318,7 +1310,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
  /* section-heading is an in-content break inside .content-area, injected by
     render.newGroup ahead of the first claim of each run of consecutive,
     same-Section claims (model.Claim.Section) — a close visual cousin of the
-@@ -3861,7 +3937,14 @@
+@@ -3861,7 +3936,14 @@
    color: var(--faint);
  }
 
@@ -1334,7 +1326,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
    margin-top: 0;
    padding-top: 0;
    border-top: 0;
-@@ -5836,20 +5919,31 @@
+@@ -5836,20 +5918,31 @@
  }
 
  /* Added only when this viewer contains structured conformance results. */
@@ -1377,7 +1369,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
  </head>
  <body class="shell-body">
    <div class="layout">
-@@ -5878,56 +5972,62 @@
+@@ -5878,56 +5971,62 @@
          </div>
        </nav>
        <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
@@ -1457,7 +1449,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
 
                </section>
 
-@@ -6013,6 +6113,8 @@
+@@ -6013,6 +6112,8 @@
        // each SSE re-render. It attaches NO listeners — those are delegated once
        // on surviving nodes below, so re-running this never double-binds.
        function initViewer() {
@@ -1466,7 +1458,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
          // Two-level show/hide: one .module-section per sidebar .sec-tab, and
          // (when a module has more than one facet) one .claim-group per .subtab
          // inside that module's .sub-nav. A single-facet module still has exactly
-@@ -6044,8 +6146,17 @@
+@@ -6044,8 +6145,17 @@
          // the comment JS keying off data-claim-id (never id) for state fan-out.
          claimToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -1486,7 +1478,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
            });
          });
 
-@@ -6062,8 +6173,15 @@
+@@ -6062,8 +6172,15 @@
          // one-to-one for the same reason claimToFacet is.
          sourceToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -1504,7 +1496,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
            });
          });
 
-@@ -6116,6 +6234,70 @@
+@@ -6116,6 +6233,70 @@
          return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
        }
 
@@ -1575,7 +1567,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
        function showModuleFacet(moduleID, facetID, opts) {
          if (!moduleID) { return; }
 
-@@ -6139,6 +6321,12 @@
+@@ -6139,6 +6320,12 @@
            });
          }
 
@@ -1588,7 +1580,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -7030,26 +7218,157 @@
+@@ -7030,26 +7217,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -1758,7 +1750,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7407,52 +7726,77 @@
+@@ -7407,52 +7725,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -1865,7 +1857,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7864,6 +8208,23 @@
+@@ -7864,6 +8207,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -1889,7 +1881,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7988,9 +8349,13 @@
+@@ -7988,9 +8348,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -1904,7 +1896,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
        probeAndMount();
      })();
  </script>
-@@ -8015,12 +8380,12 @@
+@@ -8015,12 +8379,12 @@
    }
 
    function enhanceTimestamp() {
@@ -1923,7 +1915,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
    }
 
    function bindResizer() {
-@@ -8300,6 +8665,10 @@
+@@ -8300,6 +8664,10 @@
    }
 
    function updateTocActive() {
@@ -1934,7 +1926,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8374,12 +8743,12 @@
+@@ -8374,12 +8742,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -1953,7 +1945,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8388,15 +8757,38 @@
+@@ -8388,15 +8756,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -1994,7 +1986,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8423,6 +8815,7 @@
+@@ -8423,6 +8814,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -2003,9 +1995,9 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+524 -131)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
-    size            18613 lines / 4257854 bytes -> 18981 lines / 4273857 bytes
-@@ -1260,8 +1260,28 @@
+testdata/fixture-graph-demo/build/viewer/index.html  (+602 -235)
+    size            18613 lines / 4257854 bytes -> 18980 lines / 4273810 bytes
+@@ -1260,6 +1260,26 @@
    --mockup-bg: #fff;
  }
 
@@ -2030,11 +2022,8 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 +}
 +
  @media screen and (prefers-color-scheme: dark) {
--  :root {
-+  html:not([data-theme="light"]) {
+   :root {
      --ink: #e8eef8;
-     --muted: #a9b5c8;
-     --faint: #75839a;
 @@ -1905,8 +1925,8 @@
  .claim-readiness {
    overflow: hidden;
@@ -2241,7 +2230,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
      min-height: 44px;
    }
  }
-@@ -3330,9 +3361,18 @@
+@@ -3330,9 +3361,17 @@
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
    }
@@ -2249,8 +2238,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 -    margin-top: -4px;
 +  .status-strip,
 +  .claim-group,
-+  .claim,
-+  .claim-conformance {
++  .claim {
 +    width: 100%;
 +    max-width: 100%;
 +    box-sizing: border-box;
@@ -2262,7 +2250,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
    .status-strip-head {
      display: grid;
      grid-template-columns: minmax(0, 1fr) 10px;
-@@ -3754,12 +3794,40 @@
+@@ -3754,12 +3793,40 @@
    flex-shrink: 0;
    padding: 8px 14px 12px;
    border-top: 1px solid var(--border);
@@ -2306,7 +2294,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  .nav-toggle, .nav-overlay {
    display: none;
  }
-@@ -3843,6 +3911,14 @@
+@@ -3843,6 +3910,14 @@
    display: none;
  }
 
@@ -2321,7 +2309,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  /* section-heading is an in-content break inside .content-area, injected by
     render.newGroup ahead of the first claim of each run of consecutive,
     same-Section claims (model.Claim.Section) — a close visual cousin of the
-@@ -3861,7 +3937,14 @@
+@@ -3861,7 +3936,14 @@
    color: var(--faint);
  }
 
@@ -2337,7 +2325,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
    margin-top: 0;
    padding-top: 0;
    border-top: 0;
-@@ -5836,6 +5919,15 @@
+@@ -5836,6 +5918,15 @@
  }
  </style>
    <style></style>
@@ -2353,7 +2341,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  </head>
  <body class="shell-body">
    <div class="layout">
-@@ -5868,13 +5960,20 @@
+@@ -5868,13 +5959,20 @@
          </div>
        </nav>
        <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
@@ -2376,7 +2364,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 
                <div class="sub-nav">
 
-@@ -5894,41 +5993,40 @@
+@@ -5894,41 +5992,40 @@
                <section class="claim-group" id="engine-contract" hidden>
 
  <section class="claim claim-banner card" id="engine.overview.start-here" data-status="draft">
@@ -2425,7 +2413,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>The catalog is the render-ready view over a set of claims: the claims themselves plus a grouping by facet and by module.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">4 links - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.schema.claim-shape" data-claim-id="engine.schema.claim-shape" title="engine.schema.claim-shape"><span class="claim-ref-label">Claim Shape</span></a></li></ul></li><li class="claim-depended-by">depended on by:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.behavior.catalog-groups-by-facet" data-claim-id="engine.behavior.catalog-groups-by-facet" title="engine.behavior.catalog-groups-by-facet"><span class="claim-ref-prefix">Behavior › </span><span class="claim-ref-label">Catalog Groups By Facet</span></a></li><li><a class="claim-ref" href="#engine.contract.build-is-pure" data-claim-id="engine.contract.build-is-pure" title="engine.contract.build-is-pure"><span class="claim-ref-prefix">Contract › </span><span class="claim-ref-label">Build Is Pure</span></a></li><li><a class="claim-ref" href="#viewer.schema.payload-shape" data-claim-id="viewer.schema.payload-shape" title="viewer.schema.payload-shape"><span class="claim-ref-prefix">Viewer · Schema › </span><span class="claim-ref-label">Payload Shape</span></a></li></ul></li></ul></details>
-@@ -5936,34 +6034,33 @@
+@@ -5936,34 +6033,33 @@
 
 
  <section class="claim claim-card card" id="engine.schema.claim-shape" data-status="locked">
@@ -2466,7 +2454,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Grouping is built by an explicit sort rather than by ranging over a map, so two builds over the same input are byte-identical.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.schema.catalog-shape" data-claim-id="engine.schema.catalog-shape" title="engine.schema.catalog-shape"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Catalog Shape</span></a></li></ul></li></ul></details>
-@@ -5971,7 +6068,7 @@
+@@ -5971,7 +6067,7 @@
 
 
  <section class="claim claim-card card" id="engine.behavior.degree-counting" data-status="draft">
@@ -2475,7 +2463,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>A node&#39;s project-wide degree counts all three edge kinds. It is a fact about the corpus; the reader&#39;s current scope produces a different, smaller number that is computed separately.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.schema.edge-kinds" data-claim-id="engine.schema.edge-kinds" title="engine.schema.edge-kinds"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Edge Kinds</span></a></li></ul></li></ul></details>
-@@ -5979,7 +6076,7 @@
+@@ -5979,7 +6075,7 @@
 
 
  <section class="claim claim-card card claim-card--commented" id="engine.behavior.lint-runs-before-catalog" data-status="locked">
@@ -2484,7 +2472,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>A single error-severity finding stops the pipeline above the catalog and render stages. No corpus that fails review ever produces a rendered artifact.</p></div>
 
  <details class="claim-links" open><summary class="claim-links-summary">3 links - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.schema.edge-kinds" data-claim-id="engine.schema.edge-kinds" title="engine.schema.edge-kinds"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Edge Kinds</span></a></li></ul></li><li class="claim-depended-by">depended on by:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.contract.check-is-fail-fast" data-claim-id="engine.contract.check-is-fail-fast" title="engine.contract.check-is-fail-fast"><span class="claim-ref-prefix">Contract › </span><span class="claim-ref-label">Check Is Fail Fast</span></a></li></ul></li><li class="claim-review-pending">review_pending</li></ul></details><div class="comments-panel" data-claim-id="engine.behavior.lint-runs-before-catalog" hidden>
-@@ -5994,26 +6091,25 @@
+@@ -5994,26 +6090,25 @@
 
 
  <section class="claim claim-card card" id="engine.behavior.loader-walks-claims-dir" data-status="locked">
@@ -2514,7 +2502,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Build the same corpus a hundred times from shuffled input and assert the encoded bytes are identical every time.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.contract.build-is-pure" data-claim-id="engine.contract.build-is-pure" title="engine.contract.build-is-pure"><span class="claim-ref-prefix">Contract › </span><span class="claim-ref-label">Build Is Pure</span></a></li></ul></li></ul></details>
-@@ -6021,34 +6117,33 @@
+@@ -6021,34 +6116,33 @@
 
 
  <section class="claim claim-card card" id="engine.verification.nil-safety-suite" data-status="draft">
@@ -2554,7 +2542,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>The graph audits claims, not code. Whether a claim is grounded in a real implementation is answered elsewhere, with its own vocabulary and its own exit code.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed">governed_by: <a class="claim-ref" href="#engine.decision.single-source-of-truth" data-claim-id="engine.decision.single-source-of-truth" title="engine.decision.single-source-of-truth"><span class="claim-ref-label">Single Source Of Truth</span></a></li></ul></details>
-@@ -6056,18 +6151,17 @@
+@@ -6056,18 +6150,17 @@
 
 
  <section class="claim claim-card card claim-card--warn" id="engine.decision.single-source-of-truth" data-status="locked">
@@ -2575,7 +2563,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 
                <div class="sub-nav">
 
-@@ -6087,14 +6181,14 @@
+@@ -6087,14 +6180,14 @@
                <section class="claim-group" id="viewer-contract" hidden>
 
  <section class="claim claim-banner card" id="viewer.overview.read-me-first" data-status="draft">
@@ -2592,7 +2580,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>The rendered document makes no outbound request of any kind. It opens from a local file and works with the network removed.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#viewer.schema.payload-shape" data-claim-id="viewer.schema.payload-shape" title="viewer.schema.payload-shape"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Payload Shape</span></a></li></ul></li></ul></details>
-@@ -6102,115 +6196,111 @@
+@@ -6102,115 +6195,111 @@
 
 
  <section class="claim claim-card card" id="viewer.contract.render-is-pure" data-status="locked">
@@ -2727,7 +2715,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Drawing is done on a canvas rather than one element per claim. A thousand elements is a thousand things for the browser to lay out on every frame.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#viewer.schema.payload-shape" data-claim-id="viewer.schema.payload-shape" title="viewer.schema.payload-shape"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Payload Shape</span></a></li></ul></li></ul></details>
-@@ -6218,7 +6308,7 @@
+@@ -6218,7 +6307,7 @@
 
 
  <section class="claim claim-card card" id="viewer.decision.colour-is-not-the-only-channel" data-status="draft">
@@ -2736,7 +2724,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Roughly twelve is the practical ceiling on distinguishable categorical colour. Identity is therefore carried three ways: by colour, by a legend naming each category, and by a detail panel that names it in words.</p></div>
 
 
-@@ -6226,18 +6316,17 @@
+@@ -6226,18 +6315,17 @@
 
 
  <section class="claim claim-card card" id="viewer.decision.facts-not-verdicts" data-status="draft">
@@ -2758,7 +2746,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 
                <div class="sub-nav">
 
-@@ -6255,14 +6344,14 @@
+@@ -6255,14 +6343,14 @@
                <section class="claim-group" id="cli-contract" hidden>
 
  <section class="claim claim-banner card" id="cli.overview.six-nouns" data-status="draft">
@@ -2775,7 +2763,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>One command runs review, grouping, rendering and the integrity gate, stopping at the first failure.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">2 links - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#engine.contract.check-is-fail-fast" data-claim-id="engine.contract.check-is-fail-fast" title="engine.contract.check-is-fail-fast"><span class="claim-ref-prefix">Engine · Contract › </span><span class="claim-ref-label">Check Is Fail Fast</span></a></li><li><a class="claim-ref" href="#cli.behavior.exit-codes" data-claim-id="cli.behavior.exit-codes" title="cli.behavior.exit-codes"><span class="claim-ref-prefix">Behavior › </span><span class="claim-ref-label">Exit Codes</span></a></li></ul></li></ul></details>
-@@ -6270,34 +6359,33 @@
+@@ -6270,34 +6358,33 @@
 
 
  <section class="claim claim-card card" id="cli.contract.noun-list-is-fixed" data-status="locked">
@@ -2816,7 +2804,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Each code maps to one documented recovery. A code without a recovery is a message with extra steps.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#cli.schema.json-envelope" data-claim-id="cli.schema.json-envelope" title="cli.schema.json-envelope"><span class="claim-ref-label">Json Envelope</span></a></li></ul></li></ul></details>
-@@ -6305,26 +6393,25 @@
+@@ -6305,26 +6392,25 @@
 
 
  <section class="claim claim-card card" id="cli.schema.json-envelope" data-status="locked">
@@ -2847,7 +2835,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>A dry run reports the transition, the preconditions and the side effects it would have, and writes nothing at all.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#cli.schema.json-envelope" data-claim-id="cli.schema.json-envelope" title="cli.schema.json-envelope"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Json Envelope</span></a></li></ul></li></ul></details>
-@@ -6332,7 +6419,7 @@
+@@ -6332,7 +6418,7 @@
 
 
  <section class="claim claim-card card" id="cli.behavior.exit-codes" data-status="locked">
@@ -2856,7 +2844,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>The exit status distinguishes a clean run, a review failure and an operational failure, so a hook can branch without parsing prose.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">2 links - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#cli.schema.json-envelope" data-claim-id="cli.schema.json-envelope" title="cli.schema.json-envelope"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Json Envelope</span></a></li></ul></li><li class="claim-depended-by">depended on by:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#cli.contract.check-noun" data-claim-id="cli.contract.check-noun" title="cli.contract.check-noun"><span class="claim-ref-prefix">Contract › </span><span class="claim-ref-label">Check Noun</span></a></li></ul></li></ul></details>
-@@ -6340,45 +6427,43 @@
+@@ -6340,45 +6426,43 @@
 
 
  <section class="claim claim-card card" id="cli.behavior.format-flag" data-status="draft">
@@ -2908,7 +2896,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 
                <div class="sub-nav">
 
-@@ -6398,14 +6483,14 @@
+@@ -6398,14 +6482,14 @@
                <section class="claim-group" id="lock-contract" hidden>
 
  <section class="claim claim-banner card" id="lock.overview.ledger-first" data-status="draft">
@@ -2925,7 +2913,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Approval takes the human&#39;s reason in their own words. An agent may never invent one.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">2 links - 0 files</summary><ul class="claim-edges"><li class="claim-governed">governed_by: <a class="claim-ref" href="#engine.decision.single-source-of-truth" data-claim-id="engine.decision.single-source-of-truth" title="engine.decision.single-source-of-truth"><span class="claim-ref-prefix">Engine · Decision › </span><span class="claim-ref-label">Single Source Of Truth</span></a></li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#lock.behavior.lock-gates" data-claim-id="lock.behavior.lock-gates" title="lock.behavior.lock-gates"><span class="claim-ref-prefix">Behavior › </span><span class="claim-ref-label">Lock Gates</span></a></li></ul></li></ul></details>
-@@ -6413,53 +6498,51 @@
+@@ -6413,53 +6497,51 @@
 
 
  <section class="claim claim-card card" id="lock.contract.review-pending-is-engine-managed" data-status="draft">
@@ -2987,7 +2975,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  <div class="claim-body"><p>Review discussion is hashed into a sibling store, so a thread edited away in a file is reported rather than forgotten.</p></div>
 
  <details class="claim-links"><summary class="claim-links-summary">1 link - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — a demo corpus claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#lock.schema.ledger-record" data-claim-id="lock.schema.ledger-record" title="lock.schema.ledger-record"><span class="claim-ref-prefix">Schema › </span><span class="claim-ref-label">Ledger Record</span></a></li></ul></li></ul></details>
-@@ -6467,64 +6550,61 @@
+@@ -6467,64 +6549,61 @@
 
 
  <section class="claim claim-card card claim-card--warn" id="lock.behavior.lock-gates" data-status="locked">
@@ -3060,7 +3048,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 
                <div class="sub-nav">
 
-@@ -6544,120 +6624,115 @@
+@@ -6544,120 +6623,115 @@
                <section class="claim-group" id="telemetry-contract" hidden>
 
  <section class="claim claim-banner card" id="telemetry.overview.what-this-module-is" data-status="draft">
@@ -3201,7 +3189,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
                </section>
 
            </section>
-@@ -6716,6 +6791,8 @@
+@@ -6716,6 +6790,8 @@
        // each SSE re-render. It attaches NO listeners — those are delegated once
        // on surviving nodes below, so re-running this never double-binds.
        function initViewer() {
@@ -3210,7 +3198,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
          // Two-level show/hide: one .module-section per sidebar .sec-tab, and
          // (when a module has more than one facet) one .claim-group per .subtab
          // inside that module's .sub-nav. A single-facet module still has exactly
-@@ -6747,8 +6824,17 @@
+@@ -6747,8 +6823,17 @@
          // the comment JS keying off data-claim-id (never id) for state fan-out.
          claimToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -3230,7 +3218,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
            });
          });
 
-@@ -6765,8 +6851,15 @@
+@@ -6765,8 +6850,15 @@
          // one-to-one for the same reason claimToFacet is.
          sourceToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -3248,7 +3236,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
            });
          });
 
-@@ -6819,6 +6912,70 @@
+@@ -6819,6 +6911,70 @@
          return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
        }
 
@@ -3319,7 +3307,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
        function showModuleFacet(moduleID, facetID, opts) {
          if (!moduleID) { return; }
 
-@@ -6842,6 +6999,12 @@
+@@ -6842,6 +6998,12 @@
            });
          }
 
@@ -3332,7 +3320,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -7733,26 +7896,157 @@
+@@ -7733,26 +7895,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -3502,7 +3490,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -8110,52 +8404,77 @@
+@@ -8110,52 +8403,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -3609,7 +3597,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -8567,6 +8886,23 @@
+@@ -8567,6 +8885,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -3633,7 +3621,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -8691,9 +9027,13 @@
+@@ -8691,9 +9026,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -3648,7 +3636,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
        probeAndMount();
      })();
  </script>
-@@ -8718,12 +9058,12 @@
+@@ -8718,12 +9057,12 @@
    }
 
    function enhanceTimestamp() {
@@ -3667,7 +3655,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
    }
 
    function bindResizer() {
-@@ -9003,6 +9343,10 @@
+@@ -9003,6 +9342,10 @@
    }
 
    function updateTocActive() {
@@ -3678,7 +3666,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -9077,12 +9421,12 @@
+@@ -9077,12 +9420,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -3697,7 +3685,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -9091,15 +9435,38 @@
+@@ -9091,15 +9434,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -3738,7 +3726,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -9126,6 +9493,7 @@
+@@ -9126,6 +9492,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -3747,9 +3735,9 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+604 -236)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-portability/build/viewer/index.html  (+503 -113)
-    size            17868 lines / 4112477 bytes -> 18258 lines / 4128233 bytes
-@@ -1260,8 +1260,28 @@
+testdata/fixture-portability/build/viewer/index.html  (+501 -112)
+    size            17868 lines / 4112477 bytes -> 18257 lines / 4128186 bytes
+@@ -1260,6 +1260,26 @@
    --mockup-bg: #fff;
  }
 
@@ -3774,11 +3762,8 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
 +}
 +
  @media screen and (prefers-color-scheme: dark) {
--  :root {
-+  html:not([data-theme="light"]) {
+   :root {
      --ink: #e8eef8;
-     --muted: #a9b5c8;
-     --faint: #75839a;
 @@ -1905,8 +1925,8 @@
  .claim-readiness {
    overflow: hidden;
@@ -3985,7 +3970,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
      min-height: 44px;
    }
  }
-@@ -3330,9 +3361,18 @@
+@@ -3330,9 +3361,17 @@
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
    }
@@ -3993,8 +3978,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
 -    margin-top: -4px;
 +  .status-strip,
 +  .claim-group,
-+  .claim,
-+  .claim-conformance {
++  .claim {
 +    width: 100%;
 +    max-width: 100%;
 +    box-sizing: border-box;
@@ -4006,7 +3990,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
    .status-strip-head {
      display: grid;
      grid-template-columns: minmax(0, 1fr) 10px;
-@@ -3754,12 +3794,40 @@
+@@ -3754,12 +3793,40 @@
    flex-shrink: 0;
    padding: 8px 14px 12px;
    border-top: 1px solid var(--border);
@@ -4050,7 +4034,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
  .nav-toggle, .nav-overlay {
    display: none;
  }
-@@ -3843,6 +3911,14 @@
+@@ -3843,6 +3910,14 @@
    display: none;
  }
 
@@ -4065,7 +4049,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
  /* section-heading is an in-content break inside .content-area, injected by
     render.newGroup ahead of the first claim of each run of consecutive,
     same-Section claims (model.Claim.Section) — a close visual cousin of the
-@@ -3861,7 +3937,14 @@
+@@ -3861,7 +3936,14 @@
    color: var(--faint);
  }
 
@@ -4081,7 +4065,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
    margin-top: 0;
    padding-top: 0;
    border-top: 0;
-@@ -5836,6 +5919,15 @@
+@@ -5836,6 +5918,15 @@
  }
  </style>
    <style></style>
@@ -4097,7 +4081,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
  </head>
  <body class="shell-body">
    <div class="layout">
-@@ -5864,13 +5956,20 @@
+@@ -5864,13 +5955,20 @@
          </div>
        </nav>
        <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
@@ -4120,7 +4104,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
 
                <div class="sub-nav">
 
-@@ -5884,35 +5983,33 @@
+@@ -5884,35 +5982,33 @@
                <section class="claim-group" id="beacon-spec" hidden>
 
  <section class="claim claim-card card" id="beacon.spec.overview" data-status="draft">
@@ -4162,7 +4146,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
                </section>
 
            </section>
-@@ -5971,6 +6068,8 @@
+@@ -5971,6 +6067,8 @@
        // each SSE re-render. It attaches NO listeners — those are delegated once
        // on surviving nodes below, so re-running this never double-binds.
        function initViewer() {
@@ -4171,7 +4155,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
          // Two-level show/hide: one .module-section per sidebar .sec-tab, and
          // (when a module has more than one facet) one .claim-group per .subtab
          // inside that module's .sub-nav. A single-facet module still has exactly
-@@ -6002,8 +6101,17 @@
+@@ -6002,8 +6100,17 @@
          // the comment JS keying off data-claim-id (never id) for state fan-out.
          claimToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -4191,7 +4175,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
            });
          });
 
-@@ -6020,8 +6128,15 @@
+@@ -6020,8 +6127,15 @@
          // one-to-one for the same reason claimToFacet is.
          sourceToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -4209,7 +4193,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
            });
          });
 
-@@ -6074,6 +6189,70 @@
+@@ -6074,6 +6188,70 @@
          return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
        }
 
@@ -4280,7 +4264,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
        function showModuleFacet(moduleID, facetID, opts) {
          if (!moduleID) { return; }
 
-@@ -6097,6 +6276,12 @@
+@@ -6097,6 +6275,12 @@
            });
          }
 
@@ -4293,7 +4277,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -6988,26 +7173,157 @@
+@@ -6988,26 +7172,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -4463,7 +4447,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7365,52 +7681,77 @@
+@@ -7365,52 +7680,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -4570,7 +4554,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7822,6 +8163,23 @@
+@@ -7822,6 +8162,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -4594,7 +4578,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7946,9 +8304,13 @@
+@@ -7946,9 +8303,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -4609,7 +4593,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
        probeAndMount();
      })();
  </script>
-@@ -7973,12 +8335,12 @@
+@@ -7973,12 +8334,12 @@
    }
 
    function enhanceTimestamp() {
@@ -4628,7 +4612,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
    }
 
    function bindResizer() {
-@@ -8258,6 +8620,10 @@
+@@ -8258,6 +8619,10 @@
    }
 
    function updateTocActive() {
@@ -4639,7 +4623,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8332,12 +8698,12 @@
+@@ -8332,12 +8697,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -4658,7 +4642,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8346,15 +8712,38 @@
+@@ -8346,15 +8711,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -4699,7 +4683,7 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8381,6 +8770,7 @@
+@@ -8381,6 +8769,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -4708,9 +4692,9 @@ testdata/fixture-portability/build/viewer/index.html  (+503 -113)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
-    size            18159 lines / 4152106 bytes -> 18545 lines / 4167930 bytes
-@@ -1260,8 +1260,28 @@
+testdata/fixture-theme-flat/build/viewer/index.html  (+514 -129)
+    size            18159 lines / 4152106 bytes -> 18544 lines / 4167883 bytes
+@@ -1260,6 +1260,26 @@
    --mockup-bg: #fff;
  }
 
@@ -4735,11 +4719,8 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 +}
 +
  @media screen and (prefers-color-scheme: dark) {
--  :root {
-+  html:not([data-theme="light"]) {
+   :root {
      --ink: #e8eef8;
-     --muted: #a9b5c8;
-     --faint: #75839a;
 @@ -1905,8 +1925,8 @@
  .claim-readiness {
    overflow: hidden;
@@ -4946,7 +4927,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
      min-height: 44px;
    }
  }
-@@ -3330,9 +3361,18 @@
+@@ -3330,9 +3361,17 @@
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
    }
@@ -4954,8 +4935,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 -    margin-top: -4px;
 +  .status-strip,
 +  .claim-group,
-+  .claim,
-+  .claim-conformance {
++  .claim {
 +    width: 100%;
 +    max-width: 100%;
 +    box-sizing: border-box;
@@ -4967,7 +4947,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
    .status-strip-head {
      display: grid;
      grid-template-columns: minmax(0, 1fr) 10px;
-@@ -3754,12 +3794,40 @@
+@@ -3754,12 +3793,40 @@
    flex-shrink: 0;
    padding: 8px 14px 12px;
    border-top: 1px solid var(--border);
@@ -5011,7 +4991,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
  .nav-toggle, .nav-overlay {
    display: none;
  }
-@@ -3843,6 +3911,14 @@
+@@ -3843,6 +3910,14 @@
    display: none;
  }
 
@@ -5026,7 +5006,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
  /* section-heading is an in-content break inside .content-area, injected by
     render.newGroup ahead of the first claim of each run of consecutive,
     same-Section claims (model.Claim.Section) — a close visual cousin of the
-@@ -3861,7 +3937,14 @@
+@@ -3861,7 +3936,14 @@
    color: var(--faint);
  }
 
@@ -5042,7 +5022,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
    margin-top: 0;
    padding-top: 0;
    border-top: 0;
-@@ -5836,6 +5919,15 @@
+@@ -5836,6 +5918,15 @@
  }
  </style>
    <style>:root{--accent:#287052;--accent-bg:rgba(40, 112, 82, .14);--link:#205b78;--warn:#a2433d;--warn-bg:rgba(162, 67, 61, .13);--font-sans:Avenir Next, ui-sans-serif, sans-serif;--font-mono:SFMono-Regular, Menlo, monospace;--radius:12px;}</style>
@@ -5058,7 +5038,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
  </head>
  <body class="shell-body">
    <div class="layout">
-@@ -5879,13 +5971,20 @@
+@@ -5879,13 +5970,20 @@
          </div>
        </nav>
        <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
@@ -5081,7 +5061,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 
                <div class="sub-nav">
 
-@@ -5902,18 +6001,18 @@
+@@ -5902,18 +6000,18 @@
  <h4 class="section-heading">What a widget is</h4>
 
  <section class="claim claim-card card" id="widget.contract.overview" data-status="draft">
@@ -5103,7 +5083,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
  <div class="claim-body"><p>This claim is locked and carries an open comment thread, which is what puts it in <code>review_pending</code> and renders the <code>.claim-review-pending</code> marker the parity probe reads.</p></div>
 
  <details class="claim-links" open><summary class="claim-links-summary">2 links - 0 files</summary><ul class="claim-edges"><li class="claim-governed governed-none">governed_by: none — fixture claim, not backed by any real doctrine</li><li class="claim-rests-on">rests_on:<ul class="claim-edge-id-list"><li><a class="claim-ref" href="#panel.contract.api" data-claim-id="panel.contract.api" title="panel.contract.api"><span class="claim-ref-prefix">Panel · Contract › </span><span class="claim-ref-label">Api</span></a></li></ul></li><li class="claim-review-pending">review_pending</li></ul></details><div class="comments-panel" data-claim-id="widget.contract.reviewed" hidden>
-@@ -5929,7 +6028,7 @@
+@@ -5929,7 +6027,7 @@
  <h4 class="section-heading">How a widget is reviewed</h4>
 
  <section class="claim claim-steps card" id="widget.contract.walkthrough" data-status="draft">
@@ -5112,7 +5092,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 
 
 
-@@ -5941,17 +6040,16 @@
+@@ -5941,17 +6039,16 @@
 
 
 
@@ -5132,7 +5112,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 
 
 
-@@ -5973,26 +6071,24 @@
+@@ -5973,26 +6070,24 @@
    </div>
 
 
@@ -5162,7 +5142,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 
                <div class="sub-nav">
 
-@@ -6009,29 +6105,28 @@
+@@ -6009,29 +6104,28 @@
  <h4 class="section-heading">The panel&#39;s surface</h4>
 
  <section class="claim claim-card card" id="panel.contract.api" data-status="locked">
@@ -5196,7 +5176,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 
    <div class="claim-list-items"><ul><li>the claim currently open</li><li>the scroll position of the reading pane</li><li>nothing else</li></ul></div>
 
-@@ -6042,26 +6137,24 @@
+@@ -6042,26 +6136,24 @@
  <h4 class="section-heading">How the panel is proven</h4>
 
  <section class="claim claim-card card" id="panel.internals.verification" data-status="locked">
@@ -5225,7 +5205,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
                </section>
 
            </section>
-@@ -6075,20 +6168,20 @@
+@@ -6075,20 +6167,20 @@
              <span class="pill pw">incomplete · 1 / 3 locked · 1 review_pending</span>
  <p class="track-summary">The cross-cutting track this corpus uses to put a .track-head on the page.</p>
            </header>
@@ -5250,7 +5230,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
            </section>
          </section>
 
-@@ -6262,6 +6355,8 @@
+@@ -6262,6 +6354,8 @@
        // each SSE re-render. It attaches NO listeners — those are delegated once
        // on surviving nodes below, so re-running this never double-binds.
        function initViewer() {
@@ -5259,7 +5239,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
          // Two-level show/hide: one .module-section per sidebar .sec-tab, and
          // (when a module has more than one facet) one .claim-group per .subtab
          // inside that module's .sub-nav. A single-facet module still has exactly
-@@ -6293,8 +6388,17 @@
+@@ -6293,8 +6387,17 @@
          // the comment JS keying off data-claim-id (never id) for state fan-out.
          claimToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -5279,7 +5259,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
            });
          });
 
-@@ -6311,8 +6415,15 @@
+@@ -6311,8 +6414,15 @@
          // one-to-one for the same reason claimToFacet is.
          sourceToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -5297,7 +5277,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
            });
          });
 
-@@ -6365,6 +6476,70 @@
+@@ -6365,6 +6475,70 @@
          return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
        }
 
@@ -5368,7 +5348,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
        function showModuleFacet(moduleID, facetID, opts) {
          if (!moduleID) { return; }
 
-@@ -6388,6 +6563,12 @@
+@@ -6388,6 +6562,12 @@
            });
          }
 
@@ -5381,7 +5361,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -7279,26 +7460,157 @@
+@@ -7279,26 +7459,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -5551,7 +5531,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7656,52 +7968,77 @@
+@@ -7656,52 +7967,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -5658,7 +5638,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -8113,6 +8450,23 @@
+@@ -8113,6 +8449,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -5682,7 +5662,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -8237,9 +8591,13 @@
+@@ -8237,9 +8590,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -5697,7 +5677,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
        probeAndMount();
      })();
  </script>
-@@ -8264,12 +8622,12 @@
+@@ -8264,12 +8621,12 @@
    }
 
    function enhanceTimestamp() {
@@ -5716,7 +5696,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
    }
 
    function bindResizer() {
-@@ -8549,6 +8907,10 @@
+@@ -8549,6 +8906,10 @@
    }
 
    function updateTocActive() {
@@ -5727,7 +5707,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8623,12 +8985,12 @@
+@@ -8623,12 +8984,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -5746,7 +5726,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8637,15 +8999,38 @@
+@@ -8637,15 +8998,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -5787,7 +5767,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8672,6 +9057,7 @@
+@@ -8672,6 +9056,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -5796,9 +5776,9 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+516 -130)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
-    size            17879 lines / 4113503 bytes -> 18269 lines / 4130518 bytes
-@@ -1260,8 +1260,28 @@
+testdata/fixture-theme-preset/build/viewer/index.html  (+500 -111)
+    size            17879 lines / 4113503 bytes -> 18268 lines / 4130636 bytes
+@@ -1260,6 +1260,26 @@
    --mockup-bg: #fff;
  }
 
@@ -5823,11 +5803,8 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
 +}
 +
  @media screen and (prefers-color-scheme: dark) {
--  :root {
-+  html:not([data-theme="light"]) {
+   :root {
      --ink: #e8eef8;
-     --muted: #a9b5c8;
-     --faint: #75839a;
 @@ -1905,8 +1925,8 @@
  .claim-readiness {
    overflow: hidden;
@@ -6034,7 +6011,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
      min-height: 44px;
    }
  }
-@@ -3330,9 +3361,18 @@
+@@ -3330,9 +3361,17 @@
      border-top: 1px solid var(--border);
      border-radius: 14px 14px 0 0;
    }
@@ -6042,8 +6019,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
 -    margin-top: -4px;
 +  .status-strip,
 +  .claim-group,
-+  .claim,
-+  .claim-conformance {
++  .claim {
 +    width: 100%;
 +    max-width: 100%;
 +    box-sizing: border-box;
@@ -6055,7 +6031,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
    .status-strip-head {
      display: grid;
      grid-template-columns: minmax(0, 1fr) 10px;
-@@ -3754,12 +3794,40 @@
+@@ -3754,12 +3793,40 @@
    flex-shrink: 0;
    padding: 8px 14px 12px;
    border-top: 1px solid var(--border);
@@ -6099,7 +6075,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
  .nav-toggle, .nav-overlay {
    display: none;
  }
-@@ -3843,6 +3911,14 @@
+@@ -3843,6 +3910,14 @@
    display: none;
  }
 
@@ -6114,7 +6090,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
  /* section-heading is an in-content break inside .content-area, injected by
     render.newGroup ahead of the first claim of each run of consecutive,
     same-Section claims (model.Claim.Section) — a close visual cousin of the
-@@ -3861,7 +3937,14 @@
+@@ -3861,7 +3936,14 @@
    color: var(--faint);
  }
 
@@ -6130,12 +6106,12 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
    margin-top: 0;
    padding-top: 0;
    border-top: 0;
-@@ -5835,7 +5918,16 @@
+@@ -5835,7 +5917,16 @@
    .bo-diagram marker path { fill: var(--muted) !important; stroke: var(--muted) !important; }
  }
  </style>
 -  <style>@font-face{font-family:"DossierX Probe";src:url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMkUASc0AAAEoAAAAYGNtYXAAtAA8AAABkAAAADxnbHlmy7nLuAAAAdQAAAA0aGVhZGbmQ5wAAACsAAAANmhoZWEK8gduAAAA5AAAACRobXR4B9AAyAAAAYgAAAAIbG9jYQANACcAAAHMAAAACG1heHAABQAGAAABCAAAACBuYW1luuNvcgAAAggAAAF6cG9zdAAIAEQAAAOEAAAAKAABAAAAAQAAGXD3P18PPPUAAwPoAAAAAAAAAAAAAAAAAAAAAABkAAAHbAK8AAAAAwACAAAAAAAAAAEAAAMg/zgAAAfQAGQAZAdsAAEAAAAAAAAAAAAAAAAAAAABAAEAAAADAAQAAQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwfQAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAPz8/PwAAACAAYQMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAAH0ABkAAAAZAAAAAIAAAADAAAAFAADAAEAAAAUAAQAKAAAAAYABAABAAIAIABh//8AAAAgAGH////h/6EAAQAAAAAAAAAAAA0ADQAaAAEAZAAAB2wCvAADAAAzESERZAcIArz9RAAAAQBkAAAHbAK8AAMAADMRIRFkBwgCvP1EAAAAAAgAZgABAAAAAAAAADIAAAABAAAAAAABAA4AMgABAAAAAAACAAcAQAABAAAAAAAGABUARwADAAEECQAAAGQAXAADAAEECQABABwAwAADAAEECQACAA4A3AADAAEECQAGACoA6kdlbmVyYXRlZCBmb3IgZG9zc2llcnggdGVzdHM7IHB1YmxpYyBkb21haW4gKENDMCkuRG9zc2llclggUHJvYmVSZWd1bGFyRG9zc2llclhQcm9iZS1SZWd1bGFyAEcAZQBuAGUAcgBhAHQAZQBkACAAZgBvAHIAIABkAG8AcwBzAGkAZQByAHgAIAB0AGUAcwB0AHMAOwAgAHAAdQBiAGwAaQBjACAAZABvAG0AYQBpAG4AIAAoAEMAQwAwACkALgBEAG8AcwBzAGkAZQByAFgAIABQAHIAbwBiAGUAUgBlAGcAdQBsAGEAcgBEAG8AcwBzAGkAZQByAFgAUAByAG8AYgBlAC0AUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAMARA==) format("truetype");font-weight:400;font-style:normal;font-display:swap;}:root{--accent:#7c4dff;--font-sans:DossierX Probe, ui-sans-serif, sans-serif;--font-mono:"Anthropic Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;--radius:8px;--mockup-bg:#ffffff;}@media (prefers-color-scheme: light), print{:root{--accent-bg:rgba(217, 119, 87, 0.14);--ink:#141413;--muted:#5E5D59;--faint:#8A8983;--paper:#fbf9f5;--card-bg:#FFFFFF;--border:#E5E3D9;--link:#2F6FCB;--warn:#B8802E;--warn-bg:rgba(184, 128, 46, 0.12);--code-inline-bg:#EDEBE3;--code-bg:#F0EEE6;--table-head-bg:#F4F2EC;--image-bg:#F4F2EC;--hover-bg:rgba(20, 20, 19, 0.05);--border-strong:#CFCCC0;--shadow:rgba(20, 20, 19, 0.08);--shadow-strong:rgba(20, 20, 19, 0.14);--shadow-cast:rgba(20, 20, 19, 0.12);--scrim:rgba(20, 20, 19, 0.22);--selection-bg:rgba(217, 119, 87, 0.28);--status-draft:#B8802E;--status-draft-bg:rgba(184, 128, 46, 0.12);}}@media screen and (prefers-color-scheme: dark){:root{--accent-bg:rgba(217, 119, 87, 0.18);--ink:#F0EFEC;--muted:#B4B3AF;--faint:#8A8985;--paper:#141210;--card-bg:#212121;--border:#2D2D2D;--link:#6DA7EC;--warn:#E5A66B;--warn-bg:rgba(229, 166, 107, 0.12);--code-inline-bg:#212121;--code-bg:#1C1C1C;--table-head-bg:#212121;--image-bg:#212121;--hover-bg:rgba(255, 255, 255, 0.05);--border-strong:#373737;--shadow:rgba(0, 0, 0, 0.28);--shadow-strong:rgba(0, 0, 0, 0.34);--shadow-cast:rgba(0, 0, 0, 0.5);--scrim:rgba(0, 0, 0, 0.42);--selection-bg:rgba(217, 119, 87, 0.30);--status-draft:#E5A66B;--status-draft-bg:rgba(229, 166, 107, 0.12);}}</style>
-+  <style>@font-face{font-family:"DossierX Probe";src:url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMkUASc0AAAEoAAAAYGNtYXAAtAA8AAABkAAAADxnbHlmy7nLuAAAAdQAAAA0aGVhZGbmQ5wAAACsAAAANmhoZWEK8gduAAAA5AAAACRobXR4B9AAyAAAAYgAAAAIbG9jYQANACcAAAHMAAAACG1heHAABQAGAAABCAAAACBuYW1luuNvcgAAAggAAAF6cG9zdAAIAEQAAAOEAAAAKAABAAAAAQAAGXD3P18PPPUAAwPoAAAAAAAAAAAAAAAAAAAAAABkAAAHbAK8AAAAAwACAAAAAAAAAAEAAAMg/zgAAAfQAGQAZAdsAAEAAAAAAAAAAAAAAAAAAAABAAEAAAADAAQAAQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwfQAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAPz8/PwAAACAAYQMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAAH0ABkAAAAZAAAAAIAAAADAAAAFAADAAEAAAAUAAQAKAAAAAYABAABAAIAIABh//8AAAAgAGH////h/6EAAQAAAAAAAAAAAA0ADQAaAAEAZAAAB2wCvAADAAAzESERZAcIArz9RAAAAQBkAAAHbAK8AAMAADMRIRFkBwgCvP1EAAAAAAgAZgABAAAAAAAAADIAAAABAAAAAAABAA4AMgABAAAAAAACAAcAQAABAAAAAAAGABUARwADAAEECQAAAGQAXAADAAEECQABABwAwAADAAEECQACAA4A3AADAAEECQAGACoA6kdlbmVyYXRlZCBmb3IgZG9zc2llcnggdGVzdHM7IHB1YmxpYyBkb21haW4gKENDMCkuRG9zc2llclggUHJvYmVSZWd1bGFyRG9zc2llclhQcm9iZS1SZWd1bGFyAEcAZQBuAGUAcgBhAHQAZQBkACAAZgBvAHIAIABkAG8AcwBzAGkAZQByAHgAIAB0AGUAcwB0AHMAOwAgAHAAdQBiAGwAaQBjACAAZABvAG0AYQBpAG4AIAAoAEMAQwAwACkALgBEAG8AcwBzAGkAZQByAFgAIABQAHIAbwBiAGUAUgBlAGcAdQBsAGEAcgBEAG8AcwBzAGkAZQByAFgAUAByAG8AYgBlAC0AUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAMARA==) format("truetype");font-weight:400;font-style:normal;font-display:swap;}:root{--accent:#7c4dff;--font-sans:DossierX Probe, ui-sans-serif, sans-serif;--font-mono:"Anthropic Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;--radius:8px;--mockup-bg:#ffffff;}@media (prefers-color-scheme: light), print{:root{--accent-bg:rgba(217, 119, 87, 0.14);--ink:#141413;--muted:#5E5D59;--faint:#8A8983;--paper:#fbf9f5;--card-bg:#FFFFFF;--border:#E5E3D9;--link:#2F6FCB;--warn:#B8802E;--warn-bg:rgba(184, 128, 46, 0.12);--code-inline-bg:#EDEBE3;--code-bg:#F0EEE6;--table-head-bg:#F4F2EC;--image-bg:#F4F2EC;--hover-bg:rgba(20, 20, 19, 0.05);--border-strong:#CFCCC0;--shadow:rgba(20, 20, 19, 0.08);--shadow-strong:rgba(20, 20, 19, 0.14);--shadow-cast:rgba(20, 20, 19, 0.12);--scrim:rgba(20, 20, 19, 0.22);--selection-bg:rgba(217, 119, 87, 0.28);--status-draft:#B8802E;--status-draft-bg:rgba(184, 128, 46, 0.12);}}html[data-theme="light"]{--accent-bg:rgba(217, 119, 87, 0.14);--ink:#141413;--muted:#5E5D59;--faint:#8A8983;--paper:#fbf9f5;--card-bg:#FFFFFF;--border:#E5E3D9;--link:#2F6FCB;--warn:#B8802E;--warn-bg:rgba(184, 128, 46, 0.12);--code-inline-bg:#EDEBE3;--code-bg:#F0EEE6;--table-head-bg:#F4F2EC;--image-bg:#F4F2EC;--hover-bg:rgba(20, 20, 19, 0.05);--border-strong:#CFCCC0;--shadow:rgba(20, 20, 19, 0.08);--shadow-strong:rgba(20, 20, 19, 0.14);--shadow-cast:rgba(20, 20, 19, 0.12);--scrim:rgba(20, 20, 19, 0.22);--selection-bg:rgba(217, 119, 87, 0.28);--status-draft:#B8802E;--status-draft-bg:rgba(184, 128, 46, 0.12);}@media screen{html[data-theme="dark"]{--accent-bg:rgba(217, 119, 87, 0.18);--ink:#F0EFEC;--muted:#B4B3AF;--faint:#8A8985;--paper:#141210;--card-bg:#212121;--border:#2D2D2D;--link:#6DA7EC;--warn:#E5A66B;--warn-bg:rgba(229, 166, 107, 0.12);--code-inline-bg:#212121;--code-bg:#1C1C1C;--table-head-bg:#212121;--image-bg:#212121;--hover-bg:rgba(255, 255, 255, 0.05);--border-strong:#373737;--shadow:rgba(0, 0, 0, 0.28);--shadow-strong:rgba(0, 0, 0, 0.34);--shadow-cast:rgba(0, 0, 0, 0.5);--scrim:rgba(0, 0, 0, 0.42);--selection-bg:rgba(217, 119, 87, 0.30);--status-draft:#E5A66B;--status-draft-bg:rgba(229, 166, 107, 0.12);}}@media screen and (prefers-color-scheme: dark){html:not([data-theme="light"]){--accent-bg:rgba(217, 119, 87, 0.18);--ink:#F0EFEC;--muted:#B4B3AF;--faint:#8A8985;--paper:#141210;--card-bg:#212121;--border:#2D2D2D;--link:#6DA7EC;--warn:#E5A66B;--warn-bg:rgba(229, 166, 107, 0.12);--code-inline-bg:#212121;--code-bg:#1C1C1C;--table-head-bg:#212121;--image-bg:#212121;--hover-bg:rgba(255, 255, 255, 0.05);--border-strong:#373737;--shadow:rgba(0, 0, 0, 0.28);--shadow-strong:rgba(0, 0, 0, 0.34);--shadow-cast:rgba(0, 0, 0, 0.5);--scrim:rgba(0, 0, 0, 0.42);--selection-bg:rgba(217, 119, 87, 0.30);--status-draft:#E5A66B;--status-draft-bg:rgba(229, 166, 107, 0.12);}}</style>
++  <style>@font-face{font-family:"DossierX Probe";src:url(data:font/ttf;base64,AAEAAAAKAIAAAwAgT1MvMkUASc0AAAEoAAAAYGNtYXAAtAA8AAABkAAAADxnbHlmy7nLuAAAAdQAAAA0aGVhZGbmQ5wAAACsAAAANmhoZWEK8gduAAAA5AAAACRobXR4B9AAyAAAAYgAAAAIbG9jYQANACcAAAHMAAAACG1heHAABQAGAAABCAAAACBuYW1luuNvcgAAAggAAAF6cG9zdAAIAEQAAAOEAAAAKAABAAAAAQAAGXD3P18PPPUAAwPoAAAAAAAAAAAAAAAAAAAAAABkAAAHbAK8AAAAAwACAAAAAAAAAAEAAAMg/zgAAAfQAGQAZAdsAAEAAAAAAAAAAAAAAAAAAAABAAEAAAADAAQAAQAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAwfQAZAABQAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAPz8/PwAAACAAYQMg/zgAAAMgAMgAAAAAAAAAAAAAAAAAAAAgAAAH0ABkAAAAZAAAAAIAAAADAAAAFAADAAEAAAAUAAQAKAAAAAYABAABAAIAIABh//8AAAAgAGH////h/6EAAQAAAAAAAAAAAA0ADQAaAAEAZAAAB2wCvAADAAAzESERZAcIArz9RAAAAQBkAAAHbAK8AAMAADMRIRFkBwgCvP1EAAAAAAgAZgABAAAAAAAAADIAAAABAAAAAAABAA4AMgABAAAAAAACAAcAQAABAAAAAAAGABUARwADAAEECQAAAGQAXAADAAEECQABABwAwAADAAEECQACAA4A3AADAAEECQAGACoA6kdlbmVyYXRlZCBmb3IgZG9zc2llcnggdGVzdHM7IHB1YmxpYyBkb21haW4gKENDMCkuRG9zc2llclggUHJvYmVSZWd1bGFyRG9zc2llclhQcm9iZS1SZWd1bGFyAEcAZQBuAGUAcgBhAHQAZQBkACAAZgBvAHIAIABkAG8AcwBzAGkAZQByAHgAIAB0AGUAcwB0AHMAOwAgAHAAdQBiAGwAaQBjACAAZABvAG0AYQBpAG4AIAAoAEMAQwAwACkALgBEAG8AcwBzAGkAZQByAFgAIABQAHIAbwBiAGUAUgBlAGcAdQBsAGEAcgBEAG8AcwBzAGkAZQByAFgAUAByAG8AYgBlAC0AUgBlAGcAdQBsAGEAcgAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAwAAAAMARA==) format("truetype");font-weight:400;font-style:normal;font-display:swap;}:root{--accent:#7c4dff;--font-sans:DossierX Probe, ui-sans-serif, sans-serif;--font-mono:"Anthropic Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;--radius:8px;--mockup-bg:#ffffff;}@media (prefers-color-scheme: light), print{:root{--accent-bg:rgba(217, 119, 87, 0.14);--ink:#141413;--muted:#5E5D59;--faint:#8A8983;--paper:#fbf9f5;--card-bg:#FFFFFF;--border:#E5E3D9;--link:#2F6FCB;--warn:#B8802E;--warn-bg:rgba(184, 128, 46, 0.12);--code-inline-bg:#EDEBE3;--code-bg:#F0EEE6;--table-head-bg:#F4F2EC;--image-bg:#F4F2EC;--hover-bg:rgba(20, 20, 19, 0.05);--border-strong:#CFCCC0;--shadow:rgba(20, 20, 19, 0.08);--shadow-strong:rgba(20, 20, 19, 0.14);--shadow-cast:rgba(20, 20, 19, 0.12);--scrim:rgba(20, 20, 19, 0.22);--selection-bg:rgba(217, 119, 87, 0.28);--status-draft:#B8802E;--status-draft-bg:rgba(184, 128, 46, 0.12);}}html[data-theme="light"]{--accent-bg:rgba(217, 119, 87, 0.14);--ink:#141413;--muted:#5E5D59;--faint:#8A8983;--paper:#fbf9f5;--card-bg:#FFFFFF;--border:#E5E3D9;--link:#2F6FCB;--warn:#B8802E;--warn-bg:rgba(184, 128, 46, 0.12);--code-inline-bg:#EDEBE3;--code-bg:#F0EEE6;--table-head-bg:#F4F2EC;--image-bg:#F4F2EC;--hover-bg:rgba(20, 20, 19, 0.05);--border-strong:#CFCCC0;--shadow:rgba(20, 20, 19, 0.08);--shadow-strong:rgba(20, 20, 19, 0.14);--shadow-cast:rgba(20, 20, 19, 0.12);--scrim:rgba(20, 20, 19, 0.22);--selection-bg:rgba(217, 119, 87, 0.28);--status-draft:#B8802E;--status-draft-bg:rgba(184, 128, 46, 0.12);}@media screen{html[data-theme="dark"]{--accent:#7c4dff;--font-sans:DossierX Probe, ui-sans-serif, sans-serif;--font-mono:"Anthropic Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;--radius:8px;--mockup-bg:#ffffff;--accent-bg:rgba(217, 119, 87, 0.18);--ink:#F0EFEC;--muted:#B4B3AF;--faint:#8A8985;--paper:#141210;--card-bg:#212121;--border:#2D2D2D;--link:#6DA7EC;--warn:#E5A66B;--warn-bg:rgba(229, 166, 107, 0.12);--code-inline-bg:#212121;--code-bg:#1C1C1C;--table-head-bg:#212121;--image-bg:#212121;--hover-bg:rgba(255, 255, 255, 0.05);--border-strong:#373737;--shadow:rgba(0, 0, 0, 0.28);--shadow-strong:rgba(0, 0, 0, 0.34);--shadow-cast:rgba(0, 0, 0, 0.5);--scrim:rgba(0, 0, 0, 0.42);--selection-bg:rgba(217, 119, 87, 0.30);--status-draft:#E5A66B;--status-draft-bg:rgba(229, 166, 107, 0.12);}}@media screen and (prefers-color-scheme: dark){:root{--accent-bg:rgba(217, 119, 87, 0.18);--ink:#F0EFEC;--muted:#B4B3AF;--faint:#8A8985;--paper:#141210;--card-bg:#212121;--border:#2D2D2D;--link:#6DA7EC;--warn:#E5A66B;--warn-bg:rgba(229, 166, 107, 0.12);--code-inline-bg:#212121;--code-bg:#1C1C1C;--table-head-bg:#212121;--image-bg:#212121;--hover-bg:rgba(255, 255, 255, 0.05);--border-strong:#373737;--shadow:rgba(0, 0, 0, 0.28);--shadow-strong:rgba(0, 0, 0, 0.34);--shadow-cast:rgba(0, 0, 0, 0.5);--scrim:rgba(0, 0, 0, 0.42);--selection-bg:rgba(217, 119, 87, 0.30);--status-draft:#E5A66B;--status-draft-bg:rgba(229, 166, 107, 0.12);}}</style>
 +  <script>
 +    (function () {
 +      var key = 'dossierx-theme';
@@ -6148,7 +6124,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
  </head>
  <body class="shell-body">
    <div class="layout">
-@@ -5864,13 +5956,20 @@
+@@ -5864,13 +5955,20 @@
          </div>
        </nav>
        <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
@@ -6171,7 +6147,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
 
                <div class="sub-nav">
 
-@@ -5885,20 +5984,19 @@
+@@ -5885,20 +5983,19 @@
  <h4 class="section-heading">What this fixture is</h4>
 
  <section class="claim claim-card card" id="widget.contract.overview" data-status="draft">
@@ -6195,7 +6171,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
 
 
 
-@@ -5920,10 +6018,9 @@
+@@ -5920,10 +6017,9 @@
    </div>
 
 
@@ -6207,7 +6183,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
                </section>
 
            </section>
-@@ -5982,6 +6079,8 @@
+@@ -5982,6 +6078,8 @@
        // each SSE re-render. It attaches NO listeners — those are delegated once
        // on surviving nodes below, so re-running this never double-binds.
        function initViewer() {
@@ -6216,7 +6192,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
          // Two-level show/hide: one .module-section per sidebar .sec-tab, and
          // (when a module has more than one facet) one .claim-group per .subtab
          // inside that module's .sub-nav. A single-facet module still has exactly
-@@ -6013,8 +6112,17 @@
+@@ -6013,8 +6111,17 @@
          // the comment JS keying off data-claim-id (never id) for state fan-out.
          claimToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -6236,7 +6212,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
            });
          });
 
-@@ -6031,8 +6139,15 @@
+@@ -6031,8 +6138,15 @@
          // one-to-one for the same reason claimToFacet is.
          sourceToFacet = {};
          document.querySelectorAll('.claim-group').forEach(function (g) {
@@ -6254,7 +6230,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
            });
          });
 
-@@ -6085,6 +6200,70 @@
+@@ -6085,6 +6199,70 @@
          return { module: firstModuleID, facet: moduleDefaultFacet[firstModuleID] };
        }
 
@@ -6325,7 +6301,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
        function showModuleFacet(moduleID, facetID, opts) {
          if (!moduleID) { return; }
 
-@@ -6108,6 +6287,12 @@
+@@ -6108,6 +6286,12 @@
            });
          }
 
@@ -6338,7 +6314,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
          if (lastStatusData) {
            renderStatusStrip(lastStatusData);
          } else {
-@@ -6999,26 +7184,157 @@
+@@ -6999,26 +7183,157 @@
        }
 
        function readinessWarningsForActiveFacet(readiness, claimIDs) {
@@ -6508,7 +6484,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
  // The status endpoint is project-wide, but the reader's orientation is
  // module-local. Place the notice between the active record header and its
  // facet controls, where it can be seen before reading without competing
-@@ -7376,52 +7692,77 @@
+@@ -7376,52 +7691,77 @@
          var claimIDs = activeFacetClaimIDs();
          var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
          var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
@@ -6615,7 +6591,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
          setStripExpanded(stripExpanded);
          positionStatusStrip();
          stripEl.hidden = false;
-@@ -7833,6 +8174,23 @@
+@@ -7833,6 +8173,23 @@
          // and the viewport is not yanked. skipHash keeps the URL untouched.
          var target = resolve(hashId());
          showModuleFacet(target.module, target.facet, { skipHash: true });
@@ -6639,7 +6615,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
 
          // ---- restore the reader's scroll AFTER the active section is un-hidden
          // above, so the document has regained its full height ----
-@@ -7957,9 +8315,13 @@
+@@ -7957,9 +8314,13 @@
        // already parsed by the time this IIFE runs — no DOMContentLoaded needed.
        initViewer();
        showFromHash({ skipHash: true });
@@ -6654,7 +6630,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
        probeAndMount();
      })();
  </script>
-@@ -7984,12 +8346,12 @@
+@@ -7984,12 +8345,12 @@
    }
 
    function enhanceTimestamp() {
@@ -6673,7 +6649,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
    }
 
    function bindResizer() {
-@@ -8269,6 +8631,10 @@
+@@ -8269,6 +8630,10 @@
    }
 
    function updateTocActive() {
@@ -6684,7 +6660,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8343,12 +8709,12 @@
+@@ -8343,12 +8708,12 @@
        labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
      });
      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
@@ -6703,7 +6679,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8357,15 +8723,38 @@
+@@ -8357,15 +8722,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -6744,7 +6720,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+502 -112)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8392,6 +8781,7 @@
+@@ -8392,6 +8780,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();

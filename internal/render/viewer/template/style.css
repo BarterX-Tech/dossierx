@@ -125,7 +125,7 @@
 }
 
 @media screen and (prefers-color-scheme: dark) {
-  html:not([data-theme="light"]) {
+  :root {
     --ink: #e8eef8;
     --muted: #a9b5c8;
     --faint: #75839a;
@@ -2207,8 +2207,7 @@ th {
   }
   .status-strip,
   .claim-group,
-  .claim,
-  .claim-conformance {
+  .claim {
     width: 100%;
     max-width: 100%;
     box-sizing: border-box;

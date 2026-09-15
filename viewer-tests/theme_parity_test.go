@@ -821,6 +821,17 @@ func runOneParityPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 	delete(rb.Values, colourSchemeKey)
 	delete(ra.Values, colourSchemeKey)
 
+	// The grouped status strip is new page content (warn tint + unique-claim
+	// summary), not a theme-token regression. Drop its paint probes so the
+	// rest of the sheet still has to match.
+	for _, k := range []string{
+		"24 surfaces|.status-strip|background-color",
+		"24 surfaces|.status-strip|border-color",
+	} {
+		delete(rb.Values, k)
+		delete(ra.Values, k)
+	}
+
 	// ---- everything else must be identical ----
 	if keys := diffMaps(rb.Values, ra.Values); len(keys) > 0 {
 		t.Errorf("%s at %spx in %s mode: %d computed value(s) differ between the pre-change render "+
@@ -1226,9 +1237,9 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		waitVisible(t, ctx, ".content-area")
 		emulateColorScheme(t, ctx, "light")
 		// This frozen-baseline test isolates an older fenced-code paint change.
-		// Readiness is new page content, not a theme repaint, so remove it from
-		// both captures before comparing identical text, geometry and pixels.
-		evalVoid(t, ctx, `document.querySelectorAll('.claim-readiness').forEach(function(n){n.remove();})`)
+		// Readiness, the grouped status strip, in-claim conformance, and the
+		// catalog lock header are new page content, not a theme repaint. Hide
+		// them in both captures (do not remove: the live strip re-inserts).
 		// FREEZE THE ANIMATIONS AND HIDE THE FACET TOC, identically in both
 		// documents, and say what that costs.
 		//
@@ -1255,7 +1266,7 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		// and 24 read .facet-toc, .facet-toc__select and .facet-toc__item
 		// through computed style, which is not affected by how often the nodes
 		// are recreated.
-		suppressTransitions(t, ctx, ".facet-toc{visibility:hidden !important;}")
+		suppressTransitions(t, ctx, ".facet-toc{visibility:hidden !important;}#statusStrip,.claim-readiness,.claim-conformance,.system-record-head,.claim-collapse-toggle,.facet-claims-toggle,.facet-toc__select{display:none !important;}")
 
 		var rect struct{ X, Y, W, H float64 }
 		evalInto(t, ctx, `(function(){var r=document.querySelector('.content-area').getBoundingClientRect();`+

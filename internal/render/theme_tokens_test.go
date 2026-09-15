@@ -191,6 +191,9 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 			t.Fatal("style.css must paint explicit Dark via html[data-theme=\"dark\"]")
 		}
 		idx := strings.Index(css, `html[data-theme="dark"]`)
+		if idx < 0 {
+			t.Fatal("html[data-theme=\"dark\"] vanished between the Contains check and Index")
+		}
 		before := css[:idx]
 		lastScreen := strings.LastIndex(before, "@media screen")
 		lastPrint := strings.LastIndex(before, "@media print")

@@ -78,8 +78,8 @@ func TestThemeOverrideCSS_FourParts(t *testing.T) {
 		`:root{--accent:#111111;--font-sans:One, Two;--radius:8px;}` +
 		`@media (prefers-color-scheme: light), print{:root{--ink:#101010;--paper:#ffffff;}}` +
 		`html[data-theme="light"]{--ink:#101010;--paper:#ffffff;}` +
-		`@media screen{html[data-theme="dark"]{--ink:#eeeeee;--paper:#151515;}}` +
-		`@media screen and (prefers-color-scheme: dark){html:not([data-theme="light"]){--ink:#eeeeee;--paper:#151515;}}`
+		`@media screen{html[data-theme="dark"]{--accent:#111111;--font-sans:One, Two;--radius:8px;--ink:#eeeeee;--paper:#151515;}}` +
+		`@media screen and (prefers-color-scheme: dark){:root{--ink:#eeeeee;--paper:#151515;}}`
 
 	for i := 0; i < 20; i++ {
 		theme := config.Theme{
@@ -191,7 +191,7 @@ func TestThemeOverrideCSS_DarkOnlyTokenHasNoLightBlock(t *testing.T) {
 	rt := resolveForTest(t, config.Theme{Dark: map[string]string{"ink": "#eeeeee"}}, nil)
 	got := string(themeOverrideCSS(rt))
 
-	if want := `@media screen{html[data-theme="dark"]{--ink:#eeeeee;}}@media screen and (prefers-color-scheme: dark){html:not([data-theme="light"]){--ink:#eeeeee;}}`; got != want {
+	if want := `@media screen{html[data-theme="dark"]{--ink:#eeeeee;}}@media screen and (prefers-color-scheme: dark){:root{--ink:#eeeeee;}}`; got != want {
 		t.Fatalf("dark-only theme emitted:\n%s\nwant:\n%s", got, want)
 	}
 	if strings.Contains(got, "prefers-color-scheme: light") {

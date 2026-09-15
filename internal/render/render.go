@@ -940,8 +940,9 @@ const softMountClaimThreshold = 80
 //  4. "html[data-theme=light]{...}" so an explicit Light choice overrides OS;
 //  5. "@media screen{html[data-theme=dark]{...}}" so Dark overrides OS and
 //     cannot reach print;
-//  6. "@media screen and (prefers-color-scheme: dark){html:not([data-theme=light]){...}}"
-//     for System (and unset) following the OS, still screen-scoped.
+//  6. "@media screen and (prefers-color-scheme: dark){:root{...}}"
+//     for System (and unset) following the OS. Kept at :root specificity so
+//     a project's later :root shared tokens still win in both schemes.
 //
 // The two media lists are the whole of the print story (plan v4 A1). A
 // project's light values apply to print as well as to the light scheme; its
@@ -986,8 +987,12 @@ func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
 	writeBlock(&b, "", ":root", rt.Shared)
 	writeBlock(&b, "@media (prefers-color-scheme: light), print", ":root", rt.Light)
 	writeBlock(&b, "", `html[data-theme="light"]`, rt.Light)
-	writeBlock(&b, "@media screen", `html[data-theme="dark"]`, rt.Dark)
-	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", `html:not([data-theme="light"])`, rt.Dark)
+	explicitDark := rt.Dark
+	if len(rt.Dark) > 0 {
+		explicitDark = appendThemeDecls(rt.Shared, rt.Dark)
+	}
+	writeBlock(&b, "@media screen", `html[data-theme="dark"]`, explicitDark)
+	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", ":root", rt.Dark)
 
 	return template.CSS(b.String())
 }
@@ -996,6 +1001,17 @@ func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
 // media when that is non-empty. An empty decls list writes nothing at all,
 // which is what keeps a flat-only theme's output byte-identical to what
 // this engine emitted before per-mode values existed.
+func appendThemeDecls(a, b []config.ThemeDecl) []config.ThemeDecl {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	out := make([]config.ThemeDecl, 0, len(a)+len(b))
+	return append(append(out, a...), b...)
+}
+
 func writeBlock(b *strings.Builder, media, selector string, decls []config.ThemeDecl) {
 	if len(decls) == 0 {
 		return
