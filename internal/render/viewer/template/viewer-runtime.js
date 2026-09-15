@@ -1123,24 +1123,146 @@
       }
 
       function readinessWarningsForActiveFacet(readiness, claimIDs) {
-        var rows = [];
+        return collectStatusGroups(readiness, claimIDs, [], [], [], []).filter(function (group) {
+          return group.severity === 'blocker' || group.severity === 'needs_you';
+        });
+      }
+
+      var STATUS_SEVERITIES = [
+        { id: 'critical', label: 'Critical' },
+        { id: 'needs_you', label: 'Needs you' },
+        { id: 'blocker', label: 'Blocker' },
+        { id: 'check', label: 'Check' },
+        { id: 'later', label: 'Later' }
+      ];
+      var stripSeverityFilter = '';
+
+      function addStatusGroup(groups, key, fields) {
+        if (!groups[key]) {
+          groups[key] = {
+            key: key,
+            severity: fields.severity,
+            title: fields.title,
+            kind: fields.kind || '',
+            claimIDs: {},
+            count: 0
+          };
+        }
+        var group = groups[key];
+        if (fields.claimID) { group.claimIDs[fields.claimID] = true; }
+        group.count += 1;
+        return group;
+      }
+
+      function collectStatusGroups(readiness, claimIDs, ledger, lintErrors, lintWarnings, checkClaimIDs) {
+        var groups = {};
+        ledger.forEach(function (finding) {
+          addStatusGroup(groups, 'critical:' + (finding.rule || 'ledger') + ':' + (finding.claim_id || ''), {
+            severity: 'critical',
+            title: humanRule(finding.rule) || 'Approval record issue',
+            kind: finding.rule || 'ledger',
+            claimID: finding.claim_id
+          });
+        });
         Object.keys(readiness || {}).sort().forEach(function (id) {
           if (claimIDs[id] !== true) { return; }
           var assessment = readiness[id] || {};
-          var conditions = assessment.dependency_conditions || assessment.conditions || [];
-          var causes = assessment.review_causes || assessment.causes || [];
-          conditions.forEach(function (condition) {
-            var path = (condition.path || []).join(' → ');
-            rows.push(findingRow('Dependency ' + humanRule(condition.kind), id,
-              (condition.detail || condition.kind || 'dependency condition') + (path ? ' · ' + path : '')));
+          (assessment.dependency_conditions || assessment.conditions || []).forEach(function (condition) {
+            var dep = condition.dependency_id || (condition.path || [])[(condition.path || []).length - 1] || condition.kind || 'dependency';
+            addStatusGroup(groups, 'blocker:' + (condition.kind || 'dependency') + ':' + dep, {
+              severity: 'blocker',
+              title: readinessFactLabel(condition, 'condition', id),
+              kind: condition.kind || 'dependency',
+              claimID: id
+            });
           });
-          causes.forEach(function (cause) {
-            var path = (cause.path || []).join(' → ');
-            rows.push(findingRow('Review ' + humanRule(cause.kind), id,
-              (cause.detail || cause.kind || 'review cause') + (path ? ' · ' + path : '')));
+          (assessment.review_causes || assessment.causes || []).forEach(function (cause) {
+            addStatusGroup(groups, 'needs_you:' + (cause.kind || 'review') + ':' + (cause.direct ? id : (cause.dependency_id || id)), {
+              severity: 'needs_you',
+              title: readinessFactLabel(cause, 'cause', id),
+              kind: cause.kind || 'review',
+              claimID: id
+            });
           });
         });
-        return rows;
+        checkClaimIDs.forEach(function (id) {
+          addStatusGroup(groups, 'check:conformance:' + id, {
+            severity: 'check',
+            title: 'Implementation checks are not ready',
+            kind: 'conformance',
+            claimID: id
+          });
+        });
+        lintErrors.forEach(function (finding) {
+          addStatusGroup(groups, 'check:lint:' + (finding.lint || 'lint'), {
+            severity: 'check',
+            title: humanRule(finding.lint) || 'Check issue',
+            kind: finding.lint || 'lint',
+            claimID: finding.claim_id
+          });
+        });
+        lintWarnings.forEach(function (finding) {
+          addStatusGroup(groups, 'later:lint:' + (finding.lint || 'lint'), {
+            severity: 'later',
+            title: humanRule(finding.lint) || 'Later warning',
+            kind: finding.lint || 'lint',
+            claimID: finding.claim_id
+          });
+        });
+        return Object.keys(groups).sort().map(function (key) { return groups[key]; });
+      }
+
+      function statusGroupClaimCount(group) {
+        return Object.keys(group.claimIDs).length;
+      }
+
+      function countSeverity(groups, id) {
+        return groups.reduce(function (sum, group) {
+          return group.severity === id ? sum + statusGroupClaimCount(group) : sum;
+        }, 0);
+      }
+
+      function statusChipLine(groups) {
+        return STATUS_SEVERITIES.map(function (item) {
+          return item.label + ' ' + countSeverity(groups, item.id);
+        }).join(' · ');
+      }
+
+      function blockerHeadline(groups) {
+        var blockers = groups.filter(function (group) { return group.severity === 'blocker'; });
+        if (!blockers.length) { return ''; }
+        var byKind = {};
+        blockers.forEach(function (group) {
+          byKind[group.kind] = (byKind[group.kind] || 0) + statusGroupClaimCount(group);
+        });
+        var topKind = Object.keys(byKind).sort(function (a, b) { return byKind[b] - byKind[a]; })[0];
+        var n = byKind[topKind];
+        if (topKind === 'dependency_unapproved') {
+          return n + ' claim' + (n === 1 ? '' : 's') + ' blocked by unapproved dependencies';
+        }
+        return n + ' claim' + (n === 1 ? '' : 's') + ' blocked';
+      }
+
+      function conformanceNotReadyIDs(claimIDs) {
+        var ids = [];
+        document.querySelectorAll('.claim-conformance[data-implementation-ready="false"]').forEach(function (panel) {
+          var id = panel.getAttribute('data-claim-id');
+          if (id && claimIDs[id] === true) { ids.push(id); }
+        });
+        return ids;
+      }
+
+      function renderStatusGroup(group) {
+        var row = el('li', 'status-finding status-finding--group');
+        row.setAttribute('data-severity', group.severity);
+        row.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
+        var ids = Object.keys(group.claimIDs).sort();
+        if (ids.length === 1) {
+          row.appendChild(textEl('span', 'status-finding-claim', ids[0]));
+        }
+        var n = ids.length || group.count;
+        row.appendChild(textEl('span', 'status-finding-msg', 'blocks ' + n + ' claim' + (n === 1 ? '' : 's')));
+        return row;
       }
 
 // The status endpoint is project-wide, but the reader's orientation is
@@ -1500,52 +1622,76 @@
         var claimIDs = activeFacetClaimIDs();
         var ledger = findingsForActiveFacet(lastStatusData.ledger_findings || [], claimIDs);
         var lintErrors = findingsForActiveFacet(lastStatusData.lint_errors || [], claimIDs);
-        var readiness = readinessWarningsForActiveFacet(lastStatusData.readiness || offlineReadiness(), claimIDs);
+        var lintWarnings = findingsForActiveFacet(lastStatusData.lint_warnings || [], claimIDs);
+        var groups = collectStatusGroups(
+          lastStatusData.readiness || offlineReadiness(),
+          claimIDs,
+          ledger,
+          lintErrors,
+          lintWarnings,
+          conformanceNotReadyIDs(claimIDs)
+        );
 
-        if (!ledger.length && !lintErrors.length && !readiness.length) {
+        if (!groups.length) {
           stripEl.hidden = true;
           stripEl.classList.remove('status-strip--integrity', 'status-strip--lint');
           stripBody.textContent = '';
           return;
         }
 
-        stripBody.textContent = '';
-        if (ledger.length) {
-          stripBody.appendChild(findingGroup(
-            'Approval record issues',
-            ledger.map(function (f) { return findingRow(humanRule(f.rule), f.claim_id, f.message); })
-          ));
-        }
-        if (readiness.length) {
-          stripBody.appendChild(findingGroup('Readiness warnings', readiness));
-        }
-        if (lintErrors.length) {
-          stripBody.appendChild(findingGroup(
-            'Issues to resolve',
-            lintErrors.map(function (f) { return findingRow(humanRule(f.lint), f.claim_id, f.message); })
-          ));
-        }
+        var critical = countSeverity(groups, 'critical');
+        var needsYou = countSeverity(groups, 'needs_you');
+        var visible = groups.filter(function (group) {
+          return !stripSeverityFilter || group.severity === stripSeverityFilter;
+        });
 
-        // The summary leads with integrity whenever there is any, however many
-        // lint errors sit behind it — the reader needs the worst fact first.
+        stripBody.textContent = '';
+        var filters = el('div', 'status-strip-filters');
+        STATUS_SEVERITIES.forEach(function (item) {
+          var count = countSeverity(groups, item.id);
+          var chip = el('button', 'pill' + (stripSeverityFilter === item.id ? ' ps' : ' pv'));
+          chip.type = 'button';
+          chip.textContent = item.label + ' ' + count;
+          chip.setAttribute('aria-pressed', String(stripSeverityFilter === item.id));
+          chip.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            stripSeverityFilter = stripSeverityFilter === item.id ? '' : item.id;
+            renderStatusStrip(lastStatusData);
+          });
+          filters.appendChild(chip);
+        });
+        stripBody.appendChild(filters);
+
+        var bySeverity = {};
+        visible.forEach(function (group) {
+          if (!bySeverity[group.severity]) { bySeverity[group.severity] = []; }
+          bySeverity[group.severity].push(group);
+        });
+        STATUS_SEVERITIES.forEach(function (item) {
+          var rows = bySeverity[item.id] || [];
+          if (!rows.length) { return; }
+          stripBody.appendChild(findingGroup(item.label, rows.map(renderStatusGroup)));
+        });
+
+        var headline = blockerHeadline(groups);
         if (ledger.length) {
           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = (lintErrors.length || readiness.length)
-            ? 'There ' + (lintErrors.length + readiness.length === 1 ? 'is ' : 'are ') + countLabel(lintErrors.length + readiness.length, 'readiness warning') + ' in this facet also needing attention.'
-            : 'Review these locked claims before relying on their approved state.';
-        } else if (lintErrors.length) {
+          stripNote.textContent = statusChipLine(groups);
+        } else if (lintErrors.length && !headline && !needsYou) {
           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = lintErrors.length === 1
-            ? 'This issue blocks the next successful DossierX check.'
-            : 'These issues block the next successful DossierX check.';
+          stripNote.textContent = statusChipLine(groups);
+        } else if (headline) {
+          stripTitle.textContent = headline;
+          stripNote.textContent = statusChipLine(groups);
         } else {
-          stripTitle.textContent = countLabel(readiness.length, 'readiness warning') + ' in this facet need' + (readiness.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = 'Review these local approval and dependency conditions before relying on the claims.';
+          stripTitle.textContent = countLabel(groups.length, 'grouped issue') + ' in this facet';
+          stripNote.textContent = statusChipLine(groups);
         }
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);
         stripEl.classList.toggle('status-strip--lint', ledger.length === 0);
-        if (!stripUserToggled) { stripExpanded = ledger.length > 0 || readiness.length > 0; }
+        if (!stripUserToggled) { stripExpanded = critical > 0 || needsYou > 0; }
         setStripExpanded(stripExpanded);
         positionStatusStrip();
         stripEl.hidden = false;

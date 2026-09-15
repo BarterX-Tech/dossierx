@@ -104,8 +104,28 @@
   --mockup-bg: #fff;
 }
 
+@media screen {
+  html[data-theme="dark"] {
+    --ink: #e8eef8;
+    --muted: #a9b5c8;
+    --faint: #75839a;
+    --paper: #0a1220;
+    --card-bg: #0f1b2e;
+    --border: #263754;
+    --link: #8ab7ff;
+    --accent: #70c99c;
+    --accent-bg: rgba(112, 201, 156, .12);
+    --warn: #ff8b94;
+    --warn-bg: rgba(255, 139, 148, .10);
+    --dxg-facet-other: #77a9e8;
+    --shadow: rgba(0, 0, 0, .28);
+    --shadow-strong: rgba(0, 0, 0, .34);
+    --scrim: rgba(0, 0, 0, .42);
+  }
+}
+
 @media screen and (prefers-color-scheme: dark) {
-  :root {
+  html:not([data-theme="light"]) {
     --ink: #e8eef8;
     --muted: #a9b5c8;
     --faint: #75839a;
@@ -749,8 +769,8 @@ th {
 .claim-readiness {
   overflow: hidden;
   margin: 1.05rem 0 0;
-  border: 1px solid color-mix(in srgb, var(--warn) 35%, var(--border));
-  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   background: color-mix(in srgb, var(--paper) 55%, var(--card-bg));
 }
 
@@ -759,8 +779,7 @@ th {
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 72px;
-  padding: 0.8rem;
+  padding: 13px 14px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -780,15 +799,15 @@ th {
 
 .claim-readiness-state {
   padding: 0.25rem 0.45rem;
-  border-radius: 3px;
+  border-radius: var(--radius);
   background: var(--warn-bg);
   color: var(--warn);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.045em;
+  letter-spacing: 0;
   line-height: 1.2;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .claim-readiness--ready {
@@ -816,11 +835,11 @@ th {
   min-width: 64px;
   padding: 0.4rem 0.45rem;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: var(--radius);
   background: var(--card-bg);
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   line-height: 1.3;
   text-align: center;
   white-space: nowrap;
@@ -834,12 +853,12 @@ th {
 .claim-readiness-label {
   margin: 0;
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0;
   line-height: 1.3;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .claim-readiness-section-head {
@@ -852,8 +871,8 @@ th {
 
 .claim-readiness-section-head > span {
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
 }
 
 .claim-readiness-local {
@@ -878,7 +897,7 @@ th {
 .claim-readiness-route {
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   background: var(--card-bg);
 }
 
@@ -930,8 +949,8 @@ th {
 .claim-readiness-route-count,
 .claim-readiness-relation {
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   line-height: 1.3;
 }
 
@@ -1001,8 +1020,8 @@ th {
 .claim-readiness-raw > summary {
   color: var(--link);
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   font-weight: 650;
 }
 
@@ -1068,8 +1087,11 @@ th {
 }
 
 .claim-readiness-map .nodeLabel,
-.claim-readiness-map .label {
+.claim-readiness-map .label,
+.bo-diagram .nodeLabel,
+.bo-diagram .label {
   color: var(--ink) !important;
+  font-family: var(--font-sans) !important;
 }
 
 .claim-readiness-raw {
@@ -1997,10 +2019,10 @@ th {
    the document and its two navigation rails. */
 .status-strip {
   width: 100%;
-  margin: -8px 0 22px;
+  margin: 0 0 22px;
   background: var(--card-bg);
   border: 1px solid var(--border);
-  border-radius: 7px;
+  border-radius: var(--radius);
   font-family: var(--font-sans);
   overflow: hidden;
 }
@@ -2053,9 +2075,9 @@ th {
 
 .status-strip-action {
   color: var(--accent);
-  font: 600 10px var(--font-mono);
-  letter-spacing: .04em;
-  text-transform: uppercase;
+  font: 600 11.5px var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
   white-space: nowrap;
 }
 
@@ -2085,15 +2107,22 @@ th {
   display: none;
 }
 
+.status-strip-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+
 .status-group + .status-group {
   margin-top: 12px;
 }
 
 .status-group-head {
   margin: 0 0 6px;
-  font: 600 9px var(--font-mono);
-  letter-spacing: .08em;
-  text-transform: uppercase;
+  font: 600 11.5px var(--font-sans);
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--muted);
 }
 
@@ -2124,10 +2153,11 @@ th {
 
 .status-finding-rule {
   color: var(--warn);
-  font-size: 9px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   font-weight: 600;
-  letter-spacing: .05em;
-  text-transform: uppercase;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 .status-finding-claim {
@@ -2147,7 +2177,8 @@ th {
   .comment-action-text,
   .comment-composer-submit,
   .comment-composer-input,
-  .status-strip-head {
+  .status-strip-head,
+  .claim-collapse-toggle {
     min-height: 44px;
   }
 }
@@ -2174,8 +2205,17 @@ th {
     border-top: 1px solid var(--border);
     border-radius: 14px 14px 0 0;
   }
-  .status-strip {
-    margin-top: -4px;
+  .status-strip,
+  .claim-group,
+  .claim,
+  .claim-conformance {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .status-strip-head,
+  .claim-collapse-toggle {
+    min-height: 44px;
   }
   .status-strip-head {
     display: grid;
@@ -2598,10 +2638,38 @@ body.shell-body {
   flex-shrink: 0;
   padding: 8px 14px 12px;
   border-top: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: 9.5px;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
   color: var(--muted);
-  letter-spacing: .02em;
+  letter-spacing: 0;
+}
+
+.theme-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.theme-control button {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  font: 12px var(--font-sans);
+  padding: 3px 7px;
+  cursor: pointer;
+}
+
+.theme-control button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.sidebar-footer-stamp {
+  font-family: var(--font-sans);
+  font-size: 11px;
 }
 
 .nav-toggle, .nav-overlay {

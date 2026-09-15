@@ -118,7 +118,7 @@ func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
   var scalar = document.querySelector('.claim-conformance-check[data-check-id="schema-version"]');
   if (!scalar) { return false; }
   var lines = Array.from(scalar.querySelectorAll('.claim-conformance-line')).map(function (line) { return line.textContent.trim(); });
-  return lines.includes('expected: 3') && lines.includes('observed: 3') && !lines.some(function (line) { return line.startsWith('missing:') || line.startsWith('extra:'); });
+  return lines.includes('Expected: 3') && lines.includes('Observed: 3') && !lines.some(function (line) { return line.startsWith('missing:') || line.startsWith('extra:') || line.startsWith('Missing:') || line.startsWith('Extra:'); });
 })()`) {
 		t.Fatal("static scalar check does not show exact expected/observed values or leaked set-only differences")
 	}

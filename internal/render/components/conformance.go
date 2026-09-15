@@ -15,7 +15,7 @@ import (
 // template.HTML contains only engine-authored structure.
 func ConformanceHTML(result conformance.Result) template.HTML {
 	var b strings.Builder
-	b.WriteString(`<section class="claim-conformance" data-conformance-mode="`)
+	b.WriteString(`<details class="claim-conformance" data-conformance-mode="`)
 	b.WriteString(html.EscapeString(string(result.Mode)))
 	b.WriteString(`" data-claim-id="`)
 	b.WriteString(html.EscapeString(result.ClaimID))
@@ -24,19 +24,23 @@ func ConformanceHTML(result conformance.Result) template.HTML {
 	if result.Mode == model.EmbodimentModeNone {
 		b.WriteString(`" data-conformance-state="declared_none`)
 	}
-	b.WriteString(`"><div class="claim-conformance-head"><strong>Implementation conformance</strong> <span class="pill `)
-	if result.ImplementationReady {
-		b.WriteString(`ps">ready`)
-	} else {
-		b.WriteString(`pw">not ready`)
+	b.WriteString(`"`)
+	if !result.ImplementationReady {
+		b.WriteString(` open`)
 	}
-	b.WriteString(`</span></div>`)
+	b.WriteString(`><summary class="claim-conformance-head"><strong>Implementation checks</strong> <span class="pill `)
+	if result.ImplementationReady {
+		b.WriteString(`ps">Ready`)
+	} else {
+		b.WriteString(`pw">Not ready`)
+	}
+	b.WriteString(`</span></summary>`)
 
 	if result.Mode == model.EmbodimentModeNone {
 		b.WriteString(`<p class="claim-conformance-scope">Ready here means this claim deliberately declares no software embodiment. Claim and release readiness remain separate.</p>`)
 		writeConformanceLine(&b, "declaration", "none")
 		writeConformanceLine(&b, "reason", result.Reason)
-		b.WriteString(`</section>`)
+		b.WriteString(`</details>`)
 		return template.HTML(b.String()) //nolint:gosec // all values escaped above
 	}
 
@@ -44,7 +48,7 @@ func ConformanceHTML(result conformance.Result) template.HTML {
 	for _, check := range result.Checks {
 		writeConformanceCheck(&b, check)
 	}
-	b.WriteString(`</section>`)
+	b.WriteString(`</details>`)
 	return template.HTML(b.String()) //nolint:gosec // all values escaped above
 }
 
@@ -63,15 +67,15 @@ func writeConformanceCheck(b *strings.Builder, check conformance.CheckResult) {
 	b.WriteString(`</strong> <span class="pill `)
 	b.WriteString(conformancePill(check.State))
 	b.WriteString(`">`)
-	b.WriteString(html.EscapeString(state))
+	b.WriteString(html.EscapeString(conformanceStateLabel(check.State)))
 	b.WriteString(`</span></div>`)
 
-	writeConformanceLine(b, "shape", string(check.Shape))
-	writeConformanceLine(b, "adapter", check.Adapter)
-	writeConformanceLine(b, "target", check.Target)
-	writeConformanceValue(b, "expected", check.Expected)
+	writeConformanceLine(b, "Shape", string(check.Shape))
+	writeConformanceLine(b, "Adapter", check.Adapter)
+	writeConformanceLine(b, "Target", check.Target)
+	writeConformanceValue(b, "Expected", check.Expected)
 	if check.Observed != nil {
-		writeConformanceValue(b, "observed", check.Observed)
+		writeConformanceValue(b, "Observed", check.Observed)
 	}
 	if len(check.Missing) > 0 {
 		writeConformanceMembers(b, "missing", check.Missing)
@@ -87,6 +91,21 @@ func writeConformanceCheck(b *strings.Builder, check conformance.CheckResult) {
 		writeConformanceLine(b, "detail", check.Reason)
 	}
 	b.WriteString(`</article>`)
+}
+
+func conformanceStateLabel(state conformance.State) string {
+	switch state {
+	case conformance.StateMatched:
+		return "Matched"
+	case conformance.StateMismatch:
+		return "Mismatch"
+	case conformance.StateUncheckable:
+		return "Uncheckable"
+	case conformance.StateOwed:
+		return "Owed"
+	default:
+		return string(state)
+	}
 }
 
 func conformancePill(state conformance.State) string {

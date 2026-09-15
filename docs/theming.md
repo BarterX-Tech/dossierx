@@ -248,9 +248,9 @@ editing any of them, stop and restart `dossierx serve` to see the result.
 - **No raw CSS.** The twenty-eight tokens in FORMAT.md's table are the
   whole vocabulary. There is no CSS injection point, and asking for one
   every so often does not create one.
-- **No in-page toggle.** Light or dark follows the reader's OS setting.
-  There is no in-viewer switch to add, and no token controls which mode is
-  active.
+- **Print stays light.** An in-page System / Light / Dark control persists
+  `dossierx-theme` and sets `html[data-theme]`. It does not add tokens, and
+  dark values remain screen-scoped so paper stays on the light palette.
 - **No graph ramp.** The claims graph's facet colours are generated to stay
   distinguishable from each other; no preset or token repaints them.
 - **The colour grammar is a shape check, not a CSS parser.** A value like

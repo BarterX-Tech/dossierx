@@ -93,7 +93,7 @@ func TestRender_TargetPill_ActionableRestsOnTargetGetsPill(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if !strings.Contains(out, `<span class="pill pv">draft</span>`) {
+	if !strings.Contains(out, `<span class="pill pv">Draft</span>`) {
 		t.Fatalf("expected a draft pill on the rests_on target that is itself draft, got:\n%s", out)
 	}
 }

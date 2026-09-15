@@ -894,6 +894,53 @@ func TestBuildModuleGroups_AllLockedRequiresEveryFacetLocked(t *testing.T) {
 	}
 }
 
+func TestBuildModuleGroups_LockCountsOnTwoFacetLockedModule(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.a", "widget", "contract", model.StatusLocked),
+		groupedClaim("w.b", "widget", "contract", model.StatusLocked),
+		groupedClaim("w.c", "widget", "internals", model.StatusLocked),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatalf("catalog.Build: %v", err)
+	}
+	rendered := map[string]template.HTML{"w.a": "", "w.b": "", "w.c": ""}
+	moduleGroups := buildModuleGroups(buildGroups(cat, cfg, rendered))
+	if len(moduleGroups) != 1 {
+		t.Fatalf("module groups = %d, want 1", len(moduleGroups))
+	}
+	got := moduleGroups[0]
+	if got.ClaimCount != 3 || got.LockedCount != 3 || got.FacetCount != 2 {
+		t.Fatalf("widget counts = claims %d locked %d facets %d, want 3/3/2", got.ClaimCount, got.LockedCount, got.FacetCount)
+	}
+}
+
+func TestRender_ModuleSectionLockMetricAttrs(t *testing.T) {
+	claims := []model.Claim{
+		groupedClaim("w.a", "widget", "contract", model.StatusLocked),
+		groupedClaim("w.b", "widget", "internals", model.StatusLocked),
+	}
+	cfg := &config.Config{Modules: []string{"widget"}, Facets: []string{"contract", "internals"}}
+	cat, err := catalog.Build(claims, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := Render(cat, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`data-claim-count="2"`,
+		`data-locked-count="2"`,
+		`data-facet-count="2"`,
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("rendered module section missing %q", want)
+		}
+	}
+}
+
 func TestOrderedNames_EmptyPresentReturnsNil(t *testing.T) {
 	if got := orderedNames([]string{"a", "b"}, nil); got != nil {
 		t.Errorf("orderedNames(preferred, nil) = %#v, want nil", got)

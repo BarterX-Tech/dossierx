@@ -186,6 +186,19 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		}
 	})
 
+	t.Run("DataThemeDarkLivesUnderScreen", func(t *testing.T) {
+		if !strings.Contains(css, `html[data-theme="dark"]`) {
+			t.Fatal("style.css must paint explicit Dark via html[data-theme=\"dark\"]")
+		}
+		idx := strings.Index(css, `html[data-theme="dark"]`)
+		before := css[:idx]
+		lastScreen := strings.LastIndex(before, "@media screen")
+		lastPrint := strings.LastIndex(before, "@media print")
+		if lastScreen < 0 || lastPrint > lastScreen {
+			t.Fatal("html[data-theme=\"dark\"] must sit inside a screen media query so print stays light")
+		}
+	})
+
 	t.Run("ExactlyOneScreenScopedDarkQuery", func(t *testing.T) {
 		n := strings.Count(css, "@media screen and (prefers-color-scheme: dark)")
 		if n != 1 {

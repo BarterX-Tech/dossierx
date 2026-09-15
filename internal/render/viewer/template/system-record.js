@@ -380,12 +380,12 @@
       labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
     });
     document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
-      if (section.querySelector(':scope > .system-record-head')) { return; }
-      var claims = Array.prototype.slice.call(section.querySelectorAll('.claim-group .claim[data-status]'));
-      var unique = {};
-      claims.forEach(function (claim) { unique[claim.id || claim.dataset.claimId] = claim; });
-      var records = Object.keys(unique).map(function (key) { return unique[key]; });
-      var locked = records.filter(function (claim) { return claim.dataset.status === 'locked'; }).length;
+      var total = parseInt(section.getAttribute('data-claim-count') || '0', 10);
+      var locked = parseInt(section.getAttribute('data-locked-count') || '0', 10);
+      var facets = parseInt(section.getAttribute('data-facet-count') || '0', 10);
+      if (!facets) { facets = section.querySelectorAll(':scope > .claim-group').length; }
+      var existing = section.querySelector(':scope > .system-record-head');
+      if (existing) { existing.remove(); }
       var header = document.createElement('header');
       header.className = 'system-record-head';
       var copy = document.createElement('div');
@@ -394,12 +394,34 @@
       var metric = document.createElement('div');
       title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
       summary.className = 'system-record-head__summary';
-      summary.textContent = records.length + ' claims across ' + section.querySelectorAll(':scope > .claim-group').length + ' record sections.';
+      summary.textContent = total + ' claims across ' + facets + ' record sections.';
       metric.className = 'system-record-head__metric';
-      metric.innerHTML = '<strong>' + locked + ' of ' + records.length + '</strong> claims locked';
+      metric.innerHTML = '<strong>' + locked + ' of ' + total + '</strong> claims locked';
       copy.append(title, summary);
       header.append(copy, metric);
       section.insertBefore(header, section.firstChild);
+    });
+  }
+
+  function applyThemeChoice(choice) {
+    if (choice !== 'light' && choice !== 'dark') { choice = 'system'; }
+    document.documentElement.setAttribute('data-theme', choice);
+    try { localStorage.setItem('dossierx-theme', choice); } catch (e) {}
+    document.querySelectorAll('.theme-control [data-theme-choice]').forEach(function (button) {
+      button.setAttribute('aria-pressed', String(button.getAttribute('data-theme-choice') === choice));
+    });
+  }
+
+  function bindThemeControl() {
+    var control = document.querySelector('.theme-control');
+    if (!control || control.dataset.bound === 'true') { return; }
+    control.dataset.bound = 'true';
+    var current = document.documentElement.getAttribute('data-theme') || 'system';
+    applyThemeChoice(current);
+    control.addEventListener('click', function (event) {
+      var button = event.target.closest('[data-theme-choice]');
+      if (!button) { return; }
+      applyThemeChoice(button.getAttribute('data-theme-choice'));
     });
   }
 
@@ -429,6 +451,7 @@
     if (running) { return; }
     running = true;
     enhanceTimestamp();
+    bindThemeControl();
     bindResizer();
     bindSidebarCollapse();
     bindNavigationGroupPreferences();
