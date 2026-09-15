@@ -6,18 +6,20 @@ import (
 
 const conformanceCSS = `
 /* Added only when this viewer contains structured conformance results. */
-.claim-conformance{margin:.65rem 0 0;padding:.65rem .75rem;border:1px solid var(--border);border-left:3px solid var(--border-strong,var(--border));border-radius:4px;background:var(--hover-bg,transparent);font-size:.78rem}
-.claim-conformance[data-implementation-ready="true"]{border-left-color:var(--accent)}
-.claim-conformance[data-implementation-ready="false"]{border-left-color:var(--warn)}
+.claim-conformance{margin:.65rem 0 0;padding:13px 14px;border:1px solid var(--border);border-radius:var(--radius);background:var(--hover-bg,transparent);font-size:.78rem;font-family:var(--font-sans)}
+.claim-conformance[data-implementation-ready="true"]{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+.claim-conformance[data-implementation-ready="false"]{border-color:color-mix(in srgb,var(--warn) 40%,var(--border))}
 .claim-conformance-head,.claim-conformance-check-head,.claim-conformance-line,.claim-conformance-scope{margin:0}
-.claim-conformance-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;color:var(--ink)}
-.claim-conformance-scope{margin-top:.35rem;color:var(--muted)}
-.claim-conformance-check{margin-top:.55rem;padding:.5rem .6rem;border:1px solid var(--border);border-left:3px solid var(--border-strong,var(--border));border-radius:4px;background:var(--card-bg,transparent)}
-.claim-conformance-check[data-conformance-state="matched"]{border-left-color:var(--accent)}
-.claim-conformance-check[data-conformance-state="mismatch"],.claim-conformance-check[data-conformance-state="uncheckable"]{border-left-color:var(--warn)}
-.claim-conformance-check-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;color:var(--ink)}
-.claim-conformance-line{margin-top:.3rem;overflow-wrap:anywhere}
-.claim-conformance-line>span{color:var(--muted)}
+.claim-conformance-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;color:var(--ink);cursor:pointer;list-style:none;font-family:var(--font-sans);font-size:13px}
+.claim-conformance-head::-webkit-details-marker{display:none}
+.claim-conformance-scope{margin-top:.35rem;color:var(--muted);font-size:11.5px}
+.claim-conformance-check{margin-top:.55rem;padding:.5rem .6rem;border:1px solid var(--border);border-radius:var(--radius);background:var(--card-bg,transparent)}
+.claim-conformance-check[data-conformance-state="matched"]{border-color:color-mix(in srgb,var(--accent) 40%,var(--border))}
+.claim-conformance-check[data-conformance-state="mismatch"],.claim-conformance-check[data-conformance-state="uncheckable"]{border-color:color-mix(in srgb,var(--warn) 40%,var(--border))}
+.claim-conformance-check-head{display:flex;align-items:center;justify-content:space-between;gap:.5rem;color:var(--ink);font-family:var(--font-sans);font-size:13px}
+.claim-conformance-line{margin-top:.3rem;overflow-wrap:anywhere;font-size:11.5px}
+.claim-conformance-line>span{color:var(--muted);font-family:var(--font-sans)}
+.claim-conformance-line>code{font-family:var(--font-mono)}
 `
 
 // conformanceStatusFetchGuardJS is injected only when the generated viewer

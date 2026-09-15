@@ -21,6 +21,15 @@
   <style>{{.GraphCSS}}</style>
   <style>{{.CSS}}</style>
   <style>{{.ThemeCSS}}</style>
+  <script>
+    (function () {
+      var key = 'dossierx-theme';
+      var choice = 'system';
+      try { choice = localStorage.getItem(key) || 'system'; } catch (e) {}
+      if (choice !== 'light' && choice !== 'dark') { choice = 'system'; }
+      document.documentElement.setAttribute('data-theme', choice);
+    })();
+  </script>
 </head>
 <body class="shell-body">
   <div class="layout">
@@ -94,13 +103,20 @@
         </div>
       </nav>
       <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
-{{if .GeneratedAt}}<div class="sidebar-footer">Generated {{.GeneratedAt}}</div>{{end}}
+      <div class="sidebar-footer">
+        <div class="theme-control" role="group" aria-label="Color theme">
+          <button type="button" data-theme-choice="system">System</button>
+          <button type="button" data-theme-choice="light">Light</button>
+          <button type="button" data-theme-choice="dark">Dark</button>
+        </div>
+{{if .GeneratedAt}}        <div class="sidebar-footer-stamp">Generated {{.GeneratedAt}}</div>{{end}}
+      </div>
       <div id="sidebarResizer" class="system-sidebar-resizer" tabindex="0" role="separator" aria-label="Resize navigation drawer" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="420" aria-valuenow="270" title="Drag to resize · Double-click to reset"></div>
     </aside>
     <main class="content-area">{{if .BuildOrders.Modules}}<script type="application/json" id="dossierx-build-orders">{{.BuildOrderPayload}}</script>{{end}}
 {{if .ModuleGroups}}
 {{range .ModuleGroups}}
-          <section class="module-section" id="{{.ID}}" hidden>
+          <section class="module-section" id="{{.ID}}" hidden data-claim-count="{{.ClaimCount}}" data-locked-count="{{.LockedCount}}" data-facet-count="{{.FacetCount}}">
 {{if .HasSubNav}}
               <div class="sub-nav">
 {{range .Facets}}

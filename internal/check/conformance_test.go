@@ -106,7 +106,7 @@ func TestRunConformanceWritesAgreementThenRemovesStaleStatus(t *testing.T) {
 	}
 	catalogRaw = readConformanceFile(t, cfg.CatalogPath())
 	viewerRaw = readConformanceFile(t, cfg.ViewerPath())
-	if strings.Contains(string(catalogRaw), `"conformance"`) || strings.Contains(string(viewerRaw), "claim-conformance") {
+	if strings.Contains(string(catalogRaw), `"conformance"`) || strings.Contains(string(viewerRaw), `class="claim-conformance"`) {
 		t.Fatal("zero-declaration outputs retained a conformance projection")
 	}
 }

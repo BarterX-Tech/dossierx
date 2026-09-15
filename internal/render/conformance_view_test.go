@@ -37,7 +37,7 @@ func TestRenderConformanceProjectionAndEscaping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Implementation conformance", "public-values", "schema-version", "mismatch", "shape", "scalar", "missing", "ready", "extra", "paused", "Ready here means every declared check"} {
+	for _, want := range []string{"Implementation checks", "public-values", "schema-version", "Mismatch", "Shape", "scalar", "missing", "ready", "extra", "paused", "Ready here means every declared check"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("viewer missing %q", want)
 		}
@@ -59,7 +59,7 @@ func TestRenderConformanceProjectionAndEscaping(t *testing.T) {
 		t.Fatal("viewer emitted an unterminated scalar check")
 	}
 	scalar := out[scalarStart : scalarStart+scalarEnd]
-	if !strings.Contains(scalar, `<span>expected:</span> <code>3</code>`) || !strings.Contains(scalar, `<span>observed:</span> <code>4</code>`) || strings.Contains(scalar, `<span>missing:</span>`) || strings.Contains(scalar, `<span>extra:</span>`) {
+	if !strings.Contains(scalar, `<span>Expected:</span> <code>3</code>`) || !strings.Contains(scalar, `<span>Observed:</span> <code>4</code>`) || strings.Contains(scalar, `<span>missing:</span>`) || strings.Contains(scalar, `<span>extra:</span>`) {
 		t.Fatalf("scalar check did not preserve scalar-only detail fields: %s", scalar)
 	}
 }
@@ -80,7 +80,7 @@ func TestRenderNoConformanceIsExactNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if before != after || strings.Contains(after, "claim-conformance") || strings.Contains(after, "dossierx-conformance-status-freshness") {
+	if before != after || strings.Contains(after, `class="claim-conformance"`) || strings.Contains(after, "dossierx-conformance-status-freshness") {
 		t.Fatal("an omitted conformance projection changed viewer bytes")
 	}
 }
@@ -149,5 +149,33 @@ func TestRenderConformanceSurvivesComponentOverride(t *testing.T) {
 	}
 	if !strings.Contains(out, `project-card-override`) || !strings.Contains(out, `data-check-id="current-value"`) || !strings.Contains(out, `data-conformance-state="matched"`) || !strings.Contains(out, `data-implementation-ready="true"`) {
 		t.Fatalf("component override hid engine conformance projection: %s", out)
+	}
+}
+
+func TestRenderConformanceIsClaimDescendant(t *testing.T) {
+	claim := claimFor(model.LayoutCard)
+	cat, err := catalog.Build([]model.Claim{claim}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cat.SetConformance(&conformance.Report{Results: []conformance.Result{{
+		ClaimID: claim.ID, Mode: model.EmbodimentModeCompare, ImplementationReady: true,
+		Checks: []conformance.CheckResult{{ID: "current-value", Shape: model.ExpectationShapeScalar, State: conformance.StateMatched, ImplementationReady: true, Expected: "ready", Observed: "ready"}},
+	}}})
+	out, err := Render(cat, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := strings.Index(out, `id="`+claim.ID+`"`)
+	if start < 0 {
+		t.Fatal("claim root missing")
+	}
+	chunk := out[start:]
+	closeAt := strings.Index(chunk, `</section>`)
+	if closeAt < 0 || !strings.Contains(chunk[:closeAt], `class="claim-conformance"`) {
+		t.Fatalf("conformance is not a descendant of .claim: %s", chunk[:min(len(chunk), 800)])
+	}
+	if strings.Contains(chunk[:closeAt], ` open`) {
+		t.Fatal("ready conformance details must stay closed")
 	}
 }

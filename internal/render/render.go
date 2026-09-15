@@ -269,6 +269,11 @@ type Group struct {
 	// exists because at least one claim produced it), but the check is
 	// written defensively regardless.
 	AllLocked bool
+	// ClaimCount and LockedCount are catalog facts for this facet (plus
+	// overview claims, counted once on the module's first facet). The
+	// viewer header reads the module-level sums, not live DOM cards.
+	ClaimCount  int
+	LockedCount int
 	// ModuleLabel is a display-cased version of Module, used for the
 	// sec-label heading shown once per module run.
 	ModuleLabel string
@@ -331,6 +336,11 @@ type ModuleGroup struct {
 	// locked). It drives the same optional lock-indicator suffix on the
 	// module-level nav label that Group.AllLocked drives per facet.
 	AllLocked bool
+	// ClaimCount, LockedCount and FacetCount are stamped onto the module
+	// <section> so the header metric does not depend on mounted claim cards.
+	ClaimCount  int
+	LockedCount int
+	FacetCount  int
 }
 
 // buildModuleGroups folds buildGroups' flat, facet-level Groups into the
@@ -365,13 +375,18 @@ func buildModuleGroups(groups []Group) []ModuleGroup {
 		out[i].FirstFacetID = out[i].Facets[0].ID
 
 		allLocked := true
+		claimCount, lockedCount := 0, 0
 		for _, f := range out[i].Facets {
+			claimCount += f.ClaimCount
+			lockedCount += f.LockedCount
 			if !f.AllLocked {
 				allLocked = false
-				break
 			}
 		}
 		out[i].AllLocked = allLocked
+		out[i].ClaimCount = claimCount
+		out[i].LockedCount = lockedCount
+		out[i].FacetCount = len(out[i].Facets)
 	}
 
 	return out
@@ -792,12 +807,13 @@ func renderClaimsWithBudget(cat *catalog.Catalog, partials map[model.Layout]*tem
 			return nil, fmt.Errorf("render: claim %q: %w", c.ID, err)
 		}
 		// Conformance is engine-owned generated evidence, not a replaceable
-		// presentation partial. Appending it after the selected layout keeps the
-		// projection visible even when a project overrides that entire partial.
+		// presentation partial. Inserting it inside the claim root keeps the
+		// projection visible when a project overrides that entire partial and
+		// keeps it inside claim collapse.
 		if result, ok := conformanceResults[c.ID]; ok {
-			if _, err := buf.WriteString(string(components.ConformanceHTML(result))); err != nil {
-				return nil, fmt.Errorf("render: claim %q conformance: %w", c.ID, err)
-			}
+			rendered := insertEngineBlockBeforeClose(buf.String(), string(components.ConformanceHTML(result)))
+			renderedByID[c.ID] = template.HTML(rendered)
+			continue
 		}
 		renderedByID[c.ID] = template.HTML(buf.String())
 	}
@@ -921,7 +937,12 @@ const softMountClaimThreshold = 80
 //  1. one @font-face per font, in the resolved slice's order;
 //  2. ":root{...}" for tokens whose value is the same in both colour schemes;
 //  3. "@media (prefers-color-scheme: light), print{:root{...}}";
-//  4. "@media screen and (prefers-color-scheme: dark){:root{...}}".
+//  4. "html[data-theme=light]{...}" so an explicit Light choice overrides OS;
+//  5. "@media screen{html[data-theme=dark]{...}}" so Dark overrides OS and
+//     cannot reach print;
+//  6. "@media screen and (prefers-color-scheme: dark){:root{...}}"
+//     for System (and unset) following the OS. Kept at :root specificity so
+//     a project's later :root shared tokens still win in both schemes.
 //
 // The two media lists are the whole of the print story (plan v4 A1). A
 // project's light values apply to print as well as to the light scheme; its
@@ -963,9 +984,15 @@ func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
 		b.WriteString(";font-display:swap;}")
 	}
 
-	writeBlock(&b, "", rt.Shared)
-	writeBlock(&b, "@media (prefers-color-scheme: light), print", rt.Light)
-	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", rt.Dark)
+	writeBlock(&b, "", ":root", rt.Shared)
+	writeBlock(&b, "@media (prefers-color-scheme: light), print", ":root", rt.Light)
+	writeBlock(&b, "", `html[data-theme="light"]`, rt.Light)
+	explicitDark := rt.Dark
+	if len(rt.Dark) > 0 {
+		explicitDark = appendThemeDecls(rt.Shared, rt.Dark)
+	}
+	writeBlock(&b, "@media screen", `html[data-theme="dark"]`, explicitDark)
+	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", ":root", rt.Dark)
 
 	return template.CSS(b.String())
 }
@@ -974,7 +1001,18 @@ func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
 // media when that is non-empty. An empty decls list writes nothing at all,
 // which is what keeps a flat-only theme's output byte-identical to what
 // this engine emitted before per-mode values existed.
-func writeBlock(b *strings.Builder, media string, decls []config.ThemeDecl) {
+func appendThemeDecls(a, b []config.ThemeDecl) []config.ThemeDecl {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	out := make([]config.ThemeDecl, 0, len(a)+len(b))
+	return append(append(out, a...), b...)
+}
+
+func writeBlock(b *strings.Builder, media, selector string, decls []config.ThemeDecl) {
 	if len(decls) == 0 {
 		return
 	}
@@ -982,7 +1020,11 @@ func writeBlock(b *strings.Builder, media string, decls []config.ThemeDecl) {
 		b.WriteString(media)
 		b.WriteString("{")
 	}
-	b.WriteString(":root{")
+	if selector == "" {
+		selector = ":root"
+	}
+	b.WriteString(selector)
+	b.WriteString("{")
 	for _, d := range decls {
 		b.WriteString("--")
 		b.WriteString(d.Token)
@@ -1075,7 +1117,16 @@ func buildGroups(cat *catalog.Catalog, cfg *config.Config, renderedByID map[stri
 			if fi == 0 {
 				overviewHTML = canonicalOverview
 			}
-			groups = append(groups, newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID, overviewHTML))
+			g := newGroup(m, f, claimsByKey[groupKey{m, f}], renderedByID, overviewHTML)
+			if fi == 0 {
+				for _, c := range overview {
+					g.ClaimCount++
+					if c.Status == model.StatusLocked {
+						g.LockedCount++
+					}
+				}
+			}
+			groups = append(groups, g)
 		}
 	}
 
@@ -1312,9 +1363,12 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 	htmls := make([]template.HTML, 0, len(claims)+len(overviewHTML))
 	htmls = append(htmls, overviewHTML...)
 	allLocked := len(claims) > 0
+	lockedCount := 0
 	prevSection := ""
 	for _, c := range claims {
-		if c.Status != model.StatusLocked {
+		if c.Status == model.StatusLocked {
+			lockedCount++
+		} else {
 			allLocked = false
 		}
 		if c.Section != "" && c.Section != prevSection {
@@ -1340,9 +1394,24 @@ func newGroup(module, facet string, claims []model.Claim, renderedByID map[strin
 		ID:          slugify(id),
 		Claims:      htmls,
 		AllLocked:   allLocked,
+		ClaimCount:  len(claims),
+		LockedCount: lockedCount,
 		ModuleLabel: displayCase(module),
 		TabLabel:    displayCase(tabSource),
 	}
+}
+
+// insertEngineBlockBeforeClose places engine-owned HTML inside the claim's
+// root element so collapse wrapping and project layout overrides cannot leave
+// it as a sibling. The last </section> is the claim root for every default
+// layout; </article> covers a project override that uses a different tag.
+func insertEngineBlockBeforeClose(host, block string) string {
+	for _, close := range []string{"</section>", "</article>"} {
+		if i := strings.LastIndex(host, close); i >= 0 {
+			return host[:i] + block + host[i:]
+		}
+	}
+	return host + block
 }
 
 // sectionHeadingHTML renders a claim's optional model.Claim.Section value as

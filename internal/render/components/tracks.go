@@ -86,8 +86,5 @@ func TrackCitedListHTML(claims []TrackCitedClaim) template.HTML {
 // internal/render's trackCompletion for why those two answers differ on
 // purpose.
 func TrackClaimStateLabel(status model.Status, reviewPending bool) string {
-	if status == model.StatusLocked && reviewPending {
-		return "review_pending"
-	}
-	return string(status)
+	return StatusLabel(status, reviewPending)
 }

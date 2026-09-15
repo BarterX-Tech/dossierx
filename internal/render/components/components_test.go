@@ -941,7 +941,7 @@ func TestEdgesHTMLWithLinks_TargetPill_DraftTarget(t *testing.T) {
 		"widget.contract.a": {Status: model.StatusDraft},
 	}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
-	if !strings.Contains(got, `<span class="pill pv">draft</span>`) {
+	if !strings.Contains(got, `<span class="pill pv">Draft</span>`) {
 		t.Fatalf("expected a draft pill (.pill.pv) on a draft target, got: %s", got)
 	}
 }
@@ -952,8 +952,8 @@ func TestEdgesHTMLWithLinks_TargetPill_LockedReviewPendingTarget(t *testing.T) {
 		"widget.contract.a": {Status: model.StatusLocked, ReviewPending: true},
 	}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
-	if !strings.Contains(got, `<span class="pill pw">review_pending</span>`) {
-		t.Fatalf("expected a warn pill (.pill.pw) reading review_pending on a locked+review_pending target, got: %s", got)
+	if !strings.Contains(got, `<span class="pill pw">Review pending</span>`) {
+		t.Fatalf("expected a warn pill (.pill.pw) reading Review pending on a locked+review_pending target, got: %s", got)
 	}
 }
 
@@ -1004,7 +1004,7 @@ func TestEdgesHTMLWithLinks_TargetPill_OnGovernedByEdge(t *testing.T) {
 		"widget.doctrine.hub": {Status: model.StatusDraft},
 	}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, statuses))
-	if !strings.Contains(got, `<span class="pill pv">draft</span>`) {
+	if !strings.Contains(got, `<span class="pill pv">Draft</span>`) {
 		t.Fatalf("expected a draft pill on an actionable governed_by target, got: %s", got)
 	}
 }
@@ -1359,7 +1359,7 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 	// chip slot follows with ZERO whitespace on either side of it. This claim
 	// carries no comments, so the slot is the hidden zero-state variant.
 	const wantHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
-		`<span class="label">Retry Policy <span class="pill ps">locked</span></span>` +
+		`<span class="label">Retry Policy <span class="pill ps">Locked</span></span>` +
 		`<span class="claim-comments-slot" hidden>` +
 		`<button type="button" class="comment-chip comment-chip--empty" data-claim-id="widget.contract.retry-policy" ` +
 		`aria-controls="commentsPanel" aria-expanded="false" aria-label="add the first comment on this claim">` +
@@ -1368,7 +1368,7 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 
 	// banner's flat head, unchanged from before v0.4.1.
 	const wantBannerHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
-		`Retry Policy <span class="pill ps">locked</span></div>`
+		`Retry Policy <span class="pill ps">Locked</span></div>`
 
 	for _, layout := range []model.Layout{
 		model.LayoutCard, model.LayoutTable, model.LayoutList,

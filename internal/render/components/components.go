@@ -60,6 +60,7 @@ var funcMap = template.FuncMap{
 	"edges":         edgesHTML,
 	"inc":           inc,
 	"pillClass":     pillClass,
+	"statusLabel":   StatusLabel,
 	"colClass":      colClass,
 	"mockupHTML":    mockupHTML,
 	"claimLabel":    ClaimLabel,
@@ -257,6 +258,25 @@ func pillClass(status model.Status, reviewPending bool) string {
 	return "pv"
 }
 
+// StatusLabel is the sentence-case word a claim status pill shows.
+func StatusLabel(status model.Status, reviewPending bool) string {
+	if status == model.StatusLocked && reviewPending {
+		return "Review pending"
+	}
+	switch status {
+	case model.StatusLocked:
+		return "Locked"
+	case model.StatusDraft:
+		return "Draft"
+	default:
+		if status == "" {
+			return ""
+		}
+		s := string(status)
+		return strings.ToUpper(s[:1]) + s[1:]
+	}
+}
+
 // edgesHTML renders the edge/metadata footer shared by every non-banner
 // component: governed_by, mirrors, rests_on, migrated_from, and a
 // review_pending flag. It is a Go helper rather than template markup so
@@ -316,10 +336,7 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 	if !actionable {
 		return ""
 	}
-	label := string(st.Status)
-	if st.Status == model.StatusLocked && st.ReviewPending {
-		label = "review_pending"
-	}
+	label := StatusLabel(st.Status, st.ReviewPending)
 	return ` <span class="pill ` + pillClass(st.Status, st.ReviewPending) + `">` + html.EscapeString(label) + `</span>`
 }
 

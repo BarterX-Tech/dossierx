@@ -186,6 +186,22 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		}
 	})
 
+	t.Run("DataThemeDarkLivesUnderScreen", func(t *testing.T) {
+		if !strings.Contains(css, `html[data-theme="dark"]`) {
+			t.Fatal("style.css must paint explicit Dark via html[data-theme=\"dark\"]")
+		}
+		idx := strings.Index(css, `html[data-theme="dark"]`)
+		if idx < 0 {
+			t.Fatal("html[data-theme=\"dark\"] vanished between the Contains check and Index")
+		}
+		before := css[:idx]
+		lastScreen := strings.LastIndex(before, "@media screen")
+		lastPrint := strings.LastIndex(before, "@media print")
+		if lastScreen < 0 || lastPrint > lastScreen {
+			t.Fatal("html[data-theme=\"dark\"] must sit inside a screen media query so print stays light")
+		}
+	})
+
 	t.Run("ExactlyOneScreenScopedDarkQuery", func(t *testing.T) {
 		n := strings.Count(css, "@media screen and (prefers-color-scheme: dark)")
 		if n != 1 {
@@ -293,8 +309,8 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// comment chip and the facet card) are a deliberate set. A fifth consumer
 		// changes what `radius: 10px` does to an existing project's viewer.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 4 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 4", n)
+		if n != 10 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 10", n)
 		}
 	})
 }

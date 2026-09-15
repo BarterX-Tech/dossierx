@@ -221,7 +221,7 @@ Work through this in order and report step 4's numbers back to the human.
 Do not promise any of these, and do not go looking for a flag:
 
 - **No raw CSS.** The twenty-eight tokens are the whole vocabulary. There is no injection point.
-- **No in-page toggle.** Light or dark follows the reader's OS; there is no switch to add.
+- **No dark print.** An in-page **System / Light / Dark** control persists `dossierx-theme` and sets `html[data-theme]`. It does not add tokens or let dark values reach paper.
 - **No graph ramp.** The claims graph's facet colours are generated, not themed.
 - **No per-claim, per-facet or per-module styling.** A theme is document-wide.
 - **No proof your colour is a colour.** The grammar checks shape, not meaning: a well-formed value

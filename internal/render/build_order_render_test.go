@@ -320,7 +320,7 @@ func TestRender_BuildOrderSectionVisibleNotAFacetGroup(t *testing.T) {
 	out := renderClaimsFor(t, cfg, claims)
 
 	sectionAt := strings.Index(out, `<section class="module-section build-order-section" id="dossierx-build-order" hidden>`)
-	moduleAt := strings.Index(out, `<section class="module-section" id="widget" hidden>`)
+	moduleAt := strings.Index(out, `<section class="module-section" id="widget" hidden`)
 	mainEnd := strings.Index(out, "</main>")
 	if sectionAt < 0 || moduleAt < 0 || mainEnd < 0 {
 		t.Fatalf("missing section/module/main markers: %d %d %d", sectionAt, moduleAt, mainEnd)
@@ -362,7 +362,7 @@ func TestRender_BuildOrderTab_RefusesAModuleWhoseIDIsTheTabs(t *testing.T) {
 	lockBuildOrder(t, cfg, claims, module)
 	out := renderClaimsFor(t, cfg, claims)
 	for _, want := range []string{
-		`<section class="module-section" id="build-order" hidden>`,
+		`<section class="module-section" id="build-order" hidden`,
 		`<section class="module-section build-order-section" id="dossierx-build-order" hidden>`,
 		`<section class="claim-group bo-module" id="dossierx-build-order-build-order" hidden>`,
 		`data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-build-order"`,
