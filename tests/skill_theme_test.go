@@ -339,7 +339,7 @@ func cssTokenBlocks(t *testing.T) (root, dark map[string]string) {
 
 	rootBlock := captureBlock(t, css, "\n:root {", "\n}")
 	darkOuter := captureBlock(t, css, "\n@media screen and (prefers-color-scheme: dark) {", "\n}")
-	darkBlock := captureBlock(t, darkOuter, "  :root {", "\n  }")
+	darkBlock := captureBlock(t, darkOuter, "  html:not([data-theme=\"light\"]) {", "\n  }")
 
 	decl := regexp.MustCompile(`(?m)^\s*--([a-z0-9-]+):\s*(.+?);\s*$`)
 	parse := func(block string) map[string]string {

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- Fit the System Record viewer chrome in place: module headers read catalog
+  lock counts (so soft-mounted corpora no longer show 0 of 0), the status strip
+  groups unique blockers with severity chips and stays collapsed unless
+  Critical or Needs you is non-zero, implementation checks live inside the
+  claim and stay closed when ready, pill words are sentence case, and an
+  in-page System / Light / Dark control sets `html[data-theme]` without letting
+  dark values reach print.
+- Regenerate the six committed fixture viewers and
+  `testdata/render-across-releases.golden.txt` for those presentation changes.
+
 ## [0.7.16] - 2026-09-13
 
 ### Added

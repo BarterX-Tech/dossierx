@@ -80,7 +80,7 @@ func TestRenderNoConformanceIsExactNoOp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if before != after || strings.Contains(after, "claim-conformance") || strings.Contains(after, "dossierx-conformance-status-freshness") {
+	if before != after || strings.Contains(after, `class="claim-conformance"`) || strings.Contains(after, "dossierx-conformance-status-freshness") {
 		t.Fatal("an omitted conformance projection changed viewer bytes")
 	}
 }
