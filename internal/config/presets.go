@@ -41,7 +41,7 @@ var claudePreset = Theme{
 		// New York stacks (Geist + Geist Mono). The faces themselves are
 		// engine-owned woff2 files inlined by internal/render; a preset
 		// still ships no font files of its own.
-		"font-sans": `"Geist", ui-sans-serif, system-ui, sans-serif`, // engine choice: New York pairing, inlined by the engine
+		"font-sans": `"Geist", ui-sans-serif, system-ui, sans-serif`,                // engine choice: New York pairing, inlined by the engine
 		"font-mono": `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace`, // engine choice: New York pairing, inlined by the engine
 
 		// The source carries three radii for three purposes —
