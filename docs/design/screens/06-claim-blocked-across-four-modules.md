@@ -865,7 +865,7 @@ left guessing.
    current home.
 
 4. **Draft status.** `--color-draft` / `--color-draft-bg` on the head chip, word
-   `DRAFT`, no padlock. Note the engine has **no dark override** for
+   `DRAFT`, **open** padlock (components board section F; corrected 04:30). Note the engine has **no dark override** for
    `--status-draft` or `--status-draft-bg` (`tokens.md` §Disagreements 9), so a
    draft chip on dark renders `#976600` today — that is a defect to fix in the
    engine, not a value to copy.

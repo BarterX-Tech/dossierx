@@ -946,8 +946,9 @@ have to guess.
    LOCKED only. **Spec:** the status chip's ground, icon and label take
    `--color-draft-bg` / `--color-draft` for DRAFT (board 07a is its specimen) and
    the chip's geometry — `999px`, `4px/8px/10px`, `12px` icon, `11/14` weight
-   600 tracking `+0.05em` — does not change. The padlock is **not** drawn for a
-   draft.
+   600 tracking `+0.05em` — does not change. The padlock IS drawn for a
+   draft, as the **open** shackle (components board section F; corrected 04:30
+   after the pilot verifier's pixel comparison).
 
 10. **Long claim titles.** The board's title is one line at 1140px and two at
     390. **Spec:** the title wraps; it is never truncated and never ellipsised.

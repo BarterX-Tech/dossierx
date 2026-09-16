@@ -141,8 +141,11 @@ exists, not that any card was seen to draw it.
 
 **Intent, in prose:** the chip is a state badge, not a decoration — it exists so a
 reviewer can tell, without reading, whether the claim is a commitment or a
-proposal. That is why the DRAFT form carries **no padlock**: a draft is not
-locked, and reusing the locked glyph would say the opposite of the truth. The
+proposal. That is why the DRAFT form carries the **open** padlock (components board
+section F: the shackle is closed when an approval is on record and open when
+it is not — the chip never appears without its icon): reusing the closed glyph
+would say the opposite of the truth. Corrected 04:30 after the pilot verifier's
+pixel comparison; 07a's own board draws the open padlock. The
 board's approval of a chip does not make its glyph right — check every glyph
 against what the state means, and record a mismatch as a Paper defect in the
 handoff. The `.k > .claim-comments-slot` rule is owned here because it is head

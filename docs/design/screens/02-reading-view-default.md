@@ -876,7 +876,8 @@ be left guessing.
 
 1. **DRAFT claim.** 02 shows only LOCKED. The chip keeps the § 4.12 geometry
    exactly and swaps the colour pair: ground `--color-draft-bg`, padlock replaced
-   by no glyph (a draft is not locked), label `DRAFT` in `--color-draft`. Dark
+   by the **open**-shackle padlock (components board section F: open when no
+   approval is on record; corrected 04:30), label `DRAFT` in `--color-draft`. Dark
    uses `--color-dark-draft` / `--color-dark-draft-bg` — and note
    `tokens.md` Disagreement 9: the engine has **no dark override** for
    `--status-draft`, so this needs one.
