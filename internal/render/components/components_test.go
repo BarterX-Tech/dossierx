@@ -1354,21 +1354,36 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 	}
 
 	// The whole head, byte for byte, for the six chip-bearing layouts: the
-	// opening <div class="k"> tag is unchanged, the label and pill move inside
-	// <span class="label"> with the one space between them preserved, and the
-	// chip slot follows with ZERO whitespace on either side of it. This claim
-	// carries no comments, so the slot is the hidden zero-state variant.
+	// opening <div class="k"> tag is unchanged, the title/pill/id move inside
+	// <span class="label"> with the one space between the title and the pill
+	// preserved, and the chip slot follows with ZERO whitespace on either
+	// side of it. This claim carries no comments, so the slot is the hidden
+	// zero-state variant.
+	//
+	// v0.4.2 (docs/design/screens/07-claim-boundary-no-embodiment.md §4.3/§4.4,
+	// LANES.md's L3 section) wraps the title in its own <span class="k-title">
+	// and adds a visible <span class="k-id"> mono id line as a third child of
+	// .label, alongside the existing pill — the "claim id/slug mono line" L3
+	// owns. The LOCKED pill also gains the padlock glyph StatusIconHTML emits
+	// for the "ps" case only (components.go's StatusIconHTML doc comment
+	// explains why DRAFT does not get one despite the board drawing it there).
 	const wantHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
-		`<span class="label">Retry Policy <span class="pill ps">Locked</span></span>` +
+		`<span class="label"><span class="k-title">Retry Policy</span> <span class="pill ps">` +
+		`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>Locked</span>` +
+		`<span class="k-id">widget.contract.retry-policy</span></span>` +
 		`<span class="claim-comments-slot" hidden>` +
 		`<button type="button" class="comment-chip comment-chip--empty" data-claim-id="widget.contract.retry-policy" ` +
 		`aria-controls="commentsPanel" aria-expanded="false" aria-label="add the first comment on this claim">` +
 		`<span class="comment-chip-glyph" aria-hidden="true"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg></span> <span class="comment-chip-count">0</span>` +
 		`</button></span></div>`
 
-	// banner's flat head, unchanged from before v0.4.1.
+	// banner's flat head, unchanged from before v0.4.1 except the same
+	// padlock glyph every other LOCKED chip now carries — banner keeps no
+	// .label wrapper and therefore no .k-title/.k-id split (it has no edges
+	// footer or comment surface to flex the head against).
 	const wantBannerHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
-		`Retry Policy <span class="pill ps">Locked</span></div>`
+		`Retry Policy <span class="pill ps">` +
+		`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>Locked</span></div>`
 
 	for _, layout := range []model.Layout{
 		model.LayoutCard, model.LayoutTable, model.LayoutList,

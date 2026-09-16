@@ -34,6 +34,13 @@
 <body class="shell-body">
   <svg class="dx-icon-sprite" aria-hidden="true">
     <symbol id="dx-icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <!-- dx-icon-lock-open is the claim status chip's "no approval on record" glyph
+         (components board section F, "Claim status chip": "the padlock is closed
+         when an approval is on record and open when it is not, so the two states
+         differ in shape as well as in colour" — see components.go's
+         StatusIconHTML). Same box/stroke as dx-icon-lock, shackle lifted off the
+         right post instead of closed over it. -->
+    <symbol id="dx-icon-lock-open" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
     <symbol id="dx-icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol>
     <symbol id="dx-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
     <symbol id="dx-icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>

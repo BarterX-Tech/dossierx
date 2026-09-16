@@ -3927,12 +3927,21 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 
 .section-heading:first-child { margin-top: 0; }
 
+/* The claim card's radius is a per-component literal, not --radius: 12px is
+   off the engine's radius token and off Paper's own 4/8/999 scale, and
+   docs/design/screens/07a-claim-draft-not-yet-approved.md open decision D4
+   rules it stays that way rather than widening the shared token ("Decision:
+   carry 12px as a per-component literal ... Do not widen --radius and do not
+   add a token"). overflow: clip is the card boundary the mobile rule (M1,
+   appended @media (max-width: 520px) block below) removes along with the
+   radius and the side borders. */
 .card,
 .claim-tree {
   margin: 0 0 14px;
   padding: 20px 21px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: 12px;
+  overflow: clip;
   background: var(--card-bg);
 }
 
@@ -3963,11 +3972,43 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
   line-height: 1.35;
 }
 
-.k > .label {
+/* .label now carries three children — .k-title, .pill and .k-id — instead of
+   a loose title text run beside the pill. docs/design/screens/07-claim-
+   boundary-no-embodiment.md §3 measures the title-to-id gap at 7px and the
+   title-to-chip gap at 16px on the same row; row-gap/column-gap on a wrapped
+   flex row gives both without a grid. .k-id is forced onto its own line with
+   flex-basis: 100% (a flex-wrap line break, not a second flex container). The
+   comment-chip's slot stays a SIBLING of .label (added by {{commentChip .}}
+   after .label closes), never a child of it, per the standing note above the
+   dead early .k layer: a control inside a control is not a control, and
+   system-record.js's enhanceClaimDisclosures only ever moves .label itself
+   into the collapse button, which is what keeps the id line + title
+   collapsible together while the comment slot rides outside, still able to
+   float via its own absolute-position rule regardless of .label's layout. */
+.k > .label,
+.claim-collapse-toggle > .label {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
   align-items: baseline;
+  row-gap: 7px;
+  column-gap: 16px;
+}
+
+.k-title {
+  font-size: 20px;
+  line-height: 26px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+
+.k-id {
+  flex-basis: 100%;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  color: var(--faint);
   overflow-wrap: anywhere;
 }
 
@@ -4006,14 +4047,13 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 
 .claim-collapse-toggle:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); }
 
+/* Only the toggle-specific sizing lives here — display/wrap/gap/alignment for
+   .label are declared once, above, on the combined ".k > .label,
+   .claim-collapse-toggle > .label" selector, so the two parents can never
+   drift into two different arrangements of the same three children. */
 .claim-collapse-toggle > .label {
-  display: flex;
   flex: 1 1 auto;
-  flex-wrap: wrap;
-  gap: 7px;
-  align-items: baseline;
   min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .claim-collapse-chevron {
@@ -4037,16 +4077,40 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 .claim--collapsed > .k { margin-bottom: 0; }
 .claim-collapse-content[hidden] { display: none; }
 
+/* Status chip family — docs/design/screens/07-claim-boundary-no-embodiment.md
+   §4.5 and reference-rules.md R-H.2, measured on the LOCKED chip and shared by
+   every .pill variant: --radius-pill (999px), Inter 11/14 weight 600 tracking
+   +0.05em, and an 8px/10px left/right asymmetry the design keeps deliberately
+   uneven (the padlock's own sidebearing pays for the 2px difference — do not
+   normalise it to a symmetric value). inline-flex + gap is what lets the
+   locked padlock (added by components.go's StatusIconHTML, only for a
+   healthy locked claim — see .pill.ps below) sit beside the label instead of
+   needing its own margin. */
 .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin: 0;
-  padding: 4px 8px;
-  border-radius: 3px;
-  font: 700 9px/1.2 var(--font-mono);
-  letter-spacing: .045em;
+  padding: 4px 10px 4px 8px;
+  border-radius: 999px;
+  font: 600 11px/14px var(--font-sans);
+  letter-spacing: .05em;
   text-transform: uppercase;
   vertical-align: 2px;
 }
 
+.pill .dx-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* Every variant carries a padlock, per the components board's "Claim status
+   chip" rule — closed (#dx-icon-lock) when an approval is on record (ps, and
+   pw since review_pending is a flag on an already-locked claim), open
+   (#dx-icon-lock-open) when it is not (pv). See components.go's
+   StatusIconHTML for the full reasoning, including the Paper defect this
+   corrects (07a node 4BJ-0 draws the DRAFT chip with what reads as the same
+   closed padlock as LOCKED). */
 .pill.ps,
 .status-locked {
   background: var(--accent-bg);
@@ -4074,7 +4138,17 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
   line-height: 1.68;
 }
 
-.claim-body { width: 100%; max-width: none; margin: 0; }
+/* Claim prose size, leading and measure — docs/design/screens/07a-claim-
+   draft-not-yet-approved.md §3 (the 760px reading measure, confirmed three
+   times over: the prose block, the lede, and the checks footnote) and §4.3
+   (serif 17/28, --text-body at --leading-body). This is the claim body
+   specifically, not every body-shaped element markdown.Render feeds — .sbody
+   / .claim-list-items / .claim-table-scroll td keep the shared 14.5px/1.68
+   two rules up; L3's prose-typography ownership is the card's own reading
+   measure, not every markdown-rendered surface. Mobile drops the measure and
+   resizes to 16/26 in the lane's own appended @media (max-width: 520px)
+   block below (M5). */
+.claim-body { width: 100%; max-width: 760px; margin: 0; font-size: 17px; line-height: 28px; }
 .claim-body p { margin: .8em 0; }
 
 .claim-body strong,
@@ -4743,6 +4817,74 @@ code {
   .claim-footer__counts { justify-content: flex-start; }
   .claim-footer__counts > span:not(.claim-footer__chevron) { padding: 4px 6px; }
   .claim-footer__chevron { margin-left: auto; }
+}
+
+/* lane: L3 — card shell, head line, status chips, prose. New phone-tier block
+   per docs/design/LANES.md OD1: 520px is not one of the three shared
+   containers (861-1180, 860, 560) that OD1 assigns line-by-line, so a lane
+   adding a new mobile rule appends its own @media block after the last shared
+   container and before the print doc comment, tagged with this lane comment,
+   rather than editing a shared container in place. Equal specificity, later
+   source order, is what makes this block win.
+
+   Every rule below maps a docs/design/screens/07-claim-boundary-no-embodiment
+   .md / 07a-claim-draft-not-yet-approved.md mobile rule (M1/M3/M4/M5) onto
+   this existing engine breakpoint, per tokens.md §8's standing instruction:
+   no 390px breakpoint is added. */
+@media (max-width: 520px) {
+  /* M1 — the card loses its radius and side borders and runs full-bleed,
+     keeping only the top/bottom hairlines the base .card/.claim-tree rule
+     already sets. Card gutters (32px -> 16px) are NOT changed here: every
+     section today still shares one padding box with the card (see
+     learnings/inbox/L3.md), so narrowing it before the sections that read it
+     exist would misalign L4/L5/L6/L7's own padding-inline rather than this
+     lane's. */
+  .card,
+  .claim-tree {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  /* M3 — status chip moves above the title; order is status, then claim,
+     then id (R-H.2), with the reference-rules.md gaps of 9px / 6px. .label's
+     desktop row-gap/column-gap (7px / 16px) is replaced by per-row margins
+     here because the three gaps are not uniform once the chip breaks onto
+     its own line. */
+  .k > .label,
+  .claim-collapse-toggle > .label {
+    flex-direction: column;
+    align-items: flex-start;
+    row-gap: 0;
+    column-gap: 0;
+  }
+
+  .pill {
+    order: -1;
+    margin-bottom: 9px;
+  }
+
+  /* M4 — claim title 20/26 -> 18/24; id mono 12/16 -> 11/15. */
+  .k-title {
+    order: 0;
+    margin-bottom: 6px;
+    font-size: 18px;
+    line-height: 24px;
+  }
+
+  .k-id {
+    order: 1;
+    flex-basis: auto;
+    font-size: 11px;
+    line-height: 15px;
+  }
+
+  /* M5 — claim prose loses its 760px measure and resizes 17/28 -> 16/26. */
+  .claim-body {
+    max-width: none;
+    font-size: 16px;
+    line-height: 26px;
+  }
 }
 
 /* ---- print — THE @media print block ------------------------------------

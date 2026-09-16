@@ -61,6 +61,7 @@ var funcMap = template.FuncMap{
 	"inc":           inc,
 	"pillClass":     pillClass,
 	"statusLabel":   StatusLabel,
+	"statusIcon":    StatusIconHTML,
 	"colClass":      colClass,
 	"mockupHTML":    mockupHTML,
 	"claimLabel":    ClaimLabel,
@@ -275,6 +276,38 @@ func StatusLabel(status model.Status, reviewPending bool) string {
 		s := string(status)
 		return strings.ToUpper(s[:1]) + s[1:]
 	}
+}
+
+// StatusIconHTML returns the padlock glyph that rides inside every claim
+// status pill. The components board (section F, "Claim status chip") is
+// explicit that the chip is a closed set of two shapes, not an icon plus a
+// bare-word fallback: "Always a padlock and a word — the padlock is closed
+// when an approval is on record and open when it is not, so the two states
+// differ in shape as well as in colour" and "The chip never appears without
+// its icon. A word alone reads as a label; the padlock is what makes it a
+// state." A locked claim (pillClass "ps") and a locked-but-review_pending one
+// ("pw") both have an approval on record — review_pending is a flag on an
+// already-locked claim, not a withdrawal of its lock — so both get the closed
+// #dx-icon-lock glyph; only a draft claim ("pv") has never been approved, and
+// gets the open #dx-icon-lock-open glyph instead.
+//
+// docs/design/screens/07a-claim-draft-not-yet-approved.md's board (node
+// 4BJ-0) draws the DRAFT chip with what looks like the same closed padlock as
+// LOCKED, just recoloured amber — which would be wrong, and is exactly the
+// case docs/design/LANES.md's L3 ownership section warns against ("reusing
+// the locked glyph would say the opposite of the truth"). The fix is not to
+// drop the glyph, though: it is to draw the OTHER glyph the source-of-truth
+// component already specifies for this state, per R00.0 (the components
+// board wins over a screen board). Recorded as a Paper defect in
+// learnings/inbox/L3.md.
+func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
+	if status == model.StatusLocked {
+		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>`)
+	}
+	if status == model.StatusDraft {
+		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock-open"/></svg>`)
+	}
+	return ""
 }
 
 // edgesHTML renders the edge/metadata footer shared by every non-banner

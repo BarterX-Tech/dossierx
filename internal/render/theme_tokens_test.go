@@ -305,12 +305,23 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 
 	t.Run("RadiusConsumerCountIsPinned", func(t *testing.T) {
 		// Pinned rather than bounded: --radius is the one length token, and the
-		// four surfaces that honour it (the code block, the comment panel, the
-		// comment chip and the facet card) are a deliberate set. A fifth consumer
-		// changes what `radius: 10px` does to an existing project's viewer.
+		// surfaces that honour it (the code block, the comment panel and the
+		// comment chip) are a deliberate set. A new consumer changes what
+		// `radius: 10px` does to an existing project's viewer.
+		//
+		// The claim card (.card, .claim-tree) dropped out of this set in L3's
+		// pass (docs/design/screens/07a-claim-draft-not-yet-approved.md open
+		// decision D4): the design measures the card's radius at 12px, off both
+		// the engine's --radius default and Paper's own 4/8/999 scale, and rules
+		// "carry 12px as a per-component literal ... do not widen --radius and
+		// do not add a token." tokens.md's Open decisions repeats this as a
+		// general rule for every off-scale radius on the boards. A project's
+		// `radius` theme setting still reaches the code block, the comment
+		// panel and the comment chip; the claim card's corner is no longer one
+		// of them, by design.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 10 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 10", n)
+		if n != 9 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
 		}
 	})
 }
