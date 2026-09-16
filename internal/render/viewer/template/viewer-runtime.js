@@ -1,6 +1,16 @@
     (function () {
       'use strict';
 
+      function dxIcon(name) {
+        if (!/^[a-z0-9-]+$/.test(name)) {
+          throw new Error('unknown icon');
+        }
+        var wrap = document.createElement('span');
+        wrap.innerHTML = '<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-' + name + '"></use></svg>';
+        return wrap.firstChild;
+      }
+      window.dxIcon = dxIcon;
+
       // ================================================================
       // Navigation lookup maps + view state (idempotent initViewer)
       // ================================================================
@@ -751,10 +761,10 @@
         meta.appendChild(time);
         if (m.edited) { meta.appendChild(textEl('span', 'comment-edited', '(edited)')); }
         if (mounted && m.author === 'human') {
-          var edit = iconButton('comment-action comment-edit', '✎', 'Edit comment', function () {
+          var edit = iconButton('comment-action comment-edit', 'pencil', 'Edit comment', function () {
             startEdit(claimID, threadID, replyID, m, body);
           });
-          var del = iconButton('comment-action comment-delete', '✕',
+          var del = iconButton('comment-action comment-delete', 'x',
             replyID ? 'Delete reply' : 'Delete thread', function () {
               doDelete(claimID, threadID, replyID);
             });
@@ -778,24 +788,22 @@
       function buildThreadActions(claimID, t) {
         var row = el('div', 'comment-thread-actions');
         if (t.status === 'open') {
-          row.appendChild(iconButton('comment-action comment-resolve', '✓', 'Resolve thread', function () {
+          row.appendChild(iconButton('comment-action comment-resolve', 'check', 'Resolve thread', function () {
             doResolve(claimID, t.id);
           }));
         } else {
-          row.appendChild(iconButton('comment-action comment-reopen', '↺', 'Reopen thread', function () {
+          row.appendChild(iconButton('comment-action comment-reopen', 'rotate-ccw', 'Reopen thread', function () {
             doReopen(claimID, t.id);
           }));
         }
         return row;
       }
 
-      function iconButton(cls, glyph, label, onClick) {
+      function iconButton(cls, icon, label, onClick) {
         var b = el('button', cls);
         b.type = 'button';
         b.setAttribute('aria-label', label);
-        var g = textEl('span', 'comment-action-glyph', glyph);
-        g.setAttribute('aria-hidden', 'true');
-        b.appendChild(g);
+        b.appendChild(dxIcon(icon));
         b.addEventListener('click', onClick);
         return b;
       }
@@ -1455,7 +1463,10 @@
         var isDirect = group.items.every(function (item) { return (item.record.path || []).length <= 2; });
         summary.appendChild(textEl('span', 'claim-readiness-route-via', group.key === rootID ? 'local review' : (isDirect ? 'direct dependency' : 'shown via this dependency')));
         summary.appendChild(textEl('span', 'claim-readiness-route-count', group.items.length + ' ' + (group.items.length === 1 ? 'blocker' : 'blockers')));
-        summary.appendChild(el('span', 'claim-readiness-chevron'));
+        var routeChevron = el('span', 'claim-readiness-chevron');
+        routeChevron.setAttribute('aria-hidden', 'true');
+        routeChevron.appendChild(dxIcon('chevron-right'));
+        summary.appendChild(routeChevron);
         details.appendChild(summary);
 
         var body = el('div', 'claim-readiness-route-body');

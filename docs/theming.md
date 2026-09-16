@@ -89,8 +89,8 @@ to accidentally collapse.
 ## Start from the `claude` preset
 
 `preset: claude` sets every colour token plus `font-sans`/`font-mono`
-(system-font stacks — a preset ships no font files) and `radius`, with no
-file to maintain:
+(Geist / Geist Mono — the New York pairing the engine inlines) and `radius`,
+with no file to maintain:
 
 ```yaml
 viewer:

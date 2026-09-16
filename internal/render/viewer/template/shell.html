@@ -32,8 +32,25 @@
   </script>
 </head>
 <body class="shell-body">
+  <svg class="dx-icon-sprite" aria-hidden="true">
+    <symbol id="dx-icon-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+    <symbol id="dx-icon-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16"/><path d="M4 12h16"/><path d="M4 19h16"/></symbol>
+    <symbol id="dx-icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="dx-icon-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="dx-icon-pencil" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
+    <symbol id="dx-icon-rotate-ccw" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="dx-icon-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="dx-icon-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="dx-icon-monitor" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="3" rx="2"/><line x1="8" x2="16" y1="21" y2="21"/><line x1="12" x2="12" y1="17" y2="21"/></symbol>
+    <symbol id="dx-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></symbol>
+    <symbol id="dx-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+    <symbol id="dx-icon-message-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></symbol>
+    <symbol id="dx-icon-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></symbol>
+    <symbol id="dx-icon-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+    <symbol id="dx-icon-panel-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+  </svg>
   <div class="layout">
-    <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false">☰ <span>Sections</span></button>
+    <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg> <span>Sections</span></button>
     <button id="navOverlay" class="nav-overlay" type="button" aria-label="Close documentation navigation" tabindex="-1"></button>
     <aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
       <div class="sidebar-header">
@@ -42,7 +59,7 @@
           <div><h1>{{.Title}}</h1>{{if .Eyebrow}}<div class="eyebrow">{{.Eyebrow}}</div>{{end}}</div>
         </div>
         <button id="sidebarCollapseToggle" class="system-panel-toggle system-panel-toggle--sidebar" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Hide navigation" title="Hide navigation">
-          <span class="system-panel-toggle__chevron" aria-hidden="true"></span>
+          <svg class="dx-icon system-panel-toggle__chevron" aria-hidden="true"><use href="#dx-icon-panel-left"/></svg>
         </button>
       </div>
       <nav id="nav">
@@ -53,13 +70,13 @@
              It lives inside the swapped subtree and is destroyed and
              re-created by every fragment swap, which is why graph-ui.js binds
              one delegated listener on document rather than a listener here. -->
-        <button id="dxgOpen" type="button" data-dxg-open aria-expanded="false">Claims graph</button>
+        <button id="dxgOpen" type="button" data-dxg-open aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-git-branch"/></svg> Claims graph</button>
         <div class="system-nav-groups">
           <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .ModuleGroups}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}">{{.ModuleLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}} <svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</button>
 {{- end}}
             </div>
           </details>{{if .Tracks}}
@@ -77,7 +94,7 @@
              elements — a track section is a .module-section to all the
              show/hide machinery below, deliberately (see track_view.go). -->
           <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <summary class="system-nav-group__toggle"><span>Tracks</span><span class="system-nav-group__count">{{len .Tracks}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .Tracks}}
                 <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.ClaimsID}}">{{.Title}}</button>
@@ -95,7 +112,7 @@
              outside the space slugify maps module names into: a module named
              "build-order" gets id="build-order", and the tab must not. -->
           <details class="system-nav-group" open>
-            <summary class="system-nav-group__toggle"><span>Build order</span><span class="system-nav-group__count">{{len .BuildOrders.Modules}}</span><span class="system-nav-group__chevron" aria-hidden="true"></span></summary>
+            <summary class="system-nav-group__toggle"><span>Build order</span><span class="system-nav-group__count">{{len .BuildOrders.Modules}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
               <button class="sec-tab" data-target="#dossierx-build-order" data-default-target="#dossierx-build-order-{{.BuildOrders.FirstModuleID}}">Build order</button>
             </div>
@@ -105,9 +122,9 @@
       <button id="expandAllToggle" type="button" aria-pressed="false">Expand all evidence</button>
       <div class="sidebar-footer">
         <div class="theme-control" role="group" aria-label="Color theme">
-          <button type="button" data-theme-choice="system">System</button>
-          <button type="button" data-theme-choice="light">Light</button>
-          <button type="button" data-theme-choice="dark">Dark</button>
+          <button type="button" data-theme-choice="system"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-monitor"/></svg> System</button>
+          <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
+          <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
         </div>
 {{if .GeneratedAt}}        <div class="sidebar-footer-stamp">Generated {{.GeneratedAt}}</div>{{end}}
       </div>
@@ -120,7 +137,7 @@
 {{if .HasSubNav}}
               <div class="sub-nav">
 {{range .Facets}}
-                  <button class="subtab" data-target="#{{.ID}}">{{.TabLabel}}{{if .AllLocked}} 🔒{{end}}</button>
+                  <button class="subtab" data-target="#{{.ID}}"><span class="sec-tab__label">{{.TabLabel}}</span>{{if .AllLocked}} <svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</button>
 {{end}}
               </div>
 {{end}}
@@ -226,7 +243,7 @@
   <aside id="commentsPanel" class="comments-rail" role="complementary" aria-label="Comments" tabindex="-1" hidden>
     <header class="comments-rail-head">
       <p id="commentsRailTitle" class="comments-rail-title">Comments</p>
-      <button id="commentsRailClose" class="comments-rail-close" type="button" aria-label="Close comments"><span aria-hidden="true">✕</span></button>
+      <button id="commentsRailClose" class="comments-rail-close" type="button" aria-label="Close comments"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
     </header>
     <div id="commentsRailBody" class="comments-rail-body"></div>
   </aside>
@@ -259,7 +276,7 @@
         <span id="statusStripNote" class="status-strip-note"></span>
       </span>
       <span id="statusStripAction" class="status-strip-action">Show issues</span>
-      <span class="status-strip-caret" aria-hidden="true"></span>
+      <svg class="dx-icon status-strip-caret" aria-hidden="true"><use href="#dx-icon-chevron-down"/></svg>
     </button>
     <div id="statusStripBody" class="status-strip-body" hidden></div>
   </section>

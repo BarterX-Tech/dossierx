@@ -44,7 +44,7 @@ import (
 // exactly the same mistake — a client file deleted, renamed or never
 // written — into a silently empty pane.
 //
-//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/build-order.html viewer/template/build-order-ui.js viewer/template/vendor/mermaid.min.js
+//go:embed viewer/template/shell.html viewer/template/style.css viewer/template/system-record.js viewer/template/viewer-runtime.js viewer/template/graph-core.js viewer/template/graph-ui.js viewer/template/graph.css viewer/template/build-order.html viewer/template/build-order-ui.js viewer/template/vendor/mermaid.min.js viewer/template/fonts/geist-latin-wght.woff2 viewer/template/fonts/geist-mono-latin-wght.woff2
 var shellFS embed.FS
 
 // shellFileName and styleFileName are the override-lookup names for the
@@ -682,6 +682,11 @@ func loadTemplates(overrideDir string) (loadedTemplates, error) {
 		if err != nil {
 			return loadedTemplates{}, fmt.Errorf("render: load default stylesheet: %w", err)
 		}
+		faces, err := geistFontFaceCSS()
+		if err != nil {
+			return loadedTemplates{}, err
+		}
+		css = append(faces, css...)
 	}
 
 	shellSrc, shellOverridden, err := components.OverrideFile(overrideDir, shellFileName)

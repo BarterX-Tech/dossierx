@@ -686,7 +686,7 @@ func CommentChipHTML(c model.Claim) template.HTML {
 	b.WriteString(html.EscapeString(c.ID))
 	b.WriteString(`" aria-controls="commentsPanel" aria-expanded="false" aria-label="`)
 	b.WriteString(html.EscapeString(label))
-	b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">`)
+	b.WriteString(`"><span class="comment-chip-glyph" aria-hidden="true"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg></span> <span class="comment-chip-count">`)
 	b.WriteString(fmt.Sprintf("%d", count))
 	b.WriteString(`</span></button></span>`)
 	return template.HTML(b.String())

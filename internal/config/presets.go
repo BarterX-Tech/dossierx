@@ -38,11 +38,11 @@ var themePresets = map[string]Theme{
 // engine choices with no source counterpart at all; both say so.
 var claudePreset = Theme{
 	Shared: map[string]string{
-		// Stacks only — the Anthropic faces are named first and fall
-		// through when they are not installed. This engine embeds no
-		// font it was not handed by the project (viewer.theme.fonts).
-		"font-sans": `"Anthropic Sans", -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif`, // claude.css:112
-		"font-mono": `"Anthropic Mono", "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace`,                                          // claude.css:114
+		// New York stacks (Geist + Geist Mono). The faces themselves are
+		// engine-owned woff2 files inlined by internal/render; a preset
+		// still ships no font files of its own.
+		"font-sans": `"Geist", ui-sans-serif, system-ui, sans-serif`, // engine choice: New York pairing, inlined by the engine
+		"font-mono": `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace`, // engine choice: New York pairing, inlined by the engine
 
 		// The source carries three radii for three purposes —
 		// --radius-sm 6px (claude.css:125), --radius-md 10px

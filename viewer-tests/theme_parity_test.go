@@ -1266,7 +1266,19 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 		// and 24 read .facet-toc, .facet-toc__select and .facet-toc__item
 		// through computed style, which is not affected by how often the nodes
 		// are recreated.
-		suppressTransitions(t, ctx, ".facet-toc{visibility:hidden !important;}#statusStrip,.claim-readiness,.claim-conformance,.system-record-head,.claim-collapse-toggle,.facet-claims-toggle,.facet-toc__select{display:none !important;}")
+		suppressTransitions(t, ctx, ".facet-toc{visibility:hidden !important;}#statusStrip,.claim-readiness,.claim-conformance,.system-record-head,.claim-collapse-toggle,.facet-claims-toggle,.facet-toc__select,.comment-chip,.dx-icon{display:none !important;}")
+		// Lucide replaced lock/comment emoji. Strip the old glyphs from both
+		// documents so innerText and paint stay comparable.
+		evalString(t, ctx, `(function(){
+			var walk = document.createTreeWalker(document.querySelector('.content-area'), NodeFilter.SHOW_TEXT);
+			var node;
+			while ((node = walk.nextNode())) {
+				if (node.nodeValue && (node.nodeValue.indexOf('🔒') !== -1 || node.nodeValue.indexOf('💬') !== -1)) {
+					node.nodeValue = node.nodeValue.replace(/🔒/g, '').replace(/💬/g, '');
+				}
+			}
+			return 'ok';
+		})()`)
 
 		var rect struct{ X, Y, W, H float64 }
 		evalInto(t, ctx, `(function(){var r=document.querySelector('.content-area').getBoundingClientRect();`+

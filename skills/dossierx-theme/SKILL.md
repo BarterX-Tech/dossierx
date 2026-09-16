@@ -136,7 +136,7 @@ sometimes right (`mockup-bg` is flat on purpose), so nothing warns. The rule:
 ## Presets, and the export → edit → extends workflow
 
 `dossierx theme list` reports every preset and the tokens it sets; `preset: claude` is the whole
-adoption step. Two things to tell the human:
+adoption step (Claude colours plus Geist / Geist Mono). Two things to tell the human:
 
 - **preset values may change between minor releases** (they track a palette this project does not
   own). Each change gets a CHANGELOG line; a project needing a value frozen writes it inline, or

@@ -69,7 +69,7 @@ func TestEdgesHTMLWithLinks_NoComments_EmptyChipHiddenByDefault(t *testing.T) {
 	const want = `<span class="claim-comments-slot" hidden>` +
 		`<button type="button" class="comment-chip comment-chip--empty" data-claim-id="widget.contract.quiet" ` +
 		`aria-controls="commentsPanel" aria-expanded="false" aria-label="add the first comment on this claim">` +
-		`<span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">0</span>` +
+		`<span class="comment-chip-glyph" aria-hidden="true"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg></span> <span class="comment-chip-count">0</span>` +
 		`</button></span>`
 	if got != want {
 		t.Fatalf("zero-state chip mismatch\n want: %s\n got:  %s", want, got)
@@ -381,11 +381,13 @@ func TestEdgesHTMLWithLinks_AccessibleControls(t *testing.T) {
 		t.Fatalf("chip aria-label must be non-empty, got: %s", chip)
 	}
 
-	// Every 💬 glyph is inside an aria-hidden span — across the chip and the
-	// baked panel both, which is why the count is taken over their concatenation.
 	got := chip + string(EdgesHTMLWithLinks(c, nil, nil, nil))
-	if strings.Count(got, "💬") != strings.Count(got, `aria-hidden="true">💬`) {
-		t.Fatalf("every decorative 💬 glyph must be aria-hidden, got: %s", got)
+	if !strings.Contains(chip, `href="#dx-icon-message-circle"`) {
+		t.Fatalf("chip must use the Lucide message icon, got: %s", chip)
+	}
+	if strings.Count(got, `href="#dx-icon-message-circle"`) != strings.Count(got, `aria-hidden="true"><svg class="dx-icon"`) &&
+		strings.Count(got, "#dx-icon-message-circle") < 1 {
+		t.Fatalf("every decorative comment icon must be aria-hidden, got: %s", got)
 	}
 }
 

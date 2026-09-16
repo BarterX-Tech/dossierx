@@ -1,6 +1,24 @@
 (function () {
   'use strict';
 
+  function tabLabel(tab) {
+    if (!tab) { return 'Claims'; }
+    var named = tab.querySelector('.sec-tab__label');
+    if (named) { return named.textContent.trim() || 'Claims'; }
+    var copy = tab.cloneNode(true);
+    copy.querySelectorAll('.dx-icon').forEach(function (node) { node.remove(); });
+    return copy.textContent.replace(/🔒/g, '').trim() || 'Claims';
+  }
+
+  function attachIcon(host, name) {
+    if (!host || host.querySelector('.dx-icon')) { return host; }
+    var make = window.dxIcon;
+    if (typeof make === 'function') {
+      host.appendChild(make(name));
+    }
+    return host;
+  }
+
   function ordinal(day) {
     var mod100 = day % 100;
     if (mod100 >= 11 && mod100 <= 13) { return day + 'th'; }
@@ -132,6 +150,7 @@
       var chevron = document.createElement('span');
       chevron.className = 'claim-footer__chevron';
       chevron.setAttribute('aria-hidden', 'true');
+      attachIcon(chevron, 'chevron-right');
       counts.appendChild(chevron);
       summary.append(identity, counts);
     });
@@ -209,6 +228,7 @@
       var chevron = document.createElement('span');
       chevron.className = 'claim-collapse-chevron';
       chevron.setAttribute('aria-hidden', 'true');
+      attachIcon(chevron, 'chevron-right');
       toggle.appendChild(chevron);
       head.insertBefore(toggle, head.firstChild);
       claim.appendChild(content);
@@ -259,7 +279,7 @@
     var group = groups.find(function (section) { return !section.hidden; });
     if (!group) { return null; }
     var tab = module.querySelector(':scope > .sub-nav .subtab[data-target="#' + group.id + '"]');
-    return { module: module, view: group, label: tab ? tab.textContent.replace(/🔒/g, '').trim() : 'Claims' };
+    return { module: module, view: group, label: tabLabel(tab) };
   }
 
   function updateFacetClaimControl(active, claims) {
@@ -284,7 +304,7 @@
     if (!control) {
       control = document.createElement('div');
       control.className = 'facet-claim-controls';
-      control.innerHTML = '<button class="facet-claims-toggle" type="button" aria-pressed="false"><span class="facet-claims-toggle__icon" aria-hidden="true"></span><span class="facet-claims-toggle__label">Collapse all claims</span></button>';
+      control.innerHTML = '<button class="facet-claims-toggle" type="button" aria-pressed="false"><svg class="dx-icon facet-claims-toggle__icon" aria-hidden="true"><use href="#dx-icon-chevron-down"></use></svg><span class="facet-claims-toggle__label">Collapse all claims</span></button>';
       active.view.insertBefore(control, active.view.firstChild);
       control.querySelector('.facet-claims-toggle').addEventListener('click', function () {
         var current = activeFacet();
@@ -327,7 +347,7 @@
       toc.id = 'systemFacetToc';
       toc.className = 'facet-toc';
       toc.setAttribute('aria-label', 'Claims in this facet');
-      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span><button class="system-panel-toggle system-panel-toggle--toc" type="button" aria-controls="systemFacetToc" aria-expanded="true" aria-label="Hide table of contents" title="Hide table of contents"><span class="system-panel-toggle__chevron" aria-hidden="true"></span></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>';
+      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span><button class="system-panel-toggle system-panel-toggle--toc" type="button" aria-controls="systemFacetToc" aria-expanded="true" aria-label="Hide table of contents" title="Hide table of contents"><svg class="dx-icon system-panel-toggle__chevron" aria-hidden="true"><use href="#dx-icon-panel-left"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>';
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
         var claim = document.getElementById(event.target.value);
         if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -377,7 +397,7 @@
   function addModuleHeaders() {
     var labels = {};
     document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
-      labels[button.dataset.target.slice(1)] = button.textContent.replace(/🔒/g, '').trim();
+      labels[button.dataset.target.slice(1)] = tabLabel(button);
     });
     document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
       var total = parseInt(section.getAttribute('data-claim-count') || '0', 10);

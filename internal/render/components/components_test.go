@@ -1363,7 +1363,7 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 		`<span class="claim-comments-slot" hidden>` +
 		`<button type="button" class="comment-chip comment-chip--empty" data-claim-id="widget.contract.retry-policy" ` +
 		`aria-controls="commentsPanel" aria-expanded="false" aria-label="add the first comment on this claim">` +
-		`<span class="comment-chip-glyph" aria-hidden="true">💬</span> <span class="comment-chip-count">0</span>` +
+		`<span class="comment-chip-glyph" aria-hidden="true"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-message-circle"/></svg></span> <span class="comment-chip-count">0</span>` +
 		`</button></span></div>`
 
 	// banner's flat head, unchanged from before v0.4.1.
