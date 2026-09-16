@@ -150,7 +150,6 @@
       var chevron = document.createElement('span');
       chevron.className = 'claim-footer__chevron';
       chevron.setAttribute('aria-hidden', 'true');
-      attachIcon(chevron, 'chevron-right');
       counts.appendChild(chevron);
       summary.append(identity, counts);
     });

@@ -3275,17 +3275,32 @@ body.shell-body {
   text-align: center;
 }
 
-.system-nav-group__chevron,
-.claim-footer__chevron {
+/* Nav-group Lucide hosts stay 14px. The evidence-footer chevron is the
+   CSS border triangle the frozen theme-parity baselines paint — swapping
+   it for a Lucide stroke repainted every claim card in an unthemed
+   project (channel delta ~246, currentColor vs the card). */
+.system-nav-group__chevron {
   width: 14px;
   height: 14px;
   transition: transform .16s ease;
 }
 
+.claim-footer__chevron {
+  width: 7px;
+  height: 7px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg) translate(-1px, -1px);
+  transition: transform .16s ease;
+}
+
 .system-nav-group__toggle[aria-expanded="true"] .system-nav-group__chevron,
-.system-nav-group[open] .system-nav-group__chevron,
-.claim-links[open] .claim-footer__chevron {
+.system-nav-group[open] .system-nav-group__chevron {
   transform: rotate(90deg);
+}
+
+.claim-links[open] .claim-footer__chevron {
+  transform: rotate(225deg) translate(-1px, -1px);
 }
 
 .system-nav-group__body {
