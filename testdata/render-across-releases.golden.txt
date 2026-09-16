@@ -46,8 +46,8 @@ explained  0 rendered differently after their own inputs changed
 SILENT RENDER CHANGES
 ---------------------
 
-testdata/fixture-basic/build/viewer/index.html  (+651 -195)
-    size            17877 lines / 4110066 bytes -> 18333 lines / 4201733 bytes
+testdata/fixture-basic/build/viewer/index.html  (+658 -195)
+    size            17877 lines / 4110066 bytes -> 18340 lines / 4202195 bytes
 @@ -1154,7 +1154,7 @@
    border-color: var(--accent);
  }
@@ -1377,7 +1377,20 @@ testdata/fixture-basic/build/viewer/index.html  (+651 -195)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8288,7 +8720,7 @@
+@@ -8282,13 +8714,20 @@
+   }
+
+   function renderToc() {
++    // Theme-parity's hover probe forces :hover through CDP node ids. This
++    // function replaceChildren()s the TOC list on every enhance pass (the
++    // layout MutationObserver retriggers enhance when addModuleHeaders
++    // rewrites the module head), so a node id dies between QuerySelector
++    // and ForcePseudoState. The harness sets this flag for the duration of
++    // that probe; it is otherwise unset.
++    if (window.__dxParityFreezeToc) { return; }
+     var toc = document.getElementById('systemFacetToc');
+     if (!toc) {
+       toc = document.createElement('aside');
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -1386,7 +1399,7 @@ testdata/fixture-basic/build/viewer/index.html  (+651 -195)
        toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
          var claim = document.getElementById(event.target.value);
          if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-@@ -8338,15 +8770,15 @@
+@@ -8338,15 +8777,15 @@
    function addModuleHeaders() {
      var labels = {};
      document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
@@ -1409,7 +1422,7 @@ testdata/fixture-basic/build/viewer/index.html  (+651 -195)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8355,15 +8787,38 @@
+@@ -8355,15 +8794,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -1450,7 +1463,7 @@ testdata/fixture-basic/build/viewer/index.html  (+651 -195)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8390,6 +8845,7 @@
+@@ -8390,6 +8852,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -1459,8 +1472,8 @@ testdata/fixture-basic/build/viewer/index.html  (+651 -195)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-conformance-v1/build/viewer/index.html  (+672 -213)
-    size            14052 lines / 537928 bytes -> 14511 lines / 630153 bytes
+testdata/fixture-conformance-v1/build/viewer/index.html  (+679 -213)
+    size            14052 lines / 537928 bytes -> 14518 lines / 630615 bytes
 @@ -1154,7 +1154,7 @@
    border-color: var(--accent);
  }
@@ -2831,7 +2844,20 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+672 -213)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8321,7 +8756,7 @@
+@@ -8315,13 +8750,20 @@
+   }
+
+   function renderToc() {
++    // Theme-parity's hover probe forces :hover through CDP node ids. This
++    // function replaceChildren()s the TOC list on every enhance pass (the
++    // layout MutationObserver retriggers enhance when addModuleHeaders
++    // rewrites the module head), so a node id dies between QuerySelector
++    // and ForcePseudoState. The harness sets this flag for the duration of
++    // that probe; it is otherwise unset.
++    if (window.__dxParityFreezeToc) { return; }
+     var toc = document.getElementById('systemFacetToc');
+     if (!toc) {
+       toc = document.createElement('aside');
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -2840,7 +2866,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+672 -213)
        toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
          var claim = document.getElementById(event.target.value);
          if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-@@ -8371,15 +8806,15 @@
+@@ -8371,15 +8813,15 @@
    function addModuleHeaders() {
      var labels = {};
      document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
@@ -2863,7 +2889,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+672 -213)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8388,15 +8823,38 @@
+@@ -8388,15 +8830,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -2904,7 +2930,7 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+672 -213)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8423,6 +8881,7 @@
+@@ -8423,6 +8888,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -2913,8 +2939,8 @@ testdata/fixture-conformance-v1/build/viewer/index.html  (+672 -213)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-graph-demo/build/viewer/index.html  (+780 -346)
-    size            18613 lines / 4257854 bytes -> 19047 lines / 4355148 bytes
+testdata/fixture-graph-demo/build/viewer/index.html  (+787 -346)
+    size            18613 lines / 4257854 bytes -> 19054 lines / 4355610 bytes
 @@ -1154,7 +1154,7 @@
    border-color: var(--accent);
  }
@@ -5116,7 +5142,20 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+780 -346)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -9024,7 +9434,7 @@
+@@ -9018,13 +9428,20 @@
+   }
+
+   function renderToc() {
++    // Theme-parity's hover probe forces :hover through CDP node ids. This
++    // function replaceChildren()s the TOC list on every enhance pass (the
++    // layout MutationObserver retriggers enhance when addModuleHeaders
++    // rewrites the module head), so a node id dies between QuerySelector
++    // and ForcePseudoState. The harness sets this flag for the duration of
++    // that probe; it is otherwise unset.
++    if (window.__dxParityFreezeToc) { return; }
+     var toc = document.getElementById('systemFacetToc');
+     if (!toc) {
+       toc = document.createElement('aside');
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -5125,7 +5164,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+780 -346)
        toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
          var claim = document.getElementById(event.target.value);
          if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-@@ -9074,15 +9484,15 @@
+@@ -9074,15 +9491,15 @@
    function addModuleHeaders() {
      var labels = {};
      document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
@@ -5148,7 +5187,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+780 -346)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -9091,15 +9501,38 @@
+@@ -9091,15 +9508,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -5189,7 +5228,7 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+780 -346)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -9126,6 +9559,7 @@
+@@ -9126,6 +9566,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -5198,8 +5237,8 @@ testdata/fixture-graph-demo/build/viewer/index.html  (+780 -346)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-portability/build/viewer/index.html  (+653 -197)
-    size            17868 lines / 4112477 bytes -> 18324 lines / 4204223 bytes
+testdata/fixture-portability/build/viewer/index.html  (+660 -197)
+    size            17868 lines / 4112477 bytes -> 18331 lines / 4204685 bytes
 @@ -1154,7 +1154,7 @@
    border-color: var(--accent);
  }
@@ -6536,7 +6575,20 @@ testdata/fixture-portability/build/viewer/index.html  (+653 -197)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8279,7 +8711,7 @@
+@@ -8273,13 +8705,20 @@
+   }
+
+   function renderToc() {
++    // Theme-parity's hover probe forces :hover through CDP node ids. This
++    // function replaceChildren()s the TOC list on every enhance pass (the
++    // layout MutationObserver retriggers enhance when addModuleHeaders
++    // rewrites the module head), so a node id dies between QuerySelector
++    // and ForcePseudoState. The harness sets this flag for the duration of
++    // that probe; it is otherwise unset.
++    if (window.__dxParityFreezeToc) { return; }
+     var toc = document.getElementById('systemFacetToc');
+     if (!toc) {
+       toc = document.createElement('aside');
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -6545,7 +6597,7 @@ testdata/fixture-portability/build/viewer/index.html  (+653 -197)
        toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
          var claim = document.getElementById(event.target.value);
          if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-@@ -8329,15 +8761,15 @@
+@@ -8329,15 +8768,15 @@
    function addModuleHeaders() {
      var labels = {};
      document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
@@ -6568,7 +6620,7 @@ testdata/fixture-portability/build/viewer/index.html  (+653 -197)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8346,15 +8778,38 @@
+@@ -8346,15 +8785,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -6609,7 +6661,7 @@ testdata/fixture-portability/build/viewer/index.html  (+653 -197)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8381,6 +8836,7 @@
+@@ -8381,6 +8843,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -6618,8 +6670,8 @@ testdata/fixture-portability/build/viewer/index.html  (+653 -197)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-flat/build/viewer/index.html  (+673 -221)
-    size            18159 lines / 4152106 bytes -> 18611 lines / 4245069 bytes
+testdata/fixture-theme-flat/build/viewer/index.html  (+680 -221)
+    size            18159 lines / 4152106 bytes -> 18618 lines / 4245531 bytes
 @@ -1154,7 +1154,7 @@
    border-color: var(--accent);
  }
@@ -8115,7 +8167,20 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+673 -221)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8570,7 +8998,7 @@
+@@ -8564,13 +8992,20 @@
+   }
+
+   function renderToc() {
++    // Theme-parity's hover probe forces :hover through CDP node ids. This
++    // function replaceChildren()s the TOC list on every enhance pass (the
++    // layout MutationObserver retriggers enhance when addModuleHeaders
++    // rewrites the module head), so a node id dies between QuerySelector
++    // and ForcePseudoState. The harness sets this flag for the duration of
++    // that probe; it is otherwise unset.
++    if (window.__dxParityFreezeToc) { return; }
+     var toc = document.getElementById('systemFacetToc');
+     if (!toc) {
+       toc = document.createElement('aside');
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -8124,7 +8189,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+673 -221)
        toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
          var claim = document.getElementById(event.target.value);
          if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-@@ -8620,15 +9048,15 @@
+@@ -8620,15 +9055,15 @@
    function addModuleHeaders() {
      var labels = {};
      document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
@@ -8147,7 +8212,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+673 -221)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8637,15 +9065,38 @@
+@@ -8637,15 +9072,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -8188,7 +8253,7 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+673 -221)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8672,6 +9123,7 @@
+@@ -8672,6 +9130,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();
@@ -8197,8 +8262,8 @@ testdata/fixture-theme-flat/build/viewer/index.html  (+673 -221)
      bindSidebarCollapse();
      bindNavigationGroupPreferences();
 
-testdata/fixture-theme-preset/build/viewer/index.html  (+652 -196)
-    size            17879 lines / 4113503 bytes -> 18335 lines / 4206568 bytes
+testdata/fixture-theme-preset/build/viewer/index.html  (+659 -196)
+    size            17879 lines / 4113503 bytes -> 18342 lines / 4207030 bytes
 @@ -1154,7 +1154,7 @@
    border-color: var(--accent);
  }
@@ -9531,7 +9596,20 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+652 -196)
      var toc = document.getElementById('systemFacetToc');
      if (!toc || toc.hidden) { return; }
      var links = Array.prototype.slice.call(toc.querySelectorAll('.facet-toc__item'));
-@@ -8290,7 +8722,7 @@
+@@ -8284,13 +8716,20 @@
+   }
+
+   function renderToc() {
++    // Theme-parity's hover probe forces :hover through CDP node ids. This
++    // function replaceChildren()s the TOC list on every enhance pass (the
++    // layout MutationObserver retriggers enhance when addModuleHeaders
++    // rewrites the module head), so a node id dies between QuerySelector
++    // and ForcePseudoState. The harness sets this flag for the duration of
++    // that probe; it is otherwise unset.
++    if (window.__dxParityFreezeToc) { return; }
+     var toc = document.getElementById('systemFacetToc');
+     if (!toc) {
+       toc = document.createElement('aside');
        toc.id = 'systemFacetToc';
        toc.className = 'facet-toc';
        toc.setAttribute('aria-label', 'Claims in this facet');
@@ -9540,7 +9618,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+652 -196)
        toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
          var claim = document.getElementById(event.target.value);
          if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-@@ -8340,15 +8772,15 @@
+@@ -8340,15 +8779,15 @@
    function addModuleHeaders() {
      var labels = {};
      document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
@@ -9563,7 +9641,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+652 -196)
        var header = document.createElement('header');
        header.className = 'system-record-head';
        var copy = document.createElement('div');
-@@ -8357,15 +8789,38 @@
+@@ -8357,15 +8796,38 @@
        var metric = document.createElement('div');
        title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
        summary.className = 'system-record-head__summary';
@@ -9604,7 +9682,7 @@ testdata/fixture-theme-preset/build/viewer/index.html  (+652 -196)
    function enhanceGraphLabels() {
      var pane = document.getElementById('dxgPane');
      if (!pane || !pane.querySelector('.dxg-surface')) { return; }
-@@ -8392,6 +8847,7 @@
+@@ -8392,6 +8854,7 @@
      if (running) { return; }
      running = true;
      enhanceTimestamp();

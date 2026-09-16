@@ -944,6 +944,12 @@ func setPseudoState(ctx context.Context, sel string, classes []string) error {
 // this document, or the whole row is a comparison of two unhovered pages.
 func forceHoverInto(t *testing.T, ctx context.Context, vals map[string]string, label string) {
 	t.Helper()
+	waitScrollSettled(t, ctx)
+	// Pin the TOC list so renderToc cannot replace the buttons under the
+	// CDP hover calls. Cleared when this function returns so later probes
+	// on the same tab still see a live spy.
+	evalVoid(t, ctx, `window.__dxParityFreezeToc = true`)
+	defer evalVoid(t, ctx, `window.__dxParityFreezeToc = false`)
 	runCDP(t, ctx, css.Enable())
 	changed := 0
 	for _, sel := range parityProbes[hoverProbeIndex].selectors {
