@@ -62,90 +62,166 @@
 
 :root {
   color-scheme: light dark;
-  --accent: #287052;
-  --accent-bg: rgba(40, 112, 82, .12);
-  --ink: #091426;
-  --muted: #536179;
-  --faint: #7d899a;
-  --paper: #f6f8fc;
-  --card-bg: #ffffff;
-  --border: #d8deea;
-  --link: #205b78;
-  --warn: #a2433d;
-  --warn-bg: rgba(162, 67, 61, .10);
+  --accent: #2C6B52;
+  --accent-bg: rgb(44 107 82 / 10%);
+  --ink: #101720;
+  --muted: #54606F;
+  --faint: #6E7C8E;
+  --paper: #EFF1F4;
+  --card-bg: #FFFFFF;
+  --border: #DDE2E9;
+  --link: #1C4E8C;
+  --warn: #9E3B36;
+  --warn-bg: rgb(158 59 54 / 10%);
   --dxg-facet-other: #0d55b5;
-  --font-sans: "Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
-  --font-mono: ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace;
-  --radius: 6px;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 8px;
 
   /* Added for the custom-theme work. Each value below is what a LIGHT OS and
-     a printed page get; the screen-dark query re-points the three that differ
-     per mode (--shadow, --shadow-strong, --scrim). The other eleven are the
-     same in both modes on purpose: a neutral overlay tint tracks whatever it
-     sits on, and the mockup card is deliberately mode-invariant.
-     Every value is the expression the live consumer used before it read a
-     token, so an unset token renders exactly as it did before. Note "live":
-     for --code-inline-bg and --code-bg that is the System Record layer's
-     color-mix, not the rgba() in the dead declaration those rules have always
-     beaten. Order matches ThemeTokenAllowlist. */
-  --code-inline-bg: color-mix(in srgb, var(--paper) 72%, var(--card-bg));
-  --code-bg: color-mix(in srgb, var(--paper) 82%, var(--card-bg));
+     a printed page get; the screen-dark query re-points the SEVEN that differ
+     per mode (--code-bg, --border-strong, --shadow, --shadow-strong,
+     --status-draft, --status-draft-bg, --scrim). The other seven are the same
+     in both modes on purpose: a neutral overlay tint tracks whatever it sits
+     on, and the mockup card is deliberately mode-invariant.
+     Order matches ThemeTokenAllowlist. --code-inline-bg is declared before
+     the --code-bg it reads; custom properties resolve by name and not by
+     source order inside a block, so the allowlist order is kept rather than
+     reordered to put the dependency first. */
+  --code-inline-bg: color-mix(in srgb, var(--code-bg) 88%, var(--card-bg));
+  --code-bg: #F3F5F8;
   --table-head-bg: rgba(127, 127, 127, .10);
   --image-bg: rgba(127, 127, 127, .06);
   --hover-bg: rgba(125, 137, 154, .08);
-  --border-strong: #aab5c7;
+  --border-strong: #C2CAD5;
   --shadow: rgba(0, 0, 0, .08);
   --shadow-strong: rgba(0, 0, 0, .14);
   --shadow-cast: rgba(9, 20, 38, .12);
   --scrim: rgba(0, 0, 0, .22);
-  --selection-bg: rgba(40, 112, 82, .20);
-  --status-draft: #976600;
-  --status-draft-bg: rgba(151, 102, 0, .12);
+  --selection-bg: rgba(28, 78, 140, .20);
+  --status-draft: #9A6A16;
+  --status-draft-bg: rgb(154 106 22 / 11%);
   --mockup-bg: #fff;
+
+  /* ENGINE-OWNED, NOT THEMEABLE. Everything from here to the end of this
+     block is outside ThemeTokenAllowlist by decision, not by omission: the
+     allowlist is closed and its order is load-bearing (internal/render emits
+     declarations in it), so a name added to it is a compatibility promise
+     this layer is not making. A project cannot set any of the properties
+     below, and nothing validates them, because nothing reads them from
+     config. */
+
+  /* The serif family. docs/design/tokens.md §7 gives the three families a
+     role each: sans is what the INTERFACE says, serif is what a HUMAN wrote
+     and a human must judge, mono is what the MACHINE emitted. A claim's prose
+     is serif and the same claim's id is mono for exactly that reason.
+     Deliberately not themeable (tokens.md, "Open decisions"): appending a
+     serif key to the closed allowlist would let a project name a family the
+     engine has no face for and could not fall back to. */
+  --font-serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
+
+  /* Two more radii than --radius, which is the one themeable length. The
+     design needs three (tokens.md §5) and the allowlist cannot grow, so the
+     other two are engine-owned: a project that sets `radius` moves the card
+     radius and leaves these alone. */
+  --radius-sm: 4px;
+  --radius-pill: 999px;
+
+  /* The dark blocked notice needs a SURFACE, not a tint. On dark a 10% red
+     wash over --paper's near-black is invisible, so the notice takes a ground
+     colour of its own (tokens.md §1, --color-dark-blocked-surface) with a
+     hairline to match. In light there is no such problem, so both fall back
+     to the ordinary blocked tint and a border mixed from it — which is what
+     keeps the two modes one rule rather than two. */
+  --blocked-surface: var(--warn-bg);
+  --blocked-hairline: color-mix(in srgb, var(--warn) 30%, var(--border));
+
+  /* TYPE AND SPACING. Declared here, consumed by the screen lanes. Before
+     this block every size, leading and tracking in this file was a literal in
+     a rule, which is why the design could not state a scale the stylesheet
+     would honour. Values are tokens.md §3 (type) and §4 (spacing); the names
+     are tokens.md's own. Sizes the boards use that are NOT on these scales
+     stay per-component literals on purpose (tokens.md, "Open decisions"):
+     widening a scale to swallow 5px or 26/32 turns a deliberate
+     micro-adjustment into a sanctioned step and the scale stops meaning
+     anything. */
+  --text-display: 40px;
+  --text-h1: 28px;
+  --text-h2: 20px;
+  --text-body: 17px;
+  --text-ui: 15px;
+  --text-meta: 14px;
+  --text-label: 12px;
+  --leading-body: 28px;
+  --leading-title: 26px;
+  --leading-ui: 20px;
+  --tracking-display: -0.02em;
+  --tracking-label: 0.08em;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
 }
+
+/* THE TWO DARK BLOCKS ARE THE SAME DECLARATIONS TWICE, AND THAT IS THE
+   POINT. html[data-theme="dark"] paints the reader's explicit Dark choice;
+   the prefers-color-scheme query paints System. A token re-pointed in one and
+   not the other is a viewer whose Dark toggle and whose OS setting disagree,
+   which is invisible to anyone testing only one of the two paths. Keep the
+   bodies byte-identical; if one gains a declaration, so does the other. */
 
 @media screen {
   html[data-theme="dark"] {
-    --ink: #e8eef8;
-    --muted: #a9b5c8;
-    --faint: #75839a;
-    --paper: #0a1220;
-    --card-bg: #0f1b2e;
-    --border: #263754;
-    --link: #8ab7ff;
-    --accent: #70c99c;
-    --accent-bg: rgba(112, 201, 156, .12);
-    --warn: #ff8b94;
-    --warn-bg: rgba(255, 139, 148, .10);
+    --ink: #E6EAF0;
+    --muted: #9AA7B8;
+    --faint: #8494A8;
+    --paper: #0D1117;
+    --card-bg: #161B22;
+    --border: #242C38;
+    --link: #6AA6E8;
+    --accent: #63BE9A;
+    --accent-bg: rgb(99 190 154 / 13%);
+    --warn: #EC8A83;
+    --warn-bg: rgb(236 138 131 / 13%);
     --dxg-facet-other: #77a9e8;
+    --code-bg: #1B212B;
+    --border-strong: #38424F;
+    --status-draft: #DDA94E;
+    --status-draft-bg: rgb(221 169 78 / 13%);
     --shadow: rgba(0, 0, 0, .28);
     --shadow-strong: rgba(0, 0, 0, .34);
     --scrim: rgba(0, 0, 0, .42);
+    --blocked-surface: #1D1618;
+    --blocked-hairline: #3A2A2B;
   }
 }
 
 @media screen and (prefers-color-scheme: dark) {
   :root {
-    --ink: #e8eef8;
-    --muted: #a9b5c8;
-    --faint: #75839a;
-    --paper: #0a1220;
-    --card-bg: #0f1b2e;
-    --border: #263754;
-    --link: #8ab7ff;
-    --accent: #70c99c;
-    --accent-bg: rgba(112, 201, 156, .12);
-    --warn: #ff8b94;
-    --warn-bg: rgba(255, 139, 148, .10);
+    --ink: #E6EAF0;
+    --muted: #9AA7B8;
+    --faint: #8494A8;
+    --paper: #0D1117;
+    --card-bg: #161B22;
+    --border: #242C38;
+    --link: #6AA6E8;
+    --accent: #63BE9A;
+    --accent-bg: rgb(99 190 154 / 13%);
+    --warn: #EC8A83;
+    --warn-bg: rgb(236 138 131 / 13%);
     --dxg-facet-other: #77a9e8;
-
-    /* The three theme tokens that genuinely differ per mode: a shadow needs
-       more alpha to read on a dark surface, and the modal dim needs more to
-       separate the sheet from what is behind it. The other eleven new tokens
-       are mode-invariant and are declared once, above. */
+    --code-bg: #1B212B;
+    --border-strong: #38424F;
+    --status-draft: #DDA94E;
+    --status-draft-bg: rgb(221 169 78 / 13%);
     --shadow: rgba(0, 0, 0, .28);
     --shadow-strong: rgba(0, 0, 0, .34);
     --scrim: rgba(0, 0, 0, .42);
+    --blocked-surface: #1D1618;
+    --blocked-hairline: #3A2A2B;
   }
 }
 
@@ -242,7 +318,19 @@ body {
   background: var(--accent-bg);
 }
 
+/* Claim prose is THE serif role, and the only consumer of --font-serif.
+   docs/design/tokens.md §7: serif marks what a human wrote and a human must
+   judge; the same claim's id, a few pixels away, is mono because a machine
+   emitted it. This is the winning font-family declaration for the selector —
+   `.claim-body` is re-declared once further down, for width and margin only —
+   and descendants that are machine output (`code`, the fenced-block list)
+   take var(--font-mono) at their own, more specific, rules.
+
+   Size and leading stay as they are. --text-body/--leading-body are declared
+   in :root and the screen lanes spend them; re-typesetting this rule is not
+   this layer's job. */
 .claim-body {
+  font-family: var(--font-serif);
   font-size: 13px;
   white-space: pre-wrap;
   margin: 6px 0;

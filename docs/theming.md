@@ -38,12 +38,13 @@ is a leading or trailing space — `accent: ' #C6613F'` is refused with
 
 ## Light and dark, and the trap: a flat colour key pins both modes
 
-Fourteen of the twenty-eight tokens have a different default depending on
+Eighteen of the twenty-eight tokens have a different default depending on
 the reader's OS colour scheme — `paper`, `card-bg`, `ink`, `muted`, `faint`,
-`border`, `link`, `accent`, `accent-bg`, `warn`, `warn-bg`, `shadow`,
-`shadow-strong`, and `scrim`. Setting one of these as a flat key pins it to
-that value in **both** schemes. That is sometimes exactly what you want, and
-nothing warns you when it is not:
+`border`, `border-strong`, `link`, `accent`, `accent-bg`, `warn`, `warn-bg`,
+`code-bg`, `status-draft`, `status-draft-bg`, `shadow`, `shadow-strong`, and
+`scrim`. Setting one of these as a flat key pins it to that value in **both**
+schemes. That is sometimes exactly what you want, and nothing warns you when
+it is not:
 
 ```yaml
 viewer:
@@ -68,29 +69,27 @@ unchanged. The reverse is also true. **Printing always uses the light
 values**, regardless of the reader's OS setting — see "What a theme cannot
 do" below.
 
-Two more tokens vary between schemes without being re-declared in the dark
-block: `code-inline-bg` and `code-bg` default to
-`color-mix(in srgb, var(--paper) 72%|82%, var(--card-bg))`, an expression
-over `paper` and `card-bg` rather than a fixed colour, so their *computed*
-value is darker in dark mode even though the engine declares them once.
-Setting either flat freezes that expression's current result — a light
-tint baked permanently onto a dark-mode reader's page — which is exactly
-the trap above. Treat them as mode-varying: set them under `light:`/`dark:`
-if you override them at all, or leave them alone and let them keep tracking
-`paper`/`card-bg`.
+One more token varies between schemes without being re-declared in the dark
+block: `code-inline-bg` defaults to
+`color-mix(in srgb, var(--code-bg) 88%, var(--card-bg))`, an expression over
+`code-bg` and `card-bg` rather than a fixed colour, so its *computed* value is
+darker in dark mode even though the engine declares it once. Setting it flat
+freezes that expression's current result — a light tint baked permanently onto
+a dark-mode reader's page — which is exactly the trap above. Treat it as
+mode-varying: set it under `light:`/`dark:` if you override it at all, or leave
+it alone and let it keep tracking `code-bg`/`card-bg`.
 
-The other twelve tokens — `font-sans`, `font-mono`, `radius`, and nine more
+The other nine tokens — `font-sans`, `font-mono`, `radius`, and six more
 added alongside the per-mode work (`table-head-bg`, `image-bg`, `hover-bg`,
-`border-strong`, `shadow-cast`, `selection-bg`, `status-draft`,
-`status-draft-bg`, `mockup-bg`) render the same value in both schemes by
-design. Setting these flat is exactly right; there is no light/dark variant
-to accidentally collapse.
+`shadow-cast`, `selection-bg`, `mockup-bg`) render the same value in both
+schemes by design. Setting these flat is exactly right; there is no light/dark
+variant to accidentally collapse.
 
 ## Start from the `claude` preset
 
 `preset: claude` sets every colour token plus `font-sans`/`font-mono`
-(Geist / Geist Mono — the New York pairing the engine inlines) and `radius`,
-with no file to maintain:
+(Inter / IBM Plex Mono — the engine's own pairing, which it inlines) and
+`radius`, with no file to maintain:
 
 ```yaml
 viewer:

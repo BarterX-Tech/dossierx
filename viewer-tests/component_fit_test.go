@@ -155,8 +155,15 @@ func TestThemeControlDarkOverridesLightOS(t *testing.T) {
 	if darkPaper == "" || darkPaper == lightPaper {
 		t.Fatalf("Dark toggle left --paper at %q under a light OS (was %q)", darkPaper, lightPaper)
 	}
-	if darkPaper != "#0a1220" {
-		t.Fatalf("--paper after Dark = %q, want the engine dark token #0a1220", darkPaper)
+	// The literal is the engine's dark --paper in style.css's two dark blocks.
+	// It moved from #0a1220 to #0D1117 when the design revamp re-pointed the
+	// default palette onto the design's tokens; the mechanism this test is
+	// about — an explicit Dark choice beating a light OS — is unchanged, only
+	// the value it lands on. Pinned rather than read back from the sheet on
+	// purpose: comparing the page against itself would pass for a Dark control
+	// that did nothing at all.
+	if darkPaper != "#0D1117" {
+		t.Fatalf("--paper after Dark = %q, want the engine dark token #0D1117", darkPaper)
 	}
 }
 

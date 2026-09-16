@@ -65,39 +65,39 @@ Twenty-eight, and there are no others. Defaults are the engine's own; the rows w
 
 | token | light default | dark default | what it paints |
 |---|---|---|---|
-| `paper` | `#f6f8fc` | `#0a1220` | the page behind everything |
-| `card-bg` | `#ffffff` | `#0f1b2e` | claim cards, panels, the sidebar |
-| `ink` | `#091426` | `#e8eef8` | body text |
-| `muted` | `#536179` | `#a9b5c8` | secondary text, metadata |
-| `faint` | `#7d899a` | `#75839a` | the quietest labels |
-| `border` | `#d8deea` | `#263754` | ordinary rules and card edges |
-| `border-strong` | `#aab5c7` | *(same)* | emphasised edges |
-| `accent` | `#287052` | `#70c99c` | the brand colour: locked state, active tabs |
-| `accent-bg` | `rgba(40, 112, 82, .12)` | `rgba(112, 201, 156, .12)` | the accent as a fill |
-| `link` | `#205b78` | `#8ab7ff` | hyperlinks |
-| `warn` | `#a2433d` | `#ff8b94` | warnings and refusals |
-| `warn-bg` | `rgba(162, 67, 61, .10)` | `rgba(255, 139, 148, .10)` | the warning fill |
-| `status-draft` | `#976600` | *(same)* | the draft pill's text |
-| `status-draft-bg` | `rgba(151, 102, 0, .12)` | *(same)* | the draft pill's fill |
-| `code-inline-bg` | `color-mix(in srgb, var(--paper) 72%, var(--card-bg))` | *(derived)* | `` `inline code` `` |
-| `code-bg` | `color-mix(in srgb, var(--paper) 82%, var(--card-bg))` | *(derived)* | fenced blocks, claim trees |
+| `paper` | `#EFF1F4` | `#0D1117` | the page behind everything |
+| `card-bg` | `#FFFFFF` | `#161B22` | claim cards, panels, the sidebar |
+| `ink` | `#101720` | `#E6EAF0` | body text |
+| `muted` | `#54606F` | `#9AA7B8` | secondary text, metadata |
+| `faint` | `#6E7C8E` | `#8494A8` | the quietest labels |
+| `border` | `#DDE2E9` | `#242C38` | ordinary rules and card edges |
+| `border-strong` | `#C2CAD5` | `#38424F` | emphasised edges |
+| `accent` | `#2C6B52` | `#63BE9A` | the brand colour: locked state, active tabs |
+| `accent-bg` | `rgb(44 107 82 / 10%)` | `rgb(99 190 154 / 13%)` | the accent as a fill |
+| `link` | `#1C4E8C` | `#6AA6E8` | hyperlinks |
+| `warn` | `#9E3B36` | `#EC8A83` | warnings and refusals |
+| `warn-bg` | `rgb(158 59 54 / 10%)` | `rgb(236 138 131 / 13%)` | the warning fill |
+| `status-draft` | `#9A6A16` | `#DDA94E` | the draft pill's text |
+| `status-draft-bg` | `rgb(154 106 22 / 11%)` | `rgb(221 169 78 / 13%)` | the draft pill's fill |
+| `code-inline-bg` | `color-mix(in srgb, var(--code-bg) 88%, var(--card-bg))` | *(derived)* | `` `inline code` `` |
+| `code-bg` | `#F3F5F8` | `#1B212B` | fenced blocks, claim trees |
 | `table-head-bg` | `rgba(127, 127, 127, .10)` | *(same)* | table header rows |
 | `image-bg` | `rgba(127, 127, 127, .06)` | *(same)* | the mat behind images |
 | `mockup-bg` | `#fff` | *(same)* | mockup diagrams (light artwork in both modes, on purpose) |
 | `hover-bg` | `rgba(125, 137, 154, .08)` | *(same)* | hover highlight on rows and tabs |
-| `selection-bg` | `rgba(40, 112, 82, .20)` | *(same)* | selected text |
+| `selection-bg` | `rgba(28, 78, 140, .20)` | *(same)* | selected text |
 | `shadow` | `rgba(0, 0, 0, .08)` | `rgba(0, 0, 0, .28)` | the comments panel |
 | `shadow-strong` | `rgba(0, 0, 0, .14)` | `rgba(0, 0, 0, .34)` | the toast |
 | `shadow-cast` | `rgba(9, 20, 38, .12)` | *(same)* | the rail, the nav toggle, the facet ToC |
 | `scrim` | `rgba(0, 0, 0, .22)` | `rgba(0, 0, 0, .42)` | the dim behind a modal |
-| `font-sans` | `"Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif` | *(same)* | all body text |
-| `font-mono` | `ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace` | *(same)* | code and ids |
-| `radius` | `6px` | *(same)* | every rounded corner |
+| `font-sans` | `"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` | *(same)* | all chrome text |
+| `font-mono` | `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace` | *(same)* | code and ids |
+| `radius` | `8px` | *(same)* | every rounded corner |
 
-**`*(derived)*` is not `*(same)*`.** `code-inline-bg` and `code-bg` are `color-mix()` over `paper`
-and `card-bg`, so they follow those two in either scheme — including in a theme that only sets
-`paper`. The dark block never re-points them, yet their *computed* value is darker there. A flat
-override freezes that, which is the trap below: set them per-mode, or leave them and set `paper`.
+**`*(derived)*` is not `*(same)*`.** `code-inline-bg` is a `color-mix()` over `code-bg` and
+`card-bg`, so it follows those two in either scheme — including in a theme that only sets `code-bg`.
+The dark block never re-points it, yet its *computed* value is darker there. A flat override freezes
+that, which is the trap below: set it per-mode, or leave it and set `code-bg`.
 
 Values are validated as hostile input, not trusted as CSS. Colours must be `#hex`, an
 `rgb(`/`hsl(`/`oklch(`/`color-mix(`-family function, or a CSS named colour; `radius` must carry a
@@ -112,8 +112,8 @@ in `check` catches that, which is why step 2 below is the real evidence.
 
 ### The trap: a flat colour key pins both modes
 
-**Fourteen of these tokens are re-declared in dark mode** — every row with a value in the dark
-column — and two more, the `*(derived)*` pair, vary without being re-declared. Writing one of them flat sets it for **both** schemes:
+**Eighteen of these tokens are re-declared in dark mode** — every row with a value in the dark
+column — and one more, the `*(derived)*` row, varies without being re-declared. Writing one of them flat sets it for **both** schemes:
 
 ```yaml
 viewer:
@@ -136,7 +136,8 @@ sometimes right (`mockup-bg` is flat on purpose), so nothing warns. The rule:
 ## Presets, and the export → edit → extends workflow
 
 `dossierx theme list` reports every preset and the tokens it sets; `preset: claude` is the whole
-adoption step (Claude colours plus Geist / Geist Mono). Two things to tell the human:
+adoption step (Claude colours plus the engine's own Inter / IBM Plex Mono stacks). Two things to
+tell the human:
 
 - **preset values may change between minor releases** (they track a palette this project does not
   own). Each change gets a CHANGELOG line; a project needing a value frozen writes it inline, or

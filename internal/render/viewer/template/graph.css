@@ -159,13 +159,39 @@
    light values are darkened to stay legible on its near-white. Neither set
    inherits from the other. */
 :root {
+  /* THE NINE THE DESIGN NAMES, declared under their design names first and
+     read into the --dxg-* ramp below. docs/design/tokens.md §2 carries a
+     --color-graph-* / --color-dark-graph-* pair for each of the nine colours
+     the viewer chrome touches, and the ramp's twenty slots have no design
+     name at all beyond slot 5. Naming the nine gives the design vocabulary a
+     declaration in the engine without renaming a single --dxg-* consumer.
+
+     THE VALUES ARE THIS FILE'S OWN, in both modes, and that is a ruling
+     rather than an oversight. Paper's --color-dark-graph-* set disagrees with
+     every one of the nine dark values here, and five of them (facet-2,
+     facet-3, facet-5, other, halo) are the LIGHT hex copied verbatim onto a
+     dark board — a defect, not a value (tokens.md, Disagreements 1 and 2).
+     The dark ramp is also the output of a maximin CIEDE2000 solve seeded on
+     frozen slots 1-5, so accepting a transcription slip in one slot moves the
+     whole ramp's minimum distance. graph.css wins, full stop. */
+
   /* Facet slots 1-5: frozen prototype values. Do not renumber — assignment is
      positional, so renumbering silently recolours every existing project. */
-  --dxg-facet-1: #7C8CE8;
-  --dxg-facet-2: #3FB3A6;
-  --dxg-facet-3: #DE8A62;
-  --dxg-facet-4: #A98CD8;
-  --dxg-facet-5: #8E9AA8;
+  --color-dark-graph-facet-1: #7C8CE8;
+  --color-dark-graph-facet-2: #3FB3A6;
+  --color-dark-graph-facet-3: #DE8A62;
+  --color-dark-graph-facet-4: #A98CD8;
+  --color-dark-graph-facet-5: #8E9AA8;
+  --color-dark-graph-other: #6C7F75;
+  --color-dark-graph-cycle: #F5615C;
+  --color-dark-graph-halo: #EFB44D;
+  --color-dark-graph-governed: #F06A9C;
+
+  --dxg-facet-1: var(--color-dark-graph-facet-1);
+  --dxg-facet-2: var(--color-dark-graph-facet-2);
+  --dxg-facet-3: var(--color-dark-graph-facet-3);
+  --dxg-facet-4: var(--color-dark-graph-facet-4);
+  --dxg-facet-5: var(--color-dark-graph-facet-5);
 
   /* Slots 6-20: solved for maximum perceptual separation against slots 1-5,
      against each other and against every reserved colour. See the method note
@@ -191,15 +217,17 @@
      KEPT AS A FALLBACK, NOT AS THE SHIPPED VALUE: style.css declares
      --dxg-facet-other too and is emitted after this file, so this grey only
      reaches a project whose viewer.template_overrides replaces style.css.
-     Do not delete it — for such a project it is the only declaration. */
-  --dxg-facet-other: #6C7F75;
+     Do not delete it — for such a project it is the only declaration, and it
+     is the reason --color-dark-graph-other above is documentation of a branch
+     that does not paint in the shipped viewer. */
+  --dxg-facet-other: var(--color-dark-graph-other);
 
   /* State colours. Ring, halo and the two structural overlays only. */
-  --dxg-cycle: #F5615C;
-  --dxg-halo: #EFB44D;
+  --dxg-cycle: var(--color-dark-graph-cycle);
+  --dxg-halo: var(--color-dark-graph-halo);
 
   /* Reserved governance hue, outside the ramp. See the block comment above. */
-  --dxg-governed: #F06A9C;
+  --dxg-governed: var(--color-dark-graph-governed);
 }
 
 /* `, print`: paper is light, whatever the OS says. A printed graph pane with
@@ -207,11 +235,24 @@
    dark query prevents for the base palette. */
 @media (prefers-color-scheme: light), print {
   :root {
-    --dxg-facet-1: #4257C4;
-    --dxg-facet-2: #12897F;
-    --dxg-facet-3: #B65A34;
-    --dxg-facet-4: #7050A8;
-    --dxg-facet-5: #67717E;
+    /* The same nine under their light design names. Every one of these nine
+       light values already agreed with Paper exactly; only the dark set
+       disagreed. */
+    --color-graph-facet-1: #4257C4;
+    --color-graph-facet-2: #12897F;
+    --color-graph-facet-3: #B65A34;
+    --color-graph-facet-4: #7050A8;
+    --color-graph-facet-5: #67717E;
+    --color-graph-other: #7D8C85;
+    --color-graph-cycle: #D1201A;
+    --color-graph-halo: #C07E0C;
+    --color-graph-governed: #C11F5B;
+
+    --dxg-facet-1: var(--color-graph-facet-1);
+    --dxg-facet-2: var(--color-graph-facet-2);
+    --dxg-facet-3: var(--color-graph-facet-3);
+    --dxg-facet-4: var(--color-graph-facet-4);
+    --dxg-facet-5: var(--color-graph-facet-5);
 
     /* Solved the same way as the dark ramp, independently: the light band is
        L* 36-62 with chroma 22-68, every slot at least 3:1 against --paper.
@@ -235,12 +276,12 @@
 
     /* Light fallback, same standing as the dark one above: style.css's own
        light value wins for the shipped sheet. */
-    --dxg-facet-other: #7D8C85;
+    --dxg-facet-other: var(--color-graph-other);
 
-    --dxg-cycle: #D1201A;
-    --dxg-halo: #C07E0C;
+    --dxg-cycle: var(--color-graph-cycle);
+    --dxg-halo: var(--color-graph-halo);
 
-    --dxg-governed: #C11F5B;
+    --dxg-governed: var(--color-graph-governed);
   }
 }
 

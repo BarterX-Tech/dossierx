@@ -62,8 +62,8 @@ func newThemeCmd() *cobra.Command {
 // test rather than a blank column.
 var themePresetDescriptions = map[string]string{
 	"claude": "The Claude desktop app's palette — warm off-white paper in light, near-black in dark, " +
-		"terracotta accent — mapped onto this engine's tokens by role. Type is the New York " +
-		"pairing: Geist and Geist Mono, which the engine inlines so the stacks resolve offline.",
+		"terracotta accent — mapped onto this engine's tokens by role. Type is the engine's own " +
+		"pairing: Inter and IBM Plex Mono, which the engine inlines so the stacks resolve offline.",
 }
 
 // ---------------------------------------------------------------------

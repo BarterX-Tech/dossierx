@@ -38,11 +38,16 @@ var themePresets = map[string]Theme{
 // engine choices with no source counterpart at all; both say so.
 var claudePreset = Theme{
 	Shared: map[string]string{
-		// New York stacks (Geist + Geist Mono). The faces themselves are
+		// The engine's own stacks, restated. The faces themselves are
 		// engine-owned woff2 files inlined by internal/render; a preset
-		// still ships no font files of its own.
-		"font-sans": `"Geist", ui-sans-serif, system-ui, sans-serif`,                // engine choice: New York pairing, inlined by the engine
-		"font-mono": `"Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace`, // engine choice: New York pairing, inlined by the engine
+		// still ships no font files of its own. These are DELIBERATELY the
+		// same two stacks style.css declares rather than a pairing of the
+		// preset's own: a preset that named a third family would put every
+		// reader on a fallback face, because a preset cannot ship font
+		// files. They are restated rather than omitted so `theme export`
+		// still writes a complete, self-contained starting file.
+		"font-sans": `"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif`, // engine choice: the engine's own sans, inlined by the engine
+		"font-mono": `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace`,          // engine choice: the engine's own mono, inlined by the engine
 
 		// The source carries three radii for three purposes —
 		// --radius-sm 6px (claude.css:125), --radius-md 10px

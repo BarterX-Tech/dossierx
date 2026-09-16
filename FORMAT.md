@@ -1599,44 +1599,44 @@ changed shape for that case.
 
 #### The tokens
 
-Twenty-eight tokens, and there are no others. Fourteen are re-declared
+Twenty-eight tokens, and there are no others. Eighteen are re-declared
 inside the dark `@media` block with a different value ("mode-varying"
-below); two more are not re-declared but still compute a different value
-per scheme, because their default is a `color-mix()` expression over other
-tokens rather than a fixed color ("derived" below); the remaining twelve
+below); one more is not re-declared but still computes a different value
+per scheme, because its default is a `color-mix()` expression over other
+tokens rather than a fixed color ("derived" below); the remaining nine
 render the same value regardless of scheme ("mode-invariant"). "Consumer"
 names what the token paints in the shipped stylesheet — the same surface an
 override stylesheet or a preset targets.
 
 | token | role | light default | dark default | consumer |
 |---|---|---|---|---|
-| `accent` | brand color | `#287052` | `#70c99c` | locked state, active tabs |
-| `accent-bg` | accent as a fill | `rgba(40, 112, 82, .12)` | `rgba(112, 201, 156, .12)` | accent-tinted backgrounds |
-| `ink` | body text | `#091426` | `#e8eef8` | primary text color |
-| `muted` | secondary text | `#536179` | `#a9b5c8` | metadata, secondary labels |
-| `faint` | quiet labels | `#7d899a` | `#75839a` | the quietest labels |
-| `paper` | page background | `#f6f8fc` | `#0a1220` | the page behind everything |
-| `card-bg` | surface background | `#ffffff` | `#0f1b2e` | claim cards, panels, the sidebar |
-| `border` | ordinary rule | `#d8deea` | `#263754` | card edges, dividers |
-| `link` | hyperlink | `#205b78` | `#8ab7ff` | hyperlinks |
-| `warn` | warning text | `#a2433d` | `#ff8b94` | warnings and refusals |
-| `warn-bg` | warning fill | `rgba(162, 67, 61, .10)` | `rgba(255, 139, 148, .10)` | the warning fill |
-| `font-sans` | body font stack | `"Avenir Next", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif` | same | all body text |
-| `font-mono` | code font stack | `ui-monospace, "SFMono-Regular", "IBM Plex Mono", Menlo, monospace` | same | code and ids |
-| `radius` | corner radius | `6px` | same | every rounded corner |
-| `code-inline-bg` | inline code fill | `color-mix(in srgb, var(--paper) 72%, var(--card-bg))` | *(derived)* | `` `inline code` `` |
-| `code-bg` | block code fill | `color-mix(in srgb, var(--paper) 82%, var(--card-bg))` | *(derived)* | fenced blocks, claim trees |
+| `accent` | brand color | `#2C6B52` | `#63BE9A` | locked state, active tabs |
+| `accent-bg` | accent as a fill | `rgb(44 107 82 / 10%)` | `rgb(99 190 154 / 13%)` | accent-tinted backgrounds |
+| `ink` | body text | `#101720` | `#E6EAF0` | primary text color |
+| `muted` | secondary text | `#54606F` | `#9AA7B8` | metadata, secondary labels |
+| `faint` | quiet labels | `#6E7C8E` | `#8494A8` | the quietest labels |
+| `paper` | page background | `#EFF1F4` | `#0D1117` | the page behind everything |
+| `card-bg` | surface background | `#FFFFFF` | `#161B22` | claim cards, panels, the sidebar |
+| `border` | ordinary rule | `#DDE2E9` | `#242C38` | card edges, dividers |
+| `link` | hyperlink | `#1C4E8C` | `#6AA6E8` | hyperlinks |
+| `warn` | warning text | `#9E3B36` | `#EC8A83` | warnings and refusals |
+| `warn-bg` | warning fill | `rgb(158 59 54 / 10%)` | `rgb(236 138 131 / 13%)` | the warning fill |
+| `font-sans` | chrome font stack | `"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` | same | all chrome text |
+| `font-mono` | code font stack | `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace` | same | code and ids |
+| `radius` | corner radius | `8px` | same | every rounded corner |
+| `code-inline-bg` | inline code fill | `color-mix(in srgb, var(--code-bg) 88%, var(--card-bg))` | *(derived)* | `` `inline code` `` |
+| `code-bg` | block code fill | `#F3F5F8` | `#1B212B` | fenced blocks, claim trees |
 | `table-head-bg` | table header fill | `rgba(127, 127, 127, .10)` | same | table header rows |
 | `image-bg` | image mat | `rgba(127, 127, 127, .06)` | same | the mat behind images |
 | `hover-bg` | hover highlight | `rgba(125, 137, 154, .08)` | same | hover on rows and tabs |
-| `border-strong` | emphasized rule | `#aab5c7` | same | emphasized edges |
+| `border-strong` | emphasized rule | `#C2CAD5` | `#38424F` | emphasized edges |
 | `shadow` | light shadow | `rgba(0, 0, 0, .08)` | `rgba(0, 0, 0, .28)` | the comments panel |
 | `shadow-strong` | heavier shadow | `rgba(0, 0, 0, .14)` | `rgba(0, 0, 0, .34)` | the toast |
 | `shadow-cast` | cast shadow | `rgba(9, 20, 38, .12)` | same | the rail, the nav toggle, the facet ToC |
 | `scrim` | modal dim | `rgba(0, 0, 0, .22)` | `rgba(0, 0, 0, .42)` | the dim behind a modal |
-| `selection-bg` | text selection | `rgba(40, 112, 82, .20)` | same | selected text |
-| `status-draft` | draft pill text | `#976600` | same | `.pill.pv`, `.status-draft` |
-| `status-draft-bg` | draft pill fill | `rgba(151, 102, 0, .12)` | same | the draft pill's fill |
+| `selection-bg` | text selection | `rgba(28, 78, 140, .20)` | same | selected text |
+| `status-draft` | draft pill text | `#9A6A16` | `#DDA94E` | `.pill.pv`, `.status-draft` |
+| `status-draft-bg` | draft pill fill | `rgb(154 106 22 / 11%)` | `rgb(221 169 78 / 13%)` | the draft pill's fill |
 | `mockup-bg` | mockup canvas | `#fff` | same | mockup diagrams (light artwork in both modes, on purpose) |
 
 **Mode-varying (14, re-declared in the dark block)**: `accent`,
@@ -1692,8 +1692,9 @@ deliberate bound, not a gap to file.
 #### Presets
 
 `preset: claude` is the lowest layer of the merge and needs no file: it
-sets every color token, `font-sans`/`font-mono` (stacks that fall through
-to system fonts — a preset carries no font files), and `radius`. Presets
+sets every color token, `font-sans`/`font-mono` (the engine's own Inter /
+IBM Plex Mono stacks, whose faces the engine inlines — a preset carries no
+font files of its own), and `radius`. Presets
 may change between minor releases: they track a palette this project does
 not own, and every change to one is a CHANGELOG "Changed" line. A project
 that needs a value frozen writes it inline (where it always wins) or
