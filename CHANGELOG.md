@@ -16,10 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   claim and stay closed when ready, pill words are sentence case, and an
   in-page System / Light / Dark control sets `html[data-theme]` without letting
   dark values reach print.
-- Viewer chrome uses Lucide icons (lock, navigation, theme, comments, chevrons)
-  instead of mixed emoji and CSS triangles. The `claude` preset's type stacks
-  are Geist and Geist Mono (New York pairing); the engine inlines those faces
-  so they resolve offline. Unthemed engine defaults stay Avenir / system mono.
+- Viewer chrome uses Lucide icons (lock, navigation, theme, comments, nav
+  chevrons) instead of mixed emoji and CSS triangles. The evidence-footer
+  chevron stays the CSS border triangle so unthemed claim cards paint as they
+  did. The `claude` preset's type stacks are Geist and Geist Mono (New York
+  pairing); the engine inlines those faces so they resolve offline. Unthemed
+  engine defaults stay Avenir / system mono.
 - Regenerate the six committed fixture viewers and
   `testdata/render-across-releases.golden.txt` for those presentation changes
   and for Lucide / Geist chrome.
