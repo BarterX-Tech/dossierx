@@ -2200,8 +2200,12 @@ th {
   line-height: 1.45;
 }
 
+/* 02 §4.10/§4.19, 03 §4.5/§7.5, R-H.1: "Show issues"/"Hide issues" is the
+   ALARM half of the banner (the body sentence stays --color-ink) and reads
+   in the same red as the icon and the dot, never the generic --accent link
+   colour this action inherited before promotion. */
 .status-strip-action {
-  color: var(--accent);
+  color: var(--warn);
   font: 600 11.5px var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
@@ -2276,11 +2280,16 @@ th {
   font: 10px var(--font-mono);
 }
 
+/* 04 §4.8: the finding TITLE is --ink at weight 500 — only its dot and its
+   "blocks N claims" line (below) carry the row's severity colour. This was
+   --warn/weight 600 before promotion, which painted every row red
+   regardless of severity; that reading is what the new per-severity dot and
+   .status-finding-msg colour (above) replace. */
 .status-finding-rule {
-  color: var(--warn);
+  color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   letter-spacing: 0;
   text-transform: none;
 }
@@ -2295,6 +2304,180 @@ th {
   line-height: 1.5;
 }
 
+/* lane: L8 — 04 §6: the module group heading is two spans, the module name
+   and its "blocks N of M claims here" weight phrase (§2), never one
+   concatenated string, so § 5 M6 can stack them on a phone without a
+   client-side string split. */
+.status-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.status-group-head-name {
+  color: var(--muted);
+}
+
+.status-group-head-note {
+  font: 400 11.5px var(--font-sans);
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* 04 §8 item 3 / R08.2: a lint and a ledger finding must never read alike.
+   The APPROVAL RECORD group keeps the same .status-group shape but takes a
+   red leading edge instead of the module groups' plain heading, because
+   integrity is a different KIND of finding, never a severity among
+   severities, and it always sorts first (viewer-runtime.js renderStatusStrip). */
+.status-group--approval-record {
+  border-left: 2px solid var(--warn);
+  padding-left: 10px;
+  margin-left: -10px;
+}
+
+.status-group--approval-record .status-group-head-name {
+  color: var(--warn);
+}
+
+/* 04 §4.8: a finding row carries a severity dot ahead of its title, the same
+   two-hue vocabulary the filter chips use below (R08.1) — never a third
+   colour, and never colour by module. */
+.status-finding--group {
+  position: relative;
+  padding-left: 14px;
+}
+
+.status-finding--group::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.status-finding--group[data-severity="critical"]::before,
+.status-finding--group[data-severity="needs_you"]::before {
+  background: var(--warn);
+}
+
+.status-finding--group[data-severity="blocker"]::before,
+.status-finding--group[data-severity="check"]::before {
+  background: var(--status-draft);
+}
+
+.status-finding--group[data-severity="critical"] .status-finding-msg,
+.status-finding--group[data-severity="needs_you"] .status-finding-msg {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.status-finding--group[data-severity="blocker"] .status-finding-msg {
+  color: var(--status-draft);
+  font-weight: 600;
+}
+
+/* file:// has no /api/status and therefore no ledger_findings at all (04 §8
+   item 11 / §9 item 5) — stated in the body rather than silently omitted. */
+.status-strip-static-note {
+  margin: 0 0 12px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+/* 04 §4.4 / R08.1: the severity filter strip is its OWN scoped chip, never a
+   reuse of claim-status's shared .pill (LOCKED / DRAFT / review_pending is a
+   different vocabulary; repainting .pill here would repaint every claim
+   chip in the document). Shell padding/gap/dot/radius are measured
+   identical across all five variants; only fill, border and colour vary. */
+.status-severity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px 5px 10px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--card-bg);
+  font: 500 12px var(--font-sans);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.status-severity-chip__dot {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border-strong);
+}
+
+.status-severity-chip__count {
+  font: 400 12px var(--font-mono);
+  color: var(--faint);
+}
+
+.status-severity-chip--check,
+.status-severity-chip--later {
+  border-color: var(--border);
+}
+
+.status-severity-chip--check .status-severity-chip__dot {
+  background: var(--status-draft);
+}
+
+.status-severity-chip--needs_you {
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.status-severity-chip--needs_you .status-severity-chip__dot,
+.status-severity-chip--needs_you .status-severity-chip__count {
+  background: var(--warn);
+  color: var(--warn);
+}
+
+.status-severity-chip--blocker {
+  background: var(--status-draft-bg);
+  color: var(--status-draft);
+  font-weight: 600;
+}
+
+.status-severity-chip--blocker .status-severity-chip__dot,
+.status-severity-chip--blocker .status-severity-chip__count {
+  background: var(--status-draft);
+  color: var(--status-draft);
+}
+
+/* Critical (04 §4.4 / §8 item 1): the ONLY filled chip — filling is how
+   "there is nothing above this" is said (R08.1). No other severity may fill
+   to match it. */
+.status-severity-chip--critical {
+  background: var(--warn);
+  color: #fff;
+}
+
+.status-severity-chip--critical .status-severity-chip__dot {
+  background: #fff;
+}
+
+.status-severity-chip--critical .status-severity-chip__count {
+  color: rgba(255, 255, 255, .72);
+}
+
+/* 04 §8 item 2: pressed is the R-F.2 "open" treatment — an accent border and
+   a weight step — because the five severity hues already carry meaning and
+   cannot also mean "selected". Selection stays single: stripSeverityFilter
+   holds at most one id (viewer-runtime.js:1146). */
+.status-severity-chip[aria-pressed="true"] {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
 /* Coarse pointers (touch) need >=44px hit targets on every comment control. */
 @media (pointer: coarse) {
   .comments-rail-close,
@@ -2304,6 +2487,13 @@ th {
   .comment-composer-input,
   .status-strip-head,
   .claim-collapse-toggle {
+    min-height: 44px;
+  }
+
+  /* 04 §5 M9/M13: no control on the 390 boards reaches 44px on its own
+     (chips measure 30px); the hit area grows here without changing the
+     drawn box, the same split the rule above already uses. */
+  .status-severity-chip {
     min-height: 44px;
   }
 }
@@ -2359,6 +2549,45 @@ th {
     grid-column: 2;
     grid-row: 1;
     margin-top: 4px;
+  }
+}
+
+/* lane: L8 — tokens.md §8's mapping table ("H1 · blocked notice becomes an
+   inset card with a divided action row -> max-width: 520px") and R-H.1: on a
+   phone the collapsed status strip IS the blocked notice (02 §4.19, 03 §7.5),
+   an inset card with side margins and a tinted-red border, never the
+   full-bleed band the 860 block above leaves it as. This is scoped to
+   .status-strip and its own children only (G11) — it does not touch
+   .claim-group or .claim, which the 860 block already widens. */
+@media (max-width: 520px) {
+  .status-strip {
+    width: auto;
+    margin: 14px 16px 22px;
+    border-radius: 10px;
+    border-color: color-mix(in srgb, var(--warn) 26%, var(--border));
+  }
+  .status-strip-body {
+    border-top-color: color-mix(in srgb, var(--warn) 18%, var(--border));
+  }
+  /* 04 §5 M6: the module group header stacks — name over weight phrase —
+     instead of ranging across a filler rule; there is no filler rule at
+     this width. */
+  .status-group-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  /* 04 §5 M5: the finding row leads with the dot and the "blocks N claims"
+     count; the title follows on its own line. The claim slug is already
+     never emitted by renderStatusGroup, so there is nothing to drop here. */
+  .status-finding--group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .status-finding--group .status-finding-msg {
+    order: -1;
+    flex-basis: auto;
   }
 }
 

@@ -75,6 +75,13 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	if !evalBool(t, ctx, `document.getElementById('statusStripTitle').textContent.indexOf('blocked by unapproved dependencies') >= 0`) {
 		t.Fatal("blocker-only strip must summarize unique unapproved dependencies, not dump one row per path")
 	}
+	// lane L8 (docs/design/screens/04-issues-screen.md §2, §9 item 6): the
+	// promoted Issues body now groups these rows by owning MODULE rather than
+	// by severity, so they may land under more than one <ul>. This assertion
+	// still holds because it counts the .status-finding--group <li> rows
+	// themselves, not the .status-group headings around them — the total
+	// number of unique blockers this fixture produces is unchanged by which
+	// axis groups them.
 	if got := evalInt(t, ctx, `document.querySelectorAll('#statusStripBody .status-finding--group').length`); got < 1 || got > 6 {
 		t.Fatalf("grouped strip rows = %d, want a small unique-blocker set", got)
 	}
