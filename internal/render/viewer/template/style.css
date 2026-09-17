@@ -2182,10 +2182,31 @@ th {
   cursor: pointer;
 }
 
+/* retry fix 14: 02 §4.10 "Icon" / §4.19 "Icon" / R-H.1 "Content" put a warning
+   triangle ahead of the banner sentence at every width, in both schemes — it
+   was absent everywhere. .status-strip-summary becomes the icon's row; the
+   title/note stack (unchanged) moves into its own -text wrapper so the two
+   IDs the runtime writes to keep working untouched. */
 .status-strip-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.status-strip-icon {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  color: var(--warn);
+  flex-shrink: 0;
+}
+
+.status-strip-summary-text {
   display: grid;
   gap: 3px;
-  flex: 1;
+  min-width: 0;
 }
 
 .status-strip-title {
@@ -2204,12 +2225,32 @@ th {
    ALARM half of the banner (the body sentence stays --color-ink) and reads
    in the same red as the icon and the dot, never the generic --accent link
    colour this action inherited before promotion. */
+/* retry fix 13: 02 §4.10 and 03 §4.5 measure the desktop action at weight
+   500, 13/16 — R-H.1's weight 600 at 13/16 is the PHONE step (added in
+   L8's own 520 block below), not the desktop default. --warn is correct at
+   both widths and is unchanged. */
 .status-strip-action {
   color: var(--warn);
-  font: 600 11.5px var(--font-sans);
+  font: 500 13px/16px var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
   white-space: nowrap;
+}
+
+/* retry fix 15: the action text (#statusStripAction, whose textContent the
+   runtime overwrites on every toggle) and its trailing chevron are separate
+   elements inside this row wrapper — the row, not the text span, is what
+   the 520 block turns into R-H.1's divided action row, so a re-render can
+   never wipe the chevron out from under it. The chevron itself is hidden
+   above 520 (§ 4.10 draws no trailing chevron on the desktop banner). */
+.status-strip-action-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-strip-action-chevron {
+  display: none;
 }
 
 .status-strip-caret {
@@ -2225,11 +2266,21 @@ th {
 
 /* The detail list is capped and scrolls internally: a project with forty lint
    errors must not grow a dock that swallows the page it is describing. */
+/* retry fix 16: the promoted list is 04 §3/§9 item 4's bottom-open card —
+   the list runs off the bottom edge rather than closing itself. A 40vh
+   (~360px on this fixture) inner scroller hid every row past the fourth
+   from BOTH the page scroll and the screenshot tooling, which is strictly
+   worse than the page simply growing to fit the list. */
 .status-strip-body {
-  max-height: 40vh;
-  overflow-y: auto;
   border-top: 1px solid var(--border);
   padding: 12px 14px 14px;
+}
+
+/* 04 §4.6 / §9 item 4: bottom radii of the findings card are 0 — the list
+   is drawn as continuing past the fold, not as a closed box — while
+   collapsed/lint-only the strip keeps the shared --radius on all corners. */
+.status-strip--open {
+  border-radius: 12px 12px 0 0;
 }
 
 .status-strip-body[hidden] {
@@ -2239,21 +2290,19 @@ th {
 .status-strip-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  row-gap: 6px;
+  column-gap: 8px; /* retry fix 9: 04 §4.4 "Strip gap" measures 8px. */
   margin: 0 0 12px;
 }
 
 .status-group + .status-group {
-  margin-top: 12px;
+  margin-top: 0;
 }
 
-.status-group-head {
-  margin: 0 0 6px;
-  font: 600 11.5px var(--font-sans);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--muted);
-}
+/* .status-group-head's pre-band rule (margin/font/letter-spacing/color) lived
+   here and is superseded by the banded rule below (retry fix 4) plus
+   .status-group-head-name's own typography (retry fix 3) — see
+   learnings/deadcode/L8.md. */
 
 .status-finding-list {
   margin: 0;
@@ -2275,48 +2324,84 @@ th {
   border-top: 1px solid var(--border);
 }
 
-.status-finding-rule,
-.status-finding-claim {
-  font: 10px var(--font-mono);
-}
-
 /* 04 §4.8: the finding TITLE is --ink at weight 500 — only its dot and its
-   "blocks N claims" line (below) carry the row's severity colour. This was
-   --warn/weight 600 before promotion, which painted every row red
-   regardless of severity; that reading is what the new per-severity dot and
-   .status-finding-msg colour (above) replace. */
+   count slot (below) carry the row's severity colour. This was --warn/weight
+   600 before promotion, which painted every row red regardless of severity;
+   that reading is what the new per-severity dot and .status-finding-msg
+   colour (above) replace.
+   retry fix 5: 04 §4.8 "Finding title" measures Inter 14/20 weight 500, not
+   13px/normal. */
 .status-finding-rule {
   color: var(--ink);
-  font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
+  font: 500 14px/20px var(--font-sans);
   letter-spacing: 0;
   text-transform: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 0;
 }
 
+/* retry fix 6: 04 §8 item 9 — the claim slug is the demoted line ("the slug
+   is for the agent"); it truncates with an ellipsis and never wraps, so a
+   long slug cannot bury the title above it. --faint / 11px mono per §4.8. */
 .status-finding-claim {
-  color: var(--muted);
+  color: var(--faint);
+  font: 400 11px/14px var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 100%;
+  min-width: 0;
+  order: 2;
 }
 
+/* retry fix 7: the count gets its OWN slot (04 §4.8 "Count slot" / "Count
+   label", §6 "Row count", §7.1 — the board promotes the "blocks N claims"
+   phrase INTO the count slot rather than running it full-width as a third
+   line). `order: 1` seats it beside the title on line one, ahead of the
+   slug — which still wraps to its own line below via its `flex: 1 1 100%`
+   above — instead of after it. */
 .status-finding-msg {
-  flex-basis: 100%;
-  font-size: 12.5px;
-  line-height: 1.5;
+  flex: 0 0 104px;
+  text-align: right;
+  font: 600 13px/16px var(--font-sans);
+  order: 1;
 }
 
 /* lane: L8 — 04 §6: the module group heading is two spans, the module name
    and its "blocks N of M claims here" weight phrase (§2), never one
    concatenated string, so § 5 M6 can stack them on a phone without a
-   client-side string split. */
+   client-side string split.
+   retry fix 4: 04 §4.7 / §9 item 2 gives the group header its own band —
+   ground `--code-bg` (the light board's ground and the dark board's literal
+   both resolve to it, per §9 item 2), 13px/20px padding and a bottom
+   hairline; the second group onward also takes a top hairline so adjacent
+   bands read as a stack of headers rather than one continuous strip. */
 .status-group-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 8px;
+  background: var(--code-bg);
+  padding: 13px 20px;
+  border-bottom: 1px solid var(--border);
 }
 
+.status-group + .status-group .status-group-head {
+  border-top: 1px solid var(--border);
+}
+
+/* retry fix 3: 04 §4.7 "Module name" — Inter 11/14 w600 tracking 0.08em,
+   UPPERCASE copy. The heading text itself ships as written copy (e.g.
+   "Capability support"); this is the eyebrow treatment that reads it as
+   "CAPABILITY SUPPORT" without a second, all-caps literal in viewer-runtime.js. */
 .status-group-head-name {
   color: var(--muted);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
 }
 
 .status-group-head-note {
@@ -2342,17 +2427,27 @@ th {
 
 /* 04 §4.8: a finding row carries a severity dot ahead of its title, the same
    two-hue vocabulary the filter chips use below (R08.1) — never a third
-   colour, and never colour by module. */
+   colour, and never colour by module.
+   retry fix 8: 04 §4.8 measures 14px block / 20px inline padding, a 14px
+   gap (dot -> text -> count) and align-items: start (a wrapped title still
+   hangs correctly against the dot). The dot stays a ::before at left:0,
+   which — measured from the row's own padding edge, not its parent's —
+   lands it 20px inline before the title (14 + the 6px "gap" this rule's
+   own padding-left already reserved), matching the row gap exactly. */
 .status-finding--group {
   position: relative;
-  padding-left: 14px;
+  padding: 14px 20px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: start;
 }
 
 .status-finding--group::before {
   content: "";
   position: absolute;
   left: 0;
-  top: 7px;
+  top: 20px;
   width: 6px;
   height: 6px;
   border-radius: 999px;
@@ -2435,9 +2530,15 @@ th {
   font-weight: 600;
 }
 
-.status-severity-chip--needs_you .status-severity-chip__dot,
-.status-severity-chip--needs_you .status-severity-chip__count {
+/* retry fix 1 (04 §4.4 per-variant table, R08.1, ref-08.png): the DOT takes
+   the fill, the COUNT takes only the text colour — a shared `background`
+   rule on both painted the mono digit red-on-red and made it disappear
+   ("Needs you ▮" instead of "Needs you 3"). */
+.status-severity-chip--needs_you .status-severity-chip__dot {
   background: var(--warn);
+}
+
+.status-severity-chip--needs_you .status-severity-chip__count {
   color: var(--warn);
 }
 
@@ -2447,9 +2548,12 @@ th {
   font-weight: 600;
 }
 
-.status-severity-chip--blocker .status-severity-chip__dot,
-.status-severity-chip--blocker .status-severity-chip__count {
+/* retry fix 1: same dot/count split as --needs_you above. */
+.status-severity-chip--blocker .status-severity-chip__dot {
   background: var(--status-draft);
+}
+
+.status-severity-chip--blocker .status-severity-chip__count {
   color: var(--status-draft);
 }
 
@@ -2472,9 +2576,12 @@ th {
 /* 04 §8 item 2: pressed is the R-F.2 "open" treatment — an accent border and
    a weight step — because the five severity hues already carry meaning and
    cannot also mean "selected". Selection stays single: stripSeverityFilter
-   holds at most one id (viewer-runtime.js:1146). */
+   holds at most one id (viewer-runtime.js:1146).
+   retry fix 2: 04 §8 item 2 names `--color-accent`, which tokens.md §1 line
+   52 / Disagreement 7 maps onto the engine's `--link`, not `--accent` (that
+   is Paper's `--color-locked`, the LOCKED green — see G2). */
 .status-severity-chip[aria-pressed="true"] {
-  border-color: var(--accent);
+  border-color: var(--link);
   font-weight: 600;
 }
 
@@ -2489,14 +2596,11 @@ th {
   .claim-collapse-toggle {
     min-height: 44px;
   }
-
-  /* 04 §5 M9/M13: no control on the 390 boards reaches 44px on its own
-     (chips measure 30px); the hit area grows here without changing the
-     drawn box, the same split the rule above already uses. */
-  .status-severity-chip {
-    min-height: 44px;
-  }
 }
+/* retry fix 17 (LANES.md OD3): .status-severity-chip is an L8-owned
+   selector and does not belong in the shared coarse-pointer block above —
+   it also needs a different TECHNIQUE (retry fix 11), so it gets its own
+   appended coarse-pointer block instead of a shared-block entry. */
 
 /* Mobile: the rail becomes a modal bottom sheet — the dimming backdrop and the
    body scroll-lock are the MODAL half of the panel and apply ONLY at this
@@ -2540,7 +2644,7 @@ th {
     grid-column: 1;
     grid-row: 1;
   }
-  .status-strip-action {
+  .status-strip-action-row {
     grid-column: 1;
     grid-row: 2;
     justify-self: start;
@@ -2549,45 +2653,6 @@ th {
     grid-column: 2;
     grid-row: 1;
     margin-top: 4px;
-  }
-}
-
-/* lane: L8 — tokens.md §8's mapping table ("H1 · blocked notice becomes an
-   inset card with a divided action row -> max-width: 520px") and R-H.1: on a
-   phone the collapsed status strip IS the blocked notice (02 §4.19, 03 §7.5),
-   an inset card with side margins and a tinted-red border, never the
-   full-bleed band the 860 block above leaves it as. This is scoped to
-   .status-strip and its own children only (G11) — it does not touch
-   .claim-group or .claim, which the 860 block already widens. */
-@media (max-width: 520px) {
-  .status-strip {
-    width: auto;
-    margin: 14px 16px 22px;
-    border-radius: 10px;
-    border-color: color-mix(in srgb, var(--warn) 26%, var(--border));
-  }
-  .status-strip-body {
-    border-top-color: color-mix(in srgb, var(--warn) 18%, var(--border));
-  }
-  /* 04 §5 M6: the module group header stacks — name over weight phrase —
-     instead of ranging across a filler rule; there is no filler rule at
-     this width. */
-  .status-group-head {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 3px;
-  }
-  /* 04 §5 M5: the finding row leads with the dot and the "blocks N claims"
-     count; the title follows on its own line. The claim slug is already
-     never emitted by renderStatusGroup, so there is nothing to drop here. */
-  .status-finding--group {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-  .status-finding--group .status-finding-msg {
-    order: -1;
-    flex-basis: auto;
   }
 }
 
@@ -5201,6 +5266,121 @@ code {
     max-width: none;
     font-size: 16px;
     line-height: 26px;
+  }
+}
+
+/* lane: L8 — tokens.md §8's mapping table ("H1 · blocked notice becomes an
+   inset card with a divided action row -> max-width: 520px") and R-H.1: on a
+   phone the collapsed status strip IS the blocked notice (02 §4.19, 03 §7.5),
+   an inset card with side margins and a tinted-red border, never the
+   full-bleed band the 860 block above leaves it as. This is scoped to
+   .status-strip and its own children only (G11) — it does not touch
+   .claim-group or .claim, which the 860 block already widens.
+   retry fix 18 (LANES.md OD1): this block moved here, after the last shared
+   520 container and the last other lane's own appended 520 block and before
+   the print doc comment, keeping this exact tag comment. Equal specificity,
+   later source order is what makes an appended block win; placed at its old
+   spot (right after the shared 860 block) it was instead overridden BY the
+   L3 block below it, backwards from what OD1 intends. */
+@media (max-width: 520px) {
+  .status-strip {
+    width: auto;
+    margin: 14px 16px 22px;
+    border-radius: 10px;
+    border-color: color-mix(in srgb, var(--warn) 26%, var(--border));
+  }
+  .status-strip--open {
+    border-radius: 10px 10px 0 0;
+  }
+  .status-strip-body {
+    border-top-color: color-mix(in srgb, var(--warn) 18%, var(--border));
+  }
+  /* 04 §5 M6: the module group header stacks — name over weight phrase —
+     instead of ranging across a filler rule; there is no filler rule at
+     this width. */
+  .status-group-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+  }
+  /* 04 §5 M5: the finding row leads with the dot and the count; the title
+     follows on its own line. */
+  .status-finding--group {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .status-finding--group .status-finding-msg {
+    order: -1;
+    flex: 0 0 auto;
+    text-align: left;
+  }
+  /* retry fix 12 (04 §5 M5): the slug is dropped on mobile — the group
+     header already carries the module prefix, so it is redundant here, and
+     renderStatusGroup DOES still emit it for a single-claim group (fix 21
+     corrects the stale comment that used to claim otherwise). */
+  .status-finding-claim {
+    display: none;
+  }
+  /* retry fix 10 (04 §5 M8): the filter chips run off the right edge and
+     never wrap — the clipped last chip IS the affordance that more exist. */
+  .status-strip-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-right: 0;
+  }
+  /* retry fix 11 (04 §5 M9): chips grow to a 30px touch height with
+     symmetric 12px inline padding, against the desktop 26/28px asymmetric
+     10px/12px. The coarse-pointer hit-area growth is a SEPARATE rule below
+     (fix 17) so it never changes this drawn box. */
+  .status-severity-chip {
+    height: 30px;
+    padding-inline: 12px;
+  }
+  /* retry fix 15 (R-H.1, 02 §4.19): the action gets its own divided row —
+     a 1px top hairline at ~18% blocked tint, a 38px row and 14px inline
+     padding, bled to the head's own inline/bottom padding edges so the tap
+     target is the card's full width. `grid-column: 1 / -1` reclaims the
+     10px caret column too, since the divider must span edge to edge. */
+  .status-strip-action-row {
+    grid-column: 1 / -1;
+    justify-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 38px;
+    margin: 8px -14px -13px;
+    padding-inline: 14px;
+    border-top: 1px solid color-mix(in srgb, var(--warn) 18%, transparent);
+  }
+  .status-strip-action {
+    font-weight: 600; /* retry fix 13: the 600 step is the PHONE form only. */
+  }
+  .status-strip-action-chevron {
+    display: inline-block;
+    width: 13px;
+    height: 13px;
+    color: var(--warn);
+    flex-shrink: 0;
+  }
+}
+
+/* retry fix 17 (LANES.md OD3, and fix 11's technique): .status-severity-chip
+   needs its hit area grown to >=44px on a coarse pointer WITHOUT changing
+   its drawn 30px box (M13) — a pill whose min-height simply grows distorts
+   its own rounded shape, unlike a rectangular row. A `position: relative`
+   chip with an absolutely-positioned, invisible `::after` that overhangs it
+   grows the hit area alone; a click anywhere in the overhang still targets
+   the chip, because a pseudo-element's painted area hit-tests to the
+   element that generates it. */
+@media (pointer: coarse) {
+  .status-severity-chip {
+    position: relative;
+  }
+  .status-severity-chip::after {
+    content: "";
+    position: absolute;
+    inset: -7px 0;
   }
 }
 

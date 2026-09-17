@@ -1152,6 +1152,17 @@
             severity: fields.severity,
             title: fields.title,
             kind: fields.kind || '',
+            // retry fix 20 / R08.2 / 04 §8 item 3: `origin` is the finding's
+            // KIND — which array it came from — never its severity. Before
+            // this fix the APPROVAL RECORD group was selected by
+            // `severity === 'critical'`, which only happened to work because
+            // collectStatusGroups was the sole producer of that severity; a
+            // future critical-severity LINT finding would have been filed
+            // under APPROVAL RECORD by accident, and § 8 item 1's Critical
+            // ROWS could never sit in their own module group. Only the
+            // ledger call site below passes 'ledger'; every other call site
+            // defaults to 'readiness'.
+            origin: fields.origin || 'readiness',
             // ownerModuleClaimID is the claim whose MODULE the Issues screen
             // groups this finding under (04 §2: "which module do I chase").
             // For a readiness blocker/review cause that is the dependency
@@ -1176,6 +1187,7 @@
             severity: 'critical',
             title: humanRule(finding.rule) || 'Approval record issue',
             kind: finding.rule || 'ledger',
+            origin: 'ledger',
             claimID: finding.claim_id
           });
         });
@@ -1287,8 +1299,12 @@
         if (ids.length === 1) {
           row.appendChild(textEl('span', 'status-finding-claim', ids[0]));
         }
+        // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
+        // phrase INTO the count slot as a bare `N claims`, never `blocks N
+        // claim(s)` — that longer phrase was written for a full-width third
+        // line, which the fixed 104px slot (style.css) no longer is.
         var n = ids.length || group.count;
-        row.appendChild(textEl('span', 'status-finding-msg', 'blocks ' + n + ' claim' + (n === 1 ? '' : 's')));
+        row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
         return row;
       }
 
@@ -1745,10 +1761,14 @@
         var withoutLater = visible.filter(function (group) {
           return group.severity !== 'later' || stripSeverityFilter === 'later';
         });
-        var approvalRecord = withoutLater.filter(function (group) { return group.severity === 'critical'; });
+        // retry fix 20: keyed off `origin` (the finding's KIND), not
+        // `severity` — a critical-severity LINT row must still be able to
+        // sit in its own module group (§ 8 item 1), and only a `ledger`
+        // finding may ever join APPROVAL RECORD.
+        var approvalRecord = withoutLater.filter(function (group) { return group.origin === 'ledger'; });
         var byModule = {};
         var moduleOrder = [];
-        withoutLater.filter(function (group) { return group.severity !== 'critical'; }).forEach(function (group) {
+        withoutLater.filter(function (group) { return group.origin !== 'ledger'; }).forEach(function (group) {
           var moduleID = ownerModuleID(group);
           if (!Object.prototype.hasOwnProperty.call(byModule, moduleID)) {
             byModule[moduleID] = [];
@@ -1756,7 +1776,7 @@
           }
           byModule[moduleID].push(group);
         });
-        var facetTotal = uniqueClaimCount(groups.filter(function (group) { return group.severity !== 'critical'; }));
+        var facetTotal = uniqueClaimCount(groups.filter(function (group) { return group.origin !== 'ledger'; }));
         moduleOrder.sort(function (a, b) {
           return uniqueClaimCount(byModule[b]) - uniqueClaimCount(byModule[a]);
         });
