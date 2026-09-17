@@ -192,7 +192,12 @@ func TestUIReplyAppearsAndPersists(t *testing.T) {
 	ctx := newLiveTab(t, p)
 	openPanelLive(t, ctx)
 
+	// 14 §4.4 OD14.8: the reply composer is a REVEAL target for the bare
+	// `Reply` label, not mounted visible at rest — click it before the field
+	// it unhides is waited on.
 	runCDP(t, ctx,
+		chromedp.WaitVisible("#commentsPanel .comment-reply-trigger", chromedp.ByQuery),
+		chromedp.Click("#commentsPanel .comment-reply-trigger", chromedp.ByQuery),
 		chromedp.WaitVisible("#commentsPanel .comment-reply-composer .comment-composer-input", chromedp.ByQuery),
 		chromedp.SendKeys("#commentsPanel .comment-reply-composer .comment-composer-input", "a considered reply", chromedp.ByQuery),
 		chromedp.Click("#commentsPanel .comment-reply-composer .comment-composer-submit", chromedp.ByQuery),

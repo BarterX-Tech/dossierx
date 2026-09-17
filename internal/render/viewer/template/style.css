@@ -1718,8 +1718,8 @@ th {
    facet-toc active row already derives one from --link (style.css ~3697). */
 .comment-chip--open,
 .comment-chip--active {
-  border-color: var(--link);
-  background: color-mix(in srgb, var(--link) 10%, var(--card-bg));
+  border-color: transparent;
+  background: color-mix(in srgb, var(--link) 9%, transparent);
   color: var(--link);
 }
 
@@ -1758,6 +1758,8 @@ th {
    `display` of its own). */
 .comment-chip--empty {
   border-style: dashed;
+  background: transparent;
+  border-color: transparent;
   color: var(--faint);
   opacity: 0;
 }
@@ -1794,8 +1796,16 @@ button.comment-chip--active.comment-chip--empty {
   opacity: 1;
 }
 
-.comment-chip-count {
+/* 14a §4F (473-0, 479-0): w600 is the --open/--active form only; --resolved
+   and --empty read at the ambient w400 (--resolved's own override above
+   stays for clarity/specificity parity). */
+.comment-chip--open .comment-chip-count,
+.comment-chip--active .comment-chip-count {
   font-weight: 600;
+}
+
+.comment-chip--empty .comment-chip-count {
+  font-weight: 400;
 }
 
 /* Open-thread cards carry a 3px accent left border (reference-rules.md board
@@ -1913,12 +1923,35 @@ button.comment-chip--active.comment-chip--empty {
    is 500 at rest (14 §4.4) and steps to 600 under (pointer: coarse) (M9, "the
    mobile chip rule") — see the pointer:coarse block further down. */
 .comments-resolved > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--border);
+  list-style: none;
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: 12px;
   line-height: 16px;
   font-weight: 500;
   color: var(--muted);
+}
+
+.comments-resolved > summary::-webkit-details-marker {
+  display: none;
+}
+
+.comments-resolved-chevron {
+  flex-shrink: 0;
+  stroke: var(--muted);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .16s ease;
+}
+
+.comments-resolved[open] > summary .comments-resolved-chevron {
+  transform: rotate(90deg);
 }
 
 /* Coarse pointers (touch) need a >=44px hit target on the chip. They also
@@ -2045,6 +2078,7 @@ button.comment-chip--active.comment-chip--empty {
   font-size: 16px;
   line-height: 22px;
   font-weight: 600;
+  letter-spacing: -0.01em;
   color: var(--ink);
 }
 
@@ -2272,6 +2306,16 @@ button.comment-chip--active.comment-chip--empty {
   margin-top: 8px;
 }
 
+/* OD14.8: buildThread mounts this form `hidden` at rest and unhides it from
+   the bare `Reply` label — but the `display: flex` two rules up is an AUTHOR
+   declaration that beats the UA `[hidden] { display: none }` rule outright
+   (see the `.claim-source-note-toggle[hidden]` note above this file's other
+   instance of the same trap), so without this companion the form would
+   render fully visible under every open thread regardless of the attribute. */
+.comment-reply-composer[hidden] {
+  display: none;
+}
+
 /* The root composer is the ONLY one with the caption + pinned footer (R-J.5);
    reply and edit forms stay the plain textarea+button row above. It now lives
    inside #commentsComposerSlot (a sibling of the scrolling body, shell.html),
@@ -2337,22 +2381,21 @@ button.comment-chip--active.comment-chip--empty {
   outline-offset: -1px;
 }
 
-/* 14 §4.5: dark inverts the label to the page ground rather than white,
-   "which is correct on a light-blue accent" (--color-dark-accent #6AA6E8 has
-   too little contrast against white text at this size). theme_tokens_test.go
-   permits exactly one @media screen and (prefers-color-scheme: dark) block in
-   this file (the reserved palette one), so a second, component-scoped dark
-   query is not available to this lane without coordinator sign-off (see
-   learnings/inbox/L6.md). --card-bg is white in light (matching the board's
-   literal #FFFFFF exactly) and a near-black navy in dark (#161B22, close to
-   the board's --color-dark-paper #0D1117 and equally high-contrast against
-   --link's dark value), so it reaches the same intent through one existing,
-   already-inverting token instead. */
+/* 14 §4.5 node 45I-0: dark inverts the label to the PAGE ground (--paper,
+   --color-dark-paper #0D1117), "which is correct on a light-blue accent"
+   (--color-dark-accent #6AA6E8 has too little contrast against white text at
+   this size) — not the CARD ground (--card-bg, #161B22), which reads as a
+   different, off-target hex. theme_tokens_test.go permits exactly one @media
+   screen and (prefers-color-scheme: dark) block in this file (the reserved
+   palette one), so a second, component-scoped dark query is not available to
+   this lane without coordinator sign-off (see learnings/inbox/L6.md); --paper
+   already inverts light/dark on its own and reaches the exact dark value
+   through the one existing token instead. */
 .comment-composer-submit {
   flex-shrink: 0;
   border: 0;
   background: var(--link);
-  color: var(--card-bg);
+  color: var(--paper);
   border-radius: 6px;
   padding: 7px 16px;
   font: 600 13px/16px var(--font-sans);
@@ -2677,6 +2720,26 @@ button.comment-chip--active.comment-chip--empty {
     border-radius: 16px 16px 0 0;
     overflow: clip;
   }
+  /* `#commentsPanel.comments-rail`, not plain `.comments-rail`: the live/
+     System Record layer (further down this file) carries its own
+     unconditional `.comments-rail { box-shadow: var(--shadow-cast, …) }`
+     rule (same declared element — `#commentsPanel` IS `.comments-rail`,
+     shell.html:244), and an equal-specificity plain-class override here
+     would only win at whichever position happens to sit later in the file —
+     which TestConsumerReadWinsCascade reads textually and does not resolve
+     against media-query scoping, so a plain `.comments-rail` override here
+     previously either lost the real cascade (pre-fix: the sheet kept its
+     desktop shadow) or, once it won the real cascade, made that test think
+     --shadow-cast's read was dead everywhere. The ID+class compound is
+     higher specificity than either unconditional rule, so it wins on every
+     browser at this breakpoint regardless of source order — 14 §5 M3 / AOY-0
+     ("the rail's left border and its -8px shadow are dropped") — while its
+     different selector text keeps it outside tokenConsumers["shadow-cast"]'s
+     exact-match set, leaving the desktop `var(--shadow-cast, …)` consumer as
+     the one both that test and theme_tokens_test.go:542-543 find. */
+  #commentsPanel.comments-rail {
+    box-shadow: none;
+  }
   /* R-J.2 / OD14a.7 / M4 also want a DARK-ONLY 1px top hairline here (the
      light sheet relies on its 16px corners and the scrim alone). Expressing
      "present only under dark" needs either a second selector-scoped dark
@@ -2692,6 +2755,7 @@ button.comment-chip--active.comment-chip--empty {
   }
   .comments-rail-head {
     padding: 14px 16px 12px;
+    gap: 10px;
   }
   .comments-rail-title {
     font-size: 16px;
@@ -4748,15 +4812,23 @@ code {
   text-transform: uppercase;
 }
 
+/* Spec 14 §4.6 (42I-0) / 14a §4.F (46U-0, 46X-0): the pill is 999px/3px 8px/
+   12px everywhere the chip appears, and the --open/--active form is tinted,
+   not outlined (border-color: transparent overrides the base 1px --border,
+   not a --link stroke). tokens.md §9's standing decision pins the tint at
+   color-mix 9% over transparent (not 10% over --card-bg, which baked the
+   card's own ground into the mix and drifted per surface). */
 .comment-chip {
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: var(--radius-pill, 999px);
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
 .comment-chip--open,
 .comment-chip--active {
-  border-color: var(--link);
-  background: color-mix(in srgb, var(--link) 10%, var(--card-bg));
+  border-color: transparent;
+  background: color-mix(in srgb, var(--link) 9%, transparent);
   color: var(--link);
 }
 

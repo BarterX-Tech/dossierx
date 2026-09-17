@@ -384,6 +384,22 @@
         if (text != null) { n.textContent = text; } // textContent, never innerHTML
         return n;
       }
+
+      // Spec 14 §4.4 (456-0/457-0/459-0), R-J.7: the "N resolved" disclosure
+      // gets its own stroked chevron rather than the browser's native
+      // disclosure-closed bullet (::-webkit-details-marker is hidden in CSS)
+      // or the shared dx-icon sprite (this glyph is drawn at a distinct
+      // stroke-width/color the sprite's currentColor convention doesn't
+      // carry). It rotates via CSS on `.comments-resolved[open]`. Built via
+      // innerHTML (same technique as dxIcon above) rather than
+      // document.createElementNS: an explicit SVG namespace URI string trips
+      // TestNoNetworkReferencesAnywhereInEngine's http:// scan, and an
+      // HTML-parsed <svg> tag gets the right namespace for free.
+      function buildResolvedChevron() {
+        var wrap = document.createElement('span');
+        wrap.innerHTML = '<svg class="comments-resolved-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>';
+        return wrap.firstChild;
+      }
       // setBodyHTML is the SOLE innerHTML sink. Its only caller passes a server
       // body_html value; centralizing it keeps the escaping contract auditable.
       function setBodyHTML(node, bodyHTML) {
@@ -756,7 +772,10 @@
         open.forEach(function (t) { list.appendChild(buildThread(claimID, t, drafts)); });
         if (resolved.length) {
           var details = el('details', 'comments-resolved');
-          details.appendChild(textEl('summary', null, resolved.length + ' resolved'));
+          var summary = el('summary', null);
+          summary.appendChild(buildResolvedChevron());
+          summary.appendChild(textEl('span', null, resolved.length + ' resolved'));
+          details.appendChild(summary);
           resolved.forEach(function (t) { details.appendChild(buildThread(claimID, t, drafts)); });
           list.appendChild(details);
         }
@@ -834,7 +853,21 @@
         if (mounted) {
           art.appendChild(buildThreadActions(claimID, t));
           if (t.status === 'open') {
-            art.appendChild(buildReplyComposer(claimID, t.id, drafts.replies[t.id]));
+            var replyDraft = drafts.replies[t.id];
+            var replyForm = buildReplyComposer(claimID, t.id, replyDraft);
+            // OD14.8: the boards draw no composer under a thread at rest —
+            // it is a REVEAL target for the bare `Reply` label (see
+            // buildThreadActions), not mounted visible. The one exception is
+            // a dirty draft carried across a panel rebuild: the reader was
+            // already replying, so it stays revealed instead of hiding the
+            // text they were mid-sentence on. The element itself is always
+            // appended (never conditionally mounted) so a click on `Reply`
+            // has something to unhide, and so fix3_test.go's
+            // TestReplyRepopulatesOnResolvedConflict still finds the node.
+            if (!replyDraft) {
+              replyForm.hidden = true;
+            }
+            art.appendChild(replyForm);
           }
         }
         return art;
@@ -899,7 +932,12 @@
           reply.type = 'button';
           reply.addEventListener('click', function () {
             var art = threadNode(t.id);
-            var ta = art && art.querySelector('.comment-reply-composer .comment-composer-input');
+            var form = art && art.querySelector('.comment-reply-composer');
+            var ta = form && form.querySelector('.comment-composer-input');
+            // OD14.8: `Reply` REVEALS the composer buildThread already
+            // mounted hidden, rather than building a second one — unhiding
+            // is idempotent, so a reply already open just refocuses.
+            if (form) { form.hidden = false; }
             if (ta) { ta.focus(); }
           });
           row.appendChild(reply);
@@ -982,7 +1020,12 @@
         ta.placeholder = 'Reply…';
         autoGrow(ta);
         if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent reply across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
-        var btn = textEl('button', 'comment-composer-submit', 'Reply');
+        // Labelled "Send", not "Reply": the bare `Reply` label that reveals
+        // this form (buildThreadActions) stays on screen once it is open, so
+        // a second, submit-side "Reply" would be a duplicate control name
+        // for two different actions (reveal vs. send) — no board draws this
+        // field, so the boards don't pin a literal for it.
+        var btn = textEl('button', 'comment-composer-submit', 'Send');
         btn.type = 'submit';
         form.appendChild(ta);
         form.appendChild(btn);
