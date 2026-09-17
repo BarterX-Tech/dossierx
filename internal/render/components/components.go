@@ -292,14 +292,16 @@ func StatusLabel(status model.Status, reviewPending bool) string {
 // gets the open #dx-icon-lock-open glyph instead.
 //
 // docs/design/screens/07a-claim-draft-not-yet-approved.md's board (node
-// 4BJ-0) draws the DRAFT chip with what looks like the same closed padlock as
-// LOCKED, just recoloured amber — which would be wrong, and is exactly the
-// case docs/design/LANES.md's L3 ownership section warns against ("reusing
-// the locked glyph would say the opposite of the truth"). The fix is not to
-// drop the glyph, though: it is to draw the OTHER glyph the source-of-truth
-// component already specifies for this state, per R00.0 (the components
-// board wins over a screen board). Recorded as a Paper defect in
-// learnings/inbox/L3.md.
+// 4BJ-0) draws the DRAFT chip with the SAME open padlock this returns for
+// StatusDraft — a pixel comparison against the components board confirms the
+// shackle is lifted, not closed, on both. There is no Paper defect here: the
+// open-padlock choice below agrees with 07a as well as with section F. The
+// actual inaccuracy is prose, not a board: docs/design/LANES.md's L3
+// ownership section says "the DRAFT form carries no padlock," which reads
+// narrower than section F's own rule (a closed set of two shapes, never
+// "icon or nothing") and is being corrected there, not here — see
+// learnings/inbox/L3.md item 2 for the full history of this lane's own
+// first-pass misreading of the board.
 func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
 	if status == model.StatusLocked {
 		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>`)

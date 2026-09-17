@@ -1365,8 +1365,9 @@ func TestPartialHeadings_LabelIDAndKeepMachineIDReachable(t *testing.T) {
 	// and adds a visible <span class="k-id"> mono id line as a third child of
 	// .label, alongside the existing pill — the "claim id/slug mono line" L3
 	// owns. The LOCKED pill also gains the padlock glyph StatusIconHTML emits
-	// for the "ps" case only (components.go's StatusIconHTML doc comment
-	// explains why DRAFT does not get one despite the board drawing it there).
+	// for every status: closed for "ps"/"pw" (an approval is on record), open
+	// for "pv" (see components.go's StatusIconHTML doc comment) — this claim
+	// is StatusLocked, so it takes the closed glyph exercised below.
 	const wantHead = `<div class="k" data-claim-id="widget.contract.retry-policy" title="widget.contract.retry-policy">` +
 		`<span class="label"><span class="k-title">Retry Policy</span> <span class="pill ps">` +
 		`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>Locked</span>` +
