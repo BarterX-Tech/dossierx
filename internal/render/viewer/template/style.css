@@ -6846,18 +6846,6 @@ code {
      same full-bleed treatment a module's claims do. */
   body:has(.build-order-section:not([hidden])) .content-area { padding-inline: 16px; }
 }
-/* lane L8a fix (docs/design/screens/04-issues-screen.md verification pass):
-   the @media (max-width: 520px) block this lane comment opens (tagged
-   "lane: L2 — shell-chrome" a few lines above) was missing this closing
-   brace in the committed baseline — confirmed via git show HEAD, so this
-   predates every wave-B lane's own work, this lane's included. Its absence
-   nested every block from here to end-of-file one level deeper than
-   intended (verified with the browser's own CSSOM: sheet.cssRules stopped
-   at 633 top-level entries and the @media print block below could not be
-   found in it at all before this fix). Two more of the same defect follow,
-   at the next two "lane: L6"/"lane: L8" tagged blocks below — each is
-   fixed at its own site with the same evidence, not batched here, so a
-   diff reviewer can see each brace next to the block it closes. */
 
 /* lane: L4 — footer strip, evidence & relationships, sources, expansion
    exclusivity. New phone-tier block per docs/design/LANES.md OD1 and
@@ -7064,10 +7052,6 @@ code {
     min-height: 44px;
   }
 }
-/* lane L8a fix (same defect and evidence as the L2 block fixed above): this
-   @media (pointer: coarse) block and its one .claim-footer-chip rule were
-   both left open in the committed baseline — two missing closing braces,
-   not one, confirmed via git show HEAD before this lane touched the file. */
 
 /* lane: L6 — comments (chip, rail, bottom sheet, threads, composer). New
    phone-tier block per docs/design/LANES.md OD1: appended after the last
@@ -7102,12 +7086,6 @@ code {
     margin-top: 2px;
   }
 }
-/* lane L8a fix (same defect and evidence as the two fixes above): the
-   @media (max-width: 520px) block this "lane: L6" comment opens was the
-   third and last of these missing braces in the committed baseline — after
-   this one, the CSSOM's top-level rule count and the @media print block's
-   presence were both confirmed restored via the browser (see this lane's
-   learnings/inbox/L8a.md for the full before/after evidence). */
 
 /* lane: L8 — tokens.md §8's mapping table ("H1 · blocked notice becomes an
    inset card with a divided action row -> max-width: 520px") and R-H.1: on a
