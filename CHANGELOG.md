@@ -22,9 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   did. The `claude` preset's type stacks are Geist and Geist Mono (New York
   pairing); the engine inlines those faces so they resolve offline. Unthemed
   engine defaults stay Avenir / system mono.
-- Regenerate the six committed fixture viewers and
-  `testdata/render-across-releases.golden.txt` for those presentation changes
-  and for Lucide / Geist chrome.
+- Regenerate the six committed fixture viewers,
+  `testdata/render-across-releases.golden.txt`, and the theme-parity default
+  freeze (`viewer-tests/testdata/theme-parity/baseline-*.html`) for the
+  design-revamp default look. Theme-parity now compares a fresh unthemed
+  render to that freeze, not to the 01b70d0 pre-theme HTML.
 
 ## [0.7.16] - 2026-09-13
 
