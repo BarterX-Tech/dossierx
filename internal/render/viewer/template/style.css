@@ -6807,6 +6807,7 @@ code {
      whole cards (shell.html's own comment on `.track-section`) and get the
      same full-bleed treatment a module's claims do. */
   body:has(.build-order-section:not([hidden])) .content-area { padding-inline: 16px; }
+}
 
 /* lane: L4 — footer strip, evidence & relationships, sources, expansion
    exclusivity. New phone-tier block per docs/design/LANES.md OD1 and
@@ -7011,6 +7012,8 @@ code {
 @media (pointer: coarse) {
   .claim-footer-chip {
     min-height: 44px;
+  }
+}
 
 /* lane: L6 — comments (chip, rail, bottom sheet, threads, composer). New
    phone-tier block per docs/design/LANES.md OD1: appended after the last
@@ -7044,6 +7047,7 @@ code {
   .comment-thread-actions {
     margin-top: 2px;
   }
+}
 
 /* lane: L8 — tokens.md §8's mapping table ("H1 · blocked notice becomes an
    inset card with a divided action row -> max-width: 520px") and R-H.1: on a
