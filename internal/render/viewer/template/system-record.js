@@ -236,66 +236,14 @@
     group.open = true;
   }
 
-  function enhanceFooters() {
-    document.querySelectorAll('.claim-links').forEach(function (details) {
-      var summary = details.querySelector(':scope > .claim-links-summary');
-      if (!summary || summary.querySelector('.claim-footer__title')) { return; }
-      var match = summary.textContent.trim().match(/(\d+)\s+links?\s+-\s+(\d+)\s+files?(?:\s+-\s+(\d+)\s+sources?)?(?:\s+-\s+(\d+)\s+drifted)?/i);
-      if (!match) { return; }
-      var relationships = +match[1];
-      var files = +match[2];
-      var sources = match[3] == null ? null : +match[3];
-      var drifted = match[4] == null ? null : +match[4];
-      summary.textContent = '';
-      var identity = document.createElement('span');
-      identity.className = 'claim-footer__identity';
-      identity.innerHTML = '<span><strong class="claim-footer__title">Evidence &amp; relationships</strong><small>Trace this claim through its supporting record</small></span>';
-      var counts = document.createElement('span');
-      counts.className = 'claim-footer__counts';
-      function count(value, singular, className) {
-        var item = document.createElement('span');
-        if (className) { item.className = className; }
-        var strong = document.createElement('strong');
-        strong.textContent = value;
-        item.append(strong, ' ' + (singular === 'drifted' || value === 1 ? singular : singular + 's'));
-        counts.appendChild(item);
-      }
-      count(relationships, 'relationship');
-      if (sources != null) { count(sources, 'source'); }
-      count(files, 'file');
-      if (drifted != null) { count(drifted, 'drifted', 'claim-footer__drifted'); }
-      var chevron = document.createElement('span');
-      chevron.className = 'claim-footer__chevron';
-      chevron.setAttribute('aria-hidden', 'true');
-      counts.appendChild(chevron);
-      summary.append(identity, counts);
-    });
-  }
-
-  function enhanceFieldLabels() {
-    var rows = [
-      ['.claim-links > .claim-edges > .claim-governed', 'Governed By', /^\s*governed_by:\s*/i],
-      ['.claim-links > .claim-edges > .claim-mirrors', 'Mirrors', /^\s*mirrors:\s*/i],
-      ['.claim-links > .claim-edges > .claim-rests-on', 'Rests On', /^\s*rests_on:\s*/i],
-      ['.claim-links > .claim-edges > .claim-depended-by', 'Depended On By', /^\s*depended\s+on\s+by:\s*/i],
-      ['.claim-links > .claim-edges > .claim-migrated', 'Migrated From', /^\s*migrated_from:\s*/i],
-      ['.claim-links > .claim-edges > .claim-implemented-in', 'Implemented In', /^\s*implemented\s+in:\s*/i],
-      ['.claim-links > .claim-edges > .claim-review-pending', 'Review Pending', /^\s*review_pending\s*/i],
-      ['.claim-links > .claim-edges > .claim-sources', 'Sources', /^\s*sources:\s*/i]
-    ];
-    rows.forEach(function (entry) {
-      document.querySelectorAll(entry[0]).forEach(function (row) {
-        if (row.querySelector(':scope > .claim-relation-label')) { return; }
-        var textNode = Array.prototype.slice.call(row.childNodes).find(function (node) { return node.nodeType === 3 && node.textContent.trim(); });
-        if (!textNode) { return; }
-        textNode.textContent = textNode.textContent.replace(entry[2], ' ');
-        var label = document.createElement('span');
-        label.className = 'claim-relation-label';
-        label.textContent = entry[1];
-        row.insertBefore(label, textNode);
-      });
-    });
-  }
+  // enhanceFooters and enhanceFieldLabels were retired here: both targeted
+  // the pre-redesign single-<details> mono digest and flat <li> labels
+  // ("N links - N files - N drifted", "governed_by:" text prefixes) that
+  // components.EdgesHTMLWithLinks no longer emits — see that Go function's
+  // doc comment and docs/design/screens/05-claim-one-expansion-at-a-time.md
+  // R09.1/R-F.1. The new footer strip (.claim-footer, .claim-footer-chip*,
+  // .claim-relationship-direction*) ships its final vocabulary directly
+  // from the server, so no client-side rewrite step is needed any more.
 
   var claimDisclosureSequence = 0;
 
@@ -744,8 +692,6 @@
     bindResizer();
     bindFocusControl();
     bindNavigationGroupPreferences();
-    enhanceFooters();
-    enhanceFieldLabels();
     enhanceClaimDisclosures();
     revealHashTarget();
     addModuleHeaders();
