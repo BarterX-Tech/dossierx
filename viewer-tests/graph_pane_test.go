@@ -573,8 +573,10 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 	// at twenty facets where colour alone has stopped working at about twelve.
 	facets := evalStrings(t, ctx, `Array.from(document.querySelectorAll('.dxg-legend [data-dxg-facet] .dxg-legend-name'))
 		.map(function (e) { return e.textContent; })`)
-	if fmt.Sprint(facets) != fmt.Sprint([]string{"contract", "design"}) {
-		t.Fatalf("legend facet names = %v, want the project's own facets", facets)
+	// Re-pinned for 13 §4.5/§6 (RETRY fix list item 12): legend facet names
+	// are Title Case ("contract" -> "Contract").
+	if fmt.Sprint(facets) != fmt.Sprint([]string{"Contract", "Design"}) {
+		t.Fatalf("legend facet names = %v, want the project's own facets, Title Case", facets)
 	}
 
 	// Selecting a node fills the detail panel — facet identity's THIRD
@@ -591,8 +593,10 @@ func TestGraphPaneInertUntilOpened(t *testing.T) {
 		}
 		return '';
 	})()`)
-	if facetRow != "design" {
-		t.Fatalf("detail panel facet row = %q, want design", facetRow)
+	// Re-pinned for 13 §6 (RETRY fix list item 7): the rail's FACET value is
+	// humanised ("design" -> "Design"), same sentence-case rule as MODULE.
+	if facetRow != "Design" {
+		t.Fatalf("detail panel facet row = %q, want Design", facetRow)
 	}
 	if n := evalInt(t, ctx, `document.querySelectorAll('[data-dxg-open-claim="widget.design.thing"]').length`); n != 1 {
 		t.Fatalf("detail panel open-claim links = %d, want 1", n)

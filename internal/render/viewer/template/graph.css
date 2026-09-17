@@ -1129,8 +1129,10 @@ body.dxg-open #dxgOpen {
   color: var(--muted);
 }
 
-.dxg-legend-item--governed .dxg-legend-edge,
-.dxg-legend-item--governed .dxg-legend-name {
+/* RETRY fix list item 9 / 13 §4.5: every legend LABEL paints --color-muted
+   — only the 34x12 mark itself carries the governance hue. Dropped
+   .dxg-legend-name from this selector. */
+.dxg-legend-item--governed .dxg-legend-edge {
   color: var(--dxg-governed);
 }
 
@@ -1216,11 +1218,14 @@ body.dxg-open #dxgOpen {
    alone. Sits between the title and the heuristics jump button now, so
    both survive: the count states what is showing, the button reaches what
    is not. */
+/* RETRY fix list item 15: line-height was unset, inheriting the rail
+   head's own — pin it to the eyebrow's 14px explicitly. */
 .dxg-rail-count {
   margin-left: auto;
   flex-shrink: 0;
   font-family: var(--font-sans);
   font-size: 11px;
+  line-height: 14px;
   color: var(--faint);
 }
 
@@ -1259,10 +1264,15 @@ body.dxg-open #dxgOpen {
   display: none;
 }
 
-/* 13 §3: one reading — padding-block 12px, ~5px between its own parts
-   (rule-head's row gap plus rule-body's margin-top add up to that), a top
-   rule. */
+/* 13 §3/§4.9 (RETRY fix list item 15): one reading — padding-block 12px, a
+   top rule, and a clean 5px gap between its parts (head, body, and the
+   affected-ids list when it has one) via flex, rather than the previous
+   indirect combination of rule-head's own row-gap and rule-body's
+   margin-top. */
 .dxg-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
   margin: 0;
   padding: 12px 0;
   border-top: 1px solid var(--border);
@@ -1298,12 +1308,20 @@ body.dxg-open #dxgOpen {
 .dxg-rule-phrase {
   min-width: 0;
   font-weight: 600;
+  /* RETRY fix list item 8: the comment above already says "sans w600 ink"
+     — the colour itself was never written down. Set directly (not left to
+     inherit from .dxg-rule-head) so 13 §8.12's found-vs-found-nothing
+     contrast is a real declaration on both sides — see .dxg-rule--empty
+     .dxg-rule-phrase below, which dims this back to --muted. */
+  color: var(--ink);
 }
 
 /* The READING BODY (13 §4.9) — serif, muted, the descriptive sentence
    ruleBody() builds from the affected claims' own titles. */
 .dxg-rule-body {
-  margin: 5px 0 0;
+  /* margin-top is 0, not 5px: .dxg-rule's own flex gap (RETRY fix list
+     item 15) supplies the space between this and rule-head now. */
+  margin: 0;
   font-family: var(--font-serif);
   font-size: 13px;
   line-height: 20px;
@@ -1334,6 +1352,7 @@ body.dxg-open #dxgOpen {
    the correct and honest reading for a corpus that passes check, and hiding
    it would leave a reader unable to tell "no cycles" from "not computed". */
 .dxg-rule--empty .dxg-rule-head,
+.dxg-rule--empty .dxg-rule-phrase,
 .dxg-rule--empty .dxg-rule-body {
   color: var(--muted);
 }
@@ -1378,9 +1397,21 @@ body.dxg-open #dxgOpen {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin: 4px 0 0;
+  /* margin-top 0, not 4px: .dxg-rule's flex gap (RETRY fix list item 15)
+     already supplies 5px above this list. */
+  margin: 0;
   padding: 0;
   list-style: none;
+}
+
+/* RETRY fix list item 16: a flex item's default min-width is auto, which
+   let a long claim id hold the <li> — and the .dxg-jump button inside it —
+   to its own un-wrapped intrinsic width, clipping past the rail's edge at
+   both 1440 (measured 370px against a 288px interior) and 390. min-width:0
+   lets the item shrink to the rail's real width instead. */
+.dxg-rule-ids li {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .dxg-jump {
@@ -1392,10 +1423,10 @@ body.dxg-open #dxgOpen {
   font: 11px var(--font-mono);
   line-height: 1;
   padding: 4px 6px;
+  min-width: 0;
   max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .dxg-jump:hover {
@@ -1477,20 +1508,24 @@ body.dxg-open #dxgOpen {
   color: var(--faint);
 }
 
+/* 13 §4.6 (RETRY fix list item 13): 23px, not 1.35 (21.6px). */
 .dxg-detail-title {
   margin: 0;
   font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 600;
-  line-height: 1.35;
+  line-height: 23px;
   color: var(--ink);
   overflow-wrap: anywhere;
 }
 
+/* 13 §4.6 (RETRY fix list item 13): mono 11/17 — line-height was unset
+   (inheriting the pane's own 1.2, ~13px, not the spec's 17px). */
 .dxg-detail-id {
   margin: 0;
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 17px;
   color: var(--faint);
   overflow-wrap: anywhere;
 }

@@ -290,8 +290,11 @@ func TestGraphDetailDegreeNamesTheNodeItsNumbersBelongTo(t *testing.T) {
 
 	t.Run("drawn itself: the numbers are its own and are stated plainly", func(t *testing.T) {
 		text, noted := degreeRow(t, ctx)
-		if text != "0 — 0 in, 0 out" {
-			t.Fatalf("degree (view) = %q, want the claim's own %q", text, "0 — 0 in, 0 out")
+		// Re-pinned for 13 §6 (RETRY fix list item 7): "4 in · 3 out", not
+		// "15 — 13 in, 2 out" — the rail states the in/out split, not the
+		// sum the split already implies.
+		if text != "0 in · 0 out" {
+			t.Fatalf("degree here = %q, want the claim's own %q", text, "0 in · 0 out")
 		}
 		if noted {
 			t.Fatal("a node reporting its OWN degree must not carry the 'not this claim's' note")
@@ -316,8 +319,10 @@ func TestGraphDetailDegreeNamesTheNodeItsNumbersBelongTo(t *testing.T) {
 		if !strings.Contains(text, "not this claim") {
 			t.Fatalf("degree (view) = %q, want it to say the numbers are not this claim's", text)
 		}
-		if !strings.HasPrefix(text, "1 — 0 in, 1 out") {
-			t.Fatalf("degree (view) = %q, want it to open with the module's real degree (1 — 0 in, 1 out)", text)
+		// Re-pinned for 13 §6 (RETRY fix list item 7), same format change as
+		// the sibling case above.
+		if !strings.HasPrefix(text, "0 in · 1 out") {
+			t.Fatalf("degree here = %q, want it to open with the module's real degree (0 in · 1 out)", text)
 		}
 	})
 
@@ -367,7 +372,10 @@ func TestGraphLegendDescribesEveryRelationAndFollowsTheOverlay(t *testing.T) {
 	ctx := staticGraphTab(t, p)
 	openGraphPane(t, ctx)
 
-	wantEdges := []string{"rests_on", "mirrors", "governed_by"}
+	// Re-pinned for 13 §4.5 (RETRY fix list item 12): "Legend order,
+	// exactly" puts governed by first, then depends on, then mirrors —
+	// not graph-core.js's EDGE_TYPES declaration order.
+	wantEdges := []string{"governed_by", "rests_on", "mirrors"}
 
 	cases := []struct {
 		name     string

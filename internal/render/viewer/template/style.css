@@ -6170,22 +6170,59 @@ code {
 
 .dxg-btn:hover { border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong)); }
 
+/* 13 §3 (RETRY fix list item 4): inline padding 28px, so the bar's left/
+   right edges line up with .dxg-head's own 28px gutter; group gap 26px.
+   Seven live control groups (the board's five plus the pre-13 Granularity
+   and Highlight-overlay axes, 13 §4.2's own comment: "neither control
+   exists on any board") do not fit one 54px row at 1440 — measured via
+   probe at 1440/scoped state: two rows, module+facet+track+granularity+
+   overlay filling the first, relations+view the second. Recorded as a
+   spec amendment against §3 in learnings/inbox/L9.md rather than shipped
+   silently; block padding is still sized so EACH row lands at the
+   spec's 54px (13px top/bottom around a 28px-tall control). */
 .dxg-controls {
   display: grid;
   grid-template-columns: repeat(12, minmax(0, 1fr));
   align-items: end;
-  gap: 12px 14px;
-  padding: 13px 18px 15px;
+  gap: 14px 26px;
+  padding: 13px 28px;
   border-color: var(--border);
   background: color-mix(in srgb, var(--card-bg) 76%, var(--paper));
 }
 
+/* 13 §3: label -> control gap 9px (the row-gap, between the eyebrow line
+   and the control beneath it); relation-chip row gap 6px (the column-gap,
+   between a group's own children — the three RELATIONS chips are the only
+   group with more than one). */
 .dxg-ctl {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: 9px 6px;
   min-width: 0;
+}
+
+/* 13 §3, node 3OG-0: a 1x20px --color-border divider before RELATIONS.
+   Drawn on the group's own left edge (::before, not a sibling DOM node) so
+   the seven-groups-wide nth-child(N) grid-column-span selectors above never
+   shift — inserting an eighth grid child would renumber every one of them.
+   Self-contained for the same reason: it draws at 0/20px centered inside
+   the 26px gap already reserved by the group gap above, whichever row
+   RELATIONS lands on. */
+.dxg-ctl[data-dxg-group="relationships"] {
+  position: relative;
+  padding-left: 26px;
+}
+
+.dxg-ctl[data-dxg-group="relationships"]::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 1px;
+  height: 20px;
+  background: var(--border);
+  transform: translateY(-50%);
 }
 
 .dxg-ctl:nth-child(1) { grid-column: span 2; }
@@ -6196,18 +6233,19 @@ code {
 .dxg-ctl:nth-child(6) { grid-column: span 7; }
 .dxg-ctl:nth-child(7) { grid-column: span 5; justify-content: flex-end; }
 
+/* 13 §4.2 (RETRY fix list item 2): eyebrow label — sans 11/14 w600, tracking
+   .08em, --faint. Was mono 9px w720 tracking .09em --muted. */
 .dxg-ctl-label {
   flex: 0 0 100%;
-  color: var(--muted);
-  font-family: var(--font-mono);
-  font-size: 9px;
-  font-weight: 720;
-  letter-spacing: .09em;
-  line-height: 1.2;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .08em;
+  line-height: 14px;
   text-transform: uppercase;
 }
 
-.dxg-select,
 .dxg-toggle,
 .dxg-notice-action,
 .dxg-detail-open {
@@ -6221,13 +6259,27 @@ code {
   line-height: 1.2;
 }
 
-.dxg-notice-action,
 .dxg-detail-open { padding: 8px 11px; }
 
+/* 13 §4.2 (RETRY fix list item 3): split out of the shared toggle/button
+   rule above so the select's own values — border-color, radius, size and
+   weight — never disturb .dxg-toggle's correct 12/16. border-color
+   --border-strong (not --border); radius 6px (not 5px); sans 13/16 w500.
+   Padding takes the spec's 5px 10px on three sides; the inline-end side
+   keeps the wider room the native chevron already needs. */
 .dxg-select {
+  min-height: 36px;
   width: 100%;
   max-width: none;
-  padding: 7px 30px 7px 9px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 16px;
+  padding: 5px 30px 5px 10px;
 }
 
 .dxg-select:hover,
@@ -6267,20 +6319,43 @@ code {
   box-shadow: none;
 }
 
+/* 13 §4.3 (RETRY fix list item 1): the draft/attention band — every notice
+   kind except 'warn'. Ground --status-draft-bg (its dark arm above already
+   carries the spec's dark hex), body sans 13/18 w400 --ink, padding 9px
+   block / 28px inline, gap 10px. Reused verbatim by the empty-scope and
+   empty-overlay notices (13 §8.9/§8.10) — one band, not a second
+   empty-state device. */
 .dxg-notice {
-  min-height: 44px;
-  gap: 12px;
-  padding: 8px 18px;
+  align-items: flex-start;
+  min-height: 0;
+  gap: 10px;
+  padding: 9px 28px;
   border-color: var(--border);
-  background: var(--card-bg);
-  color: var(--muted);
-  line-height: 1.45;
+  background: var(--status-draft-bg);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 18px;
 }
 
+.dxg-notice-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--status-draft);
+}
+
+.dxg-notice-body { min-width: 0; }
+
 .dxg-notice-action {
-  min-height: 32px;
+  min-height: 0;
+  border: 0;
   background: transparent;
-  color: var(--ink);
+  padding: 0;
+  box-shadow: none;
+  color: var(--link);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 600;
+  text-decoration: none;
 }
 
 .dxg-body { background: var(--paper); }
@@ -6376,11 +6451,17 @@ code {
   border-bottom: 1px solid var(--border);
 }
 
+/* 13 §4.7 (RETRY fix list item 14): the label's own 11/14 (it was
+   inheriting .dxg-detail-rows' 19px line-height above), and flex-shrink:0
+   so a long value in the sibling dd can never compress the fixed label
+   column. */
 .dxg-detail-rows dt {
+  flex-shrink: 0;
   color: var(--faint);
   font-family: var(--font-sans);
   font-size: 11px;
   font-weight: 600;
+  line-height: 14px;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
@@ -6399,14 +6480,17 @@ code {
   border-bottom: 1px solid var(--border);
 }
 
+/* 13 §3 (RETRY fix list item 10): padding 14px block / 28px inline. */
 .dxg-legend {
-  padding: 10px 18px;
+  padding: 14px 28px;
   border-color: var(--border);
   background: var(--card-bg);
 }
 
 .dxg-legend-list { gap: 6px 16px; }
-.dxg-legend-item { gap: 6px; color: var(--muted); font-size: 11px; }
+/* 13 §4.5 (RETRY fix list item 10): 12/16, not the pre-13 11px/unset line
+   height. */
+.dxg-legend-item { gap: 6px; color: var(--muted); font-size: 12px; line-height: 16px; }
 .dxg-legend-name { font-family: var(--font-sans); }
 
 /* 13 §4.5: "Section label (FACETS, MARKS) | sans 10/12 w600, tracking
@@ -6545,7 +6629,10 @@ code {
     border-bottom: 1px solid var(--border);
   }
 
-  .dxg-head-icon,
+  /* RETRY fix list item 18: 13 §4.10 measures the glyph on the mobile
+     screen header too ("Screen header: glyph 17x17..."). Only the divider
+     between the identity cluster and the provenance line — a desktop-only
+     device, absent from the mobile spec's own row list — is dropped. */
   .dxg-head-divider {
     display: none;
   }
@@ -6553,8 +6640,8 @@ code {
   .dxg-title { font-size: 19px; line-height: 24px; }
 
   /* The provenance sub-line indents to sit under the title, past the
-     glyph + gap the desktop header no longer draws here (13 §4.10,
-     "aligns under the title, past the 17px icon + 10px gap"). */
+     glyph + gap the header still draws here (13 §4.10, "aligns under the
+     title, past the 17px icon + 10px gap"). */
   .dxg-provenance {
     flex: 1 1 100%;
     padding-left: 27px;
@@ -6619,6 +6706,13 @@ code {
     flex-basis: 100%;
     flex-wrap: wrap;
     gap: 8px;
+    padding-left: 0;
+  }
+
+  /* No divider on the mobile filter strip (13 §4.11 draws none) — the
+     desktop-only ::before above. */
+  .dxg-ctl[data-dxg-group="relationships"]::before {
+    content: none;
   }
 
   .dxg-toggle { font-weight: 600; }
