@@ -334,11 +334,22 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// band with only a bottom hairline, so `border-radius: var(--radius)`
 		// left .status-strip (and the redundant .status-strip--open override,
 		// see learnings/deadcode/L8.md). The 520px inset-card form keeps its own
-		// literal 10px, never a --radius consumer. Merged count re-pinned by the
-		// coordinator from the merged tree (L2 +1, L8 -2 against the pilot's 9).
+		// literal 10px, never a --radius consumer.
+		//
+		// L5 (G9 count re-pin): drops 4 more — .claim-readiness,
+		// .claim-readiness-state, .claim-readiness-count and
+		// .claim-readiness-route, the pre-revamp readiness box's own
+		// rounded-panel/pill/route-card corners. docs/design/screens/
+		// 06-claim-blocked-across-four-modules.md §3/§4.4 measures the
+		// redesigned readiness surface as a full-bleed strip section (no
+		// corner radius of its own, like the footer strip it now shares a
+		// door with) whose only rounded shapes are the blocked-count pill
+		// (--radius-pill) and the dependency-path slug chips (--radius-sm,
+		// tokens.md §5's off-scale-radius rule) — neither of which is
+		// --radius. 9 (L2 +1, L8 -2 against the pilot's 9) minus 4 is 5.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 9 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
+		if n != 5 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 5", n)
 		}
 	})
 }

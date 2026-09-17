@@ -77,11 +77,23 @@ import (
 
 // The footer only renders when a claim has at least one link or file (see
 // components.EdgesHTMLWithLinks — "governed_by: none" is a stated absence and
-// does not count), and it must render CLOSED, so neither auto-open signal may
-// fire: no drifted implemented-in file, and status draft rather than
-// locked + review_pending. One rests_on edge between two draft claims is the
-// smallest fixture with those properties — and it gives BOTH claims a footer,
-// since the reverse index hands the base claim a "depended on by" row.
+// does not count), and it must render CLOSED, so no auto-open signal may
+// fire: no drifted implemented-in file, deep's own status draft rather than
+// locked + review_pending, AND — since lane L5 gave readiness its own door
+// sharing this claim's name group — base must be LOCKED (via lockRevealBase,
+// which every test using this fixture calls right after writing it) so
+// deep's rests_on is a satisfied, locally-approved dependency and readiness
+// has zero blocking facts. Before that lane, a draft base was the smallest
+// fixture with these properties; now a draft base makes deep BLOCKED (06
+// §R09.3: readiness auto-opens for a blocked claim, which also satisfies
+// this selector's own `.claim-footer:not(:has(> details[open]))` guard and
+// masks the very reveal this file exists to test). base is written draft
+// and locked through the CLI, not authored as `status: locked` directly,
+// because renderStatic's "check" runs the ledger gate — a hand-authored
+// locked status with no matching approval record fails render outright.
+// The fixture still gives BOTH claims a footer, since the reverse index
+// hands the base claim a "depended on by" row, and base's own status draws
+// no readiness facts of its own (no rests_on, no review_pending).
 const revealBaseClaim = `id: widget.contract.base
 facet: contract
 module: widget
@@ -92,6 +104,14 @@ governed_by:
   type: none
   reason: viewer-test fixture, not backed by any doctrine claim
 `
+
+// lockRevealBase locks widget.contract.base through the CLI (the ledger gate
+// renderStatic's "check" runs requires a real approval record, not a
+// hand-authored `status: locked`). Every test using revealBaseClaim calls
+// this right after writing it and before rendering.
+func lockRevealBase(p *project) {
+	p.run("claim", "lock", "widget.contract.base", "--reason", "viewer-test fixture, readiness must not auto-open this claim's own footer")
+}
 
 const revealDeepClaim = `id: widget.contract.deep
 facet: contract
@@ -274,6 +294,7 @@ func revealFixtureTab(t *testing.T) context.Context {
 	p := newProjectRaw(t, defaultConfigYAML)
 	p.writeClaim("base.yaml", revealBaseClaim)
 	p.writeClaim("deep.yaml", revealDeepClaim)
+	lockRevealBase(p)
 	url := p.renderStatic()
 
 	ctx := browserContext(t)
@@ -400,7 +421,12 @@ claims_dir: claims
 // Four claims, two per facet, each facet an internal rests_on pair so that BOTH
 // facets contain a claim with a real footer to reveal. The edges stay within
 // their own facet on purpose: the only difference between the two claims being
-// compared must be which facet they live in.
+// compared must be which facet they live in — which is also why this base
+// gets locked (lockPrintFacetInterfaceBase) exactly like revealBaseClaim
+// does: an unlocked base would make widget.interface.deep BLOCKED too,
+// breaking the "only difference is the facet" symmetry the comment above
+// promises, even though this particular test's own assertions do not
+// depend on that door's open/closed state.
 const printFacetInterfaceBase = `id: widget.interface.base
 facet: interface
 module: widget
@@ -411,6 +437,12 @@ governed_by:
   type: none
   reason: viewer-test fixture, not backed by any doctrine claim
 `
+
+// lockPrintFacetInterfaceBase is lockRevealBase's twin for the inactive
+// facet's base claim — see printFacetInterfaceBase's doc comment.
+func lockPrintFacetInterfaceBase(p *project) {
+	p.run("claim", "lock", "widget.interface.base", "--reason", "viewer-test fixture, readiness must not auto-open this claim's own footer")
+}
 
 const printFacetInterfaceDeep = `id: widget.interface.deep
 facet: interface
@@ -527,6 +559,8 @@ func TestPrintCoversOnlyTheOnScreenFacet(t *testing.T) {
 	p.writeClaim("deep.yaml", revealDeepClaim)
 	p.writeClaim("iface-base.yaml", printFacetInterfaceBase)
 	p.writeClaim("iface-deep.yaml", printFacetInterfaceDeep)
+	lockRevealBase(p)
+	lockPrintFacetInterfaceBase(p)
 	url := p.renderStatic()
 
 	ctx := browserContext(t)

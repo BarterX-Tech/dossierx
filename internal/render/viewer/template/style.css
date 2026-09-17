@@ -1113,218 +1113,274 @@ th {
   display: block;
 }
 
-/* Claim readiness is a reviewer-facing work queue. The policy engine remains
-   authoritative; this surface groups its complete fact list by the first hop
-   of each representative path, with an optional focused Mermaid trace. */
-.claim-readiness {
-  overflow: hidden;
-  margin: 1.05rem 0 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: color-mix(in srgb, var(--paper) 55%, var(--card-bg));
-}
+/* Claim readiness is a reviewer-facing work queue, not a diagnostic dump
+   (06 §2/§9's "intent, in prose"). This surface groups the policy engine's
+   COMPLETE fact list by the module that owns the fix (06 §7.6's new
+   construction: representative-route grouping is gone), leads each group
+   with its nearest hop distance, and drops the old inline Mermaid trace
+   entirely — R09.9 ("no inline dependency map"): the breadcrumb on a
+   blocker row is two slugs and a chevron, never a drawn tree, and the
+   real shape lives in the graph pane behind "See in claims graph". The
+   policy engine remains authoritative; nothing here re-derives a verdict.
 
-.claim-readiness-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 13px 14px;
-  border-bottom: 1px solid var(--border);
-}
+   Doors, R09.1-R09.3 (06 §4.3, 05 §4.9, 03 §4.10-4.11): this component is
+   now two elements, not one — .claim-readiness-door is the strip's own
+   <details name="claim-footer-<id>"> (viewer-runtime.js builds it fresh on
+   every render, joining components.EdgesHTMLWithLinks's relationships/
+   sources doors in the SAME name group so opening one closes the others
+   natively, per that function's own doc comment, "once L5 lands it"), and
+   .claim-readiness is its panel, a sibling <div> exactly like
+   .claim-links-panel/.claim-sources-panel. R09.3 is the one auto-open
+   exception: the door opens on load when and only when the claim is
+   BLOCKED (at least one dependency condition or review cause), overriding
+   whatever the relationships door's own server-side open signal set —
+   viewer-runtime.js enforces that ordering explicitly rather than trusting
+   native exclusivity alone. A claim with zero blocking facts renders a
+   neutral, closed-by-default "0 blockers" door (06 §8 item 5): still a
+   noun and a count (R-F.1), never an absence.
 
-.claim-readiness-id {
-  min-width: 0;
-}
-
-.claim-readiness-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.45rem;
-  color: var(--ink);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
-.claim-readiness-state {
-  padding: 0.25rem 0.45rem;
-  border-radius: var(--radius);
-  background: var(--warn-bg);
-  color: var(--warn);
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.2;
-  text-transform: none;
-}
-
-.claim-readiness--ready {
-  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
-}
-
-.claim-readiness--ready .claim-readiness-state {
-  background: var(--accent-bg);
-  color: var(--accent);
-}
-
-.claim-readiness-summary {
-  margin: 0.3rem 0 0;
-  color: var(--muted);
-  font-size: 0.7rem;
-}
-
-.claim-readiness-counts {
-  display: flex;
-  flex: 0 0 auto;
-  gap: 0.4rem;
-}
-
-.claim-readiness-count {
-  min-width: 64px;
-  padding: 0.4rem 0.45rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card-bg);
-  color: var(--faint);
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  line-height: 1.3;
-  text-align: center;
-  white-space: nowrap;
-}
-
-.claim-readiness-count strong {
-  color: var(--ink);
-  font-size: 0.7rem;
-}
-
-.claim-readiness-label {
+   Specificity note: components.go's shared `.claim-footer > .claim-readiness,
+   .claim-footer > .claim-conformance { flex: 1 1 100%; }` (style.css:1046,
+   L4-owned) was written as an inert placeholder for this day ("true and
+   inert until a readiness box actually lands here"). Its selector
+   (.claim-footer > .claim-readiness, two classes) out-specifies a bare
+   .claim-readiness rule, so this block's full-bleed sizing below is written
+   as the compound .claim-readiness.claim-footer-panel — the same two-class
+   specificity, and later in source order, so it wins on the tie without
+   editing L4's line. See VAULT/learnings/inbox/L5.md for the cross-lane
+   note (informational only; the placeholder rule is harmless dead weight
+   once this compound selector is in play, not a defect to fix here). */
+.claim-readiness-door {
+  order: 0;
   margin: 0;
-  color: var(--faint);
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0;
-  line-height: 1.3;
-  text-transform: none;
+  padding: 0;
+  border: 0;
+  flex: 0 0 auto;
 }
 
-.claim-readiness-section-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.8rem;
-  padding: 0.65rem 0.8rem 0.45rem;
+.claim-readiness-door > summary {
+  list-style: none;
 }
 
-.claim-readiness-section-head > span {
-  color: var(--faint);
-  font-family: var(--font-sans);
-  font-size: 11.5px;
+.claim-readiness-door > summary::marker { content: ""; }
+.claim-readiness-door > summary::-webkit-details-marker { display: none; }
+
+/* The chip's own dot + colour promotion. Neutral (0 blockers) inherits the
+   ordinary .claim-footer-chip look (style.css:1508, L4-owned, muted/400);
+   blocked promotes straight to --warn/600 and STAYS --warn when open —
+   unlike the relationships/sources doors, which promote to --link, this
+   door's colour is a status, not a navigation affordance (tokens.md G2),
+   so opening it must not repaint it navy. */
+.claim-readiness-chip-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: var(--radius-pill);
+  background: var(--warn);
 }
 
+.claim-footer-chip--readiness.claim-footer-chip--blocked,
+.claim-readiness-door[open] > .claim-footer-chip--readiness.claim-footer-chip--blocked {
+  color: var(--warn);
+  font-weight: 600;
+}
+
+.claim-footer-chip--readiness.claim-footer-chip--blocked .claim-footer__chevron {
+  border-color: var(--warn);
+}
+
+.claim-readiness-door[open] .claim-footer__chevron {
+  transform: rotate(225deg) translate(-2px, -2px);
+}
+
+/* .claim-readiness is the panel — components.EdgesHTMLWithLinks's own
+   full-bleed technique (style.css:1568-1600, "width: calc(100% + 2 *
+   var(--card-gutter))", not the classic negative-margin/width:auto trick,
+   which measurably fails on a flex item's main-axis size). --card-gutter
+   (G8) already re-points to 16px at both the 860 and 520 tiers, so this
+   needs no mobile override of its own for M2. */
+.claim-readiness.claim-footer-panel {
+  display: none;
+  order: 1;
+  flex: 0 0 auto;
+  width: calc(100% + 2 * var(--card-gutter));
+  min-width: 0;
+  margin-inline: calc(-1 * var(--card-gutter));
+  padding: 18px var(--card-gutter) 22px;
+  border-top: 1px solid var(--border);
+  background: transparent;
+}
+
+.claim-readiness-door[open] + .claim-readiness.claim-footer-panel {
+  display: block;
+}
+
+/* The dark-mode surface these two tokens exist for (tokens.md §1's
+   --color-dark-blocked-surface / --color-dark-blocked-hairline, G13):
+   --blocked-surface/--blocked-hairline are engine-owned (style.css:149-150,
+   248-249) and were declared for exactly this consumer. On light they fall
+   back to the ordinary --warn-bg tint; on dark they resolve to a genuine
+   SURFACE colour rather than an invisible 10% wash over near-black — never
+   a light hex on a dark ground (tokens.md's standing rule).
+
+   Specificity note (found by probing, not by inspection): the base panel
+   rule above is deliberately the two-class compound
+   .claim-readiness.claim-footer-panel, to out-specify components.go's
+   .claim-footer > .claim-readiness placeholder (see that rule's own
+   comment). A one-class .claim-readiness--blocked modifier is LOWER
+   specificity than that two-class base rule and loses its own
+   background/border-top-color to it regardless of source order — this
+   selector repeats .claim-footer-panel so the modifier's specificity
+   matches the base rule's, and source order (this rule comes later) then
+   lets the blocked variant win. */
+.claim-readiness--blocked.claim-footer-panel {
+  border-top-color: var(--blocked-hairline);
+  background: var(--blocked-surface);
+}
+
+/* The zero-blocker / not-yet-blocked sentence (06 §8 items 5-6): a claim
+   whose door is neutral still opens to ONE line of prose, serif, on the
+   neutral ground — never an empty panel and never a numeral-less absence
+   dressed up as a badge (G16). */
+.claim-readiness-summary {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+/* Local-approval reasons ride above the module list when present. Not on
+   any 06/03/05 board (the boards' own claim has no local-approval note
+   alongside its dependency blockers) but real engine data this component
+   must not drop (07/tokens.md's standing "nothing is deleted"). */
 .claim-readiness-local {
-  padding: 0.65rem 0.8rem;
-  border-bottom: 1px solid var(--border);
+  margin: 0 0 12px;
 }
 
-.claim-readiness-local ul {
-  margin: 0.45rem 0 0;
+.claim-readiness-local > ul {
+  margin: 6px 0 0;
   padding-left: 1.1rem;
   color: var(--muted);
-  font-size: 0.66rem;
+  font-family: var(--font-sans);
+  font-size: 13px;
 }
 
-.claim-readiness-routes {
+/* Section header row (06 §4.4 "Header row"): eyebrow, a flexible hairline
+   rule, then the scope count hard right — "23 across 4 modules", correctly
+   singular at "1 across 1 module" (06 §8 item 8). */
+.claim-readiness-section-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.claim-readiness-eyebrow {
+  flex: 0 0 auto;
+  color: var(--warn);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+.claim-readiness-eyebrow-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--blocked-hairline);
+}
+
+.claim-readiness-scope {
+  flex: 0 0 auto;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.claim-readiness-modules {
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  padding: 0 0.75rem 0.75rem;
 }
 
-.claim-readiness-route {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--card-bg);
+/* One module = one native <details>, exactly like the retired per-route
+   disclosure it replaces, so the reviewer can still open a module the
+   render did not pick as nearest (06 §2/§8 item 9). Only the FIRST
+   (nearest-hop-ascending, then blocker-count-descending, then name; 06 §9
+   open decision 2) starts open. */
+.claim-readiness-module {
+  border: 0;
+  margin: 0;
 }
 
-.claim-readiness-route > summary {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
+.claim-readiness-module + .claim-readiness-module {
+  border-top: 1px solid var(--blocked-hairline);
+}
+
+.claim-readiness-module-summary {
+  display: flex;
   align-items: center;
-  gap: 0.75rem;
-  min-height: 54px;
-  padding: 0.55rem 0.7rem;
-  color: var(--muted);
+  gap: 12px;
+  padding-block: 8px;
   cursor: pointer;
   list-style: none;
 }
 
-.claim-readiness-route > summary::-webkit-details-marker {
-  display: none;
-}
+.claim-readiness-module-summary::marker { content: ""; }
+.claim-readiness-module-summary::-webkit-details-marker { display: none; }
 
-.claim-readiness-route > summary:hover,
-.claim-readiness-route > summary:focus-visible {
-  background: color-mix(in srgb, var(--muted) 7%, transparent);
-}
-
-.claim-readiness-route-id {
-  min-width: 0;
-}
-
-.claim-readiness-route-id strong {
-  display: block;
-  color: var(--ink);
-  font-size: 0.75rem;
-  font-weight: 650;
-}
-
-.claim-readiness-route-id small {
-  display: block;
-  overflow: hidden;
-  margin-top: 0.12rem;
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
-  line-height: 1.35;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.claim-readiness-route-via,
-.claim-readiness-route-count,
-.claim-readiness-relation {
-  color: var(--faint);
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  line-height: 1.3;
-}
-
-.claim-readiness-route-count {
-  color: var(--warn);
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.claim-readiness-chevron {
+.claim-readiness-module-chevron {
   display: inline-flex;
-  width: 14px;
-  height: 14px;
-  margin: 0 2px 0 2px;
-  color: var(--faint);
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--muted);
+  transition: transform .16s ease;
 }
 
-.claim-readiness-route[open] .claim-readiness-chevron {
+.claim-readiness-module[open] > .claim-readiness-module-summary .claim-readiness-module-chevron {
   transform: rotate(90deg);
 }
 
-.claim-readiness-route-body {
-  padding: 0 0.7rem 0.65rem;
-  border-top: 1px solid var(--border);
+.claim-readiness-module-name {
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.claim-readiness-module-hop {
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.claim-readiness-module-spacer {
+  flex: 1 1 auto;
+}
+
+.claim-readiness-module-count {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--warn-bg);
+  color: var(--warn);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+}
+
+.claim-readiness-module-body {
+  padding-left: 24px;
 }
 
 .claim-readiness-blockers {
@@ -1333,160 +1389,267 @@ th {
   list-style: none;
 }
 
+/* One blocker row, three grid areas so mobile can reorder without a second
+   DOM shape (R-I.1 / component I1, which 03 §9 open decision 8 rules wins
+   over that screen's OWN boards — the hop pill sits AFTER the title, never
+   right-ranged beside it, at any width the row stacks). Desktop keeps the
+   112px right-ranged hop column 06 §3/§4.4 measures; ≤520 collapses to a
+   single flex column so the title wraps above the hop pill and the path
+   drops last, per M7/M12. */
 .claim-readiness-blocker {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 0.75rem;
-  padding: 0.65rem 0;
-  border-bottom: 1px solid var(--border);
+  grid-template-columns: minmax(0, 1fr) 112px;
+  grid-template-areas: "title hop" "path hop";
+  column-gap: 14px;
+  row-gap: 6px;
+  padding-block: 10px;
+  border-top: 1px solid var(--blocked-hairline);
+  overflow-wrap: anywhere;
 }
 
-.claim-readiness-blocker strong {
+.claim-readiness-blocker-title-group {
+  grid-area: title;
+}
+
+.claim-readiness-blocker-title {
   display: block;
   color: var(--ink);
-  font-size: 0.69rem;
-  font-weight: 650;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 600;
 }
 
-.claim-readiness-blocker-copy > p,
-.claim-readiness-path p {
-  margin: 0.18rem 0 0;
+.claim-readiness-blocker-detail {
+  margin: 4px 0 0;
   color: var(--muted);
-  font-size: 0.63rem;
+  font-family: var(--font-sans);
+  font-size: 13px;
 }
 
+/* The hop pill (direct/upstream - N hop(s)) is styled as a pill even though
+   it began life as a bare grid cell (06 §4.4 "Hop pill"): ground --paper,
+   999px radius, 3px/9px padding, muted 11/14 weight 500. */
 .claim-readiness-relation {
+  grid-area: hop;
+  justify-self: end;
+  align-self: start;
+  width: max-content;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 500;
   white-space: nowrap;
 }
 
-.claim-readiness-path {
-  margin-top: 0.35rem;
+/* The dependency path — exactly two slugs and a chevron (06 §8 item 11: a
+   cycle must never produce a longer breadcrumb). The target-line wrapper
+   keeps the chevron glued to the target slug as one flex item so the
+   mobile column layout puts "source" on its own line and "> target" on the
+   next, per 06 §4.8's mobile form / 05 §4.9's mobile note. */
+.claim-readiness-path-chips {
+  grid-area: path;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
 }
 
-.claim-readiness-path summary,
-.claim-readiness-trace > summary,
-.claim-readiness-raw > summary {
-  color: var(--link);
-  cursor: pointer;
-  font-family: var(--font-sans);
-  font-size: 11.5px;
-  font-weight: 650;
+.claim-readiness-path-target-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.claim-readiness-path p {
+.claim-readiness-slug {
+  display: inline-block;
+  border-radius: var(--radius-sm);
+  padding: 2px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 14px;
   overflow-wrap: anywhere;
-  font-family: var(--font-mono);
 }
 
-.claim-readiness-trace {
-  padding-top: 0.6rem;
+.claim-readiness-slug--source {
+  background: var(--paper);
+  color: var(--muted);
 }
 
-.claim-readiness-map {
-  margin-top: 0.55rem;
+.claim-readiness-slug--target {
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 
-.claim-readiness-map-caption,
-.claim-readiness-map-limit,
-.claim-readiness-map-error {
-  margin: 0 0 0.45rem;
+.claim-readiness-path-chevron {
+  display: inline-flex;
+  width: 11px;
+  height: 11px;
+  flex-shrink: 0;
   color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: 0.56rem;
 }
 
-.claim-readiness-map-scroll {
-  overflow: auto;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--card-bg);
-}
-
-.claim-readiness-map pre.mermaid {
-  min-width: 720px;
+/* The within-module truncation (06 §4.4 "Show 9 more in this module": 11
+   total facts, 2 rendered up front, 9 more). viewer-runtime.js's
+   readinessModule builds only the first READINESS_VISIBLE_CAP rows and
+   appends the rest lazily when this control is clicked (06 §8 item 14:
+   in-place expansion, never a re-render) — the DOM itself, not a CSS
+   display rule, carries the cap, so a project with thousands of facts in
+   one module (TestReadinessBrowserScaleBudgets) never pays for rows no
+   one asked to see; the complete list stays reachable, never deleted. */
+.claim-readiness-more {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
   margin: 0;
-  padding: 1rem;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--blocked-hairline);
   background: transparent;
+  color: var(--link);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
 }
 
-.claim-readiness-map svg {
-  max-width: none !important;
+.claim-readiness-more-chevron {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
 }
 
-.claim-readiness-map .node.current rect,
-.claim-readiness-map .node.current path,
-.claim-readiness-map .node.current polygon {
-  fill: var(--accent-bg) !important;
-  stroke: var(--accent) !important;
+/* The graph link (R09.9's replacement for the inline map). It reuses the
+   sidebar's existing [data-dxg-open] delegated trigger (graph-ui.js:481-486)
+   to open the pane for real rather than shipping a dead link — focusing it
+   on this claim specifically has no engine hook yet (06 §9 open decision 7
+   flags that gap for the graph lane; this is not a regression, the gap
+   already existed). Desktop right-ranges it (06 §4.4's row, minus the empty
+   spacer node 06 §9 P7 records as a Paper defect not to be copied); mobile
+   is left-aligned, one node, per 06 §4.8. */
+.claim-readiness-module-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 12px;
 }
 
-.claim-readiness-map .node.dependency rect,
-.claim-readiness-map .node.dependency path,
-.claim-readiness-map .node.dependency polygon {
-  fill: var(--card-bg) !important;
-  stroke: var(--border-strong, var(--border)) !important;
+.claim-readiness-graph-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--link);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
 }
 
-.claim-readiness-map .node.fact rect,
-.claim-readiness-map .node.fact path,
-.claim-readiness-map .node.fact polygon {
-  fill: var(--warn-bg) !important;
-  stroke: var(--warn) !important;
+.claim-readiness-graph-link svg {
+  width: 13px;
+  height: 13px;
 }
 
-.claim-readiness-map .nodeLabel,
-.claim-readiness-map .label,
-.bo-diagram .nodeLabel,
-.bo-diagram .label {
-  color: var(--ink) !important;
-  font-family: var(--font-sans) !important;
-}
-
+/* Raw diagnostics: R09.8's demotion, not a removal. The lossless engine
+   payload stays reachable (viewer-tests' escaping/live-refresh assertions
+   read it) but is visually the quietest thing in the panel — closed by
+   default, small type, no colour of its own. */
 .claim-readiness-raw {
-  padding: 0.65rem 0.8rem;
+  margin-top: 14px;
+  padding-top: 12px;
   border-top: 1px solid var(--border);
 }
 
+.claim-readiness-raw > summary {
+  color: var(--faint);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
 .claim-readiness-raw > p {
-  margin: 0.4rem 0;
+  margin: 6px 0;
   color: var(--muted);
-  font-size: 0.63rem;
+  font-family: var(--font-sans);
+  font-size: 12px;
 }
 
 .claim-readiness-raw pre {
   overflow: auto;
   max-height: 22rem;
-  margin: 0.5rem 0 0;
-  padding: 0.7rem;
+  margin: 6px 0 0;
+  padding: 10px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   background: var(--card-bg);
   color: var(--muted);
-  font-size: 0.58rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
   white-space: pre;
 }
 
 @media (max-width: 860px) {
-  .claim-readiness-head {
-    display: block;
-  }
-  .claim-readiness-counts {
-    margin-top: 0.65rem;
-  }
-  .claim-readiness-route > summary {
-    grid-template-columns: minmax(0, 1fr) auto auto;
-  }
-  .claim-readiness-route-via {
-    display: none;
+  .claim-readiness-module-body {
+    padding-left: 22px;
   }
 }
 
+/* M12 (06 §5): blocker-row list indent 24px -> 22px. M7: the row's grid
+   collapses to a single flex column so DOM order alone gives "title wraps
+   above its hop pill", then the path last (R-I.1 / component I1, which 03
+   §9 open decision 8 rules wins over that screen's own boards' right-ranged
+   form). M10-analogue path stacking: the target line drops onto its own
+   row beneath the source slug (06 §4.8). */
 @media (max-width: 520px) {
-  .claim-readiness-blocker {
-    grid-template-columns: 1fr;
+  .claim-readiness-module-body {
+    padding-left: 22px;
   }
+
+  .claim-readiness-blocker {
+    display: flex;
+    flex-direction: column;
+    grid-template-columns: none;
+    grid-template-areas: none;
+    row-gap: 8px;
+  }
+
   .claim-readiness-relation {
-    white-space: normal;
+    justify-self: initial;
+    align-self: flex-start;
+  }
+
+  .claim-readiness-path-chips {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+  }
+
+  .claim-readiness-path-chevron {
+    margin-top: 3px;
+  }
+
+  .claim-readiness-summary {
+    line-height: 21px;
+  }
+
+  /* 06 §4.8: the mobile graph-link footer is left-aligned, one node, no
+     spacer — the desktop-only right-range this overrides exists because
+     06's own board draws a (defect, P7) empty spacer node to right-range
+     it there; mobile carries no such node at all. */
+  .claim-readiness-module-footer {
+    justify-content: flex-start;
   }
 }
 
@@ -6807,6 +6970,7 @@ code {
      whole cards (shell.html's own comment on `.track-section`) and get the
      same full-bleed treatment a module's claims do. */
   body:has(.build-order-section:not([hidden])) .content-area { padding-inline: 16px; }
+}
 
 /* lane: L4 — footer strip, evidence & relationships, sources, expansion
    exclusivity. New phone-tier block per docs/design/LANES.md OD1 and
@@ -7011,6 +7175,8 @@ code {
 @media (pointer: coarse) {
   .claim-footer-chip {
     min-height: 44px;
+  }
+}
 
 /* lane: L6 — comments (chip, rail, bottom sheet, threads, composer). New
    phone-tier block per docs/design/LANES.md OD1: appended after the last
@@ -7044,6 +7210,7 @@ code {
   .comment-thread-actions {
     margin-top: 2px;
   }
+}
 
 /* lane: L8 — tokens.md §8's mapping table ("H1 · blocked notice becomes an
    inset card with a divided action row -> max-width: 520px") and R-H.1: on a
