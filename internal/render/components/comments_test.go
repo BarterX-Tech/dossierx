@@ -172,14 +172,15 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 		}
 	}
 
-	// The panel is a SIBLING of the footer disclosure, emitted immediately
-	// after </details> — never nested inside it. A claim's threads must stay
-	// readable without expanding its edges.
+	// The panel is a SIBLING of the whole .claim-footer strip (05 §4.6's
+	// <div class="claim-footer"> now wraps the relationships/sources doors),
+	// emitted immediately after it closes — never nested inside it. A
+	// claim's threads must stay readable without expanding its edges.
 	//
 	// THIS ONE STRING IS THE WHOLE ORDERING PROOF. Matching
-	// `</ul></details><div class="comments-panel"` as a single literal asserts
-	// the adjacency and the order together: the panel opens immediately after
-	// the footer closes, with nothing between them.
+	// `</ul></details></div><div class="comments-panel"` as a single literal
+	// asserts the adjacency and the order together: the panel opens
+	// immediately after the strip closes, with nothing between them.
 	//
 	// A SECOND, INDEX-BASED PROBE WAS DELETED HERE. It read
 	// `closeIdx := strings.Index(got, "</details>")` and compared it against the
@@ -192,8 +193,8 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 	// comparing the panel against itself and passing for the wrong reason. It
 	// proved nothing the adjacency match above does not already prove, and it
 	// could degrade silently as the fixture changed underneath it.
-	if !strings.Contains(got, `</ul></details><div class="comments-panel"`) {
-		t.Fatalf("the panel must follow </details> as a sibling with no whitespace between, got: %s", got)
+	if !strings.Contains(got, `</ul></div></div></details></div><div class="comments-panel"`) {
+		t.Fatalf("the panel must follow the closed .claim-footer strip as a sibling with no whitespace between, got: %s", got)
 	}
 
 	// The chip is not in the footer's output at all any more.
@@ -452,9 +453,9 @@ func TestCommentChip_AppearsForEveryLayoutExceptBanner(t *testing.T) {
 				t.Fatalf("layout %q must wrap its chip in the head's slot span, got: %s", layout, out)
 			}
 			chipIdx := strings.Index(out, "comment-chip")
-			ulIdx := strings.Index(out, `<ul class="claim-edges">`)
+			ulIdx := strings.Index(out, `<div class="claim-footer">`)
 			if ulIdx < 0 {
-				t.Fatalf("layout %q should have rendered an edges footer for a claim with a rests_on edge, got: %s", layout, out)
+				t.Fatalf("layout %q should have rendered a footer strip for a claim with a rests_on edge, got: %s", layout, out)
 			}
 			if chipIdx > ulIdx {
 				t.Fatalf("layout %q renders its chip inside/after the edges list; it belongs in the head, before the footer: %s", layout, out)

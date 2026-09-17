@@ -30,47 +30,55 @@ func sourcedClaim(sources ...model.Source) model.Claim {
 // produce the same bytes it did before the feature existed — no "0 sources"
 // segment, no empty <li>, no <ul> — because that is every claim in every corpus
 // that has not adopted citations.
+// 05 §4.11/R09.5: sources is now its own peer door, <details class="claim-
+// sources">, split out of relationships, with its own "N sources" chip —
+// never a segment of the relationships chip's text.
 func TestEdges_NoSourcesRendersIdentically(t *testing.T) {
 	c := sourcedClaim()
 	c.RestsOn = []string{"widget.contract.other"}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
-	for _, absent := range []string{"claim-sources", "claim-source-list", "source</summary>", "sources</summary>", "0 sources"} {
+	for _, absent := range []string{"claim-sources", "claim-source-list", "0 sources"} {
 		if strings.Contains(got, absent) {
 			t.Errorf("a source-less claim emitted %q: %s", absent, got)
 		}
 	}
-	if want := `<summary class="claim-links-summary">1 link - 0 files</summary>`; !strings.Contains(got, want) {
-		t.Errorf("expected the untouched summary %q, got: %s", want, got)
+	if want := `<span class="claim-footer-chip-label">1 relationship</span>`; !strings.Contains(got, want) {
+		t.Errorf("expected the untouched relationships chip %q, got: %s", want, got)
 	}
 }
 
 // TestEdges_SourcesOpenTheFooterAlone pins the suppression rule's new leg: a
 // claim whose ONLY footer content is its evidence must still be able to
-// disclose it. Before sources joined the test, such a claim emitted no
-// <details> at all and the citations in its body pointed at nothing.
+// disclose it, as its own door — with no relationships door alongside it,
+// since this claim has zero relationships (05 §4.11/R09.5).
 func TestEdges_SourcesOpenTheFooterAlone(t *testing.T) {
 	c := sourcedClaim(model.Source{Ref: 1, Kind: model.SourceKindExternal, Title: "A page", URL: "http" + "s://example.test/p", AccessedOn: "2026-01-02"})
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
-	if !strings.Contains(got, `<details class="claim-links"`) {
-		t.Fatalf("a claim whose only footer content is a source emitted no disclosure: %s", got)
+	if !strings.Contains(got, `<details class="claim-sources"`) {
+		t.Fatalf("a claim whose only footer content is a source emitted no sources door: %s", got)
 	}
-	if want := `<summary class="claim-links-summary">0 links - 0 files - 1 source</summary>`; !strings.Contains(got, want) {
-		t.Fatalf("expected the summary %q, got: %s", want, got)
+	if want := `<span class="claim-footer-chip-label">1 source</span>`; !strings.Contains(got, want) {
+		t.Fatalf("expected the sources chip %q, got: %s", want, got)
+	}
+	// The relationships door still opens (links=0 here), since this claim
+	// has no relationships at all — it renders with a 0 chip per 05 §8 item
+	// 5's "a chip with a count of zero still renders".
+	if want := `<span class="claim-footer-chip-label">0 relationships</span>`; !strings.Contains(got, want) {
+		t.Fatalf("expected the relationships chip to still render at zero, got: %s", got)
 	}
 }
 
-// TestEdges_SourceCountIsPluralisedAndOrdered holds the digest's shape: the
-// sources segment is singular at exactly one, rides after "files", and appears
-// before "drifted" so the adjective stays next to the count it qualifies.
+// TestEdges_SourceCountIsPluralisedAndOrdered holds the sources chip's
+// pluralisation.
 func TestEdges_SourceCountIsPluralisedAndOrdered(t *testing.T) {
 	c := sourcedClaim(
 		model.Source{Ref: 1, Kind: model.SourceKindExternal, Title: "One"},
 		model.Source{Ref: 2, Kind: model.SourceKindExternal, Title: "Two"},
 	)
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
-	if want := `<summary class="claim-links-summary">0 links - 0 files - 2 sources</summary>`; !strings.Contains(got, want) {
+	if want := `<span class="claim-footer-chip-label">2 sources</span>`; !strings.Contains(got, want) {
 		t.Fatalf("expected %q, got: %s", want, got)
 	}
 }

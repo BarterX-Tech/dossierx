@@ -105,8 +105,13 @@ func claimCitations(c model.Claim) markdown.Citations {
 	return markdown.NewCitations(prefix, refs)
 }
 
-// writeSourcesRow writes the footer's "sources:" <li> and the nested list of
-// one entry per source, in the order the author declared them.
+// writeSourcesRow writes one <li class="claim-source"> per model.Source, in
+// the order the author declared them. Per docs/design/screens/05-claim-one-
+// expansion-at-a-time.md §4.11/R09.5, sources is its own peer expansion split
+// out of relationships, so this function no longer opens its own wrapping
+// "sources:" <li> or <ul class="claim-source-list"> — the caller
+// (components.EdgesHTMLWithLinks) owns that list element, as the direct
+// content of the sources door's panel.
 //
 // DECLARED ORDER, NEVER SORTED BY REF. Refs are author-assigned precisely so
 // that reordering the list does not renumber the prose (see model.Source.Ref),
@@ -118,7 +123,6 @@ func claimCitations(c model.Claim) markdown.Citations {
 // EdgesHTMLWithLinks is: a FuncMap-returned template.HTML bypasses
 // html/template's automatic escaping, so nothing downstream will escape these.
 func writeSourcesRow(b *strings.Builder, c model.Claim) {
-	b.WriteString(`<li class="claim-sources">sources:<ul class="claim-source-list">`)
 	for _, s := range c.Sources {
 		b.WriteString(`<li class="claim-source"`)
 		if id := ClaimSourceAnchorID(c, s.Ref); id != "" {
@@ -128,7 +132,12 @@ func writeSourcesRow(b *strings.Builder, c model.Claim) {
 		}
 		b.WriteString(`><span class="claim-source-ref">[`)
 		b.WriteString(strconv.Itoa(s.Ref))
-		b.WriteString(`]</span> `)
+		// claim-source-body wraps everything after the ref column so 05
+		// §4.11's fixed-ref-column-then-stacked-content row can lay the ref
+		// out as one flex item and the title/publisher/citation-count as a
+		// single sibling that stacks internally, rather than every span
+		// riding as its own top-level flex item of .claim-source.
+		b.WriteString(`]</span><span class="claim-source-body">`)
 
 		if s.IsInternal() {
 			writeInternalSource(b, s)
@@ -144,9 +153,8 @@ func writeSourcesRow(b *strings.Builder, c model.Claim) {
 
 		writeSourceNote(b, "supports", s.Supports)
 		writeSourceNote(b, "does_not_support", s.DoesNotSupport)
-		b.WriteString(`</li>`)
+		b.WriteString(`</span></li>`)
 	}
-	b.WriteString(`</ul></li>`)
 }
 
 // writeExternalSource writes a URL-anchored source: its title as a link, then

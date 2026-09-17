@@ -874,22 +874,54 @@ th {
   margin: 0.75rem 0;
 }
 
-/* .claim-links is the <details> that wraps the whole edges footer
-   (components.EdgesHTMLWithLinks). A card with many edges now collapses to
-   a single summary count line, and the server writes a bare `open`
-   attribute on the two claims that must not be hidden: one whose
-   implemented-in file has drifted, and one that is locked + review_pending.
-   The horizontal rule that used to sit on .claim-edges' own border-top moves
-   here, so the separator is drawn once, above the summary, whether the
-   disclosure is open or closed — see the .claim-links > .claim-edges reset
-   below. The <ul>'s remaining rules (.claim-edges > li, ::before, a,
-   .claim-edge-id-list, .claim-ref*) are written unscoped rather than as
-   ".card > .claim-edges", so nesting the list one level deeper inside the
-   <details> leaves every one of them applying unchanged. */
-.claim-links {
+/* .claim-footer is the strip docs/design/screens/05-claim-one-expansion-at-
+   a-time.md draws: "the strip has four doors and opens one" (R09.1). It
+   wraps the two doors components.EdgesHTMLWithLinks renders directly
+   (.claim-links = relationships, .claim-sources = sources, R09.4/R09.5) and
+   is the flex row the other two doors — readiness (viewer-runtime.js's
+   renderClaimReadiness, inserted via `card.querySelector('.claim-links')`,
+   whose .parentNode is now this element) and implementation checks
+   (.claim-conformance, L7's) — slot into once their own lanes give them a
+   matching `name` for R09.2's one-at-a-time group. The hairline this element
+   draws is 05 §4.6's "footer strip top hairline", inset by --card-gutter
+   (G8) rather than full-bleed, replacing the old .claim-links border-top
+   that used to sit flush with the card's own padding.
+   `.claim-footer > .claim-readiness` is a layout-integration rule, not an
+   edit of readiness's own .claim-readiness rule (style.css:895-1246,
+   L5-owned): it only says "take the full row once you are inside this flex
+   container", which is true and inert until a readiness box actually lands
+   here. */
+.claim-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 20px;
   margin: 0.4rem 0 0;
-  padding: 0.35rem 0 0;
+  padding-block: 15px;
   border-top: 1px solid var(--border);
+}
+
+.claim-footer > .claim-readiness,
+.claim-footer > .claim-conformance {
+  flex: 1 1 100%;
+}
+
+/* .claim-links and .claim-sources are the two <details> doors this package
+   renders directly (components.EdgesHTMLWithLinks): relationships (R09.4)
+   and sources (R09.5), each its own peer disclosure sharing one
+   `name="claim-footer-<id>"` group so opening one closes the other natively
+   (R09.2) with no JS. Both reset to plain flex items of .claim-footer above
+   — no border, no radius, no background of their own, because the strip's
+   ONE hairline (drawn by .claim-footer, above) is the only separator this
+   design allows; see docs/design/LANES.md's L4 intent paragraph on the old
+   bordered/radiused/tinted box this replaces. Each door's own panel
+   (.claim-footer-panel) is what forces the full-width wrap onto its own row
+   when open — see that rule below. */
+.claim-links,
+.claim-sources {
+  margin: 0;
+  padding: 0;
+  border: 0;
 }
 
 /* Claim readiness is a reviewer-facing work queue. The policy engine remains
@@ -1269,33 +1301,182 @@ th {
   }
 }
 
-/* The summary is the disclosure's only click target and reads as a mono
-   count strip ("4 links - 2 files - 1 drifted"), sharing .k's and
-   .claim-edges' register rather than the card body's prose. The UA
-   disclosure triangle is deliberately KEPT — it is the only affordance that
-   says open vs closed, and the :target deep-link rule reveals content
-   without setting `open`, so the marker is what tells a reader the footer is
-   still collapsed underneath. */
-.claim-links-summary {
+/* The summary is each door's only click target — 05 §4.6's "a noun and a
+   count, never a score" (R-F.1), bare text plus a chevron with no pill and
+   no border on desktop (the ≤520px pill form is M4/M5 below; see 05 §9 Open
+   decisions for why the width qualifier belongs here). The UA disclosure
+   triangle is REMOVED (::marker/::-webkit-details-marker below) because the
+   CSS border-triangle .claim-footer__chevron (style.css:3376) is the only
+   affordance the boards draw; keeping both would show two chevrons. Opening
+   a chip promotes it from --muted/400 to the chip's own colour at weight
+   500 — 05 §4.7's "openness is chevron flip + one weight step + a colour
+   promotion" — and a neutral chip (relationships, sources) has no status
+   colour of its own, so it borrows --link, this engine's mapping of the
+   board's navigation accent (tokens.md G2). The :target deep-link rule
+   reveals content without setting the `open` attribute, so the still-closed
+   chevron on a revealed door is a known, accepted cosmetic mismatch (see the
+   deep-link comment below). */
+.claim-footer-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.78rem;
+  list-style: none;
   color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 400;
 }
 
-.claim-links-summary:hover,
-.claim-links-summary:focus-visible {
+.claim-footer-chip::marker { content: ""; }
+.claim-footer-chip::-webkit-details-marker { display: none; }
+
+.claim-footer-chip:hover,
+.claim-footer-chip:focus-visible {
   color: var(--ink);
 }
 
-/* The separator and top spacing now belong to .claim-links (above); the
-   nested <ul> keeps only its inter-row gap. This is an override rather than
-   an edit to the .claim-edges rule so that rule stays a single description
-   of the list itself. */
-.claim-links > .claim-edges {
-  margin: 0.3rem 0 0;
-  padding: 0;
+.claim-links[open] > .claim-footer-chip,
+.claim-sources[open] > .claim-footer-chip {
+  color: var(--link);
+  font-weight: 500;
+}
+
+/* .claim-footer-panel is each door's expansion body — 05 §4.9–§4.11's
+   neutral/blocked panel ground. flex-basis: 100% is what forces it onto its
+   own full-width row inside the .claim-footer flex strip, wrapping below the
+   row of chips, the same trick that lets .claim-footer stay a single flex
+   container without the JS or grid machinery a "real" accordion would need.
+   The negative inline margin + matching padding (G8's full-bleed-hairline
+   pattern) is why the panel's tint reaches the card's own edges while its
+   text still lines up with the chips above — 05 §3's "flush with the card
+   body, not with the inset footer". */
+.claim-footer-panel {
+  flex-basis: 100%;
+  width: 100%;
+  margin-inline: calc(-1 * var(--card-gutter));
+  padding: 18px var(--card-gutter) 22px;
+  border-top: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+}
+
+.claim-footer-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 13px;
+}
+
+.claim-footer-eyebrow {
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.claim-footer-rule {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--border);
+}
+
+.claim-footer-panel-count {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 14px;
+}
+
+.claim-relationship-direction + .claim-relationship-direction,
+.claim-edges-extra {
+  margin-top: 13px;
+}
+
+.claim-relationship-direction-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 7px;
+}
+
+.claim-relationship-arrow {
+  color: var(--faint);
+  font-size: 12px;
+  line-height: 1;
+}
+
+.claim-relationship-direction-label {
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+/* .claim-relationship-list resets the shared .claim-edges bullet-list rule
+   (this file, below) for the fixed-direction rows: each row carries its own
+   lifecycle dot instead of the generic bullet, so the ::before dot would
+   double up. */
+.claim-relationship-list {
+  padding-left: 0;
   border-top: 0;
+  margin: 0;
+  gap: 10px;
+}
+
+.claim-relationship-list > li.claim-relationship {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-left: 0;
+}
+
+.claim-relationship-list > li.claim-relationship::before {
+  content: none;
+}
+
+.claim-relationship-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  align-self: center;
+}
+
+.claim-relationship-dot--locked { background: var(--accent); }
+.claim-relationship-dot--draft { background: var(--status-draft); }
+
+.claim-relationship-list .claim-ref {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--link);
+  font-weight: 400;
+}
+
+.claim-relationship-badge {
+  flex: 0 0 58px;
+  text-align: right;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 14px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+.claim-relationship-badge--locked { color: var(--accent); }
+.claim-relationship-badge--draft { color: var(--status-draft); }
+
+.claim-relationship-none {
+  color: var(--faint);
+  font-family: var(--font-sans);
 }
 
 /* Deep-link auto-open (decision C9). Landing on #<claim-id> — from the
@@ -1445,44 +1626,65 @@ th {
    two rules. The "–" marker convention is shared, so a reader sees one kind
    of sub-list under a footer row rather than two. */
 .claim-source-list {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
   list-style: none;
-  margin: 0.25rem 0 0;
+  margin: 0;
   padding: 0;
 }
 
+/* 05 §4.11's source row: a fixed-width ref column, then title/publisher/
+   citation-count, gap 12px. The bullet-dash convention the pre-redesign row
+   shared with .claim-edge-id-list is dropped — the "[n]" ref IS the row's own
+   marker (it is what a citation superscript in the body links to), so a
+   second decorative bullet beside it would be redundant. */
 .claim-source {
-  padding-left: 0.9rem;
-  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
   line-height: 1.5;
-  margin-bottom: 0.35rem;
-}
-
-.claim-source:last-child {
-  margin-bottom: 0;
 }
 
 .claim-source::before {
-  content: "–";
-  position: absolute;
-  left: 0;
-  opacity: 0.6;
+  content: none;
 }
 
 /* The ref is the one thing on the row that must be findable by eye, because
    it is what the reader followed a "[n]" marker to get to. Tabular figures
-   keep a column of refs aligned as the numbers gain digits; --accent is the
-   same "this is the anchor point" colour the locked pill and the active nav
-   entry use, so the row a deep link landed on reads as arrived-at rather
-   than merely present. */
+   keep a column of refs aligned as the numbers gain digits; a fixed 26px
+   column (05 §4.11; mobile narrows to 22px, see the 520px block) keeps every
+   row's title starting at the same x regardless of how many digits the ref
+   grows to. --faint (not --accent) matches the board's measured colour;
+   the :target row below still carries its own accent treatment. */
 .claim-source-ref {
+  flex: 0 0 26px;
+  padding-top: 2px;
   font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 16px;
   font-variant-numeric: tabular-nums;
-  color: var(--accent);
-  font-weight: 600;
+  color: var(--faint);
 }
 
+/* claim-source-body is the ref column's sibling: title (Source Serif 4,
+   05 §4.11), then the publisher/citation-count meta line 3px below it. */
+.claim-source-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.claim-source-body > .claim-source-title,
+.claim-edges a.claim-source-title,
 .claim-edges .claim-source-title {
-  font-weight: 500;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 23px;
+  font-weight: 400;
+  color: var(--ink);
 }
 
 /* The title is an anchor for an external source and a plain span for an
@@ -1515,7 +1717,11 @@ th {
 }
 
 .claim-source-meta {
+  display: block;
   color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
 }
 
 /* The two authored boundary lines (supports / does_not_support). They are
@@ -1615,12 +1821,16 @@ th {
    because equal specificity leaves source order as the only tiebreak.
    An engine without :has() support drops both rules and simply shows the
    reader a collapsed footer they can open by hand — a degraded landing, never
-   a wrong one. */
-.claim-links:has(.claim-source:target) > *:not(summary) {
+   a wrong one.
+   Selector re-pinned from `.claim-links` to `.claim-sources` — 05 §4.11/R09.5
+   split sources into its own peer <details>, so the citation-marker target
+   this rule reveals now lives under `.claim-sources`, never under
+   `.claim-links` (relationships). */
+.claim-sources:has(.claim-source:target) > *:not(summary) {
   content-visibility: visible;
 }
 
-.claim-links:has(.claim-source:target)::details-content {
+.claim-sources:has(.claim-source:target)::details-content {
   content-visibility: visible;
 }
 
@@ -3387,7 +3597,8 @@ body.shell-body {
   transform: rotate(90deg);
 }
 
-.claim-links[open] .claim-footer__chevron {
+.claim-links[open] .claim-footer__chevron,
+.claim-sources[open] .claim-footer__chevron {
   transform: rotate(225deg) translate(-1px, -1px);
 }
 
@@ -4865,26 +5076,33 @@ code {
   .sbody,
   .claim-list-items { font-size: 14px; }
 
-  .claim-links-summary { align-items: flex-start; }
-  .claim-footer__identity small { display: none; }
-  .claim-footer__counts { flex-wrap: wrap; justify-content: flex-end; }
-  .claim-footer__counts > span:not(.claim-footer__chevron) { font-size: 8.5px; }
+  /* The footer half of this container is RETIRED, not merely edited: the
+     four rules that used to live here (.claim-links-summary,
+     .claim-footer__identity small, .claim-footer__counts x2) targeted the
+     pre-redesign mono digest bar, and none of those classes are emitted by
+     components.EdgesHTMLWithLinks any more (see this file's .claim-footer*
+     rules, style.css:1272 area). 05 §5's M3 gives the phone-tier (<=520px)
+     two-row form its own new block below, per the Open Decision that a new
+     520px rule must win over this container and the 560px one rather than
+     extend either — there is deliberately no tablet-tier (521-860px) footer
+     override, because .claim-footer's own flex-wrap already reflows the
+     strip at that width with no special-casing. */
   .track-head { padding-top: 28px; }
   .track-title { font-size: 31px; }
   .track-cite { align-items: flex-start; }
 }
 
+/* This container is RETIRED for the same reason as the footer half of the
+   860px container above: every rule it used to hold
+   (.claim-links-summary, .claim-footer__counts x2, .claim-footer__chevron)
+   targeted the pre-redesign mono digest bar. It stays as an empty container
+   — rather than being deleted outright — because docs/design/LANES.md's OD1
+   names it as one of the three shared containers other lanes may reference
+   by line address; 05 §5's M3 phone-tier form lives in the lane's own
+   appended @media (max-width: 520px) block below instead, per that section's
+   Open Decision ("the new 520px block must be a new block… not added to
+   the existing max-width: 520px… nor to the 560px one"). */
 @media (max-width: 560px) {
-  .claim-links-summary {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 9px;
-    padding: 12px;
-  }
-
-  .claim-footer__counts { justify-content: flex-start; }
-  .claim-footer__counts > span:not(.claim-footer__chevron) { padding: 4px 6px; }
-  .claim-footer__chevron { margin-left: auto; }
 }
 
 /* lane: L3 — card shell, head line, status chips, prose. New phone-tier block
@@ -4972,6 +5190,120 @@ code {
     max-width: none;
     font-size: 16px;
     line-height: 26px;
+  }
+}
+
+/* lane: L4 — footer strip, evidence & relationships, sources, expansion
+   exclusivity. New phone-tier block per docs/design/LANES.md OD1 and
+   docs/design/screens/05-claim-one-expansion-at-a-time.md §5's Open
+   Decision: this must be a NEW block placed after the 860px and 560px
+   shared containers (both retired above, for this lane's rules, in place)
+   rather than added to L3's own @media (max-width: 520px) block just above
+   — the two blocks are independent (disjoint selector sets) and ordering
+   between them does not matter; what matters is that THIS block comes after
+   the two shared containers, so its equal-specificity rules win by source
+   order over whatever those containers used to say about the footer.
+
+   Every rule below maps a 05 §5 mobile rule (M3/M4/M6/M7/M9/M10/M11) onto
+   this existing engine breakpoint, per tokens.md §8: no 390px breakpoint is
+   added. M8 (44px touch targets) is a pointer question, not a width one, and
+   lives in the existing @media (pointer: coarse) block instead — see the
+   rule appended after this one. */
+@media (max-width: 520px) {
+  /* M3 — the footer strip splits into two rows: the relationships/sources
+     chips wrap naturally via .claim-footer's own flex-wrap, but the desktop
+     inter-chip gap (20px) is too wide for two 30px pills on a 358px content
+     column, so it narrows here. R-F.4's row shape (blocked chip + comment
+     count on row one, neutral chips on row two) is the readiness chip's
+     shape to draw once L5 lands it in this strip (see components.go's
+     EdgesHTMLWithLinks doc comment) — the two doors this lane owns
+     (relationships, sources) are both "neutral" chips and simply wrap to
+     whichever row has room, which is what flex-wrap already does with no
+     extra rule needed here. */
+  .claim-footer {
+    gap: 8px 10px;
+  }
+
+  /* M4/M5 — every chip becomes a 30px --radius-pill pill with 11px inline
+     padding; neutral chips (relationships, sources) gain a --color-border
+     outline. The open-chip accent OUTLINE (M5) is the mobile-only addition
+     the desktop bare-text-plus-chevron form does not carry (05 §9 Open
+     decisions: "at 12px, colour alone is too quiet on a phone"). */
+  .claim-footer-chip {
+    height: 30px;
+    padding-inline: 11px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--card-bg);
+    box-sizing: border-box;
+  }
+
+  .claim-links[open] > .claim-footer-chip,
+  .claim-sources[open] > .claim-footer-chip {
+    border-color: var(--link);
+  }
+
+  /* M6 — mobile carries one weight step heavier throughout: open chip 600
+     (desktop 500), closed chips 500 (desktop 400), relationship row title
+     500 (desktop 400). Status badges (not this lane's) stay at 11px/600. */
+  .claim-footer-chip {
+    font-weight: 500;
+  }
+
+  .claim-links[open] > .claim-footer-chip,
+  .claim-sources[open] > .claim-footer-chip {
+    font-weight: 600;
+  }
+
+  .claim-relationship-list .claim-ref {
+    font-weight: 500;
+  }
+
+  /* M7 — the blocker row's stacked dependency path is L5's own row shape
+     (readiness); this lane's equivalent is the relationship row, which
+     already has no ranged path to stack — R-I.2's row (M9, below) is the
+     shape this lane owns at this breakpoint. */
+
+  /* M9 — relationship row becomes two lines: dot + title on line one, meta +
+     right-ranged badge (no fixed-width slot) on line two. */
+  .claim-relationship-list > li.claim-relationship {
+    flex-wrap: wrap;
+    row-gap: 3px;
+  }
+
+  .claim-relationship-list .claim-ref {
+    flex-basis: calc(100% - 17px);
+  }
+
+  .claim-relationship-badge {
+    flex: 0 1 auto;
+    margin-left: auto;
+    padding-left: 15px;
+  }
+
+  /* M10 — source row: ref column narrows 26px -> 22px. */
+  .claim-source-ref {
+    flex-basis: 22px;
+  }
+
+  /* M11 is the checks field-row rule (L7's panel); this lane's panels
+     (relationships, sources) carry no fixed label column to drop. */
+
+  /* M12 — expansion panels keep 16px inline padding (--card-gutter is
+     already 16px at this width per L3's M2 re-pin) and their hairline
+     dividers; nothing here becomes a card. No rule is needed: the panel
+     already reads --card-gutter. */
+}
+
+/* M8 — every chip and the comment count must reach a 44px minimum hit
+   target, achieved with a larger hit box rather than by growing the 30px
+   pill's visual box. This is a pointer question, not a width one (tokens.md
+   §8), so it lives beside the engine's existing .comment-chip precedent in
+   the SAME @media (pointer: coarse) block rather than behind a width query —
+   a coarse-pointer tablet in landscape above 520px still needs it. */
+@media (pointer: coarse) {
+  .claim-footer-chip {
+    min-height: 44px;
   }
 }
 
