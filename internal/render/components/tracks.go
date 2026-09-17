@@ -65,7 +65,7 @@ func TrackCitedListHTML(claims []TrackCitedClaim) template.HTML {
 		// nil statuses: this row draws its own pill below, and letting
 		// writeClaimRef draw a second one from a catalog lookup would print
 		// two pills on exactly the claims that most need one to be read.
-		writeClaimRef(&b, c.ID, "", "", nil)
+		writeClaimRef(&b, c.ID, "", "", nil, true)
 		b.WriteString(` <span class="pill `)
 		b.WriteString(pillClass(c.Status, c.ReviewPending))
 		b.WriteString(`">`)

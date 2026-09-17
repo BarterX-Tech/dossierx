@@ -25,23 +25,49 @@ func sourcedClaim(sources ...model.Source) model.Claim {
 	}
 }
 
-// TestEdges_NoSourcesRendersIdentically is the zero-cost contract at the one
-// place it could break: the footer emitter itself. A claim with no sources must
-// produce the same bytes it did before the feature existed — no "0 sources"
-// segment, no empty <li>, no <ul> — because that is every claim in every corpus
-// that has not adopted citations.
-// 05 §4.11/R09.5: sources is now its own peer door, <details class="claim-
-// sources">, split out of relationships, with its own "N sources" chip —
-// never a segment of the relationships chip's text.
-func TestEdges_NoSourcesRendersIdentically(t *testing.T) {
+// TestEdges_NoSourcesRendersItsOwnEmptyDoor is the RETRY re-pin (fix-list
+// item 10) of what used to be TestEdges_NoSourcesRendersIdentically. That
+// test pinned the OPPOSITE of the correct behaviour: 05 §8 item 5's "an
+// entirely edgeless, sourceless, checkless claim still shows four zeros and
+// the comment count" and 07a §6/§8's "Sources present" state (which is
+// explicit that the wording changes FROM "No sources" TO "N sources" once
+// len(c.Sources) > 0, implying a distinct zero-state wording exists) both
+// say a source-less claim's SOURCES door renders — worded "No sources",
+// never a "0 sources" numeral, never absent. The evidence that drove this
+// fix: 852 rendered footers against only 290 sources chips, because the old
+// gate suppressed the whole sources door at zero.
+// 05 §4.11/R09.5: sources is its own peer door, <details class="claim-
+// sources">, split out of relationships, with its own chip — never a
+// segment of the relationships chip's text.
+func TestEdges_NoSourcesRendersItsOwnEmptyDoor(t *testing.T) {
 	c := sourcedClaim()
 	c.RestsOn = []string{"widget.contract.other"}
 	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
 
-	for _, absent := range []string{"claim-sources", "claim-source-list", "0 sources"} {
-		if strings.Contains(got, absent) {
-			t.Errorf("a source-less claim emitted %q: %s", absent, got)
-		}
+	if !strings.Contains(got, `<details class="claim-sources" name="claim-footer-widget.contract.retry">`) {
+		t.Fatalf("expected a sources door even at zero sources, got: %s", got)
+	}
+	if want := `<span class="claim-footer-chip-label">No sources</span>`; !strings.Contains(got, want) {
+		t.Errorf("expected the zero-sources chip to read %q, got: %s", want, got)
+	}
+	if strings.Contains(got, "claim-source-list") {
+		t.Errorf("a source-less claim's sources door should have no <ul> of rows: %s", got)
+	}
+	if strings.Contains(got, "0 sources") {
+		t.Errorf("zero sources must read \"No sources\", never the numeral form: %s", got)
+	}
+	const summaryOpen = `<summary class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty">`
+	summaryStart := strings.Index(got, summaryOpen)
+	if summaryStart < 0 {
+		t.Fatalf("expected the zero-sources chip to carry the --empty modifier, got: %s", got)
+	}
+	summaryEnd := strings.Index(got[summaryStart:], "</summary>")
+	if summaryEnd < 0 {
+		t.Fatalf("the zero-sources summary never closes, got: %s", got)
+	}
+	summary := got[summaryStart : summaryStart+summaryEnd]
+	if strings.Contains(summary, "claim-footer__chevron") {
+		t.Errorf("the zero-sources chip must be chevron-less, got summary: %s", summary)
 	}
 	if want := `<span class="claim-footer-chip-label">1 relationship</span>`; !strings.Contains(got, want) {
 		t.Errorf("expected the untouched relationships chip %q, got: %s", want, got)
@@ -332,5 +358,94 @@ func TestClaimMarkdown_MarkersResolveAgainstTheFooterAnchor(t *testing.T) {
 	}
 	if !strings.Contains(footer, ` id="`+anchor+`"`) {
 		t.Errorf("the footer row does not carry the anchor %q: %s", anchor, footer)
+	}
+}
+
+// ---------------------------------------------------------------------
+// RETRY ADDITION (fix-list item 11) — the citation-count column. None of
+// this surface existed before this pass: no counter, no column, no wording.
+// 05 §4.11's "cited once" / D12's "derived from the count of `[n]` markers
+// in the claim body … computed at render time, never authored".
+// ---------------------------------------------------------------------
+
+// TestCitedLabel pins D12's exact wording for every count, including the
+// zero case (a source nobody has cited yet still shows a count, never a
+// blank column — see writeSourcesRow).
+func TestCitedLabel(t *testing.T) {
+	cases := []struct {
+		n    int
+		want string
+	}{
+		{0, "cited 0 times"},
+		{1, "cited once"},
+		{2, "cited 2 times"},
+		{10, "cited 10 times"},
+	}
+	for _, tc := range cases {
+		if got := citedLabel(tc.n); got != tc.want {
+			t.Errorf("citedLabel(%d) = %q, want %q", tc.n, got, tc.want)
+		}
+	}
+}
+
+// TestSourcesCitationCounts_CountsOnlyResolvedMarkers is the whole argument
+// for rendering the body to count rather than scanning it for "[n]"
+// substrings by hand: a marker only counts when it is one this claim's
+// sources can actually resolve (markdown_cite.go's recognition rules), so a
+// ref naming no source, and a bracketed number that merely LOOKS like a
+// marker inside a fenced code block, must not inflate any source's count.
+func TestSourcesCitationCounts_CountsOnlyResolvedMarkers(t *testing.T) {
+	c := sourcedClaim(
+		model.Source{Ref: 1, Kind: model.SourceKindExternal, Title: "One"},
+		model.Source{Ref: 2, Kind: model.SourceKindExternal, Title: "Two"},
+	)
+	c.Body = "budget [1] and retries [1] and [7] and an array `array[2]` access, " +
+		"then a fence:\n\n```\n[2] not a marker in here\n```\n"
+
+	counts := sourcesCitationCounts(c)
+	if got := counts[1]; got != 2 {
+		t.Errorf("ref 1: got %d resolved citations, want 2", got)
+	}
+	if got := counts[2]; got != 0 {
+		t.Errorf("ref 2: got %d resolved citations, want 0 (its only two spellings are a code span and a fence, neither of which the inline scanner ever reaches)", got)
+	}
+}
+
+// TestSourcesCitationCounts_NoSourcesIsNil holds the same zero-cost shape
+// every capability in this family has: a claim that cannot carry citations
+// gets a nil map, not an empty one that happens to behave the same — nil is
+// what counts[anything] reads as 0 through anyway, so callers need no special
+// case, but the function must never panic or render the body needlessly for
+// a claim with nothing to count.
+func TestSourcesCitationCounts_NoSourcesIsNil(t *testing.T) {
+	c := sourcedClaim()
+	c.Body = "see [1] for details"
+	if got := sourcesCitationCounts(c); got != nil {
+		t.Errorf("expected a nil map for a claim with no sources, got: %#v", got)
+	}
+}
+
+// TestWriteSourcesRow_CitationCountColumn is the end-to-end check: the
+// rendered footer carries the right "cited once" / "cited N times" text for
+// each source, matching how many times its ref actually resolves in the
+// claim's own body — never an authored field, always derived.
+func TestWriteSourcesRow_CitationCountColumn(t *testing.T) {
+	c := sourcedClaim(
+		model.Source{Ref: 1, Kind: model.SourceKindExternal, Title: "Cited once"},
+		model.Source{Ref: 2, Kind: model.SourceKindExternal, Title: "Cited twice"},
+		model.Source{Ref: 3, Kind: model.SourceKindExternal, Title: "Never cited"},
+	)
+	c.Body = "the retry bound rests on [1]. the budget is checked twice, at [2] and again [2]."
+
+	got := string(EdgesHTMLWithLinks(c, nil, nil, nil))
+
+	for _, want := range []string{
+		`<span class="claim-source-cite">cited once</span>`,
+		`<span class="claim-source-cite">cited 2 times</span>`,
+		`<span class="claim-source-cite">cited 0 times</span>`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("expected %q in the footer, got: %s", want, got)
+		}
 	}
 }

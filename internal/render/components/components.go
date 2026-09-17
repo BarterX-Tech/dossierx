@@ -527,75 +527,102 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 
 	var b strings.Builder
 
-	// Zero links, zero files and zero sources: emit no footer at all — not an
-	// empty strip that opens onto nothing, which would be a control on every
-	// claim with no edges yet. Same all-zero gate the pre-redesign digest used,
-	// preserved so a project with no edges/files/sources keeps rendering no
-	// footer.
-	if links > 0 || len(files) > 0 || len(c.Sources) > 0 {
-		footerName := html.EscapeString("claim-footer-" + c.ID)
+	// RETRY FIX (05 §8 item 5: "An entirely edgeless, sourceless, checkless
+	// claim still shows four zeros and the comment count."; fix-list item
+	// 10). The strip now renders UNCONDITIONALLY: the previous all-zero gate
+	// (`links > 0 || len(files) > 0 || len(c.Sources) > 0`) hid the whole
+	// footer — GOVERNED BY row included — on any claim whose only
+	// relationship fact was a stated `governed_by: none`, since that state
+	// deliberately does not count toward `links` (see above). R-F.1 fixes
+	// the strip's four positions; a reader who has learned "this position is
+	// sources" must not find the position itself missing on the next claim,
+	// only its count at zero.
+	footerName := html.EscapeString("claim-footer-" + c.ID)
 
-		// Two auto-open signals, OR'd — either alone opens the relationships
-		// door. Both read data already in scope (files' Drifted flag, the
-		// claim's own status pair), which is why this needs no new parameter.
-		// The THIRD auto-open signal, the deep-link/fragment case, stays
-		// CSS-only (viewer/template/style.css's `.claim:target .claim-links…`
-		// rule) since a URL fragment is never sent to the server.
-		openAttr := ""
-		for _, f := range files {
-			if f.Drifted {
-				openAttr = " open"
-				break
-			}
-		}
-		if reviewPending {
+	// Two auto-open signals, OR'd — either alone opens the relationships
+	// door. Both read data already in scope (files' Drifted flag, the
+	// claim's own status pair), which is why this needs no new parameter.
+	// The THIRD auto-open signal, the deep-link/fragment case, stays
+	// CSS-only (viewer/template/style.css's `.claim:target .claim-links…`
+	// rule) since a URL fragment is never sent to the server.
+	openAttr := ""
+	for _, f := range files {
+		if f.Drifted {
 			openAttr = " open"
+			break
 		}
-
-		b.WriteString(`<div class="claim-footer">`)
-
-		// ---- relationships door (R09.4) ----
-		b.WriteString(`<details class="claim-links" name="`)
-		b.WriteString(footerName)
-		b.WriteString(`"`)
-		b.WriteString(openAttr)
-		b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
-		b.WriteString(countSegment(links, "relationship"))
-		b.WriteString(`</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary>`)
-		b.WriteString(`<div class="claim-footer-panel claim-links-panel">`)
-		b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
-		b.WriteString(strconv.Itoa(links))
-		b.WriteString(`</span></div>`)
-
-		writeRelationshipDirection(&b, "up", "GOVERNED BY", governedBody.String(), governedHas)
-		writeRelationshipDirection(&b, "down", "DEPENDS ON", dependsOnBody.String(), len(c.RestsOn) > 0)
-		writeRelationshipDirection(&b, "right", "DEPENDED ON BY", dependedOnByBody.String(), len(dependedBy) > 0)
-
-		if extra.Len() > 0 {
-			b.WriteString(`<ul class="claim-edges claim-edges-extra">`)
-			b.WriteString(extra.String())
-			b.WriteString(`</ul>`)
-		}
-		b.WriteString(`</div></details>`)
-
-		// ---- sources door (R09.5) ----
-		if len(c.Sources) > 0 {
-			b.WriteString(`<details class="claim-sources" name="`)
-			b.WriteString(footerName)
-			b.WriteString(`"><summary class="claim-footer-chip claim-footer-chip--sources"><span class="claim-footer-chip-label">`)
-			b.WriteString(countSegment(len(c.Sources), "source"))
-			b.WriteString(`</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary>`)
-			b.WriteString(`<div class="claim-footer-panel claim-sources-panel">`)
-			b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
-			b.WriteString(strconv.Itoa(len(c.Sources)))
-			b.WriteString(`</span></div>`)
-			b.WriteString(`<ul class="claim-source-list">`)
-			writeSourcesRow(&b, c)
-			b.WriteString(`</ul></div></details>`)
-		}
-
-		b.WriteString(`</div>`)
 	}
+	if reviewPending {
+		openAttr = " open"
+	}
+
+	b.WriteString(`<div class="claim-footer">`)
+
+	// ---- relationships door (R09.4) ----
+	b.WriteString(`<details class="claim-links" name="`)
+	b.WriteString(footerName)
+	b.WriteString(`"`)
+	b.WriteString(openAttr)
+	b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
+	b.WriteString(countSegment(links, "relationship"))
+	b.WriteString(`</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary>`)
+	b.WriteString(`<div class="claim-footer-panel claim-links-panel">`)
+	b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
+	b.WriteString(strconv.Itoa(links))
+	b.WriteString(`</span></div>`)
+
+	// The direction count (2nd param) is 05 §4.10's optional mono count,
+	// omitted for GOVERNED BY (sentinel -1: it always has exactly one
+	// target, so counting it is meaningless) and shown for DEPENDS ON /
+	// DEPENDED ON BY (07a §6 pins "DEPENDS ON · 1", "DEPENDED ON BY · 1").
+	writeRelationshipDirection(&b, "up", "GOVERNED BY", -1, governedBody.String(), governedHas)
+	writeRelationshipDirection(&b, "down", "DEPENDS ON", len(c.RestsOn), dependsOnBody.String(), len(c.RestsOn) > 0)
+	writeRelationshipDirection(&b, "right", "DEPENDED ON BY", len(dependedBy), dependedOnByBody.String(), len(dependedBy) > 0)
+
+	if extra.Len() > 0 {
+		b.WriteString(`<ul class="claim-edges claim-edges-extra">`)
+		b.WriteString(extra.String())
+		b.WriteString(`</ul>`)
+	}
+	b.WriteString(`</div></details>`)
+
+	// ---- sources door (R09.5) ----
+	// RETRY FIX: always rendered now, even at zero sources. 07a §6/§8's
+	// "Sources present" state is explicit that the word changes FROM "No
+	// sources" TO "N sources" once len(c.Sources) > 0 — meaning the zero
+	// state has its own, non-numeral wording, never "0 sources". Per 05 §8
+	// item 5 that zero-state chip is also closed, un-openable and
+	// --color-faint rather than the ordinary --color-muted+chevron chip —
+	// hence claim-footer-chip--empty and the omitted chevron span below.
+	b.WriteString(`<details class="claim-sources" name="`)
+	b.WriteString(footerName)
+	b.WriteString(`"><summary class="claim-footer-chip claim-footer-chip--sources`)
+	if len(c.Sources) == 0 {
+		b.WriteString(` claim-footer-chip--empty`)
+	}
+	b.WriteString(`"><span class="claim-footer-chip-label">`)
+	if len(c.Sources) == 0 {
+		b.WriteString(`No sources`)
+	} else {
+		b.WriteString(countSegment(len(c.Sources), "source"))
+	}
+	b.WriteString(`</span>`)
+	if len(c.Sources) > 0 {
+		b.WriteString(`<span class="claim-footer__chevron" aria-hidden="true"></span>`)
+	}
+	b.WriteString(`</summary>`)
+	b.WriteString(`<div class="claim-footer-panel claim-sources-panel">`)
+	b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
+	b.WriteString(strconv.Itoa(len(c.Sources)))
+	b.WriteString(`</span></div>`)
+	if len(c.Sources) > 0 {
+		b.WriteString(`<ul class="claim-source-list">`)
+		writeSourcesRow(&b, c)
+		b.WriteString(`</ul>`)
+	}
+	b.WriteString(`</div></details>`)
+
+	b.WriteString(`</div>`)
 
 	// The baked-in thread panel follows the whole footer strip (a <div>, so it
 	// can't be an <li> inside a <ul>) but stays inside the claim's <section>,
@@ -620,17 +647,24 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 
 // writeRelationshipDirection writes one of R09.4's three fixed-order
 // direction blocks — GOVERNED BY / DEPENDS ON / DEPENDED ON BY — as its own
-// header (arrow + label) followed by the rows body already built for it. A
-// direction with nothing to show (has is false) is omitted entirely rather
-// than printed empty: GOVERNED BY is the one direction a claim always has an
-// opinion about (a named target or a stated "none"), so its caller always
-// passes has=true.
+// header (arrow + label + optional count) followed by the rows body already
+// built for it. A direction with nothing to show (has is false) is omitted
+// entirely rather than printed empty: GOVERNED BY is the one direction a
+// claim always has an opinion about (a named target or a stated "none"), so
+// its caller always passes has=true.
+//
+// count is 05 §4.10's "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
+// --color-faint" — omitted (no element at all, not a "0") when count is
+// negative, which is the sentinel every GOVERNED BY call passes: "GOVERNED BY
+// carries no count because it has exactly one target". DEPENDS ON and
+// DEPENDED ON BY always pass their real row count, matching 07a §6's pinned
+// "DEPENDS ON · 1" / "DEPENDED ON BY · 1".
 //
 // arrow is a plain glyph rather than an SVG sprite reference — the frozen
 // theme-parity baselines already accept a CSS/glyph chevron for this exact
 // footer (see the .claim-footer__chevron border-triangle), and a bare
 // Unicode arrow in the same Inter run needs no new icon plumbing.
-func writeRelationshipDirection(b *strings.Builder, arrow, label, rowsHTML string, has bool) {
+func writeRelationshipDirection(b *strings.Builder, arrow, label string, count int, rowsHTML string, has bool) {
 	if !has {
 		return
 	}
@@ -646,23 +680,36 @@ func writeRelationshipDirection(b *strings.Builder, arrow, label, rowsHTML strin
 	b.WriteString(glyph)
 	b.WriteString(`</span><span class="claim-relationship-direction-label">`)
 	b.WriteString(label)
-	b.WriteString(`</span></div>`)
+	b.WriteString(`</span>`)
+	if count >= 0 {
+		b.WriteString(`<span class="claim-relationship-direction-count">`)
+		b.WriteString(strconv.Itoa(count))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</div>`)
 	b.WriteString(`<ul class="claim-edges claim-relationship-list">`)
 	b.WriteString(rowsHTML)
 	b.WriteString(`</ul></div>`)
 }
 
 // writeRelationshipRow writes one R09.4 relationship row: a lifecycle dot,
-// the shared writeClaimRef anchor, and a right-ranged lifecycle badge —
-// 05 §4.10's "the dot is 7px in the lifecycle colour… the badge is fixed-58px,
-// right-aligned, in the lifecycle colour". Unlike targetPillHTML (which still
-// governs the "extra" mirrors/rests-on-adjacent rows via writeIDListItems), a
-// fixed-direction relationship row ALWAYS carries a badge when the target's
-// lifecycle is known — a healthy locked target gets "LOCKED" rather than
-// nothing, because R-I.2 states the badge is the row's lifecycle fact, not an
-// alert. An unknown target (no catalog lookup — the default, parse-time
-// "edges" binding) renders no dot and no badge, degrading to the plain link
-// the pre-redesign row already was.
+// the shared writeClaimRef anchor (title only — showPrefix=false, see below),
+// the target's own `module · facet` meta column, and a right-ranged
+// lifecycle badge — 05 §4.10's four columns. Unlike targetPillHTML (which
+// still governs the "extra" mirrors/rests-on-adjacent rows via
+// writeIDListItems), a fixed-direction relationship row ALWAYS carries a
+// badge when the target's lifecycle is known — a healthy locked target gets
+// "LOCKED" rather than nothing, because R-I.2 states the badge is the row's
+// lifecycle fact, not an alert. An unknown target (no catalog lookup — the
+// default, parse-time "edges" binding) renders no dot, no meta and no badge,
+// degrading to the plain link the pre-redesign row already was.
+//
+// The meta column and the badge are wrapped together in a
+// claim-relationship-line2 span, which style.css unwraps with
+// `display: contents` at every width down to the 520px tier — so the four
+// columns still lay out as direct flex children of the <li> on desktop —
+// and turns into a real flex row at 520px, where R-I.2 stacks them together
+// as the relationship row's mobile "line two".
 func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
 	st, known := targetStatuses[targetID]
 	b.WriteString(`<li class="`)
@@ -673,7 +720,9 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 		b.WriteString(lifecycleModifier(st))
 		b.WriteString(`" aria-hidden="true"></span>`)
 	}
-	writeClaimRef(b, targetID, fromModule, fromFacet, nil)
+	writeClaimRef(b, targetID, fromModule, fromFacet, nil, false)
+	b.WriteString(`<span class="claim-relationship-line2">`)
+	writeRelationshipMeta(b, targetID)
 	if known {
 		b.WriteString(`<span class="claim-relationship-badge claim-relationship-badge--`)
 		b.WriteString(lifecycleModifier(st))
@@ -681,7 +730,31 @@ func writeRelationshipRow(b *strings.Builder, liClass, targetID, fromModule, fro
 		b.WriteString(html.EscapeString(strings.ToUpper(StatusLabel(st.Status, st.ReviewPending))))
 		b.WriteString(`</span>`)
 	}
+	b.WriteString(`</span>`)
 	b.WriteString(`</li>`)
+}
+
+// writeRelationshipMeta writes 05 §4.10's "module · facet" meta column for a
+// relationship row — the target's OWN module and facet, unconditionally.
+// Unlike writeClaimRef's prefix (elided against the reading claim's own
+// module/facet, and shown inline before the label), this column always
+// shows both segments, because both 05 §4.10 ("Meta Curtainly · Doctrine")
+// and 07 §4.10 ("Row meta … text form Module · Facet") measure it
+// unqualified — there is no same-module/same-facet special case for this
+// column, only for writeClaimRef's own inline prefix on every OTHER edge
+// list this footer renders (mirrors, rests_on-adjacent extras).
+//
+// An unshaped id (splitClaimID fails) has no module/facet to show and
+// writes no meta span at all — the same graceful degradation writeClaimRef's
+// own raw-id fallback uses.
+func writeRelationshipMeta(b *strings.Builder, targetID string) {
+	module, facet, _, ok := splitClaimID(targetID)
+	if !ok {
+		return
+	}
+	b.WriteString(`<span class="claim-relationship-meta">`)
+	b.WriteString(html.EscapeString(DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)))
+	b.WriteString(`</span>`)
 }
 
 // lifecycleModifier maps a target's status to the BEM-style modifier suffix
@@ -915,7 +988,7 @@ func writeIDListItems(b *strings.Builder, fromModule, fromFacet string, ids []st
 	b.WriteString(`<ul class="claim-edge-id-list">`)
 	for _, id := range ids {
 		b.WriteString(`<li>`)
-		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses)
+		writeClaimRef(b, id, fromModule, fromFacet, targetStatuses, true)
 		b.WriteString(`</li>`)
 	}
 	b.WriteString(`</ul>`)
@@ -1043,7 +1116,16 @@ func ClaimLabel(id string) string {
 // function produced before the pill existed. Only internal/render's
 // attachEdgesOverride, which does have the whole catalog, ever supplies a
 // non-nil map.
-func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus) {
+//
+// showPrefix is the RETRY addition: a fixed-direction relationship row (see
+// writeRelationshipRow) now carries the target's module/facet in its own,
+// UNCONDITIONAL meta column (writeRelationshipMeta), so folding the same
+// information into an elided inline prefix here as well would print it
+// twice on those rows. Every other caller — writeIDListItems, for mirrors
+// and rests_on-adjacent "extra" rows, which have no meta column of their
+// own — passes true and keeps this function's original elision behaviour
+// exactly as it was.
+func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, targetStatuses map[string]TargetStatus, showPrefix bool) {
 	esc := html.EscapeString(targetID)
 	b.WriteString(`<a class="claim-ref" href="#`)
 	b.WriteString(esc)
@@ -1065,11 +1147,13 @@ func writeClaimRef(b *strings.Builder, targetID, fromModule, fromFacet string, t
 	}
 
 	var prefix string
-	switch {
-	case module != fromModule:
-		prefix = DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)
-	case facet != fromFacet:
-		prefix = DisplayCase(facet)
+	if showPrefix {
+		switch {
+		case module != fromModule:
+			prefix = DisplayCase(module) + claimRefModuleSep + DisplayCase(facet)
+		case facet != fromFacet:
+			prefix = DisplayCase(facet)
+		}
 	}
 	if prefix != "" {
 		b.WriteString(`<span class="claim-ref-prefix">`)

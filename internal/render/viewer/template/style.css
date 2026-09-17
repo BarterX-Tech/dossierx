@@ -924,6 +924,24 @@ th {
   border: 0;
 }
 
+/* RETRY FIX (05 §2/§3: "pushes one panel out below the footer hairline",
+   panel inline padding 32px flush with the card body). An open <details> is
+   the flex item .claim-footer actually lays out — .claim-footer-panel is a
+   block INSIDE that <details>'s content, never a flex item of .claim-footer
+   itself, so the panel's own `flex-basis: 100%` (below) was inert: nothing
+   about a plain block child cares about its ancestor's flex-basis. The
+   <details> element is what needs `flex: 1 1 100%` — take the whole strip
+   row the instant it opens — so the block panel inside it can then reach
+   `width: 100%` of something that is actually the card's full content width
+   (measured 844px at 1440: 780px content + 2×--card-gutter), not the
+   ~510px a shrink-to-fit flex item leaves it. min-width: 0 is the standard
+   companion so a long relationship title inside can wrap instead of forcing
+   the row wider than the strip. */
+.claim-footer > details[open] {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+
 /* Claim readiness is a reviewer-facing work queue. The policy engine remains
    authoritative; this surface groups its complete fact list by the first hop
    of each representative path, with an optional focused Mermaid trace. */
@@ -1343,18 +1361,57 @@ th {
   font-weight: 500;
 }
 
+/* RETRY FIX (fix-list item 10; 05 §8 item 5's zero-count-chip rule applied
+   to the wording 07a §6/§8 gives sources specifically: "No sources" rather
+   than a "0 sources" numeral). A source-less claim's SOURCES door still
+   renders — R-F.1 fixes the strip's positions — but reads closed, faint and
+   chevron-less rather than an ordinary muted/chevroned chip: there is
+   nothing behind it to disclose, so nothing invites a click. components.go
+   omits the `.claim-footer__chevron` span entirely on this variant rather
+   than hiding it here, so no assistive tech announces an affordance that
+   is not there. */
+.claim-footer-chip--empty {
+  color: var(--faint);
+}
+
+.claim-footer-chip--empty:hover,
+.claim-footer-chip--empty:focus-visible {
+  color: var(--faint);
+}
+
 /* .claim-footer-panel is each door's expansion body — 05 §4.9–§4.11's
-   neutral/blocked panel ground. flex-basis: 100% is what forces it onto its
-   own full-width row inside the .claim-footer flex strip, wrapping below the
-   row of chips, the same trick that lets .claim-footer stay a single flex
-   container without the JS or grid machinery a "real" accordion would need.
-   The negative inline margin + matching padding (G8's full-bleed-hairline
-   pattern) is why the panel's tint reaches the card's own edges while its
-   text still lines up with the chips above — 05 §3's "flush with the card
-   body, not with the inset footer". */
+   neutral/blocked panel ground.
+
+   RETRY FIX, SECOND HALF (found by probing the LIVE page after the item-1
+   fix above, not by re-reading the CSS): `.claim-footer > details[open]`
+   correctly makes the <details> take the full strip row now, but this
+   rule's own `width: 100%` was a SECOND, independent bug the verifier's
+   842px-vs-510px reading did not separately name. This engine's global
+   reset is `box-sizing: border-box`, under which an explicit `width: 100%`
+   resolves to 100% of the CONTAINING BLOCK'S width — i.e. the <details>'s
+   own content width — as this element's fixed OUTER (border-box) size.
+   Negative `margin-inline` then only SHIFTS that fixed-size box left and
+   right; per CSS2.1 §10.3.3's over-constrained-box rule, an explicit,
+   non-auto width means the margins are NOT solved for by the "fill the
+   available space" equation the classic negative-margin full-bleed trick
+   depends on — that equation only runs when width is 'auto'. The
+   observable result: the panel's LEFT edge reached the card's edge (the
+   negative margin did shift it), but its RIGHT edge fell exactly
+   2×--card-gutter short, because the box's own width never grew to fill
+   the gap the shift opened up. `width: auto` (the property's default —
+   simply omitted here) is what lets a block box's width auto-solve to
+   "containing block width − margin-left − margin-right", which is exactly
+   the full-bleed span this rule wants: content width + gutter on both
+   sides. flex-basis: 100% is kept only as a defensive no-op (it is not a
+   flex item of .claim-footer — the <details> is — so it does nothing
+   today, but costs nothing to leave in case a future markup change ever
+   makes this element a direct flex child again). The negative inline
+   margin + matching padding (G8's full-bleed-hairline pattern) is why the
+   panel's tint reaches the card's own edges while its text still lines up
+   with the chips above — 05 §3's "flush with the card body, not with the
+   inset footer". */
 .claim-footer-panel {
   flex-basis: 100%;
-  width: 100%;
   margin-inline: calc(-1 * var(--card-gutter));
   padding: 18px var(--card-gutter) 22px;
   border-top: 1px solid var(--border);
@@ -1421,25 +1478,50 @@ th {
   letter-spacing: 0.08em;
 }
 
+/* RETRY FIX (05 §4.10: "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
+   --color-faint. GOVERNED BY carries no count because it has exactly one
+   target."; 07a §6 pins "DEPENDS ON · 1" / "DEPENDED ON BY · 1"). Emitted by
+   components.go's writeRelationshipDirection for DEPENDS ON / DEPENDED ON BY
+   only — GOVERNED BY's caller passes the "omit" sentinel, so no element with
+   this class exists in that direction's head at all. */
+.claim-relationship-direction-count {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 14px;
+}
+
 /* .claim-relationship-list resets the shared .claim-edges bullet-list rule
    (this file, below) for the fixed-direction rows: each row carries its own
    lifecycle dot instead of the generic bullet, so the ::before dot would
-   double up. */
-.claim-relationship-list {
-  padding-left: 0;
+   double up.
+   RETRY FIX: every selector in this block is scoped under
+   `.claim-footer-panel` (a second class, specificity 0,2,0) rather than
+   bare `.claim-relationship-list` (0,1,0), which is EQUAL specificity to
+   the shared `.claim-edges` rule below — a bare selector here only won
+   because it happened to sit before `.claim-edges` in source order, which
+   is exactly the fragile arrangement a later edit (or a merge) could
+   silently invert. The extra ancestor class settles it structurally: this
+   block always wins over `.claim-edges`, regardless of where either rule
+   sits in the file. `padding-left: 19px` on the list itself is 05 §3's
+   "Relationship direction-body indent" (also §4.10) — it replaces the
+   inherited `.claim-edges` indent that a plain `padding-left: 0` here used
+   to throw away with nothing put back. */
+.claim-footer-panel .claim-relationship-list {
+  padding-left: 19px;
   border-top: 0;
   margin: 0;
   gap: 10px;
 }
 
-.claim-relationship-list > li.claim-relationship {
+.claim-footer-panel .claim-relationship-list > li.claim-relationship {
   display: flex;
   align-items: baseline;
   gap: 10px;
   padding-left: 0;
 }
 
-.claim-relationship-list > li.claim-relationship::before {
+.claim-footer-panel .claim-relationship-list > li.claim-relationship::before {
   content: none;
 }
 
@@ -1454,11 +1536,52 @@ th {
 .claim-relationship-dot--locked { background: var(--accent); }
 .claim-relationship-dot--draft { background: var(--status-draft); }
 
-.claim-relationship-list .claim-ref {
+/* RETRY FIX: font-size/line-height/text-decoration were previously unset
+   here, so the anchor fell through to the plain UA <a> defaults — an
+   inherited ~12px (from the shared `.claim-edges` 0.78rem body copy) and a
+   browser underline. 05 §4.10 measures the relationship-row title at Inter
+   `14px / 18px` desktop; R-I.2 measures it `14px / 20px` on mobile (see the
+   520px block below), and it is a plain-text-coloured link, never
+   underlined, matching every other claim-ref in this footer. */
+.claim-footer-panel .claim-relationship-list .claim-ref {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--link);
   font-weight: 400;
+  font-size: 14px;
+  line-height: 18px;
+  text-decoration: none;
+}
+
+/* RETRY FIX (05 §4.10 four columns; R-I.2 desktop line one/mobile line two
+   left side): the target's own `module · facet`, ALWAYS shown — never the
+   elided, reader-context-relative prefix `writeClaimRef` draws for every
+   other edge list in this footer (mirrors/rests_on extras). It is its own
+   column between the title and the badge, not text folded into the title,
+   because 05 §4.10 counts it as one of the row's four columns. See
+   components.go's writeRelationshipRow/writeRelationshipMeta. */
+.claim-relationship-meta {
+  flex: 0 1 auto;
+  min-width: 0;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* .claim-relationship-line2 wraps the meta + badge pair (R-I.2's "line two")
+   so mobile can present them together while desktop keeps them as two of
+   the row's four columns. `display: contents` unwraps it from the box tree
+   at every width down to the 520px tier: its two children lay out as if
+   they were direct flex children of the `<li>`, so desktop's one-line,
+   four-column row (dot, title, meta, badge) is unaffected by this element
+   existing at all. The 520px block below is what turns it into a real flex
+   row. */
+.claim-relationship-line2 {
+  display: contents;
 }
 
 .claim-relationship-badge {
@@ -1474,9 +1597,35 @@ th {
 .claim-relationship-badge--locked { color: var(--accent); }
 .claim-relationship-badge--draft { color: var(--status-draft); }
 
+/* RETRY FIX: font-size/line-height were unset, so this fell through to the
+   inherited ~12px `.claim-edges` body copy. 05 §8 item 15 is explicit that
+   the stated-absence form of GOVERNED BY reads "in --color-faint Inter
+   14/18 where a title would be, no dot and no badge" — this is the ONLY
+   spec for this state in L4's reading list (07 §4.10, which draws a
+   competing NONE-badge-plus-serif-sentence form, is outside L4's verified
+   region per LANES.md's Screens-verified column, which names 07 §4.7/§4.8
+   only); see VAULT/learnings/inbox/L4.md for the recorded resolution. */
 .claim-relationship-none {
   color: var(--faint);
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 18px;
+}
+
+/* RETRY FIX companion to the rule above: this <li> is NOT `li.claim-
+   relationship` (components.go gives it `claim-governed governed-none
+   claim-relationship-none` — no "claim-relationship" class), so it never
+   picked up the `.claim-relationship-list > li.claim-relationship` reset
+   two rules up: it kept the shared `.claim-edges > li` bullet dot and
+   0.9rem indent. 05 §8 item 15 says "no dot" in as many words; this reset
+   is keyed on the class the markup already carries, so no Go change is
+   needed and every test pinning that exact class string is undisturbed. */
+.claim-footer-panel .claim-relationship-list > li.claim-relationship-none {
+  padding-left: 0;
+}
+
+.claim-footer-panel .claim-relationship-list > li.claim-relationship-none::before {
+  content: none;
 }
 
 /* Deep-link auto-open (decision C9). Landing on #<claim-id> — from the
@@ -1508,12 +1657,36 @@ th {
    (0,3,1) and source order is all that separates them.
    Neither form sets the `open` content attribute — CSS cannot write one — so
    the UA disclosure marker still reads closed while the contents show. That is
-   a cosmetic mismatch, not a defect to "fix" with JS. */
-.claim:target .claim-links > *:not(summary) {
+   a cosmetic mismatch, not a defect to "fix" with JS.
+
+   RETRY FIX (R09.2 in the deep-link state, 05 §2). The reveal above used to
+   apply unconditionally, with no regard for the OTHER door in the same
+   `name="claim-footer-<id>"` group. Because relationships is revealed by
+   `content-visibility` rather than a real `open` attribute, the native
+   disclosure-group mechanism has nothing to close when a reader on a
+   `:target` claim then clicks the SOURCES chip: `<details>`'s "close every
+   sibling that shares my name" behaviour only fires against siblings that
+   themselves carry `open`, and relationships never did. The result was two
+   panels open at once — exactly what R09.2 forbids.
+   The `:not(:has(> details[open]))` guard on `.claim-footer` below is the
+   fix: the CSS-only reveal only fires while NEITHER door in the strip has
+   really been opened yet. The moment a reader clicks sources, the browser
+   sets a real `open` attribute on it, `:has(> details[open])` starts
+   matching, the guard's `:not()` stops matching, and the reveal rule simply
+   no longer applies — relationships falls back to the UA's ordinary
+   closed-<details> hiding, with no JS and no third `open` attribute written
+   anywhere. If the reader instead opens relationships itself first, its own
+   `open` attribute takes over as the reason its content shows, so the guard
+   going false there is harmless. This preserves every constraint above (CSS
+   only, no third `open` attribute, works under static file:// export) while
+   the pre-existing "toggling the revealed relationships door closed does not
+   visually close it" cosmetic quirk (an accepted, unrelated mismatch, not
+   this bug) is unchanged. */
+.claim:target .claim-footer:not(:has(> details[open])) > .claim-links > *:not(summary) {
   content-visibility: visible;
 }
 
-.claim:target .claim-links::details-content {
+.claim:target .claim-footer:not(:has(> details[open])) > .claim-links::details-content {
   content-visibility: visible;
 }
 
@@ -1724,6 +1897,24 @@ th {
   line-height: 16px;
 }
 
+/* RETRY ADDITION (fix-list item 11; 05 §4.11's citation count "cited once",
+   Inter 12/16, --color-faint, padding-top: 3px — components.go's D12
+   counter, sourcesCitationCounts). It is written as `display: block` for the
+   same reason `.claim-source-meta` is: `.claim-source-body`'s column flex
+   gives every DIRECT block/flex-participating child its own stacked line,
+   so this becomes the row's next line after the title/publisher content
+   with no extra layout rule needed. See sources.go's writeSourcesRow for
+   the recorded, in-scope simplification against 05's mobile "shares line
+   two with the publisher" arrangement (M10). */
+.claim-source-cite {
+  display: block;
+  padding-top: 3px;
+  color: var(--faint);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+}
+
 /* The two authored boundary lines (supports / does_not_support). They are
    prose a human wrote about the citation rather than facts about the source,
    so they sit dimmed on their own lines under the entry — visible without
@@ -1825,12 +2016,18 @@ th {
    Selector re-pinned from `.claim-links` to `.claim-sources` — 05 §4.11/R09.5
    split sources into its own peer <details>, so the citation-marker target
    this rule reveals now lives under `.claim-sources`, never under
-   `.claim-links` (relationships). */
-.claim-sources:has(.claim-source:target) > *:not(summary) {
+   `.claim-links` (relationships).
+
+   RETRY FIX (R09.2, mirrors the `.claim:target .claim-links` gate above): the
+   same `:not(:has(> details[open]))` guard on `.claim-footer` is needed here
+   for the same reason — a citation-marker deep link into a closed sources
+   door must stop force-revealing the moment the reader opens relationships
+   for real, or both doors would show at once. */
+.claim-footer:not(:has(> details[open])) > .claim-sources:has(.claim-source:target) > *:not(summary) {
   content-visibility: visible;
 }
 
-.claim-sources:has(.claim-source:target)::details-content {
+.claim-footer:not(:has(> details[open])) > .claim-sources:has(.claim-source:target)::details-content {
   content-visibility: visible;
 }
 
@@ -3576,7 +3773,17 @@ body.shell-body {
 /* Nav-group Lucide hosts stay 14px. The evidence-footer chevron is the
    CSS border triangle the frozen theme-parity baselines paint — swapping
    it for a Lucide stroke repainted every claim card in an unthemed
-   project (channel delta ~246, currentColor vs the card). */
+   project (channel delta ~246, currentColor vs the card).
+   RETRY FIX (05 §4.6: "12px down-chevron, stroke-width 2.4, --color-faint";
+   07 §4.7's open form is the same 12px chevron in --color-accent). Two
+   things were wrong: the box was 7px, not the board's 12px, and its colour
+   rode `currentColor` — which inherited the CHIP's own colour (`--muted`
+   closed / `--link` open), not the CHEVRON's own colour the board measures
+   separately (`--color-faint` closed, only matching the chip's colour once
+   it is open). `border-color` is now set explicitly instead of inheriting,
+   and the open-state override below promotes it to `--link` to match. The
+   border-triangle technique itself is unchanged — still the frozen
+   theme-parity baseline's chevron, just re-pinned to the board's size. */
 .system-nav-group__chevron {
   width: 14px;
   height: 14px;
@@ -3584,12 +3791,12 @@ body.shell-body {
 }
 
 .claim-footer__chevron {
-  width: 7px;
-  height: 7px;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  transform: rotate(45deg) translate(-1px, -1px);
-  transition: transform .16s ease;
+  width: 12px;
+  height: 12px;
+  border-right: 2px solid var(--faint);
+  border-bottom: 2px solid var(--faint);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform .16s ease, border-color .16s ease;
 }
 
 .system-nav-group__toggle[aria-expanded="true"] .system-nav-group__chevron,
@@ -3599,7 +3806,8 @@ body.shell-body {
 
 .claim-links[open] .claim-footer__chevron,
 .claim-sources[open] .claim-footer__chevron {
-  transform: rotate(225deg) translate(-1px, -1px);
+  border-color: var(--link);
+  transform: rotate(225deg) translate(-2px, -2px);
 }
 
 .system-nav-group__body {
@@ -5228,7 +5436,10 @@ code {
      padding; neutral chips (relationships, sources) gain a --color-border
      outline. The open-chip accent OUTLINE (M5) is the mobile-only addition
      the desktop bare-text-plus-chevron form does not carry (05 §9 Open
-     decisions: "at 12px, colour alone is too quiet on a phone"). */
+     decisions: "at 12px, colour alone is too quiet on a phone").
+     font-size/line-height were missing here (RETRY FIX): the chip inherited
+     desktop's 13px, where 07 §4.8/05 §4.8 both measure the mobile chip label
+     at Inter 12px / 16px. */
   .claim-footer-chip {
     height: 30px;
     padding-inline: 11px;
@@ -5236,6 +5447,20 @@ code {
     border-radius: var(--radius-pill);
     background: var(--card-bg);
     box-sizing: border-box;
+    font-size: 12px;
+    line-height: 16px;
+  }
+
+  /* RETRY FIX (R-F.4 "nothing spans the width or splits across lines"; 07
+     §4.8's `width: max-content`). Once `.claim-footer > details[open]` (the
+     item-1 fix, above) makes the OPEN door's <details> a full-width flex
+     item of the strip, its <summary> chip — a normal block-level child of a
+     block-level <details> — would stretch to fill that same full width and
+     the pill would span the whole row (and, at two-line wrap, could split
+     across lines). `width: max-content` keeps the open pill sized to its
+     own label, exactly like every closed pill beside it. */
+  .claim-footer > details[open] > .claim-footer-chip {
+    width: max-content;
   }
 
   .claim-links[open] > .claim-footer-chip,
@@ -5257,6 +5482,7 @@ code {
 
   .claim-relationship-list .claim-ref {
     font-weight: 500;
+    line-height: 20px;
   }
 
   /* M7 — the blocker row's stacked dependency path is L5's own row shape
@@ -5264,8 +5490,14 @@ code {
      already has no ranged path to stack — R-I.2's row (M9, below) is the
      shape this lane owns at this breakpoint. */
 
-  /* M9 — relationship row becomes two lines: dot + title on line one, meta +
-     right-ranged badge (no fixed-width slot) on line two. */
+  /* M9 — relationship row becomes two lines (R-I.2): dot + title on line
+     one, meta + right-ranged badge (no fixed-width slot) on line two, the
+     line-two block itself indented a further 15px (05 §3 mobile layout
+     table). RETRY FIX: `.claim-relationship-line2` (a `display: contents`
+     no-op at wider tiers — see its base rule) becomes a REAL flex row here,
+     because 05 §4.10's item 9 gives the meta column its own element instead
+     of folding it into the title, so meta and badge now have to be pulled
+     onto their own line together rather than each individually. */
   .claim-relationship-list > li.claim-relationship {
     flex-wrap: wrap;
     row-gap: 3px;
@@ -5275,10 +5507,23 @@ code {
     flex-basis: calc(100% - 17px);
   }
 
-  .claim-relationship-badge {
-    flex: 0 1 auto;
-    margin-left: auto;
+  .claim-relationship-line2 {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    flex: 1 1 100%;
     padding-left: 15px;
+  }
+
+  .claim-relationship-meta {
+    flex: 1 1 auto;
+  }
+
+  .claim-relationship-badge {
+    flex: 0 0 auto;
+    width: max-content;
+    margin-left: auto;
+    padding-left: 0;
   }
 
   /* M10 — source row: ref column narrows 26px -> 22px. */

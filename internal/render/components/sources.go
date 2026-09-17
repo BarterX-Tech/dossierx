@@ -29,6 +29,66 @@ import (
 	"github.com/BarterX-Tech/dossierx/internal/urlsafe"
 )
 
+// RETRY ADDITION (fix-list item 11; 05 §4.11 "Citation count `cited once`…
+// its own column"; 07 D12: "`cited once` / `cited N times` is derived from
+// the count of `[n]` markers in the claim body … computed at render time,
+// never authored."). Before this pass no counter existed anywhere in the
+// engine — citations were addressed (markdown_cite.go resolves a "[n]"
+// marker into a link) but never tallied.
+//
+// sourcesCitationCounts renders c's body exactly ONCE, through the same
+// markdown.RenderClaimBody + Citations capability every live "[n]" marker in
+// that body actually resolves against (claimCitations(c)), and counts how
+// many times each source's resolved anchor appears in the output. Counting
+// the RENDERED anchor rather than scanning the raw body text for "[n]"
+// substrings is the whole point: markdown_cite.go's recognition rules are
+// deliberately narrow (no marker inside a fenced block or a code span, the
+// link grammar wins first, a ref that names no source stays literal text —
+// see that file's doc comment), and re-implementing those rules a second
+// time here, by hand, is exactly the kind of second copy that drifts. This
+// way the count can never disagree with what the reader can actually click.
+//
+// The rendered HTML is discarded — this call exists only to count, never to
+// display, so it passes an empty AssetPrefix rather than routing through
+// ClaimAssetURLPrefix (an image src the reader will never see costs nothing
+// to get "wrong").
+//
+// A claim with no sources, or one whose id ClaimSourceAnchorPrefix refuses,
+// gets a nil map; every source's count is then simply absent (findable as
+// map[int]int's zero value, 0, when read with the two-value form or a bare
+// index — see writeSourcesRow, which always reads through counts[s.Ref]).
+func sourcesCitationCounts(c model.Claim) map[int]int {
+	if len(c.Sources) == 0 {
+		return nil
+	}
+	prefix, ok := ClaimSourceAnchorPrefix(c)
+	if !ok {
+		return nil
+	}
+	rendered := string(markdown.RenderClaimBody(c.Body, "", claimCitations(c)))
+	counts := make(map[int]int, len(c.Sources))
+	for _, s := range c.Sources {
+		needle := `href="#` + prefix + strconv.Itoa(s.Ref) + `"`
+		counts[s.Ref] = strings.Count(rendered, needle)
+	}
+	return counts
+}
+
+// citedLabel renders D12's exact wording: "cited once" for exactly one
+// resolved marker, "cited N times" for every other count, including zero —
+// a source nobody has cited yet is not hidden, so the reader can see that no
+// sentence in the body actually rests on it. Both forms are quoted verbatim
+// in 05 §4.11/§6 and 07 §6/§4.9; neither screen states a distinct zero-count
+// wording (contrast the footer chip's own "No sources", which 07a §6/§8
+// does state distinctly), so "cited 0 times" is the derived, not invented,
+// form.
+func citedLabel(n int) string {
+	if n == 1 {
+		return "cited once"
+	}
+	return "cited " + strconv.Itoa(n) + " times"
+}
+
 // sourceAnchorInfix separates a claim's id from a source's ref in the anchor
 // id the two halves of the citation feature share.
 //
@@ -122,7 +182,13 @@ func claimCitations(c model.Claim) markdown.Citations {
 // Every interpolation point is hand-escaped, for the same reason the rest of
 // EdgesHTMLWithLinks is: a FuncMap-returned template.HTML bypasses
 // html/template's automatic escaping, so nothing downstream will escape these.
+//
+// RETRY ADDITION (fix-list item 11): counts is computed ONCE per claim, not
+// once per source — sourcesCitationCounts already renders the whole body a
+// single time internally, and doing that inside this loop would re-render
+// the body len(c.Sources) times for no new information each pass.
 func writeSourcesRow(b *strings.Builder, c model.Claim) {
+	counts := sourcesCitationCounts(c)
 	for _, s := range c.Sources {
 		b.WriteString(`<li class="claim-source"`)
 		if id := ClaimSourceAnchorID(c, s.Ref); id != "" {
@@ -150,6 +216,23 @@ func writeSourcesRow(b *strings.Builder, c model.Claim) {
 			// something readable when the anchoring fields are absent.
 			writeExternalSource(b, s)
 		}
+
+		// The citation-count column (D12; 05 §4.11): "cited once" / "cited N
+		// times", derived from sourcesCitationCounts above, never authored.
+		// KNOWN SIMPLIFICATION, recorded in VAULT/learnings/inbox/L4.md: it
+		// renders as its own stacked line here at every width, rather than
+		// merging onto the external source's publisher line specifically at
+		// the ≤520px tier (05 §4.11 mobile / M10's "publisher and cited once
+		// share line two"). The two source shapes' "meta" content is not one
+		// element to merge against — external's is a single
+		// claim-source-meta span, internal's is two (claim-source-anchor,
+		// claim-source-hash) — and forcing a shared line for only one shape
+		// would read as an inconsistency between them at the same
+		// breakpoint. A true fix needs a unified meta wrapper for both
+		// shapes first; that is out of this retry's scope.
+		b.WriteString(`<span class="claim-source-cite">`)
+		b.WriteString(citedLabel(counts[s.Ref]))
+		b.WriteString(`</span>`)
 
 		writeSourceNote(b, "supports", s.Supports)
 		writeSourceNote(b, "does_not_support", s.DoesNotSupport)
