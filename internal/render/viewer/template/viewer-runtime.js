@@ -1084,7 +1084,11 @@
       var stripToggle = document.getElementById('statusStripToggle');
       var stripSummary = document.getElementById('statusStripSummary');
       var stripTitle = document.getElementById('statusStripTitle');
-      var stripNote = document.getElementById('statusStripNote');
+      // retry fix 21 (this lane's third attempt): #statusStripNote (the
+      // "Critical 0 · Needs you 3 · ..." tally) is REMOVED per the
+      // coordinator's ruling — no 02/03/04 board draws it, the chips
+      // already carry every count it repeated — and dropped from shell.html
+      // along with its element lookup here.
       var stripAction = document.getElementById('statusStripAction');
       var stripBody = document.getElementById('statusStripBody');
       var lastStatusData = null;
@@ -1258,12 +1262,6 @@
         return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
       }
 
-      function statusChipLine(groups) {
-        return STATUS_SEVERITIES.map(function (item) {
-          return item.label + ' ' + countSeverity(groups, item.id);
-        }).join(' · ');
-      }
-
       function blockerHeadline(groups) {
         var blockers = groups.filter(function (group) { return group.severity === 'blocker'; });
         if (!blockers.length) { return ''; }
@@ -1291,14 +1289,23 @@
         return ids;
       }
 
+      // retry fix 23/27 (this lane's third attempt, 04 §4.8 "Text column" /
+      // dot): the row is exactly three flex children — the dot, a text
+      // column carrying the title and (for a single-claim group) its
+      // demoted slug, and the fixed-width count slot — rather than three
+      // loose wrapping siblings. See style.css's .status-finding-dot /
+      // .status-finding-text for the layout this DOM shape enables.
       function renderStatusGroup(group) {
         var row = el('li', 'status-finding status-finding--group');
         row.setAttribute('data-severity', group.severity);
-        row.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
+        row.appendChild(el('span', 'status-finding-dot'));
+        var text = el('span', 'status-finding-text');
+        text.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
         var ids = Object.keys(group.claimIDs).sort();
         if (ids.length === 1) {
-          row.appendChild(textEl('span', 'status-finding-claim', ids[0]));
+          text.appendChild(textEl('span', 'status-finding-claim', ids[0]));
         }
+        row.appendChild(text);
         // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
         // phrase INTO the count slot as a bare `N claims`, never `blocks N
         // claim(s)` — that longer phrase was written for a full-width third
@@ -1367,7 +1374,13 @@
         var group = el('div', 'status-group');
         var head = el('p', 'status-group-head');
         head.appendChild(textEl('span', 'status-group-head-name', heading));
-        if (note) { head.appendChild(textEl('span', 'status-group-head-note', note)); }
+        // retry fix 25 (this lane's third attempt, 04 §4.7 "Filler rule"):
+        // the hairline only exists between a name and a weight phrase — a
+        // heading with no `note` (APPROVAL RECORD) gets neither.
+        if (note) {
+          head.appendChild(el('span', 'status-group-head-rule'));
+          head.appendChild(textEl('span', 'status-group-head-note', note));
+        }
         group.appendChild(head);
         var list = el('ul', 'status-finding-list');
         rows.forEach(function (r) { list.appendChild(r); });
@@ -1682,7 +1695,7 @@
       // reads as "fine" by default, and a persistent all-clear chip would be one
       // more thing to stop noticing.
       function renderStatusStrip(data) {
-        if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
+        if (!stripEl || !stripBody || !stripSummary || !stripTitle) { return; }
         lastStatusData = data || {};
         renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
@@ -1726,6 +1739,13 @@
         var filters = el('div', 'status-strip-filters');
         STATUS_SEVERITIES.forEach(function (item) {
           var count = countSeverity(groups, item.id);
+          // retry fix 32 (this lane's third attempt, COORDINATOR RULING):
+          // a severity at zero emits NO chip — R08.1 makes a FILLED pill
+          // mean "nothing above this", which only means something when the
+          // filled (Critical) chip's absence is itself the "nothing above
+          // this" signal. A zero-count chip for every severity, always
+          // shown, said nothing a reader could act on.
+          if (count === 0) { return; }
           var pressed = stripSeverityFilter === item.id;
           // 04 §4.4 / R08.1: a scoped chip, never claim-status's shared
           // .pill — that class is a different vocabulary (LOCKED / DRAFT /
@@ -1796,19 +1816,21 @@
           stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
         });
 
+        // retry fix 21: stripNote (the "Critical 0 · Needs you 3 · ..."
+        // tally) is removed from the collapsed banner per the coordinator's
+        // ruling — the severity chips above already carry every count this
+        // used to repeat as a second string. statusChipLine, the function
+        // that built that string, is now dead (no other call site) and is
+        // deleted — see learnings/deadcode/L8.md.
         var headline = blockerHeadline(groups);
         if (ledger.length) {
           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = statusChipLine(groups);
         } else if (lintErrors.length && !headline && !needsYou) {
           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = statusChipLine(groups);
         } else if (headline) {
           stripTitle.textContent = headline;
-          stripNote.textContent = statusChipLine(groups);
         } else {
           stripTitle.textContent = countLabel(groups.length, 'grouped issue') + ' in this facet';
-          stripNote.textContent = statusChipLine(groups);
         }
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);

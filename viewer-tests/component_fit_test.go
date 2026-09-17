@@ -88,17 +88,22 @@ func TestStatusStripGroupsBlockersAndStaysCollapsed(t *testing.T) {
 	if evalBool(t, ctx, `document.getElementById('statusStrip').classList.contains('status-strip--open')`) {
 		t.Fatal("blocker-only strip must stay collapsed")
 	}
+	// lane L8 (this lane's third attempt; docs/design/screens/
+	// 04-issues-screen.md §8 item 11's coordinator ruling): #statusStripNote
+	// (the "Critical 0 · Needs you 3 · ..." tally) is removed from the
+	// collapsed banner — no 02/03/04 board draws it, and the severity chips
+	// already carry every count it used to repeat. This assertion now reads
+	// the Blocker chip's own count span instead of that removed string.
 	if !evalBool(t, ctx, `(function(){
 		var claims = document.querySelectorAll('.module-section:not([hidden]) .claim-group:not([hidden]) .claim').length;
 		var title = document.getElementById('statusStripTitle').textContent;
-		var note = document.getElementById('statusStripNote').textContent;
+		var chipCount = document.querySelector('.status-severity-chip--blocker .status-severity-chip__count');
 		var blocked = title.match(/(\d+) claims? blocked/);
-		var chip = note.match(/Blocker (\d+)/);
-		return blocked && chip && Number(blocked[1]) <= claims && Number(chip[1]) <= claims;
+		return blocked && chipCount && Number(blocked[1]) <= claims && Number(chipCount.textContent) <= claims;
 	})()`) {
-		t.Fatalf("blocker counts must be unique claims, not summed paths (title=%q note=%q)",
+		t.Fatalf("blocker counts must be unique claims, not summed paths (title=%q chip=%q)",
 			evalString(t, ctx, `document.getElementById('statusStripTitle').textContent`),
-			evalString(t, ctx, `document.getElementById('statusStripNote').textContent`))
+			evalString(t, ctx, `(document.querySelector('.status-severity-chip--blocker .status-severity-chip__count') || {}).textContent`))
 	}
 }
 

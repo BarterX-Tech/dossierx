@@ -319,9 +319,20 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// `radius` theme setting still reaches the code block, the comment
 		// panel and the comment chip; the claim card's corner is no longer one
 		// of them, by design.
+		//
+		// L8 (this lane's third attempt; G9 count re-pin) drops .status-strip
+		// out of this set too: 02 §4.10 "Radius" and its closing prose ("a
+		// full-bleed band inside the card, flush to both card edges ... there
+		// is no separate banner card") and 03 §4.5 both make the collapsed
+		// banner a flush band with only a bottom hairline, never a rounded box
+		// of its own -- `border-radius: var(--radius)` is removed from
+		// .status-strip (and the now-redundant `.status-strip--open` top-radius
+		// override deleted alongside it; see learnings/deadcode/L8.md). The
+		// 520px inset-card form of the same element (R-H.1) keeps its own
+		// literal `border-radius: 10px`, which was never a --radius consumer.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 9 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
+		if n != 8 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 8", n)
 		}
 	})
 }
