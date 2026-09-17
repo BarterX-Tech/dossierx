@@ -59,7 +59,7 @@
   <div class="layout">
     <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg> <span>Sections</span></button>
     <button id="navOverlay" class="nav-overlay" type="button" aria-label="Close documentation navigation" tabindex="-1"></button>
-    <aside id="sidebar" class="sidebar" aria-label="Documentation navigation">
+    <aside id="sidebar" class="sidebar" aria-label="Documentation navigation"{{if .GeneratedAt}} data-generated-at="{{.GeneratedAt}}"{{end}}>
       <div class="sidebar-header">
         <div class="top">
           <div class="logo"><span></span></div>
@@ -130,10 +130,6 @@
           <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
           <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
         </div>
-{{if .GeneratedAt}}        <div class="freshness-footer">
-          <p class="freshness-footer__line"><svg class="dx-icon freshness-footer__icon" aria-hidden="true"><use href="#dx-icon-clock"/></svg><span class="freshness-footer__phrase" data-generated-at="{{.GeneratedAt}}">Updated recently</span></p>
-          <p class="freshness-footer__caption">Claims changed since then are not in this view</p>
-        </div>{{end}}
       </div>
       <div id="sidebarResizer" class="system-sidebar-resizer" tabindex="0" role="separator" aria-label="Resize navigation drawer" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="420" aria-valuenow="270" title="Drag to resize · Double-click to reset"></div>
     </aside>

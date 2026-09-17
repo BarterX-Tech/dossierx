@@ -319,9 +319,17 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// `radius` theme setting still reaches the code block, the comment
 		// panel and the comment chip; the claim card's corner is no longer one
 		// of them, by design.
+		// Re-pinned 9 -> 10 by lane L2 (third and final retry, verifier fix
+		// item 7): 02 §4.4 gives the sidebar/System-Record module row
+		// (#dxgOpen, .sec-tab) radius 6px, exactly --radius's value, where
+		// the row previously used --radius-sm (4px, off-spec). --radius-sm
+		// keeps its other consumers (inline code spans, blocker-row slug
+		// chips per tokens.md §3), so this is a literal count change, not a
+		// structural one (LEARNINGS.md G9): the row's radius token, not a
+		// new surface.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 9 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
+		if n != 10 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 10", n)
 		}
 	})
 }

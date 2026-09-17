@@ -2776,11 +2776,14 @@ body.shell-body {
 }
 
 .theme-control button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: transparent;
   color: var(--muted);
-  font: 12px var(--font-sans);
+  font: 13px/16px var(--font-sans);
   padding: 3px 7px;
   cursor: pointer;
 }
@@ -2799,15 +2802,19 @@ body.shell-body {
    Ageing (< 24h, 1-7d) share one neutral presentation; Stale (> 7d) is the
    only band that takes colour (R10.2), via the --stale modifier
    enhanceTimestamp toggles. */
+/* Third and final retry attempt: 02 §3/§4.17 (node 1EZ-0 inside the facet
+   panel 8P-0) and reference-rules.md R10.1 ("the right-rail footer") place
+   this block in the RIGHT facet panel, not the left sidebar. It moved —
+   system-record.js's renderToc() now builds it as the last child of
+   #systemFacetToc (.facet-toc), reading data-generated-at off #sidebar
+   instead of shell.html emitting it inline in the old sidebar-footer.
+   margin-top: auto is what pins it to the bottom of .facet-toc's flex
+   column while .facet-toc__list scrolls above it. */
 .freshness-footer {
-  /* Retry fix 6: 02 §3/§4.17 place this block in the right facet panel
-     (1EZ-0 inside 8P-0, margin-top: auto, padding: 14px 8px 20px, gap:
-     5px) and reference-rules.md R10.1 calls it "the right-rail footer".
-     This pass keeps it in the left sidebar footer instead — the rail
-     architecture is unchanged this pass, disclosed here and in the lane
-     report per the retry instruction — but brings the block's own padding
-     to the spec's figure. */
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: auto;
   padding: 14px 8px 20px;
   border-top: 1px solid var(--border);
 }
@@ -2829,7 +2836,7 @@ body.shell-body {
 }
 
 .freshness-footer__caption {
-  margin: 5px 0 0;
+  margin: 0;
   color: var(--faint);
   font-size: 11px;
   line-height: 15px;
@@ -3320,18 +3327,21 @@ body.shell-body {
 .top h1 {
   margin-top: 1px;
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 720;
-  letter-spacing: -.015em;
+  font-size: 19px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: -.01em;
 }
 
 .eyebrow {
   max-width: 160px;
   margin-top: 3px;
   color: var(--faint);
-  font-size: 8.5px;
-  line-height: 1.45;
-  letter-spacing: .11em;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 #nav {
@@ -3421,15 +3431,15 @@ body.shell-body {
 #dxgOpen,
 .sec-tab {
   display: flex;
-  min-height: 35px;
+  align-items: center;
+  min-height: 32px;
   margin: 1px 0;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 0;
-  /* tokens.md §5's first consumer of --radius-sm on this screen. */
-  border-radius: var(--radius-sm, 4px);
+  border-radius: var(--radius);
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 18px;
 }
 
 #dxgOpen:hover,
@@ -3462,8 +3472,8 @@ body.shell-body {
 .sec-tab.on {
   background: color-mix(in srgb, var(--link) 9%, transparent);
   box-shadow: inset 2px 0 0 var(--link);
-  color: var(--ink);
-  font-weight: 650;
+  color: var(--link);
+  font-weight: 600;
 }
 
 .sec-tab.on .sec-tab__count {
@@ -3679,7 +3689,7 @@ body.shell-body {
   position: sticky;
   z-index: 8;
   top: 0;
-  gap: 23px;
+  gap: 26px;
   margin: 0 0 24px;
   padding: 0;
   border-bottom-color: var(--border);
@@ -3691,9 +3701,10 @@ body.shell-body {
   align-items: center;
   gap: 7px;
   min-height: 44px;
-  padding: 13px 0 10px;
+  padding: 13px 0 11px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 18px;
 }
 
 .subtab:hover { color: var(--ink); }
@@ -3708,8 +3719,8 @@ body.shell-body {
    sidebar module row. */
 .subtab.on {
   border-bottom-color: var(--link);
-  color: var(--ink);
-  font-weight: 700;
+  color: var(--link);
+  font-weight: 600;
 }
 
 .subtab .sec-tab__count {
@@ -3720,6 +3731,13 @@ body.shell-body {
 .subtab.on .sec-tab__count {
   color: var(--link);
 }
+
+/* The "On this facet" trigger (02 §5 M8) system-record.js's
+   ensureFacetTocTrigger appends to the active module's .sub-nav. It is a
+   mobile-only affordance for the facet panel's bottom-sheet form — hidden
+   here, given a shape only inside the lane's own @media (max-width: 860px)
+   block below. */
+.facet-toc-trigger { display: none; }
 
 /* ---- Build order tab (.bo-*) --------------------------------------------
    The viewer's build order is a top-level tab of its own (#dossierx-build-order, a
@@ -3929,11 +3947,14 @@ body.shell-body {
 }
 
 .facet-toc {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   z-index: 9;
   top: 28px;
   right: 18px;
   width: 236px;
+  height: calc(100vh - 56px);
   max-height: calc(100vh - 56px);
   border-left: 1px solid var(--border);
   background: var(--paper);
@@ -3972,7 +3993,7 @@ body.shell-body {
   display: block;
   margin-bottom: 3px;
   color: var(--faint);
-  font: 700 9px/1.2 var(--font-mono);
+  font: 600 11px/14px var(--font-sans);
   letter-spacing: .09em;
   text-transform: uppercase;
 }
@@ -4869,27 +4890,25 @@ code {
 
   /* At this tier .facet-toc floats as a fixed corner popover instead of
      reserving .content-area padding (unlike the >=1181px tier, where the
-     base rule's 282px right padding does that job) — so nothing stops the
-     module head's own content from running underneath it. That was true
-     before this lane (a short "N of M claims locked" line already sat in
-     the same corner), and the wider metric row this lane adds (the
-     confirmation bar, the Focus control) reaches far enough to actually
-     overlap the popover, caught probing this exact tier.
-
-     Retry fix 4: reserving the popover's width on the WHOLE head
-     (`padding-right: 280px`) took it off the head's `minmax(0, 1fr)`
-     identity column too — at 1000px wide the identity column wrapped to
-     four lines and the metric+Focus cluster dropped to a second row, a
-     shape no 02 §4.7 board draws (the head is one space-between row at
-     every desktop width). Reserve against the popover on the metric row
-     alone, which is what actually sits under it. */
-  .system-record-head__metric { margin-right: 280px; }
+     base rule's 282px right padding does that job). 02 §4.7 / 03 §3 draw
+     the head as one space-between row at every desktop width, so nothing
+     in the head's own grid may be charged for the popover's width — not
+     the whole head (that wraps the identity column at 1000px) and not the
+     metric row alone (the metric's `auto` track still absorbs a margin,
+     which is exactly what "retry fix 4" got wrong: it charged the reserve
+     to the head's grid instead of moving the popover off the head's band).
+     The popover is bottom-anchored below the head/facet-strip band
+     instead, so it no longer competes with the head for space at all. */
 
   .facet-toc {
+    display: block;
     z-index: 12;
-    top: 10px;
+    top: auto;
+    bottom: 16px;
     right: 12px;
     width: min(260px, calc(100vw - var(--system-record-sidebar-width, 270px) - 58px));
+    height: auto;
+    max-height: calc(100dvh - 32px);
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--card-bg);
@@ -4900,9 +4919,12 @@ code {
      learnings/deadcode/L2.md). With no toggle to keep visible, the
      identity/count stay in normal flow instead of collapsing to a 40px
      absolute box, and the <select> below is this tier's whole facet
-     navigation surface. */
+     navigation surface. The freshness block (R10.1/02 §4.17) has no room
+     in this compact popover form — it stays a desktop-rail feature; states
+     to render lists it against the >=1181px rail, not this tier's select. */
   .facet-toc__disclosure,
-  .facet-toc__list { display: none; }
+  .facet-toc__list,
+  .facet-toc .freshness-footer { display: none; }
   .facet-toc__head {
     padding: 8px 10px;
     border-bottom: 1px solid var(--border);
@@ -4939,41 +4961,88 @@ code {
   .sidebar { width: min(310px, calc(100vw - 42px)); min-width: 0; max-width: none; }
   .system-sidebar-resizer { display: none; }
 
+  /* 02 §5 M1/M8 and §4.18 (node 4XR-0): the facet panel becomes a bottom
+     sheet opened from an "On this facet" trigger at the right end of the
+     facet tab strip, closed by default. Landed this attempt (third and
+     final): a fixed, always-visible corner popover (retry fix 8's own
+     interim shape) has nothing to sit above that it cannot end up
+     overlapping — the app-bar/head band when top-anchored, or arbitrary
+     card content (a comment chip, caught by
+     viewer-tests/live_reload_test.go TestReloadSecondFacetChipOpensThread)
+     when bottom-anchored. A sheet that is absent from layout until a
+     reader opens it has no such collision to have. The trigger
+     (.facet-toc-trigger, system-record.js's ensureFacetTocTrigger) is
+     injected into the active module's own .sub-nav, one lane-owned
+     selector this pass adds no new file for. */
   .facet-toc {
+    display: none;
     position: fixed;
-    z-index: 35;
-    top: 10px;
-    right: 10px;
-    width: min(248px, calc(100vw - 116px));
-    max-height: calc(100dvh - 20px);
-    border: 1px solid var(--border);
-    border-radius: 7px;
+    z-index: 40;
+    inset: auto 0 0 0;
+    width: auto;
+    height: auto;
+    max-height: 72vh;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
     background: var(--card-bg);
-    box-shadow: 0 7px 18px var(--shadow-cast, rgba(9, 20, 38, .12));
+    box-shadow: 0 -8px 24px var(--shadow-cast, rgba(9, 20, 38, .18));
   }
 
-  /* Same removal as the narrow-desktop tier above. */
-  .facet-toc__disclosure,
-  .facet-toc__list { display: none; }
+  body.facet-toc-open .facet-toc { display: flex; }
+
+  .facet-toc__disclosure { display: none; }
+  .facet-toc__list {
+    display: block;
+    max-height: none;
+    flex: 1 1 auto;
+  }
+  .facet-toc .freshness-footer { display: none; }
   .facet-toc__head {
-    padding: 8px 10px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--border);
   }
-  .facet-toc__select {
-    display: block;
-    width: 100%;
-    min-height: 38px;
-    padding: 7px 10px;
+  .facet-toc__select { display: none; }
+
+  .facet-toc-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-left: auto;
+    min-height: 44px;
+    padding: 0 4px 0 12px;
     border: 0;
-    background: var(--card-bg);
-    color: var(--ink);
-    font: 650 11px var(--font-sans);
+    background: transparent;
+    color: var(--muted);
+    font: 500 13px/16px var(--font-sans);
+    white-space: nowrap;
   }
+
+  .facet-toc-trigger[aria-expanded="true"] { color: var(--link); }
+
+  .facet-toc-trigger__count {
+    color: var(--faint);
+    font: 11px/14px var(--font-mono);
+  }
+
+  /* A dimming scrim, the same mechanism the comments rail (L6) and the
+     nav drawer already use for a modal sheet at this width, added here in
+     this lane's own selector so it does not touch either of theirs. */
+  .facet-toc-scrim {
+    display: none;
+    position: fixed;
+    z-index: 39;
+    inset: 0;
+    background: rgba(0, 0, 0, .42);
+  }
+
+  body.facet-toc-open .facet-toc-scrim { display: block; }
 
   .system-record-head {
     display: block;
     margin-bottom: 18px;
-    padding: 28px 0 20px;
+    padding: 14px 0;
   }
 
   /* Retry fix 1: 02 §4.7 / 03 §4.1 give the mobile title 24/30, not 31px. */
@@ -5183,6 +5252,16 @@ code {
   .section-heading {
     padding-inline: 16px;
   }
+
+  /* Third-attempt fix (verifier item 4): the 860 container's own .sub-nav
+     rule carries `margin: 0 -16px 21px; padding: 0 16px` to cancel a
+     .content-area gutter that existed at that tier. That gutter is zeroed
+     here, so the negative inline margin now runs the strip 16px past the
+     screen edge with no gutter left to cancel — 02 §3 mobile (node 4R0-0)
+     gives the facet tab strip `padding-inline: 16px`, not a flush edge.
+     Cancel only the inline margin; the strip keeps its own 16px padding
+     and its horizontal scroll (`overflow-x: auto`, `.sub-nav` above). */
+  .sub-nav { margin-inline: 0; }
 
   /* Exception: the Build order tab holds mermaid diagrams, not claim
      cards, and viewer-tests/build_order_tab_test.go

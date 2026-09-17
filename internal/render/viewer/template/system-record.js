@@ -494,7 +494,23 @@
       // focus mode (bindFocusControl, html[data-focus="on"]) is the one
       // control that hides it now, from the module head instead of from
       // here.
-      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>';
+      // The freshness block (R10.1 "the right-rail footer", 02 §3/§4.17
+      // node 1EZ-0 inside the facet panel 8P-0) is built here rather than
+      // server-rendered inline: it used to be a static child of the left
+      // sidebar-footer in shell.html, and this is the third and final
+      // retry attempt landing its move into the right facet panel (see
+      // learnings/inbox/L2.md). #sidebar carries data-generated-at (added
+      // by this lane at shell.html's <aside id="sidebar"> tag) so the
+      // instant survives the move without shell.html emitting the whole
+      // block twice. A project with no GeneratedAt (offline/dev render)
+      // renders no freshness block at all, matching the old {{if
+      // .GeneratedAt}} guard.
+      var generatedAt = document.getElementById('sidebar');
+      generatedAt = generatedAt && generatedAt.dataset.generatedAt;
+      var freshnessHTML = generatedAt
+        ? '<div class="freshness-footer"><p class="freshness-footer__line"><svg class="dx-icon freshness-footer__icon" aria-hidden="true"><use href="#dx-icon-clock"/></svg><span class="freshness-footer__phrase" data-generated-at="' + generatedAt + '">Updated recently</span></p><p class="freshness-footer__caption">Claims changed since then are not in this view</p></div>'
+        : '';
+      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
         var claim = document.getElementById(event.target.value);
         if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
@@ -524,7 +540,10 @@
       count.textContent = number;
       strong.textContent = label;
       button.append(count, strong);
-      button.addEventListener('click', function () { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      button.addEventListener('click', function () {
+        claim.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        closeFacetToc();
+      });
       list.appendChild(button);
       var option = document.createElement('option');
       option.value = claim.id;
@@ -532,7 +551,74 @@
       select.appendChild(option);
     });
     updateTocActive();
+    ensureFacetTocTrigger(active, claims.length);
   }
+
+  // ---------------------------------------------------------------------
+  // 02 §5 M1/M8 + §4.18 (node 4XR-0): at <=860px the facet panel is a
+  // bottom sheet, closed by default, opened from an "On this facet"
+  // trigger at the right end of the active module's facet tab strip
+  // (.sub-nav). The trigger is hidden above 860px by CSS
+  // (.facet-toc-trigger has no rule outside that lane-owned @media block).
+  // A module with exactly one facet renders no .sub-nav at all (shell.html
+  // guards it on .HasSubNav), so it gets no trigger either — matching
+  // "the one 1-facet module (no sub-nav head)" state, which has nothing to
+  // open.
+  // ---------------------------------------------------------------------
+  function facetTocScrim() {
+    var scrim = document.getElementById('facetTocScrim');
+    if (!scrim) {
+      scrim = document.createElement('button');
+      scrim.id = 'facetTocScrim';
+      scrim.type = 'button';
+      scrim.className = 'facet-toc-scrim';
+      scrim.setAttribute('aria-label', 'Close facet panel');
+      scrim.tabIndex = -1;
+      scrim.addEventListener('click', closeFacetToc);
+      document.body.appendChild(scrim);
+    }
+    return scrim;
+  }
+
+  function closeFacetToc() {
+    document.body.classList.remove('facet-toc-open');
+    document.querySelectorAll('.facet-toc-trigger[aria-expanded="true"]').forEach(function (trigger) {
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function openFacetToc(trigger) {
+    facetTocScrim();
+    document.body.classList.add('facet-toc-open');
+    document.querySelectorAll('.facet-toc-trigger').forEach(function (other) {
+      other.setAttribute('aria-expanded', String(other === trigger));
+    });
+  }
+
+  function ensureFacetTocTrigger(active, count) {
+    var subNav = active.module.querySelector(':scope > .sub-nav');
+    if (!subNav) { return; }
+    var trigger = subNav.querySelector(':scope > .facet-toc-trigger');
+    if (!trigger) {
+      trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'facet-toc-trigger';
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.setAttribute('aria-controls', 'systemFacetToc');
+      trigger.innerHTML = '<span>On this facet</span><span class="facet-toc-trigger__count"></span>';
+      trigger.addEventListener('click', function () {
+        if (document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
+        else { openFacetToc(trigger); }
+      });
+      subNav.appendChild(trigger);
+    }
+    var countEl = trigger.querySelector('.facet-toc-trigger__count');
+    if (countEl && countEl.textContent !== String(count)) { countEl.textContent = String(count); }
+  }
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
+  });
 
   function addModuleHeaders() {
     var labels = {};
@@ -654,7 +740,6 @@
   function enhance() {
     if (running) { return; }
     running = true;
-    enhanceTimestamp();
     bindThemeControl();
     bindResizer();
     bindFocusControl();
@@ -669,6 +754,13 @@
     }
     syncNavigation();
     renderToc();
+    // enhanceTimestamp() runs after renderToc(): the freshness footer now
+    // lives INSIDE the facet-toc panel renderToc creates (02 §3/§4.17,
+    // "the right facet panel" — see the .freshness-footer move below), so
+    // on the very first pass the footer does not exist until the TOC is
+    // built. renderToc() must still run after syncNavigation(), which is
+    // what makes activeFacet() see the right module/facet's hidden state.
+    enhanceTimestamp();
     enhanceGraphLabels();
     running = false;
   }
