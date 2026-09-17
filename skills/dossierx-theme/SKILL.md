@@ -88,7 +88,7 @@ Twenty-eight, and there are no others. Defaults are the engine's own; the rows w
 | `selection-bg` | `rgba(28, 78, 140, .20)` | *(same)* | selected text |
 | `shadow` | `rgba(0, 0, 0, .08)` | `rgba(0, 0, 0, .28)` | the comments panel |
 | `shadow-strong` | `rgba(0, 0, 0, .14)` | `rgba(0, 0, 0, .34)` | the toast |
-| `shadow-cast` | `rgba(9, 20, 38, .12)` | *(same)* | the rail, the nav toggle, the facet ToC |
+| `shadow-cast` | `rgba(9, 20, 38, .12)` | `rgba(0, 0, 0, .28)` | the rail, the nav toggle, the facet ToC |
 | `scrim` | `rgba(0, 0, 0, .22)` | `rgba(0, 0, 0, .42)` | the dim behind a modal |
 | `font-sans` | `"Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif` | *(same)* | all chrome text |
 | `font-mono` | `"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace` | *(same)* | code and ids |

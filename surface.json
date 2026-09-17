@@ -536,7 +536,7 @@
     "unordered-list-basic",
     "wrapped-bullet-continuation"
   ],
-  "render_fingerprint": "sha256:a13229e275cbfaa29f686b01b683f26d8bf648a49a95b1005abd5f350b2bdf41",
+  "render_fingerprint": "sha256:bbabacf4999a0992ab880a0d527b009a46038190ab9425b1736c42ebd5d72d46",
   "behaviour_fingerprint": {
     "cmd/dossierx": "sha256:684be0caf6e37621245b25e63e706a2fe4b0a0c9683f74011112a606cf8d64bf",
     "internal/atomicfile": "sha256:a1653f442ecdcf0154806d8db914ec6519f9dc790aca79fb50823bfd6a541890",
@@ -545,7 +545,7 @@
     "internal/check": "sha256:a39baa9833204015526444c674a1cf06d35c083e3cf5dd1e20bed21c2c32fbff",
     "internal/cliout": "sha256:b7ebcf94e1a00225524a2f1f4d9b0ac34665a556a5c83c9680844c891924f6a8",
     "internal/comments": "sha256:d5a1d2b8d16c2450dba7f25d7e3e32da345f9cff1f4cab2afea621647ae44351",
-    "internal/config": "sha256:23bf8f821fbeb9d32f6f0d1ef6b223e59ff6842b4e02d863a5c138ad642e7670",
+    "internal/config": "sha256:c4117d8dc9e317f601c4514f42739a5fee3ae13217b18c17d21a2427fa2521e3",
     "internal/conformance": "sha256:c38aec695b70d85fbaaaf6e7f6cd9f2ea5c7e5273b15a1cd7e8e95df8f31f4ab",
     "internal/digest": "sha256:00a3be16fc78561813f19c1469da1dcce6a34cb09a42be5cdcd5b0ef6053d003",
     "internal/graph": "sha256:b2afca7c90cbde529188ce027ab6340375ec574e0a5094d8ce3ac89b2aa6a644",
@@ -558,13 +558,13 @@
     "internal/readiness": "sha256:27b94ad2e402403e255aed9a577d82f40abb15bcd1d2973b73f5f4d7abbf3636",
     "internal/reaudit": "sha256:f1e7307105c0833136e5d6f6d001d05533878c8d202a4d5ce1a0d596a011a89e",
     "internal/releasebaseline": "sha256:bdd2398a819ee55c65caef61d6933ceccdec91ef16d68da53b92b593b03071d3",
-    "internal/render": "sha256:a8ebb6ca09a793b69b265703df47a268e6a050fc6254daa4736f4b245d1aa918",
+    "internal/render": "sha256:f7fbfe885b3fd59fb394c507f57e8cfca17b33632e25886b5c5eeacd538e6b32",
     "internal/render/components": "sha256:5ea3e135820ff51d0f1f1d4267801740297783ea594ee33324a3f8c97361a718",
     "internal/render/markdown": "sha256:33deac0d28cb74dcc84519cab1c8af11b893a09a2c4e24506d13c98f461d4afe",
     "internal/render/markdown/generate-goldens": "sha256:6f270caa37397a24e5e569e5dfffb0781af11b250d45d162af81e4c2502cb66b",
     "internal/serve": "sha256:6ff243ddf8604ed263b45b69a68fbe391124fa0eb7651793441c06e2181780ca",
     "internal/urlsafe": "sha256:85ce38ad04d7bc1b4391898b199d805b674f013f33a3d042f0854d62a8993aca",
-    "skills": "sha256:61d52c52a7554494d893637fe8ee161d46f1459f47f4180b33418b2111e77a18"
+    "skills": "sha256:b227772266a371fbfaf090796013d036939c774c645ffe30617e6a36a121afe3"
   },
   "envelope": {
     "keys": [

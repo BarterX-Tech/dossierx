@@ -114,11 +114,16 @@ var claudePreset = Theme{
 		"border":         "#2D2D2D",                   // claude-dark.css:26  --c-border
 		"border-strong":  "#373737",                   // claude-dark.css:28  --c-border-strong
 		// Same rule as the light block: the source hue at the engine's
-		// own default alpha per token. shadow-cast has no dark default in
-		// §2 (the engine declares it once, mode-invariant), so rather
-		// than invent an alpha it takes the source's dark --c-shadow
-		// unmodified — the one place this preset's dark shadow is
-		// heavier than its light one, which is what the source does too.
+		// own default alpha per token. shadow-cast is the documented
+		// exception: when this value was chosen the engine declared it
+		// once and mode-invariant, so rather than invent an alpha it took
+		// the source's dark --c-shadow unmodified — the one place this
+		// preset's dark shadow is heavier than its light one, which is
+		// what the source does too. The engine has since grown a dark
+		// shadow-cast of its own (rgba(0,0,0,.28), style.css's two dark
+		// blocks), but the preset keeps .5: it is the source's own value,
+		// moving it would change every `preset: claude` viewer, and that
+		// is a CHANGELOG event rather than a follow-on edit.
 		"shadow":          "rgba(0, 0, 0, 0.28)",       // claude-dark.css:29 --c-shadow hue; engine dark alpha .28
 		"shadow-strong":   "rgba(0, 0, 0, 0.34)",       // claude-dark.css:29 --c-shadow hue; engine dark alpha .34
 		"shadow-cast":     "rgba(0, 0, 0, 0.5)",        // claude-dark.css:29 --c-shadow, used unmodified

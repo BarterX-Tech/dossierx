@@ -1632,21 +1632,27 @@ override stylesheet or a preset targets.
 | `border-strong` | emphasized rule | `#C2CAD5` | `#38424F` | emphasized edges |
 | `shadow` | light shadow | `rgba(0, 0, 0, .08)` | `rgba(0, 0, 0, .28)` | the comments panel |
 | `shadow-strong` | heavier shadow | `rgba(0, 0, 0, .14)` | `rgba(0, 0, 0, .34)` | the toast |
-| `shadow-cast` | cast shadow | `rgba(9, 20, 38, .12)` | same | the rail, the nav toggle, the facet ToC |
+| `shadow-cast` | cast shadow | `rgba(9, 20, 38, .12)` | `rgba(0, 0, 0, .28)` | the rail, the nav toggle, the facet ToC |
 | `scrim` | modal dim | `rgba(0, 0, 0, .22)` | `rgba(0, 0, 0, .42)` | the dim behind a modal |
 | `selection-bg` | text selection | `rgba(28, 78, 140, .20)` | same | selected text |
 | `status-draft` | draft pill text | `#9A6A16` | `#DDA94E` | `.pill.pv`, `.status-draft` |
 | `status-draft-bg` | draft pill fill | `rgb(154 106 22 / 11%)` | `rgb(221 169 78 / 13%)` | the draft pill's fill |
 | `mockup-bg` | mockup canvas | `#fff` | same | mockup diagrams (light artwork in both modes, on purpose) |
 
-**Mode-varying (14, re-declared in the dark block)**: `accent`,
+**Mode-varying (19, re-declared in the dark block)**: `accent`,
 `accent-bg`, `ink`, `muted`, `faint`, `paper`, `card-bg`, `border`, `link`,
-`warn`, `warn-bg`, `shadow`, `shadow-strong`, `scrim`. **Derived (2, not
-re-declared, but computed differently per scheme)**: `code-inline-bg`,
-`code-bg` — both default to a `color-mix()` of `paper` and `card-bg`, so
-they track whichever scheme those two are currently in, even though the
-engine declares them once. **Mode-invariant (12)**: every other token in
-the table above, including `font-sans`, `font-mono`, and `radius`.
+`warn`, `warn-bg`, `code-bg`, `border-strong`, `status-draft`,
+`status-draft-bg`, `shadow`, `shadow-strong`, `shadow-cast`, `scrim`.
+**Derived (1, not re-declared, but computed differently per scheme)**:
+`code-inline-bg` — it defaults to a `color-mix()` of `code-bg` into
+`card-bg`, so it tracks whichever scheme those two are currently in, even
+though the engine declares it once. **Mode-invariant (8)**: every other
+token in the table above, including `font-sans`, `font-mono`, and `radius`.
+
+Setting a mode-varying token as a FLAT key is legal and pins it in both
+schemes, including for a reader who has pressed the viewer's explicit Dark
+control — the engine emits a project's shared declarations under
+`html[data-theme="dark"]` as well as on `:root` for exactly that reason.
 
 Setting a mode-varying token as a flat key pins it to that value in **both**
 color schemes — sometimes exactly right, never warned about. A derived

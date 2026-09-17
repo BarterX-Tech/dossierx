@@ -267,8 +267,11 @@ func TestRender_OverrideMissingPartialFallsBack(t *testing.T) {
 // ---- themeOverrideCSS ------------------------------------------------
 
 // sharedTheme is the resolved shape a flat-only viewer.theme merges to:
-// every token identical in both colour schemes, so everything lands in the
-// unconditional :root block and nothing is scoped to a media query.
+// every token identical in both colour schemes, so the declarations land in
+// the unconditional :root block and — so that a flat key survives the reader's
+// explicit Dark toggle against style.css's own (0,1,1) dark rule — a second
+// copy under `@media screen{html[data-theme="dark"]{...}}`. Neither
+// colour-scheme query appears, and nothing reaches print.
 func sharedTheme(pairs ...string) *config.ResolvedTheme {
 	rt := &config.ResolvedTheme{}
 	for i := 0; i < len(pairs); i += 2 {
@@ -297,7 +300,14 @@ func TestThemeOverrideCSS_OnlySuppliedKeysAppear(t *testing.T) {
 		t.Errorf("output missing --ink declaration: %q", got)
 	}
 	if !strings.HasPrefix(got, ":root{") || !strings.HasSuffix(got, "}") {
-		t.Errorf("output is not a single :root{...} block: %q", got)
+		t.Errorf("output does not open with the shared :root{...} block: %q", got)
+	}
+	// The explicit-Dark copy carries the same declarations and no others.
+	if want := `@media screen{html[data-theme="dark"]{--accent:#ff0000;--ink:#00ff00;}}`; !strings.Contains(got, want) {
+		t.Errorf("output is missing the explicit-Dark copy of the shared block\n got: %q\nwant it to contain: %q", got, want)
+	}
+	if strings.Contains(got, "prefers-color-scheme") {
+		t.Errorf("a flat-only theme emitted a colour-scheme media query: %q", got)
 	}
 	for _, unsupplied := range []string{"--muted:", "--paper:", "--font-sans:", "--radius:"} {
 		if strings.Contains(got, unsupplied) {
@@ -320,7 +330,12 @@ func TestThemeOverrideCSS_PreservesGivenOrder(t *testing.T) {
 		{Token: "radius", Value: "8px"},
 	}}
 
-	want := ":root{--accent:#111111;--ink:#222222;--font-mono:monospace;--radius:8px;}"
+	// Twice: once on :root, once on the explicit-Dark selector. Both copies
+	// have to preserve the given order, which is the point of running the
+	// comparison against the full string rather than against one block.
+	const decls = "--accent:#111111;--ink:#222222;--font-mono:monospace;--radius:8px;"
+	want := ":root{" + decls + "}" +
+		`@media screen{html[data-theme="dark"]{` + decls + "}}"
 
 	for i := 0; i < 20; i++ {
 		if got := string(themeOverrideCSS(theme)); got != want {

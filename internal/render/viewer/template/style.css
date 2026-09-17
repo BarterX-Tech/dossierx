@@ -79,11 +79,15 @@
   --radius: 8px;
 
   /* Added for the custom-theme work. Each value below is what a LIGHT OS and
-     a printed page get; the screen-dark query re-points the SEVEN that differ
+     a printed page get; the screen-dark query re-points the EIGHT that differ
      per mode (--code-bg, --border-strong, --shadow, --shadow-strong,
-     --status-draft, --status-draft-bg, --scrim). The other seven are the same
-     in both modes on purpose: a neutral overlay tint tracks whatever it sits
-     on, and the mockup card is deliberately mode-invariant.
+     --shadow-cast, --status-draft, --status-draft-bg, --scrim). The other six
+     are the same in both modes on purpose: a neutral overlay tint tracks
+     whatever it sits on, and the mockup card is deliberately mode-invariant.
+     --shadow-cast joined the eight at integration (G13): board 14 §4.1's
+     Shadow row, nodes 43Y-0 / 9TA-0, casts the rail's shadow from ink at 8%
+     on light and from BLACK at 28% on dark, so one value cannot serve both.
+     It was already an allowlist entry; the allowlist itself does not grow.
      Order matches ThemeTokenAllowlist. --code-inline-bg is declared before
      the --code-bg it reads; custom properties resolve by name and not by
      source order inside a block, so the allowlist order is kept rather than
@@ -135,6 +139,27 @@
      keeps the two modes one rule rather than two. */
   --blocked-surface: var(--warn-bg);
   --blocked-hairline: color-mix(in srgb, var(--warn) 30%, var(--border));
+
+  /* The mobile bottom sheet's top edge. `transparent` here and var(--border)
+     in the two dark blocks, because board 14 §4.8's shell row gives the DARK
+     sheet `border-top: 1px --color-dark-border` and the light sheet no top
+     edge at all; R-J.2 and M4 make that a mode item, not a width item. A
+     token rather than two rules, so the sheet declares its border-top once
+     and the dark blocks decide whether it paints. Engine-owned (G13): not in
+     ThemeTokenAllowlist, so a project cannot set it. */
+  --sheet-hairline: transparent;
+
+  /* The tint behind a NAVIGATION accent — the mobile comment trigger, the
+     active nav item. tokens.md rules the value in Open decisions: use
+     `color-mix(in srgb, var(--link) 9%, transparent)` rather than spending an
+     allowlist entry on it, because the tint is derivable from the token that
+     is already there. Paper's --color-accent is navigation navy and maps onto
+     --link, not --accent (tokens.md §7), so --accent-bg is the wrong tint for
+     these surfaces. Declared ONCE and in no dark block on purpose: it is an
+     expression over --link, which the dark blocks already re-point, so its
+     computed value follows the mode without a twin. Engine-owned (G13): not
+     in ThemeTokenAllowlist. */
+  --link-bg: color-mix(in srgb, var(--link) 9%, transparent);
 
   /* TYPE AND SPACING. Declared here, consumed by the screen lanes. Before
      this block every size, leading and tracking in this file was a literal in
@@ -193,9 +218,17 @@
     --status-draft-bg: rgb(221 169 78 / 13%);
     --shadow: rgba(0, 0, 0, .28);
     --shadow-strong: rgba(0, 0, 0, .34);
+    /* Board 14 §4.1's Shadow row (nodes 43Y-0 / 9TA-0): the rail casts ink at
+       8% on light and BLACK at 28% on dark. The light value is a tinted ink
+       and cannot simply be darkened, so dark needs its own. */
+    --shadow-cast: rgba(0, 0, 0, .28);
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
+    /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's 1px top hairline exists
+       on dark ONLY. The :root default is `transparent`, so the sheet's
+       unconditional border-top paints nothing until this block runs. */
+    --sheet-hairline: var(--border);
   }
 }
 
@@ -219,9 +252,17 @@
     --status-draft-bg: rgb(221 169 78 / 13%);
     --shadow: rgba(0, 0, 0, .28);
     --shadow-strong: rgba(0, 0, 0, .34);
+    /* Board 14 §4.1's Shadow row (nodes 43Y-0 / 9TA-0): the rail casts ink at
+       8% on light and BLACK at 28% on dark. The light value is a tinted ink
+       and cannot simply be darkened, so dark needs its own. */
+    --shadow-cast: rgba(0, 0, 0, .28);
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
+    /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's 1px top hairline exists
+       on dark ONLY. The :root default is `transparent`, so the sheet's
+       unconditional border-top paints nothing until this block runs. */
+    --sheet-hairline: var(--border);
   }
 }
 

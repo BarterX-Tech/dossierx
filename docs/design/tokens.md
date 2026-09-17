@@ -73,9 +73,9 @@ a value for them.
 | `--table-head-bg` | `rgba(127,127,127,.10)` | same | Mode-invariant by design — a neutral overlay tint tracks whatever it sits on |
 | `--image-bg` | `rgba(127,127,127,.06)` | same | Mode-invariant |
 | `--hover-bg` | `rgba(125,137,154,.08)` | same | Mode-invariant |
-| `--shadow` | `rgba(0,0,0,.08)` | `rgba(0,0,0,.28)` | One of the three that genuinely differ per mode |
+| `--shadow` | `rgba(0,0,0,.08)` | `rgba(0,0,0,.28)` | One of the four in THIS table that genuinely differ per mode (`--shadow`, `--shadow-strong`, `--shadow-cast`, `--scrim`). The three Paper-named dark twins — `--border-strong`, `--status-draft`, `--status-draft-bg` — are in the table above and now differ too |
 | `--shadow-strong` | `rgba(0,0,0,.14)` | `rgba(0,0,0,.34)` | Differs per mode |
-| `--shadow-cast` | `rgba(9,20,38,.12)` | same | Mode-invariant |
+| `--shadow-cast` | `rgba(9,20,38,.12)` | `rgba(0,0,0,.28)` | Differs per mode as of the revamp integration (G13), per 14 §4.1's Shadow row (`43Y-0` / `9TA-0`): ink at 8 % on light, black at 28 % on dark |
 | `--scrim` | `rgba(0,0,0,.22)` | `rgba(0,0,0,.42)` | Differs per mode. This is the bottom-sheet scrim (board J) |
 | `--selection-bg` | `rgba(40,112,82,.20)` | same | Text selection |
 | `--mockup-bg` | `#fff` | same | Deliberately mode-invariant |
@@ -503,7 +503,11 @@ Recorded rather than asked, per the freeze protocol.
 
 - **Navigation accent tint: use `color-mix(in srgb, var(--link) 9%, transparent)`
   rather than adding a `link-bg` token.** The allowlist is closed, and the tint
-  is derivable from the token that is already there.
+  is derivable from the token that is already there. *Settled at integration
+  (G13):* the ruled expression is now declared once in `style.css`'s `:root` as
+  an ENGINE-OWNED `--link-bg`, outside `ThemeTokenAllowlist` — a name for the
+  expression, not a new key a project may set, so the allowlist is still
+  closed. Consume `var(--link-bg)` rather than re-spelling the `color-mix()`.
 
 - **Off-scale spacing, radii and type sizes stay as per-component literals.** The
   scales govern layout; a component's internal padding is measured in that

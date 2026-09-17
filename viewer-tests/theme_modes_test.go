@@ -897,3 +897,128 @@ viewer:
 	}
 	t.Logf("theme file edit: %q before, %q under the same server, %q after restart", before, during, after)
 }
+
+// ---------------------------------------------------------------------
+// A flat key survives the reader's explicit Dark toggle
+// ---------------------------------------------------------------------
+
+// engineDarkDefaults are the values style.css's two dark blocks give these
+// tokens. They are pinned rather than read back from the page, because the
+// control below has to distinguish "the project's value won" from "the engine's
+// value won", and reading both numbers off the same document could not.
+var engineDarkDefaults = map[string]string{
+	"accent": "#63BE9A",
+	"link":   "#6AA6E8",
+}
+
+// flatFixtureValues are what testdata/fixture-theme-flat's viewer.theme sets
+// for those two tokens, FLAT — no light:/dark: sub-mapping. That fixture is a
+// verbatim copy of a real client's config, which is the shape this test exists
+// for: every project written before per-mode values existed looks like this.
+var flatFixtureValues = map[string]string{
+	"accent": "#287052",
+	"link":   "#205b78",
+}
+
+// TestFlatThemeKeySurvivesTheExplicitDarkToggle is docs/theming.md's promise —
+// "a flat key applies to both" schemes — measured on the one path where it used
+// to be false.
+//
+// A flat key lands on `:root`, specificity (0,1,0). The reader's explicit Dark
+// choice is painted by `@media screen{html[data-theme="dark"]{…}}`, specificity
+// (0,1,1). Before the fix the engine emitted that selector only for a project
+// that had written `dark:` keys, so a flat `accent` was beaten by the engine's
+// own dark default for every reader who had pressed Dark — silently, and only
+// on that one of the three control positions.
+//
+// The unthemed control is what makes the assertion mean something: it shows the
+// engine's dark rule really is firing on this page, so "the project's value is
+// there after the toggle" is an override and not an inert page.
+func TestFlatThemeKeySurvivesTheExplicitDarkToggle(t *testing.T) {
+	browser := resolveBrowser(t)
+
+	openAt := func(url string) context.Context {
+		ctx := browserContextFor(t, browser)
+		runCDP(t, ctx,
+			chromedp.EmulateViewport(1280, 900, chromedp.EmulateScale(1)),
+			chromedp.Navigate(url),
+		)
+		pollTrue(t, ctx, `document.readyState === 'complete'`)
+		// A LIGHT OS, so pressing Dark is a genuine override rather than the
+		// OS query doing the work. This is the exact position the bug lived in.
+		emulateColorScheme(t, ctx, "light")
+		pollTrue(t, ctx, `!!document.querySelector('.theme-control [data-theme-choice="dark"]')`)
+		return ctx
+	}
+	readToken := func(ctx context.Context, token string) string {
+		return evalString(t, ctx,
+			`getComputedStyle(document.documentElement).getPropertyValue('--`+token+`').trim()`)
+	}
+	pressDark := func(ctx context.Context) {
+		evalVoid(t, ctx, `(function(){
+			var b = document.querySelector('.theme-control [data-theme-choice="dark"]');
+			if (!b) { throw new Error('dark theme control is missing'); }
+			b.click();
+		})()`)
+		if !evalBool(t, ctx, `document.documentElement.getAttribute('data-theme') === 'dark'`) {
+			t.Fatalf("the Dark control did not set data-theme=dark (got %q); nothing below "+
+				"would be measuring the explicit-Dark path",
+				evalString(t, ctx, `document.documentElement.getAttribute('data-theme') || ''`))
+		}
+	}
+
+	// ---- the control: the same engine, no theme at all ----
+	plain := newThemedProject(t, unthemedConfigYAML, false)
+	plainCtx := openAt(plain.renderStatic())
+	pressDark(plainCtx)
+	for token, want := range engineDarkDefaults {
+		if got := readToken(plainCtx, token); got != want {
+			t.Fatalf("on an UNTHEMED viewer, --%s after the Dark toggle is %q, want the engine's "+
+				"dark default %q. The engine's explicit-Dark rule is not doing what this test "+
+				"assumes, so the themed assertions below prove nothing.", token, got, want)
+		}
+	}
+
+	// ---- the fixture: flat accent and link, no light:/dark: at all ----
+	ctx := openAt(renderFixtureFresh(t, "fixture-theme-flat"))
+
+	before := map[string]string{}
+	for token, want := range flatFixtureValues {
+		before[token] = readToken(ctx, token)
+		if before[token] != want {
+			t.Fatalf("before any toggle, --%s is %q, want the project's flat %q; the fixture is "+
+				"not the corpus this test was written against", token, before[token], want)
+		}
+	}
+
+	pressDark(ctx)
+
+	for token, want := range flatFixtureValues {
+		got := readToken(ctx, token)
+		if got == engineDarkDefaults[token] {
+			t.Errorf("after the reader pressed Dark, --%s is the ENGINE's dark default %q, not the "+
+				"project's flat %q. docs/theming.md tells the project a flat key applies to both "+
+				"schemes; on this control position it does not.", token, got, want)
+			continue
+		}
+		if got != want {
+			t.Errorf("after the reader pressed Dark, --%s is %q, want the project's flat %q", token, got, want)
+		}
+	}
+
+	// And the two paths that already worked keep working: System on a dark OS
+	// is still the project's flat value, and so is System on a light OS.
+	evalVoid(t, ctx, `(function(){
+		var b = document.querySelector('.theme-control [data-theme-choice="system"]');
+		if (!b) { throw new Error('system theme control is missing'); }
+		b.click();
+	})()`)
+	for _, scheme := range []string{"dark", "light"} {
+		emulateColorScheme(t, ctx, scheme)
+		for token, want := range flatFixtureValues {
+			if got := readToken(ctx, token); got != want {
+				t.Errorf("on System with a %s OS, --%s is %q, want the project's flat %q", scheme, token, got, want)
+			}
+		}
+	}
+}

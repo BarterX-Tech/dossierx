@@ -38,13 +38,14 @@ is a leading or trailing space — `accent: ' #C6613F'` is refused with
 
 ## Light and dark, and the trap: a flat colour key pins both modes
 
-Eighteen of the twenty-eight tokens have a different default depending on
+Nineteen of the twenty-eight tokens have a different default depending on
 the reader's OS colour scheme — `paper`, `card-bg`, `ink`, `muted`, `faint`,
 `border`, `border-strong`, `link`, `accent`, `accent-bg`, `warn`, `warn-bg`,
-`code-bg`, `status-draft`, `status-draft-bg`, `shadow`, `shadow-strong`, and
-`scrim`. Setting one of these as a flat key pins it to that value in **both**
-schemes. That is sometimes exactly what you want, and nothing warns you when
-it is not:
+`code-bg`, `status-draft`, `status-draft-bg`, `shadow`, `shadow-strong`,
+`shadow-cast`, and `scrim`. Setting one of these as a flat key pins it to that
+value in **both** schemes — including for a reader who has pressed the
+viewer's own Dark control rather than leaving it on System. That is sometimes
+exactly what you want, and nothing warns you when it is not:
 
 ```yaml
 viewer:
@@ -79,11 +80,11 @@ a dark-mode reader's page — which is exactly the trap above. Treat it as
 mode-varying: set it under `light:`/`dark:` if you override it at all, or leave
 it alone and let it keep tracking `code-bg`/`card-bg`.
 
-The other nine tokens — `font-sans`, `font-mono`, `radius`, and six more
+The other eight tokens — `font-sans`, `font-mono`, `radius`, and five more
 added alongside the per-mode work (`table-head-bg`, `image-bg`, `hover-bg`,
-`shadow-cast`, `selection-bg`, `mockup-bg`) render the same value in both
-schemes by design. Setting these flat is exactly right; there is no light/dark
-variant to accidentally collapse.
+`selection-bg`, `mockup-bg`) render the same value in both schemes by design.
+Setting these flat is exactly right; there is no light/dark variant to
+accidentally collapse.
 
 ## Start from the `claude` preset
 

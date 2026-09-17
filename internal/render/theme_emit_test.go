@@ -133,24 +133,53 @@ func TestThemeOverrideCSS_PartOrderByIndex(t *testing.T) {
 	}
 }
 
-// TestThemeOverrideCSS_FlatOnlyEmitsOnlyRoot is the compatibility property
-// every project that already has a viewer.theme depends on: a theme with no
-// light:/dark: sub-mapping merges to shared-only declarations, so the output
-// is the single ":root{...}" block this engine emitted before per-mode values
-// existed — no media query, and therefore no change to any computed style.
-func TestThemeOverrideCSS_FlatOnlyEmitsOnlyRoot(t *testing.T) {
+// TestThemeOverrideCSS_FlatKeysAlsoPinTheExplicitDarkToggle is the contract
+// docs/theming.md states in one line — "a flat key applies to both" schemes —
+// written out as the two blocks it takes to keep it true.
+//
+// A theme with no light:/dark: sub-mapping merges to shared-only declarations.
+// Those land on ":root", specificity (0,1,0). For the nineteen tokens
+// style.css re-points in dark that is not enough on its own: the reader's
+// explicit Dark choice is painted by
+// `@media screen{html[data-theme="dark"]{...}}`, specificity (0,1,1), and a
+// later (0,1,0) rule cannot beat it. So the shared declarations are emitted a
+// second time under that same selector, and a project that writes a flat
+// `paper` gets it under System, under Light AND under Dark.
+//
+// The rest of the old compatibility property is unchanged and still asserted
+// below: no @font-face, and neither colour-scheme media query. In particular
+// the OS-dark block stays absent — there the engine's rule IS a plain ":root"
+// inside a media query, the project's ":root" ties it and wins on source
+// order, so a second copy would be dead bytes.
+func TestThemeOverrideCSS_FlatKeysAlsoPinTheExplicitDarkToggle(t *testing.T) {
 	rt := resolveForTest(t, config.Theme{
 		Shared: map[string]string{"accent": "#c6613f", "ink": "#141413", "radius": "10px"},
 	}, nil)
 	got := string(themeOverrideCSS(rt))
 
-	want := ":root{--accent:#c6613f;--ink:#141413;--radius:10px;}"
+	const decls = "--accent:#c6613f;--ink:#141413;--radius:10px;"
+	want := ":root{" + decls + "}" +
+		`@media screen{html[data-theme="dark"]{` + decls + "}}"
 	if got != want {
 		t.Fatalf("flat-only theme emitted:\n%s\nwant:\n%s", got, want)
 	}
-	for _, forbidden := range []string{"@media", "@font-face"} {
+	if !strings.HasPrefix(got, ":root{"+decls+"}") {
+		t.Errorf("the shared :root block is no longer the first thing emitted: %s", got)
+	}
+	if !strings.Contains(got, `@media screen{html[data-theme="dark"]{`+decls+"}}") {
+		t.Errorf("a flat-only theme emitted no explicit-Dark block, so every flat "+
+			"mode-varying key loses to the engine's own dark default for a reader "+
+			"who pressed Dark: %s", got)
+	}
+	if strings.Contains(got, "@font-face") {
+		t.Errorf("flat-only theme emitted a @font-face block: %s", got)
+	}
+	// Neither colour-scheme query: the explicit-Dark block is scoped to plain
+	// `screen`, so it still cannot reach print, and no light or OS-dark block
+	// is emitted at all.
+	for _, forbidden := range []string{"prefers-color-scheme", "print"} {
 		if strings.Contains(got, forbidden) {
-			t.Errorf("flat-only theme emitted a %s block: %s", forbidden, got)
+			t.Errorf("flat-only theme emitted a %q term: %s", forbidden, got)
 		}
 	}
 }

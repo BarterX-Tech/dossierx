@@ -949,6 +949,28 @@ const softMountClaimThreshold = 80
 //     for System (and unset) following the OS. Kept at :root specificity so
 //     a project's later :root shared tokens still win in both schemes.
 //
+// Block 5 carries the SHARED declarations as well as the dark ones, and it
+// does so whenever either is non-empty. docs/theming.md promises that "a flat
+// key applies to both" schemes, and for a mode-varying token that promise only
+// holds here: style.css paints the reader's explicit Dark choice from
+// `@media screen{html[data-theme="dark"]{...}}`, a selector of specificity
+// (0,1,1), while a shared key lands on `:root`, specificity (0,1,0). Source
+// order cannot rescue the weaker selector, so before this the engine's own
+// dark default beat the project's flat `paper`, `accent`, `link` — any of the
+// nineteen tokens style.css re-points — for exactly the readers who had
+// pressed Dark. Shared is written first and Dark second, so where a project
+// set a token both flat and under `dark:` the dark value still wins on source
+// order inside the block.
+//
+// The light half needs no equivalent and deliberately does not get one.
+// style.css is light-first: its light values live in the one unconditional
+// `:root`, it declares no `html[data-theme="light"]` rule and no light media
+// query at all, and graph.css's light block is also `:root` and carries only
+// the non-themeable --dxg-* ramp. So every engine rule an explicit Light
+// choice can meet is (0,1,0), the project's shared `:root` ties it and wins on
+// source order — the theme sheet is the last of the three <style> blocks.
+// Block 4 stays rt.Light alone.
+//
 // The two media lists are the whole of the print story (plan v4 A1). A
 // project's light values apply to print as well as to the light scheme; its
 // dark values are scoped to `screen`, so no dark override can reach a
@@ -992,10 +1014,14 @@ func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
 	writeBlock(&b, "", ":root", rt.Shared)
 	writeBlock(&b, "@media (prefers-color-scheme: light), print", ":root", rt.Light)
 	writeBlock(&b, "", `html[data-theme="light"]`, rt.Light)
-	explicitDark := rt.Dark
-	if len(rt.Dark) > 0 {
-		explicitDark = appendThemeDecls(rt.Shared, rt.Dark)
-	}
+	// Unconditional on purpose: see the "flat key" paragraph above. Merging
+	// is what makes a shared token survive the explicit Dark toggle, and it
+	// has to happen when rt.Dark is EMPTY too — that is the whole defect.
+	// appendThemeDecls returns the non-empty side untouched, so a dark-only
+	// theme still emits exactly its dark declarations and a wholly empty
+	// theme still emits no block at all. Each side is already in
+	// ThemeTokenAllowlist order, so the concatenation is deterministic.
+	explicitDark := appendThemeDecls(rt.Shared, rt.Dark)
 	writeBlock(&b, "@media screen", `html[data-theme="dark"]`, explicitDark)
 	writeBlock(&b, "@media screen and (prefers-color-scheme: dark)", ":root", rt.Dark)
 
