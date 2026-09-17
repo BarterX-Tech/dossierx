@@ -328,15 +328,25 @@ func evalFloat(t *testing.T, ctx context.Context, expr string) float64 {
 
 func nearly(a, b float64) bool { return math.Abs(a-b) < 0.01 }
 
-// selectedNode returns the node wearing the selection ring — the accent-coloured
-// ring drawn at r+7 for state.selected. It is the only way to say "THIS id's
-// node" about a canvas whose coordinates carry no ids, and every id-anchored
-// assertion in this file goes through it.
+// selectedNode returns the node wearing the selection ring — drawn at r+7 for
+// state.selected. It is the only way to say "THIS id's node" about a canvas
+// whose coordinates carry no ids, and every id-anchored assertion in this
+// file goes through it.
+//
+// Re-pinned for screen 13 §4.4 / tokens.md Disagreement 7 (G2): Paper's
+// board measures the ring at #1C4E8C, which is Paper's own "--color-accent"
+// label but IS the engine's --link (G2: "never invert link and lock" —
+// Paper's --color-accent is the engine's --link; Paper's --color-locked is
+// the engine's --accent, the LOCKED green). Painting the ring in pal.accent
+// would draw it in locked-green, not the board's navy; graph-ui.js's
+// drawNodes now strokes it with pal.link, and the legend's MARK_SAMPLES
+// "selected" swatch (13 §4.5) already used var(--link) for the same ring —
+// this helper follows both.
 func selectedNode(t *testing.T, f canvasFrame, id string) frameNode {
 	t.Helper()
 	var found []frameNode
 	for _, n := range f.Nodes {
-		if n.wearsRing(f.Pal["accent"]) {
+		if n.wearsRing(f.Pal["link"]) {
 			found = append(found, n)
 		}
 	}
