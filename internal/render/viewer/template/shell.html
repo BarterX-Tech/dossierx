@@ -281,10 +281,15 @@
   <section id="statusStrip" class="status-strip" role="status" aria-live="polite" hidden>
     <button id="statusStripToggle" class="status-strip-head" type="button" aria-expanded="false" aria-controls="statusStripBody">
       <span id="statusStripSummary" class="status-strip-summary">
-        <strong id="statusStripTitle" class="status-strip-title"></strong>
-        <span id="statusStripNote" class="status-strip-note"></span>
+        <svg class="dx-icon status-strip-icon" aria-hidden="true"><use href="#dx-icon-triangle-alert"/></svg>
+        <span class="status-strip-summary-text">
+          <strong id="statusStripTitle" class="status-strip-title"></strong>
+        </span>
       </span>
-      <span id="statusStripAction" class="status-strip-action">Show issues</span>
+      <span id="statusStripActionRow" class="status-strip-action-row">
+        <span id="statusStripAction" class="status-strip-action">Show issues</span>
+        <svg class="dx-icon status-strip-action-chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg>
+      </span>
       <svg class="dx-icon status-strip-caret" aria-hidden="true"><use href="#dx-icon-chevron-down"/></svg>
     </button>
     <div id="statusStripBody" class="status-strip-body" hidden></div>

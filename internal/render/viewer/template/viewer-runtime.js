@@ -1257,7 +1257,11 @@
       var stripToggle = document.getElementById('statusStripToggle');
       var stripSummary = document.getElementById('statusStripSummary');
       var stripTitle = document.getElementById('statusStripTitle');
-      var stripNote = document.getElementById('statusStripNote');
+      // retry fix 21 (this lane's third attempt): #statusStripNote (the
+      // "Critical 0 · Needs you 3 · ..." tally) is REMOVED per the
+      // coordinator's ruling — no 02/03/04 board draws it, the chips
+      // already carry every count it repeated — and dropped from shell.html
+      // along with its element lookup here.
       var stripAction = document.getElementById('statusStripAction');
       var stripBody = document.getElementById('statusStripBody');
       var lastStatusData = null;
@@ -1325,6 +1329,24 @@
             severity: fields.severity,
             title: fields.title,
             kind: fields.kind || '',
+            // retry fix 20 / R08.2 / 04 §8 item 3: `origin` is the finding's
+            // KIND — which array it came from — never its severity. Before
+            // this fix the APPROVAL RECORD group was selected by
+            // `severity === 'critical'`, which only happened to work because
+            // collectStatusGroups was the sole producer of that severity; a
+            // future critical-severity LINT finding would have been filed
+            // under APPROVAL RECORD by accident, and § 8 item 1's Critical
+            // ROWS could never sit in their own module group. Only the
+            // ledger call site below passes 'ledger'; every other call site
+            // defaults to 'readiness'.
+            origin: fields.origin || 'readiness',
+            // ownerModuleClaimID is the claim whose MODULE the Issues screen
+            // groups this finding under (04 §2: "which module do I chase").
+            // For a readiness blocker/review cause that is the dependency
+            // the reader must go fix, not the claim it is blocking — those
+            // two call sites pass it explicitly; every other kind of finding
+            // is about its own claim, so it falls back to fields.claimID.
+            ownerModuleClaimID: fields.ownerModuleClaimID || fields.claimID || '',
             claimIDs: {},
             count: 0
           };
@@ -1342,6 +1364,7 @@
             severity: 'critical',
             title: humanRule(finding.rule) || 'Approval record issue',
             kind: finding.rule || 'ledger',
+            origin: 'ledger',
             claimID: finding.claim_id
           });
         });
@@ -1354,15 +1377,18 @@
               severity: 'blocker',
               title: readinessFactLabel(condition, 'condition', id),
               kind: condition.kind || 'dependency',
-              claimID: id
+              claimID: id,
+              ownerModuleClaimID: dep
             });
           });
           (assessment.review_causes || assessment.causes || []).forEach(function (cause) {
-            addStatusGroup(groups, 'needs_you:' + (cause.kind || 'review') + ':' + (cause.direct ? id : (cause.dependency_id || id)), {
+            var owner = cause.direct ? id : (cause.dependency_id || id);
+            addStatusGroup(groups, 'needs_you:' + (cause.kind || 'review') + ':' + owner, {
               severity: 'needs_you',
               title: readinessFactLabel(cause, 'cause', id),
               kind: cause.kind || 'review',
-              claimID: id
+              claimID: id,
+              ownerModuleClaimID: owner
             });
           });
         });
@@ -1409,12 +1435,6 @@
         return uniqueClaimCount(groups.filter(function (group) { return group.severity === id; }));
       }
 
-      function statusChipLine(groups) {
-        return STATUS_SEVERITIES.map(function (item) {
-          return item.label + ' ' + countSeverity(groups, item.id);
-        }).join(' · ');
-      }
-
       function blockerHeadline(groups) {
         var blockers = groups.filter(function (group) { return group.severity === 'blocker'; });
         if (!blockers.length) { return ''; }
@@ -1442,16 +1462,29 @@
         return ids;
       }
 
+      // retry fix 23/27 (this lane's third attempt, 04 §4.8 "Text column" /
+      // dot): the row is exactly three flex children — the dot, a text
+      // column carrying the title and (for a single-claim group) its
+      // demoted slug, and the fixed-width count slot — rather than three
+      // loose wrapping siblings. See style.css's .status-finding-dot /
+      // .status-finding-text for the layout this DOM shape enables.
       function renderStatusGroup(group) {
         var row = el('li', 'status-finding status-finding--group');
         row.setAttribute('data-severity', group.severity);
-        row.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
+        row.appendChild(el('span', 'status-finding-dot'));
+        var text = el('span', 'status-finding-text');
+        text.appendChild(textEl('span', 'status-finding-rule', group.title || 'Issue'));
         var ids = Object.keys(group.claimIDs).sort();
         if (ids.length === 1) {
-          row.appendChild(textEl('span', 'status-finding-claim', ids[0]));
+          text.appendChild(textEl('span', 'status-finding-claim', ids[0]));
         }
+        row.appendChild(text);
+        // retry fix 7: 04 §4.8 "Count label" / §6 "Row count" promotes the
+        // phrase INTO the count slot as a bare `N claims`, never `blocks N
+        // claim(s)` — that longer phrase was written for a full-width third
+        // line, which the fixed 104px slot (style.css) no longer is.
         var n = ids.length || group.count;
-        row.appendChild(textEl('span', 'status-finding-msg', 'blocks ' + n + ' claim' + (n === 1 ? '' : 's')));
+        row.appendChild(textEl('span', 'status-finding-msg', n + ' claim' + (n === 1 ? '' : 's')));
         return row;
       }
 
@@ -1478,24 +1511,50 @@
         }
       }
       window.dossierxPositionStatusStrip = positionStatusStrip;
+      // Exposed for the same reason dossierxPositionStatusStrip is: a browser
+      // test needs a way to paint an APPROVAL RECORD verdict (04 §8 item 3 /
+      // R08.2) without corrupting a real lock ledger to produce one, since
+      // ledger_findings only ever arrives from a live GET /api/status.
+      window.dossierxRenderStatusStrip = function (data) { renderStatusStrip(data); };
 
-      // findingRow renders one finding. EVERY value here is server data about a
-      // claim (rule names, claim ids, gate messages) and every one of them goes
-      // through textContent — this function creates no innerHTML sink, which is
-      // the whole escaping contract of this block restated for the strip.
-      function findingRow(name, claimID, message) {
-        var row = el('li', 'status-finding');
-        row.appendChild(textEl('span', 'status-finding-rule', name || ''));
-        if (claimID) {
-          row.appendChild(textEl('span', 'status-finding-claim', claimID));
-        }
-        row.appendChild(textEl('span', 'status-finding-msg', message || ''));
-        return row;
+      // ownerModuleID (04 §2, §9 item 6) resolves a group's ownerModuleClaimID
+      // to the .module-section id that owns it, via the same claimToFacet /
+      // facetToModule maps initViewer() already builds for deep linking — read
+      // only, never written here, exactly as readinessClaimLabel already reads
+      // .claim/.k .label elsewhere in this file. A claim id the maps do not
+      // know (a project-wide finding with no claim_id at all) resolves to ''
+      // and moduleLabel below renders it as the "Other" catch-all group.
+      function ownerModuleID(group) {
+        var facetID = claimToFacet[group.ownerModuleClaimID];
+        return facetID ? facetToModule[facetID] : '';
       }
 
-      function findingGroup(heading, rows) {
+      // moduleLabel reads the sidebar's own .sec-tab label text for a module
+      // id — the label a lane agent must not duplicate as a second literal,
+      // per tokens.md's single-source rule. R09.6 already forbids adding an
+      // Issues nav tab, so this is read-only lookup, never a written one.
+      function moduleLabel(moduleID) {
+        if (!moduleID) { return 'Other'; }
+        var tab = document.querySelector('.sec-tab[data-target="#' + moduleID.replace(/"/g, '') + '"] .sec-tab__label');
+        return tab ? (tab.textContent || '').trim() : moduleID;
+      }
+
+      // findingGroup renders one heading + its finding list. `note`, when
+      // given, is 04 §6's `blocks <N> of <M> claims here` weight phrase — a
+      // second span so it can be styled and (§5 M6) stacked separately from
+      // the module name, never concatenated into one string.
+      function findingGroup(heading, rows, note) {
         var group = el('div', 'status-group');
-        group.appendChild(textEl('p', 'status-group-head', heading));
+        var head = el('p', 'status-group-head');
+        head.appendChild(textEl('span', 'status-group-head-name', heading));
+        // retry fix 25 (this lane's third attempt, 04 §4.7 "Filler rule"):
+        // the hairline only exists between a name and a weight phrase — a
+        // heading with no `note` (APPROVAL RECORD) gets neither.
+        if (note) {
+          head.appendChild(el('span', 'status-group-head-rule'));
+          head.appendChild(textEl('span', 'status-group-head-note', note));
+        }
+        group.appendChild(head);
         var list = el('ul', 'status-finding-list');
         rows.forEach(function (r) { list.appendChild(r); });
         group.appendChild(list);
@@ -1809,7 +1868,7 @@
       // reads as "fine" by default, and a persistent all-clear chip would be one
       // more thing to stop noticing.
       function renderStatusStrip(data) {
-        if (!stripEl || !stripBody || !stripSummary || !stripTitle || !stripNote) { return; }
+        if (!stripEl || !stripBody || !stripSummary || !stripTitle) { return; }
         lastStatusData = data || {};
         renderClaimReadiness(lastStatusData.readiness || offlineReadiness());
         var claimIDs = activeFacetClaimIDs();
@@ -1840,47 +1899,111 @@
         });
 
         stripBody.textContent = '';
+        // 04 §8 item 11 / §9 item 5: shell.html:265-271 already states this
+        // strip exists only against a live serve; readiness and lint groups
+        // still render statically from the embedded graph payload
+        // (offlineReadiness), but an APPROVAL RECORD verdict never can — a
+        // baked one would be exactly the "stale green strip nobody checked"
+        // that comment forbids. Stated here, not silently omitted.
+        if (((window.location && window.location.protocol) || '') === 'file:') {
+          stripBody.appendChild(textEl('p', 'status-strip-static-note',
+            'Approval record findings need a live dossierx serve; open with dossierx serve to see them.'));
+        }
         var filters = el('div', 'status-strip-filters');
         STATUS_SEVERITIES.forEach(function (item) {
           var count = countSeverity(groups, item.id);
-          var chip = el('button', 'pill' + (stripSeverityFilter === item.id ? ' ps' : ' pv'));
+          // retry fix 32 (this lane's third attempt, COORDINATOR RULING):
+          // a severity at zero emits NO chip — R08.1 makes a FILLED pill
+          // mean "nothing above this", which only means something when the
+          // filled (Critical) chip's absence is itself the "nothing above
+          // this" signal. A zero-count chip for every severity, always
+          // shown, said nothing a reader could act on.
+          if (count === 0) { return; }
+          var pressed = stripSeverityFilter === item.id;
+          // 04 §4.4 / R08.1: a scoped chip, never claim-status's shared
+          // .pill — that class is a different vocabulary (LOCKED / DRAFT /
+          // review_pending) and restyling it here would restyle every claim
+          // chip in the document too.
+          var chip = el('button', 'status-severity-chip status-severity-chip--' + item.id);
           chip.type = 'button';
-          chip.textContent = item.label + ' ' + count;
-          chip.setAttribute('aria-pressed', String(stripSeverityFilter === item.id));
+          chip.appendChild(el('span', 'status-severity-chip__dot'));
+          chip.appendChild(document.createTextNode(item.label + ' '));
+          chip.appendChild(textEl('span', 'status-severity-chip__count', String(count)));
+          // 04 §8 item 2: pressed is the R-F.2 "open" treatment (an accent
+          // border + weight step), not a second fill — the severity hues are
+          // already spent on meaning and cannot also mean "selected".
+          chip.setAttribute('aria-pressed', String(pressed));
           chip.addEventListener('click', function (event) {
             event.preventDefault();
             event.stopPropagation();
-            stripSeverityFilter = stripSeverityFilter === item.id ? '' : item.id;
+            stripSeverityFilter = pressed ? '' : item.id;
             renderStatusStrip(lastStatusData);
           });
           filters.appendChild(chip);
         });
         stripBody.appendChild(filters);
 
-        var bySeverity = {};
-        visible.forEach(function (group) {
-          if (!bySeverity[group.severity]) { bySeverity[group.severity] = []; }
-          bySeverity[group.severity].push(group);
+        // 04 §2 / §9 item 6: the promoted Issues body groups by the module
+        // that owns the blocking claim, never by severity — severity is the
+        // filter strip above, not the organising axis. R09.8 / §9 item 7
+        // keeps "Later" out of the default list; a reader opts in by
+        // pressing its chip. R08.2 / §8 item 3: integrity ("ledger")
+        // findings are a different KIND of finding, not a severity among
+        // severities — they sort into their own APPROVAL RECORD group,
+        // first, ahead of every module group, regardless of weight.
+        var withoutLater = visible.filter(function (group) {
+          return group.severity !== 'later' || stripSeverityFilter === 'later';
         });
-        STATUS_SEVERITIES.forEach(function (item) {
-          var rows = bySeverity[item.id] || [];
-          if (!rows.length) { return; }
-          stripBody.appendChild(findingGroup(item.label, rows.map(renderStatusGroup)));
+        // retry fix 20: keyed off `origin` (the finding's KIND), not
+        // `severity` — a critical-severity LINT row must still be able to
+        // sit in its own module group (§ 8 item 1), and only a `ledger`
+        // finding may ever join APPROVAL RECORD.
+        var approvalRecord = withoutLater.filter(function (group) { return group.origin === 'ledger'; });
+        var byModule = {};
+        var moduleOrder = [];
+        withoutLater.filter(function (group) { return group.origin !== 'ledger'; }).forEach(function (group) {
+          var moduleID = ownerModuleID(group);
+          if (!Object.prototype.hasOwnProperty.call(byModule, moduleID)) {
+            byModule[moduleID] = [];
+            moduleOrder.push(moduleID);
+          }
+          byModule[moduleID].push(group);
+        });
+        var facetTotal = uniqueClaimCount(groups.filter(function (group) { return group.origin !== 'ledger'; }));
+        moduleOrder.sort(function (a, b) {
+          return uniqueClaimCount(byModule[b]) - uniqueClaimCount(byModule[a]);
+        });
+        if (approvalRecord.length) {
+          var recordEl = findingGroup('APPROVAL RECORD', approvalRecord.slice().sort(function (a, b) {
+            return statusGroupClaimCount(b) - statusGroupClaimCount(a);
+          }).map(renderStatusGroup));
+          recordEl.classList.add('status-group--approval-record');
+          stripBody.appendChild(recordEl);
+        }
+        moduleOrder.forEach(function (moduleID) {
+          var rows = byModule[moduleID].slice().sort(function (a, b) {
+            return statusGroupClaimCount(b) - statusGroupClaimCount(a);
+          });
+          var weight = uniqueClaimCount(rows);
+          var note = 'blocks ' + weight + ' of ' + facetTotal + ' claim' + (facetTotal === 1 ? '' : 's') + ' here';
+          stripBody.appendChild(findingGroup(moduleLabel(moduleID), rows.map(renderStatusGroup), note));
         });
 
+        // retry fix 21: stripNote (the "Critical 0 · Needs you 3 · ..."
+        // tally) is removed from the collapsed banner per the coordinator's
+        // ruling — the severity chips above already carry every count this
+        // used to repeat as a second string. statusChipLine, the function
+        // that built that string, is now dead (no other call site) and is
+        // deleted — see learnings/deadcode/L8.md.
         var headline = blockerHeadline(groups);
         if (ledger.length) {
           stripTitle.textContent = countLabel(ledger.length, 'approval record issue') + ' in this facet need' + (ledger.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = statusChipLine(groups);
         } else if (lintErrors.length && !headline && !needsYou) {
           stripTitle.textContent = countLabel(lintErrors.length, 'issue') + ' in this facet need' + (lintErrors.length === 1 ? 's' : '') + ' attention';
-          stripNote.textContent = statusChipLine(groups);
         } else if (headline) {
           stripTitle.textContent = headline;
-          stripNote.textContent = statusChipLine(groups);
         } else {
           stripTitle.textContent = countLabel(groups.length, 'grouped issue') + ' in this facet';
-          stripNote.textContent = statusChipLine(groups);
         }
 
         stripEl.classList.toggle('status-strip--integrity', ledger.length > 0);

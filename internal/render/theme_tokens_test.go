@@ -328,9 +328,17 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// chips per tokens.md §3), so this is a literal count change, not a
 		// structural one (LEARNINGS.md G9): the row's radius token, not a
 		// new surface.
+		//
+		// L8 (third attempt; G9 count re-pin) drops .status-strip out of this
+		// set: 02 §4.10 "Radius" and 03 §4.5 make the collapsed banner a flush
+		// band with only a bottom hairline, so `border-radius: var(--radius)`
+		// left .status-strip (and the redundant .status-strip--open override,
+		// see learnings/deadcode/L8.md). The 520px inset-card form keeps its own
+		// literal 10px, never a --radius consumer. Merged count re-pinned by the
+		// coordinator from the merged tree (L2 +1, L8 -2 against the pilot's 9).
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 10 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 10", n)
+		if n != 9 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
 		}
 	})
 }
