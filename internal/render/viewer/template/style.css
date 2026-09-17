@@ -7511,6 +7511,15 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
 .issues-findings-card {
   flex: 1 1 0;
   min-width: 0;
+  /* Retry fix 3 (04 §4.6 + §9 Open decision 4 + §3): .issues-body has a
+     definite height (flex: 1 1 0 inside a height: 1024px main column), so
+     this percentage resolves against it, giving the card a FLOOR at the
+     body's height rather than a fixed height — a short list (e.g. the Check
+     chip pressed, one row deep) still reaches the bottom edge instead of
+     closing itself with a square-cornered border mid-page, which §9 Open
+     decision 4 forbids. A longer list still grows past this floor exactly as
+     flex: 1 1 0 already lets it (min-height never caps max content size). */
+  min-height: 100%;
   background: var(--card-bg);
   border: 1px solid var(--border);
   border-top-left-radius: 12px;
@@ -7647,9 +7656,15 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   .issues-caveat {
     display: block;
   }
-  .issues-body {
-    align-items: stretch;
-  }
+  /* Retry fix 1 (04 §3 "Sticky and scroll regions"): no align-items override
+     here. .issues-body already sets align-items: start above 860px, and
+     that value must carry through below it too — align-items governs the
+     CROSS axis of this flex row, not .issues-findings-card's width (that
+     comes from flex: 1 1 0 regardless), so a `stretch` override here only
+     stretched the card to .issues-body's own height. .issues-body is the
+     scroll region (flex: 1 1 0, min-height: 0, overflow-y: auto); stretching
+     the card to match it defeated that scroll and, because the card also
+     carries overflow: clip, silently clipped every group past the first. */
   /* #navToggle (group 02's fixed hamburger pill, style.css:6516) floats at
      `top: 10px` over whatever is beneath it at this tier — .content-area's
      own mobile rule reserves the identical 54px above via padding-top
@@ -7873,6 +7888,18 @@ body:has(#issuesView:not([hidden])) #facetTocScrim {
   .comments-rail,
   .status-strip { display: none !important; }
   .content-area { padding: 0; }
+
+  /* Retry fix 7 (04 §7.1): an Issues view that is a document view needs a
+     deliberate print decision instead of inheriting .status-strip's
+     display: none !important above. Decision: .issues-view PRINTS — it
+     holds the actual findings, not chrome, and a reader who opened it wants
+     those rows on paper. Its right rail panel (04 §4.9, WHERE THE BLOCKERS
+     LIVE) is the one part suppressed: every figure it carries already
+     repeats in the group headers a few lines to its left (the same reason
+     §5 M1 drops it at 390), so on paper it joins the other decorative rails
+     already hidden above (.facet-toc, .comments-rail) rather than competing
+     with the list for the printed page. */
+  .issues-rail-panel { display: none !important; }
   .card,
   .claim-tree { break-inside: avoid; }
   .claim-collapse-toggle { pointer-events: none; }

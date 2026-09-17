@@ -2161,17 +2161,28 @@
       }
 
       // renderIssuesRail (04 §4.9): a ranking with bars, proportional to the
-      // LARGEST count on screen (§8 item 8), truncated rather than scrolled
-      // past four rows, with the same double-counting caveat sentence
-      // mirrored under the mobile subtitle (§5 M2) once the rail itself is
-      // gone. The caveat is DERIVED here, not the fixture's hand-authored
-      // literal, so it stays correct at any corpus size or scope.
+      // facet's blocked-claim TOTAL (§4.9's own measured widths — retry fix
+      // 4, coordinator ruling: "rail bars use the spec's rounding basis" —
+      // round(N / M, 1px) against data.claims, the SAME M
+      // issuesApplyScopeDenominator already writes into every group header's
+      // "blocks N of M claims here" phrase (§8 item 7/9: the rail figures
+      // must agree with the group headers at the same scope). §4.9's table
+      // measures round(92%, 1px) for a count of 24 against a facet total of
+      // 26 (24/26 = 92.3%), NOT 100% for the largest row — §2 and §4.9's
+      // prose ("proportions of the largest count") describes the board's
+      // words, not its pixels, and the pixels are the spec (tokens.md's
+      // standing rule: a measured value wins over paraphrased prose).
+      // Truncated rather than scrolled past four rows, with the same
+      // double-counting caveat sentence mirrored under the mobile subtitle
+      // (§5 M2) once the rail itself is gone. The caveat is DERIVED here,
+      // not the fixture's hand-authored literal, so it stays correct at any
+      // corpus size or scope.
       function renderIssuesRail() {
         if (!issuesRailRowsEl) { return; }
         var data = issuesModuleWeights(issuesScope);
         issuesRailRowsEl.textContent = '';
         var shown = data.rows.slice(0, ISSUES_RAIL_MAX_ROWS);
-        var largest = shown.length ? shown[0].weight : 0;
+        var total = data.claims;
         shown.forEach(function (row) {
           var wrap = el('div', 'issues-rail-row');
           var labelRow = el('div', 'issues-rail-row-label');
@@ -2180,7 +2191,7 @@
           wrap.appendChild(labelRow);
           var track = el('div', 'issues-rail-bar-track');
           var fill = el('div', 'issues-rail-bar-fill');
-          fill.style.width = (largest ? Math.round((row.weight / largest) * 100) : 0) + '%';
+          fill.style.width = (total ? Math.round((row.weight / total) * 100) : 0) + '%';
           track.appendChild(fill);
           wrap.appendChild(track);
           issuesRailRowsEl.appendChild(wrap);
