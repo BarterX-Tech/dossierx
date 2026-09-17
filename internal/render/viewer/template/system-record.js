@@ -252,7 +252,13 @@
     var title = claim.querySelector(':scope > .k');
     if (!title) { return (claim.id || '').replace(/[.-]/g, ' '); }
     var copy = title.cloneNode(true);
-    copy.querySelectorAll('.pill, .claim-comments-slot').forEach(function (node) { node.remove(); });
+    // .k-id is the v0.4.x mono id line card.html's head now renders beneath
+    // the title (docs/design/screens/07-claim-boundary-no-embodiment.md
+    // §4.4) — stripped here for the same reason .pill and .claim-comments-slot
+    // are: every caller of cleanTitle (the collapse toggle's aria-label, the
+    // facet TOC's item label) wants the human title alone, not the title with
+    // the machine id run on right after it.
+    copy.querySelectorAll('.pill, .claim-comments-slot, .k-id').forEach(function (node) { node.remove(); });
     return copy.textContent.replace(/\s+/g, ' ').trim();
   }
 

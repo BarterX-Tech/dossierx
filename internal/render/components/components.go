@@ -61,6 +61,7 @@ var funcMap = template.FuncMap{
 	"inc":           inc,
 	"pillClass":     pillClass,
 	"statusLabel":   StatusLabel,
+	"statusIcon":    StatusIconHTML,
 	"colClass":      colClass,
 	"mockupHTML":    mockupHTML,
 	"claimLabel":    ClaimLabel,
@@ -275,6 +276,40 @@ func StatusLabel(status model.Status, reviewPending bool) string {
 		s := string(status)
 		return strings.ToUpper(s[:1]) + s[1:]
 	}
+}
+
+// StatusIconHTML returns the padlock glyph that rides inside every claim
+// status pill. The components board (section F, "Claim status chip") is
+// explicit that the chip is a closed set of two shapes, not an icon plus a
+// bare-word fallback: "Always a padlock and a word — the padlock is closed
+// when an approval is on record and open when it is not, so the two states
+// differ in shape as well as in colour" and "The chip never appears without
+// its icon. A word alone reads as a label; the padlock is what makes it a
+// state." A locked claim (pillClass "ps") and a locked-but-review_pending one
+// ("pw") both have an approval on record — review_pending is a flag on an
+// already-locked claim, not a withdrawal of its lock — so both get the closed
+// #dx-icon-lock glyph; only a draft claim ("pv") has never been approved, and
+// gets the open #dx-icon-lock-open glyph instead.
+//
+// docs/design/screens/07a-claim-draft-not-yet-approved.md's board (node
+// 4BJ-0) draws the DRAFT chip with the SAME open padlock this returns for
+// StatusDraft — a pixel comparison against the components board confirms the
+// shackle is lifted, not closed, on both. There is no Paper defect here: the
+// open-padlock choice below agrees with 07a as well as with section F. The
+// actual inaccuracy is prose, not a board: docs/design/LANES.md's L3
+// ownership section says "the DRAFT form carries no padlock," which reads
+// narrower than section F's own rule (a closed set of two shapes, never
+// "icon or nothing") and is being corrected there, not here — see
+// learnings/inbox/L3.md item 2 for the full history of this lane's own
+// first-pass misreading of the board.
+func StatusIconHTML(status model.Status, reviewPending bool) template.HTML {
+	if status == model.StatusLocked {
+		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock"/></svg>`)
+	}
+	if status == model.StatusDraft {
+		return template.HTML(`<svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-lock-open"/></svg>`)
+	}
+	return ""
 }
 
 // edgesHTML renders the edge/metadata footer shared by every non-banner
