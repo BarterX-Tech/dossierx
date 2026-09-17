@@ -37,7 +37,10 @@ func TestRenderConformanceProjectionAndEscaping(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"Implementation checks", "public-values", "schema-version", "Mismatch", "Shape", "scalar", "missing", "ready", "extra", "paused", "Ready here means every declared check"} {
+	// "shape" (not "Shape") is lowercase per 06a §4.8/§6: the machine-layer
+	// keys are a fixed, lowercase mono envelope — check/adapter/shape/
+	// target/expected/observed/missing/extra/detail.
+	for _, want := range []string{"Implementation checks", "public-values", "schema-version", "Mismatch", "shape", "scalar", "missing", "ready", "extra", "paused", "Ready here means every declared check"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("viewer missing %q", want)
 		}
@@ -59,7 +62,20 @@ func TestRenderConformanceProjectionAndEscaping(t *testing.T) {
 		t.Fatal("viewer emitted an unterminated scalar check")
 	}
 	scalar := out[scalarStart : scalarStart+scalarEnd]
-	if !strings.Contains(scalar, `<span>Expected:</span> <code>3</code>`) || !strings.Contains(scalar, `<span>Observed:</span> <code>4</code>`) || strings.Contains(scalar, `<span>missing:</span>`) || strings.Contains(scalar, `<span>extra:</span>`) {
+	// Re-pinned lowercase per 06a §4.8/§6 ("lowercase mono: check · adapter
+	// · shape · target · expected · observed · missing · extra · detail") —
+	// previously "Expected"/"Observed" (capitalized), which predates this
+	// screen's machine-layer vocabulary.
+	//
+	// RETRY re-pin (verifier item 2, 06a §9 Open decision 5): `extra` is no
+	// longer omitted when the slice is empty — the nine-key envelope is a
+	// fixed shape, and an absent key made the envelope variable-length. It
+	// now always renders, with an em-dash value when there is nothing to
+	// list (`claim-conformance-line--empty`). `missing` stays omitted here:
+	// this check is scalar-shaped, and only a set-shaped check ever
+	// populates Missing (conformance.go's evaluateCheck never sets it on a
+	// scalar comparison), so its absence is unrelated to this decision.
+	if !strings.Contains(scalar, `<span>expected:</span> <code>3</code>`) || !strings.Contains(scalar, `<span>observed:</span> <code>4</code>`) || strings.Contains(scalar, `<span>missing:</span>`) || !strings.Contains(scalar, "<span>extra:</span> <code>—</code>") {
 		t.Fatalf("scalar check did not preserve scalar-only detail fields: %s", scalar)
 	}
 }
