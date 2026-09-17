@@ -4838,8 +4838,13 @@ code {
        card at 12px down to 520, where the lane's own appended
        @media (max-width: 520px) block (M1) is the only place it goes to 0.
        This tablet-tier 6px was a stray leftover the verifier caught at both
-       700 and 560 — see the comment on the base .card, .claim-tree rule. */
-    padding: 17px 16px;
+       700 and 560 — see the comment on the base .card, .claim-tree rule.
+       --card-gutter is re-pointed here too (verifier attempt 2, M1): the
+       shorthand below used to hard-code 16px while the token still read
+       32px, so a section reading the token (G8) would inset 32px inside a
+       16px card across 521–860. The token and the box it names must agree. */
+    --card-gutter: 16px;
+    padding: 17px var(--card-gutter);
   }
 
   .k { font-size: 15px; }
