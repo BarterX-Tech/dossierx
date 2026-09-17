@@ -418,6 +418,19 @@ func targetPillHTML(targetID string, statuses map[string]TargetStatus) string {
 // one-at-a-time group at zero cost. The name is per-claim (the id itself) so
 // two different claim cards on one page never cross-close each other.
 //
+// THIRD RETRY FIX (verifier item 2): a door's <details> now contains ONLY its
+// <summary> chip — its `.claim-footer-panel` is a plain <div> written as
+// that <details>'s next SIBLING in this function's output, not its child.
+// This is what lets .claim-footer lay the chip out as an ordinary flex item
+// (always in the strip row, open or closed) while the panel independently
+// takes the full row on its own line once open — see style.css's
+// `.claim-links[open] + .claim-links-panel` rule and the doc comment beside
+// the `.claim-links, .claim-sources` reset for the measured browser bug
+// (`display: contents` on a <details>) that ruled out the alternative of
+// promoting the panel out from INSIDE the <details>. The disclosure-group
+// mechanics above (shared `name`, native `open`) are entirely unaffected:
+// they key off the <details> elements, which are unchanged.
+//
 // Two signals still write the bare ` open` attribute server-side on the
 // relationships door — any linked file Drifted, or the claim locked +
 // review_pending — so the two states a reader must not miss are never
@@ -559,13 +572,46 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	b.WriteString(`<div class="claim-footer">`)
 
 	// ---- relationships door (R09.4) ----
+	//
+	// THIRD RETRY FIX (verifier item 2). The panel used to be this <details>'s
+	// own child, closed with it inside one `</div></details>` pair. Probed
+	// directly: `display: contents` on a <details> — the mechanism a second
+	// draft of this fix used to promote the summary chip and the panel into
+	// independent flex items of .claim-footer, so the chip stays in the strip
+	// row while only the panel wraps onto its own full-width row below —
+	// measurably breaks in the tested engine (Chrome/Chromium). Two separate
+	// defects, both confirmed by reading getComputedStyle: a CLOSED door's
+	// panel still computed `content-visibility: visible` (the native
+	// closed-<details> hiding the whole point of `display: contents` here
+	// was supposed to leave alone did not fire), and a promoted child's own
+	// percentage `width`/`flex-basis` resolved against the wrong containing
+	// block (a measured 744px against .claim-footer's own, simultaneously
+	// measured, 780px content box — no CSS in this file asks for that
+	// number, and it is not a rounding artifact: it reproduced exactly,
+	// repeatedly, independent of which flex properties this rule set).
+	//
+	// The panel is therefore now a genuine SIBLING of this <details>, not its
+	// child: a plain, always-present <div> immediately following
+	// `</details>`, hidden by default (`.claim-footer-panel { display: none
+	// }`) and revealed purely by CSS sibling selectors keyed off this
+	// <details>'s `open` attribute or a `:target` inside it — see that rule
+	// and the deep-link block below. This sidesteps the display:contents bug
+	// entirely: the <details> here is now a NORMAL, always-content-sized
+	// (chip-only) box, never asked to promote a child or to hide one
+	// natively, and the panel is a NORMAL flex item of .claim-footer from
+	// the start, sized with ordinary CSS (no promoted-child percentage
+	// resolution involved). The `name`-grouped native "close my sibling
+	// <details>" mechanism (R09.2) is unaffected — it keys off the
+	// <details> elements themselves, which still exist, still share
+	// `name="claim-footer-<id>"`, and still carry the real `open` attribute
+	// exactly as before.
 	b.WriteString(`<details class="claim-links" name="`)
 	b.WriteString(footerName)
 	b.WriteString(`"`)
 	b.WriteString(openAttr)
 	b.WriteString(`><summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">`)
 	b.WriteString(countSegment(links, "relationship"))
-	b.WriteString(`</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary>`)
+	b.WriteString(`</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary></details>`)
 	b.WriteString(`<div class="claim-footer-panel claim-links-panel">`)
 	b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
 	b.WriteString(strconv.Itoa(links))
@@ -584,7 +630,7 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 		b.WriteString(extra.String())
 		b.WriteString(`</ul>`)
 	}
-	b.WriteString(`</div></details>`)
+	b.WriteString(`</div>`)
 
 	// ---- sources door (R09.5) ----
 	// RETRY FIX: always rendered now, even at zero sources. 07a §6/§8's
@@ -610,7 +656,10 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 	if len(c.Sources) > 0 {
 		b.WriteString(`<span class="claim-footer__chevron" aria-hidden="true"></span>`)
 	}
-	b.WriteString(`</summary>`)
+	// See the relationships door's comment above (THIRD RETRY FIX, verifier
+	// item 2): this door's panel is likewise now a sibling <div>, not a
+	// child of this <details>, closed here right after </summary>.
+	b.WriteString(`</summary></details>`)
 	b.WriteString(`<div class="claim-footer-panel claim-sources-panel">`)
 	b.WriteString(`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">`)
 	b.WriteString(strconv.Itoa(len(c.Sources)))
@@ -620,7 +669,7 @@ func EdgesHTMLWithLinks(c model.Claim, files []implink.ViewFile, dependedBy []st
 		writeSourcesRow(&b, c)
 		b.WriteString(`</ul>`)
 	}
-	b.WriteString(`</div></details>`)
+	b.WriteString(`</div>`)
 
 	b.WriteString(`</div>`)
 

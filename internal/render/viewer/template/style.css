@@ -898,7 +898,17 @@ th {
   gap: 20px;
   margin: 0.4rem 0 0;
   padding-block: 15px;
-  border-top: 1px solid var(--border);
+  /* THIRD RETRY FIX (verifier item 10; 05 §3 "Footer strip top hairline 1px
+     solid #E8ECF1 (light) / 1px solid #212934 (dark)"; 07 §4.11 and D10:
+     dark's hairline "is not --color-dark-border #242C38; it is three to four
+     units darker on every channel"). A flat var(--border) painted this
+     hairline at the raw border colour on both schemes; mixing it 70% toward
+     --card-bg is what pulls dark three-to-four units darker per channel
+     while leaving light close to its own --border (both boards read this
+     hairline as quieter than the ordinary card border). .claim-footer-panel
+     below carries the identical mix so the strip's top edge and the open
+     panel's own top edge read as the same weight of line. */
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, var(--card-bg));
 }
 
 .claim-footer > .claim-readiness,
@@ -914,9 +924,45 @@ th {
    — no border, no radius, no background of their own, because the strip's
    ONE hairline (drawn by .claim-footer, above) is the only separator this
    design allows; see docs/design/LANES.md's L4 intent paragraph on the old
-   bordered/radiused/tinted box this replaces. Each door's own panel
-   (.claim-footer-panel) is what forces the full-width wrap onto its own row
-   when open — see that rule below. */
+   bordered/radiused/tinted box this replaces.
+
+   THIRD RETRY FIX (verifier item 2). The previous mechanism made the whole
+   OPEN <details> a `flex: 1 1 100%` item of .claim-footer, which does keep
+   a panel INSIDE it on its own full-width row but ALSO evicts that door's
+   own <summary> chip from the strip row along with it — forcing the
+   <details> itself to 100% width pushes every chip that comes after it (in
+   source order) down onto the panel's own line too, and 05 §2 is explicit
+   that "nothing else on the card moves" when one door opens.
+
+   A SECOND draft tried `display: contents` on the <details> instead, to
+   promote its two children (the summary chip and .claim-footer-panel) into
+   independent flex items of .claim-footer — the chip staying an ordinary,
+   default-order item in the strip row regardless of open state, the panel
+   given `flex: 1 1 100%; order: 1` to always wrap onto its own row below.
+   MEASURED BROWSER BEHAVIOUR, NOT SPEC: this breaks in the tested engine
+   (Chrome/Chromium), confirmed by reading getComputedStyle directly on both
+   a closed and an open door. Two separate defects: a CLOSED door's panel
+   still computed `content-visibility: visible` — the UA's own
+   closed-<details> content hiding, which `display: contents` is supposed
+   to leave untouched since it lives in the `::details-content` mechanism
+   keyed off the `open` attribute, did not fire at all once its <details>
+   ancestor had `display: contents` — and a PROMOTED child's own percentage
+   `width`/`flex-basis` resolved against the wrong containing block (a
+   repeatably measured 744px against .claim-footer's own, simultaneously
+   measured, 780px content box, independent of which flex properties the
+   panel rule set — not a rounding artifact).
+
+   `components.EdgesHTMLWithLinks` therefore now writes each door's panel as
+   a plain <div>, a SIBLING of its <details> immediately following
+   `</details>` in source order, never the <details>'s child — see that
+   function's doc comment. `.claim-links`/`.claim-sources` need no special
+   sizing beyond the reset below: each <details> now contains only its
+   <summary>, so it is an ordinary, always-content-sized (chip-shaped) flex
+   item of .claim-footer with no promotion, no native-hide reliance, and
+   none of the above bugs in the loop. `.claim-footer-panel`'s own rule
+   (below) hides it by default and gives it `order: 1` so it always lands
+   after every order-0 chip, on its own full-width flex-wrap line, and the
+   sibling-selector rules further down reveal exactly one at a time. */
 .claim-links,
 .claim-sources {
   margin: 0;
@@ -924,22 +970,15 @@ th {
   border: 0;
 }
 
-/* RETRY FIX (05 §2/§3: "pushes one panel out below the footer hairline",
-   panel inline padding 32px flush with the card body). An open <details> is
-   the flex item .claim-footer actually lays out — .claim-footer-panel is a
-   block INSIDE that <details>'s content, never a flex item of .claim-footer
-   itself, so the panel's own `flex-basis: 100%` (below) was inert: nothing
-   about a plain block child cares about its ancestor's flex-basis. The
-   <details> element is what needs `flex: 1 1 100%` — take the whole strip
-   row the instant it opens — so the block panel inside it can then reach
-   `width: 100%` of something that is actually the card's full content width
-   (measured 844px at 1440: 780px content + 2×--card-gutter), not the
-   ~510px a shrink-to-fit flex item leaves it. min-width: 0 is the standard
-   companion so a long relationship title inside can wrap instead of forcing
-   the row wider than the strip. */
-.claim-footer > details[open] {
-  flex: 1 1 100%;
-  min-width: 0;
+/* Reveals a door's panel purely from its <details> sibling's `open`
+   attribute — no JS, no third state to keep in sync. `+` (not `~`) because
+   components.go writes the panel as the <details>'s immediate next
+   sibling; if a future change ever puts something else between them this
+   selector stops matching and the panel simply stays hidden, which is a
+   safer failure than a selector that keeps matching something else. */
+.claim-links[open] + .claim-footer-panel,
+.claim-sources[open] + .claim-footer-panel {
+  display: block;
 }
 
 /* Claim readiness is a reviewer-facing work queue. The policy engine remains
@@ -1380,41 +1419,54 @@ th {
 }
 
 /* .claim-footer-panel is each door's expansion body — 05 §4.9–§4.11's
-   neutral/blocked panel ground.
+   neutral/blocked panel ground. THIRD RETRY FIX (verifier item 2):
+   components.EdgesHTMLWithLinks now writes this <div> as its door's
+   <details> SIBLING, not its child (see that function's doc comment and
+   the .claim-links/.claim-sources reset above for why display: contents —
+   the alternative that keeps this element nested — measurably breaks in
+   the tested engine). Being a genuine, un-promoted flex item of
+   .claim-footer from the start, it needs no special-cased sizing: `display:
+   none` hides it by default (both doors' panels start hidden; the sibling
+   rule above reveals exactly the open one), and `order: 1` keeps it behind
+   every order-0 chip in flex layout order regardless of which door opened
+   or where its markup falls relative to the others, so the complete chip
+   row always renders above the single open panel — 05 §2's "nothing else
+   on the card moves".
 
-   RETRY FIX, SECOND HALF (found by probing the LIVE page after the item-1
-   fix above, not by re-reading the CSS): `.claim-footer > details[open]`
-   correctly makes the <details> take the full strip row now, but this
-   rule's own `width: 100%` was a SECOND, independent bug the verifier's
-   842px-vs-510px reading did not separately name. This engine's global
-   reset is `box-sizing: border-box`, under which an explicit `width: 100%`
-   resolves to 100% of the CONTAINING BLOCK'S width — i.e. the <details>'s
-   own content width — as this element's fixed OUTER (border-box) size.
-   Negative `margin-inline` then only SHIFTS that fixed-size box left and
-   right; per CSS2.1 §10.3.3's over-constrained-box rule, an explicit,
-   non-auto width means the margins are NOT solved for by the "fill the
-   available space" equation the classic negative-margin full-bleed trick
-   depends on — that equation only runs when width is 'auto'. The
-   observable result: the panel's LEFT edge reached the card's edge (the
-   negative margin did shift it), but its RIGHT edge fell exactly
-   2×--card-gutter short, because the box's own width never grew to fill
-   the gap the shift opened up. `width: auto` (the property's default —
-   simply omitted here) is what lets a block box's width auto-solve to
-   "containing block width − margin-left − margin-right", which is exactly
-   the full-bleed span this rule wants: content width + gutter on both
-   sides. flex-basis: 100% is kept only as a defensive no-op (it is not a
-   flex item of .claim-footer — the <details> is — so it does nothing
-   today, but costs nothing to leave in case a future markup change ever
-   makes this element a direct flex child again). The negative inline
-   margin + matching padding (G8's full-bleed-hairline pattern) is why the
-   panel's tint reaches the card's own edges while its text still lines up
-   with the chips above — 05 §3's "flush with the card body, not with the
-   inset footer". */
+   width is `calc(100% + 2 * var(--card-gutter))`, not the classic
+   block-layout "negative margin-inline + width: auto" full-bleed trick:
+   that trick auto-solves a block's width from its CONTAINING BLOCK's width
+   minus its own margins, which is a computation the CSS box model only
+   runs for a block box in normal flow, not for a flex item's main-axis
+   size (a flex item's main size comes from the flex sizing algorithm —
+   flex-basis, then grow/shrink — which does not re-derive itself from
+   `width: auto` and margins the same way). Stating the target span
+   directly — 100% of the flex container's content width plus one gutter
+   each side, i.e. content width + 2×--card-gutter, matching G8 — needs no
+   flex-grow arithmetic in the loop at all: `flex: 0 0 auto` lets
+   `flex-basis: auto` read this `width` value as the item's basis outright
+   (the flexbox spec's own definition of an `auto` basis), so the resolved
+   main size is exactly the declared `width`, full stop; grow/shrink stay
+   at zero because nothing needs solving once the size is stated
+   explicitly, and this panel is alone on its own flex-wrap line regardless
+   (order: 1, after every order-0 chip, and only ever one panel visible at
+   once), so there is never competing content to shrink for. min-width: 0
+   is kept as the standard companion so a long relationship title inside
+   can still wrap instead of forcing the row wider than the strip.
+
+   border-top-color is the same color-mix(...) as .claim-footer's own
+   hairline above (verifier item 10) — the strip's top edge and the open
+   panel's own top edge must read as the same weight of line, never a flat
+   var(--border). */
 .claim-footer-panel {
-  flex-basis: 100%;
+  display: none;
+  flex: 0 0 auto;
+  order: 1;
+  min-width: 0;
+  width: calc(100% + 2 * var(--card-gutter));
   margin-inline: calc(-1 * var(--card-gutter));
   padding: 18px var(--card-gutter) 22px;
-  border-top: 1px solid var(--border);
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, var(--card-bg));
   background: var(--code-bg);
   color: var(--muted);
   font-family: var(--font-sans);
@@ -1469,13 +1521,18 @@ th {
   line-height: 1;
 }
 
+/* THIRD RETRY FIX (verifier item 3; 05 §4.10/07 §4.10: "tracking +0.06em
+   desktop (+0.08em on mobile)"). This desktop rule had carried the MOBILE
+   tracking value since the previous retry; the correct desktop figure is
+   0.06em (0.66px at 11px) — the 0.08em value stays put in the lane's own
+   @media (max-width: 520px) block below, where it belongs. */
 .claim-relationship-direction-label {
   color: var(--faint);
   font-family: var(--font-sans);
   font-size: 11px;
   line-height: 14px;
   font-weight: 600;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.06em;
 }
 
 /* RETRY FIX (05 §4.10: "Optional mono count (1, 2) IBM Plex Mono 11px / 14px
@@ -1632,62 +1689,49 @@ th {
    sidebar, from a claim-ref cross-link, or from a pasted URL — must not show
    the reader a collapsed footer, because the edge they followed the link for
    is inside it.
-   This is CSS ONLY, and the two rules below are its entire implementation
-   anywhere in the codebase. A URL fragment is never sent to the server and is unknowable
-   at render time, so no Go code may write a third `open` attribute for it
-   (the two the server does write are the drifted-file and the
-   locked+review_pending signals); and doing it in JS would not survive the
-   static file:// export, which is the case this has to work in.
+   This is CSS ONLY, and the rule below is its entire implementation anywhere
+   in the codebase. A URL fragment is never sent to the server and is
+   unknowable at render time, so no Go code may write a third `open`
+   attribute for it (the two the server does write are the drifted-file and
+   the locked+review_pending signals); and doing it in JS would not survive
+   the static file:// export, which is the case this has to work in.
    .claim is the root <section> of every partial. render.stripOverviewIDs
    removes id= from every non-canonical overview copy of a claim, so at most
    ONE element on the page can ever match :target — the rule cannot fan out.
 
-   TWO rules, and the order between them matters. A closed <details> hides its
-   contents through the UA's ::details-content pseudo-element, and a descendant
-   cannot opt back out of an ancestor that `content-visibility: hidden` has
-   already skipped — so the child-selector form below is expected to be a no-op
-   on any engine that implements the pseudo-element, and is kept only as a
-   fallback for older engines that predate it and hide the contents some other
-   way. Those engines drop the ::details-content rule as unparseable and still
-   get the pre-v0.4.1 behaviour.
-   ::details-content is recent (Chrome/Edge 131+, Safari 18.4+, Firefox 139+),
-   which is exactly why the fallback stays. The two rules declare the same
-   value, so neither can contradict the other; the pseudo-element rule is
-   nonetheless written LAST because the two selectors carry equal specificity
-   (0,3,1) and source order is all that separates them.
-   Neither form sets the `open` content attribute — CSS cannot write one — so
-   the UA disclosure marker still reads closed while the contents show. That is
-   a cosmetic mismatch, not a defect to "fix" with JS.
+   THIRD RETRY FIX (verifier item 2) simplified this considerably. Under the
+   previous nested-panel structure, revealing a closed door's content meant
+   fighting the UA's own ::details-content hiding with `content-visibility:
+   visible` (plus an older, pre-::details-content fallback rule) — because
+   the panel was that <details>'s own descendant. Now that
+   components.EdgesHTMLWithLinks writes the panel as the <details>'s
+   SIBLING (see that function's doc comment and the .claim-links/
+   .claim-sources reset above), `.claim-footer-panel` starts from a plain,
+   author-controlled `display: none` with no native disclosure mechanism
+   involved at all — so revealing it here is exactly the same `display:
+   block` the `[open]` sibling-selector rule above uses, aimed at the
+   deep-linked door's panel specifically. There is no ::details-content
+   engine-compatibility fallback to carry any more, because nothing here
+   depends on that pseudo-element existing.
 
-   RETRY FIX (R09.2 in the deep-link state, 05 §2). The reveal above used to
-   apply unconditionally, with no regard for the OTHER door in the same
-   `name="claim-footer-<id>"` group. Because relationships is revealed by
-   `content-visibility` rather than a real `open` attribute, the native
-   disclosure-group mechanism has nothing to close when a reader on a
-   `:target` claim then clicks the SOURCES chip: `<details>`'s "close every
-   sibling that shares my name" behaviour only fires against siblings that
-   themselves carry `open`, and relationships never did. The result was two
-   panels open at once — exactly what R09.2 forbids.
-   The `:not(:has(> details[open]))` guard on `.claim-footer` below is the
-   fix: the CSS-only reveal only fires while NEITHER door in the strip has
-   really been opened yet. The moment a reader clicks sources, the browser
-   sets a real `open` attribute on it, `:has(> details[open])` starts
-   matching, the guard's `:not()` stops matching, and the reveal rule simply
-   no longer applies — relationships falls back to the UA's ordinary
-   closed-<details> hiding, with no JS and no third `open` attribute written
-   anywhere. If the reader instead opens relationships itself first, its own
-   `open` attribute takes over as the reason its content shows, so the guard
-   going false there is harmless. This preserves every constraint above (CSS
+   The `:not(:has(> details[open]))` guard on `.claim-footer` is unchanged
+   from the previous draft and still does the same job (R09.2 in the
+   deep-link state, 05 §2): because this reveal sets no `open` attribute,
+   the native disclosure-group mechanism has nothing to close when a reader
+   on a `:target` claim then clicks the SOURCES chip, so the guard is what
+   stops the reveal once a REAL open exists anywhere in the strip — the
+   moment a reader opens either door for real, `:has(> details[open])`
+   starts matching, the guard's `:not()` stops matching, and this rule
+   simply no longer applies. If the reader instead opens relationships
+   itself first, its own `open` attribute (and the sibling-selector rule
+   above) takes over as the reason its content shows, so the guard going
+   false there is harmless. This preserves every constraint above (CSS
    only, no third `open` attribute, works under static file:// export) while
    the pre-existing "toggling the revealed relationships door closed does not
    visually close it" cosmetic quirk (an accepted, unrelated mismatch, not
    this bug) is unchanged. */
-.claim:target .claim-footer:not(:has(> details[open])) > .claim-links > *:not(summary) {
-  content-visibility: visible;
-}
-
-.claim:target .claim-footer:not(:has(> details[open])) > .claim-links::details-content {
-  content-visibility: visible;
+.claim:target .claim-footer:not(:has(> details[open])) > .claim-links + .claim-footer-panel {
+  display: block;
 }
 
 /* .claim-edges is a <ul> (see components.EdgesHTMLWithLinks): each
@@ -1807,11 +1851,19 @@ th {
   padding: 0;
 }
 
-/* 05 §4.11's source row: a fixed-width ref column, then title/publisher/
-   citation-count, gap 12px. The bullet-dash convention the pre-redesign row
-   shared with .claim-edge-id-list is dropped — the "[n]" ref IS the row's own
-   marker (it is what a citation superscript in the body links to), so a
-   second decorative bullet beside it would be redundant. */
+/* 05 §4.11's source row: a fixed-width ref column, title/publisher stacked
+   in the middle, and (THIRD RETRY FIX, verifier item 8) the citation count
+   as its own right-ranged column — three flex items, gap 12px. The
+   bullet-dash convention the pre-redesign row shared with .claim-edge-id-
+   list is dropped — the "[n]" ref IS the row's own marker (it is what a
+   citation superscript in the body links to), so a second decorative
+   bullet beside it would be redundant.
+
+   `align-items: baseline` is what the ref/body pair still wants (the "[n]"
+   sits on the title's text baseline), but the cite column opts out with its
+   own `align-self` below — 05 §4.11 pins it to the title's LINE, not to the
+   row's shared text baseline, which is a different thing once the body
+   stacks a second (meta) line underneath the title. */
 .claim-source {
   display: flex;
   align-items: baseline;
@@ -1841,7 +1893,11 @@ th {
 }
 
 /* claim-source-body is the ref column's sibling: title (Source Serif 4,
-   05 §4.11), then the publisher/citation-count meta line 3px below it. */
+   05 §4.11), then the publisher meta line 3px below it. THIRD RETRY FIX
+   (verifier item 8): the citation count used to be a third stacked line in
+   here (`.claim-source-cite { display: block }` at the body's full width);
+   it is now .claim-source's own third flex child (see below), so this
+   element's job is only the title and the meta line under it. */
 .claim-source-body {
   flex: 1 1 auto;
   min-width: 0;
@@ -1867,6 +1923,16 @@ th {
    case identically and promise a link that is not there. */
 .claim-edges a.claim-source-title {
   color: var(--link);
+}
+
+/* THIRD RETRY FIX (verifier item 9). No board draws a rule under the source
+   title (Source Serif 4 15/23 weight 400 --color-ink) — the anchor form was
+   falling through to the plain UA <a> underline, disagreeing with the
+   sibling .claim-relationship-list .claim-ref link, which this lane already
+   de-underlines. A bare class selector covers both the anchor and the
+   plain-span (internal-source / refused-URL) forms in one declaration. */
+.claim-source-title {
+  text-decoration: none;
 }
 
 /* claim-source-anchor is the machine string that pins the source: a path (with
@@ -1899,20 +1965,35 @@ th {
 
 /* RETRY ADDITION (fix-list item 11; 05 §4.11's citation count "cited once",
    Inter 12/16, --color-faint, padding-top: 3px — components.go's D12
-   counter, sourcesCitationCounts). It is written as `display: block` for the
-   same reason `.claim-source-meta` is: `.claim-source-body`'s column flex
-   gives every DIRECT block/flex-participating child its own stacked line,
-   so this becomes the row's next line after the title/publisher content
-   with no extra layout rule needed. See sources.go's writeSourcesRow for
-   the recorded, in-scope simplification against 05's mobile "shares line
-   two with the publisher" arrangement (M10). */
+   counter, sourcesCitationCounts).
+
+   THIRD RETRY FIX (verifier item 8; 05 §4.11 "its own column, padding-top
+   3px", 07 §4.11 "own right column"; boards 05/06/07/07a all right-range
+   it on the title's line). writeSourcesRow now emits this span as
+   .claim-source's own third flex child, a sibling of .claim-source-body,
+   not a line stacked inside the body — so it is styled as a fixed-content,
+   right-ranged column here rather than the `display: block` full-body-width
+   line it used to be. `flex: 0 0 auto` keeps it sized to its own text;
+   `.claim-source-body`'s `flex: 1 1 auto` claims the space between the ref
+   column and this one, which is what pushes it flush against the row's
+   right edge with no `margin-left: auto` needed. `align-self: flex-start`
+   opts it out of the row's shared `align-items: baseline` (which follows
+   the title's baseline, the wrong reference once the body stacks a second,
+   shorter meta line beneath the title) and `padding-top: 3px` then lines
+   its own text up with the title's cap-height the same way the meta line
+   below the title does. `white-space: nowrap` keeps "cited N times" from
+   wrapping into a second, narrower line now that it owns a column instead
+   of the body's full width. The mobile merge onto the publisher line (05
+   §5 M10) remains the lane's recorded inbox item 8. */
 .claim-source-cite {
-  display: block;
+  flex: 0 0 auto;
+  align-self: flex-start;
   padding-top: 3px;
   color: var(--faint);
   font-family: var(--font-sans);
   font-size: 12px;
   line-height: 16px;
+  white-space: nowrap;
 }
 
 /* The two authored boundary lines (supports / does_not_support). They are
@@ -2000,19 +2081,15 @@ th {
 }
 
 /* Deep-link auto-open for a SOURCE row, the companion to the .claim:target
-   rules above. A citation marker's href names the row, not the claim, so the
-   claim is not :target and those rules do not fire — yet the row the reader
-   asked for is inside the collapsed footer. :has() is what lets a closed
-   <details> react to a descendant's :target state; CSS cannot write the `open`
-   attribute, so as with the .claim:target pair the UA marker still reads
-   closed while the contents show. That is cosmetic, not a defect to fix in JS.
-   Both forms are declared for the same reason and in the same order as the
-   .claim:target pair: the child-selector form is the fallback for engines that
-   predate ::details-content, and the pseudo-element form is written last
-   because equal specificity leaves source order as the only tiebreak.
-   An engine without :has() support drops both rules and simply shows the
-   reader a collapsed footer they can open by hand — a degraded landing, never
-   a wrong one.
+   rule above. A citation marker's href names the row, not the claim, so the
+   claim is not :target and that rule does not fire — yet the row the reader
+   asked for is inside the collapsed footer. :has() is what lets the closed
+   sources door react to a descendant row's :target state; CSS cannot write
+   the `open` attribute, so as with the .claim:target rule the UA marker
+   still reads closed while the contents show. That is cosmetic, not a
+   defect to fix in JS. An engine without :has() support drops this rule and
+   simply shows the reader a collapsed footer they can open by hand — a
+   degraded landing, never a wrong one.
    Selector re-pinned from `.claim-links` to `.claim-sources` — 05 §4.11/R09.5
    split sources into its own peer <details>, so the citation-marker target
    this rule reveals now lives under `.claim-sources`, never under
@@ -2022,13 +2099,21 @@ th {
    same `:not(:has(> details[open]))` guard on `.claim-footer` is needed here
    for the same reason — a citation-marker deep link into a closed sources
    door must stop force-revealing the moment the reader opens relationships
-   for real, or both doors would show at once. */
-.claim-footer:not(:has(> details[open])) > .claim-sources:has(.claim-source:target) > *:not(summary) {
-  content-visibility: visible;
-}
+   for real, or both doors would show at once.
 
-.claim-footer:not(:has(> details[open])) > .claim-sources:has(.claim-source:target)::details-content {
-  content-visibility: visible;
+   THIRD RETRY FIX (verifier item 2): as with the .claim:target rule above,
+   the ::details-content engine-compatibility fallback this used to need is
+   gone — the sources panel is now a plain sibling <div> that starts
+   `display: none` with no native disclosure mechanism to fight, so
+   revealing it is the same `display: block` every other reveal rule here
+   uses, aimed at the sources door's own panel via `~` (general sibling:
+   `:has(.claim-source:target)` is on the <details> itself, so the panel
+   that follows it is not its immediate `+` sibling from this selector's
+   point of view — `~` still only ever matches the one <div> that follows,
+   since each door's <details>/panel pair is unique within one
+   .claim-footer). */
+.claim-footer:not(:has(> details[open])) > .claim-sources:has(.claim-source:target) ~ .claim-footer-panel {
+  display: block;
 }
 
 /* The landed-on row itself. It borrows the same accent tint the active nav
@@ -4652,13 +4737,24 @@ code {
   font-size: 12px;
 }
 
-.claim-links {
-  margin-top: 17px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--paper) 55%, var(--card-bg));
-  overflow: hidden;
-}
+/* THIRD RETRY FIX (verifier item 1). The rule this comment replaces —
+   `.claim-links { margin-top: 17px; border: 1px solid var(--border);
+   border-radius: 8px; background: color-mix(in srgb, var(--paper) 55%,
+   var(--card-bg)); overflow: hidden; }` — was the pre-revamp bordered,
+   radiused, tinted box LANES.md's L4 intent paragraph names outright: "That
+   is a deletion, and it is the change the frozen theme-parity baselines
+   ... will report; report the parity failure, do not fix it." Sitting in
+   this LIVE (System Record) layer, AFTER the reset at this file's primary
+   layer (`.claim-links, .claim-sources { margin: 0; padding: 0; border: 0;
+   display: contents; }`), it won every one of those four properties back on
+   source order alone: 05 §4.6/§4.7/§9's desktop chip is bare text with no
+   pill, no border and no ground, not a tinted panel, and `overflow: hidden`
+   on an element with `display: contents` additionally clipped the open
+   panel's negative-margin full-bleed (the panel is no longer even a
+   descendant box of this element for overflow purposes once it is
+   `contents`, but the stale rule still cropped it before that fix landed).
+   Nothing here needs to replace it: the primary-layer reset three sections
+   up is the whole rule for this selector now. */
 
 .claim-links-summary {
   display: flex;
@@ -5439,8 +5535,21 @@ code {
      decisions: "at 12px, colour alone is too quiet on a phone").
      font-size/line-height were missing here (RETRY FIX): the chip inherited
      desktop's 13px, where 07 §4.8/05 §4.8 both measure the mobile chip label
-     at Inter 12px / 16px. */
+     at Inter 12px / 16px.
+
+     THIRD RETRY FIX cleanup: `width: max-content` (R-F.4 "nothing spans the
+     width or splits across lines"; 07 §4.8) used to be its own rule scoped
+     to `.claim-footer > details[open] > .claim-footer-chip`, needed only
+     because the OLD mechanism made the open <details> itself a full-width
+     flex item, which would have stretched its block-level <summary> child
+     to match. Now that `.claim-links`/`.claim-sources` are `display:
+     contents` (verifier item 2, above), .claim-footer-chip is always an
+     ordinary flex item of .claim-footer directly — it already sizes to its
+     own content on the main axis with no stretching to undo — but the
+     property is folded into this general rule anyway, open or closed, as a
+     stated guarantee rather than an incidental default. */
   .claim-footer-chip {
+    width: max-content;
     height: 30px;
     padding-inline: 11px;
     border: 1px solid var(--border);
@@ -5449,18 +5558,6 @@ code {
     box-sizing: border-box;
     font-size: 12px;
     line-height: 16px;
-  }
-
-  /* RETRY FIX (R-F.4 "nothing spans the width or splits across lines"; 07
-     §4.8's `width: max-content`). Once `.claim-footer > details[open]` (the
-     item-1 fix, above) makes the OPEN door's <details> a full-width flex
-     item of the strip, its <summary> chip — a normal block-level child of a
-     block-level <details> — would stretch to fill that same full width and
-     the pill would span the whole row (and, at two-line wrap, could split
-     across lines). `width: max-content` keeps the open pill sized to its
-     own label, exactly like every closed pill beside it. */
-  .claim-footer > details[open] > .claim-footer-chip {
-    width: max-content;
   }
 
   .claim-links[open] > .claim-footer-chip,
@@ -5480,11 +5577,6 @@ code {
     font-weight: 600;
   }
 
-  .claim-relationship-list .claim-ref {
-    font-weight: 500;
-    line-height: 20px;
-  }
-
   /* M7 — the blocker row's stacked dependency path is L5's own row shape
      (readiness); this lane's equivalent is the relationship row, which
      already has no ranged path to stack — R-I.2's row (M9, below) is the
@@ -5497,14 +5589,59 @@ code {
      no-op at wider tiers — see its base rule) becomes a REAL flex row here,
      because 05 §4.10's item 9 gives the meta column its own element instead
      of folding it into the title, so meta and badge now have to be pulled
-     onto their own line together rather than each individually. */
+     onto their own line together rather than each individually.
+
+     THIRD RETRY FIX (verifier item 7). `column-gap: 8px` narrows the
+     dot/title gap from the desktop 10px per R-I.2's mobile row spec; the
+     previous `row-gap: 3px` alone left column-gap at its inherited desktop
+     10px, since a shorthand `gap` and a longhand `row-gap` are different
+     declarations and only the second was ever re-pinned here. */
   .claim-relationship-list > li.claim-relationship {
     flex-wrap: wrap;
     row-gap: 3px;
+    column-gap: 8px;
   }
 
-  .claim-relationship-list .claim-ref {
-    flex-basis: calc(100% - 17px);
+  /* THIRD RETRY FIX (verifier item 7; R-I.2 "Line one: status dot and
+     title"). A title long enough to need two lines was stranding the dot
+     alone on line one and dropping the whole title to line two: with
+     `flex-basis: calc(100% - 17px)` (this rule's previous, lower-
+     specificity value, which the desktop `.claim-footer-panel … .claim-ref`
+     rule's `flex: 1 1 auto` shorthand always beat on specificity anyway —
+     same failure shape as item 4 below), flexbox's line-wrap test uses the
+     item's hypothetical (content-based) main size, not its post-flex
+     resolved size, to decide whether it fits beside the dot on the current
+     flex line — and a long, unbroken title's content-based size can exceed
+     that remaining space even though the item would happily shrink to fit.
+     `flex: 1 1 0` starts the hypothetical size at 0 instead: the item
+     always "fits" beside the dot by that test, stays on the dot's flex
+     line, and only then grows to fill the remaining width, wrapping its
+     own text internally rather than being evicted to a new flex line as a
+     whole. This selector is written at the same specificity as the desktop
+     rule it overrides (`.claim-footer-panel .claim-relationship-list
+     .claim-ref`, 0,3,0) — a bare `.claim-relationship-list .claim-ref`
+     (0,2,0) here would lose to it regardless of media-query source order,
+     which is exactly why verifier item 4's 20px/500 line-height/weight
+     values were not landing either; both item 4 and item 7's fixes are
+     folded into this one higher-specificity rule. */
+  .claim-footer-panel .claim-relationship-list .claim-ref {
+    flex: 1 1 0;
+    min-width: 0;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+  }
+
+  /* THIRD RETRY FIX (verifier item 7, companion to the two rules above).
+     `align-self: flex-start` (equal specificity to, and after, the desktop
+     `.claim-relationship-dot { align-self: center }`) pins the dot to the
+     TOP of the row instead of the row's shared text baseline, which is the
+     wrong reference once the title can wrap to a second internal line;
+     `margin-top: 6px` then nudges it down to sit beside the first line's
+     cap-height rather than the row's outer edge. */
+  .claim-relationship-dot {
+    margin-top: 6px;
+    align-self: flex-start;
   }
 
   .claim-relationship-line2 {
@@ -5519,11 +5656,16 @@ code {
     flex: 1 1 auto;
   }
 
+  /* THIRD RETRY FIX (verifier item 5; 05 §4.10 mobile, R-I.2 "Badge 11/14
+     weight 600 tracking +0.06em"). The badge's tracking had stayed at the
+     desktop figure (0.05em); mobile widens it to 0.06em (0.66px at 11px),
+     same value as the direction label's desktop/mobile split above. */
   .claim-relationship-badge {
     flex: 0 0 auto;
     width: max-content;
     margin-left: auto;
     padding-left: 0;
+    letter-spacing: 0.06em;
   }
 
   /* M10 — source row: ref column narrows 26px -> 22px. */
@@ -5534,10 +5676,19 @@ code {
   /* M11 is the checks field-row rule (L7's panel); this lane's panels
      (relationships, sources) carry no fixed label column to drop. */
 
-  /* M12 — expansion panels keep 16px inline padding (--card-gutter is
-     already 16px at this width per L3's M2 re-pin) and their hairline
-     dividers; nothing here becomes a card. No rule is needed: the panel
-     already reads --card-gutter. */
+  /* THIRD RETRY FIX (verifier item 6; 05 §3 Mobile table, "Expansion panel
+     padding | 16px top / 18px bottom / 16px inline"). Inline padding was
+     already correct (--card-gutter is 16px at this width per L3's M2
+     re-pin, and this rule needs no inline override), but the desktop
+     top/bottom figures (18px / 22px, from the shorthand `padding: 18px
+     var(--card-gutter) 22px` above) were leaking straight through — the
+     previous pass's M12 comment claimed no rule was needed here, which was
+     the bug: nothing had actually re-pinned the vertical figures for this
+     breakpoint. */
+  .claim-footer-panel {
+    padding-top: 16px;
+    padding-bottom: 18px;
+  }
 }
 
 /* M8 — every chip and the comment count must reach a 44px minimum hit
@@ -5583,16 +5734,15 @@ code {
    Revealing the contents through CSS is deliberate rather than setting `open`,
    which CSS cannot do: `open` is a content attribute, not a property a rule
    can write.
-   Same mechanism, and the same two-rule pairing, as the .claim:target rule
-   above: a closed <details> hides its contents through the UA's
-   ::details-content pseudo-element, so that is what is targeted, and the
-   child-selector form is expected to be a no-op wherever the pseudo-element is
-   implemented. It is kept only as a fallback for engines that predate
-   ::details-content (Chrome/Edge 131+, Safari 18.4+, Firefox 139+) and hide
-   the contents some other way; such an engine drops the pseudo-element rule
-   and still prints as it did before v0.4.1. Both rules declare the same value
-   and carry equal specificity (0,1,2), so the pseudo-element rule is written
-   LAST — source order is the only thing ranking them.
+   THIRD RETRY FIX (verifier item 2) simplified this rule considerably: a
+   door's panel is now a plain sibling <div> (components.EdgesHTMLWithLinks;
+   see the .claim-links/.claim-sources reset near the top of this file),
+   starting from an author-controlled `display: none` rather than the UA's
+   own ::details-content closed-<details> hiding. There is therefore only
+   ONE rule below, not the two-rule ::details-content/fallback pairing this
+   comment used to describe, and no engine-support question at all: this is
+   the exact same `display: block` override every screen reveal rule in
+   this file already uses on `.claim-footer-panel`, just unconditional here.
    This block is independent of the .claim:target rule, of the two
    server-written `open` signals, and of the expand-all toolbar — whichever of
    those is or is not in effect on screen, print shows all four states
@@ -5626,13 +5776,9 @@ code {
     display: none;
   }
 
-  /* collapsed claim-links footer */
-  details.claim-links > *:not(summary) {
-    content-visibility: visible;
-  }
-
-  details.claim-links::details-content {
-    content-visibility: visible;
+  /* collapsed door panels (both claim-links and claim-sources) */
+  .claim-footer-panel {
+    display: block;
   }
 
   .claim-links-summary {

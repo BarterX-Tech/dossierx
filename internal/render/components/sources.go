@@ -198,11 +198,14 @@ func writeSourcesRow(b *strings.Builder, c model.Claim) {
 		}
 		b.WriteString(`><span class="claim-source-ref">[`)
 		b.WriteString(strconv.Itoa(s.Ref))
-		// claim-source-body wraps everything after the ref column so 05
-		// §4.11's fixed-ref-column-then-stacked-content row can lay the ref
-		// out as one flex item and the title/publisher/citation-count as a
-		// single sibling that stacks internally, rather than every span
-		// riding as its own top-level flex item of .claim-source.
+		// claim-source-body wraps the title and its publisher/anchor meta —
+		// the row's middle column, which stacks those two lines internally
+		// — so 05 §4.11's three-column row (ref, body, citation-count; see
+		// the citation-count span below) can lay each column out as its own
+		// top-level flex item of .claim-source. THIRD RETRY FIX (verifier
+		// item 8): the citation count used to close inside this span as a
+		// third stacked line; it is now written as .claim-source's own
+		// sibling column after this span closes.
 		b.WriteString(`]</span><span class="claim-source-body">`)
 
 		if s.IsInternal() {
@@ -217,26 +220,34 @@ func writeSourcesRow(b *strings.Builder, c model.Claim) {
 			writeExternalSource(b, s)
 		}
 
-		// The citation-count column (D12; 05 §4.11): "cited once" / "cited N
-		// times", derived from sourcesCitationCounts above, never authored.
-		// KNOWN SIMPLIFICATION, recorded in VAULT/learnings/inbox/L4.md: it
-		// renders as its own stacked line here at every width, rather than
-		// merging onto the external source's publisher line specifically at
-		// the ≤520px tier (05 §4.11 mobile / M10's "publisher and cited once
-		// share line two"). The two source shapes' "meta" content is not one
-		// element to merge against — external's is a single
-		// claim-source-meta span, internal's is two (claim-source-anchor,
-		// claim-source-hash) — and forcing a shared line for only one shape
-		// would read as an inconsistency between them at the same
-		// breakpoint. A true fix needs a unified meta wrapper for both
-		// shapes first; that is out of this retry's scope.
+		writeSourceNote(b, "supports", s.Supports)
+		writeSourceNote(b, "does_not_support", s.DoesNotSupport)
+		b.WriteString(`</span>`)
+
+		// THIRD RETRY FIX (verifier item 8; 05 §4.11 "its own column,
+		// padding-top 3px", 07 §4.11 "own right column"). The citation-count
+		// column (D12): "cited once" / "cited N times", derived from
+		// sourcesCitationCounts above, never authored. It used to render
+		// INSIDE claim-source-body, as that element's third stacked line;
+		// every board (05/06/07/07a) instead right-ranges it on the row
+		// itself, as .claim-source's own third flex child beside the ref and
+		// body columns — see style.css's .claim-source-cite for the layout
+		// half of this fix. KNOWN SIMPLIFICATION, recorded in
+		// VAULT/learnings/inbox/L4.md: it still renders as its own column at
+		// every width, rather than merging onto the external source's
+		// publisher line specifically at the ≤520px tier (05 §4.11 mobile /
+		// M10's "publisher and cited once share line two"). The two source
+		// shapes' "meta" content is not one element to merge against —
+		// external's is a single claim-source-meta span, internal's is two
+		// (claim-source-anchor, claim-source-hash) — and forcing a shared
+		// line for only one shape would read as an inconsistency between
+		// them at the same breakpoint. A true fix needs a unified meta
+		// wrapper for both shapes first; that is out of this retry's scope.
 		b.WriteString(`<span class="claim-source-cite">`)
 		b.WriteString(citedLabel(counts[s.Ref]))
 		b.WriteString(`</span>`)
 
-		writeSourceNote(b, "supports", s.Supports)
-		writeSourceNote(b, "does_not_support", s.DoesNotSupport)
-		b.WriteString(`</span></li>`)
+		b.WriteString(`</li>`)
 	}
 }
 

@@ -15,18 +15,39 @@ package viewertests
 // has already skipped — so both reveals shipped broken behind a green suite,
 // and the next stylesheet edit could silently undo the repair the same way.
 //
+// RETRY RE-PIN (verifier fix-list item 2, THIRD retry; 05 §2 "nothing else on
+// the card moves"). Every measurement in this file used to read
+// getComputedStyle(details, '::details-content') on details.claim-links
+// itself, because the door's panel used to be that <details>'s own child and
+// the UA's native closed-<details> hiding — the ::details-content mechanism —
+// was what both reveals had to defeat. components.EdgesHTMLWithLinks now
+// writes each door's panel (.claim-footer-panel) as a plain sibling <div>
+// immediately after its own `</details>`, never that <details>'s child (see
+// its doc comment and style.css's `.claim-links, .claim-sources` reset for
+// the measured browser bug — `display: contents` on a <details> — that ruled
+// out the alternative of keeping the panel nested). The panel is therefore no
+// longer hidden by the UA's ::details-content mechanism at all: it starts
+// from a plain, author-controlled `display: none` and is revealed by a plain
+// `display: block` override, with no pseudo-element and no native disclosure
+// content-hiding in the loop. Every measurement below reads THAT panel's
+// `display` and box height directly instead of the <details>' own
+// ::details-content — the RELATIONSHIP under test (hidden before, shown
+// after, `open` never set) is unchanged, only which element and which CSS
+// property demonstrate it.
+//
 // What is asserted is the RELATIONSHIP, never the pixel numbers: the numbers
 // depend on the fixture text and the machine's fonts, so a test that pinned
 // them would fail for reasons that have nothing to do with the reveal.
 //
-//	before:  getComputedStyle(details, '::details-content').contentVisibility === 'hidden'
-//	after:   ... === 'visible', and the details box is strictly taller
+//	before:  getComputedStyle(panel).display === 'none'
+//	after:   ... === 'block', and the panel's box is strictly taller
 //
 // Plus the invariant that must NOT change in either revealed state: the `open`
 // content attribute stays ABSENT. CSS cannot write one, that is the whole
-// reason the reveal is expressed as content-visibility, and a future "fix" that
-// starts setting `open` from JS or from the server would be a regression of
-// C9 — it would not survive the static file:// export the reveal exists for.
+// reason the reveal is expressed as a plain `display` override rather than
+// setting `open`, and a future "fix" that starts setting `open` from JS or
+// from the server would be a regression of C9 — it would not survive the
+// static file:// export the reveal exists for.
 //
 // The fixture is a throwaway two-claim project written by this file, so no
 // committed testdata viewer has to be regenerated with it.
@@ -39,7 +60,7 @@ package viewertests
 // never by polling for the flip as the pass condition. A poll that never goes
 // true reports "condition never became true", which names neither what was
 // measured nor what it should have been; a developer who breaks the stylesheet
-// deserves a message that names ::details-content and the rule responsible.
+// deserves a message that names the panel's `display` and the rule responsible.
 // The bounded settleFor below exists only so the read happens after the style
 // recalculation, and it deliberately does NOT decide pass or fail.
 
@@ -94,9 +115,13 @@ const (
 // selector responsible without the reader opening style.css. If a selector here
 // stops matching the stylesheet the test still fails correctly — only the
 // message's pointer goes stale — so these are documentation, not assertions.
+//
+// RETRY RE-PIN (verifier fix-list item 2, THIRD retry): re-pointed at the
+// panel-sibling selectors these reveals now use — see this file's top-of-file
+// doc comment.
 const (
-	targetRule = ".claim:target .claim-links::details-content"
-	printRule  = "@media print { details.claim-links::details-content }"
+	targetRule = ".claim:target .claim-footer:not(:has(> details[open])) > .claim-links + .claim-footer-panel"
+	printRule  = "@media print { .claim-footer-panel { display: block; } }"
 )
 
 // minGrowthPx is a float-noise guard, NOT a measurement of the fixture. The
@@ -116,7 +141,7 @@ const settleTimeout = 3 * time.Second
 // returns REGARDLESS of whether it did. That is the whole point: it is a
 // settle, never an assertion. The pass/fail decision always belongs to the
 // read-once assertion that follows, so a reveal that is genuinely broken fails
-// through a message naming ::details-content and the CSS rule responsible,
+// through a message naming the panel's `display` and the CSS rule responsible,
 // instead of through pollTrue's generic "condition never became true within
 // timeout" — which names the cause of nothing.
 //
@@ -140,47 +165,50 @@ func settleFor(t *testing.T, ctx context.Context, expr string) {
 	}
 }
 
-// revealedExpr is the settle condition for a claim's footer: the pseudo-element
-// has flipped. It is only ever passed to settleFor — never to pollTrue — so a
-// false result ends a bounded wait rather than ending the test.
+// revealedExpr is the settle condition for a claim's footer: the panel has
+// flipped to visible. It is only ever passed to settleFor — never to
+// pollTrue — so a false result ends a bounded wait rather than ending the
+// test.
 func revealedExpr(claimID string) string {
 	return fmt.Sprintf(`(function () {
 		var sec = document.getElementById(%q);
-		var d = sec && sec.querySelector('details.claim-links');
-		return !!d && getComputedStyle(d, '::details-content').contentVisibility === 'visible';
+		var p = sec && sec.querySelector('.claim-links-panel');
+		return !!p && getComputedStyle(p).display === 'block';
 	})()`, claimID)
 }
 
 // footerState is one observation of a claim's disclosure: the computed
-// content-visibility of the UA pseudo-element that does the hiding, the height
-// of the <details> box, and whether the `open` content attribute is set.
+// `display` of the panel sibling that does the hiding, the height of its box,
+// and whether the <details> door's `open` content attribute is set.
 type footerState struct {
-	Found             bool    `json:"found"`
-	ContentVisibility string  `json:"contentVisibility"`
-	Height            float64 `json:"height"`
-	Open              bool    `json:"open"`
+	Found   bool    `json:"found"`
+	Display string  `json:"display"`
+	Height  float64 `json:"height"`
+	Open    bool    `json:"open"`
 }
 
 func (s footerState) String() string {
-	return fmt.Sprintf("::details-content content-visibility=%q, details height=%.1fpx, open=%v",
-		s.ContentVisibility, s.Height, s.Open)
+	return fmt.Sprintf("panel display=%q, panel height=%.1fpx, open=%v",
+		s.Display, s.Height, s.Open)
 }
 
-// readFooter measures the disclosure inside the named claim. It reads the
-// pseudo-element rather than the <ul> because the pseudo-element is where the
-// UA's hiding actually lives — reading the child is exactly the mistake that
-// let the broken implementation look fine.
+// readFooter measures the disclosure inside the named claim: the RELATIONSHIPS
+// door's panel sibling (.claim-links-panel), which is what a reveal rule
+// actually toggles now — see this file's top-of-file doc comment — plus the
+// `open` attribute on the door's own <details>, which the reveal must never
+// set.
 func readFooter(t *testing.T, ctx context.Context, claimID string) footerState {
 	t.Helper()
 	var s footerState
 	expr := fmt.Sprintf(`(function () {
 		var sec = document.getElementById(%q);
 		var d = sec && sec.querySelector('details.claim-links');
-		if (!d) { return { found: false, contentVisibility: '', height: 0, open: false }; }
+		var p = sec && sec.querySelector('.claim-links-panel');
+		if (!d || !p) { return { found: false, display: '', height: 0, open: false }; }
 		return {
 			found: true,
-			contentVisibility: getComputedStyle(d, '::details-content').contentVisibility,
-			height: d.getBoundingClientRect().height,
+			display: getComputedStyle(p).display,
+			height: p.getBoundingClientRect().height,
 			open: d.hasAttribute('open')
 		};
 	})()`, claimID)
@@ -188,30 +216,25 @@ func readFooter(t *testing.T, ctx context.Context, claimID string) footerState {
 		t.Fatalf("read footer of %s: %v", claimID, err)
 	}
 	if !s.Found {
-		t.Fatalf("%s rendered no <details class=\"claim-links\"> — the fixture no longer produces a footer to reveal", claimID)
+		t.Fatalf("%s rendered no <details class=\"claim-links\"> (or no sibling .claim-links-panel) — the fixture no longer produces a footer to reveal", claimID)
 	}
 	return s
 }
 
 // assertCollapsed is the precondition BOTH cases share: the footer must start
-// hidden, or "it is visible afterwards" proves nothing. A value that is neither
-// "hidden" nor "visible" (or an unexpected "visible" here) also catches an
-// engine that does not implement ::details-content at all — on which this
-// repair does not apply and the suite must not report a silent pass.
+// hidden, or "it is visible afterwards" proves nothing.
 func assertCollapsed(t *testing.T, s footerState, claimID string) {
 	t.Helper()
-	if s.ContentVisibility != "hidden" {
-		t.Fatalf("%s: a closed footer must start with ::details-content hidden, got %s\n"+
-			"(if this reads %q the browser may predate ::details-content — Chrome/Edge 131+, Safari 18.4+, Firefox 139+ — which this reveal requires)",
-			claimID, s, s.ContentVisibility)
+	if s.Display != "none" {
+		t.Fatalf("%s: a closed footer's panel must start display:none, got %s", claimID, s)
 	}
 	if s.Open {
 		t.Fatalf("%s: the fixture footer must ship CLOSED (no auto-open signal), got %s", claimID, s)
 	}
 }
 
-// assertRevealed is the postcondition both cases share: the pseudo-element
-// flipped to visible, the box actually grew by it, and no `open` attribute
+// assertRevealed is the postcondition both cases share: the panel's `display`
+// flipped to block, the box actually grew by it, and no `open` attribute
 // appeared — CSS cannot write one, and anything that starts writing one has
 // left the CSS-only contract C9 depends on.
 //
@@ -223,17 +246,16 @@ func assertRevealed(t *testing.T, before, after footerState, claimID, how, rule 
 	t.Helper()
 	t.Logf("%s %s:\n  before: %s\n  after:  %s", claimID, how, before, after)
 
-	if after.ContentVisibility != "visible" {
-		t.Errorf("%s: ::details-content stayed content-visibility:%q %s — it must compute to \"visible\", so the collapsed footer is NOT being revealed.\n"+
+	if after.Display != "block" {
+		t.Errorf("%s: the panel stayed display:%q %s — it must compute to \"block\", so the collapsed footer is NOT being revealed.\n"+
 			"  measured: %s\n"+
-			"  mechanism: the reveal is performed by `%s` in internal/render/viewer/template/style.css, which sets content-visibility: visible. If that rule was edited, re-scoped or dropped, that is the cause.\n"+
-			"  note: the rule MUST target the ::details-content pseudo-element. Setting content-visibility on the details' CHILDREN instead is a no-op — a closed <details> hides its contents through that UA pseudo-element, and a descendant cannot opt back out of an ancestor the UA has already skipped. That exact mistake is what shipped broken before v0.4.1.",
-			claimID, after.ContentVisibility, how, after, rule)
+			"  mechanism: the reveal is performed by `%s` in internal/render/viewer/template/style.css, which sets display: block on the door's sibling .claim-footer-panel. If that rule was edited, re-scoped or dropped, that is the cause.",
+			claimID, after.Display, how, after, rule)
 	}
 	if !(after.Height > before.Height+minGrowthPx) {
-		t.Errorf("%s: the <details> box measured %.1fpx %s but was %.1fpx collapsed — a revealed footer must be strictly taller (by more than %.1fpx of float noise).\n"+
+		t.Errorf("%s: the panel measured %.1fpx %s but was %.1fpx collapsed — a revealed footer must be strictly taller (by more than %.1fpx of float noise).\n"+
 			"  mechanism: `%s` in internal/render/viewer/template/style.css.\n"+
-			"  note: a 'visible' computed value that does not grow the box means the contents still are not being laid out.",
+			"  note: a 'block' computed value that does not grow the box means the contents still are not being laid out.",
 			claimID, after.Height, how, before.Height, minGrowthPx, rule)
 	}
 	if after.Open {
@@ -282,7 +304,7 @@ func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 	// Follow the deep link, give the style recalculation a bounded moment to
 	// land, then READ ONCE and assert. The settle is not the test — see
 	// settleFor: if the reveal is broken this costs settleTimeout and then fails
-	// through assertRevealed, which names ::details-content and the rule, rather
+	// through assertRevealed, which names the panel's `display` and the rule, rather
 	// than through a 20s poll that names neither.
 	runCDP(t, ctx, chromedp.Evaluate(fmt.Sprintf(`window.location.hash = %q;`, revealDeepID), nil))
 	settleFor(t, ctx, revealedExpr(revealDeepID))
@@ -294,7 +316,7 @@ func TestDeepLinkRevealsCollapsedFooter(t *testing.T) {
 	// element can match :target, so the OTHER claim's footer — which has its own
 	// edges and would be just as revealable — must still be collapsed.
 	baseAfter := readFooter(t, ctx, revealBaseID)
-	if baseAfter.ContentVisibility != "hidden" {
+	if baseAfter.Display != "none" {
 		t.Errorf("%s: a claim that is not the :target must stay collapsed, got %s", revealBaseID, baseAfter)
 	}
 	if baseAfter.Height != baseBefore.Height {
@@ -414,36 +436,45 @@ const (
 // display:none subtree the interesting quantities are not the disclosure's
 // computed values but whether the thing is in the box tree at all, plus the
 // state of the ancestor group that removed it.
+//
+// RETRY RE-PIN (verifier fix-list item 2, THIRD retry): measures the panel
+// sibling (.claim-links-panel), not details.claim-links itself — see this
+// file's top-of-file doc comment. A <details> door is now always just its
+// <summary> chip (~16px), open or not, so measuring ITS box would no longer
+// show either the active facet's reveal or the inactive facet's box-tree
+// removal; the panel is what actually grows, and it lives inside the exact
+// same ancestor `.claim-group`, so it is removed from the box tree identically
+// when that ancestor is display:none.
 type facetFooterState struct {
-	Found             bool    `json:"found"`
-	ContentVisibility string  `json:"contentVisibility"`
-	Height            float64 `json:"height"`
-	ClientRects       int     `json:"clientRects"`
-	GroupID           string  `json:"groupID"`
-	GroupHidden       bool    `json:"groupHidden"`
-	GroupDisplay      string  `json:"groupDisplay"`
+	Found        bool    `json:"found"`
+	Display      string  `json:"display"`
+	Height       float64 `json:"height"`
+	ClientRects  int     `json:"clientRects"`
+	GroupID      string  `json:"groupID"`
+	GroupHidden  bool    `json:"groupHidden"`
+	GroupDisplay string  `json:"groupDisplay"`
 }
 
 func (s facetFooterState) String() string {
-	return fmt.Sprintf("details height=%.1fpx, clientRects=%d, ::details-content content-visibility=%q; ancestor %s[hidden=%v, display=%q]",
-		s.Height, s.ClientRects, s.ContentVisibility, s.GroupID, s.GroupHidden, s.GroupDisplay)
+	return fmt.Sprintf("panel height=%.1fpx, clientRects=%d, panel display=%q; ancestor %s[hidden=%v, display=%q]",
+		s.Height, s.ClientRects, s.Display, s.GroupID, s.GroupHidden, s.GroupDisplay)
 }
 
-// readFacetFooter measures a claim's footer TOGETHER with the facet group that
-// contains it.
+// readFacetFooter measures a claim's footer panel TOGETHER with the facet
+// group that contains it.
 func readFacetFooter(t *testing.T, ctx context.Context, claimID string) facetFooterState {
 	t.Helper()
 	var s facetFooterState
 	expr := fmt.Sprintf(`(function () {
 		var sec = document.getElementById(%q);
-		var d = sec && sec.querySelector('details.claim-links');
-		if (!d) { return { found: false }; }
+		var p = sec && sec.querySelector('.claim-links-panel');
+		if (!p) { return { found: false }; }
 		var g = sec.closest('.claim-group');
 		return {
 			found: true,
-			contentVisibility: getComputedStyle(d, '::details-content').contentVisibility,
-			height: d.getBoundingClientRect().height,
-			clientRects: d.getClientRects().length,
+			display: getComputedStyle(p).display,
+			height: p.getBoundingClientRect().height,
+			clientRects: p.getClientRects().length,
 			groupID: g ? g.id : '',
 			groupHidden: g ? g.hasAttribute('hidden') : false,
 			groupDisplay: g ? getComputedStyle(g).display : ''
@@ -453,7 +484,7 @@ func readFacetFooter(t *testing.T, ctx context.Context, claimID string) facetFoo
 		t.Fatalf("read facet footer of %s: %v", claimID, err)
 	}
 	if !s.Found {
-		t.Fatalf("%s rendered no <details class=\"claim-links\"> — the two-facet fixture no longer produces a footer in that facet", claimID)
+		t.Fatalf("%s rendered no .claim-links-panel — the two-facet fixture no longer produces a footer in that facet", claimID)
 	}
 	return s
 }
@@ -481,15 +512,15 @@ func readFacetFooter(t *testing.T, ctx context.Context, claimID string) facetFoo
 // =========================================================================
 //
 // ONE MORE TRAP, measured rather than assumed. Under print emulation the hidden
-// facet's ::details-content DOES compute to "visible" — the cascade does not
-// care that an ancestor is display:none, so the print rule matches there just as
-// it does on screen. What does not happen is any RENDERING: the box is 0px with
-// zero client rects, because display:none removed the subtree from the box tree
-// and content-visibility on a descendant cannot resurrect it. That is exactly
-// what the stylesheet's SCOPE clause says, and it is why the assertion below is
-// about the box and NOT about content-visibility. Do not "tighten" this test by
-// requiring the hidden facet's content-visibility to stay "hidden": that would
-// be asserting something the engine does not do, and it would fail.
+// facet's panel DOES compute display:block — the cascade does not care that an
+// ancestor is display:none, so the print rule matches there just as it does on
+// screen. What does not happen is any RENDERING: the box is 0px with zero
+// client rects, because display:none removed the subtree from the box tree and
+// a descendant's own `display: block` cannot resurrect it. That is exactly what
+// the stylesheet's SCOPE clause says, and it is why the assertion below is
+// about the box and NOT about the panel's computed `display`. Do not "tighten"
+// this test by requiring the hidden facet's panel to stay display:none: that
+// would be asserting something the engine does not do, and it would fail.
 func TestPrintCoversOnlyTheOnScreenFacet(t *testing.T) {
 	p := newProjectRaw(t, twoFacetConfigYAML)
 	p.writeClaim("base.yaml", revealBaseClaim)
@@ -550,7 +581,7 @@ func TestPrintCoversOnlyTheOnScreenFacet(t *testing.T) {
 	// measurement is rendering, not computed style: see the trap note above.
 	inactiveAfter := readFacetFooter(t, ctx, inactiveDeepID)
 	t.Logf("under print media, inactive facet %s: %s\n"+
-		"  (whatever ::details-content computes to here is beside the point — the print rule still MATCHES inside a display:none subtree, it simply produces no rendering. The assertions below are about the box, never the computed value.)",
+		"  (whatever the panel's `display` computes to here is beside the point — the print rule still MATCHES inside a display:none subtree, it simply produces no rendering. The assertions below are about the box, never the computed value.)",
 		inactiveDeepID, inactiveAfter)
 
 	if inactiveAfter.GroupHidden != true || inactiveAfter.GroupDisplay != "none" {

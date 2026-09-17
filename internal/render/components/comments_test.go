@@ -187,9 +187,17 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 	// present" state): the sources door now renders UNCONDITIONALLY — this
 	// fixture claim has zero sources, so it gets the "No sources" empty
 	// variant — where it used to be suppressed at zero. The strip's closing
-	// tail therefore now always ends on the sources door's own close
-	// (`</div></div></details>`) before the strip's own `</div>`, not on
-	// the relationships door's close as this string used to assert.
+	// tail therefore now always ends on the sources door's own PANEL close
+	// (three nested `</div>`s: the panel head, the sources panel itself,
+	// then the strip), not on a `</details>` as this string used to assert.
+	//
+	// RETRY RE-PIN, THIRD retry (verifier fix-list item 2). Each door's
+	// panel is now a sibling <div> immediately after its own `</details>`,
+	// not that <details>'s child — see
+	// TestEdgesHTMLWithLinks_DetailsWrapperSeams's doc comment for the
+	// measured display:contents browser bug this works around. The tail
+	// this literal matches is therefore three `</div>` closes, not a
+	// `</details>` followed by two `</div>`s.
 	//
 	// A SECOND, INDEX-BASED PROBE WAS DELETED HERE. It read
 	// `closeIdx := strings.Index(got, "</details>")` and compared it against the
@@ -202,7 +210,7 @@ func TestEdgesHTMLWithLinks_OpenThread_ChipAccentAndBakedPanel(t *testing.T) {
 	// comparing the panel against itself and passing for the wrong reason. It
 	// proved nothing the adjacency match above does not already prove, and it
 	// could degrade silently as the fixture changed underneath it.
-	if !strings.Contains(got, `</div></div></details></div><div class="comments-panel"`) {
+	if !strings.Contains(got, `</div></div></div><div class="comments-panel"`) {
 		t.Fatalf("the panel must follow the closed .claim-footer strip as a sibling with no whitespace between, got: %s", got)
 	}
 

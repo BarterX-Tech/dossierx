@@ -514,6 +514,19 @@ func TestEdgesHTMLWithLinks_SummaryCountsAndFormat(t *testing.T) {
 // (05 §4.6, R09.1/R09.4): a <div class="claim-footer"> wrapping a
 // <details class="claim-links" name="claim-footer-<id>"> door, whose
 // GOVERNED BY direction block carries the governed_by row.
+//
+// RETRY RE-PIN (verifier fix-list item 2, THIRD retry; 05 §2 "nothing else
+// on the card moves"). A door's panel used to be its <details>'s own child,
+// closed together in one `</div></details>`. `display: contents` on the
+// <details> — an intermediate draft's way of promoting the panel and the
+// summary chip into independent flex items of .claim-footer, so the chip
+// stays in the strip row while only the panel wraps onto its own row below
+// — measurably breaks in the tested engine (see style.css's
+// `.claim-links, .claim-sources` reset for the two probed defects). The
+// panel is therefore now components.EdgesHTMLWithLinks' own SIBLING <div>
+// immediately following `</details>`, never its child, which is what
+// actually keeps every door's <summary> chip an ordinary flex item of the
+// strip regardless of open state.
 func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 	c := model.Claim{
 		ID: "widget.contract.self", Module: "widget", Facet: "contract",
@@ -524,8 +537,11 @@ func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 	if !strings.HasPrefix(got, `<div class="claim-footer"><details class="claim-links" name="claim-footer-widget.contract.self">`) {
 		t.Fatalf("expected the strip/door prologue with the per-claim accordion name, got: %s", got)
 	}
-	if !strings.HasSuffix(got, `</details></div>`) {
-		t.Fatalf("the relationships door must close immediately before the strip, got: %s", got)
+	if !strings.Contains(got, `</summary></details><div class="claim-footer-panel claim-links-panel">`) {
+		t.Fatalf("the relationships door must close immediately after its summary, with its panel as the very next sibling, got: %s", got)
+	}
+	if !strings.HasSuffix(got, `</div></div>`) {
+		t.Fatalf("the strip must close immediately after the sources door's panel (its own sibling <div>, not a </details>), got: %s", got)
 	}
 	// The GOVERNED BY row is byte-identical to before the redesign; it
 	// simply moved inside the RELATIONSHIPS panel's direction block.
@@ -551,6 +567,14 @@ func TestEdgesHTMLWithLinks_DetailsWrapperSeams(t *testing.T) {
 // own). (3) the sources door now always renders, even at zero — 05 §8 item
 // 5 / 07a §6's "No sources" — so the worked example's tail is no longer the
 // relationships door's own close.
+//
+// RETRY RE-PIN, THIRD retry (verifier fix-list item 2; see
+// TestEdgesHTMLWithLinks_DetailsWrapperSeams's doc comment for the measured
+// display:contents browser bug this works around). Each door's panel is now
+// written as a sibling <div> immediately after its own `</details>`, not as
+// that <details>'s child, so the relationships door closes right after its
+// summary and the sources door likewise closes right after ITS summary,
+// each followed immediately by its own `.claim-footer-panel` sibling.
 func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 	c := model.Claim{
 		ID: "widget.contract.retry-policy", Module: "widget", Facet: "contract",
@@ -566,7 +590,7 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 	// = 4. Open, on the review_pending signal (files' Drifted also qualifies).
 	const want = `<div class="claim-footer">` +
 		`<details class="claim-links" name="claim-footer-widget.contract.retry-policy" open>` +
-		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">4 relationships</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary>` +
+		`<summary class="claim-footer-chip claim-footer-chip--relationships"><span class="claim-footer-chip-label">4 relationships</span><span class="claim-footer__chevron" aria-hidden="true"></span></summary></details>` +
 		`<div class="claim-footer-panel claim-links-panel">` +
 		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">RELATIONSHIPS</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">4</span></div>` +
 		`<div class="claim-relationship-direction"><div class="claim-relationship-direction-head"><span class="claim-relationship-arrow" aria-hidden="true">↑</span><span class="claim-relationship-direction-label">GOVERNED BY</span></div><ul class="claim-edges claim-relationship-list">` +
@@ -580,12 +604,12 @@ func TestEdgesHTMLWithLinks_WorkedExampleExactBytes(t *testing.T) {
 		`<li class="claim-review-pending claim-relationship-extra">review_pending</li>` +
 		`<li class="claim-implemented-in claim-relationship-extra">implemented in: <code>internal/http/retry.go#Do</code> <span class="pill pw">drifted</span></li>` +
 		`<li class="claim-implemented-in claim-relationship-extra">implemented in: <code>internal/http/backoff.go</code></li>` +
-		`</ul></div></details>` +
+		`</ul></div>` +
 		`<details class="claim-sources" name="claim-footer-widget.contract.retry-policy">` +
-		`<summary class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></summary>` +
+		`<summary class="claim-footer-chip claim-footer-chip--sources claim-footer-chip--empty"><span class="claim-footer-chip-label">No sources</span></summary></details>` +
 		`<div class="claim-footer-panel claim-sources-panel">` +
 		`<div class="claim-footer-panel-head"><span class="claim-footer-eyebrow">SOURCES</span><span class="claim-footer-rule" aria-hidden="true"></span><span class="claim-footer-panel-count">0</span></div>` +
-		`</div></details></div>`
+		`</div></div>`
 
 	if got := string(EdgesHTMLWithLinks(c, files, nil, nil)); got != want {
 		t.Fatalf("worked-example footer mismatch\n want: %s\n got:  %s", want, got)
