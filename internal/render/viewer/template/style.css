@@ -1367,20 +1367,22 @@ th {
 }
 
 /* RETRY FIX (verifier item 2; 06 §4.4 "Collapsed row divider + geometry",
-   06 §9 OD9): the collapsed-module-row divider is its OWN color-mix, not a
+   06 §9 OD9): the collapsed-module-row divider is its OWN value, not a
    share of --blocked-hairline (which is now spoken for by the eyebrow rule
-   alone). Light target `#EBD9D8` — the SAME hex the eyebrow rule names, so
-   this uses the identical formula; OD9's own point is that the two rows'
-   DARK values differ (`#3A2A2B` eyebrow vs `#33262A` here), which a shared
-   token cannot express without a second engine-owned dark literal (a
-   structural addition to the coordinator-held dark blocks, out of this
-   lane's reach per G9 — filed as a dependency in learnings/inbox/L5.md).
-   The 20%-into-card-bg formula is kept here anyway because it is exact on
-   light and close on dark (measured ~10-15 units off per channel, still
-   read as a warm dark hairline, not the wrong hue), rather than silently
-   falling back to the old, provably-wrong shared mix. */
+   alone). Light target `#EBD9D8` — the SAME hex the eyebrow rule names.
+   OD9's own point is that the two rows' DARK values differ (`#3A2A2B`
+   eyebrow vs `#33262A` here), which a shared token cannot express without a
+   second engine-owned dark literal (a structural addition to the
+   coordinator-held dark blocks, out of this lane's reach per G9).
+   RETRY FIX (wave-B2 fix list item 5): the coordinator ruling accepts
+   `light-dark()` for this dark-only value with no token (LEARNINGS G13) —
+   the prior color-mix formula was exact on light but landed dark at
+   `#413135`, ~14/11/11 units off `#33262A`; `light-dark()` pins both
+   exactly and needs no second engine-owned literal. Verified by probe
+   under the explicit Dark toggle and the OS scheme (06 §4.4 dark column,
+   06 §9 open decision 9). */
 .claim-readiness-module + .claim-readiness-module {
-  border-top: 1px solid color-mix(in srgb, var(--warn) 20%, var(--card-bg));
+  border-top: 1px solid light-dark(#EBD9D8, #33262A);
 }
 
 .claim-readiness-module-summary {
@@ -1490,7 +1492,10 @@ th {
 .claim-readiness-module-row-flat {
   cursor: default;
   padding-block: 11px;
-  border-top: 1px solid color-mix(in srgb, var(--warn) 20%, var(--card-bg));
+  /* RETRY FIX (wave-B2 fix list item 5) — see the light-dark() comment on
+     `.claim-readiness-module + .claim-readiness-module` above; this row
+     shares the exact same divider value (06 §4.4, 06 §9 open decision 9). */
+  border-top: 1px solid light-dark(#EBD9D8, #33262A);
 }
 
 .claim-readiness-blockers {
@@ -1537,6 +1542,24 @@ th {
   font-size: 14px;
   line-height: 20px;
   font-weight: 600;
+}
+
+/* RETRY FIX (wave-B2 fix list item 1): the authored review-cause detail
+   (a flag's reason, in the reviewer's own words) — R09.8's "nothing is
+   deleted from the data" / 06 §8 item 3. Not drawn on any board (Cutainly
+   carries no own_flag/own_thread instance; this is a synthetic-fixture
+   case per viewer-tests/claim_readiness_test.go), so the type scale
+   follows the row's own serif prose convention (06 §7.4's "Detail row
+   value" family) at the row's compact size rather than a literal node
+   measurement. */
+.claim-readiness-blocker-detail {
+  display: block;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
 }
 
 /* The hop pill (direct/upstream - N hop(s)) is styled as a pill even though
@@ -1763,6 +1786,31 @@ th {
 @media (max-width: 520px) {
   .claim-readiness-module-body {
     padding-left: 22px;
+  }
+
+  /* RETRY FIX (wave-B2 fix list item 2): 06 §3 Mobile table's "Section
+     padding 16px uniform on all four sections" / 03 §4.11's "Panel padding
+     16px uniform (desktop 18/24/32)" — desktop's 18px-top/22px-bottom pair
+     (style.css ~:1225, `.claim-readiness.claim-footer-panel`) must not
+     survive at 520. padding-inline is left alone: it already resolves to
+     16px via --card-gutter (G8). */
+  .claim-readiness.claim-footer-panel {
+    padding-block: 16px;
+  }
+
+  /* RETRY FIX (wave-B2 fix list item 3): 06 §4.8 "Mobile blocker row …
+     padding-block: 11px" (also 03 §4.11, 05 §4.9) — desktop's 10px
+     (style.css ~:1518) is not itself a mobile value. */
+  .claim-readiness-blocker {
+    padding-block: 11px;
+  }
+
+  /* RETRY FIX (wave-B2 fix list item 4): 03 §4.11 "Eyebrow row gap 10px
+     (desktop 12px)" — the section head's desktop `gap: 12px`
+     (style.css ~:1322) shorthand sets both axes; only the column axis
+     narrows on mobile. */
+  .claim-readiness-section-head {
+    column-gap: 10px;
   }
 
   .claim-readiness-blocker {

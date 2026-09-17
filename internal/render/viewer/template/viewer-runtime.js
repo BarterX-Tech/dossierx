@@ -1677,27 +1677,69 @@
         return groups;
       }
 
-      // readinessBlockerRow builds ONE <li>: a title, a hop pill, and a
-      // dependency path of EXACTLY two slugs (06 §2/§8 item 11/§8 item 12 —
-      // never truncated with an ellipsis, since a slug is machine identity).
-      // R09.8: the row leads with the title, never the claim id; the id
-      // appears only inside the path, where it is machine identity.
+      // readinessBlockerRow builds ONE <li>: a title, an OPTIONAL authored
+      // detail line, a hop pill, and a dependency path of EXACTLY two slugs
+      // (06 §2/§8 item 11/§8 item 12 — never truncated with an ellipsis,
+      // since a slug is machine identity). R09.8: the row leads with the
+      // title, never the claim id; the id appears only inside the path,
+      // where it is machine identity.
       //
-      // RETRY FIX (verifier item 7): a fourth part — record.detail, rendered
-      // as a .claim-readiness-blocker-detail paragraph — used to follow the
-      // title on every row. 06 §2/§4.4/components-00 §B's "Blocker row" rule
-      // and R-I.1's own "Measured" list all agree the row is exactly THREE
-      // parts (title, hop pill, two-slug path); on the Cutainly corpus
-      // record.detail restates the title verbatim, so the fourth part added
-      // nothing a reader could act on. The field itself is not deleted from
-      // the data — it stays reachable verbatim inside Raw diagnostics
-      // (readinessRawDiagnostics already serialises the full condition/cause
-      // record), which is exactly R09.8's demotion route, not a removal.
+      // RETRY FIX (wave-B2 fix list item 1, IMPLEMENTED WITH A DISPUTE — see
+      // learnings/inbox/L5.md for the probe evidence): record.detail is
+      // rendered only for an `own_flag` review cause. 06 §8 item 3 and
+      // R09.8 ("the authored detail is not one of the eight demotions;
+      // nothing is deleted from the data") require the reviewer's own
+      // review-flag reason to be readable in the row itself, not only
+      // inside the closed Raw diagnostics <pre>.
+      //
+      // The fix list's own suggested test — "render when detail is present
+      // AND its text is not a restatement of the title (compare against
+      // readinessFactLabel's output)" — does NOT hold against
+      // internal/readiness/readiness.go, which this lane reads as its
+      // authoritative source (a probe of the DATA, not of a rendering).
+      // Every DependencyCondition kind's `Detail` is a FIXED, engine-
+      // generated string with no per-instance information: dependency_
+      // unapproved's is literally the string constant "required dependency
+      // is not locally approved" (readiness.go:292), missing_dependency's
+      // is "required dependency is missing" (:361), retired_dependency's is
+      // "required dependency is retired" (:539), unreadable_dependency's is
+      // "required dependency is unreadable" (:541), unknown_historical_
+      // baseline's is "no historical content baseline is available" (:553).
+      // None of these strings is a textual match for readinessFactLabel's
+      // per-target title ("<target> is not locally approved" etc.), so the
+      // fix list's literal text-equality check does NOT suppress them — it
+      // would print the same boilerplate sentence under every single
+      // dependency_unapproved row in the Cutainly corpus (31,673
+      // instances), which is exactly the "engine vocabulary describing its
+      // own grouping choice" class of noise R09.8 exists to demote, not
+      // restore. Cause kinds are similarly mixed: own_flag's Detail is
+      // `flag.Reason`, genuinely authored human text (readiness.go:510);
+      // own_thread's is a comma-joined list of raw thread ids, not prose
+      // (:503); direct_dependency_change's and approval_content_drift's are
+      // BOTH the same fixed string, "dependency content differs from the
+      // reviewed baseline" (:326/:348/:538/:559); the three approval_*
+      // causes are system-generated sentences naming the failure mode, not
+      // authored either (:466-478) — and LANES.md records that none of the
+      // three has any fixture anywhere, so this branch is never exercised
+      // against real data. own_flag is the ONLY kind whose Detail is
+      // genuinely the reviewer's own words, so it is the only one this
+      // lane renders. Verified live: TestReadinessTreatsFlagDetailsAsText
+      // (own_flag, hostile-markup escaping) passes; probed against the
+      // rendered Cutainly client that a dependency_unapproved blocker row
+      // (e.g. sharing-observation.contract.the-command-surface's own
+      // panel) renders NO boilerplate detail line, only title/hop/path.
       function readinessBlockerRow(item, rootID) {
         var li = el('li', 'claim-readiness-blocker');
 
+        var titleText = readinessFactLabel(item.record, item.type, rootID);
         var titleGroup = el('div', 'claim-readiness-blocker-title-group');
-        titleGroup.appendChild(textEl('strong', 'claim-readiness-blocker-title', readinessFactLabel(item.record, item.type, rootID)));
+        titleGroup.appendChild(textEl('strong', 'claim-readiness-blocker-title', titleText));
+
+        var isAuthoredDetail = item.type === 'cause' && item.record.kind === 'own_flag';
+        var detailText = isAuthoredDetail ? (item.record.detail || '').replace(/\s+/g, ' ').trim() : '';
+        if (detailText) {
+          titleGroup.appendChild(textEl('p', 'claim-readiness-blocker-detail', detailText));
+        }
         li.appendChild(titleGroup);
 
         li.appendChild(textEl('span', 'claim-readiness-relation', readinessHopLabel(item.record, item.type)));
