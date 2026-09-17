@@ -1,0 +1,20 @@
+# A minimal project whose ONE module carries THREE facets.
+#
+# It exists for exactly one state nothing else in this repository produces: the
+# facet tab strip (.sub-nav) with three .subtab buttons, each carrying its own
+# claim count (docs/design/screens/02-reading-view-default.md § 4.9). Every
+# other fixture here is one- or two-facet, and the client corpus the design
+# lanes rendered against (Cutainly) carries at most two facets per module — its
+# "3 facets" is the project's facet vocabulary, not any module's tab strip. See
+# the vault's LEARNINGS.md G20.
+#
+# Kept deliberately tiny: one module, three facets, four draft claims, no locked
+# claims and no ledger, so `dossierx check` renders it with nothing to gate on.
+schema_version: 1
+facets:
+  - contract
+  - interface
+  - internals
+modules:
+  - widget
+claims_dir: claims
