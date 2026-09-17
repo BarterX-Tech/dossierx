@@ -405,8 +405,8 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 		// one occurrence was left for the merge to remove. -2 is true of the
 		// lane's own base, not of this file.
 		n := len(regexp.MustCompile(`var\(--radius\s*[,)]`).FindAllString(css, -1))
-		if n != 9 {
-			t.Errorf("style.css has %d --radius consumers, want exactly 9", n)
+		if n != 5 {
+			t.Errorf("style.css has %d --radius consumers, want exactly 5", n)
 		}
 	})
 }

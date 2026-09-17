@@ -3,6 +3,8 @@ package viewertests
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -12,10 +14,13 @@ import (
 const (
 	// These are browser-product budgets, separate from the engine's 64 MiB
 	// serialized-output containment gate. They deliberately leave headroom for
-	// slower CI runners while still catching an eager Mermaid render, duplicated
-	// blocker lists, or a projection that makes the claim page impractical.
+	// slower CI runners while still catching a duplicated blocker list or a
+	// projection that makes the claim page impractical.
+	//
+	// readinessScaleMaxMapMS is retired: docs/design/screens/
+	// 06-claim-blocked-across-four-modules.md's R09.9 ("no inline dependency
+	// map") removed the focused Mermaid trace this budget used to time.
 	readinessScaleMaxLoadMS      = 10_000
-	readinessScaleMaxMapMS       = 5_000
 	readinessScaleMaxDOMNodes    = 100_000
 	readinessScaleMaxJSHeapBytes = 512 * 1024 * 1024
 )
@@ -59,14 +64,11 @@ type readinessScaleMetrics struct {
 	LoadMS         float64 `json:"load_ms"`
 	DOMNodes       int     `json:"dom_nodes"`
 	JSHeapBytes    float64 `json:"js_heap_bytes"`
-	ReadinessCards int     `json:"readiness_cards"`
-	BlockerRows    int     `json:"blocker_rows"`
+	ReadinessDoors int     `json:"readiness_doors"`
+	VisibleRows    int     `json:"visible_rows"`
 	RawFacts       int     `json:"raw_facts"`
 	RawPanels      int     `json:"raw_panels"`
-	RouteGroups    int     `json:"route_groups"`
-	MermaidSources int     `json:"mermaid_sources"`
-	ProcessedMaps  int     `json:"processed_maps"`
-	SVGs           int     `json:"svgs"`
+	MapElements    int     `json:"map_elements"`
 }
 
 func readReadinessScaleMetrics(t *testing.T, ctx context.Context) readinessScaleMetrics {
@@ -79,47 +81,76 @@ func readReadinessScaleMetrics(t *testing.T, ctx context.Context) readinessScale
 			load_ms: nav ? nav.loadEventEnd - nav.startTime : -1,
 			dom_nodes: document.querySelectorAll('*').length,
 			js_heap_bytes: performance.memory ? performance.memory.usedJSHeapSize : -1,
-			readiness_cards: document.querySelectorAll('.claim-readiness').length,
-			blocker_rows: document.querySelectorAll('.claim-readiness-blocker').length,
+			readiness_doors: document.querySelectorAll('.claim-readiness-door').length,
+			visible_rows: document.querySelectorAll('.claim-readiness-blocker').length,
 			raw_facts: raws.reduce(function(total, pre){
 				var raw = JSON.parse(pre.textContent);
 				return total + (raw.dependency_conditions || []).length + (raw.review_causes || []).length;
 			}, 0),
 			raw_panels: raws.length,
-			route_groups: document.querySelectorAll('.claim-readiness-route').length,
-			mermaid_sources: document.querySelectorAll('.claim-readiness-map pre.mermaid').length,
-			processed_maps: document.querySelectorAll('.claim-readiness-map pre.mermaid[data-processed]').length,
-			svgs: document.querySelectorAll('.claim-readiness-map svg').length
+			// R09.9 ("no inline dependency map"): none of these selectors
+			// should ever match again. A non-zero count here is a
+			// regression, not a budget.
+			map_elements: document.querySelectorAll('.claim-readiness-map, .claim-readiness-trace, .claim-readiness-route').length
 		};
 	})()`, &metrics))
 	return metrics
 }
 
+// scopeCounts parses a ".claim-readiness-scope" string, e.g. "127 across 1
+// module" or "1 across 1 module", into its two numerals.
+func scopeCounts(t *testing.T, text string) (facts, modules int) {
+	t.Helper()
+	re := regexp.MustCompile(`^(\d+) across (\d+) module`)
+	m := re.FindStringSubmatch(strings.TrimSpace(text))
+	if m == nil {
+		t.Fatalf("readiness scope text %q does not match 'N across M module(s)'", text)
+	}
+	facts, err := strconv.Atoi(m[1])
+	if err != nil {
+		t.Fatalf("scope fact count: %v", err)
+	}
+	modules, err = strconv.Atoi(m[2])
+	if err != nil {
+		t.Fatalf("scope module count: %v", err)
+	}
+	return facts, modules
+}
+
+// TestReadinessBrowserScaleBudgets: docs/design/screens/
+// 06-claim-blocked-across-four-modules.md's redesign changed two things this
+// suite must still hold at scale even though it re-pins how it proves them.
+// (1) R09.9 ("no inline dependency map") means there is no Mermaid trace to
+// budget or lazily render any more — every .claim-readiness-map/-trace/-route
+// selector is now permanently absent (dead-selector regression guard below).
+// (2) Grouping moved from "the representative-route claim" to "the module
+// that owns the fix" (06 §7.6): this fixture's every claim shares one module
+// (widget), so each claim's readiness panel now has exactly ONE module group
+// holding its COMPLETE fact list, rather than many small per-dependency
+// groups. The within-module cap (06 §4.4's "Show 9 more in this module"; 2
+// rendered up front) is what keeps a project whose fan-out reaches thousands
+// of facts under the DOM-node budget: viewer-runtime.js's readinessModule
+// builds the tail lazily, on the "Show N more" click, never up front.
 func TestReadinessBrowserScaleBudgets(t *testing.T) {
 	for _, tc := range []struct {
-		name          string
-		layers        int
-		width         int
-		maxRouteFacts int
+		name   string
+		layers int
+		width  int
 	}{
-		{name: "deep-chain-128", layers: 128, width: 1, maxRouteFacts: 127},
-		{name: "layered-dense-24x5", layers: 24, width: 5, maxRouteFacts: 111},
+		{name: "deep-chain-128", layers: 128, width: 1},
+		{name: "layered-dense-24x5", layers: 24, width: 5},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := readinessScaleProject(t, tc.layers, tc.width)
 			claimCount := tc.layers * tc.width
 			factCount := readinessScaleFacts(tc.layers, tc.width)
-			routeCount := (tc.layers - 1) * tc.width * tc.width
 
 			ctx := browserContext(t)
 			runCDP(t, ctx,
 				chromedp.Navigate(p.renderStatic()+"#widget.contract.l000-n00"),
 				chromedp.WaitVisible("#widget\\.contract\\.l000-n00 .claim-readiness", chromedp.ByQuery),
 			)
-			pollTrue(t, ctx, fmt.Sprintf(`
-				document.readyState === 'complete' &&
-				performance.getEntriesByType('navigation')[0].loadEventEnd > 0 &&
-				document.querySelectorAll('.claim-readiness-blocker').length === %d`, factCount))
+			pollTrue(t, ctx, `document.readyState === 'complete' && performance.getEntriesByType('navigation')[0].loadEventEnd > 0`)
 
 			before := readReadinessScaleMetrics(t, ctx)
 			if before.LoadMS < 0 || before.LoadMS > readinessScaleMaxLoadMS {
@@ -131,87 +162,48 @@ func TestReadinessBrowserScaleBudgets(t *testing.T) {
 			if before.JSHeapBytes < 0 || before.JSHeapBytes > readinessScaleMaxJSHeapBytes {
 				t.Fatalf("mounted JS heap %.0f bytes outside required 0..%d budget", before.JSHeapBytes, readinessScaleMaxJSHeapBytes)
 			}
-			if before.ReadinessCards != claimCount {
-				t.Fatalf("readiness cards = %d, want every one of %d claims", before.ReadinessCards, claimCount)
-			}
-			if before.BlockerRows != factCount {
-				t.Fatalf("authoritative blocker rows = %d, want all %d engine facts", before.BlockerRows, factCount)
+			if before.ReadinessDoors != claimCount {
+				t.Fatalf("readiness doors = %d, want every one of %d claims", before.ReadinessDoors, claimCount)
 			}
 			if before.RawPanels != claimCount || before.RawFacts != factCount {
 				t.Fatalf("raw diagnostics have %d panels and %d facts, want %d panels and all %d facts", before.RawPanels, before.RawFacts, claimCount, factCount)
 			}
-			if before.RouteGroups != routeCount || before.MermaidSources != routeCount {
-				t.Fatalf("route groups / map sources = %d / %d, want %d / %d", before.RouteGroups, before.MermaidSources, routeCount, routeCount)
-			}
-			if before.ProcessedMaps != 0 || before.SVGs != 0 {
-				t.Fatalf("closed maps processed %d sources and rendered %d SVGs, want lazy zero / zero", before.ProcessedMaps, before.SVGs)
+			if before.MapElements != 0 {
+				t.Fatalf("06 §R09.9: found %d .claim-readiness-map/-trace/-route element(s), want zero — the inline dependency map is retired", before.MapElements)
 			}
 
-			var opened struct {
-				Facts int `json:"facts"`
+			// Root (l000-n00) is the deepest node and so carries the most
+			// transitive facts of any claim in the fixture. Its own scope
+			// count is the authoritative total FOR THIS ONE CLAIM — always
+			// correct even though only READINESS_VISIBLE_CAP rows are in
+			// the DOM at load.
+			root := `document.getElementById('widget.contract.l000-n00').querySelector('.claim-readiness')`
+			scopeText := evalString(t, ctx, root+`.querySelector('.claim-readiness-scope').textContent`)
+			rootFacts, rootModules := scopeCounts(t, scopeText)
+			if rootModules != 1 {
+				t.Fatalf("root scope modules = %d, want 1 (fixture uses a single module)", rootModules)
 			}
-			runCDP(t, ctx, chromedp.Evaluate(`(function(){
-				var routes = Array.from(document.querySelectorAll('.claim-readiness-route'));
-				var route = routes.reduce(function(best, item){
-					return item.querySelectorAll('.claim-readiness-blocker').length > best.querySelectorAll('.claim-readiness-blocker').length ? item : best;
-				});
-				var facts = route.querySelectorAll('.claim-readiness-blocker').length;
-				window.__readinessScaleMapStarted = performance.now();
-				route.open = true;
-				route.querySelector('.claim-readiness-trace').open = true;
-				return { facts: facts };
-			})()`, &opened))
-			if opened.Facts != tc.maxRouteFacts {
-				t.Fatalf("largest route group has %d facts, want %d", opened.Facts, tc.maxRouteFacts)
+			if rootFacts <= 0 {
+				t.Fatalf("root scope facts = %d, want at least one", rootFacts)
 			}
-			pollTrue(t, ctx, `document.querySelectorAll('.claim-readiness-map svg').length === 1`)
+			if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length`); got > 2 {
+				t.Fatalf("initial visible blocker rows = %d, want the within-module cap of 2 or fewer", got)
+			}
 
-			var after struct {
-				MapMS         float64 `json:"map_ms"`
-				FactNodes     int     `json:"fact_nodes"`
-				ProcessedMaps int     `json:"processed_maps"`
-				SVGs          int     `json:"svgs"`
-				Errors        int     `json:"errors"`
-				CapText       string  `json:"cap_text"`
-				JSHeapBytes   float64 `json:"js_heap_bytes"`
-			}
-			runCDP(t, ctx, chromedp.Evaluate(`(function(){
-				var svg = document.querySelector('.claim-readiness-map svg');
-				var map = svg.closest('.claim-readiness-map');
-				var cap = map.querySelector('.claim-readiness-map-limit');
-				return {
-					map_ms: performance.now() - window.__readinessScaleMapStarted,
-					fact_nodes: svg.querySelectorAll('.node.fact').length,
-					processed_maps: document.querySelectorAll('.claim-readiness-map pre.mermaid[data-processed]').length,
-					svgs: document.querySelectorAll('.claim-readiness-map svg').length,
-					errors: (window.__boErrors || []).length,
-					cap_text: cap ? cap.textContent : '',
-					js_heap_bytes: performance.memory ? performance.memory.usedJSHeapSize : -1
-				};
-			})()`, &after))
-			if after.MapMS > readinessScaleMaxMapMS {
-				t.Fatalf("focused Mermaid map took %.0fms, exceeded %dms budget", after.MapMS, readinessScaleMaxMapMS)
-			}
-			if after.FactNodes != 12 {
-				t.Fatalf("focused Mermaid map has %d fact nodes, want explicit cap of 12", after.FactNodes)
-			}
-			if after.ProcessedMaps != 1 || after.SVGs != 1 {
-				t.Fatalf("opening one map processed %d sources and rendered %d SVGs, want one / one", after.ProcessedMaps, after.SVGs)
-			}
-			if after.Errors != 0 {
-				t.Fatalf("Mermaid renderer recorded %d errors", after.Errors)
-			}
-			wantCap := fmt.Sprintf("Showing 12 of %d blocker facts", opened.Facts)
-			if !strings.Contains(after.CapText, wantCap) {
-				t.Fatalf("map cap disclosure = %q, want it to contain %q", after.CapText, wantCap)
-			}
+			// "Show N more" must reveal EVERY remaining fact — the cap
+			// defers rendering, it never drops data (06/07's standing
+			// "nothing is deleted").
+			runCDP(t, ctx, chromedp.Evaluate(root+`.querySelector('.claim-readiness-more') && `+root+`.querySelector('.claim-readiness-more').click()`, nil))
+			pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length === `+strconv.Itoa(rootFacts))
+
+			after := readReadinessScaleMetrics(t, ctx)
 			if after.JSHeapBytes < 0 || after.JSHeapBytes > readinessScaleMaxJSHeapBytes {
-				t.Fatalf("post-map JS heap %.0f bytes outside required 0..%d budget", after.JSHeapBytes, readinessScaleMaxJSHeapBytes)
+				t.Fatalf("post-expand JS heap %.0f bytes outside required 0..%d budget", after.JSHeapBytes, readinessScaleMaxJSHeapBytes)
 			}
 
-			t.Logf("claims=%d facts=%d routes=%d load=%.0fms domNodes=%d heapBefore=%.1fMiB map=%.0fms heapAfter=%.1fMiB",
-				claimCount, factCount, routeCount, before.LoadMS, before.DOMNodes,
-				before.JSHeapBytes/(1024*1024), after.MapMS, after.JSHeapBytes/(1024*1024))
+			t.Logf("claims=%d facts=%d rootFacts=%d load=%.0fms domNodesBefore=%d domNodesAfter=%d heapBefore=%.1fMiB heapAfter=%.1fMiB",
+				claimCount, factCount, rootFacts, before.LoadMS, before.DOMNodes, after.DOMNodes,
+				before.JSHeapBytes/(1024*1024), after.JSHeapBytes/(1024*1024))
 		})
 	}
 }
@@ -275,7 +267,16 @@ func newReadinessProject(t *testing.T) *project {
 	return p
 }
 
-func TestReadinessMapCapNeverCapsTheAuthoritativeList(t *testing.T) {
+// TestReadinessShowMoreRevealsTheAuthoritativeList re-pins this file's
+// original TestReadinessMapCapNeverCapsTheAuthoritativeList. That test
+// proved the old focused Mermaid trace's 12-node cap never shrank the
+// COMPLETE list drawn beside it; 06 §R09.9 ("no inline dependency map")
+// removed the trace entirely, so there is no longer a map to keep honest.
+// The list itself now carries its own display cap (06 §4.4's within-module
+// "Show N more", 2 rows up front) — this test re-points the same guarantee
+// at THAT cap: clicking through must still reach every one of the 14
+// authoritative facts, never fewer.
+func TestReadinessShowMoreRevealsTheAuthoritativeList(t *testing.T) {
 	p := newProjectRaw(t, defaultConfigYAML)
 	var leafIDs []string
 	for i := 0; i < 13; i++ {
@@ -308,7 +309,7 @@ facet: contract
 module: widget
 status: draft
 body: |
-  a root with one grouped route.
+  a root with one grouped module.
 governed_by:
   type: none
   reason: viewer-test fixture, not backed by any doctrine claim
@@ -322,23 +323,36 @@ rests_on:
 		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness", chromedp.ByQuery),
 	)
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length`); got != 14 {
-		t.Fatalf("authoritative list has %d facts, want all 14", got)
+	if got, want := evalString(t, ctx, root+`.querySelector('.claim-readiness-scope').textContent.trim()`), "14 across 1 module"; got != want {
+		t.Fatalf("scope text = %q, want %q", got, want)
 	}
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-route').length`); got != 1 {
-		t.Fatalf("first-hop groups = %d, want one hub route", got)
+	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-module').length`); got != 1 {
+		t.Fatalf("module groups = %d, want one (every claim shares module widget)", got)
 	}
-	runCDP(t, ctx, chromedp.Evaluate(root+`.querySelector('.claim-readiness-trace').open = true`, nil))
-	pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-map svg').length === 1`)
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-map .node.fact').length`); got != 12 {
-		t.Fatalf("bounded map has %d fact nodes, want explicit cap of 12", got)
+	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length`); got != 2 {
+		t.Fatalf("visible blocker rows before expanding = %d, want the cap of 2", got)
 	}
-	if !evalBool(t, ctx, root+`.querySelector('.claim-readiness-map-limit').textContent.includes('Showing 12 of 14')`) {
-		t.Fatal("bounded map must disclose its 12-of-14 cap beside the complete list")
+	if got, want := evalString(t, ctx, root+`.querySelector('.claim-readiness-more').textContent.trim()`), "Show 12 more in this module"; !strings.Contains(got, "12 more") {
+		t.Fatalf("'Show N more' control reads %q, want it to say 12 more (14 total minus the 2 shown; %q)", got, want)
+	}
+	runCDP(t, ctx, chromedp.Evaluate(root+`.querySelector('.claim-readiness-more').click()`, nil))
+	pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length === 14`)
+	if evalBool(t, ctx, root+`.querySelector('.claim-readiness-more')`) {
+		t.Fatal("'Show more' control must remove itself once every fact is shown")
 	}
 }
 
-func TestStaticReadinessGroupsCompleteFactsAndRendersFocusedMapOnDemand(t *testing.T) {
+// TestStaticReadinessGroupsFactsByModuleAndPreservesEveryID re-pins this
+// file's original TestStaticReadinessGroupsCompleteFactsAndRendersFocused-
+// MapOnDemand: grouping moved from "the representative-route claim" to "the
+// module that owns the fix" (06 §7.6), so alpha/beta/gamma — which all share
+// module widget in this fixture — now collapse into ONE module group
+// instead of two per-dependency route groups, and R09.9 removed the focused
+// Mermaid trace this test used to open. What survives from the original
+// test's intent: every id is preserved verbatim, nothing is silently capped,
+// hostile/raw content stays text-safe, and the panel never causes horizontal
+// overflow at 390px.
+func TestStaticReadinessGroupsFactsByModuleAndPreservesEveryID(t *testing.T) {
 	p := newReadinessProject(t)
 	ctx := browserContext(t)
 	runCDP(t, ctx,
@@ -347,45 +361,31 @@ func TestStaticReadinessGroupsCompleteFactsAndRendersFocusedMapOnDemand(t *testi
 	)
 
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
-	if got := evalString(t, ctx, root+`.querySelector('.claim-readiness-state').textContent.trim()`); got != "Dependencies not ready" {
-		t.Fatalf("readiness state = %q, want Dependencies not ready", got)
+	if got, want := evalString(t, ctx, `document.getElementById('widget.contract.root').querySelector('.claim-readiness-door').getAttribute('data-readiness-state')`), "Dependencies not ready"; got != want {
+		t.Fatalf("readiness state = %q, want %q", got, want)
 	}
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length`); got != 3 {
-		t.Fatalf("rendered blocker facts = %d, want all 3 independent conditions", got)
+	if got, want := evalString(t, ctx, root+`.querySelector('.claim-readiness-scope').textContent.trim()`), "3 across 1 module"; got != want {
+		t.Fatalf("scope text = %q, want %q (alpha, beta and gamma all share module widget)", got, want)
 	}
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-route').length`); got != 2 {
-		t.Fatalf("first-hop groups = %d, want alpha and beta", got)
+	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-module').length`); got != 1 {
+		t.Fatalf("module groups = %d, want 1", got)
 	}
 	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-local li').length`); got != 1 {
 		t.Fatalf("local approval reasons = %d, want the alias displayed once", got)
 	}
+	// Only 2 of the 3 facts render up front (the within-module cap); reveal
+	// the rest before checking every id is present.
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){ var m = `+root+`.querySelector('.claim-readiness-more'); if (m) { m.click(); } })()`, nil))
+	pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length === 3`)
 	if !evalBool(t, ctx, root+`.textContent.includes('widget.contract.alpha') && `+root+`.textContent.includes('widget.contract.beta') && `+root+`.textContent.includes('widget.contract.gamma')`) {
 		t.Fatal("grouped view must preserve the exact ids of direct and upstream blockers")
 	}
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-map svg').length`); got != 0 {
-		t.Fatalf("closed map disclosures rendered %d SVGs, want lazy zero", got)
-	}
-
-	// The beta route is the group with two facts: beta itself and gamma via
-	// beta. Open its native disclosure, reveal the representative path, and
-	// then opt into its focused Mermaid trace.
-	runCDP(t, ctx, chromedp.Evaluate(`(function(){
-		var routes = Array.from(`+root+`.querySelectorAll('.claim-readiness-route'));
-		var beta = routes.find(function(route){ return route.querySelector('.claim-readiness-route-id small').textContent === 'widget.contract.beta'; });
-		beta.open = true;
-		beta.querySelector('.claim-readiness-path').open = true;
-		beta.querySelector('.claim-readiness-trace').open = true;
-	})()`, nil))
-	pollTrue(t, ctx, root+`.querySelectorAll('.claim-readiness-map svg').length === 1`)
-
-	if !evalBool(t, ctx, root+`.textContent.includes('widget.contract.root → widget.contract.beta → widget.contract.gamma')`) {
-		t.Fatal("upstream fact must retain its complete representative path")
-	}
-	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-map .node.fact').length`); got != 2 {
-		t.Fatalf("focused beta map fact nodes = %d, want 2", got)
-	}
-	if got := evalInt(t, ctx, `window.__boErrors.length`); got != 0 {
-		t.Fatalf("Mermaid renderer recorded %d errors", got)
+	// The upstream fact's dependency PATH is exactly two slugs — this
+	// claim's own id and gamma's, never the intermediate beta hop (06 §8
+	// item 11: a representative path must never grow the breadcrumb beyond
+	// source/target).
+	if !evalBool(t, ctx, root+`.textContent.includes('widget.contract.root') && `+root+`.textContent.includes('widget.contract.gamma')`) {
+		t.Fatal("the gamma blocker row must show its own claim-id-to-target path")
 	}
 
 	// Raw diagnostics are the lossless maintainer surface, not a replacement
@@ -399,10 +399,7 @@ func TestStaticReadinessGroupsCompleteFactsAndRendersFocusedMapOnDemand(t *testi
 	runCDP(t, ctx, chromedp.EmulateViewport(390, 844, chromedp.EmulateScale(1)))
 	pollTrue(t, ctx, `window.innerWidth === 390`)
 	if !evalBool(t, ctx, `document.documentElement.scrollWidth <= window.innerWidth + 1`) {
-		t.Fatal("the open readiness route and map must keep horizontal scrolling inside the map at 390px")
-	}
-	if !evalBool(t, ctx, root+`.querySelector('.claim-readiness-map-scroll').scrollWidth > `+root+`.querySelector('.claim-readiness-map-scroll').clientWidth`) {
-		t.Fatal("the narrow layout must retain an internally scrollable dependency map")
+		t.Fatal("the open readiness module must not create horizontal overflow at 390px")
 	}
 }
 
@@ -428,6 +425,14 @@ func TestReadinessTreatsFlagDetailsAsText(t *testing.T) {
 	}
 }
 
+// TestLiveReadinessRefreshesAfterAnUpstreamApproval re-pins the same test's
+// original Mermaid-error assertion away: R09.9 removed the inline trace, so
+// there is no `window.__boErrors` global for a project with no locked Build
+// order (build-order-ui.js is no longer injected at all — see render.go's
+// HasReadinessMaps field comment). The live-refresh guarantee itself is
+// unchanged: an upstream approval must drop the resolved fact from the
+// COMPLETE list on the next poll, not just from whichever page happened to
+// be open.
 func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 	p := newReadinessProject(t)
 	ctx := browserContext(t)
@@ -438,6 +443,7 @@ func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 	)
 	pollTrue(t, ctx, `document.body.classList.contains('comments-sse-open')`)
 	root := `document.getElementById('widget.contract.root').querySelector('.claim-readiness')`
+	runCDP(t, ctx, chromedp.Evaluate(`(function(){ var m = `+root+`.querySelector('.claim-readiness-more'); if (m) { m.click(); } })()`, nil))
 	if got := evalInt(t, ctx, root+`.querySelectorAll('.claim-readiness-blocker').length`); got != 3 {
 		t.Fatalf("initial live blocker facts = %d, want 3", got)
 	}
@@ -447,7 +453,36 @@ func TestLiveReadinessRefreshesAfterAnUpstreamApproval(t *testing.T) {
 	if evalBool(t, ctx, root+`.textContent.includes('widget.contract.gamma')`) {
 		t.Fatal("live readiness kept the approved upstream blocker after the served fragment refreshed")
 	}
-	if got := evalInt(t, ctx, `window.__boErrors.length`); got != 0 {
-		t.Fatalf("live refresh left %d Mermaid renderer errors", got)
+}
+
+// TestReadinessDoorJoinsTheFooterDisclosureGroup verifies the new door/panel
+// architecture 06 §4.3/R09.1-R09.3 requires: the readiness door is a native
+// <details name="claim-footer-<id>"> sharing its group with the
+// relationships/sources doors components.EdgesHTMLWithLinks renders, it
+// auto-opens because this claim is blocked, and opening a sibling door
+// closes it right back — "exactly one expansion open at a time" (R09.2),
+// with readiness's own auto-open (R09.3) as the sole exception at load.
+func TestReadinessDoorJoinsTheFooterDisclosureGroup(t *testing.T) {
+	p := newReadinessProject(t)
+	ctx := browserContext(t)
+	runCDP(t, ctx,
+		chromedp.Navigate(p.renderStatic()+"#widget.contract.root"),
+		chromedp.WaitVisible("#widget\\.contract\\.root .claim-readiness-door", chromedp.ByQuery),
+	)
+	card := `document.getElementById('widget.contract.root')`
+	if !evalBool(t, ctx, card+`.querySelector('.claim-readiness-door').open`) {
+		t.Fatal("a blocked claim's readiness door must auto-open (R09.3)")
+	}
+	if !evalBool(t, ctx, `(function(){
+		var door = `+card+`.querySelector('.claim-readiness-door');
+		var links = `+card+`.querySelector('.claim-links');
+		return door.getAttribute('name') !== '' && door.getAttribute('name') === links.getAttribute('name');
+	})()`) {
+		t.Fatal("the readiness door must share its name group with the relationships door")
+	}
+	runCDP(t, ctx, chromedp.Evaluate(card+`.querySelector('.claim-links summary').click()`, nil))
+	pollTrue(t, ctx, card+`.querySelector('.claim-links').open === true`)
+	if evalBool(t, ctx, card+`.querySelector('.claim-readiness-door').open`) {
+		t.Fatal("opening the relationships door must close readiness (R09.2: exactly one door open at a time)")
 	}
 }

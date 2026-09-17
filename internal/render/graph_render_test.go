@@ -43,7 +43,19 @@ var graphInjectionWitnesses = map[string]string{
 	"graph-ui.js":   "\n  var PANE_ID = 'dxgPane';\n",
 }
 
-func TestMermaidAssetsAreGuardedByTraceableReadiness(t *testing.T) {
+// TestReadinessNeverPullsInTheMermaidBundle re-pins this file's original
+// TestMermaidAssetsAreGuardedByTraceableReadiness, which asserted the
+// OPPOSITE of what it is named now: docs/design/screens/
+// 06-claim-blocked-across-four-modules.md's R09.9 ("no inline dependency
+// map") retired the claim-readiness dependency trace this guard existed
+// for. viewer-runtime.js's renderClaimReadiness (lane L5) renders a
+// two-slug dependency path with plain text and no diagram source — see
+// its own doc comment and render.go's HasReadinessMaps field comment — so
+// a traceable readiness condition alone must no longer pull in the ~3.5 MB
+// vendored renderer at all. Build order's own locked artifact (untouched by
+// this lane) is the only remaining reason shell.html's
+// `{{if or .BuildOrders.Modules .HasReadinessMaps}}` guard ever passes.
+func TestReadinessNeverPullsInTheMermaidBundle(t *testing.T) {
 	claims := []model.Claim{
 		groupedClaim("widget.contract.one", "widget", "contract", model.StatusDraft),
 		groupedClaim("widget.contract.two", "widget", "contract", model.StatusDraft),
@@ -77,11 +89,11 @@ func TestMermaidAssetsAreGuardedByTraceableReadiness(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render blocked catalog: %v", err)
 	}
-	if !strings.Contains(blocked, "__esbuild_esm_mermaid_nm") {
-		t.Fatal("a traceable readiness condition must include the Mermaid bundle")
+	if strings.Contains(blocked, "__esbuild_esm_mermaid_nm") {
+		t.Fatal("06 §R09.9: a traceable readiness condition must not pull in the retired inline-map Mermaid bundle")
 	}
-	if got := strings.Count(blocked, "shared lazy Mermaid renderer"); got != 1 {
-		t.Fatalf("shared renderer source count = %d, want one", got)
+	if strings.Contains(blocked, "shared lazy Mermaid renderer") {
+		t.Fatal("06 §R09.9: a traceable readiness condition alone must not include the shared Mermaid renderer glue")
 	}
 }
 

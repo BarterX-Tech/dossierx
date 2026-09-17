@@ -1,11 +1,16 @@
 (function () {
   'use strict';
 
-  // build-order-ui.js — shared lazy Mermaid renderer for Build order diagrams
-  // and claim-readiness route traces. It is injected AFTER the vendored build
-  // only when shell.html has at least one of those surfaces. It owns no
-  // readiness semantics: route source is projected from policy-engine records
-  // by viewer-runtime.js, while Build order source remains server-rendered.
+  // build-order-ui.js — shared lazy Mermaid renderer for Build order
+  // diagrams. It is injected AFTER the vendored build only when shell.html
+  // has at least one .bo-diagram. It used to double as the host for an
+  // inline claim-readiness dependency trace; 06 §R09.9 ("no inline
+  // dependency map") retired that surface — viewer-runtime.js's
+  // renderClaimReadiness no longer emits a .claim-readiness-map anywhere,
+  // so the .claim-readiness-map fragments this file's selectors used to
+  // carry are gone (LANES.md's L5: "the Mermaid host wiring for
+  // .claim-readiness-map, which R09.9 makes dead weight"). This file keeps
+  // its full generality for Build order's own diagrams.
   //
   // Rendering is a STATE observation, not an event. One MutationObserver on
   // .layout — a node that survives a serve fragment swap, which replaces
@@ -69,16 +74,16 @@
   function writeDiagramError(el, err) {
     var message = (err && err.message) ? err.message : String(err);
     var p = document.createElement('p');
-    p.className = el.closest('.claim-readiness-map') ? 'claim-readiness-map-error' : 'bo-error';
+    p.className = 'bo-error';
     p.textContent = 'diagram failed to render: ' + message;
-    var host = el.closest('.bo-diagram, .claim-readiness-map') || el.parentNode;
+    var host = el.closest('.bo-diagram') || el.parentNode;
     if (host) { host.appendChild(p); }
     window.__boErrors.push(message);
     console.error('dossierx: diagram failed to render:', err);
   }
 
   function visibleUnrendered() {
-    return Array.prototype.slice.call(document.querySelectorAll('.bo-diagram pre.mermaid, .claim-readiness-map pre.mermaid')).filter(function (el) {
+    return Array.prototype.slice.call(document.querySelectorAll('.bo-diagram pre.mermaid')).filter(function (el) {
       var closedDisclosure = el.closest('details:not([open])');
       return !closedDisclosure && el.offsetParent !== null && el.getClientRects().length > 0 && !el.hasAttribute('data-processed');
     });
@@ -130,12 +135,12 @@
   // and stamp a .bo-error into every block the moment the OS flips to dark.
   function rerenderAll() {
     initialised = false;
-    document.querySelectorAll('.bo-diagram pre.mermaid[data-processed], .claim-readiness-map pre.mermaid[data-processed]').forEach(function (el) {
+    document.querySelectorAll('.bo-diagram pre.mermaid[data-processed]').forEach(function (el) {
       if (el.dataset.src === undefined) { return; }
       el.textContent = el.dataset.src;
       el.removeAttribute('data-processed');
-      var host = el.closest('.bo-diagram, .claim-readiness-map');
-      if (host) { host.querySelectorAll('.bo-error, .claim-readiness-map-error').forEach(function (n) { n.remove(); }); }
+      var host = el.closest('.bo-diagram');
+      if (host) { host.querySelectorAll('.bo-error').forEach(function (n) { n.remove(); }); }
     });
     schedule();
   }

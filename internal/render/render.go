@@ -203,10 +203,17 @@ type shellData struct {
 	// payload block and the two script tags — on that, so such a project
 	// renders not one byte of it and never carries the vendored renderer.
 	BuildOrders BuildOrderTab
-	// HasReadinessMaps is true when at least one assessment carries a
-	// dependency condition or review cause that the claim view can trace. It
-	// extends the Mermaid asset guard without charging healthy projects the
-	// vendored renderer's ~3.5 MB cost.
+	// HasReadinessMaps used to extend the Mermaid asset guard so a project
+	// with at least one traceable dependency condition or review cause paid
+	// the vendored renderer's ~3.5 MB cost. docs/design/screens/
+	// 06-claim-blocked-across-four-modules.md's R09.9 ("no inline dependency
+	// map") retired the inline claim-readiness trace this field guarded —
+	// viewer-runtime.js's renderClaimReadiness now renders a two-slug
+	// dependency path with no Mermaid source at all, so this is always
+	// false. The field stays (permanently false, never removed) because
+	// shell.html's `{{if or .BuildOrders.Modules .HasReadinessMaps}}` guard
+	// (shell.html:339, not L5-owned) still reads it by name; Build order's
+	// own diagrams are the only remaining reason that guard ever passes.
 	HasReadinessMaps bool
 	// BuildOrderPayload is the tab's JSON payload (buildOrderPayloadJSON),
 	// injected into <script type="application/json" id="dossierx-build-orders">
@@ -879,14 +886,13 @@ type shellInputs struct {
 // at those injection sites fail silently.
 func buildShellStaticData(in shellInputs) shellData {
 	cfg := in.cfg
-	hasReadinessMaps := false
-	for _, assessment := range in.cat.Readiness {
-		if len(assessment.DependencyConditions) > 0 || len(assessment.Conditions) > 0 ||
-			len(assessment.ReviewCauses) > 0 || len(assessment.Causes) > 0 {
-			hasReadinessMaps = true
-			break
-		}
-	}
+	// hasReadinessMaps is permanently false: 06 §R09.9 retired the inline
+	// claim-readiness dependency trace this used to gate (see the
+	// HasReadinessMaps field doc comment above). Left as a named constant,
+	// not deleted, so the one call site that still asks for it — the return
+	// below, matching shellData.HasReadinessMaps's own field comment — has
+	// something to name.
+	const hasReadinessMaps = false
 
 	title := "dossierx viewer"
 	eyebrow := ""

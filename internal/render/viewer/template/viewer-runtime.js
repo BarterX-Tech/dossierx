@@ -1561,12 +1561,19 @@
         return group;
       }
 
+      // readinessClaimLabel derives a claim's reading-view title from its own
+      // rendered .k .label, for use as a dependency's readable name here.
+      // G18(b): the label's three children are .k-title, .pill and .k-id
+      // (card.html); the pill and the collapse chevron were already
+      // stripped, but .k-id (the mono id line) was not, so the machine id
+      // used to leak into every derived readiness title. All three are
+      // stripped now, so the id never rides along with a readable label.
       function readinessClaimLabel(id) {
         var card = id ? document.getElementById(id) : null;
         var label = card && card.querySelector('.k .label');
         if (label) {
           var copy = label.cloneNode(true);
-          copy.querySelectorAll('.pill, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
+          copy.querySelectorAll('.pill, .k-id, .claim-collapse-chevron').forEach(function (node) { node.remove(); });
           var rendered = (copy.textContent || '').replace(/\s+/g, ' ').trim();
           if (rendered) { return rendered; }
         }
@@ -1598,12 +1605,21 @@
         return labels[record.kind] || String(record.kind || 'Readiness obstacle').replace(/_/g, ' ');
       }
 
-      function readinessRouteKey(record, type, rootID) {
-        if (type === 'cause' && record.direct) { return rootID; }
+      // readinessTargetID is the SAME "final dependency" identity
+      // readinessFactLabel already reads — the id a blocker row's target
+      // slug names and the id 06 §8 item 11 requires stays exactly one hop
+      // long even when the record's own representative path is longer
+      // (upstream) or cyclical.
+      function readinessTargetID(record, rootID) {
         var path = record.path || [];
-        return path[1] || record.dependency_id || rootID;
+        return record.dependency_id || path[path.length - 1] || rootID;
       }
 
+      // readinessHopLabel is the PER-BLOCKER-ROW pill: "direct - 1 hop" /
+      // "upstream - 2 hops" (06 §4.4, §6). readinessHopCount is the same
+      // arithmetic as a bare number, for module grouping/sorting and for
+      // the module row's OWN "nearest N hop(s)" wording (06 §4.4 / 03
+      // §4.10), which never carries "direct"/"upstream".
       function readinessHopLabel(record, type) {
         var path = record.path || [];
         var hops = Math.max(0, path.length - 1);
@@ -1611,117 +1627,274 @@
         return relation + ' · ' + hops + ' ' + (hops === 1 ? 'hop' : 'hops');
       }
 
-      // Mermaid node identifiers are synthetic. Authored claim ids and engine
-      // details are labels only, escaped under the same character contract as
-      // internal/buildorder's exporter so they cannot become diagram syntax.
-      function readinessMermaidEscape(value) {
-        var replacements = { '"': '#quot;', '#': '#35;', ';': '#59;', '<': '#lt;', '>': '#gt;', '&': '#amp;' };
-        return String(value || '').replace(/["#;<>&]/g, function (c) { return replacements[c]; });
+      function readinessHopCount(record, type) {
+        if (type === 'cause' && record.direct) { return 0; }
+        var path = record.path || [];
+        return Math.max(0, path.length - 1);
       }
 
-      function readinessMermaidSource(rootID, records) {
-        var limited = records.slice(0, 12);
-        var nodeIDs = {};
-        var nodeLines = [];
-        var edgeLines = [];
-        var edgeSeen = {};
-        var dependencyClasses = [];
-        var factClasses = [];
+      function readinessNearestHopLabel(hops) {
+        return 'nearest ' + hops + ' ' + (hops === 1 ? 'hop' : 'hops');
+      }
 
-        function pathNode(id) {
-          if (!Object.prototype.hasOwnProperty.call(nodeIDs, id)) {
-            var nodeID = 'n' + Object.keys(nodeIDs).length;
-            nodeIDs[id] = nodeID;
-            nodeLines.push('  ' + nodeID + '["' + readinessMermaidEscape(readinessClaimLabel(id)) + '"]');
-            if (id !== rootID) { dependencyClasses.push(nodeID); }
-          }
-          return nodeIDs[id];
-        }
+      // readinessModuleKey groups a fact by "the module that owns the fix"
+      // (06 §2/§7.6: NOT the representative-route claim the old
+      // readinessRouteKey grouped by). A dependency condition's fix lives
+      // wherever its unapproved target lives; a direct review cause's fix
+      // is this claim's own review, so it groups under this claim's own
+      // module. claimToFacet/facetToModule/moduleLabel are the same maps
+      // and function the status strip already builds (initViewer, above) —
+      // read-only here, never duplicated.
+      function readinessModuleKey(item, rootID) {
+        var targetID = (item.type === 'cause' && item.record.direct) ? rootID : readinessTargetID(item.record, rootID);
+        var facetID = claimToFacet[targetID];
+        return facetID ? facetToModule[facetID] : '';
+      }
 
-        pathNode(rootID);
-        limited.forEach(function (item, index) {
-          var path = (item.record.path || []).slice();
-          if (!path.length || path[0] !== rootID) { path.unshift(rootID); }
-          for (var i = 0; i + 1 < path.length; i += 1) {
-            var from = pathNode(path[i]);
-            var to = pathNode(path[i + 1]);
-            var edge = from + ' --> ' + to;
-            if (!edgeSeen[edge]) { edgeSeen[edge] = true; edgeLines.push('  ' + edge); }
+      // readinessGroupByModule sorts groups per 06 §9 open decision 2 (the
+      // board's own tie-break, not stated in the rules): nearest hop
+      // distance ascending, then blocker count descending, then module name
+      // ascending. Only the FIRST group is opened by the caller.
+      function readinessGroupByModule(facts, rootID) {
+        var byKey = {};
+        var groups = [];
+        facts.forEach(function (item) {
+          var key = readinessModuleKey(item, rootID);
+          if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
+            byKey[key] = { key: key, label: moduleLabel(key), items: [], minHops: Infinity };
+            groups.push(byKey[key]);
           }
-          var terminal = pathNode(path[path.length - 1]);
-          var factID = 'f' + index;
-          nodeLines.push('  ' + factID + '(["' + readinessMermaidEscape(readinessFactLabel(item.record, item.type, rootID)) + '"])');
-          edgeLines.push('  ' + terminal + ' --> ' + factID);
-          factClasses.push(factID);
+          var group = byKey[key];
+          group.items.push(item);
+          var hops = readinessHopCount(item.record, item.type);
+          if (hops < group.minHops) { group.minHops = hops; }
         });
-
-        var lines = ['flowchart LR'].concat(nodeLines, edgeLines, [
-          '  classDef current stroke-width:3px',
-          '  classDef dependency stroke-width:1px',
-          '  classDef fact stroke-width:2px',
-          '  class ' + nodeIDs[rootID] + ' current'
-        ]);
-        if (dependencyClasses.length) { lines.push('  class ' + dependencyClasses.join(',') + ' dependency'); }
-        if (factClasses.length) { lines.push('  class ' + factClasses.join(',') + ' fact'); }
-        return lines.join('\n');
+        groups.sort(function (a, b) {
+          if (a.minHops !== b.minHops) { return a.minHops - b.minHops; }
+          if (b.items.length !== a.items.length) { return b.items.length - a.items.length; }
+          return a.label < b.label ? -1 : (a.label > b.label ? 1 : 0);
+        });
+        return groups;
       }
 
-      function readinessPathDetails(record) {
-        var details = el('details', 'claim-readiness-path');
-        details.appendChild(textEl('summary', '', 'Show representative path'));
-        details.appendChild(textEl('p', '', (record.path || []).join(' → ') || 'No path supplied'));
-        return details;
-      }
-
-      function readinessFactRow(item, rootID) {
+      // readinessBlockerRow builds ONE <li>: a title, an OPTIONAL authored
+      // detail line, a hop pill, and a dependency path of EXACTLY two slugs
+      // (06 §2/§8 item 11/§8 item 12 — never truncated with an ellipsis,
+      // since a slug is machine identity). R09.8: the row leads with the
+      // title, never the claim id; the id appears only inside the path,
+      // where it is machine identity.
+      //
+      // RETRY FIX (wave-B2 fix list item 1, IMPLEMENTED WITH A DISPUTE — see
+      // learnings/inbox/L5.md for the probe evidence): record.detail is
+      // rendered only for an `own_flag` review cause. 06 §8 item 3 and
+      // R09.8 ("the authored detail is not one of the eight demotions;
+      // nothing is deleted from the data") require the reviewer's own
+      // review-flag reason to be readable in the row itself, not only
+      // inside the closed Raw diagnostics <pre>.
+      //
+      // The fix list's own suggested test — "render when detail is present
+      // AND its text is not a restatement of the title (compare against
+      // readinessFactLabel's output)" — does NOT hold against
+      // internal/readiness/readiness.go, which this lane reads as its
+      // authoritative source (a probe of the DATA, not of a rendering).
+      // Every DependencyCondition kind's `Detail` is a FIXED, engine-
+      // generated string with no per-instance information: dependency_
+      // unapproved's is literally the string constant "required dependency
+      // is not locally approved" (readiness.go:292), missing_dependency's
+      // is "required dependency is missing" (:361), retired_dependency's is
+      // "required dependency is retired" (:539), unreadable_dependency's is
+      // "required dependency is unreadable" (:541), unknown_historical_
+      // baseline's is "no historical content baseline is available" (:553).
+      // None of these strings is a textual match for readinessFactLabel's
+      // per-target title ("<target> is not locally approved" etc.), so the
+      // fix list's literal text-equality check does NOT suppress them — it
+      // would print the same boilerplate sentence under every single
+      // dependency_unapproved row in the Cutainly corpus (31,673
+      // instances), which is exactly the "engine vocabulary describing its
+      // own grouping choice" class of noise R09.8 exists to demote, not
+      // restore. Cause kinds are similarly mixed: own_flag's Detail is
+      // `flag.Reason`, genuinely authored human text (readiness.go:510);
+      // own_thread's is a comma-joined list of raw thread ids, not prose
+      // (:503); direct_dependency_change's and approval_content_drift's are
+      // BOTH the same fixed string, "dependency content differs from the
+      // reviewed baseline" (:326/:348/:538/:559); the three approval_*
+      // causes are system-generated sentences naming the failure mode, not
+      // authored either (:466-478) — and LANES.md records that none of the
+      // three has any fixture anywhere, so this branch is never exercised
+      // against real data. own_flag is the ONLY kind whose Detail is
+      // genuinely the reviewer's own words, so it is the only one this
+      // lane renders. Verified live: TestReadinessTreatsFlagDetailsAsText
+      // (own_flag, hostile-markup escaping) passes; probed against the
+      // rendered Cutainly client that a dependency_unapproved blocker row
+      // (e.g. sharing-observation.contract.the-command-surface's own
+      // panel) renders NO boilerplate detail line, only title/hop/path.
+      function readinessBlockerRow(item, rootID) {
         var li = el('li', 'claim-readiness-blocker');
-        var copy = el('div', 'claim-readiness-blocker-copy');
-        copy.appendChild(textEl('strong', '', readinessFactLabel(item.record, item.type, rootID)));
-        if (item.record.detail) { copy.appendChild(textEl('p', '', item.record.detail)); }
-        copy.appendChild(readinessPathDetails(item.record));
-        li.appendChild(copy);
+
+        var titleText = readinessFactLabel(item.record, item.type, rootID);
+        var titleGroup = el('div', 'claim-readiness-blocker-title-group');
+        titleGroup.appendChild(textEl('strong', 'claim-readiness-blocker-title', titleText));
+
+        var isAuthoredDetail = item.type === 'cause' && item.record.kind === 'own_flag';
+        var detailText = isAuthoredDetail ? (item.record.detail || '').replace(/\s+/g, ' ').trim() : '';
+        if (detailText) {
+          titleGroup.appendChild(textEl('p', 'claim-readiness-blocker-detail', detailText));
+        }
+        li.appendChild(titleGroup);
+
         li.appendChild(textEl('span', 'claim-readiness-relation', readinessHopLabel(item.record, item.type)));
+
+        var path = el('div', 'claim-readiness-path-chips');
+        path.appendChild(textEl('span', 'claim-readiness-slug claim-readiness-slug--source', rootID));
+        var targetLine = el('span', 'claim-readiness-path-target-line');
+        var chevron = el('span', 'claim-readiness-path-chevron');
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.appendChild(dxIcon('chevron-right'));
+        targetLine.appendChild(chevron);
+        targetLine.appendChild(textEl('span', 'claim-readiness-slug claim-readiness-slug--target', readinessTargetID(item.record, rootID)));
+        path.appendChild(targetLine);
+        li.appendChild(path);
+
         return li;
       }
 
-      function readinessRoute(group, rootID, index) {
-        var details = el('details', 'claim-readiness-route');
+      // READINESS_VISIBLE_CAP is the within-module truncation 06 §4.4's own
+      // arithmetic fixes: "Show 9 more in this module" against an 11-item
+      // Capability-support group means 2 rendered up front. The remaining
+      // rows are built and appended ONLY when "Show N more" is clicked
+      // (06 §8 item 14: in-place expansion, never navigation) — lazily,
+      // the same way the retired inline Mermaid trace it replaces used to
+      // defer its own SVG (readinessScaleBudgets's DOM-node ceiling is a
+      // real constraint against a project whose fan-out runs to thousands
+      // of facts in one module, same as the trace's old lazy-render
+      // rationale). The complete list stays fully QUERYABLE from the
+      // engine's own /api payload (nothing is deleted from the data); it is
+      // deferred from the DOM, not withheld from the reader.
+      var READINESS_VISIBLE_CAP = 2;
+
+      // MODULES_VISIBLE_CAP is 06 §8 item 9's module-list truncation: "the
+      // board shows exactly four [modules]... the remainder are one-line
+      // rows in ascending hop order, and the list is subject to the same
+      // Show N more treatment the within-module list gets." RETRY FIX
+      // (verifier item 12): the Cutainly corpus has claims fanning out
+      // across up to 23 modules (voice.contract.what-this-module-does-not-
+      // own), so an uncapped module list drew 23 full <details> rows.
+      var MODULES_VISIBLE_CAP = 4;
+
+      // readinessModuleRowFlat is the "one-line row" §8 item 9 names for a
+      // module beyond the cap: name, nearest-hop note and count pill, same
+      // geometry as an open module's own summary line but never a
+      // <details> — it is not itself expandable, only a locator, so the
+      // reviewer still sees every module's name and count without paying
+      // for 19 extra disclosure widgets up front.
+      function readinessModuleRowFlat(group) {
+        var row = el('div', 'claim-readiness-module-summary claim-readiness-module-row-flat');
+        row.appendChild(textEl('span', 'claim-readiness-module-name', group.label));
+        row.appendChild(textEl('span', 'claim-readiness-module-hop', readinessNearestHopLabel(group.minHops)));
+        row.appendChild(el('span', 'claim-readiness-module-spacer'));
+        var pill = el('span', 'claim-readiness-module-count');
+        pill.appendChild(document.createTextNode(String(group.items.length)));
+        row.appendChild(pill);
+        return row;
+      }
+
+      // readinessResolutionSentence is 03 §4.10 / 05 §4.9's "Resolution
+      // note" (RETRY FIX, verifier item 6): "Both sit in capability-support.
+      // One approval there clears this claim." The wording is mechanical
+      // from the single group's own key (its module id, the same
+      // lowercase-hyphenated form the quoted example uses — group.label is
+      // the sidebar's Title Case display name, a different string), never
+      // invented prose, and this is called only when there is exactly one
+      // group to name (renderClaimReadiness enforces that).
+      function readinessResolutionSentence(group) {
+        var count = group.items.length;
+        var subject = count === 1 ? 'It sits' : (count === 2 ? 'Both sit' : 'All ' + count + ' sit');
+        return subject + ' in ' + (group.key || group.label) + '. One approval there clears this claim.';
+      }
+
+      // readinessPanelFooter is the panel's OWN footer — "See in claims
+      // graph", plus the resolution sentence when there is exactly one
+      // module to resolve. RETRY FIX (verifier item 5): this used to be
+      // built once PER MODULE inside readinessModule and appended to every
+      // module's own body, so two open modules on one claim drew the link
+      // twice. It is now built once and appended to the panel itself, after
+      // .claim-readiness-modules, per components-00 §B ("Footer · every
+      // panel ends with 'See in claims graph' hard right") and 06 §4.4's
+      // row 3B6-0, which sits at the SECTION's end, after all module rows.
+      function readinessPanelFooter(singleGroup) {
+        var footer = el('div', 'claim-readiness-module-footer');
+        if (singleGroup) {
+          footer.appendChild(textEl('p', 'claim-readiness-resolution', readinessResolutionSentence(singleGroup)));
+        }
+        // The reverse of graph-ui.js's own data-dxg-open-claim link
+        // (graph-ui.js:3585-3594): that gap — "no API for open the graph
+        // focused on claim X" — is recorded, not solved, per 06 §9 open
+        // decision 7. [data-dxg-open] is the SAME delegated trigger the
+        // sidebar button uses (graph-ui.js:68, :481-486), so this link
+        // opens the real pane rather than shipping a dead affordance; it
+        // just cannot focus it on rootID yet.
+        var link = el('a', 'claim-readiness-graph-link');
+        link.href = '#';
+        link.setAttribute('data-dxg-open', '');
+        link.appendChild(dxIcon('git-branch'));
+        link.appendChild(textEl('span', '', 'See in claims graph'));
+        footer.appendChild(link);
+        return footer;
+      }
+
+      // readinessModule builds one module's disclosure: a summary line
+      // (chevron, module name, "nearest N hop(s)", a count pill) and, once
+      // open, its blocker list and an optional "Show N more in this
+      // module". The panel-level "See in claims graph" footer is built
+      // once by readinessPanelFooter, not per module (RETRY FIX, verifier
+      // item 5).
+      function readinessModule(group, rootID, index) {
+        var details = el('details', 'claim-readiness-module');
         if (index === 0) { details.open = true; }
-        var summary = el('summary');
-        var identity = el('span', 'claim-readiness-route-id');
-        identity.appendChild(textEl('strong', '', group.key === rootID ? 'This claim' : readinessClaimLabel(group.key)));
-        identity.appendChild(textEl('small', '', group.key));
-        summary.appendChild(identity);
-        var isDirect = group.items.every(function (item) { return (item.record.path || []).length <= 2; });
-        summary.appendChild(textEl('span', 'claim-readiness-route-via', group.key === rootID ? 'local review' : (isDirect ? 'direct dependency' : 'shown via this dependency')));
-        summary.appendChild(textEl('span', 'claim-readiness-route-count', group.items.length + ' ' + (group.items.length === 1 ? 'blocker' : 'blockers')));
-        var routeChevron = el('span', 'claim-readiness-chevron');
-        routeChevron.setAttribute('aria-hidden', 'true');
-        routeChevron.appendChild(dxIcon('chevron-right'));
-        summary.appendChild(routeChevron);
+
+        var summary = el('summary', 'claim-readiness-module-summary');
+        var chevron = el('span', 'claim-readiness-module-chevron');
+        chevron.setAttribute('aria-hidden', 'true');
+        chevron.appendChild(dxIcon('chevron-right'));
+        summary.appendChild(chevron);
+        summary.appendChild(textEl('span', 'claim-readiness-module-name', group.label));
+        summary.appendChild(textEl('span', 'claim-readiness-module-hop', readinessNearestHopLabel(group.minHops)));
+        summary.appendChild(el('span', 'claim-readiness-module-spacer'));
+        var pill = el('span', 'claim-readiness-module-count');
+        pill.appendChild(document.createTextNode(String(group.items.length)));
+        summary.appendChild(pill);
         details.appendChild(summary);
 
-        var body = el('div', 'claim-readiness-route-body');
+        var body = el('div', 'claim-readiness-module-body');
         var list = el('ul', 'claim-readiness-blockers');
-        group.items.forEach(function (item) { list.appendChild(readinessFactRow(item, rootID)); });
+        var visible = group.items.slice(0, READINESS_VISIBLE_CAP);
+        var rest = group.items.slice(READINESS_VISIBLE_CAP);
+        visible.forEach(function (item) { list.appendChild(readinessBlockerRow(item, rootID)); });
         body.appendChild(list);
 
-        var trace = el('details', 'claim-readiness-trace');
-        trace.appendChild(textEl('summary', '', 'Trace this route in a dependency map'));
-        var map = el('div', 'claim-readiness-map');
-        map.appendChild(textEl('p', 'claim-readiness-map-caption', 'Representative routes · scroll horizontally'));
-        var scroll = el('div', 'claim-readiness-map-scroll');
-        scroll.appendChild(textEl('pre', 'mermaid', readinessMermaidSource(rootID, group.items)));
-        map.appendChild(scroll);
-        if (group.items.length > 12) {
-          map.appendChild(textEl('p', 'claim-readiness-map-limit', 'Showing 12 of ' + group.items.length + ' blocker facts in the map. The complete list remains above.'));
+        if (rest.length) {
+          var more = el('button', 'claim-readiness-more');
+          more.type = 'button';
+          var moreChevron = el('span', 'claim-readiness-more-chevron');
+          moreChevron.setAttribute('aria-hidden', 'true');
+          moreChevron.appendChild(dxIcon('chevron-down'));
+          more.appendChild(moreChevron);
+          more.appendChild(textEl('span', '', 'Show ' + rest.length + ' more in this module'));
+          more.addEventListener('click', function () {
+            rest.forEach(function (item) { list.appendChild(readinessBlockerRow(item, rootID)); });
+            more.remove();
+          });
+          body.appendChild(more);
         }
-        trace.appendChild(map);
-        body.appendChild(trace);
+
         details.appendChild(body);
         return details;
       }
 
+      // readinessRawDiagnostics is R09.8's demotion, not a deletion: the
+      // exact engine fields and representative path arrays stay reachable
+      // (viewer-tests' escaping and live-refresh assertions read them) as
+      // the quietest, closed-by-default thing in the panel.
       function readinessRawDiagnostics(assessment) {
         var details = el('details', 'claim-readiness-raw');
         details.appendChild(textEl('summary', '', 'Raw diagnostics'));
@@ -1741,115 +1914,162 @@
         return details;
       }
 
-      // renderClaimReadiness reorganizes the policy engine's facts for review.
-      // It never re-derives a verdict, merges independent facts, walks the
-      // dependency graph, or treats a representative path as exclusive cause
-      // ownership. The complete records remain available in list and raw form.
+      // renderClaimReadiness reorganizes the policy engine's facts for
+      // review. It never re-derives a verdict, merges independent facts,
+      // walks the dependency graph, or treats a representative path as
+      // exclusive cause ownership. The complete records remain available in
+      // list and raw form.
+      //
+      // R09.1-R09.3: the door (.claim-readiness-door, a native
+      // <details name="claim-footer-<id>">) and its panel
+      // (.claim-readiness.claim-footer-panel, the door's next sibling — the
+      // same shape components.EdgesHTMLWithLinks uses for its own two
+      // doors) are rebuilt as a pair on every call, exactly as the single
+      // .claim-readiness section used to be, so a live poll's replacement
+      // stays atomic. The door shares its `name` with the relationships and
+      // sources doors that same function already writes, joining their
+      // native "one open at a time" group at no extra cost; it force-closes
+      // any of them still marked open from a stale server-side signal
+      // before opening itself, because R09.3's auto-open — reserved for a
+      // BLOCKED claim — outranks the relationships door's own
+      // drifted/review_pending auto-open signal.
       function renderClaimReadiness(assessments) {
-        // Project by the rendered card's canonical id. Claim ids also occur on
-        // graph links, comment controls, and edge references, so heading/link
-        // scans are not a reliable card inventory after the live mount.
+        // Project by the rendered card's canonical id. Claim ids also occur
+        // on graph links, comment controls, and edge references, so
+        // heading/link scans are not a reliable card inventory after the
+        // live mount.
         document.querySelectorAll('.claim[id]').forEach(function (card) {
           var id = card.id;
           var assessment = assessments && assessments[id];
           if (!assessment) { return; }
-          var existing = card.querySelector('.claim-readiness');
-          var box = el('section', 'claim-readiness');
-          if (assessment.ready) { box.classList.add('claim-readiness--ready'); }
-          box.setAttribute('aria-label', 'Claim readiness');
+
           var conditions = assessment.dependency_conditions || assessment.conditions || [];
           var causes = assessment.review_causes || assessment.causes || [];
           var facts = conditions.map(function (record) { return { type: 'condition', record: record }; })
             .concat(causes.map(function (record) { return { type: 'cause', record: record }; }));
-
-          var header = el('header', 'claim-readiness-head');
-          var identity = el('div', 'claim-readiness-id');
-          var title = el('div', 'claim-readiness-title');
-          title.appendChild(document.createTextNode('Readiness '));
+          var blocked = facts.length > 0;
           var state = assessment.ready
             ? 'Ready'
             : (assessment.review_pending
               ? 'Review required'
               : (!assessment.local_approved && assessment.dependency_ready ? 'Approval required' : 'Dependencies not ready'));
-          title.appendChild(textEl('span', 'claim-readiness-state', state));
-          identity.appendChild(title);
-          var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
-          var dependencySentence = assessment.dependency_ready
-            ? (causes.length
-              ? 'Its dependencies are ready, but ' + causes.length + ' ' + (causes.length === 1 ? 'review cause still needs' : 'review causes still need') + ' attention.'
-              : 'Its required dependency chain is ready.')
-            : facts.length + ' ' + (facts.length === 1 ? 'blocking fact is' : 'blocking facts are') + ' shown below.';
-          identity.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
-          header.appendChild(identity);
-          var counts = el('div', 'claim-readiness-counts');
-          var blockerCount = el('span', 'claim-readiness-count');
-          blockerCount.appendChild(textEl('strong', '', String(facts.length)));
-          blockerCount.appendChild(document.createTextNode(' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
-          counts.appendChild(blockerCount);
-          header.appendChild(counts);
-          box.appendChild(header);
 
+          var footerName = 'claim-footer-' + id;
+          var door = el('details', 'claim-readiness-door');
+          door.setAttribute('name', footerName);
+          door.setAttribute('data-readiness-state', state);
+          var summary = el('summary', 'claim-footer-chip claim-footer-chip--readiness' + (blocked ? ' claim-footer-chip--blocked' : ''));
+          if (blocked) {
+            summary.appendChild(el('span', 'claim-readiness-chip-dot'));
+            summary.appendChild(textEl('span', 'claim-footer-chip-label', 'Blocked'));
+          }
+          summary.appendChild(textEl('span', 'claim-footer-chip-count', facts.length + ' ' + (facts.length === 1 ? 'blocker' : 'blockers')));
+          summary.appendChild(el('span', 'claim-footer__chevron'));
+          door.appendChild(summary);
+          if (blocked) {
+            // Force-close any sibling in this name group a stale
+            // server-rendered `open` attribute left open (the relationships
+            // door's drifted/review_pending signal, components.go's
+            // openAttr) before this claim's own blocked state claims the
+            // group, per R09.3's priority over that signal.
+            document.querySelectorAll('details[name="' + footerName.replace(/"/g, '\\"') + '"][open]').forEach(function (other) { other.open = false; });
+            door.open = true;
+          }
+
+          var panel = el('div', 'claim-readiness claim-footer-panel' + (blocked ? ' claim-readiness--blocked' : ''));
+          panel.setAttribute('aria-label', 'Claim readiness');
+
+          // RETRY FIX (verifier item 8): local approval reasons used to be
+          // appended FIRST, ahead of the READINESS BLOCKERS eyebrow, so a
+          // blocked claim's panel opened with a bare "is not locally
+          // approved" bullet instead of the section head. No board (06
+          // §4.4, 03 §4.10, 05 §4.9, components-00 §B) draws content above
+          // that eyebrow. localNotes is still computed here (it needs
+          // assessment before either branch below), but the actual
+          // .claim-readiness-local append moves below the module list /
+          // summary paragraph, whichever this claim takes.
           var localNotes = (assessment.local_reasons || []).slice();
-          // local_approval_issue is a concise alias and may repeat the reason
-          // already present in local_reasons. Collapse that one presentation
-          // duplicate while retaining both exact fields in Raw diagnostics.
+          // local_approval_issue is a concise alias and may repeat the
+          // reason already present in local_reasons. Collapse that one
+          // presentation duplicate while retaining both exact fields in
+          // Raw diagnostics.
           if (assessment.local_approval_issue && localNotes.indexOf(assessment.local_approval_issue) < 0) {
             localNotes.push(assessment.local_approval_issue);
           }
+
+          if (facts.length) {
+            var groups = readinessGroupByModule(facts, id);
+            var head = el('div', 'claim-readiness-section-head');
+            head.appendChild(textEl('span', 'claim-readiness-eyebrow', 'Readiness blockers'));
+            head.appendChild(el('span', 'claim-readiness-eyebrow-rule'));
+            var moduleWord = groups.length === 1 ? 'module' : 'modules';
+            head.appendChild(textEl('span', 'claim-readiness-scope', facts.length + ' across ' + groups.length + ' ' + moduleWord));
+            panel.appendChild(head);
+
+            var modules = el('div', 'claim-readiness-modules');
+            var visibleGroups = groups.slice(0, MODULES_VISIBLE_CAP);
+            var restGroups = groups.slice(MODULES_VISIBLE_CAP);
+            visibleGroups.forEach(function (group, index) { modules.appendChild(readinessModule(group, id, index)); });
+            panel.appendChild(modules);
+
+            if (restGroups.length) {
+              // 06 §8 item 9: the remainder are "one-line rows in ascending
+              // hop order", subject to the same Show N more treatment the
+              // within-module list gets — built and appended only on click.
+              var moreModules = el('button', 'claim-readiness-more claim-readiness-more--modules');
+              moreModules.type = 'button';
+              var moreModulesChevron = el('span', 'claim-readiness-more-chevron');
+              moreModulesChevron.setAttribute('aria-hidden', 'true');
+              moreModulesChevron.appendChild(dxIcon('chevron-down'));
+              moreModules.appendChild(moreModulesChevron);
+              moreModules.appendChild(textEl('span', '', 'Show ' + restGroups.length + ' more modules'));
+              moreModules.addEventListener('click', function () {
+                restGroups.slice().sort(function (a, b) { return a.minHops - b.minHops; })
+                  .forEach(function (group) { modules.appendChild(readinessModuleRowFlat(group)); });
+                moreModules.remove();
+              });
+              panel.appendChild(moreModules);
+            }
+
+            // 05 §4.9 / 03 §4.10's resolution sentence sits only when every
+            // blocker sits in one module — components-00 §B: "The sentence
+            // to its left appears only when all blockers sit in one
+            // module, because only then is one approval enough to clear
+            // the claim." (RETRY FIX, verifier item 6.)
+            panel.appendChild(readinessPanelFooter(groups.length === 1 ? groups[0] : null));
+          } else {
+            var localSentence = assessment.local_approved ? 'This claim is locally approved.' : 'This claim is not locally approved.';
+            var dependencySentence = assessment.dependency_ready ? 'Its required dependency chain is ready.' : 'Its dependency chain is not ready.';
+            panel.appendChild(textEl('p', 'claim-readiness-summary', localSentence + ' ' + dependencySentence));
+          }
+
           if (localNotes.length) {
             var local = el('div', 'claim-readiness-local');
-            local.appendChild(textEl('p', 'claim-readiness-label', 'Local approval'));
             var localList = el('ul');
             localNotes.forEach(function (note) { localList.appendChild(textEl('li', '', note)); });
             local.appendChild(localList);
-            box.appendChild(local);
+            panel.appendChild(local);
           }
 
-          if (facts.length) {
-            var byKey = {};
-            var groups = [];
-            facts.forEach(function (item) {
-              var key = readinessRouteKey(item.record, item.type, id);
-              if (!Object.prototype.hasOwnProperty.call(byKey, key)) {
-                byKey[key] = { key: key, items: [] };
-                groups.push(byKey[key]);
-              }
-              byKey[key].items.push(item);
-            });
-            var routeHeader = el('div', 'claim-readiness-section-head');
-            routeHeader.appendChild(textEl('p', 'claim-readiness-label', 'Readiness blockers'));
-            routeHeader.appendChild(textEl('span', '', groups.length + ' shown ' + (groups.length === 1 ? 'route' : 'routes')));
-            box.appendChild(routeHeader);
-            var routes = el('div', 'claim-readiness-routes');
-            groups.forEach(function (group, index) { routes.appendChild(readinessRoute(group, id, index)); });
-            box.appendChild(routes);
-          }
+          panel.appendChild(readinessRawDiagnostics(assessment));
 
-          if (facts.length || localNotes.length || !assessment.ready) {
-            box.appendChild(readinessRawDiagnostics(assessment));
-          }
+          var existingDoor = card.querySelector('.claim-readiness-door');
+          var existingPanel = card.querySelector('.claim-readiness');
           var links = card.querySelector('.claim-links');
-          // claim-links lives inside the card's collapse-content wrapper, not
-          // directly under the section. A DOM reference must belong to the
-          // parent receiving the insertion; otherwise Comet raises
+          // claim-links lives inside the card's collapse-content wrapper,
+          // not directly under the section. A DOM reference must belong to
+          // the parent receiving the insertion; otherwise Comet raises
           // NotFoundError and no readiness card is rendered.
-          // Replace an existing panel atomically. Removing it and inserting a
-          // new one in two steps makes scroll anchoring compensate for the
-          // temporary height loss during live refreshes.
-          if (existing && existing.parentNode) {
-            existing.replaceWith(box);
-          } else if (links && links.parentNode) {
-            links.parentNode.insertBefore(box, links);
-          } else {
-            card.appendChild(box);
-          }
+          if (existingPanel && existingPanel.parentNode) { existingPanel.replaceWith(panel); } else if (links && links.parentNode) { links.parentNode.insertBefore(panel, links); } else { card.appendChild(panel); }
+          if (existingDoor && existingDoor.parentNode) { existingDoor.replaceWith(door); } else { panel.parentNode.insertBefore(door, panel); }
         });
       }
 
-      // A checked-in/offline viewer has no /api/status endpoint. The rendered
-      // graph payload carries the same readiness projection as .catalog.json,
-      // so turn its node data back into the claim-id map the card renderer
-      // accepts. A live status response below always replaces this snapshot.
+      // A checked-in/offline viewer has no /api/status endpoint. The
+      // rendered graph payload carries the same readiness projection as
+      // .catalog.json, so turn its node data back into the claim-id map the
+      // card renderer accepts. A live status response below always
+      // replaces this snapshot.
       function offlineReadiness() {
         var node = document.getElementById('dossierx-graph');
         if (!node) { return {}; }
