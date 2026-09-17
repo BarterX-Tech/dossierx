@@ -2906,11 +2906,14 @@ body.shell-body {
 }
 
 .theme-control button {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: transparent;
   color: var(--muted);
-  font: 12px var(--font-sans);
+  font: 13px/16px var(--font-sans);
   padding: 3px 7px;
   cursor: pointer;
 }
@@ -2921,10 +2924,60 @@ body.shell-body {
   background: var(--accent-bg);
 }
 
-.sidebar-footer-stamp {
-  font-family: var(--font-sans);
-  font-size: 11px;
+/* Freshness (reference-rules.md §10 / 02-reading-view-default.md §4.17):
+   elapsed time computed client-side by system-record.js's enhanceTimestamp
+   from data-generated-at, never a baked-in timestamp (R10.1/R10.4); the
+   phrase becomes "Live" outright under `dossierx serve` (R10.5, read off
+   the reachability probe's own body.comments-live signal). Fresh and
+   Ageing (< 24h, 1-7d) share one neutral presentation; Stale (> 7d) is the
+   only band that takes colour (R10.2), via the --stale modifier
+   enhanceTimestamp toggles. */
+/* Third and final retry attempt: 02 §3/§4.17 (node 1EZ-0 inside the facet
+   panel 8P-0) and reference-rules.md R10.1 ("the right-rail footer") place
+   this block in the RIGHT facet panel, not the left sidebar. It moved —
+   system-record.js's renderToc() now builds it as the last child of
+   #systemFacetToc (.facet-toc), reading data-generated-at off #sidebar
+   instead of shell.html emitting it inline in the old sidebar-footer.
+   margin-top: auto is what pins it to the bottom of .facet-toc's flex
+   column while .facet-toc__list scrolls above it. */
+.freshness-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: auto;
+  padding: 14px 8px 20px;
+  border-top: 1px solid var(--border);
 }
+
+.freshness-footer__line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted);
+  font: 500 12px/16px var(--font-sans);
+}
+
+.freshness-footer__icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--faint);
+}
+
+.freshness-footer__caption {
+  margin: 0;
+  color: var(--faint);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.freshness-footer--stale .freshness-footer__line,
+.freshness-footer--stale .freshness-footer__icon {
+  color: var(--status-draft, #976600);
+}
+
+.freshness-footer--stale .freshness-footer__line { font-weight: 600; }
 
 .nav-toggle, .nav-overlay {
   display: none;
@@ -3337,69 +3390,43 @@ body.shell-body {
   padding: 20px 18px 18px;
 }
 
-.system-panel-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--card-bg);
-  color: var(--muted);
-  cursor: pointer;
-  transition: border-color 150ms ease-out, color 150ms ease-out, background-color 150ms ease-out;
-}
+/* ---- focus mode (reference-rules.md §11: R11.1-R11.6) --------------------
+   R11.1 replaces BOTH of the engine's independent per-rail toggles — this
+   one (id="sidebarCollapseToggle", body.system-sidebar-collapsed) and the
+   facet TOC's (renderToc's injected .system-panel-toggle--toc,
+   body.system-toc-collapsed, removed below at .facet-toc) — with the one
+   control system-record.js's bindFocusControl renders inside every module
+   head (.focus-group, inside .system-record-head__metric) and toggles via
+   html[data-focus="on"]. Nothing named .system-panel-toggle survives this
+   lane: it had exactly these two consumers and both are gone (see
+   learnings/deadcode/L2.md).
 
-.system-panel-toggle:hover {
-  border-color: color-mix(in srgb, var(--accent) 62%, var(--border));
-  background: var(--accent-bg);
-  color: var(--ink);
-}
-
-.system-panel-toggle__chevron {
-  width: 15px;
-  height: 15px;
-  transition: transform 180ms ease-out;
-}
-
-.system-panel-toggle--sidebar {
-  position: absolute;
-  top: 16px;
-  right: 9px;
-}
-
-.sidebar-header .top { padding-right: 28px; }
-
+   Scoped to (min-width: 861px) because the rails it hides do not exist
+   below that width by construction — a phone never had them (the M1 rule
+   collapses both into an off-canvas drawer/sheet at the SAME 860px
+   boundary), so a focus rule below it would have nothing to hide
+   (03-reading-view-focus-mode.md §2, "WHY MOBILE HAS NO FOCUS CONTROL"). */
 @media (min-width: 861px) {
-  .sidebar,
-  .content-area { transition: width 180ms ease-out, padding 180ms ease-out; }
+  html[data-focus="on"] .sidebar,
+  html[data-focus="on"] .facet-toc { display: none; }
+}
 
-  body.system-sidebar-collapsed .sidebar {
-    width: 44px;
-    min-width: 44px;
-    max-width: 44px;
-    overflow: hidden;
-  }
-
-  body.system-sidebar-collapsed .sidebar-header {
-    padding: 10px 6px;
-    border-bottom: 0;
-  }
-
-  body.system-sidebar-collapsed .sidebar-header .top,
-  body.system-sidebar-collapsed #nav,
-  body.system-sidebar-collapsed #expandAllToggle,
-  body.system-sidebar-collapsed .sidebar-footer,
-  body.system-sidebar-collapsed .system-sidebar-resizer { display: none; }
-
-  body.system-sidebar-collapsed .system-panel-toggle--sidebar {
-    position: static;
-  }
-
-  body.system-sidebar-collapsed .system-panel-toggle--sidebar .system-panel-toggle__chevron {
-    transform: rotate(180deg);
+/* R11.3: the freed width goes to the evidence, not the prose — the page
+   grows to 1140px (docs/design/tokens.md §Open decisions: board 11 states
+   this for both the desktop card column and its 1140px-wide header, and
+   .claim-body's own 760px cap, L3's, is untouched either way). Scoped
+   exactly like the Build-order reclaim immediately below (same
+   `screen and (min-width: 1181px)` floor, same reasoning: outrank the
+   tablet/phone .content-area rules only where the rail being reclaimed
+   actually exists, and stay off the print cascade, whose own
+   `.content-area { padding: 0 }` already reclaims everything). It composes
+   with that rule rather than fighting it: both set the SAME 42px right
+   padding, so viewing Build order while focused does not double-reclaim. */
+@media screen and (min-width: 1181px) {
+  html[data-focus="on"] .content-area {
+    max-width: 1140px;
+    margin-inline: auto;
+    padding-right: 42px;
   }
 }
 
@@ -3430,18 +3457,21 @@ body.shell-body {
 .top h1 {
   margin-top: 1px;
   color: var(--ink);
-  font-size: 15px;
-  font-weight: 720;
-  letter-spacing: -.015em;
+  font-size: 19px;
+  line-height: 24px;
+  font-weight: 600;
+  letter-spacing: -.01em;
 }
 
 .eyebrow {
   max-width: 160px;
   margin-top: 3px;
   color: var(--faint);
-  font-size: 8.5px;
-  line-height: 1.45;
-  letter-spacing: .11em;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 #nav {
@@ -3531,14 +3561,15 @@ body.shell-body {
 #dxgOpen,
 .sec-tab {
   display: flex;
-  min-height: 35px;
+  align-items: center;
+  min-height: 32px;
   margin: 1px 0;
-  padding: 8px 10px;
+  padding: 7px 10px;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius);
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 18px;
 }
 
 #dxgOpen:hover,
@@ -3547,11 +3578,36 @@ body.shell-body {
   color: var(--ink);
 }
 
+/* Retry fix 5: 02 §4.4 gives every sidebar module row a right-ranged claim
+   count (IBM Plex Mono 11/14, --color-faint at rest, --color-accent
+   active, width: 16px). margin-left: auto pushes it to the row's right
+   edge without a justify-content change that would also move the
+   all-locked padlock icon (.dx-icon--lock) this same row can carry. */
+.sec-tab__count {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 16px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  text-align: right;
+}
+
+/* docs/design/tokens.md §Open decisions / 02-reading-view-default.md §9.11:
+   navigation is --color-accent (the engine's --link, navy), never
+   --accent-bg (the engine's LOCKED green) — --accent-bg here would say
+   "this module is approved", which is not what an active nav row means.
+   The measured figure is 9% light / 14% dark; only 9% ships in both modes
+   here — see the comment on .facet-toc__item.on below for why the dark
+   figure cannot be a separate rule in this engine today. */
 .sec-tab.on {
-  background: var(--accent-bg);
-  box-shadow: inset 2px 0 0 var(--accent);
-  color: var(--ink);
-  font-weight: 650;
+  background: color-mix(in srgb, var(--link) 9%, transparent);
+  box-shadow: inset 2px 0 0 var(--link);
+  color: var(--link);
+  font-weight: 600;
+}
+
+.sec-tab.on .sec-tab__count {
+  color: var(--link);
 }
 
 .nav-group-label {
@@ -3593,10 +3649,6 @@ body.shell-body {
   transition: padding 180ms ease-out;
 }
 
-@media (min-width: 1181px) {
-  body.system-toc-collapsed .content-area { padding-right: 86px; }
-}
-
 /* The Build order tab reclaims the 282px right rail .content-area reserves
    for the facet TOC, which renderToc hides on this tab, so the widest
    diagram on the page is not laid out beside a blank gutter. Scoped to
@@ -3614,7 +3666,8 @@ body.shell-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 22px;
-  align-items: start;
+  /* 02-reading-view-default.md §3: the header row is align-items: end. */
+  align-items: end;
   margin: 0 0 24px;
   padding: 38px 0 24px;
   border-bottom: 1px solid var(--border-strong, #aab5c7);
@@ -3623,38 +3676,150 @@ body.shell-body {
 .system-record-head h2 {
   margin: 0;
   color: var(--ink);
-  font-size: clamp(28px, 4vw, 42px);
-  font-weight: 560;
-  letter-spacing: -.04em;
-  line-height: 1.06;
+  /* Retry fix 1: 02 §4.7 / 03 §4.1 measure this title at a literal 28/34,
+     weight 600 (mobile 24/30) — a fixed size, not a fluid clamp between
+     --text-h1 and --text-display. docs/design/LANES.md's residual-token
+     table assigns --text-h1 (28px) and --tracking-display to this rule;
+     --text-display (40px) is a surface that is actually 40px elsewhere,
+     not this rule's ceiling. The 34px leading is off the --text-h1 scale
+     step (28/36), so it stays a per-component literal per tokens.md. */
+  font-size: var(--text-h1, 28px);
+  line-height: 34px;
+  font-weight: 600;
+  letter-spacing: var(--tracking-display, -.02em);
 }
 
-.system-record-head__summary {
-  max-width: 660px;
-  margin: 11px 0 0;
-  color: var(--muted);
-  font-size: 14px;
+/* Retry fix 2: 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)" — a mono
+   eyebrow sits 6px above the title; addModuleHeaders (system-record.js)
+   emits it as the module's 1-based index of the module count. The old
+   .system-record-head__summary ("N claims across N record sections.")
+   is removed: it appears on no 02/03 board, and the counts it stated are
+   already carried by the eyebrow and the "N of M locked" metric. */
+.system-record-head__eyebrow {
+  margin: 0 0 6px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
+/* 02 §4.7/§9.13: the metric is "a sentence with one number pulled out",
+   not a label — the numeral alone is bold, the phrase drops "claims", and
+   a 6px confirmation bar sits beside it (a fact already read, not a gauge:
+   06px tall, no text of its own). Restructured to a flex row (was a
+   right-aligned block) so the one Focus control (R11.1, reference-rules.md
+   §11) can sit after it, past a hairline divider, in the same cluster —
+   .focus-group / .focus-toggle below, rendered by system-record.js's
+   addModuleHeaders / bindFocusControl. */
 .system-record-head__metric {
-  min-width: 120px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding-top: 6px;
   color: var(--muted);
-  font: 11px/1.4 var(--font-sans);
-  text-align: right;
+  font: 13px/16px var(--font-sans);
 }
 
 .system-record-head__metric strong {
-  display: inline;
   color: var(--ink);
-  font-weight: 720;
+  font-weight: 600;
 }
+
+.system-record-head__bar {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 80px;
+  height: 6px;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--border);
+  overflow: clip;
+}
+
+.system-record-head__bar-fill {
+  display: block;
+  height: 100%;
+  /* tokens.md §1: --color-locked -> the engine's --accent. The bar is a
+     confirmation of the "N of M locked" phrase, so it takes the same
+     status colour the numeral's approval state does — never --link. */
+  background: var(--accent);
+}
+
+/* ---- the one Focus control (reference-rules.md §11, R11.1) --------------
+   Wrapper carries only the separation from the metric before it; every
+   geometry/fill value lives on .focus-toggle itself (02 §4.8's own
+   distinction between its two-child group and the button box). */
+.focus-group {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 10px;
+  margin-left: 6px;
+}
+
+.focus-divider {
+  width: 1px;
+  height: 16px;
+  flex-shrink: 0;
+  background: var(--border);
+}
+
+.focus-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 28px;
+  padding-inline: 11px;
+  border: 1px solid var(--border);
+  /* Off-scale per tokens.md §5 Open decisions ("off-scale radii stay as
+     per-component literals") — measured 7px, not 4 (--radius-sm) or 8
+     (--radius-md). */
+  border-radius: 7px;
+  background: var(--card-bg);
+  color: var(--muted);
+  font: 500 13px/16px var(--font-sans);
+  cursor: pointer;
+}
+
+.focus-toggle:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); }
+
+.focus-toggle__icon { width: 13px; height: 13px; flex-shrink: 0; }
+
+.focus-toggle__hint {
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+}
+
+/* Active state: the same tint-plus-border language the active nav row
+   uses above — --link at low alpha with a full-strength label — because
+   both say "this is on" (02 §4.8 / R11.4). */
+.focus-toggle[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--link) 22%, transparent);
+  background: color-mix(in srgb, var(--link) 9%, transparent);
+  color: var(--link);
+}
+
+.focus-toggle[aria-pressed="true"] .focus-toggle__hint { color: var(--link); }
+
+/* The measured dark figures (40%/14%, vs. light's 22%/9%) are NOT
+   reproduced here for the same reason .facet-toc__item.on's comment gives
+   above: TestStyleCSSModeAndPrintStructure/ExactlyOneScreenScopedDarkQuery
+   pins exactly one dark-OS-preference block in the file and
+   LEARNINGS.md's standing rule 2 forbids a third dark block outright.
+   Flagged in learnings/inbox/L2.md. */
+
+/* R11.4: the control is keyboard-primary by design — use the engine's
+   existing focus-visible treatment (style.css's `:where(button, select,
+   summary, a):focus-visible` rule already covers it) rather than a new
+   ring for this one button. Hidden below 861px inside the shared
+   `@media (max-width: 860px)` chrome container this lane owns (OD1) — see
+   `.focus-group { display: none; }` there: mobile never had the rails
+   this control hides, so the control itself would be a lie there. */
 
 .sub-nav {
   position: sticky;
   z-index: 8;
   top: 0;
-  gap: 23px;
+  gap: 26px;
   margin: 0 0 24px;
   padding: 0;
   border-bottom-color: var(--border);
@@ -3662,19 +3827,47 @@ body.shell-body {
 }
 
 .subtab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   min-height: 44px;
-  padding: 13px 0 10px;
+  padding: 13px 0 11px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 18px;
 }
 
 .subtab:hover { color: var(--ink); }
 
+/* Self-found while verifying 02 §4.9's facet tab strip (coverage check,
+   retry fix 8): the selected underline/label used --accent, the engine's
+   LOCKED green (tokens.md's --color-locked), where 02 §4.9 measures
+   --color-accent — the engine's --link, navy, navigation-only per
+   tokens.md §Open decisions / G2 ("never invert link/lock"). Also added
+   the mono claim count (6F-0/6I-0) the strip carries per facet, absent
+   until now, using the same .sec-tab__count this lane already gives the
+   sidebar module row. */
 .subtab.on {
-  border-bottom-color: var(--accent);
-  color: var(--ink);
-  font-weight: 700;
+  border-bottom-color: var(--link);
+  color: var(--link);
+  font-weight: 600;
 }
+
+.subtab .sec-tab__count {
+  margin-left: 0;
+  color: var(--faint);
+}
+
+.subtab.on .sec-tab__count {
+  color: var(--link);
+}
+
+/* The "On this facet" trigger (02 §5 M8) system-record.js's
+   ensureFacetTocTrigger appends to the active module's .sub-nav. It is a
+   mobile-only affordance for the facet panel's bottom-sheet form — hidden
+   here, given a shape only inside the lane's own @media (max-width: 860px)
+   block below. */
+.facet-toc-trigger { display: none; }
 
 /* ---- Build order tab (.bo-*) --------------------------------------------
    The viewer's build order is a top-level tab of its own (#dossierx-build-order, a
@@ -3884,11 +4077,14 @@ body.shell-body {
 }
 
 .facet-toc {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   z-index: 9;
   top: 28px;
   right: 18px;
   width: 236px;
+  height: calc(100vh - 56px);
   max-height: calc(100vh - 56px);
   border-left: 1px solid var(--border);
   background: var(--paper);
@@ -3923,41 +4119,11 @@ body.shell-body {
   color: var(--ink);
 }
 
-.facet-toc__head .system-panel-toggle {
-  flex: 0 0 auto;
-  width: 28px;
-  height: 28px;
-  margin: 0 0 -4px;
-}
-
-.system-panel-toggle--toc .system-panel-toggle__chevron { transform: rotate(180deg); }
-
-body.system-toc-collapsed .facet-toc {
-  width: 44px;
-  border-left: 0;
-  background: transparent;
-}
-
-body.system-toc-collapsed .facet-toc__head {
-  justify-content: center;
-  padding: 4px;
-  border-bottom: 0;
-}
-
-body.system-toc-collapsed .facet-toc__identity,
-body.system-toc-collapsed .facet-toc__total,
-body.system-toc-collapsed .facet-toc__list,
-body.system-toc-collapsed .facet-toc__select { display: none; }
-
-body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevron {
-  transform: none;
-}
-
 .facet-toc__head small {
   display: block;
   margin-bottom: 3px;
   color: var(--faint);
-  font: 700 9px/1.2 var(--font-mono);
+  font: 600 11px/14px var(--font-sans);
   letter-spacing: .09em;
   text-transform: uppercase;
 }
@@ -4004,8 +4170,20 @@ body.system-toc-collapsed .system-panel-toggle--toc .system-panel-toggle__chevro
 .facet-toc__item > span { color: var(--faint); font: 9px/1.45 var(--font-mono); }
 .facet-toc__item > strong { font-size: 11px; font-weight: 520; line-height: 1.38; }
 .facet-toc__item:hover { background: var(--hover-bg, rgba(125, 137, 154, .08)); color: var(--ink); }
-.facet-toc__item.on { background: var(--accent-bg); box-shadow: inset 2px 0 0 var(--accent); color: var(--ink); }
-.facet-toc__item.on > span { color: var(--accent); }
+/* Same navigation-tint correction as .sec-tab.on above (tokens.md §Open
+   decisions, 02 §9.11): --link, not the LOCKED-green --accent-bg. The
+   measured dark figure is 14%, a stronger mix than light's 9% — NOT
+   reproduced here. internal/render/theme_tokens_test.go
+   TestStyleCSSModeAndPrintStructure/ExactlyOneScreenScopedDarkQuery pins
+   exactly one `@media screen and (prefers-color-scheme: dark)` block in
+   the whole file (the palette's own), and LEARNINGS.md's standing rule 2
+   forbids a lane adding a third dark block outright; a component rule
+   cannot legally differ between modes by any route this engine currently
+   offers. Flagged in learnings/inbox/L2.md as a dependency: either a
+   coordinator-landed twin or accepting one flat percentage in both
+   modes, which is what ships today. */
+.facet-toc__item.on { background: color-mix(in srgb, var(--link) 9%, transparent); box-shadow: inset 2px 0 0 var(--link); color: var(--ink); }
+.facet-toc__item.on > span { color: var(--link); }
 
 .facet-claim-controls {
   display: flex;
@@ -4840,36 +5018,53 @@ code {
 @media (min-width: 861px) and (max-width: 1180px) {
   .content-area { padding: 0 34px 76px; }
 
+  /* At this tier .facet-toc floats as a fixed corner popover instead of
+     reserving .content-area padding (unlike the >=1181px tier, where the
+     base rule's 282px right padding does that job). 02 §4.7 / 03 §3 draw
+     the head as one space-between row at every desktop width, so nothing
+     in the head's own grid may be charged for the popover's width — not
+     the whole head (that wraps the identity column at 1000px) and not the
+     metric row alone (the metric's `auto` track still absorbs a margin,
+     which is exactly what "retry fix 4" got wrong: it charged the reserve
+     to the head's grid instead of moving the popover off the head's band).
+     The popover is bottom-anchored below the head/facet-strip band
+     instead, so it no longer competes with the head for space at all. */
+
   .facet-toc {
+    display: block;
     z-index: 12;
-    top: 10px;
+    top: auto;
+    bottom: 16px;
     right: 12px;
     width: min(260px, calc(100vw - var(--system-record-sidebar-width, 270px) - 58px));
+    height: auto;
+    max-height: calc(100dvh - 32px);
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--card-bg);
   }
 
+  /* R11.1 removed the collapse toggle this corner-head trick existed to
+     show (formerly .system-panel-toggle--toc, injected by renderToc — see
+     learnings/deadcode/L2.md). With no toggle to keep visible, the
+     identity/count stay in normal flow instead of collapsing to a 40px
+     absolute box, and the <select> below is this tier's whole facet
+     navigation surface. The freshness block (R10.1/02 §4.17) has no room
+     in this compact popover form — it stays a desktop-rail feature; states
+     to render lists it against the >=1181px rail, not this tier's select. */
   .facet-toc__disclosure,
-  .facet-toc__list { display: none; }
+  .facet-toc__list,
+  .facet-toc .freshness-footer { display: none; }
   .facet-toc__head {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    justify-content: flex-end;
-    width: 40px;
-    padding: 6px;
-    border: 0;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
   }
-  .facet-toc__head > :not(.system-panel-toggle) { display: none; }
   .facet-toc__select {
     display: block;
     width: 100%;
     min-height: 40px;
-    padding: 7px 46px 7px 10px;
+    padding: 7px 10px;
     border: 0;
-    border-radius: 6px;
     background: var(--card-bg);
     color: var(--ink);
     font: 650 11px var(--font-sans);
@@ -4895,60 +5090,108 @@ code {
 
   .sidebar { width: min(310px, calc(100vw - 42px)); min-width: 0; max-width: none; }
   .system-sidebar-resizer { display: none; }
-  .system-panel-toggle--sidebar { display: none; }
-  .sidebar-header .top { padding-right: 0; }
 
+  /* 02 §5 M1/M8 and §4.18 (node 4XR-0): the facet panel becomes a bottom
+     sheet opened from an "On this facet" trigger at the right end of the
+     facet tab strip, closed by default. Landed this attempt (third and
+     final): a fixed, always-visible corner popover (retry fix 8's own
+     interim shape) has nothing to sit above that it cannot end up
+     overlapping — the app-bar/head band when top-anchored, or arbitrary
+     card content (a comment chip, caught by
+     viewer-tests/live_reload_test.go TestReloadSecondFacetChipOpensThread)
+     when bottom-anchored. A sheet that is absent from layout until a
+     reader opens it has no such collision to have. The trigger
+     (.facet-toc-trigger, system-record.js's ensureFacetTocTrigger) is
+     injected into the active module's own .sub-nav, one lane-owned
+     selector this pass adds no new file for. */
   .facet-toc {
+    display: none;
     position: fixed;
-    z-index: 35;
-    top: 10px;
-    right: 10px;
-    width: min(248px, calc(100vw - 116px));
-    max-height: calc(100dvh - 20px);
-    border: 1px solid var(--border);
-    border-radius: 7px;
+    z-index: 40;
+    inset: auto 0 0 0;
+    width: auto;
+    height: auto;
+    max-height: 72vh;
+    border: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 14px 14px 0 0;
     background: var(--card-bg);
-    box-shadow: 0 7px 18px var(--shadow-cast, rgba(9, 20, 38, .12));
+    box-shadow: 0 -8px 24px var(--shadow-cast, rgba(9, 20, 38, .18));
   }
 
-  .facet-toc__disclosure,
-  .facet-toc__list { display: none; }
-  .facet-toc__head {
-    position: absolute;
-    z-index: 1;
-    top: 0;
-    right: 0;
-    justify-content: flex-end;
-    width: 40px;
-    padding: 5px;
-    border: 0;
-  }
-  .facet-toc__head > :not(.system-panel-toggle) { display: none; }
-  .facet-toc__select {
+  body.facet-toc-open .facet-toc { display: flex; }
+
+  .facet-toc__disclosure { display: none; }
+  .facet-toc__list {
     display: block;
-    width: 100%;
-    min-height: 38px;
-    padding: 7px 46px 7px 10px;
-    border: 0;
-    border-radius: 7px;
-    background: var(--card-bg);
-    color: var(--ink);
-    font: 650 11px var(--font-sans);
+    max-height: none;
+    flex: 1 1 auto;
   }
+  .facet-toc .freshness-footer { display: none; }
+  .facet-toc__head {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .facet-toc__select { display: none; }
+
+  .facet-toc-trigger {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    margin-left: auto;
+    min-height: 44px;
+    padding: 0 4px 0 12px;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font: 500 13px/16px var(--font-sans);
+    white-space: nowrap;
+  }
+
+  .facet-toc-trigger[aria-expanded="true"] { color: var(--link); }
+
+  .facet-toc-trigger__count {
+    color: var(--faint);
+    font: 11px/14px var(--font-mono);
+  }
+
+  /* A dimming scrim, the same mechanism the comments rail (L6) and the
+     nav drawer already use for a modal sheet at this width, added here in
+     this lane's own selector so it does not touch either of theirs. */
+  .facet-toc-scrim {
+    display: none;
+    position: fixed;
+    z-index: 39;
+    inset: 0;
+    background: rgba(0, 0, 0, .42);
+  }
+
+  body.facet-toc-open .facet-toc-scrim { display: block; }
 
   .system-record-head {
     display: block;
     margin-bottom: 18px;
-    padding: 28px 0 20px;
+    padding: 14px 0;
   }
 
-  .system-record-head h2 { font-size: 31px; }
+  /* Retry fix 1: 02 §4.7 / 03 §4.1 give the mobile title 24/30, not 31px. */
+  .system-record-head h2 { font-size: 24px; line-height: 30px; }
 
+  /* Retry fix 7: 02 §3 mobile / 03 §3 mobile give the metric row
+     padding-top: 6px (already the base rule's value) — the extra 16px
+     margin-top stacked on top of it. Drop it and rely on the base rule. */
   .system-record-head__metric {
-    display: inline-block;
-    margin-top: 16px;
+    display: inline-flex;
     text-align: left;
   }
+
+  /* Retry fix 7: 03 §4.1 gives the mobile progress track 72 x 6, not 80 x 6. */
+  .system-record-head__bar { width: 72px; }
+
+  /* R11.1/03 §5: the Focus control does not render below 861px — the
+     rails it hides do not exist here (M1). */
+  .focus-group { display: none; }
 
   .sub-nav {
     gap: 22px;
@@ -5103,6 +5346,63 @@ code {
     font-size: 16px;
     line-height: 26px;
   }
+}
+
+/* lane: L2 — shell-chrome. New phone-tier block per docs/design/LANES.md
+   OD1, appended for the same reason L3's is: 520px is not one of the three
+   shared containers OD1 assigns line-by-line, so a new mobile rule goes in
+   its own block after the last shared container and before the print doc
+   comment, tagged with this lane comment.
+
+   Binding hand-off from the L3 pilot (docs/design/LANES.md, and restated
+   in this lane's own instructions): .content-area's inline padding must be
+   0 at this tier so the claim card — which L3's own M1/M2 rules above
+   already strip of its radius, side borders and 32px gutter — can actually
+   run full-bleed edge-to-edge (02 §3: "The gutter is 16px and the card has
+   no side margin on mobile... the whole scroll region takes --color-card,
+   edge-to-edge"). Without this, L3's card-level work is inset by whatever
+   .content-area still charges it (learnings/inbox/L3.md item 5). The 16px
+   gutter itself is not lost: --card-gutter (L3's token, read by the card's
+   own padding-inline) already carries it. */
+@media (max-width: 520px) {
+  .content-area { padding-inline: 0; }
+
+  /* Retry fix 3: the rule above zeroes the gutter for every child of
+     .content-area, not just the card — 02 §3 gives the module head
+     "padding: 14px 16px" and the claim-controls row the same 16px inline
+     inset, with content width 390 - 32 = 358px. Restore it on every
+     .content-area child that is not the full-bleed card: the module head,
+     the facet claim-controls row, and render.newGroup's own in-content
+     .section-heading break (unowned by any lane per docs/design/LANES.md,
+     but flush at x=0 as a direct side effect of the rule above — fixed
+     here, in this lane's own appended block, rather than by editing
+     .section-heading's own rule at style.css:2935). */
+  .system-record-head,
+  .facet-claim-controls,
+  .section-heading {
+    padding-inline: 16px;
+  }
+
+  /* Third-attempt fix (verifier item 4): the 860 container's own .sub-nav
+     rule carries `margin: 0 -16px 21px; padding: 0 16px` to cancel a
+     .content-area gutter that existed at that tier. That gutter is zeroed
+     here, so the negative inline margin now runs the strip 16px past the
+     screen edge with no gutter left to cancel — 02 §3 mobile (node 4R0-0)
+     gives the facet tab strip `padding-inline: 16px`, not a flush edge.
+     Cancel only the inline margin; the strip keeps its own 16px padding
+     and its horizontal scroll (`overflow-x: auto`, `.sub-nav` above). */
+  .sub-nav { margin-inline: 0; }
+
+  /* Exception: the Build order tab holds mermaid diagrams, not claim
+     cards, and viewer-tests/build_order_tab_test.go
+     TestBuildOrderTabWideDiagramScrollsInsideItsBlock already pins a 16px
+     gutter on both sides at this tier (mirroring the same
+     `body:has(.build-order-section:not([hidden]))` scoping the desktop
+     282px-reclaim precedent above uses) — M1's full-bleed card is not this
+     tab's shape. Tracks are NOT excepted: a track's owned claims render as
+     whole cards (shell.html's own comment on `.track-section`) and get the
+     same full-bleed treatment a module's claims do. */
+  body:has(.build-order-section:not([hidden])) .content-area { padding-inline: 16px; }
 }
 
 /* ---- print — THE @media print block ------------------------------------

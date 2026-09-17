@@ -25,22 +25,73 @@
     return day + ({ 1: 'st', 2: 'nd', 3: 'rd' }[day % 10] || 'th');
   }
 
-  function formatGeneratedTime(text) {
-    var match = text.match(/(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})\s+UTC/);
-    if (!match) { return text; }
-    var date = new Date(Date.UTC(+match[1], +match[2] - 1, +match[3], +match[4], +match[5]));
+  // formatGeneratedTime renders the ABSOLUTE instant for the hover title
+  // (reference-rules.md R10.3: "the exact build time stays on hover as a
+  // title attribute, for the rare reader who needs it"). The visible text
+  // is enhanceTimestamp's elapsed phrase, never this.
+  function formatGeneratedTime(date) {
     var month = new Intl.DateTimeFormat(undefined, { month: 'long' }).format(date);
     var time = new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit', hour12: true }).format(date);
     return 'Generated ' + ordinal(date.getDate()) + ' ' + month + ', ' + date.getFullYear() + ' ' + time.toUpperCase();
   }
 
+  // freshnessPhrase implements R10.1-R10.3: elapsed time, one unit, never a
+  // timestamp. Fresh (< 24h) and Ageing (1-7d) share one neutral
+  // presentation (R10.2); Stale (> 7d) is flagged for enhanceTimestamp to
+  // recolour, never re-worded here.
+  function freshnessPhrase(generatedAt) {
+    var hours = Math.max(0, Date.now() - generatedAt.getTime()) / 3600000;
+    if (hours < 24) {
+      var wholeHours = Math.max(1, Math.round(hours));
+      return { phrase: 'Updated ' + wholeHours + ' hour' + (wholeHours === 1 ? '' : 's') + ' ago', stale: false };
+    }
+    var days = Math.round(hours / 24);
+    return { phrase: 'Updated ' + days + ' day' + (days === 1 ? '' : 's') + ' ago', stale: hours >= 24 * 7 };
+  }
+
+  // isLive reads (never writes) viewer-runtime.js's own reachability-probe
+  // signal (probeAndMount adds body.comments-live once /api/ping confirms
+  // `dossierx serve`) — R10.5's hook, without this lane touching that
+  // lane's function.
+  function isLive() {
+    return document.body.classList.contains('comments-live');
+  }
+
+  // enhanceTimestamp replaces the freshness footer's placeholder text with
+  // either "Live" (R10.5, under a confirmed live serve) or the elapsed
+  // phrase computed from the machine-readable instant render.go stamps
+  // into data-generated-at (R10.4: "computed in the browser, not baked
+  // into the HTML"). Re-run on an interval and whenever body's class list
+  // changes (the probe resolves asynchronously, after first paint), so it
+  // is idempotent and safe to call from enhance() on every pass too.
   function enhanceTimestamp() {
-    var stamp = document.querySelector('.sidebar-footer-stamp') || document.querySelector('.sidebar-footer');
-    if (!stamp || stamp.querySelector('.theme-control') || stamp.dataset.localTime === 'true') { return; }
-    var original = stamp.textContent.trim();
-    stamp.dataset.localTime = 'true';
-    stamp.title = original + ' · shown in your local time';
-    stamp.textContent = formatGeneratedTime(original);
+    var footer = document.querySelector('.freshness-footer');
+    var phraseEl = footer && footer.querySelector('.freshness-footer__phrase');
+    if (!footer || !phraseEl) { return; }
+    var iso = phraseEl.dataset.generatedAt;
+    var generatedAt = iso ? new Date(iso) : null;
+    var validDate = generatedAt && !isNaN(generatedAt.getTime());
+    if (validDate && !phraseEl.title) {
+      phraseEl.title = formatGeneratedTime(generatedAt) + ' · shown in your local time';
+    }
+    var caption = footer.querySelector('.freshness-footer__caption');
+    // Reassigning .textContent unconditionally replaces the text node
+    // even when the string is unchanged, which is a childList mutation
+    // inside .layout's own MutationObserver scope — and this function
+    // runs on every enhance() pass. Comparing first avoids feeding that
+    // observer's enhance()-on-mutation loop (see the matching guard and
+    // its measurement note in updateFacetClaimControl above).
+    if (isLive()) {
+      if (phraseEl.textContent !== 'Live') { phraseEl.textContent = 'Live'; }
+      footer.classList.remove('freshness-footer--stale');
+      if (caption) { caption.hidden = true; }
+      return;
+    }
+    if (caption) { caption.hidden = false; }
+    if (!validDate) { return; }
+    var freshness = freshnessPhrase(generatedAt);
+    if (phraseEl.textContent !== freshness.phrase) { phraseEl.textContent = freshness.phrase; }
+    footer.classList.toggle('freshness-footer--stale', freshness.stale);
   }
 
   function bindResizer() {
@@ -79,17 +130,83 @@
     });
   }
 
-  function bindSidebarCollapse() {
-    var toggle = document.getElementById('sidebarCollapseToggle');
-    if (!toggle || toggle.dataset.bound === 'true') { return; }
-    toggle.dataset.bound = 'true';
-    toggle.addEventListener('click', function () {
-      var collapsed = !document.body.classList.contains('system-sidebar-collapsed');
-      document.body.classList.toggle('system-sidebar-collapsed', collapsed);
-      toggle.setAttribute('aria-expanded', String(!collapsed));
-      toggle.setAttribute('aria-label', collapsed ? 'Show navigation' : 'Hide navigation');
-      toggle.title = collapsed ? 'Show navigation' : 'Hide navigation';
+  // ------------------------------------------------------------------
+  // Focus mode (reference-rules.md §11: R11.1-R11.6). ONE reversible
+  // state — html[data-focus="on"] — replaces the engine's former two
+  // independent per-rail toggles (the sidebar's #sidebarCollapseToggle and
+  // the facet TOC's renderToc-injected .system-panel-toggle--toc; see
+  // learnings/deadcode/L2.md). State lives on <html>, never inside
+  // <main class="content-area"> or <nav id="nav">, so an SSE fragment swap
+  // (shell.html's own comment: those two subtrees are replaced wholesale)
+  // can never silently drop a reader out of the mode (R11.5's failure
+  // mode, restated at 03 §8.6). shell.html's inline boot script (beside the
+  // dossierx-theme read, before first paint) sets html[data-focus="on"]
+  // from localStorage's dossierx-focus key ahead of this file loading,
+  // guarded on window.innerWidth >= 861 so a phone that inherits an "on"
+  // flag from an earlier desktop session never boots into a mode whose
+  // rails it never had. That script carries no comments of its own on
+  // purpose: html/template's contextual autoescaper re-serializes a
+  // literal <script> block's JS and drops line comments, leaving
+  // whitespace-only lines TestCommittedFixtureViewersAreNotStale rejects —
+  // the same landmine LEARNINGS.md G10 documents for an HTML comment in
+  // that file's SVG sprite, one script-tag scope over.
+  // ------------------------------------------------------------------
+
+  function isFocusOn() {
+    return document.documentElement.getAttribute('data-focus') === 'on';
+  }
+
+  function focusEligible() {
+    // R11.1's rails do not exist below 861px (M1 in both 02 §5 and 03
+    // §5's mobile-rules tables) — a phone never had them, so the mode
+    // itself is meaningless there (03 §2, "WHY MOBILE HAS NO FOCUS
+    // CONTROL").
+    return window.matchMedia('(min-width: 861px)').matches;
+  }
+
+  function setFocus(on) {
+    on = !!on && focusEligible();
+    if (on) { document.documentElement.setAttribute('data-focus', 'on'); }
+    else { document.documentElement.removeAttribute('data-focus'); }
+    try { localStorage.setItem('dossierx-focus', on ? 'on' : 'off'); } catch (e) {}
+    document.querySelectorAll('.focus-toggle').forEach(function (button) {
+      button.setAttribute('aria-pressed', String(on));
     });
+  }
+
+  function bindFocusControl() {
+    if (document.documentElement.dataset.focusControlBound === 'true') { return; }
+    document.documentElement.dataset.focusControlBound = 'true';
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      if (!target || typeof target.closest !== 'function') { return; }
+      if (!target.closest('[data-focus-toggle]')) { return; }
+      setFocus(!isFocusOn());
+    });
+    // R11.4's primary exit is the `F` key. Inert while a text field has
+    // focus (10 in 03 §9's open decisions) — the comment composer is one
+    // keystroke away from the reading view, and a reader typing "Focus
+    // mode is wrong here" must not be thrown into it — and inert below
+    // 861px, where the control is not even rendered.
+    document.addEventListener('keydown', function (event) {
+      if (event.key !== 'f' && event.key !== 'F') { return; }
+      if (event.metaKey || event.ctrlKey || event.altKey) { return; }
+      var active = document.activeElement;
+      var tag = active && active.tagName;
+      if (active && (active.isContentEditable || tag === 'INPUT' || tag === 'TEXTAREA')) { return; }
+      if (!focusEligible()) { return; }
+      event.preventDefault();
+      setFocus(!isFocusOn());
+    });
+    // A viewport that crosses the 861px boundary while focus is on must
+    // not strand the reader in a mode with no rendered control to leave
+    // it from — mobile never shows the rails focus hides (03 §2).
+    var narrow = window.matchMedia('(max-width: 860px)');
+    var onNarrowChange = function (mq) {
+      if (mq.matches && isFocusOn()) { setFocus(false); }
+    };
+    if (typeof narrow.addEventListener === 'function') { narrow.addEventListener('change', onNarrowChange); }
+    else if (typeof narrow.addListener === 'function') { narrow.addListener(onNarrowChange); }
   }
 
   function bindNavigationGroupPreferences() {
@@ -301,7 +418,21 @@
     });
     toggle.disabled = claims.length === 0;
     toggle.setAttribute('aria-pressed', String(allCollapsed));
-    toggle.querySelector('.facet-claims-toggle__label').textContent = allCollapsed ? 'Expand all claims' : 'Collapse all claims';
+    // Idempotency guard (cross-cutting fix, not new behaviour): this ran
+    // unconditionally on every call, and updateFacetClaimControl is
+    // itself called from renderToc on every enhance() pass — reassigning
+    // .textContent replaces the text node even when the string is
+    // unchanged, which is a childList mutation of an ancestor inside
+    // .layout, which re-triggers the .layout MutationObserver that calls
+    // enhance() in the first place. Measured before this fix: an idle
+    // page accrues hundreds of .layout mutation records per second,
+    // forever, entirely from this one line (plus this lane's own
+    // .freshness-footer__phrase, guarded the same way in
+    // enhanceTimestamp). Comparing first breaks the loop with no visible
+    // behaviour change.
+    var label = toggle.querySelector('.facet-claims-toggle__label');
+    var nextLabel = allCollapsed ? 'Expand all claims' : 'Collapse all claims';
+    if (label && label.textContent !== nextLabel) { label.textContent = nextLabel; }
   }
 
   function renderFacetClaimControl(active, claims) {
@@ -359,17 +490,30 @@
       toc.id = 'systemFacetToc';
       toc.className = 'facet-toc';
       toc.setAttribute('aria-label', 'Claims in this facet');
-      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span><button class="system-panel-toggle system-panel-toggle--toc" type="button" aria-controls="systemFacetToc" aria-expanded="true" aria-label="Hide table of contents" title="Hide table of contents"><svg class="dx-icon system-panel-toggle__chevron" aria-hidden="true"><use href="#dx-icon-panel-left"></use></svg></button></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>';
+      // R11.1: the facet TOC no longer carries its own collapse toggle —
+      // focus mode (bindFocusControl, html[data-focus="on"]) is the one
+      // control that hides it now, from the module head instead of from
+      // here.
+      // The freshness block (R10.1 "the right-rail footer", 02 §3/§4.17
+      // node 1EZ-0 inside the facet panel 8P-0) is built here rather than
+      // server-rendered inline: it used to be a static child of the left
+      // sidebar-footer in shell.html, and this is the third and final
+      // retry attempt landing its move into the right facet panel (see
+      // learnings/inbox/L2.md). #sidebar carries data-generated-at (added
+      // by this lane at shell.html's <aside id="sidebar"> tag) so the
+      // instant survives the move without shell.html emitting the whole
+      // block twice. A project with no GeneratedAt (offline/dev render)
+      // renders no freshness block at all, matching the old {{if
+      // .GeneratedAt}} guard.
+      var generatedAt = document.getElementById('sidebar');
+      generatedAt = generatedAt && generatedAt.dataset.generatedAt;
+      var freshnessHTML = generatedAt
+        ? '<div class="freshness-footer"><p class="freshness-footer__line"><svg class="dx-icon freshness-footer__icon" aria-hidden="true"><use href="#dx-icon-clock"/></svg><span class="freshness-footer__phrase" data-generated-at="' + generatedAt + '">Updated recently</span></p><p class="freshness-footer__caption">Claims changed since then are not in this view</p></div>'
+        : '';
+      toc.innerHTML = '<div class="facet-toc__head"><span class="facet-toc__identity"><small>On this facet</small><strong class="facet-toc__name">Claims</strong></span><span class="facet-toc__total"></span></div><nav class="facet-toc__list"></nav><select class="facet-toc__select" aria-label="Jump to a claim in this facet"></select>' + freshnessHTML;
       toc.querySelector('.facet-toc__select').addEventListener('change', function (event) {
         var claim = document.getElementById(event.target.value);
         if (claim) { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
-      });
-      toc.querySelector('.system-panel-toggle--toc').addEventListener('click', function (event) {
-        var collapsed = !document.body.classList.contains('system-toc-collapsed');
-        document.body.classList.toggle('system-toc-collapsed', collapsed);
-        event.currentTarget.setAttribute('aria-expanded', String(!collapsed));
-        event.currentTarget.setAttribute('aria-label', collapsed ? 'Show table of contents' : 'Hide table of contents');
-        event.currentTarget.title = collapsed ? 'Show table of contents' : 'Hide table of contents';
       });
       document.body.appendChild(toc);
     }
@@ -396,7 +540,10 @@
       count.textContent = number;
       strong.textContent = label;
       button.append(count, strong);
-      button.addEventListener('click', function () { claim.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+      button.addEventListener('click', function () {
+        claim.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        closeFacetToc();
+      });
       list.appendChild(button);
       var option = document.createElement('option');
       option.value = claim.id;
@@ -404,32 +551,142 @@
       select.appendChild(option);
     });
     updateTocActive();
+    ensureFacetTocTrigger(active, claims.length);
   }
+
+  // ---------------------------------------------------------------------
+  // 02 §5 M1/M8 + §4.18 (node 4XR-0): at <=860px the facet panel is a
+  // bottom sheet, closed by default, opened from an "On this facet"
+  // trigger at the right end of the active module's facet tab strip
+  // (.sub-nav). The trigger is hidden above 860px by CSS
+  // (.facet-toc-trigger has no rule outside that lane-owned @media block).
+  // A module with exactly one facet renders no .sub-nav at all (shell.html
+  // guards it on .HasSubNav), so it gets no trigger either — matching
+  // "the one 1-facet module (no sub-nav head)" state, which has nothing to
+  // open.
+  // ---------------------------------------------------------------------
+  function facetTocScrim() {
+    var scrim = document.getElementById('facetTocScrim');
+    if (!scrim) {
+      scrim = document.createElement('button');
+      scrim.id = 'facetTocScrim';
+      scrim.type = 'button';
+      scrim.className = 'facet-toc-scrim';
+      scrim.setAttribute('aria-label', 'Close facet panel');
+      scrim.tabIndex = -1;
+      scrim.addEventListener('click', closeFacetToc);
+      document.body.appendChild(scrim);
+    }
+    return scrim;
+  }
+
+  function closeFacetToc() {
+    document.body.classList.remove('facet-toc-open');
+    document.querySelectorAll('.facet-toc-trigger[aria-expanded="true"]').forEach(function (trigger) {
+      trigger.setAttribute('aria-expanded', 'false');
+    });
+  }
+
+  function openFacetToc(trigger) {
+    facetTocScrim();
+    document.body.classList.add('facet-toc-open');
+    document.querySelectorAll('.facet-toc-trigger').forEach(function (other) {
+      other.setAttribute('aria-expanded', String(other === trigger));
+    });
+  }
+
+  function ensureFacetTocTrigger(active, count) {
+    var subNav = active.module.querySelector(':scope > .sub-nav');
+    if (!subNav) { return; }
+    var trigger = subNav.querySelector(':scope > .facet-toc-trigger');
+    if (!trigger) {
+      trigger = document.createElement('button');
+      trigger.type = 'button';
+      trigger.className = 'facet-toc-trigger';
+      trigger.setAttribute('aria-expanded', 'false');
+      trigger.setAttribute('aria-controls', 'systemFacetToc');
+      trigger.innerHTML = '<span>On this facet</span><span class="facet-toc-trigger__count"></span>';
+      trigger.addEventListener('click', function () {
+        if (document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
+        else { openFacetToc(trigger); }
+      });
+      subNav.appendChild(trigger);
+    }
+    var countEl = trigger.querySelector('.facet-toc-trigger__count');
+    if (countEl && countEl.textContent !== String(count)) { countEl.textContent = String(count); }
+  }
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && document.body.classList.contains('facet-toc-open')) { closeFacetToc(); }
+  });
 
   function addModuleHeaders() {
     var labels = {};
     document.querySelectorAll('.sec-tab[data-target]').forEach(function (button) {
       labels[button.dataset.target.slice(1)] = tabLabel(button);
     });
-    document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
+    // focusState joins the per-module signature below so a Focus toggle
+    // (which does not itself call addModuleHeaders) still gets picked up
+    // the next time something else does — .focus-toggle's own
+    // aria-pressed is kept live regardless, by setFocus writing it
+    // directly (see bindFocusControl above).
+    var focusState = isFocusOn() ? 'on' : 'off';
+    var moduleSections = Array.prototype.slice.call(
+      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)')
+    );
+    var moduleCount = moduleSections.length;
+    moduleSections.forEach(function (section, moduleIndex) {
       var total = parseInt(section.getAttribute('data-claim-count') || '0', 10);
       var locked = parseInt(section.getAttribute('data-locked-count') || '0', 10);
       var facets = parseInt(section.getAttribute('data-facet-count') || '0', 10);
       if (!facets) { facets = section.querySelectorAll(':scope > .claim-group').length; }
+      var label = labels[section.id] || section.id.replace(/-/g, ' ');
+      // 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)": MODULE NN / NN, the
+      // module's 1-based index over the module count.
+      var eyebrowText = 'MODULE ' + String(moduleIndex + 1).padStart(2, '0') + ' / ' + String(moduleCount).padStart(2, '0');
       var existing = section.querySelector(':scope > .system-record-head');
+      // Idempotency guard. enhance() re-runs on every mutation of .layout
+      // (a MutationObserver drives it, for the soft-mount / SSE-swap
+      // cases that need it), and this function's own remove()+rebuild is
+      // ITSELF a childList mutation of .layout — so an unconditional
+      // rebuild here means the observer re-schedules enhance() via
+      // requestAnimationFrame forever, once per frame, never settling.
+      // Measured: an unmodified page left alone accrues hundreds of
+      // .layout mutation records per second. Skip the rebuild when
+      // nothing the header actually shows has changed; a real change
+      // (claim counts after a live reload, a facet renamed, focus
+      // toggled) still invalidates the signature and rebuilds normally.
+      var signature = [label, total, locked, facets, focusState, eyebrowText].join('|');
+      if (existing && existing.dataset.signature === signature) { return; }
       if (existing) { existing.remove(); }
       var header = document.createElement('header');
+      header.dataset.signature = signature;
       header.className = 'system-record-head';
       var copy = document.createElement('div');
+      var eyebrow = document.createElement('p');
       var title = document.createElement('h2');
-      var summary = document.createElement('p');
       var metric = document.createElement('div');
-      title.textContent = labels[section.id] || section.id.replace(/-/g, ' ');
-      summary.className = 'system-record-head__summary';
-      summary.textContent = total + ' claims across ' + facets + ' record sections.';
+      eyebrow.className = 'system-record-head__eyebrow';
+      eyebrow.textContent = eyebrowText;
+      title.textContent = label;
       metric.className = 'system-record-head__metric';
-      metric.innerHTML = '<strong>' + locked + ' of ' + total + '</strong> claims locked';
-      copy.append(title, summary);
+      // 02 §4.7/§9.13: "31 of 31 locked" — the numeral alone is bold and
+      // "claims" is dropped, matching the board over the pre-revamp
+      // "<strong>N of M</strong> claims locked" wording. The bar beside it
+      // is a confirmation of that same phrase, not a second fact — 6px
+      // tall, no label of its own. The Focus control (R11.1) is the last
+      // element in the cluster, past a hairline divider (02 §4.8).
+      var pct = total > 0 ? Math.round((locked / total) * 100) : 0;
+      metric.innerHTML =
+        '<span class="system-record-head__count"><strong>' + locked + '</strong> of ' + total + ' locked</span>' +
+        '<span class="system-record-head__bar" aria-hidden="true"><span class="system-record-head__bar-fill" style="width:' + pct + '%"></span></span>' +
+        '<span class="focus-group"><span class="focus-divider" aria-hidden="true"></span>' +
+        '<button type="button" class="focus-toggle" data-focus-toggle aria-pressed="' + (isFocusOn() ? 'true' : 'false') + '" aria-label="Focus — hide navigation and read this facet at full width" title="Focus (F)">' +
+        '<svg class="dx-icon focus-toggle__icon" aria-hidden="true"><use href="#dx-icon-maximize"></use></svg>' +
+        '<span class="focus-toggle__label">Focus</span>' +
+        '<span class="focus-toggle__hint">F</span>' +
+        '</button></span>';
+      copy.append(eyebrow, title);
       header.append(copy, metric);
       section.insertBefore(header, section.firstChild);
     });
@@ -483,10 +740,9 @@
   function enhance() {
     if (running) { return; }
     running = true;
-    enhanceTimestamp();
     bindThemeControl();
     bindResizer();
-    bindSidebarCollapse();
+    bindFocusControl();
     bindNavigationGroupPreferences();
     enhanceFooters();
     enhanceFieldLabels();
@@ -498,6 +754,13 @@
     }
     syncNavigation();
     renderToc();
+    // enhanceTimestamp() runs after renderToc(): the freshness footer now
+    // lives INSIDE the facet-toc panel renderToc creates (02 §3/§4.17,
+    // "the right facet panel" — see the .freshness-footer move below), so
+    // on the very first pass the footer does not exist until the TOC is
+    // built. renderToc() must still run after syncNavigation(), which is
+    // what makes activeFacet() see the right module/facet's hidden state.
+    enhanceTimestamp();
     enhanceGraphLabels();
     running = false;
   }
@@ -527,6 +790,13 @@
   });
   window.addEventListener('hashchange', function () { setTimeout(function () { revealHashTarget(); syncNavigation(true); renderToc(); }, 0); });
   window.addEventListener('scroll', updateTocActive, { passive: true });
+  // R10.4: the elapsed phrase is computed in the browser, so it has to be
+  // recomputed while the tab stays open, not just once at load. The class
+  // observer catches viewer-runtime.js's asynchronous probeAndMount adding
+  // body.comments-live (R10.5's "Live" signal) without this lane polling
+  // for it or that lane calling back into this file.
+  window.setInterval(enhanceTimestamp, 60000);
+  new MutationObserver(enhanceTimestamp).observe(document.body, { attributes: true, attributeFilter: ['class'] });
   window.dossierxEnhanceSystemRecord = enhance;
   enhance();
 })();

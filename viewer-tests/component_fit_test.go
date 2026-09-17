@@ -51,7 +51,12 @@ func TestSoftMountLockMetricUsesCatalogAttrs(t *testing.T) {
 	if !evalBool(t, ctx, `document.querySelector('#widget').getAttribute('data-claim-count') === '80' && document.querySelector('#widget').getAttribute('data-locked-count') === '0' && document.querySelector('#widget').getAttribute('data-facet-count') === '2'`) {
 		t.Fatal("soft-mounted module must stamp catalog lock counts on the section")
 	}
-	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 80') && document.querySelector('.system-record-head__summary').textContent.includes('80 claims across 2 record sections')`) {
+	// Re-pinned: 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)" replaces the
+	// removed .system-record-head__summary ("N claims across N record
+	// sections") — a mono "MODULE NN / NN" eyebrow, not a count sentence.
+	// This project has exactly one module, so the eyebrow reads
+	// "MODULE 01 / 01".
+	if !evalBool(t, ctx, `document.querySelector('.system-record-head__metric').textContent.includes('0 of 80') && document.querySelector('.system-record-head__eyebrow').textContent.trim() === 'MODULE 01 / 01'`) {
 		t.Fatal("header metric must read catalog attrs, not live cards")
 	}
 	unmounted := evalBool(t, ctx, `document.querySelectorAll('[data-dossierx-surface-host] .claim').length === 0`)
