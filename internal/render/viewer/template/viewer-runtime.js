@@ -366,7 +366,10 @@
       var rail = document.getElementById('commentsPanel');
       var railBody = document.getElementById('commentsRailBody');
       var railTitle = document.getElementById('commentsRailTitle');
+      var railSubtitle = document.getElementById('commentsRailSubtitle');
+      var railCount = document.getElementById('commentsRailCount');
       var railClose = document.getElementById('commentsRailClose');
+      var composerSlot = document.getElementById('commentsComposerSlot');
       var commentsOverlay = document.getElementById('commentsOverlay');
       var toastEl = document.getElementById('commentsToast');
       var toastTimer = null;
@@ -466,9 +469,15 @@
         });
         return out;
       }
+      // 14 §4.6 D14.7 / OD14.3: a THIRD, independent fact from --open/--empty/
+      // --resolved — this claim's rail is the one currently showing, distinct
+      // from "has open threads" (a claim can have open threads with its rail
+      // shut, or an open rail on a claim with zero threads). Driven here
+      // rather than folded into --open so the two facts never collide.
       function setChipExpanded(claimID, expanded) {
         chipsFor(claimID).forEach(function (chip) {
           chip.setAttribute('aria-expanded', String(expanded));
+          chip.classList.toggle('comment-chip--active', expanded);
         });
       }
       function updateChips(claimID, openCount, totalCount) {
@@ -530,6 +539,45 @@
         updateChips(claimID, open, total);
       }
 
+      // claimTitleFor reads the human title off the claim's own head line
+      // (.k[data-claim-id] > .label > .k-title) rather than the slug, for the
+      // rail's subtitle (OD14.5, board rule 47E-0: "the rail always names the
+      // claim it belongs to"). Falls back to the claim id itself when no
+      // matching head is on the page (e.g. a chip inside a collapsed overview
+      // whose canonical copy id was stripped elsewhere in the DOM tree).
+      function claimTitleFor(claimID) {
+        var head = document.querySelector('.k[data-claim-id="' + cssAttr(claimID) + '"]');
+        var titleEl = head && head.querySelector('.k-title');
+        return (titleEl && titleEl.textContent.trim()) || claimID;
+      }
+
+      // ---- elapsed time (R10.1/R10.3/R10.4) ----------------------------
+      // Computed client-side from the machine `datetime`, never baked into the
+      // generated HTML — a relative phrase baked at generation time is wrong
+      // forever. One unit, never two; the exact stamp stays on the element's
+      // own datetime/title attributes for a reader who needs it.
+      function elapsedPhrase(iso) {
+        var then = new Date(iso).getTime();
+        if (isNaN(then)) { return ''; }
+        var mins = Math.max(0, Math.floor((Date.now() - then) / 60000));
+        if (mins < 60) { return (mins <= 1 ? '1 minute ago' : mins + ' minutes ago'); }
+        var hours = Math.floor(mins / 60);
+        if (hours < 24) { return (hours === 1 ? '1 hour ago' : hours + ' hours ago'); }
+        var days = Math.floor(hours / 24);
+        return (days === 1 ? '1 day ago' : days + ' days ago');
+      }
+      function decorateElapsedTime(timeEl) {
+        var iso = timeEl.getAttribute('datetime');
+        if (!iso) { return; }
+        var phrase = elapsedPhrase(iso);
+        if (!phrase) { return; }
+        timeEl.textContent = phrase;
+        if (!timeEl.hasAttribute('title')) { timeEl.setAttribute('title', iso); }
+      }
+      function decorateElapsedTimes(root) {
+        (root || document).querySelectorAll('time.comment-time[datetime]').forEach(decorateElapsedTime);
+      }
+
       // ---- panel open / close -----------------------------------------
       function commentPanelOpen() {
         return document.body.classList.contains('comments-open');
@@ -539,7 +587,13 @@
         setDrawer(false); // mutual exclusion: opening comments closes the nav
         document.body.classList.add('comments-open');
         if (commentsOverlay) { commentsOverlay.hidden = false; }
-        if (railTitle) { railTitle.textContent = 'Comments — ' + claimID; }
+        // OD14.5: two lines, "Comments" / "on <title>" — the slug the pre-
+        // revamp single line carried ('Comments — ' + claimID) is available on
+        // title= hover only, on the rail element itself.
+        if (railTitle) { railTitle.textContent = 'Comments'; }
+        if (railSubtitle) { railSubtitle.textContent = 'on ' + claimTitleFor(claimID); }
+        if (rail) { rail.title = claimID; }
+        if (railCount) { railCount.textContent = ''; } // cleared here; renderPanel below fills it in
         if (rail) {
           rail.hidden = false;
           // Desktop: a non-modal complementary right rail. Mobile: a modal
@@ -576,6 +630,15 @@
         }
       }
 
+      // buildReadOnlyNote renders R-J.6/14a state 3's explanation into the
+      // composer's slot: "a control with nowhere to POST is not disabled, it
+      // is not built" (note 46N-0) — so this re-tenants the slot rather than
+      // showing a disabled composer.
+      function buildReadOnlyNote() {
+        return textEl('p', 'comments-readonly-note',
+          'Read only. This viewer was opened as a file, so there is nothing to write back to.');
+      }
+
       // Read-only (file://): clone the baked-in server-rendered .comments-panel
       // threads for this claim into the rail. Cloning a server node is DOM copy,
       // not innerHTML parsing, so it stays within the escaping contract; no
@@ -596,6 +659,16 @@
           list.appendChild(textEl('p', 'comments-empty', 'No comments.'));
         }
         railBody.appendChild(list);
+        decorateElapsedTimes(list);
+        if (composerSlot) {
+          composerSlot.textContent = '';
+          composerSlot.appendChild(buildReadOnlyNote());
+        }
+        if (railCount) {
+          var openN = list.querySelectorAll(':scope > .comment-thread:not(.comment-thread--resolved)').length;
+          var totalN = list.querySelectorAll('.comment-thread').length;
+          railCount.textContent = String(openN > 0 ? openN : totalN);
+        }
       }
 
       // Serve mode: fetch the authoritative thread list and rebuild the rail with
@@ -633,7 +706,10 @@
           if (currentClaimID !== claimID) { return; }
           railBody.textContent = '';
           railBody.appendChild(textEl('p', 'comments-error', 'Could not load comments.'));
-          railBody.appendChild(buildComposer(claimID));
+          if (composerSlot) {
+            composerSlot.textContent = '';
+            composerSlot.appendChild(buildComposer(claimID));
+          }
         });
       }
 
@@ -651,7 +727,9 @@
       function captureDirtyDrafts() {
         var drafts = emptyDrafts();
         if (!railBody) { return drafts; }
-        var comp = railBody.querySelector('.comment-composer .comment-composer-input');
+        // The root composer now lives in #commentsComposerSlot (R-J.5: pinned,
+        // a sibling of the scrolling body), not inside railBody.
+        var comp = composerSlot && composerSlot.querySelector('.comment-composer .comment-composer-input');
         if (comp && comp.value.trim()) { drafts.composer = comp.value; }
         railBody.querySelectorAll('.comment-reply-composer .comment-composer-input').forEach(function (ta) {
           if (!ta.value.trim()) { return; }
@@ -688,8 +766,19 @@
         // plus buildComposer below are what they find.
         syncEmptyLine(list, open.length > 0 || resolved.length > 0);
         railBody.appendChild(list);
-        railBody.appendChild(buildComposer(claimID, drafts.composer));
+        decorateElapsedTimes(list);
+        if (composerSlot) {
+          composerSlot.textContent = '';
+          composerSlot.appendChild(buildComposer(claimID, drafts.composer));
+        }
         updateChips(claimID, open.length, threads.length);
+        // R-J.4: the sheet header's mono count is a slot the rail leaves
+        // empty (CSS keeps it display:none above 860px) — "shown" mirrors the
+        // chip's own open-else-total rule (updateChips above).
+        if (railCount) {
+          var shown = open.length > 0 ? open.length : threads.length;
+          railCount.textContent = String(shown);
+        }
         // (part a) Now the whole panel is attached to the DOM, size every textarea
         // that carries a RESTORED draft (composer, reply composers, re-opened edit
         // forms) to fit — a programmatic .value fires no 'input' event, and
@@ -717,13 +806,17 @@
       }
 
       // growRestoredDrafts grows every non-empty composer/reply/edit textarea now
-      // attached under railBody to fit its content. It is idempotent and cheap
+      // attached under the rail to fit its content. It is idempotent and cheap
       // (a handful of textareas), and safe on an empty rail (querySelectorAll on a
-      // missing railBody is guarded).
+      // missing element is guarded). The root composer lives in
+      // #commentsComposerSlot (R-J.5), a sibling of railBody, so both are
+      // walked rather than railBody alone.
       function growRestoredDrafts() {
-        if (!railBody) { return; }
-        railBody.querySelectorAll('.comment-composer-input').forEach(function (ta) {
-          if (ta.value) { growNow(ta); }
+        [railBody, composerSlot].forEach(function (root) {
+          if (!root) { return; }
+          root.querySelectorAll('.comment-composer-input').forEach(function (ta) {
+            if (ta.value) { growNow(ta); }
+          });
         });
       }
 
@@ -756,8 +849,13 @@
         var wrap = el('div', 'comment-message');
         var meta = el('div', 'comment-meta');
         meta.appendChild(textEl('span', 'comment-role comment-role--' + m.author, m.author));
-        var time = textEl('time', 'comment-time', m.created);
+        // R10.1/R10.3/R10.4: elapsed, one unit, computed here rather than
+        // baked — decorateElapsedTime reads the datetime it sets below and
+        // leaves the absolute stamp reachable on title= for the rare reader
+        // who needs it.
+        var time = el('time', 'comment-time');
         time.setAttribute('datetime', m.created);
+        decorateElapsedTime(time);
         meta.appendChild(time);
         if (m.edited) { meta.appendChild(textEl('span', 'comment-edited', '(edited)')); }
         if (mounted && m.author === 'human') {
@@ -785,14 +883,28 @@
         return wrap;
       }
 
+      // OD14.8: Resolve is a labelled pill (tick + word) and Reply a bare
+      // accent label, replacing the pre-revamp icon-only button with no Reply
+      // control at all. Reply does not build a second composer — the reply
+      // composer for an open thread is already mounted (buildThread below) so
+      // fix3_test.go's TestReplyRepopulatesOnResolvedConflict can wait for it
+      // without a click — it only focuses that existing field.
       function buildThreadActions(claimID, t) {
         var row = el('div', 'comment-thread-actions');
         if (t.status === 'open') {
-          row.appendChild(iconButton('comment-action comment-resolve', 'check', 'Resolve thread', function () {
+          row.appendChild(labelledButton('comment-action comment-resolve', 'check', 'Resolve', 'Resolve thread', function () {
             doResolve(claimID, t.id);
           }));
+          var reply = textEl('button', 'comment-action-text comment-reply-trigger', 'Reply');
+          reply.type = 'button';
+          reply.addEventListener('click', function () {
+            var art = threadNode(t.id);
+            var ta = art && art.querySelector('.comment-reply-composer .comment-composer-input');
+            if (ta) { ta.focus(); }
+          });
+          row.appendChild(reply);
         } else {
-          row.appendChild(iconButton('comment-action comment-reopen', 'rotate-ccw', 'Reopen thread', function () {
+          row.appendChild(labelledButton('comment-action comment-reopen', 'rotate-ccw', 'Reopen', 'Reopen thread', function () {
             doReopen(claimID, t.id);
           }));
         }
@@ -805,6 +917,14 @@
         b.setAttribute('aria-label', label);
         b.appendChild(dxIcon(icon));
         b.addEventListener('click', onClick);
+        return b;
+      }
+
+      // labelledButton is iconButton plus a visible text label (R-J.7's
+      // Resolve/Reopen pill: tick or rotate-ccw glyph + word).
+      function labelledButton(cls, icon, text, ariaLabel, onClick) {
+        var b = iconButton(cls, icon, ariaLabel, onClick);
+        b.appendChild(textEl('span', 'comment-action-label', text));
         return b;
       }
 
@@ -823,6 +943,10 @@
         ta.addEventListener('input', function () { growNow(ta); });
       }
 
+      // R-J.5: field on its own row, then a footer row (caption left, Comment
+      // button right, per the OD14.7 caption below) — the root composer's own
+      // shape, distinct from the plain textarea+button row a reply/edit form
+      // uses (buildReplyComposer, startEdit).
       function buildComposer(claimID, draftValue) {
         var form = el('form', 'comment-composer');
         var ta = el('textarea', 'comment-composer-input');
@@ -831,10 +955,16 @@
         ta.placeholder = 'Add a comment…';
         autoGrow(ta);
         if (draftValue) { ta.value = draftValue; } // (part a) restore an unsent draft across a rebuild; buildPanel's post-attach growRestoredDrafts() sizes it to fit (scrollHeight needs layout, so it can't grow while detached here)
+        var footer = el('div', 'comment-composer-footer');
+        // OD14.7: serve-only copy — a static export mounts no composer at all
+        // for this caption to sit beside (renderPanelReadOnly never calls
+        // buildComposer), so it never needs its own file://-guard here.
+        footer.appendChild(textEl('span', 'comment-composer-caption', 'Saved to the served viewer, not to this file.'));
         var btn = textEl('button', 'comment-composer-submit', 'Comment');
         btn.type = 'submit';
+        footer.appendChild(btn);
         form.appendChild(ta);
-        form.appendChild(btn);
+        form.appendChild(footer);
         form.addEventListener('submit', function (e) {
           e.preventDefault();
           var body = ta.value.trim();
