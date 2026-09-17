@@ -1099,14 +1099,9 @@ func runPrintLightPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixtur
 // and an innerText equality assertion runs over the clipped element FIRST, so a
 // pixel difference can only be a painting difference.
 //
-// ONE REGION IS ALLOWED TO DIFFER, and only because it is the fix this branch
-// makes: the fenced-code blocks. Removing the pill border from `pre > code`
-// repaints the 1px seam rows and shifts the glyphs 1px left (the inline box
-// loses its left border), and both effects are confined to the <pre>'s own
-// border box. So instead of a tolerance — which would accept a difference
-// anywhere — every differing pixel must fall INSIDE a fenced block, and if the
-// clip contains a fenced block at least one pixel MUST differ. A fixture with
-// no fenced block stays pixel-identical, exactly as before.
+// The freeze and the fresh render must paint identically. Fenced-block boxes
+// are still collected so a layout shift of those regions fails as geometry,
+// not as a silent paint delta.
 func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 	shot := func(url string) (png []byte, text string, w, h float64, fenced []fencedBox) {
 		ctx := browserContextFor(t, browser)
@@ -1263,10 +1258,6 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 // half-open on the max edges.
 type fencedBox struct{ X0, Y0, X1, Y1 int }
 
-func (b fencedBox) contains(x, y int) bool {
-	return x >= b.X0 && x < b.X1 && y >= b.Y0 && y < b.Y1
-}
-
 func sameBoxes(a, b []fencedBox) bool {
 	if len(a) != len(b) {
 		return false
@@ -1277,63 +1268,6 @@ func sameBoxes(a, b []fencedBox) bool {
 		}
 	}
 	return true
-}
-
-// comparePNGsOutside is comparePNGs partitioned by a set of allowed boxes: it
-// reports how many differing pixels fall inside them and how many fall outside,
-// and the first coordinate of an OUTSIDE difference (the one a failure needs to
-// name). maxDelta is over every differing pixel, inside or out.
-func comparePNGsOutside(t *testing.T, a, b []byte, boxes []fencedBox) (inside, outside, maxDelta, firstX, firstY int) {
-	t.Helper()
-	ia, _, err := image.Decode(bytes.NewReader(a))
-	if err != nil {
-		t.Fatalf("decode the pre-change screenshot: %v", err)
-	}
-	ib, _, err := image.Decode(bytes.NewReader(b))
-	if err != nil {
-		t.Fatalf("decode the current screenshot: %v", err)
-	}
-	ra, rb := ia.Bounds(), ib.Bounds()
-	if ra != rb {
-		t.Fatalf("the two screenshots are %v and %v; a comparison would only cover their overlap", ra, rb)
-	}
-	if ra.Dx() == 0 || ra.Dy() == 0 {
-		t.Fatalf("the screenshots are empty (%v); a pixel comparison would be vacuous", ra)
-	}
-	firstX, firstY = -1, -1
-	for y := ra.Min.Y; y < ra.Max.Y; y++ {
-		for x := ra.Min.X; x < ra.Max.X; x++ {
-			r1, g1, b1, a1 := ia.At(x, y).RGBA()
-			r2, g2, b2, a2 := ib.At(x, y).RGBA()
-			if r1 == r2 && g1 == g2 && b1 == b2 && a1 == a2 {
-				continue
-			}
-			allowed := false
-			for _, bx := range boxes {
-				if bx.contains(x, y) {
-					allowed = true
-					break
-				}
-			}
-			if allowed {
-				inside++
-			} else {
-				outside++
-				if firstX < 0 {
-					firstX, firstY = x, y
-				}
-			}
-			for _, d := range []int{int(r1) - int(r2), int(g1) - int(g2), int(b1) - int(b2), int(a1) - int(a2)} {
-				if d < 0 {
-					d = -d
-				}
-				if d>>8 > maxDelta {
-					maxDelta = d >> 8
-				}
-			}
-		}
-	}
-	return inside, outside, maxDelta, firstX, firstY
 }
 
 // comparePNGs decodes two PNGs and reports the number of differing pixels, the
