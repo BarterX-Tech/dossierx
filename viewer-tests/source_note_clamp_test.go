@@ -239,16 +239,16 @@ func clampTabWithProbe(t *testing.T, p *project, noObserver bool) context.Contex
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own
-		// <details class="claim-sources">, so a source note's clamp control
-		// only becomes measurable once that door is force-opened too. Both
-		// doors share one name="claim-footer-<id>" accordion group (R09.2),
-		// which — per the HTML details-exclusivity algorithm — closes a
-		// sibling the moment ANOTHER member of the group opens, including
-		// when `open` is set by script rather than by a click. Stripping
-		// `name` first lets this suite force every door open AT ONCE to
-		// measure every note, which is a test concern only: the group stays
-		// intact for an actual reader.
-		runCDP(t, ctx, chromedp.Evaluate(
+	// <details class="claim-sources">, so a source note's clamp control
+	// only becomes measurable once that door is force-opened too. Both
+	// doors share one name="claim-footer-<id>" accordion group (R09.2),
+	// which — per the HTML details-exclusivity algorithm — closes a
+	// sibling the moment ANOTHER member of the group opens, including
+	// when `open` is set by script rather than by a click. Stripping
+	// `name` first lets this suite force every door open AT ONCE to
+	// measure every note, which is a test concern only: the group stays
+	// intact for an actual reader.
+	runCDP(t, ctx, chromedp.Evaluate(
 		`document.querySelectorAll('details.claim-links, details.claim-sources').forEach(function (d) { d.removeAttribute('name'); d.open = true; })`, nil))
 	settleFor(t, ctx, noteDecidedExpr)
 	if !noObserver {
@@ -311,16 +311,16 @@ func clampTab(t *testing.T, p *project) context.Context {
 	runCDP(t, ctx, chromedp.Navigate(url))
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own
-		// <details class="claim-sources">, so a source note's clamp control
-		// only becomes measurable once that door is force-opened too. Both
-		// doors share one name="claim-footer-<id>" accordion group (R09.2),
-		// which — per the HTML details-exclusivity algorithm — closes a
-		// sibling the moment ANOTHER member of the group opens, including
-		// when `open` is set by script rather than by a click. Stripping
-		// `name` first lets this suite force every door open AT ONCE to
-		// measure every note, which is a test concern only: the group stays
-		// intact for an actual reader.
-		runCDP(t, ctx, chromedp.Evaluate(
+	// <details class="claim-sources">, so a source note's clamp control
+	// only becomes measurable once that door is force-opened too. Both
+	// doors share one name="claim-footer-<id>" accordion group (R09.2),
+	// which — per the HTML details-exclusivity algorithm — closes a
+	// sibling the moment ANOTHER member of the group opens, including
+	// when `open` is set by script rather than by a click. Stripping
+	// `name` first lets this suite force every door open AT ONCE to
+	// measure every note, which is a test concern only: the group stays
+	// intact for an actual reader.
+	runCDP(t, ctx, chromedp.Evaluate(
 		`document.querySelectorAll('details.claim-links, details.claim-sources').forEach(function (d) { d.removeAttribute('name'); d.open = true; })`, nil))
 	// The script decides on a ResizeObserver delivery, which lands after the
 	// footers gain a box. Settling on the OUTCOME rather than on a timer means
@@ -483,16 +483,16 @@ func TestSourceNoteControlWorksOverHTTPAndRefresh(t *testing.T) {
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own
-		// <details class="claim-sources">, so a source note's clamp control
-		// only becomes measurable once that door is force-opened too. Both
-		// doors share one name="claim-footer-<id>" accordion group (R09.2),
-		// which — per the HTML details-exclusivity algorithm — closes a
-		// sibling the moment ANOTHER member of the group opens, including
-		// when `open` is set by script rather than by a click. Stripping
-		// `name` first lets this suite force every door open AT ONCE to
-		// measure every note, which is a test concern only: the group stays
-		// intact for an actual reader.
-		runCDP(t, ctx, chromedp.Evaluate(
+	// <details class="claim-sources">, so a source note's clamp control
+	// only becomes measurable once that door is force-opened too. Both
+	// doors share one name="claim-footer-<id>" accordion group (R09.2),
+	// which — per the HTML details-exclusivity algorithm — closes a
+	// sibling the moment ANOTHER member of the group opens, including
+	// when `open` is set by script rather than by a click. Stripping
+	// `name` first lets this suite force every door open AT ONCE to
+	// measure every note, which is a test concern only: the group stays
+	// intact for an actual reader.
+	runCDP(t, ctx, chromedp.Evaluate(
 		`document.querySelectorAll('details.claim-links, details.claim-sources').forEach(function (d) { d.removeAttribute('name'); d.open = true; })`, nil))
 	settleFor(t, ctx, noteDecidedExpr)
 	settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
@@ -509,16 +509,16 @@ func TestSourceNoteControlWorksOverHTTPAndRefresh(t *testing.T) {
 	pollTrue(t, ctx, `document.readyState === 'complete'`)
 	desktopViewport(t, ctx)
 	// Re-pinned for 05 §4.11/R09.5: sources split into its own
-		// <details class="claim-sources">, so a source note's clamp control
-		// only becomes measurable once that door is force-opened too. Both
-		// doors share one name="claim-footer-<id>" accordion group (R09.2),
-		// which — per the HTML details-exclusivity algorithm — closes a
-		// sibling the moment ANOTHER member of the group opens, including
-		// when `open` is set by script rather than by a click. Stripping
-		// `name` first lets this suite force every door open AT ONCE to
-		// measure every note, which is a test concern only: the group stays
-		// intact for an actual reader.
-		runCDP(t, ctx, chromedp.Evaluate(
+	// <details class="claim-sources">, so a source note's clamp control
+	// only becomes measurable once that door is force-opened too. Both
+	// doors share one name="claim-footer-<id>" accordion group (R09.2),
+	// which — per the HTML details-exclusivity algorithm — closes a
+	// sibling the moment ANOTHER member of the group opens, including
+	// when `open` is set by script rather than by a click. Stripping
+	// `name` first lets this suite force every door open AT ONCE to
+	// measure every note, which is a test concern only: the group stays
+	// intact for an actual reader.
+	runCDP(t, ctx, chromedp.Evaluate(
 		`document.querySelectorAll('details.claim-links, details.claim-sources').forEach(function (d) { d.removeAttribute('name'); d.open = true; })`, nil))
 	settleFor(t, ctx, noteDecidedExpr)
 	settleFor(t, ctx, `getComputedStyle(document.querySelectorAll('.claim-source-note')[0].querySelector('.claim-source-note-toggle')).display !== 'none'`)
