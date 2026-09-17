@@ -2800,8 +2800,15 @@ body.shell-body {
    only band that takes colour (R10.2), via the --stale modifier
    enhanceTimestamp toggles. */
 .freshness-footer {
+  /* Retry fix 6: 02 §3/§4.17 place this block in the right facet panel
+     (1EZ-0 inside 8P-0, margin-top: auto, padding: 14px 8px 20px, gap:
+     5px) and reference-rules.md R10.1 calls it "the right-rail footer".
+     This pass keeps it in the left sidebar footer instead — the rail
+     architecture is unchanged this pass, disclosed here and in the lane
+     report per the retry instruction — but brings the block's own padding
+     to the spec's figure. */
   margin-top: 8px;
-  padding-top: 10px;
+  padding: 14px 8px 20px;
   border-top: 1px solid var(--border);
 }
 
@@ -3431,6 +3438,20 @@ body.shell-body {
   color: var(--ink);
 }
 
+/* Retry fix 5: 02 §4.4 gives every sidebar module row a right-ranged claim
+   count (IBM Plex Mono 11/14, --color-faint at rest, --color-accent
+   active, width: 16px). margin-left: auto pushes it to the row's right
+   edge without a justify-content change that would also move the
+   all-locked padlock icon (.dx-icon--lock) this same row can carry. */
+.sec-tab__count {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 16px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  text-align: right;
+}
+
 /* docs/design/tokens.md §Open decisions / 02-reading-view-default.md §9.11:
    navigation is --color-accent (the engine's --link, navy), never
    --accent-bg (the engine's LOCKED green) — --accent-bg here would say
@@ -3443,6 +3464,10 @@ body.shell-body {
   box-shadow: inset 2px 0 0 var(--link);
   color: var(--ink);
   font-weight: 650;
+}
+
+.sec-tab.on .sec-tab__count {
+  color: var(--link);
 }
 
 .nav-group-label {
@@ -3511,25 +3536,31 @@ body.shell-body {
 .system-record-head h2 {
   margin: 0;
   color: var(--ink);
-  /* docs/design/LANES.md's residual-token table names --text-h1 (28px),
-     --text-display (40px) and --tracking-display as needing their first
-     consumer here: the existing fluid clamp's floor and ceiling are those
-     two sizes, spent as the clamp's bounds rather than a fixed size,
-     because 02 §4.7 measures this title at a literal 28/34 — off the
-     --text-h1 scale step (28/36) — and tokens.md's own "off-scale values
-     stay as per-component literals" rule keeps the LEADING a literal below
-     while the two SIZE tokens still gain a real consumer via the clamp. */
-  font-size: clamp(var(--text-h1, 28px), 4vw, var(--text-display, 40px));
-  font-weight: 560;
+  /* Retry fix 1: 02 §4.7 / 03 §4.1 measure this title at a literal 28/34,
+     weight 600 (mobile 24/30) — a fixed size, not a fluid clamp between
+     --text-h1 and --text-display. docs/design/LANES.md's residual-token
+     table assigns --text-h1 (28px) and --tracking-display to this rule;
+     --text-display (40px) is a surface that is actually 40px elsewhere,
+     not this rule's ceiling. The 34px leading is off the --text-h1 scale
+     step (28/36), so it stays a per-component literal per tokens.md. */
+  font-size: var(--text-h1, 28px);
+  line-height: 34px;
+  font-weight: 600;
   letter-spacing: var(--tracking-display, -.02em);
-  line-height: 1.06;
 }
 
-.system-record-head__summary {
-  max-width: 660px;
-  margin: 11px 0 0;
-  color: var(--muted);
-  font-size: 14px;
+/* Retry fix 2: 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)" — a mono
+   eyebrow sits 6px above the title; addModuleHeaders (system-record.js)
+   emits it as the module's 1-based index of the module count. The old
+   .system-record-head__summary ("N claims across N record sections.")
+   is removed: it appears on no 02/03 board, and the counts it stated are
+   already carried by the eyebrow and the "N of M locked" metric. */
+.system-record-head__eyebrow {
+  margin: 0 0 6px;
+  color: var(--faint);
+  font: 11px/14px var(--font-mono);
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 /* 02 §4.7/§9.13: the metric is "a sentence with one number pulled out",
@@ -3656,6 +3687,9 @@ body.shell-body {
 }
 
 .subtab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   min-height: 44px;
   padding: 13px 0 10px;
   color: var(--muted);
@@ -3664,10 +3698,27 @@ body.shell-body {
 
 .subtab:hover { color: var(--ink); }
 
+/* Self-found while verifying 02 §4.9's facet tab strip (coverage check,
+   retry fix 8): the selected underline/label used --accent, the engine's
+   LOCKED green (tokens.md's --color-locked), where 02 §4.9 measures
+   --color-accent — the engine's --link, navy, navigation-only per
+   tokens.md §Open decisions / G2 ("never invert link/lock"). Also added
+   the mono claim count (6F-0/6I-0) the strip carries per facet, absent
+   until now, using the same .sec-tab__count this lane already gives the
+   sidebar module row. */
 .subtab.on {
-  border-bottom-color: var(--accent);
+  border-bottom-color: var(--link);
   color: var(--ink);
   font-weight: 700;
+}
+
+.subtab .sec-tab__count {
+  margin-left: 0;
+  color: var(--faint);
+}
+
+.subtab.on .sec-tab__count {
+  color: var(--link);
 }
 
 /* ---- Build order tab (.bo-*) --------------------------------------------
@@ -4823,9 +4874,16 @@ code {
      before this lane (a short "N of M claims locked" line already sat in
      the same corner), and the wider metric row this lane adds (the
      confirmation bar, the Focus control) reaches far enough to actually
-     overlap the popover, caught probing this exact tier. Reserve the
-     popover's own max width so the header's content stops short of it. */
-  .system-record-head { padding-right: 280px; }
+     overlap the popover, caught probing this exact tier.
+
+     Retry fix 4: reserving the popover's width on the WHOLE head
+     (`padding-right: 280px`) took it off the head's `minmax(0, 1fr)`
+     identity column too — at 1000px wide the identity column wrapped to
+     four lines and the metric+Focus cluster dropped to a second row, a
+     shape no 02 §4.7 board draws (the head is one space-between row at
+     every desktop width). Reserve against the popover on the metric row
+     alone, which is what actually sits under it. */
+  .system-record-head__metric { margin-right: 280px; }
 
   .facet-toc {
     z-index: 12;
@@ -4918,13 +4976,19 @@ code {
     padding: 28px 0 20px;
   }
 
-  .system-record-head h2 { font-size: 31px; }
+  /* Retry fix 1: 02 §4.7 / 03 §4.1 give the mobile title 24/30, not 31px. */
+  .system-record-head h2 { font-size: 24px; line-height: 30px; }
 
+  /* Retry fix 7: 02 §3 mobile / 03 §3 mobile give the metric row
+     padding-top: 6px (already the base rule's value) — the extra 16px
+     margin-top stacked on top of it. Drop it and rely on the base rule. */
   .system-record-head__metric {
     display: inline-flex;
-    margin-top: 16px;
     text-align: left;
   }
+
+  /* Retry fix 7: 03 §4.1 gives the mobile progress track 72 x 6, not 80 x 6. */
+  .system-record-head__bar { width: 72px; }
 
   /* R11.1/03 §5: the Focus control does not render below 861px — the
      rails it hides do not exist here (M1). */
@@ -5103,6 +5167,22 @@ code {
    own padding-inline) already carries it. */
 @media (max-width: 520px) {
   .content-area { padding-inline: 0; }
+
+  /* Retry fix 3: the rule above zeroes the gutter for every child of
+     .content-area, not just the card — 02 §3 gives the module head
+     "padding: 14px 16px" and the claim-controls row the same 16px inline
+     inset, with content width 390 - 32 = 358px. Restore it on every
+     .content-area child that is not the full-bleed card: the module head,
+     the facet claim-controls row, and render.newGroup's own in-content
+     .section-heading break (unowned by any lane per docs/design/LANES.md,
+     but flush at x=0 as a direct side effect of the rule above — fixed
+     here, in this lane's own appended block, rather than by editing
+     .section-heading's own rule at style.css:2935). */
+  .system-record-head,
+  .facet-claim-controls,
+  .section-heading {
+    padding-inline: 16px;
+  }
 
   /* Exception: the Build order tab holds mermaid diagrams, not claim
      cards, and viewer-tests/build_order_tab_test.go

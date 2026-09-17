@@ -80,7 +80,7 @@
             <summary class="system-nav-group__toggle"><span>Modules</span><span class="system-nav-group__count">{{len .ModuleGroups}}</span><svg class="dx-icon system-nav-group__chevron" aria-hidden="true"><use href="#dx-icon-chevron-right"/></svg></summary>
             <div class="system-nav-group__body">
 {{- range .ModuleGroups}}
-                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span>{{if .AllLocked}} <svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</button>
+                <button class="sec-tab" data-target="#{{.ID}}" data-default-target="#{{.FirstFacetID}}"><span class="sec-tab__label">{{.ModuleLabel}}</span><span class="sec-tab__count">{{.ClaimCount}}</span>{{if .AllLocked}} <svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</button>
 {{- end}}
             </div>
           </details>{{if .Tracks}}
@@ -144,7 +144,7 @@
 {{if .HasSubNav}}
               <div class="sub-nav">
 {{range .Facets}}
-                  <button class="subtab" data-target="#{{.ID}}"><span class="sec-tab__label">{{.TabLabel}}</span>{{if .AllLocked}} <svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</button>
+                  <button class="subtab" data-target="#{{.ID}}"><span class="sec-tab__label">{{.TabLabel}}</span><span class="sec-tab__count">{{.ClaimCount}}</span>{{if .AllLocked}} <svg class="dx-icon dx-icon--lock" aria-hidden="true"><use href="#dx-icon-lock"/></svg>{{end}}</button>
 {{end}}
               </div>
 {{end}}

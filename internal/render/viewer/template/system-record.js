@@ -545,12 +545,19 @@
     // aria-pressed is kept live regardless, by setFocus writing it
     // directly (see bindFocusControl above).
     var focusState = isFocusOn() ? 'on' : 'off';
-    document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)').forEach(function (section) {
+    var moduleSections = Array.prototype.slice.call(
+      document.querySelectorAll('.module-section:not(.track-section):not(.build-order-section)')
+    );
+    var moduleCount = moduleSections.length;
+    moduleSections.forEach(function (section, moduleIndex) {
       var total = parseInt(section.getAttribute('data-claim-count') || '0', 10);
       var locked = parseInt(section.getAttribute('data-locked-count') || '0', 10);
       var facets = parseInt(section.getAttribute('data-facet-count') || '0', 10);
       if (!facets) { facets = section.querySelectorAll(':scope > .claim-group').length; }
       var label = labels[section.id] || section.id.replace(/-/g, ' ');
+      // 02 §4.7 row 1 / 02 §6 "Module eyebrow (64-0)": MODULE NN / NN, the
+      // module's 1-based index over the module count.
+      var eyebrowText = 'MODULE ' + String(moduleIndex + 1).padStart(2, '0') + ' / ' + String(moduleCount).padStart(2, '0');
       var existing = section.querySelector(':scope > .system-record-head');
       // Idempotency guard. enhance() re-runs on every mutation of .layout
       // (a MutationObserver drives it, for the soft-mount / SSE-swap
@@ -563,19 +570,19 @@
       // nothing the header actually shows has changed; a real change
       // (claim counts after a live reload, a facet renamed, focus
       // toggled) still invalidates the signature and rebuilds normally.
-      var signature = [label, total, locked, facets, focusState].join('|');
+      var signature = [label, total, locked, facets, focusState, eyebrowText].join('|');
       if (existing && existing.dataset.signature === signature) { return; }
       if (existing) { existing.remove(); }
       var header = document.createElement('header');
       header.dataset.signature = signature;
       header.className = 'system-record-head';
       var copy = document.createElement('div');
+      var eyebrow = document.createElement('p');
       var title = document.createElement('h2');
-      var summary = document.createElement('p');
       var metric = document.createElement('div');
+      eyebrow.className = 'system-record-head__eyebrow';
+      eyebrow.textContent = eyebrowText;
       title.textContent = label;
-      summary.className = 'system-record-head__summary';
-      summary.textContent = total + ' claims across ' + facets + ' record sections.';
       metric.className = 'system-record-head__metric';
       // 02 §4.7/§9.13: "31 of 31 locked" — the numeral alone is bold and
       // "claims" is dropped, matching the board over the pre-revamp
@@ -593,7 +600,7 @@
         '<span class="focus-toggle__label">Focus</span>' +
         '<span class="focus-toggle__hint">F</span>' +
         '</button></span>';
-      copy.append(title, summary);
+      copy.append(eyebrow, title);
       header.append(copy, metric);
       section.insertBefore(header, section.firstChild);
     });
