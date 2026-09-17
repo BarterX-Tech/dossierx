@@ -487,20 +487,14 @@ func writeConformanceLineModified(b *strings.Builder, label, value, modifier str
 	b.WriteString(`</code></p>`)
 }
 
-// writeConformanceMembers renders a set-shaped value as its own flex child
-// (claim-conformance-values) rather than as several sibling <code> elements
-// directly inside the flex row .claim-conformance-line establishes for its
-// 84px key column (06a §4.8): as direct flex items, thirteen small <code>
-// elements each get squeezed towards their shrink-to-fit minimum by the row
-// layout, and overflow-wrap:anywhere then breaks each one mid-word instead
-// of the whole list wrapping normally. One wrapper flex-item lets the
-// comma-joined list wrap as ordinary inline content inside it.
-func writeConformanceMembers(b *strings.Builder, label string, values []string) {
-	writeConformanceMembersModified(b, label, values, "")
-}
-
-// writeConformanceMembersModified is writeConformanceMembers with the same
-// state-modifier hook as writeConformanceLineModified — see its doc comment.
+// writeConformanceMembersModified renders a set-shaped value as its own flex
+// child (claim-conformance-values) rather than as several sibling <code>
+// elements directly inside the flex row .claim-conformance-line establishes
+// for its 84px key column (06a §4.8). As direct flex items, thirteen small
+// <code> elements each get squeezed towards their shrink-to-fit minimum, and
+// overflow-wrap:anywhere then breaks each one mid-word. One wrapper lets the
+// comma-joined list wrap as ordinary inline content. The modifier hook matches
+// writeConformanceLineModified.
 func writeConformanceMembersModified(b *strings.Builder, label string, values []string, modifier string) {
 	b.WriteString(`<p class="claim-conformance-line`)
 	if modifier != "" {

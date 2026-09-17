@@ -1,31 +1,19 @@
 package viewertests
 
-// THE VIEWER LOOKS EXACTLY THE SAME AS IT DID BEFORE IT COULD BE THEMED.
+// AN UNTHEMED PROJECT STAYS ON THE COMMITTED DEFAULT LOOK.
 //
-// The custom-theme work turned ~14 hard-coded literals in style.css into
-// var(--token, <the same literal>) reads. Every one of those edits is supposed
-// to be a no-op for a project that sets no token: the fallback IS the literal
-// that used to be there. "Supposed to" is the operative phrase — a fallback
-// with a typo, a var() placed on a declaration something later overrides, a
-// token read inside a shorthand that resets a sibling property, all render
-// as a page that is subtly not the page that shipped, and no unit test over
-// the CSS source can see it. Only a browser resolving the cascade can.
+// The design-revamp changed the engine default (Inter / Source Serif / IBM Plex
+// Mono, new chrome). The 01b70d0 "pre-theme" HTML is no longer the default a
+// reader gets. This file now freezes THAT default: the committed
+// viewer-tests/testdata/theme-parity/baseline-*.html copies, produced by the
+// engine that landed the revamp, versus a fresh render of the same fixture.
+// Computed style — never a CSSRule's own .style — is read off the same probe
+// table in both, and the maps are diffed in Go.
 //
-// So this file opens TWO documents in the same browser process: the frozen
-// pre-change render (viewer-tests/testdata/theme-parity/baseline-*.html,
-// produced by the binary built from 01b70d0) and a render made by the engine
-// under test, of the same fixture. It then reads COMPUTED STYLE — never a
-// CSSRule's own .style, which reports what an author wrote rather than what a
-// reader gets, and would therefore report "identical" for exactly the class of
-// bug this exists to catch — off the same 28-row probe table in both, and
-// diffs the two maps in Go.
-//
-// WHAT IS EXPECTED TO DIFFER is asserted positively rather than tolerated:
-// `color-scheme` on the root moves from `light` to `light dark`, and under
-// print in a dark OS scheme the whole palette changes (the pre-change sheet
-// let its dark block apply to print; the new one scopes it to `screen and`).
-// A change that is expected has to be SEEN to be a change, or "expected" is
-// just another word for unchecked.
+// A later edit that changes what an unthemed project paints must update the
+// freeze in the same commit. Regenerating the freeze without a visual change
+// is a tautology; regenerating it WITH the visual change is how the snapshot
+// moves.
 //
 // THE BOUNDS, stated because a probe table is a coverage claim:
 //   - Two fixtures (fixture-theme-flat, fixture-basic) x two colour schemes x
@@ -425,11 +413,9 @@ func renderFixtureFresh(t *testing.T, fixture string) string {
 // proof of which engine produced a file.
 var unscopedDarkMediaQuery = regexp.MustCompile(`@media\s*\(prefers-color-scheme:\s*dark\)`)
 
-// baselinePath returns the frozen pre-change render for a fixture and asserts
-// the two guards that make it evidence: it must carry the OLD unconditional
-// colour-scheme pin, and it must not carry any of the fourteen new tokens.
-// Without these, a baseline accidentally regenerated with the current engine
-// would make every comparison below a tautology that passes.
+// baselinePath returns the frozen default-look render for a fixture. The
+// guards prove it is a current-engine snapshot (revamp fonts and screen-scoped
+// dark), not the 01b70d0 pre-theme HTML.
 func baselinePath(t *testing.T, fixture string) string {
 	t.Helper()
 	name := map[string]string{
@@ -460,15 +446,12 @@ func baselinePath(t *testing.T, fixture string) string {
 	// current sheet (the current viewer's remaining unscoped mention is a
 	// matchMedia STRING in the runtime script, which is why this matches on the
 	// `@media` keyword rather than on the feature alone).
-	if n := len(unscopedDarkMediaQuery.FindAllString(body, -1)); n == 0 {
-		t.Fatalf("%s contains no unscoped dark colour-scheme @media block. Only the PRE-CHANGE "+
-			"sheet has one — the engine under test scopes every dark block to `screen and` — so "+
-			"this file is not the pre-change render, and every comparison against it would be a "+
-			"comparison of the current engine with itself", p)
+	if !strings.Contains(body, "--font-serif") {
+		t.Fatalf("%s does not declare --font-serif; it is not the design-revamp default freeze", p)
 	}
-	if strings.Contains(body, "--code-bg") {
-		t.Fatalf("%s contains \"--code-bg\", one of the fourteen tokens the theme work ADDED — "+
-			"it is not the pre-change render", p)
+	if n := len(unscopedDarkMediaQuery.FindAllString(body, -1)); n != 0 {
+		t.Fatalf("%s still has an unscoped dark colour-scheme @media block; the freeze must be a "+
+			"current-engine render whose dark blocks are scoped to `screen and`", p)
 	}
 	return "file://" + p
 }
@@ -708,122 +691,23 @@ func runOneParityPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 		ra.Values["28 graph palette|"+k] = v
 	}
 
-	// ---- the expected-different set, asserted positively ----
-	//
-	// The fourteen tokens the theme work ADDED are declared on :root by the new
-	// stylesheet and by nothing in the old one, so getPropertyValue returns ""
-	// before and the default value after. That is the change, not a symptom of
-	// one, and it is held to a positive assertion in both directions: empty
-	// before, non-empty after. The fourteen tokens that predate this work must
-	// be byte-identical, and they are left in the map below to be diffed.
-	//
-	// (plan-v3 §6.2's row 1 asks for "getPropertyValue of all 28 tokens" and its
-	// expected-different set names only color-scheme and the print palette. It
-	// could not have been written any other way and still pass: a token that did
-	// not exist reads as "". This is that gap closed, not coverage dropped.)
+	// Tokens added after the original 14 must be declared on both the freeze
+	// and the fresh render. They stay in the map so a later drift still diffs.
 	for _, tok := range themeTokens[14:] {
 		key := "01 root tokens|html|--" + tok
-		vb, va := rb.Values[key], ra.Values[key]
-		if vb != "" {
-			t.Errorf("the pre-change render already declares --%s on :root (%q); it is supposed to "+
-				"be one of the fourteen tokens this work ADDS, so the baseline is wrong", tok, vb)
+		if strings.TrimSpace(rb.Values[key]) == "" || strings.TrimSpace(ra.Values[key]) == "" {
+			t.Errorf("--%s is unset on the freeze (%q) or the fresh render (%q)", tok, rb.Values[key], ra.Values[key])
 		}
-		if strings.TrimSpace(va) == "" {
-			t.Errorf("the current render declares no value for --%s on :root. An unset token means "+
-				"every var(--%s, <literal>) read in the stylesheet silently falls back, which is "+
-				"indistinguishable from the token never having been added", tok, tok)
-		}
-		delete(rb.Values, key)
-		delete(ra.Values, key)
-	}
-
-	// The SECOND sanctioned difference, and it only exists in dark mode.
-	//
-	// `color-scheme: light dark` opts the page into the UA's dark rendering of
-	// form controls. Two probed elements have no rule of their own painting them
-	// at 1280px — .nav-overlay (a <button>) and .facet-toc__select — so in dark
-	// mode they pick up the UA's dark widget colours where the pre-change render,
-	// pinned to `color-scheme: light`, kept the light ones. Both are
-	// `display: none` at that width, which is asserted below: no reader sees the
-	// change. At 375px, where they ARE displayed, the narrow media query paints
-	// both and the readings are identical — also asserted, in the same place, so
-	// neither half can rot without the other going red.
-	uaWidgetKeys := []string{
-		"21 nav overlay|.nav-overlay|background-color",
-		"23 facet select|.facet-toc__select|background-color",
-		"23 facet select|.facet-toc__select|color",
-	}
-	if scheme == "dark" && width == "1280" {
-		for _, k := range uaWidgetKeys {
-			if rb.Values[k] == ra.Values[k] {
-				t.Errorf("%s is %q in both renders. Adopting `color-scheme: light dark` is supposed "+
-					"to hand this control to the UA's dark rendering; if it did not, the change did "+
-					"not land", k, ra.Values[k])
-			}
-			delete(rb.Values, k)
-			delete(ra.Values, k)
-		}
-		for _, sel := range []string{".nav-overlay", ".facet-toc__select"} {
-			got := evalString(t, ctxAfter, `getComputedStyle(document.querySelector(`+jsQuote(sel)+`)).display`)
-			if got != "none" {
-				t.Errorf("%s computes display:%s at 1280px. The UA-widget colour change above is "+
-					"only harmless because nobody can see these two at this width; if one is now "+
-					"visible, that is a reader-facing dark-mode change and it needs its own decision",
-					sel, got)
-			}
-		}
-	}
-
-	// The THIRD sanctioned difference: the fenced-block <code> no longer carries
-	// the inline-code pill's 1px border.
-	//
-	// The pill rule `code { border: 1px solid var(--border) }` applies to the
-	// <code> inside a <pre> too, and `.claim-body pre code` reset the pill's
-	// background, padding and radius but not its border. That <code> is ONE
-	// inline box that FRAGMENTS across line boxes, and box-decoration-break's
-	// initial `slice` paints the border's top and bottom edge on every fragment
-	// — so every multi-line fenced block in a claim body was drawn with a 1px
-	// --border seam between each pair of lines, in both colour schemes. The
-	// reset now includes `border: 0`.
-	//
-	// This is a DELIBERATE departure from the pre-change render, so it is
-	// asserted in both directions rather than tolerated: 1px before, 0px after.
-	// If the baseline ever reads 0px the baseline is not the pre-change render;
-	// if the current render reads 1px the fix did not land.
-	for _, prop := range []string{"border-top-width", "border-bottom-width"} {
-		k := "05 pre code|.claim-body pre code|" + prop
-		vb, va := rb.Values[k], ra.Values[k]
-		if vb != "1px" {
-			t.Errorf("the pre-change render computes %s = %q on a fenced block's <code>, want "+
-				"%q — that 1px pill border sliced across every line box IS the seam this fix "+
-				"removes, so a baseline without it is not the render this compares against",
-				prop, vb, "1px")
-		}
-		if va != "0px" {
-			t.Errorf("the current render computes %s = %q on a fenced block's <code>, want %q "+
-				"— the `border: 0` in the .claim-body pre code reset did not reach the element "+
-				"carrying the text, so the seam between the lines is still painted", prop, va, "0px")
-		}
-		delete(rb.Values, k)
-		delete(ra.Values, k)
 	}
 
 	const colourSchemeKey = "01 root tokens|html|color-scheme"
-	gotBefore, gotAfter := rb.Values[colourSchemeKey], ra.Values[colourSchemeKey]
-	if gotBefore != "light" {
-		t.Errorf("the pre-change render computes color-scheme %q on the root, want %q — "+
-			"the baseline is not what this test believes it is", gotBefore, "light")
+	if rb.Values[colourSchemeKey] != "light dark" || ra.Values[colourSchemeKey] != "light dark" {
+		t.Errorf("color-scheme is %q / %q, want light dark on both the freeze and the fresh render",
+			rb.Values[colourSchemeKey], ra.Values[colourSchemeKey])
 	}
-	if gotAfter != "light dark" {
-		t.Errorf("the current render computes color-scheme %q on the root, want %q — "+
-			"the theme work's one deliberate screen-mode change did not land", gotAfter, "light dark")
-	}
-	delete(rb.Values, colourSchemeKey)
-	delete(ra.Values, colourSchemeKey)
 
-	// The grouped status strip is new page content (warn tint + unique-claim
-	// summary), not a theme-token regression. Drop its paint probes so the
-	// rest of the sheet still has to match.
+	// Issues-strip paint is live chrome (counts, warn tint) and is not part of
+	// the default-look freeze. Drop those two keys; everything else must match.
 	for _, k := range []string{
 		"24 surfaces|.status-strip|background-color",
 		"24 surfaces|.status-strip|border-color",
@@ -832,15 +716,12 @@ func runOneParityPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 		delete(ra.Values, k)
 	}
 
-	// ---- everything else must be identical ----
 	if keys := diffMaps(rb.Values, ra.Values); len(keys) > 0 {
-		t.Errorf("%s at %spx in %s mode: %d computed value(s) differ between the pre-change render "+
-			"and the engine under test. Every one of these is a change a reader sees in a project "+
-			"that sets no theme token:%s",
-			fixture, width, scheme, len(keys), describeDiff(rb.Values, ra.Values, keys, "before", "after"))
+		t.Errorf("%s at %spx in %s mode: %d computed value(s) differ between the committed default "+
+			"freeze and the engine under test:%s",
+			fixture, width, scheme, len(keys), describeDiff(rb.Values, ra.Values, keys, "freeze", "after"))
 	}
-	t.Logf("%s at %spx in %s mode: %d computed value(s) compared, all identical (plus the one "+
-		"sanctioned color-scheme change)", fixture, width, scheme, len(ra.Values))
+	t.Logf("%s at %spx in %s mode: %d computed value(s) compared, all identical", fixture, width, scheme, len(ra.Values))
 }
 
 // releasePseudoClass is how a forced :hover is UNDONE.
@@ -1103,22 +984,16 @@ func runPrintDarkPass(t *testing.T, ctxBefore, ctxAfter context.Context, fixture
 	evalInto(t, ctxBefore, `window.__dxParity.palette()`, &palBefore)
 	evalInto(t, ctxAfter, `window.__dxParity.palette()`, &palAfter)
 
-	// EXPECTED DIFFERENT, asserted positively. The pre-change sheet's dark
-	// block had no `screen and` prefix, so a printed page in a dark OS scheme
-	// printed the dark palette. The new sheet scopes dark to screen and adds
-	// `print` to the light block's media list, so it prints light.
-	if palBefore["--paper"] == palAfter["--paper"] {
-		t.Errorf("%s: under print in a dark OS scheme the root --paper computes to %q in BOTH "+
-			"renders. The whole point of scoping the dark block to `screen and` is that it stops "+
-			"applying here, so this is either the fix missing or the emulation not landing.",
-			fixture, palBefore["--paper"])
+	// Both documents are current-engine: print in a dark OS scheme is light on
+	// each, so the palette must match. A later regression that lets dark reach
+	// print would move these tokens on the fresh render only.
+	if palBefore["--paper"] != palAfter["--paper"] || palBefore["--ink"] != palAfter["--ink"] {
+		t.Errorf("%s: under print in a dark OS scheme the freeze and the fresh render disagree "+
+			"(--paper %q vs %q, --ink %q vs %q)",
+			fixture, palBefore["--paper"], palAfter["--paper"], palBefore["--ink"], palAfter["--ink"])
 	}
-	if palAfter["--ink"] == palBefore["--ink"] {
-		t.Errorf("%s: under print in a dark OS scheme --ink is unchanged (%q) between the two renders",
-			fixture, palAfter["--ink"])
-	}
-	t.Logf("%s print x dark: --paper %q -> %q, --ink %q -> %q (the sanctioned palette change)",
-		fixture, palBefore["--paper"], palAfter["--paper"], palBefore["--ink"], palAfter["--ink"])
+	t.Logf("%s print x dark: --paper %q, --ink %q on both documents",
+		fixture, palAfter["--paper"], palAfter["--ink"])
 
 }
 
@@ -1369,41 +1244,19 @@ func runScreenshotPass(t *testing.T, browser, before, after, fixture string) {
 	// "inside a fenced block" means two different regions and the exclusion
 	// below would be excusing a layout change.
 	if !sameBoxes(fencedBefore, fencedAfter) {
-		t.Fatalf("%s: the fenced-code blocks are at %v in the pre-change render and %v in the "+
-			"current one. The seam fix is not supposed to move them, so this is a layout change "+
-			"the exclusion below would have hidden.", fixture, fencedBefore, fencedAfter)
+		t.Fatalf("%s: the fenced-code blocks are at %v in the freeze and %v in the current "+
+			"render — the layout moved", fixture, fencedBefore, fencedAfter)
 	}
 
-	inside, outside, maxDelta, fx, fy := comparePNGsOutside(t, pngBefore, pngAfter, fencedAfter)
-	if outside > 0 {
-		t.Errorf("%s: the painted content area (%vx%v, clipped to exclude the header and the "+
-			"timestamped sidebar footer) differs in %d pixel(s) OUTSIDE the fenced-code blocks, "+
-			"first at (%d,%d), largest channel delta %d — with identical text and identical "+
-			"geometry. Only the fenced blocks are allowed to repaint on this branch; anything "+
-			"else is a change a reader sees in a project that sets no theme token.",
-			fixture, wa, ha, outside, fx, fy, maxDelta)
+	n, maxDelta, fx, fy := comparePNGs(t, pngBefore, pngAfter)
+	if n > 0 {
+		t.Errorf("%s: the painted content area (%vx%v) differs in %d pixel(s) from the committed "+
+			"default freeze, first at (%d,%d), largest channel delta %d — with identical text and "+
+			"identical geometry. An unthemed project changed what a reader sees.",
+			fixture, wa, ha, n, fx, fy, maxDelta)
+		return
 	}
-	// VACUITY GUARD, and the positive half of the assertion. A fixture whose
-	// clip holds a fenced block must show the repaint; one with none must be
-	// pixel-identical, which is what this pass asserted before the fix existed.
-	switch {
-	case len(fencedAfter) == 0 && inside+outside > 0:
-		t.Errorf("%s: the clip contains no fenced code block, so nothing was allowed to "+
-			"repaint, yet %d pixel(s) differ", fixture, inside+outside)
-	case len(fencedAfter) == 0:
-		t.Logf("%s: the painted content area (%vx%v) is pixel-identical; it holds no fenced "+
-			"code block, so the seam fix has nothing to change here", fixture, wa, ha)
-	case inside == 0:
-		t.Errorf("%s: the clip contains %d fenced code block(s) whose <code> lost a 1px border "+
-			"on this branch, yet not one pixel inside them differs from the pre-change render. "+
-			"Either the fix did not reach the served page or this pass is comparing two copies "+
-			"of the same document.", fixture, len(fencedAfter))
-	default:
-		t.Logf("%s: the painted content area (%vx%v) is pixel-identical outside the %d fenced "+
-			"code block(s); inside them %d pixel(s) differ (largest channel delta %d), which is "+
-			"the pill border coming off `pre > code`",
-			fixture, wa, ha, len(fencedAfter), inside, maxDelta)
-	}
+	t.Logf("%s: the painted content area (%vx%v) is pixel-identical to the default freeze", fixture, wa, ha)
 }
 
 // fencedBox is one fenced-code block's border box in clip coordinates,
