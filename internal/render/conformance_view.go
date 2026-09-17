@@ -49,16 +49,48 @@ const conformanceCSS = `
    a draft wash for Owed, the neutral code ground for Matched — derived with
    color-mix() rather than the six raw hexes the Paper boards paint (06a
    Paper defects 1-3), so both colour modes fall out of one declaration. */
-.claim-conformance-check{margin-top:10px;padding:18px var(--card-gutter, 32px) 24px;border-top:1px solid var(--border);background:var(--code-bg)}
+.claim-conformance-check{display:flex;flex-direction:column;gap:16px;margin-top:10px;padding:18px var(--card-gutter, 32px) 24px;border-top:1px solid var(--border);background:var(--code-bg)}
 .claim-conformance-check:first-of-type{margin-top:16px}
-/* RETRY FIX (verifier item 14): 6% read as a neutral lift rather than a
-   warm wash on dark, where --card-bg's blue channel already outweighs
-   --warn's red contribution at that share (measured rgb(35,34,40) against
-   the board's warm #1D1618). Raised to 14% so the hue survives the mix;
-   06a §9 Open decisions 1-2 sanction the derivation, not a fixed 6%. */
+/* B2 RETRY FIX (wave-B2-fixlists/L7.md item 2, 06a §9 Open decisions 1-2):
+   the wave-A retry's 14% mix read as a neutral lift on LIGHT, overshooting
+   the board's own measured #FBF7F7 (solving 255-f*(255-158)=251 gives
+   f=4/97~4%; verified this reproduces #FBF7F7 exactly on all three
+   channels against --card-bg #FFFFFF / --warn #9E3B36). DARK cannot be
+   reached by the same color-mix formula at ANY share: the target #1D1618
+   has G=22/B=24, both BELOW dark --card-bg's own G=27/B=34, and mixing in
+   --warn (dark #EC8A83, G=138/B=131) only ever raises those channels. The
+   engine already carries this exact pair as the --blocked-surface /
+   --blocked-hairline custom properties (style.css's three mode blocks,
+   light value var(--warn-bg) != the board's #FBF7F7, dark value
+   #1D1618/#3A2A2B == the board's own pin) — but reading --blocked-surface
+   unconditionally would regress LIGHT back off #FBF7F7. Per G13 ("a lane
+   may use light-dark() ... verified by probe under the explicit Dark
+   toggle as well as the OS scheme") this lane probed light-dark() first
+   and rejected it: style.css:3016's own recorded defect is that
+   light-dark() resolves against the OS-level prefers-color-scheme only,
+   because 'color-scheme: light dark' is pinned unconditionally on :root
+   with no html[data-theme] re-point — so a reader who pressed the
+   explicit Dark toggle on a light OS would keep the LIGHT branch here,
+   reproducing exactly the defect that comment documents for a different
+   rule. Instead this lane declares two small custom properties,
+   --conformance-blocked-ground / --conformance-owed-ground, using the
+   SAME three-block technique (unconditional light default, explicit-dark
+   override, OS-dark override) the engine's own tokens use — so they track
+   BOTH the explicit toggle and the OS scheme correctly, same as every
+   other var() read in this file. This is a G13-style dark token; listed in
+   the lane report and VAULT/learnings/inbox/L7.md. */
+:root{
+  --conformance-blocked-ground:color-mix(in srgb,var(--warn) 4%,var(--card-bg));
+  --conformance-owed-ground:color-mix(in srgb,var(--status-draft) 4%,var(--card-bg))
+}
+@media screen and (prefers-color-scheme: dark) {
+  :root{--conformance-blocked-ground:var(--blocked-surface)}
+}
+html[data-theme="dark"]{--conformance-blocked-ground:var(--blocked-surface)}
+html[data-theme="light"]{--conformance-blocked-ground:color-mix(in srgb,var(--warn) 4%,var(--card-bg))}
 .claim-conformance-check[data-conformance-state="mismatch"],
-.claim-conformance-check[data-conformance-state="uncheckable"]{background:color-mix(in srgb,var(--warn) 14%,var(--card-bg));border-top-color:color-mix(in srgb,var(--warn) 22%,var(--border))}
-.claim-conformance-check[data-conformance-state="owed"]{background:color-mix(in srgb,var(--status-draft) 14%,var(--card-bg));border-top-color:color-mix(in srgb,var(--status-draft) 22%,var(--border))}
+.claim-conformance-check[data-conformance-state="uncheckable"]{background:var(--conformance-blocked-ground);border-top-color:color-mix(in srgb,var(--warn) 22%,var(--border))}
+.claim-conformance-check[data-conformance-state="owed"]{background:var(--conformance-owed-ground);border-top-color:color-mix(in srgb,var(--status-draft) 22%,var(--border))}
 
 .claim-conformance-check-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;color:var(--ink);font-family:var(--font-sans);font-size:13px}
 /* flex:1 1 auto + min-width:0 (06a §8.14: "the title wraps and the verdict
@@ -142,8 +174,15 @@ const conformanceCSS = `
 
 /* The machine layer (06a §4.8) — the engine's own nine-key envelope,
    verbatim, lowercase mono; --code-bg is the token 06a Paper defects 1/11
-   flag as the light board's own unspelled ground. */
-.claim-conformance-machine{padding:16px var(--card-gutter, 32px) 22px;background:var(--code-bg);border-top:1px solid var(--border)}
+   flag as the light board's own unspelled ground. B2 RETRY FIX
+   (wave-B2-fixlists/L7.md item 5, 06a §3 '2V4-0', the same 1100-wide
+   measure as '2UX-0'/'3LZ-0'): full-bleed to the check body's own inner
+   measure, the same margin-inline/padding-inline pair
+   '.claim-conformance-disclosure[open]>.claim-conformance-disclosure-trigger'
+   already uses, so the machine layer spans the check's full width instead
+   of sitting inset a second time inside the check's own --card-gutter
+   padding. */
+.claim-conformance-machine{margin-inline:calc(-1 * var(--card-gutter, 32px));padding:16px var(--card-gutter, 32px) 22px;background:var(--code-bg);border-top:1px solid var(--border)}
 .claim-conformance-line{display:flex;align-items:baseline;gap:18px;padding-block:9px;overflow-wrap:anywhere;font-size:11.5px}
 .claim-conformance-line+.claim-conformance-line{border-top:1px solid var(--border)}
 /* RETRY FIX (verifier item 18): min-width, not width, and nowrap — the
@@ -156,7 +195,14 @@ const conformanceCSS = `
    board draws plain mono text on the code ground, not a run of small boxed
    chips with floating commas between them. */
 .claim-conformance-machine code{background:none;border:0;padding:0}
-.claim-conformance-line>code,.claim-conformance-values{font-family:var(--font-mono);font-size:12px;line-height:19px;color:var(--ink);overflow-wrap:anywhere}
+/* B2 RETRY FIX (wave-B2-fixlists/L7.md item 12, 06a §4.8): the leading
+   splits by row — 16px on the six short keys ('2V7-0': check, adapter,
+   shape, missing, extra, detail) and 19px only on the three rows that
+   actually wrap ('2VG-0'/'2VL-0'/'2VO-0': target, expected, observed).
+   '.claim-conformance-line--wide' is the modifier writeConformanceValue and
+   the "target" call site now pass (conformance.go). */
+.claim-conformance-line>code,.claim-conformance-values{font-family:var(--font-mono);font-size:12px;line-height:16px;color:var(--ink);overflow-wrap:anywhere}
+.claim-conformance-line--wide>code,.claim-conformance-line--wide .claim-conformance-values{line-height:19px}
 /* The multi-member value (missing/extra/expected/observed on a set-shaped
    check) is ONE flex item, not several — see writeConformanceMembers'
    doc comment. min-width:0 is required for a flex item to be allowed to
@@ -214,9 +260,19 @@ const conformanceCSS = `
   /* RETRY FIX (verifier item 5, 06a §3 '80G-0'/'83D-0', §5 M2/M3): the
      panel's own padding/border stop adding a second inset on top of the
      card's own --card-gutter, so the check body's 358px inner measure
-     starts flush from the card edge instead of x=31 inside it. */
-  .claim-conformance{padding-inline:0;border-inline:0;border-radius:0}
-  .claim-conformance-check{padding-block:16px 20px}
+     starts flush from the card edge instead of x=31 inside it.
+     B2 RETRY FIX (wave-B2-fixlists/L7.md item 6): that alone still left a
+     SECOND --card-gutter inset, from '.card''s own padding-inline, between
+     the card edge and '.claim-conformance''s zeroed padding — the panel sat
+     flush with the card's padding box, not with the card's border. The
+     margin-inline below cancels the card's own inset (G8's own full-bleed
+     pattern), so the single 16px inset that remains is
+     '.claim-conformance-check''s own padding-inline, matching R-H.3's
+     358px arithmetic. */
+  .claim-conformance{margin-inline:calc(-1 * var(--card-gutter, 16px));padding-inline:0;border-inline:0;border-radius:0}
+  /* B2 RETRY FIX (wave-B2-fixlists/L7.md item 4, 06a §5 M4 '80G-0'): 14px,
+     not the desktop 16px. */
+  .claim-conformance-check{padding-block:16px 20px;gap:14px}
   .claim-conformance-check:first-of-type{margin-top:14px}
   .claim-conformance-row{flex-direction:column;gap:3px;padding-block:10px}
   .claim-conformance-row-label{width:auto}
@@ -230,11 +286,18 @@ const conformanceCSS = `
      12px): the open trigger's full-bleed inset and vertical rhythm both
      change at 390, not just the inline padding-gutter's own value. */
   .claim-conformance-disclosure[open]>.claim-conformance-disclosure-trigger{margin-inline:calc(-1 * var(--card-gutter, 16px));padding:10px var(--card-gutter, 16px) 12px}
-  .claim-conformance-machine{padding:12px var(--card-gutter, 16px) 18px}
+  /* B2 RETRY FIX (wave-B2-fixlists/L7.md item 5): the machine layer's
+     full-bleed treatment needs its own mobile margin-inline too, cancelling
+     the 16px --card-gutter at this tier the same way the desktop rule
+     cancels 32px. */
+  .claim-conformance-machine{margin-inline:calc(-1 * var(--card-gutter, 16px));padding:12px var(--card-gutter, 16px) 18px}
   .claim-conformance-line{flex-direction:column;gap:2px;padding-block:8px}
   .claim-conformance-line>span:not(.claim-conformance-values){width:auto;min-width:0;font-weight:500}
   .claim-conformance-declared-row{flex-direction:column;gap:3px;padding-block:11px}
-  .claim-conformance-declared-label{width:auto}
+  /* B2 RETRY FIX (wave-B2-fixlists/L7.md item 11, 07 §4.12 mobile column):
+     the desktop rule's .07em tracking does not survive width:auto on its
+     own — the mobile column uses its own .06em. */
+  .claim-conformance-declared-label{width:auto;letter-spacing:.06em}
   .claim-conformance-declared-reason{font-size:14px;line-height:21px;max-width:none}
   .claim-conformance-declared-note{font-size:14px;line-height:22px;max-width:none}
 }

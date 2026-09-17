@@ -82,6 +82,14 @@ func ConformanceHTML(result conformance.Result, snapshot string) template.HTML {
 	b.WriteString(`</span></summary>`)
 
 	if result.Mode == model.EmbodimentModeNone {
+		// B2 RETRY FIX (wave-B2-fixlists/L7.md item 10, 07 §4.12): the
+		// declared_none expansion carries the same "IMPLEMENTATION CHECKS"
+		// eyebrow (label + hairline rule, no count — there are no checks by
+		// design) as the compare-mode branch below, which 07-desktop-
+		// light.png draws and the pre-retry emitter returned before
+		// reaching. 06a §8.4's "no nested disclosure" ban is unaffected;
+		// this is the section label, not a disclosure.
+		writeConformanceEyebrow(&b, nil)
 		// RETRY FIX (verifier item 15, 07 §4.12): DECLARATION / REASON is a
 		// two-row label column (96px, uppercase Inter 11/14 w600 tracking
 		// 0.07em, --faint), `none` in mono 12/20 --muted and the reason in
@@ -107,14 +115,28 @@ func ConformanceHTML(result conformance.Result, snapshot string) template.HTML {
 	// eyebrow label and its count, so the count right-ranges across the
 	// panel width instead of sitting immediately after the label (06a §4.3
 	// `3KE-0` gap 12px, `3KG-0` rule 1px `#EFE6E5`).
-	b.WriteString(`<div class="claim-conformance-eyebrow"><span class="claim-conformance-eyebrow-label">Implementation checks</span><span class="claim-conformance-eyebrow-rule" aria-hidden="true"></span><span class="claim-conformance-eyebrow-count">`)
-	b.WriteString(fmt.Sprintf("%d", len(result.Checks)))
-	b.WriteString(`</span></div>`)
+	checkCount := len(result.Checks)
+	writeConformanceEyebrow(&b, &checkCount)
 	for _, check := range result.Checks {
 		writeConformanceCheck(&b, check, snapshot)
 	}
 	b.WriteString(`</details>`)
 	return template.HTML(b.String()) //nolint:gosec // all values escaped above
+}
+
+// writeConformanceEyebrow emits the "IMPLEMENTATION CHECKS" panel-body
+// eyebrow (label + hairline rule) shared by both branches of ConformanceHTML
+// (06a §4.3, 07 §4.12 — see B2 RETRY FIX above ConformanceHTML's
+// EmbodimentModeNone branch). count is nil for declared_none, which has no
+// checks to count; the compare-mode branch always passes a count.
+func writeConformanceEyebrow(b *strings.Builder, count *int) {
+	b.WriteString(`<div class="claim-conformance-eyebrow"><span class="claim-conformance-eyebrow-label">Implementation checks</span><span class="claim-conformance-eyebrow-rule" aria-hidden="true"></span>`)
+	if count != nil {
+		b.WriteString(`<span class="claim-conformance-eyebrow-count">`)
+		b.WriteString(fmt.Sprintf("%d", *count))
+		b.WriteString(`</span>`)
+	}
+	b.WriteString(`</div>`)
 }
 
 // writeConformanceDeclaredRow emits one row of the declared_none DECLARATION
@@ -147,7 +169,15 @@ func writeConformanceCheck(b *strings.Builder, check conformance.CheckResult, sn
 	b.WriteString(`" data-implementation-ready="`)
 	b.WriteString(fmt.Sprintf("%t", check.ImplementationReady))
 	b.WriteString(`"><div class="claim-conformance-check-head"><span class="claim-conformance-check-title">`)
-	b.WriteString(html.EscapeString(check.ID))
+	// B2 RETRY FIX (wave-B2-fixlists/L7.md item 7, 06a §4.3 `3KJ-0`, §2, §6):
+	// a humanised title above the line ("Step coverage" from "step-coverage")
+	// — the same DisplayCase transform ClaimLabel already applies to a claim
+	// id's slug segment, so this title reads consistently with every other
+	// humanised id the viewer renders. html.EscapeString(check.ID) verbatim
+	// stays only in the machine layer's own "check" row
+	// (writeConformanceDisclosure) — 06a §2's whole point is that the
+	// typography distinguishes the two.
+	b.WriteString(html.EscapeString(DisplayCase(check.ID)))
 	b.WriteString(`</span><span class="claim-conformance-verdict"><span class="claim-conformance-verdict-dot" aria-hidden="true"></span>`)
 	b.WriteString(html.EscapeString(conformanceStateLabel(check.State)))
 	b.WriteString(`</span></div>`)
@@ -311,7 +341,12 @@ func writeConformanceDisclosure(b *strings.Builder, check conformance.CheckResul
 	writeConformanceLine(b, "check", check.ID)
 	writeConformanceLine(b, "adapter", check.Adapter)
 	writeConformanceLine(b, "shape", string(check.Shape))
-	writeConformanceLine(b, "target", check.Target)
+	// B2 RETRY FIX (wave-B2-fixlists/L7.md item 12, 06a §4.8 `2VG-0`): target
+	// is one of the three rows the board actually wraps (with expected and
+	// observed below), so it carries the "wide" modifier for its own 19px
+	// leading — conformanceCSS's `.claim-conformance-line--wide` — instead
+	// of the six short keys' 16px default.
+	writeConformanceLineModified(b, "target", check.Target, "wide")
 	writeConformanceValue(b, "expected", check.Expected)
 	if check.Observed != nil {
 		writeConformanceValue(b, "observed", check.Observed)
@@ -412,12 +447,17 @@ func conformanceStateLabel(state conformance.State) string {
 	}
 }
 
+// writeConformanceValue renders the "expected"/"observed" rows. Both are
+// among the three "wide" rows conformanceCSS's `.claim-conformance-line--wide`
+// keeps at 19px leading (B2 RETRY FIX, wave-B2-fixlists/L7.md item 12, 06a
+// §4.8 `2VL-0`/`2VO-0`) — the third, "target", is set by writeConformanceCheck's
+// own direct writeConformanceLineModified call above.
 func writeConformanceValue(b *strings.Builder, label string, value any) {
 	switch value := value.(type) {
 	case string:
-		writeConformanceLine(b, label, value)
+		writeConformanceLineModified(b, label, value, "wide")
 	case []string:
-		writeConformanceMembers(b, label, value)
+		writeConformanceMembersModified(b, label, value, "wide")
 	}
 }
 

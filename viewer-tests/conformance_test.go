@@ -117,13 +117,22 @@ func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
 	// Re-pinned lowercase 'expected'/'observed' per 06a §4.8/§6 (lowercase
 	// mono machine-layer keys); this test previously pinned the pre-06a
 	// capitalized "Expected"/"Observed" spelling.
+	//
+	// B2 RETRY FIX (wave-B2-fixlists/L7.md item 9, 06a §9 Open decision 5):
+	// `extra` is a fixed key in the nine-key envelope, not an optional one —
+	// a scalar check with no extra members now renders `extra: —` (an
+	// em-dash placeholder) rather than omitting the row. This test used to
+	// assert `extra:` never appeared at all, which the OD5 change makes
+	// false; it now asserts the em-dash row IS present and keeps only the
+	// `missing:` exclusion (a scalar check genuinely has no set to be
+	// missing members from).
 	if !evalBool(t, ctx, `(function () {
   var scalar = document.querySelector('.claim-conformance-check[data-check-id="schema-version"]');
   if (!scalar) { return false; }
   var lines = Array.from(scalar.querySelectorAll('.claim-conformance-line')).map(function (line) { return line.textContent.trim(); });
-  return lines.includes('expected: 3') && lines.includes('observed: 3') && !lines.some(function (line) { return line.startsWith('missing:') || line.startsWith('extra:') || line.startsWith('Missing:') || line.startsWith('Extra:'); });
+  return lines.includes('expected: 3') && lines.includes('observed: 3') && lines.includes('extra: —') && !lines.some(function (line) { return line.startsWith('missing:') || line.startsWith('Missing:') || line.startsWith('Extra:'); });
 })()`) {
-		t.Fatal("static scalar check does not show exact expected/observed values or leaked set-only differences")
+		t.Fatal("static scalar check does not show exact expected/observed values, the extra: — placeholder, or leaked set-only differences")
 	}
 	if !evalBool(t, ctx, `document.querySelector('.claim-conformance').getAttribute('data-implementation-ready') === 'false'`) {
 		t.Fatal("static mismatch does not expose readiness=false")
