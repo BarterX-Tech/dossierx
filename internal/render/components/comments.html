@@ -40,7 +40,7 @@
   {{- end}}
   {{- if .Resolved}}
   <details class="comments-resolved">
-    <summary>{{len .Resolved}} resolved</summary>
+    <summary><svg class="comments-resolved-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg><span>{{len .Resolved}} resolved</span></summary>
     {{- range .Resolved}}
     {{template "dossierx-comment-thread" .}}
     {{- end}}

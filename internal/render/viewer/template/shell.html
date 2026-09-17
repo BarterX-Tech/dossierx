@@ -244,11 +244,17 @@
        and opening it closes neither. See the z-index ledger in style.css. -->
   <button id="commentsOverlay" class="comments-overlay" type="button" aria-label="Close comments" tabindex="-1" hidden></button>
   <aside id="commentsPanel" class="comments-rail" role="complementary" aria-label="Comments" tabindex="-1" hidden>
+    <div class="comments-rail-grabber" aria-hidden="true"><span class="comments-rail-grabber-bar"></span></div>
     <header class="comments-rail-head">
-      <p id="commentsRailTitle" class="comments-rail-title">Comments</p>
+      <div class="comments-rail-head-text">
+        <p id="commentsRailTitle" class="comments-rail-title">Comments</p>
+        <p id="commentsRailSubtitle" class="comments-rail-subtitle"></p>
+      </div>
+      <span id="commentsRailCount" class="comments-rail-count" aria-hidden="true"></span>
       <button id="commentsRailClose" class="comments-rail-close" type="button" aria-label="Close comments"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-x"/></svg></button>
     </header>
     <div id="commentsRailBody" class="comments-rail-body"></div>
+    <div id="commentsComposerSlot" class="comments-rail-composer-slot"></div>
   </aside>
   <div id="commentsToast" class="comments-toast" role="status" aria-live="polite" hidden></div>
 

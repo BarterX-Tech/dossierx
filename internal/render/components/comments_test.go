@@ -260,8 +260,12 @@ func TestEdgesHTMLWithLinks_ResolvedOnly_ChipMutedAndDetailsCollapsed(t *testing
 	if strings.Contains(got, `<details class="comments-resolved" open`) {
 		t.Fatalf("the resolved <details> must start collapsed (no open attribute), got: %s", got)
 	}
-	if !strings.Contains(got, "<summary>3 resolved</summary>") {
-		t.Fatalf("expected a '<summary>3 resolved</summary>' disclosure, got: %s", got)
+	// Re-pinned per 14 §4.4 (457-0) + 14 §8.4 + R-J.6 (verifier RETRY item 1):
+	// the baked read-only summary now carries the same chevron svg the live
+	// path (viewer-runtime.js buildResolvedChevron) builds, since style.css
+	// hides the native <summary> marker on both paths.
+	if !strings.Contains(got, `<summary><svg class="comments-resolved-chevron" viewBox="0 0 24 24" width="13" height="13" fill="none" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg><span>3 resolved</span></summary>`) {
+		t.Fatalf("expected a chevron + '3 resolved' disclosure, got: %s", got)
 	}
 	// RETRY RE-PIN (fix-list item 10; 05 §8 item 5: "An entirely edgeless,
 	// sourceless, checkless claim still shows four zeros and the comment

@@ -243,6 +243,8 @@
        8% on light and BLACK at 28% on dark. The light value is a tinted ink
        and cannot simply be darkened, so dark needs its own. */
     --shadow-cast: rgba(0, 0, 0, .28);
+
+    --shadow-cast: rgba(0, 0, 0, .28); /* G9 literal re-pin, 14 §4.1 43Y-0/9TA-0 Shadow row */
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
@@ -345,6 +347,8 @@
        8% on light and BLACK at 28% on dark. The light value is a tinted ink
        and cannot simply be darkened, so dark needs its own. */
     --shadow-cast: rgba(0, 0, 0, .28);
+
+    --shadow-cast: rgba(0, 0, 0, .28); /* G9 literal re-pin, 14 §4.1 43Y-0/9TA-0 Shadow row */
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
@@ -2312,22 +2316,50 @@ th {
 .comment-chip {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   padding: 3px 9px;
   border: 1px solid var(--border);
   border-radius: 999px;
   background: var(--card-bg);
   color: var(--muted);
-  font-family: var(--font-mono);
+  /* 14a §4F Open decisions #9: the count is an interface statement about a
+     claim, not machine output — tokens.md §7 assigns mono to the latter and
+     sans to the former, and every board count is Inter, not mono. */
+  font-family: var(--font-sans);
   font-size: 12px;
   line-height: 1.2;
   cursor: pointer;
 }
 
-.comment-chip--open {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-  color: var(--accent);
+.comment-chip-glyph .dx-icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* R-F.3 / 14 §4.6 D14.7 (ratified OD14.3): the tinted pill is the desktop
+   "selected" form as well as the "has open threads" form — both read as
+   var(--link) (Paper's navy --color-accent, tokens.md §1), never engine
+   --accent (lock green). The engine has no --accent-bg tied to --link
+   (tokens.md §1 Disagreements), so the tint is derived the same way the
+   facet-toc active row already derives one from --link (style.css ~3697). */
+.comment-chip--open,
+.comment-chip--active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--link) 9%, transparent);
+  color: var(--link);
+}
+
+/* 14a §4F: "resolved" (every thread settled) reads distinctly from "empty"
+   (nothing ever asked) — no border, no ground, --color-faint throughout,
+   count at w400 (the base .comment-chip-count w600 is for the --open form). */
+.comment-chip--resolved {
+  border-color: transparent;
+  background: transparent;
+  color: var(--faint);
+}
+
+.comment-chip--resolved .comment-chip-count {
+  font-weight: 400;
 }
 
 /* The zero-thread chip (v0.3.0): every claim carries a chip now, so the FIRST
@@ -2352,6 +2384,8 @@ th {
    `display` of its own). */
 .comment-chip--empty {
   border-style: dashed;
+  background: transparent;
+  border-color: transparent;
   color: var(--faint);
   opacity: 0;
 }
@@ -2374,21 +2408,42 @@ th {
 .comment-chip--empty:hover,
 .comment-chip--empty:focus-visible {
   border-style: solid;
-  border-color: var(--accent);
+  border-color: var(--link);
   color: var(--ink);
   opacity: 1;
 }
 
-.comment-chip-count {
+/* An empty claim's chip must stay fully visible while ITS OWN rail is open
+   (OD14.3) — the reveal-on-hover rules above are about a chip nobody has
+   clicked yet, and must never re-dim the one the reader is actively using. */
+button.comment-chip--active.comment-chip--empty {
+  border-style: solid;
+  color: var(--link);
+  opacity: 1;
+}
+
+/* 14a §4F (473-0, 479-0): w600 is the --open/--active form only; --resolved
+   and --empty read at the ambient w400 (--resolved's own override above
+   stays for clarity/specificity parity). */
+.comment-chip--open .comment-chip-count,
+.comment-chip--active .comment-chip-count {
   font-weight: 600;
 }
 
-/* Open-thread cards carry a 3px accent left border. The dedicated
-   .claim-tree rule is required because tree claims render without the .card
-   class (see tree.html), so a .card-scoped rule would never reach them. */
+.comment-chip--empty .comment-chip-count {
+  font-weight: 400;
+}
+
+/* Open-thread cards carry a 3px accent left border (reference-rules.md board
+   rule 47H-0: "the SAME fact, marked the same way" as the graph halo). Board
+   14 §4.7 (node 41I-0) measures this exact marker at Paper --color-accent
+   (navy) -> engine --link, not --accent (lock green) — the marker means "an
+   argument is open here", not "approved". The dedicated .claim-tree rule is
+   required because tree claims render without the .card class (see
+   tree.html), so a .card-scoped rule would never reach them. */
 .card.claim-card--commented,
 .claim-tree.claim-card--commented {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--link);
 }
 
 .comments-panel {
@@ -2413,41 +2468,69 @@ th {
   color: var(--faint);
 }
 
+/* Verifier RETRY item 2: border-bottom (not border-top +
+   :first-of-type { border-top: 0 }) so the LAST open thread is also closed
+   by a hairline before the "N resolved" disclosure row, matching 14 §4.3
+   thread container row (nodes 447-0/44U-0: padding-block 16px, gap 8px,
+   border-bottom 1px --color-border) and board 3XK-0's hairlines at y=527
+   and y=572. */
 .comment-thread {
-  padding: 6px 0;
-  border-top: 1px solid var(--border);
+  padding: 16px 0;
+  border-bottom: 1px solid var(--border);
 }
 
-.comment-thread:first-of-type {
-  border-top: 0;
+/* 14a §D "Resolved dimming" (nodes 463-0 desktop / AEO-0 mobile): a resolved
+   thread dims, it is never deleted or hidden — the disclosure it sits behind
+   (.comments-resolved) is the "collapsed" half, this opacity is the "settled"
+   half. 14a's own correction (state 2's dimming applied at two levels) picks
+   mobile's target as the right one: dim the THREAD, never a wrapping card —
+   which for this engine is already .comment-thread--resolved itself, so no
+   card-vs-thread choice was needed here. Distinct from the .55 optimistic/
+   deleting opacity above: "not yet real" and "settled" must read apart. */
+.comment-thread--resolved {
+  opacity: .72;
 }
 
+/* 14 §4.3 (node 44I-0) / R-J.7. 14a §8.1 flags the pre-revamp 14px margin +
+   10px padding as a defect against R-J.7's "indented 12px behind a 2px rule";
+   the 14px left offset itself is a rail-only value (14 §4.3) that M10 drops
+   only at the phone tier (@media (max-width: 520px) below). */
 .comment-reply {
-  margin: 6px 0 0 14px;
-  padding-left: 10px;
+  margin: 10px 0 0 14px;
+  padding-left: 12px;
   border-left: 2px solid var(--border);
 }
 
 .comment-meta {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   font-family: var(--font-mono);
   font-size: 11px;
+  line-height: 14px;
   color: var(--faint);
 }
 
 .comment-role {
   text-transform: uppercase;
   letter-spacing: .04em;
+  font-weight: 600;
 }
 
+/* docs/design/screens/14a-comments-states-and-placement.md Open decisions #1:
+   "the human is the accent, the agent is the link blue" (board rule 47F-0) is
+   ambiguous between Paper's and the engine's vocabularies and both readings
+   invert the two authors. The measured boards + reference-rules.md R-J.7 agree
+   on the actual values: HUMAN = Paper --color-accent (navy) -> engine --link;
+   AGENT = --color-graph-facet-1 -> graph.css's dxg-facet-1. This was previously
+   var(--accent), which paints the human lock-green -- the single highest-
+   damage correction 14a's Open decisions flags. */
 .comment-role--human {
-  color: var(--accent);
+  color: var(--link);
 }
 
 .comment-role--agent {
-  color: var(--link);
+  color: var(--dxg-facet-1, #4257C4);
 }
 
 .comment-edited {
@@ -2456,15 +2539,47 @@ th {
 
 .comment-body {
   margin-top: 2px;
+  font-family: var(--font-sans);
   font-size: 13px;
+  line-height: 21px;
   color: var(--ink);
 }
 
+/* R-J.7 / 14a §4F OD9: resolved-thread count is an interface statement about a
+   claim ("N resolved"), not machine output, so it takes the sans face rather
+   than mono -- the same reasoning tokens.md §7 gives for the chip count. Weight
+   is 500 at rest (14 §4.4) and steps to 600 under (pointer: coarse) (M9, "the
+   mobile chip rule") — see the pointer:coarse block further down. */
 .comments-resolved > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 14px;
+  border-bottom: 1px solid var(--border);
+  list-style: none;
   cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 11px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
   color: var(--muted);
+}
+
+.comments-resolved > summary::-webkit-details-marker {
+  display: none;
+}
+
+.comments-resolved-chevron {
+  flex-shrink: 0;
+  stroke: var(--muted);
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform .16s ease;
+}
+
+.comments-resolved[open] > summary .comments-resolved-chevron {
+  transform: rotate(90deg);
 }
 
 /* Coarse pointers (touch) need a >=44px hit target on the chip. They also
@@ -2515,17 +2630,24 @@ th {
 /* .comments-overlay stays display:none above 860px (the desktop rail is
    non-modal); the mobile media query below re-enables it as :not([hidden]). */
 
+/* 14 §3/§4.1 (nodes 43Y-0 / 9TA-0), OD14.1: 360px is board 14's measurement;
+   the 90vw clamp is kept because the board never measures a sub-400px desktop
+   window. Ground and border are --card-bg / --border-strong (14a §Layout: the
+   engine has no dark --border-strong override — tokens.md Disagreement 9 — so
+   the fallback below is deliberately the LIGHT literal per tokens.md's
+   "fallback is always the light value" rule). */
 .comments-rail {
   position: fixed;
   z-index: 60;
   top: 0;
   right: 0;
   bottom: 0;
-  width: min(380px, 90vw);
+  width: min(360px, 90vw);
   display: flex;
   flex-direction: column;
-  background: var(--paper);
-  border-left: 1px solid var(--border);
+  background: var(--card-bg);
+  border-left: 1px solid var(--border-strong, #aab5c7);
+  box-shadow: -8px 0 24px var(--shadow-cast, rgba(9, 20, 38, .12));
 }
 
 .comments-rail[hidden] {
@@ -2536,62 +2658,148 @@ th {
   outline: none;
 }
 
+/* R-J.2's 36x4 grabber. Hidden on the desktop rail (OD14.9: a drag affordance
+   for the mobile sheet only); the (max-width: 860px) block below reveals it. */
+.comments-rail-grabber {
+  display: none;
+  flex-shrink: 0;
+  justify-content: center;
+  padding-top: 8px;
+}
+
+.comments-rail-grabber-bar {
+  width: 36px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-strong, #aab5c7);
+}
+
 .comments-rail-head {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 12px 14px;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 20px 22px 16px;
   border-bottom: 1px solid var(--border);
 }
 
+.comments-rail-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 0 0;
+  min-width: 0;
+}
+
+/* OD14.5: the rail names the claim it belongs to in a SECOND line (the
+   subtitle below), not in this title. The title never wraps past two lines —
+   it is the anchor over a page that scrolls behind it (rule 47E-0) — so it
+   clamps rather than the pre-revamp single-line ellipsis, which could cut a
+   long claim id/title before the reader ever saw it start. */
 .comments-rail-title {
   margin: 0;
-  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 22px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* "on <claim title>" (OD14.5). Empty until openCommentPanel fills it in, so a
+   read-only static clone never shows a stray label with nothing after it. */
+.comments-rail-subtitle {
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
+}
+
+.comments-rail-subtitle:empty {
+  display: none;
+}
+
+/* R-J.4: the header's mono count is a SLOT of the shared sheet header, not a
+   fork — the desktop rail never shows it (this stays display:none until the
+   (max-width: 860px) block below turns it on for the sheet). */
+.comments-rail-count {
+  display: none;
+  flex-shrink: 0;
   font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: .05em;
+  font-size: 12px;
+  line-height: 16px;
   color: var(--faint);
 }
 
 .comments-rail-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  border: 1px solid var(--border);
-  background: var(--card-bg);
-  color: var(--ink);
-  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
   cursor: pointer;
-  font-size: 13px;
+  padding: 0;
   line-height: 1;
-  padding: 6px 9px;
+}
+
+.comments-rail-close .dx-icon {
+  width: 17px;
+  height: 17px;
 }
 
 .comments-rail-body {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 12px 14px;
+  padding: 4px 22px 0;
+}
+
+/* R-J.5: the composer (or, in read-only mode, its re-tenanted explanation —
+   14a §D "the composer's slot is re-tenanted, not disabled") is a SIBLING of
+   the scrolling body, not a child of it, so it never scrolls out of view and
+   never shrinks. :empty collapses the slot when neither has been mounted yet
+   (the split second before openCommentPanel's first render). */
+.comments-rail-composer-slot {
+  flex-shrink: 0;
+}
+
+.comments-rail-composer-slot:empty {
+  display: none;
 }
 
 .comments-loading,
-.comments-error,
 .comments-empty {
   margin: 8px 0;
-  font-size: 12px;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 21px;
   color: var(--muted);
 }
 
 .comments-error {
+  margin: 8px 0;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 21px;
   color: var(--warn);
 }
 
 /* An optimistic (not-yet-confirmed) thread/reply reads dimmer until the server
-   round-trip replaces it with the rendered body. */
+   round-trip replaces it with the rendered body. Never the resolved value
+   (0.72, on the base .comment-thread--resolved rule further up) — "not yet
+   real" and "settled" are different facts and must stay visually distinct. */
 .comment-thread--optimistic,
 .comment-reply--optimistic,
 .comment-thread--deleting {
@@ -2603,9 +2811,11 @@ th {
   color: var(--faint);
 }
 
-/* Per-message edit/delete controls sit at the right end of the meta row. */
+/* Per-message edit/delete controls (13x13, D14.8/M15: own-comment only, and
+   hidden entirely under (pointer: coarse) — "there is no hover on a phone and
+   a 13px target is not a control"). Sit at the right end of the meta row. */
 .comment-meta .comment-action {
-  padding: 3px 6px;
+  padding: 3px;
   line-height: 1;
 }
 
@@ -2614,24 +2824,30 @@ th {
 }
 
 .comment-action {
-  border: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  border: 0;
   background: transparent;
-  color: var(--muted);
+  color: var(--faint);
   border-radius: 6px;
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  padding: 5px 9px;
+  padding: 5px;
+}
+
+.comment-edit .dx-icon,
+.comment-delete .dx-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .comment-action:hover {
   color: var(--ink);
-  border-color: var(--accent);
 }
 
 .comment-delete:hover {
   color: var(--warn);
-  border-color: var(--warn);
 }
 
 .comment-action-text {
@@ -2644,10 +2860,64 @@ th {
   padding: 6px 10px;
 }
 
+/* OD14.8: Resolve is a labelled pill (tick + word), Reply a bare accent label
+   — replacing the pre-revamp icon-only button with no Reply control at all.
+   Both keep the .comment-action class for the shared min-height rule under
+   (pointer: coarse) further down. Weight is 500 at rest (14 §4.4) and steps to
+   600 under (pointer: coarse) (M9). */
+.comment-resolve,
+.comment-reopen {
+  gap: 6px;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong, #aab5c7);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+}
+
+.comment-resolve .dx-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--accent);
+}
+
+.comment-reopen .dx-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--muted);
+}
+
+.comment-resolve:hover,
+.comment-reopen:hover {
+  color: var(--ink);
+  border-color: var(--link);
+}
+
+.comment-reply-trigger {
+  border-color: transparent;
+  background: transparent;
+  color: var(--link);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 500;
+  padding: 4px 2px;
+}
+
+.comment-reply-trigger:hover {
+  color: var(--ink);
+  border-color: transparent;
+}
+
 .comment-thread-actions {
   display: flex;
-  gap: 6px;
-  margin-top: 6px;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
 }
 
 .comment-composer,
@@ -2659,15 +2929,60 @@ th {
   flex-wrap: wrap;
 }
 
-.comment-composer {
-  margin-top: 14px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
 .comment-reply-composer,
 .comment-edit-form {
   margin-top: 8px;
+}
+
+/* OD14.8: buildThread mounts this form `hidden` at rest and unhides it from
+   the bare `Reply` label — but the `display: flex` two rules up is an AUTHOR
+   declaration that beats the UA `[hidden] { display: none }` rule outright
+   (see the `.claim-source-note-toggle[hidden]` note above this file's other
+   instance of the same trap), so without this companion the form would
+   render fully visible under every open thread regardless of the attribute. */
+.comment-reply-composer[hidden] {
+  display: none;
+}
+
+/* The root composer is the ONLY one with the caption + pinned footer (R-J.5);
+   reply and edit forms stay the plain textarea+button row above. It now lives
+   inside #commentsComposerSlot (a sibling of the scrolling body, shell.html),
+   so this strip IS the pinned region rather than a rule inside a scrolling
+   one — the strip's own padding/border/ground replace the old margin-top +
+   border-top that used to sit inline in the scroll flow. */
+.comment-composer {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  padding: 16px 22px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--paper);
+}
+
+/* The shared .comment-composer-input rule below sets flex: 1 for the
+   reply/edit forms' ROW layout (grow along the horizontal main axis, next to
+   their submit button). Inside the root composer's COLUMN layout the main
+   axis is vertical, so that same flex-grow fights autoGrow's inline
+   style.height (VJF-1 territory again) — align-items: stretch above already
+   fills the width without it, so flex-grow is turned off here instead. */
+.comment-composer .comment-composer-input {
+  flex: none;
+}
+
+.comment-composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.comment-composer-caption {
+  width: 170px;
+  flex-shrink: 0;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--faint);
 }
 
 .comment-composer-input {
@@ -2675,28 +2990,83 @@ th {
   min-width: 0;
   resize: none;
   overflow: hidden;
-  font: 13px/1.4 var(--font-sans);
+  font: 13px/20px var(--font-sans);
   color: var(--ink);
   background: var(--card-bg);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-strong, #aab5c7);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 11px 13px;
+}
+
+.comment-composer .comment-composer-input::placeholder,
+.comment-reply-composer .comment-composer-input::placeholder,
+.comment-edit-form .comment-composer-input::placeholder {
+  color: var(--faint);
 }
 
 .comment-composer-input:focus {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--link);
   outline-offset: -1px;
 }
 
+/* 14 §4.5 node 45I-0 / R-J.5, verifier RETRY item 3, re-checked in the FINAL
+   retry: the label is rgb(255,255,255) in LIGHT and the PAGE ground
+   (--paper, --color-dark-paper #0D1117) in DARK. A first attempt used
+   `light-dark(#FFFFFF, var(--paper))`, which read correctly under BOTH
+   `-scheme light` and `-scheme dark` emulation — but the coordinator's ask to
+   "verify with a probe in both schemes AND with the explicit Dark toggle"
+   caught a real defect: `light-dark()` resolves against the OS-level
+   `prefers-color-scheme`, not against this engine's `html[data-theme="dark"]`
+   override, because `color-scheme: light dark` is pinned unconditionally on
+   `:root` (no `html[data-theme] { color-scheme: … }` re-point exists to force
+   it). Probed live: OS light + explicit Dark toggle → background correctly
+   switches to dark's `--link` (`rgb(106,166,232)`) via the reserved
+   `html[data-theme="dark"]` block, but the label stayed `rgb(255,255,255)`
+   (the light branch) instead of `rgb(13,17,23)` — white-on-light-blue, wrong
+   per 45I-0. Per the coordinator's stated fallback for exactly this failure,
+   this now reads `var(--card-bg)` instead: it is already `#FFFFFF` on the
+   light `:root` (style.css:71 — an exact match for the 45I-0 light pin) and
+   `#161B22` in BOTH reserved dark blocks (style.css:182/209, byte-identical,
+   G9-compliant with no value change needed) via `html[data-theme="dark"]` AND
+   the dark media query alike — so it tracks the explicit toggle correctly,
+   unlike `light-dark()`. `#161B22` is the CARD ground rather than 45I-0's
+   PAGE ground (`--paper` `#0D1117`) — an accepted off-target hex per the
+   ruling, not a fresh choice by this lane; a `--paper` value is unreachable
+   here without either forcing `color-scheme` on this subtree or a new
+   allowlisted token, both blocked the same way as
+   learnings/inbox/L6.md item 1. */
 .comment-composer-submit {
   flex-shrink: 0;
-  border: 1px solid var(--accent);
-  background: var(--accent-bg);
-  color: var(--accent);
-  border-radius: 8px;
-  padding: 8px 14px;
-  font: 600 12px var(--font-sans);
+  border: 0;
+  background: var(--link);
+  color: var(--card-bg);
+  border-radius: 6px;
+  padding: 7px 16px;
+  font: 600 13px/16px var(--font-sans);
   cursor: pointer;
+}
+
+/* The reply/edit submit buttons keep the pre-revamp pill treatment (no board
+   measures them separately from the root Comment button's colour role). */
+.comment-reply-composer .comment-composer-submit,
+.comment-edit-form .comment-composer-submit {
+  border: 1px solid var(--link);
+  background: color-mix(in srgb, var(--link) 10%, var(--card-bg));
+  color: var(--link);
+}
+
+/* Read-only mode's explanation, mounted into #commentsComposerSlot in place of
+   the composer (14a §D / §E: "the composer's slot re-tenanted by an
+   explanation" — the control is not disabled, it is not built). */
+.comments-readonly-note {
+  margin: 0;
+  padding: 13px 22px;
+  border-top: 1px solid var(--border);
+  background: var(--paper);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 19px;
+  color: var(--muted);
 }
 
 .comments-toast {
@@ -2717,6 +3087,30 @@ th {
 
 .comments-toast[hidden] {
   display: none;
+}
+
+/* 14 §2 intent 2 / §8.15, verifier RETRY item 4(i): "the claim column keeps
+   its 760px measure; the rail takes the width that was gutter" — the
+   non-modal desktop rail is `position: fixed` and reserves no space of its
+   own, so without this the reading column's right edge (last ~78px) sits
+   under the rail's 360px. Gated to the rail's own non-modal breakpoint
+   (`min-width: 861px`, the mirror of the `(max-width: 860px)` bottom-sheet
+   query above) — below that the rail becomes the modal sheet and the column
+   needs no reflow. This is a comments-state rule scoped by `body.comments
+   -open`, not an edit to `.content-area` itself (L2/shell owns that rule);
+   the two known base-padding states it must add the rail's 360px on top of
+   (the plain default and `body.system-toc-collapsed`, `style.css` ~3921 and
+   ~3930) are covered explicitly since a bare `calc()` cannot reference
+   another rule's winning value. The `body:has(.build-order-section)` combo
+   is out of this lane's scope (comments UI is not reachable from that tab
+   today) — see learnings/inbox/L6.md. */
+@media screen and (min-width: 861px) {
+  body.comments-open .content-area {
+    padding-right: calc(282px + min(360px, 90vw));
+  }
+  body.comments-open.system-toc-collapsed .content-area {
+    padding-right: calc(86px + min(360px, 90vw));
+  }
 }
 
 /* ---- status strip (lock-ledger integrity + lint) -----------------------
@@ -2917,16 +3311,53 @@ th {
   line-height: 1.5;
 }
 
-/* Coarse pointers (touch) need >=44px hit targets on every comment control. */
+/* Coarse pointers (touch) need >=44px hit targets on every comment control
+   (R-J.2/M16/M8). M9 ("the mobile chip rule", AOY-0) is a legibility-without-
+   hover change, not an arrangement one, so it rides the same query rather
+   than a width breakpoint. M15 hides the per-message hover glyphs entirely —
+   "there is no hover on a phone and a 13px target is not a control." */
 @media (pointer: coarse) {
   .comments-rail-close,
-  .comment-action,
   .comment-action-text,
+  .comment-resolve,
+  .comment-reopen,
+  .comment-reply-trigger,
   .comment-composer-submit,
   .comment-composer-input,
   .status-strip-head,
   .claim-collapse-toggle {
     min-height: 44px;
+  }
+
+  .comments-rail-close {
+    min-width: 44px;
+    justify-content: center;
+  }
+
+  .comments-rail-close .dx-icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .comment-resolve,
+  .comment-reopen {
+    padding: 5px 11px;
+  }
+
+  .comment-composer-submit {
+    padding: 9px 16px;
+  }
+
+  .comment-resolve .comment-action-label,
+  .comment-reopen .comment-action-label,
+  .comment-reply-trigger,
+  .comments-resolved > summary {
+    font-weight: 600;
+  }
+
+  .comment-edit,
+  .comment-delete {
+    display: none;
   }
 }
 
@@ -2947,10 +3378,85 @@ th {
     right: 0;
     bottom: 0;
     width: 100%;
-    max-height: 70vh;
+    height: fit-content;
+    min-height: 240px;
+    max-height: 660px;
     border-left: 0;
-    border-top: 1px solid var(--border);
-    border-radius: 14px 14px 0 0;
+    /* R-J.2 / OD14a.7 / M4, verifier RETRY item 4(iii): a dark-only 1px top
+       hairline (the light sheet relies on its 16px corners and the scrim
+       alone). `light-dark()` expresses "present only under dark" without a
+       second selector-scoped dark query or a new dark-only token — see
+       G13/learnings/inbox/L6.md item 1 for why a component-scoped
+       `@media screen and (prefers-color-scheme: dark)` block is unavailable
+       here (theme_tokens_test.go's ExactlyOneScreenScopedDarkQuery). */
+    border-top: 1px solid light-dark(transparent, var(--border));
+    border-top-left-radius: 16px;
+    border-top-right-radius: 16px;
+    border-radius: 16px 16px 0 0;
+    overflow: clip;
+  }
+  /* `#commentsPanel.comments-rail`, not plain `.comments-rail`: the live/
+     System Record layer (further down this file) carries its own
+     unconditional `.comments-rail { box-shadow: var(--shadow-cast, …) }`
+     rule (same declared element — `#commentsPanel` IS `.comments-rail`,
+     shell.html:244), and an equal-specificity plain-class override here
+     would only win at whichever position happens to sit later in the file —
+     which TestConsumerReadWinsCascade reads textually and does not resolve
+     against media-query scoping, so a plain `.comments-rail` override here
+     previously either lost the real cascade (pre-fix: the sheet kept its
+     desktop shadow) or, once it won the real cascade, made that test think
+     --shadow-cast's read was dead everywhere. The ID+class compound is
+     higher specificity than either unconditional rule, so it wins on every
+     browser at this breakpoint regardless of source order — 14 §5 M3 / AOY-0
+     ("the rail's left border and its -8px shadow are dropped") — while its
+     different selector text keeps it outside tokenConsumers["shadow-cast"]'s
+     exact-match set, leaving the desktop `var(--shadow-cast, …)` consumer as
+     the one both that test and theme_tokens_test.go:542-543 find. */
+  #commentsPanel.comments-rail {
+    box-shadow: none;
+  }
+  .comments-rail-grabber {
+    display: flex;
+  }
+  .comments-rail-head {
+    padding: 14px 16px 12px;
+    gap: 10px;
+  }
+  .comments-rail-title {
+    font-size: 16px;
+    line-height: 22px;
+    letter-spacing: -0.01em;
+  }
+  /* R-J.4: the mono count is a header SLOT the sheet fills and the desktop
+     rail leaves empty — it is a property of the sheet shell, not the phone
+     (14 §5 M5). Populated by openCommentPanel/buildPanel; empty until then. */
+  .comments-rail-count:not(:empty) {
+    display: block;
+  }
+  .comments-rail-body {
+    padding: 4px 16px 0;
+  }
+  .comments-readonly-note {
+    padding: 13px 16px;
+  }
+  .comment-composer {
+    padding: 14px 16px 18px;
+  }
+  .comment-composer-caption {
+    width: 180px;
+  }
+  .comment-composer-submit {
+    padding: 9px 16px;
+  }
+  .comment-body {
+    font-size: 14px;
+    line-height: 22px;
+  }
+  .comment-composer-input,
+  .comment-reply-composer .comment-composer-input,
+  .comment-edit-form .comment-composer-input {
+    font-size: 14px;
+    line-height: 20px;
   }
   .status-strip,
   .claim-group,
@@ -5172,15 +5678,30 @@ code {
   text-transform: uppercase;
 }
 
+/* Spec 14 §4.6 (42I-0) / 14a §4.F (46U-0, 46X-0): the pill is 999px/3px 8px/
+   12px everywhere the chip appears, and the --open/--active form is tinted,
+   not outlined (border-color: transparent overrides the base 1px --border,
+   not a --link stroke). tokens.md §9's standing decision pins the tint at
+   color-mix 9% over transparent (not 10% over --card-bg, which baked the
+   card's own ground into the mix and drifted per surface). */
 .comment-chip {
-  border-radius: 5px;
-  font-size: 10px;
+  border-radius: var(--radius-pill, 999px);
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 16px;
 }
 
-.comment-chip--open {
-  border-color: var(--accent);
-  background: var(--accent-bg);
-  color: var(--accent);
+.comment-chip--open,
+.comment-chip--active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--link) 9%, transparent);
+  color: var(--link);
+}
+
+.comment-chip--resolved {
+  border-color: transparent;
+  background: transparent;
+  color: var(--faint);
 }
 
 .track-head {
@@ -5212,10 +5733,14 @@ code {
 
 .track-cite > .pill { margin-left: auto; }
 
+/* 14 §4.1 (node 43Y-0): the board's -8px 0 24px shadow supersedes this layer's
+   pre-revamp -14px 0 34px; border is --border-strong (D14.2's rail is
+   token-clean, and tokens.md Disagreement 9 fixes the fallback at the light
+   literal since the engine has no dark --border-strong override). */
 .comments-rail {
-  border-left-color: var(--border);
+  border-left-color: var(--border-strong, #aab5c7);
   background: var(--card-bg);
-  box-shadow: -14px 0 34px var(--shadow-cast, rgba(9, 20, 38, .12));
+  box-shadow: -8px 0 24px var(--shadow-cast, rgba(9, 20, 38, .12));
 }
 
 .comments-rail-head {
@@ -6129,6 +6654,38 @@ code {
 @media (pointer: coarse) {
   .claim-footer-chip {
     min-height: 44px;
+
+/* lane: L6 — comments (chip, rail, bottom sheet, threads, composer). New
+   phone-tier block per docs/design/LANES.md OD1: appended after the last
+   shared/lane @media (max-width: 520px) block and before the print marker,
+   tagged with this comment, per G11/OD14.11 rather than editing a shared
+   container in place.
+
+   Every rule below maps a docs/design/screens/14-comments-rail-open-on-a-claim
+   .md mobile rule (M10/M11) onto this existing engine breakpoint, per
+   tokens.md §8's standing instruction: no 390px breakpoint is added. Scoped to
+   this lane's own component roots (.comment-reply, .comment-thread), so no
+   probe is needed against another lane's selector (G11 is about a bare
+   selector reaching foreign components; these two are this lane's alone). */
+@media (max-width: 520px) {
+  /* M10 — the nested reply drops its 14px left offset and keeps the 2px rule;
+     R-J.7 fixes the rule at 2px and does not fix the indent (14 §5
+     "Reconciling M7-M11 with R-H.0"), so dropping it here is legal. Combined
+     with M11's margin-top step (10px rail -> 6px). */
+  .comment-reply {
+    margin-left: 0;
+    margin-top: 6px;
+  }
+
+  /* M11 — thread spacing switches from 10/12/4 margins to 2/6/2 padding at the
+     16px mobile gutter (14 §5 M11: "the arrangement that follows from R-J.7's
+     three-part structure"). */
+  .comment-thread {
+    padding: 2px 0;
+  }
+
+  .comment-thread-actions {
+    margin-top: 2px;
   }
 }
 
