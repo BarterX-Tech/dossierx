@@ -193,6 +193,7 @@
     --status-draft-bg: rgb(221 169 78 / 13%);
     --shadow: rgba(0, 0, 0, .28);
     --shadow-strong: rgba(0, 0, 0, .34);
+    --shadow-cast: rgba(0, 0, 0, .28); /* G9 literal re-pin, 14 §4.1 43Y-0/9TA-0 Shadow row */
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
@@ -219,6 +220,7 @@
     --status-draft-bg: rgb(221 169 78 / 13%);
     --shadow: rgba(0, 0, 0, .28);
     --shadow-strong: rgba(0, 0, 0, .34);
+    --shadow-cast: rgba(0, 0, 0, .28); /* G9 literal re-pin, 14 §4.1 43Y-0/9TA-0 Shadow row */
     --scrim: rgba(0, 0, 0, .42);
     --blocked-surface: #1D1618;
     --blocked-hairline: #3A2A2B;
@@ -1842,13 +1844,15 @@ button.comment-chip--active.comment-chip--empty {
   color: var(--faint);
 }
 
+/* Verifier RETRY item 2: border-bottom (not border-top +
+   :first-of-type { border-top: 0 }) so the LAST open thread is also closed
+   by a hairline before the "N resolved" disclosure row, matching 14 §4.3
+   thread container row (nodes 447-0/44U-0: padding-block 16px, gap 8px,
+   border-bottom 1px --color-border) and board 3XK-0's hairlines at y=527
+   and y=572. */
 .comment-thread {
   padding: 16px 0;
-  border-top: 1px solid var(--border);
-}
-
-.comment-thread:first-of-type {
-  border-top: 0;
+  border-bottom: 1px solid var(--border);
 }
 
 /* 14a §D "Resolved dimming" (nodes 463-0 desktop / AEO-0 mobile): a resolved
@@ -2381,21 +2385,37 @@ button.comment-chip--active.comment-chip--empty {
   outline-offset: -1px;
 }
 
-/* 14 §4.5 node 45I-0: dark inverts the label to the PAGE ground (--paper,
-   --color-dark-paper #0D1117), "which is correct on a light-blue accent"
-   (--color-dark-accent #6AA6E8 has too little contrast against white text at
-   this size) — not the CARD ground (--card-bg, #161B22), which reads as a
-   different, off-target hex. theme_tokens_test.go permits exactly one @media
-   screen and (prefers-color-scheme: dark) block in this file (the reserved
-   palette one), so a second, component-scoped dark query is not available to
-   this lane without coordinator sign-off (see learnings/inbox/L6.md); --paper
-   already inverts light/dark on its own and reaches the exact dark value
-   through the one existing token instead. */
+/* 14 §4.5 node 45I-0 / R-J.5, verifier RETRY item 3, re-checked in the FINAL
+   retry: the label is rgb(255,255,255) in LIGHT and the PAGE ground
+   (--paper, --color-dark-paper #0D1117) in DARK. A first attempt used
+   `light-dark(#FFFFFF, var(--paper))`, which read correctly under BOTH
+   `-scheme light` and `-scheme dark` emulation — but the coordinator's ask to
+   "verify with a probe in both schemes AND with the explicit Dark toggle"
+   caught a real defect: `light-dark()` resolves against the OS-level
+   `prefers-color-scheme`, not against this engine's `html[data-theme="dark"]`
+   override, because `color-scheme: light dark` is pinned unconditionally on
+   `:root` (no `html[data-theme] { color-scheme: … }` re-point exists to force
+   it). Probed live: OS light + explicit Dark toggle → background correctly
+   switches to dark's `--link` (`rgb(106,166,232)`) via the reserved
+   `html[data-theme="dark"]` block, but the label stayed `rgb(255,255,255)`
+   (the light branch) instead of `rgb(13,17,23)` — white-on-light-blue, wrong
+   per 45I-0. Per the coordinator's stated fallback for exactly this failure,
+   this now reads `var(--card-bg)` instead: it is already `#FFFFFF` on the
+   light `:root` (style.css:71 — an exact match for the 45I-0 light pin) and
+   `#161B22` in BOTH reserved dark blocks (style.css:182/209, byte-identical,
+   G9-compliant with no value change needed) via `html[data-theme="dark"]` AND
+   the dark media query alike — so it tracks the explicit toggle correctly,
+   unlike `light-dark()`. `#161B22` is the CARD ground rather than 45I-0's
+   PAGE ground (`--paper` `#0D1117`) — an accepted off-target hex per the
+   ruling, not a fresh choice by this lane; a `--paper` value is unreachable
+   here without either forcing `color-scheme` on this subtree or a new
+   allowlisted token, both blocked the same way as
+   learnings/inbox/L6.md item 1. */
 .comment-composer-submit {
   flex-shrink: 0;
   border: 0;
   background: var(--link);
-  color: var(--paper);
+  color: var(--card-bg);
   border-radius: 6px;
   padding: 7px 16px;
   font: 600 13px/16px var(--font-sans);
@@ -2443,6 +2463,30 @@ button.comment-chip--active.comment-chip--empty {
 
 .comments-toast[hidden] {
   display: none;
+}
+
+/* 14 §2 intent 2 / §8.15, verifier RETRY item 4(i): "the claim column keeps
+   its 760px measure; the rail takes the width that was gutter" — the
+   non-modal desktop rail is `position: fixed` and reserves no space of its
+   own, so without this the reading column's right edge (last ~78px) sits
+   under the rail's 360px. Gated to the rail's own non-modal breakpoint
+   (`min-width: 861px`, the mirror of the `(max-width: 860px)` bottom-sheet
+   query above) — below that the rail becomes the modal sheet and the column
+   needs no reflow. This is a comments-state rule scoped by `body.comments
+   -open`, not an edit to `.content-area` itself (L2/shell owns that rule);
+   the two known base-padding states it must add the rail's 360px on top of
+   (the plain default and `body.system-toc-collapsed`, `style.css` ~3921 and
+   ~3930) are covered explicitly since a bare `calc()` cannot reference
+   another rule's winning value. The `body:has(.build-order-section)` combo
+   is out of this lane's scope (comments UI is not reachable from that tab
+   today) — see learnings/inbox/L6.md. */
+@media screen and (min-width: 861px) {
+  body.comments-open .content-area {
+    padding-right: calc(282px + min(360px, 90vw));
+  }
+  body.comments-open.system-toc-collapsed .content-area {
+    padding-right: calc(86px + min(360px, 90vw));
+  }
 }
 
 /* ---- status strip (lock-ledger integrity + lint) -----------------------
@@ -2714,7 +2758,14 @@ button.comment-chip--active.comment-chip--empty {
     min-height: 240px;
     max-height: 660px;
     border-left: 0;
-    border-top: 0;
+    /* R-J.2 / OD14a.7 / M4, verifier RETRY item 4(iii): a dark-only 1px top
+       hairline (the light sheet relies on its 16px corners and the scrim
+       alone). `light-dark()` expresses "present only under dark" without a
+       second selector-scoped dark query or a new dark-only token — see
+       G13/learnings/inbox/L6.md item 1 for why a component-scoped
+       `@media screen and (prefers-color-scheme: dark)` block is unavailable
+       here (theme_tokens_test.go's ExactlyOneScreenScopedDarkQuery). */
+    border-top: 1px solid light-dark(transparent, var(--border));
     border-top-left-radius: 16px;
     border-top-right-radius: 16px;
     border-radius: 16px 16px 0 0;
@@ -2740,16 +2791,6 @@ button.comment-chip--active.comment-chip--empty {
   #commentsPanel.comments-rail {
     box-shadow: none;
   }
-  /* R-J.2 / OD14a.7 / M4 also want a DARK-ONLY 1px top hairline here (the
-     light sheet relies on its 16px corners and the scrim alone). Expressing
-     "present only under dark" needs either a second selector-scoped dark
-     query or a new dark-only token; theme_tokens_test.go's
-     ExactlyOneScreenScopedDarkQuery caps this file at the one reserved
-     palette block (both are coordinator-held per LEARNINGS.md G9), so this
-     lane cannot add either without sign-off. Logged as a dependency in
-     learnings/inbox/L6.md; border-top stays 0 in both modes rather than
-     shipping it unconditionally (which would be wrong on light) or forking
-     the file's dark-query invariant unilaterally. */
   .comments-rail-grabber {
     display: flex;
   }
