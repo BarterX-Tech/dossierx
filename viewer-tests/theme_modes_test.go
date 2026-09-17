@@ -1022,3 +1022,155 @@ func TestFlatThemeKeySurvivesTheExplicitDarkToggle(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------
+// An explicit LIGHT choice beats a dark OS — for every engine token
+// ---------------------------------------------------------------------
+
+// engineLightDefaults are the values style.css's unconditional :root gives
+// these four tokens, plus graph.css's light ramp for the fifth. Pinned rather
+// than read back off a light-OS tab, for the same reason engineDarkDefaults is:
+// comparing the page against itself would pass for a Light control that did
+// nothing at all.
+//
+// --dxg-facet-1 is in the set on purpose. It is not themeable and it lives in
+// the OTHER stylesheet, which runs the opposite convention (dark base, light
+// override), so it is the token that proves the fix reached both sheets rather
+// than only the one the palette lives in.
+var engineLightDefaults = map[string]string{
+	"paper":       "#EFF1F4",
+	"ink":         "#101720",
+	"accent":      "#2C6B52",
+	"link":        "#1C4E8C",
+	"dxg-facet-1": "#4257C4",
+}
+
+// engineDarkStart are the same five under a dark OS with the control on
+// System. They are asserted BEFORE the Light press, so "the values moved" is a
+// statement about the press and not about a page that was light all along.
+var engineDarkStart = map[string]string{
+	"paper":       "#0D1117",
+	"ink":         "#E6EAF0",
+	"accent":      "#63BE9A",
+	"link":        "#6AA6E8",
+	"dxg-facet-1": "#7C8CE8",
+}
+
+// TestThemeControlLightOverridesDarkOS is the mirror of
+// TestThemeControlDarkOverridesLightOS (viewer-tests/component_fit_test.go) and
+// it was red when it was written.
+//
+// The viewer's theme control has three positions and the engine had blocks for
+// two of them. style.css is light-first — its light values are the unconditional
+// `:root`, specificity (0,1,0) — and its OS-dark query re-points twenty-three of
+// them at that same specificity, LATER in the file. So on a dark OS the dark
+// values won on source order, and the explicit Light choice had nothing at
+// (0,1,1) to answer with: html[data-theme="light"] simply did not exist. Every
+// token a project had not themed itself stayed dark under a lit Light control.
+// graph.css had the same hole for its --dxg-* ramp, from the opposite side.
+//
+// The check runs on an UNTHEMED project on purpose: a themed one would be
+// carried by the project's own html[data-theme="light"] rule, which is the one
+// path that already worked, and would hide exactly the defect this is for.
+func TestThemeControlLightOverridesDarkOS(t *testing.T) {
+	browser := resolveBrowser(t)
+
+	readToken := func(ctx context.Context, token string) string {
+		return evalString(t, ctx,
+			`getComputedStyle(document.documentElement).getPropertyValue('--`+token+`').trim()`)
+	}
+	press := func(ctx context.Context, choice string) {
+		evalVoid(t, ctx, `(function(){
+			var b = document.querySelector('.theme-control [data-theme-choice="`+choice+`"]');
+			if (!b) { throw new Error('`+choice+` theme control is missing'); }
+			b.click();
+		})()`)
+		if got := evalString(t, ctx, `document.documentElement.getAttribute('data-theme') || ''`); got != choice {
+			t.Fatalf("the %s control did not set data-theme=%s (got %q); nothing below "+
+				"would be measuring the explicit-%s path", choice, choice, got, choice)
+		}
+	}
+	openOnADarkOS := func(url string) context.Context {
+		ctx := browserContextFor(t, browser)
+		runCDP(t, ctx,
+			chromedp.EmulateViewport(1280, 900, chromedp.EmulateScale(1)),
+			chromedp.Navigate(url),
+		)
+		pollTrue(t, ctx, `document.readyState === 'complete'`)
+		emulateColorScheme(t, ctx, "dark")
+		if !evalBool(t, ctx, `window.matchMedia('(prefers-color-scheme: dark)').matches`) {
+			t.Fatal("the OS must stay DARK, or pressing Light is not an override of anything")
+		}
+		pollTrue(t, ctx, `!!document.querySelector('.theme-control [data-theme-choice="light"]')`)
+		return ctx
+	}
+
+	// ---- the unthemed engine: the whole palette has to move ----
+	plain := newThemedProject(t, unthemedConfigYAML, false)
+	ctx := openOnADarkOS(plain.renderStatic())
+
+	for token, want := range engineDarkStart {
+		if got := readToken(ctx, token); got != want {
+			t.Fatalf("on a dark OS with the control on System, --%s is %q, want the engine's "+
+				"dark default %q. The page is not in the state this test measures a change "+
+				"away from, so every assertion below would prove nothing.", token, got, want)
+		}
+	}
+
+	press(ctx, "light")
+
+	for token, want := range engineLightDefaults {
+		got := readToken(ctx, token)
+		if got == engineDarkStart[token] {
+			t.Errorf("after the reader pressed Light on a dark OS, --%s is still the engine's "+
+				"DARK value %q. An explicit Light choice has to beat the OS for every token, "+
+				"not only the ones a project themed.", token, got)
+			continue
+		}
+		if got != want {
+			t.Errorf("after the reader pressed Light on a dark OS, --%s is %q, want the engine's "+
+				"light value %q", token, got, want)
+		}
+	}
+
+	// color-scheme has to follow the choice too, or the palette is light and the
+	// form controls, the scrollbars and every light-dark() resolution are dark.
+	scheme := func() string {
+		return evalString(t, ctx,
+			`getComputedStyle(document.documentElement).getPropertyValue('color-scheme').trim()`)
+	}
+	if got := scheme(); got != "light" {
+		t.Errorf("after pressing Light on a dark OS, :root color-scheme is %q, want \"light\"", got)
+	}
+	press(ctx, "dark")
+	if got := scheme(); got != "dark" {
+		t.Errorf("after pressing Dark, :root color-scheme is %q, want \"dark\"", got)
+	}
+	press(ctx, "system")
+	if got := scheme(); got != "light dark" {
+		t.Errorf("on System, :root color-scheme is %q, want the unconditional \"light dark\" "+
+			"so the OS decides", got)
+	}
+
+	// ---- and a project's FLAT key still wins over the new engine block ----
+	//
+	// The engine's html[data-theme="light"] rule is (0,1,1); a flat key lands on
+	// the project's own ":root" at (0,1,0). Without the mirror-image merge in
+	// themeOverrideCSS, adding that engine block would have broken the Light
+	// position for flat keys exactly as the missing Dark block once broke Dark.
+	flatCtx := openOnADarkOS(renderFixtureFresh(t, "fixture-theme-flat"))
+	press(flatCtx, "light")
+	for token, want := range flatFixtureValues {
+		got := readToken(flatCtx, token)
+		if got == engineLightDefaults[token] {
+			t.Errorf("after the reader pressed Light, --%s is the ENGINE's light default %q, "+
+				"not the project's flat %q; the engine's new explicit-Light block is beating "+
+				"the project's own theme", token, got, want)
+			continue
+		}
+		if got != want {
+			t.Errorf("after the reader pressed Light, --%s is %q, want the project's flat %q",
+				token, got, want)
+		}
+	}
+}

@@ -44,8 +44,8 @@ the reader's OS colour scheme — `paper`, `card-bg`, `ink`, `muted`, `faint`,
 `code-bg`, `status-draft`, `status-draft-bg`, `shadow`, `shadow-strong`,
 `shadow-cast`, and `scrim`. Setting one of these as a flat key pins it to that
 value in **both** schemes — including for a reader who has pressed the
-viewer's own Dark control rather than leaving it on System. That is sometimes
-exactly what you want, and nothing warns you when it is not:
+viewer's own Dark or Light control rather than leaving it on System. That is
+sometimes exactly what you want, and nothing warns you when it is not:
 
 ```yaml
 viewer:
@@ -250,7 +250,10 @@ editing any of them, stop and restart `dossierx serve` to see the result.
   every so often does not create one.
 - **Print stays light.** An in-page System / Light / Dark control persists
   `dossierx-theme` and sets `html[data-theme]`. It does not add tokens, and
-  dark values remain screen-scoped so paper stays on the light palette.
+  dark values remain screen-scoped so paper stays on the light palette. Each
+  of the two explicit positions beats the reader's OS in its own direction —
+  Light on a dark OS is a light viewer, tokens a project never set included —
+  while System follows the OS.
 - **No graph ramp.** The claims graph's facet colours are generated to stay
   distinguishable from each other; no preset or token repaints them.
 - **The colour grammar is a shape check, not a CSS parser.** A value like

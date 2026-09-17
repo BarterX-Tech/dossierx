@@ -8,9 +8,18 @@
    1. One unconditional `:root` holds the palette, and it is LIGHT-FIRST:
       every value in it is both the light-OS value and the printed value.
       There is exactly one such block in this file.
-   2. `@media screen and (prefers-color-scheme: dark)` re-points the handful
-      of tokens that invert. The `screen and` prefix is load-bearing: it is
-      what keeps a dark-mode OS from dragging dark ink onto paper.
+   2. THREE mode blocks re-point the handful of tokens that invert, in this
+      order and all scoped to `screen`: `html[data-theme="dark"]` (the
+      reader's explicit Dark choice), `html[data-theme="light"]` (the explicit
+      Light choice, carrying the :root's own light values back), and
+      `@media screen and (prefers-color-scheme: dark) { :root }` (System,
+      following the OS). The two explicit selectors are (0,1,1) and the OS
+      one is (0,1,0), which is how an explicit choice beats the OS in either
+      direction; there is exactly ONE of each of the three. The `screen`
+      scoping is load-bearing: it is what keeps a dark-mode OS, or a reader
+      sitting on Dark, from dragging dark ink onto paper. All three declare
+      the same token set, and the light one's values are the :root's — pinned
+      by TestModeBlocksDeclareTheSameTokenSet.
    3. The single `@media print` block is the LAST block in this file. It has
       to be last, because it overrides screen layout rules at equal
       specificity (`.content-area { padding: 0 }` beats the padded screen
@@ -196,10 +205,22 @@
    the prefers-color-scheme query paints System. A token re-pointed in one and
    not the other is a viewer whose Dark toggle and whose OS setting disagree,
    which is invisible to anyone testing only one of the two paths. Keep the
-   bodies byte-identical; if one gains a declaration, so does the other. */
+   custom-property bodies byte-identical; if one gains a token, so does the
+   other — and so does the explicit-LIGHT block between them, which owes the
+   same token set at its light values. `color-scheme` is the single declared
+   exception, and it says why in place. */
 
 @media screen {
   html[data-theme="dark"] {
+    /* The ONE declaration the OS-dark block below does not carry, and the only
+       break in the byte-identity rule stated above. `color-scheme` resolves
+       `light dark` against the OS, so a reader who pressed Dark on a LIGHT OS
+       kept light form controls, a light scrollbar and a light `light-dark()`
+       resolution over a dark page. The OS-dark block needs no twin: there the
+       OS is already dark and the :root's `light dark` resolves to dark on its
+       own. Custom properties are what the mode blocks must keep identical, and
+       TestModeBlocksDeclareTheSameTokenSet compares exactly those. */
+    color-scheme: dark;
     --ink: #E6EAF0;
     --muted: #9AA7B8;
     --faint: #8494A8;
@@ -229,6 +250,74 @@
        on dark ONLY. The :root default is `transparent`, so the sheet's
        unconditional border-top paints nothing until this block runs. */
     --sheet-hairline: var(--border);
+  }
+}
+
+/* EXPLICIT LIGHT — the third mode block, and the one this file went without.
+
+   The viewer's theme control has THREE positions, and shell.html's boot script
+   writes the stored choice onto <html data-theme> before the first paint:
+
+     System   no data-theme value any rule here matches, so the OS query below
+              decides: light from the unconditional :root, dark from that query.
+     Dark     html[data-theme="dark"] above, specificity (0,1,1), beats the OS
+              query's :root at (0,1,0) whatever the OS says.
+     Light    html[data-theme="light"] here, the same (0,1,1), beats it the
+              other way.
+
+   WITHOUT THIS BLOCK the OS-dark query below was the last declaration a
+   dark-OS reader met for every token it re-points, and the light values in the
+   :root above lost to it on source order — an explicit Light choice moved
+   nothing at all except the tokens a project had themed (those land on the
+   project's own later rules). An unthemed viewer stayed entirely dark with the
+   Light control lit: --paper #0D1117, --ink #E6EAF0, the lot.
+
+   The values here are the :root values above, copied for exactly the token set
+   the two dark blocks re-point. Hand-duplicated because CSS cannot say "undo
+   that query"; the guard is TestModeBlocksDeclareTheSameTokenSet in
+   internal/render/theme_tokens_test.go, which fails if this block's token set
+   drifts from the dark blocks' or if any value here stops matching the :root it
+   copies. The :root remains the single source of light truth; this is its echo,
+   not a second palette.
+
+   The project theme is emitted after this file and carries its own
+   html[data-theme="light"] rule at the same (0,1,1) specificity, so a project's
+   values still win over this block on source order. internal/render's
+   themeOverrideCSS merges a project's FLAT keys into that rule for the same
+   reason it merges them into the explicit-dark one: against a (0,1,1) engine
+   rule, a project's (0,1,0) :root cannot win. */
+
+@media screen {
+  html[data-theme="light"] {
+    /* See the note in the explicit-dark block: an explicit choice has to pin
+       `color-scheme` too, or a reader who pressed Light on a dark OS keeps dark
+       form controls and a dark scrollbar under a light page. */
+    color-scheme: light;
+    --ink: #101720;
+    --muted: #54606F;
+    --faint: #6E7C8E;
+    --paper: #EFF1F4;
+    --card-bg: #FFFFFF;
+    --border: #DDE2E9;
+    --link: #1C4E8C;
+    --accent: #2C6B52;
+    --accent-bg: rgb(44 107 82 / 10%);
+    --warn: #9E3B36;
+    --warn-bg: rgb(158 59 54 / 10%);
+    --dxg-facet-other: #0d55b5;
+    --code-bg: #F3F5F8;
+    --border-strong: #C2CAD5;
+    --status-draft: #9A6A16;
+    --status-draft-bg: rgb(154 106 22 / 11%);
+    --shadow: rgba(0, 0, 0, .08);
+    --shadow-strong: rgba(0, 0, 0, .14);
+    --shadow-cast: rgba(9, 20, 38, .12);
+    --scrim: rgba(0, 0, 0, .22);
+    --blocked-surface: var(--warn-bg);
+    --blocked-hairline: color-mix(in srgb, var(--warn) 30%, var(--border));
+    /* Board 14 §4.8 / M4 / R-J.2: the bottom sheet's top hairline is a DARK-only
+       edge, so explicit Light puts it back to nothing. */
+    --sheet-hairline: transparent;
   }
 }
 

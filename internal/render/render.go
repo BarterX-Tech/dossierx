@@ -949,10 +949,10 @@ const softMountClaimThreshold = 80
 //     for System (and unset) following the OS. Kept at :root specificity so
 //     a project's later :root shared tokens still win in both schemes.
 //
-// Block 5 carries the SHARED declarations as well as the dark ones, and it
-// does so whenever either is non-empty. docs/theming.md promises that "a flat
-// key applies to both" schemes, and for a mode-varying token that promise only
-// holds here: style.css paints the reader's explicit Dark choice from
+// Blocks 4 and 5 carry the SHARED declarations as well as their own, and each
+// does so whenever either side is non-empty. docs/theming.md promises that "a
+// flat key applies to both" schemes, and for a mode-varying token that promise
+// only holds here: style.css paints the reader's explicit Dark choice from
 // `@media screen{html[data-theme="dark"]{...}}`, a selector of specificity
 // (0,1,1), while a shared key lands on `:root`, specificity (0,1,0). Source
 // order cannot rescue the weaker selector, so before this the engine's own
@@ -962,14 +962,19 @@ const softMountClaimThreshold = 80
 // set a token both flat and under `dark:` the dark value still wins on source
 // order inside the block.
 //
-// The light half needs no equivalent and deliberately does not get one.
-// style.css is light-first: its light values live in the one unconditional
-// `:root`, it declares no `html[data-theme="light"]` rule and no light media
-// query at all, and graph.css's light block is also `:root` and carries only
-// the non-themeable --dxg-* ramp. So every engine rule an explicit Light
-// choice can meet is (0,1,0), the project's shared `:root` ties it and wins on
-// source order — the theme sheet is the last of the three <style> blocks.
-// Block 4 stays rt.Light alone.
+// Block 4 carries the shared declarations for the mirror-image reason, and
+// only since the engine grew a light half to mirror. style.css used to have
+// none: it is light-first, so its light values lived in the one unconditional
+// `:root` at (0,1,0), a project's shared `:root` tied that and won on source
+// order, and block 4 could be rt.Light alone. That stopped being true when
+// style.css gained `@media screen{html[data-theme="light"]{...}}` — without
+// that block a dark-OS reader who pressed Light kept the engine's DARK palette
+// for every token, because the OS-dark query was the last (0,1,0) rule it met.
+// The fix is at (0,1,1), so it now beats a project's shared `:root` too, and a
+// flat `paper` would be lost on the Light position exactly as it used to be
+// lost on Dark. graph.css gained the same pair for its own --dxg-* ramp.
+// Shared is written first and Light second here as well, so a project that set
+// a token both flat and under `light:` still gets the light value.
 //
 // The two media lists are the whole of the print story (plan v4 A1). A
 // project's light values apply to print as well as to the light scheme; its
@@ -1013,7 +1018,12 @@ func themeOverrideCSS(rt *config.ResolvedTheme) template.CSS {
 
 	writeBlock(&b, "", ":root", rt.Shared)
 	writeBlock(&b, "@media (prefers-color-scheme: light), print", ":root", rt.Light)
-	writeBlock(&b, "", `html[data-theme="light"]`, rt.Light)
+	// Merged for the same reason as the explicit-Dark block below: style.css's
+	// own `html[data-theme="light"]` rule is (0,1,1) and a project's shared
+	// `:root` is (0,1,0), so a flat key needs a copy at the stronger selector
+	// to survive the reader's explicit Light choice.
+	explicitLight := appendThemeDecls(rt.Shared, rt.Light)
+	writeBlock(&b, "", `html[data-theme="light"]`, explicitLight)
 	// Unconditional on purpose: see the "flat key" paragraph above. Merging
 	// is what makes a shared token survive the explicit Dark toggle, and it
 	// has to happen when rt.Dark is EMPTY too — that is the whole defect.

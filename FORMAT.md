@@ -1650,9 +1650,12 @@ though the engine declares it once. **Mode-invariant (8)**: every other
 token in the table above, including `font-sans`, `font-mono`, and `radius`.
 
 Setting a mode-varying token as a FLAT key is legal and pins it in both
-schemes, including for a reader who has pressed the viewer's explicit Dark
-control — the engine emits a project's shared declarations under
-`html[data-theme="dark"]` as well as on `:root` for exactly that reason.
+schemes, including for a reader who has pressed the viewer's explicit Dark or
+Light control — the engine emits a project's shared declarations under
+`html[data-theme="dark"]` and `html[data-theme="light"]` as well as on `:root`
+for exactly that reason. Both engine rules that paint an explicit choice are
+specificity (0,1,1) and a project's `:root` is (0,1,0), so a flat key needs a
+copy at the stronger selector on each of the two explicit positions.
 
 Setting a mode-varying token as a flat key pins it to that value in **both**
 color schemes — sometimes exactly right, never warned about. A derived

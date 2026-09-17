@@ -77,7 +77,7 @@ func TestThemeOverrideCSS_FourParts(t *testing.T) {
 		`) format("truetype");font-weight:300 800;font-style:italic;font-display:swap;}` +
 		`:root{--accent:#111111;--font-sans:One, Two;--radius:8px;}` +
 		`@media (prefers-color-scheme: light), print{:root{--ink:#101010;--paper:#ffffff;}}` +
-		`html[data-theme="light"]{--ink:#101010;--paper:#ffffff;}` +
+		`html[data-theme="light"]{--accent:#111111;--font-sans:One, Two;--radius:8px;--ink:#101010;--paper:#ffffff;}` +
 		`@media screen{html[data-theme="dark"]{--accent:#111111;--font-sans:One, Two;--radius:8px;--ink:#eeeeee;--paper:#151515;}}` +
 		`@media screen and (prefers-color-scheme: dark){:root{--ink:#eeeeee;--paper:#151515;}}`
 
@@ -135,16 +135,20 @@ func TestThemeOverrideCSS_PartOrderByIndex(t *testing.T) {
 
 // TestThemeOverrideCSS_FlatKeysAlsoPinTheExplicitDarkToggle is the contract
 // docs/theming.md states in one line — "a flat key applies to both" schemes —
-// written out as the two blocks it takes to keep it true.
+// written out as the three blocks it takes to keep it true.
 //
 // A theme with no light:/dark: sub-mapping merges to shared-only declarations.
 // Those land on ":root", specificity (0,1,0). For the nineteen tokens
-// style.css re-points in dark that is not enough on its own: the reader's
-// explicit Dark choice is painted by
-// `@media screen{html[data-theme="dark"]{...}}`, specificity (0,1,1), and a
-// later (0,1,0) rule cannot beat it. So the shared declarations are emitted a
-// second time under that same selector, and a project that writes a flat
-// `paper` gets it under System, under Light AND under Dark.
+// style.css re-points per mode that is not enough on its own: the reader's
+// EXPLICIT choices are painted by `@media screen{html[data-theme="dark"]{...}}`
+// and `@media screen{html[data-theme="light"]{...}}`, both specificity (0,1,1),
+// and a later (0,1,0) rule cannot beat either. So the shared declarations are
+// emitted a second and a third time under those selectors, and a project that
+// writes a flat `paper` gets it under System, under Light AND under Dark.
+//
+// The light copy is newer than the dark one and arrived with the engine's own
+// explicit-Light block: before style.css had one, every rule an explicit Light
+// choice could meet was (0,1,0) and the project's ":root" already won there.
 //
 // The rest of the old compatibility property is unchanged and still asserted
 // below: no @font-face, and neither colour-scheme media query. In particular
@@ -159,9 +163,15 @@ func TestThemeOverrideCSS_FlatKeysAlsoPinTheExplicitDarkToggle(t *testing.T) {
 
 	const decls = "--accent:#c6613f;--ink:#141413;--radius:10px;"
 	want := ":root{" + decls + "}" +
+		`html[data-theme="light"]{` + decls + "}" +
 		`@media screen{html[data-theme="dark"]{` + decls + "}}"
 	if got != want {
 		t.Fatalf("flat-only theme emitted:\n%s\nwant:\n%s", got, want)
+	}
+	if !strings.Contains(got, `html[data-theme="light"]{`+decls+"}") {
+		t.Errorf("a flat-only theme emitted no explicit-Light block, so every flat "+
+			"mode-varying key loses to the engine's own light default for a reader "+
+			"who pressed Light: %s", got)
 	}
 	if !strings.HasPrefix(got, ":root{"+decls+"}") {
 		t.Errorf("the shared :root block is no longer the first thing emitted: %s", got)

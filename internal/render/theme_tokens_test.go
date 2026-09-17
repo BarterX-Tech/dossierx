@@ -18,6 +18,7 @@ package render
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -326,9 +327,268 @@ func TestStyleCSSModeAndPrintStructure(t *testing.T) {
 	})
 }
 
+// ---------------------------------------------------------------------
+// The three mode blocks, and the fourth state nobody had written down
+// ---------------------------------------------------------------------
+
+// ruleBody returns the body of the rule whose opening brace is the LAST `{` of
+// re's first match, with braces balanced from there. It is the block-level
+// counterpart to parseDecls: parseDecls knows a declaration's selector but not
+// which @media it sits inside, and every assertion below is about exactly that
+// distinction — `:root` means three different rules in style.css.
+func ruleBody(t *testing.T, name, css string, re *regexp.Regexp) string {
+	t.Helper()
+	loc := re.FindStringIndex(css)
+	if loc == nil {
+		t.Fatalf("%s: no match for %s; this file's structure moved and every "+
+			"assertion built on it is now checking nothing", name, re)
+	}
+	open := strings.LastIndex(css[:loc[1]], "{")
+	if open < 0 {
+		t.Fatalf("%s: match for %s carries no opening brace", name, re)
+	}
+	depth := 0
+	for i := open; i < len(css); i++ {
+		switch css[i] {
+		case '{':
+			depth++
+		case '}':
+			depth--
+			if depth == 0 {
+				return css[open+1 : i]
+			}
+		}
+	}
+	t.Fatalf("%s: the rule opened at byte %d is never closed", name, open)
+	return ""
+}
+
+// customPropDecl matches one `--name: value;` declaration. Values in these two
+// files never contain a semicolon (the nested ones are var() and color-mix()
+// calls), so the naive terminator is exact here.
+var customPropDecl = regexp.MustCompile(`(--[a-z0-9-]+)\s*:\s*([^;]+);`)
+
+// customProps reads a rule body into name -> value, values whitespace-collapsed
+// so an indentation change cannot read as a value change.
+func customProps(body string) map[string]string {
+	space := regexp.MustCompile(`\s+`)
+	out := map[string]string{}
+	for _, m := range customPropDecl.FindAllStringSubmatch(body, -1) {
+		out[m[1]] = space.ReplaceAllString(strings.TrimSpace(m[2]), " ")
+	}
+	return out
+}
+
+func sortedNames(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// assertSameTokenSet fails naming every token one side declares and the other
+// does not, in both directions. A set difference reported as a count is a
+// failure message nobody can act on.
+func assertSameTokenSet(t *testing.T, aName string, a map[string]string, bName string, b map[string]string) {
+	t.Helper()
+	for _, name := range sortedNames(a) {
+		if _, ok := b[name]; !ok {
+			t.Errorf("%s declares %s and %s does not; the two disagree for a reader "+
+				"who switches between the states they paint", aName, name, bName)
+		}
+	}
+	for _, name := range sortedNames(b) {
+		if _, ok := a[name]; !ok {
+			t.Errorf("%s declares %s and %s does not; the two disagree for a reader "+
+				"who switches between the states they paint", bName, name, aName)
+		}
+	}
+}
+
+// TestModeBlocksDeclareTheSameTokenSet is the guard on the defect this test was
+// added with: style.css had a block for explicit Dark and a block for an OS in
+// dark mode, and NO block for explicit Light. The viewer's theme control has
+// three positions, so the third state — a reader on a dark OS who presses Light
+// — was painted by nothing at all, and the OS-dark query was the last (0,1,0)
+// rule it met. Every token the query re-points stayed DARK under a lit Light
+// control: --paper, --ink, --accent, --link, the lot, for any project that had
+// not themed them itself.
+//
+// The three blocks are therefore held to one token set. The light block's
+// values are additionally required to equal the unconditional :root's, which is
+// what keeps the :root the single source of light truth rather than making the
+// light block a second palette that can drift from it. Hand-duplicated with
+// this equality pinned, rather than generated: CSS has no way to say "the value
+// :root gave", and a test that derived the expectation from :root would pass
+// for a light block that was empty.
+func TestModeBlocksDeclareTheSameTokenSet(t *testing.T) {
+	css := stripComments(embeddedCSS(t, styleTemplatePath))
+
+	root := customProps(ruleBody(t, "style.css :root", css,
+		regexp.MustCompile(`(?m)^:root\s*\{`)))
+	dark := customProps(ruleBody(t, `style.css html[data-theme="dark"]`, css,
+		regexp.MustCompile(`html\[data-theme="dark"\]\s*\{`)))
+	light := customProps(ruleBody(t, `style.css html[data-theme="light"]`, css,
+		regexp.MustCompile(`html\[data-theme="light"\]\s*\{`)))
+	osDark := customProps(ruleBody(t, "style.css OS-dark :root", css,
+		regexp.MustCompile(`@media screen and \(prefers-color-scheme: dark\)\s*\{\s*:root\s*\{`)))
+
+	for name, got := range map[string]map[string]string{
+		"the unconditional :root": root, "the explicit-dark block": dark,
+		"the explicit-light block": light, "the OS-dark block": osDark,
+	} {
+		if len(got) == 0 {
+			t.Fatalf("%s parsed to zero custom properties; every comparison below "+
+				"would be vacuous", name)
+		}
+	}
+
+	t.Run("ExplicitLightExists", func(t *testing.T) {
+		// Stated separately from the set comparison so its absence reports as
+		// itself rather than as twenty-three missing tokens.
+		if len(light) == 0 {
+			t.Fatal("style.css declares no html[data-theme=\"light\"] custom properties; " +
+				"a reader on a dark OS who presses Light gets the engine's dark palette")
+		}
+	})
+
+	t.Run("ExplicitDarkMatchesOSDark", func(t *testing.T) {
+		assertSameTokenSet(t, "the explicit-dark block", dark, "the OS-dark block", osDark)
+		for name, want := range osDark {
+			if got, ok := dark[name]; ok && got != want {
+				t.Errorf("%s is %q under the explicit-Dark choice and %q under a dark OS; "+
+					"the Dark control and the OS setting must paint the same viewer",
+					name, got, want)
+			}
+		}
+	})
+
+	t.Run("ExplicitLightMatchesTheDarkBlocksTokenSet", func(t *testing.T) {
+		assertSameTokenSet(t, "the explicit-light block", light, "the OS-dark block", osDark)
+	})
+
+	t.Run("ExplicitLightValuesAreTheRootsOwn", func(t *testing.T) {
+		for _, name := range sortedNames(light) {
+			want, ok := root[name]
+			if !ok {
+				t.Errorf("the explicit-light block declares %s, which the unconditional "+
+					":root does not; every light value must have one source", name)
+				continue
+			}
+			if light[name] != want {
+				t.Errorf("the explicit-light block sets %s to %q; the unconditional :root, "+
+					"which is this sheet's single source of light truth, says %q",
+					name, light[name], want)
+			}
+		}
+	})
+
+	t.Run("ColorSchemeFollowsTheExplicitChoice", func(t *testing.T) {
+		// Not a custom property, so the set comparisons above cannot see it — and
+		// it is the one declaration that must NOT be the same in the two dark
+		// blocks. `color-scheme: light dark` on :root resolves against the OS, so
+		// without these two an explicit choice moved the palette and left the form
+		// controls, the scrollbars and every light-dark() resolution on the OS's
+		// side of the fence.
+		darkBody := ruleBody(t, `style.css html[data-theme="dark"]`, css,
+			regexp.MustCompile(`html\[data-theme="dark"\]\s*\{`))
+		lightBody := ruleBody(t, `style.css html[data-theme="light"]`, css,
+			regexp.MustCompile(`html\[data-theme="light"\]\s*\{`))
+		if !strings.Contains(darkBody, "color-scheme: dark;") {
+			t.Error(`html[data-theme="dark"] does not pin color-scheme: dark`)
+		}
+		if !strings.Contains(lightBody, "color-scheme: light;") {
+			t.Error(`html[data-theme="light"] does not pin color-scheme: light`)
+		}
+	})
+}
+
+// TestGraphModeBlocksDeclareTheSameTokenSet is the same guard for graph.css's
+// ramp, which had the defect twice over: dark-first with a light query and no
+// data-theme rule at all, so BOTH explicit choices were answered by whichever
+// query the OS happened to match. A reader on a dark OS pressing Light got the
+// dark ramp on a light page; a reader on a light OS pressing Dark got the light
+// ramp on a dark one.
+//
+// The --color-graph-* / --color-dark-graph-* design names are the reason each
+// explicit block repeats its whole source block rather than re-pointing the
+// --dxg-* slots alone: the light nine are declared only inside the light query,
+// so on a dark OS a --dxg-* read of one of them would resolve to nothing.
+func TestGraphModeBlocksDeclareTheSameTokenSet(t *testing.T) {
+	css := stripComments(embeddedCSS(t, graphCSSTemplatePath))
+
+	base := customProps(ruleBody(t, "graph.css :root", css,
+		regexp.MustCompile(`(?m)^:root\s*\{`)))
+	lightQuery := customProps(ruleBody(t, "graph.css light query", css,
+		regexp.MustCompile(`@media \(prefers-color-scheme: light\), print\s*\{\s*:root\s*\{`)))
+	dark := customProps(ruleBody(t, `graph.css html[data-theme="dark"]`, css,
+		regexp.MustCompile(`html\[data-theme="dark"\]\s*\{`)))
+	light := customProps(ruleBody(t, `graph.css html[data-theme="light"]`, css,
+		regexp.MustCompile(`html\[data-theme="light"\]\s*\{`)))
+
+	for name, got := range map[string]map[string]string{
+		"the dark base :root": base, "the light query": lightQuery,
+		"the explicit-dark block": dark, "the explicit-light block": light,
+	} {
+		if len(got) == 0 {
+			t.Fatalf("graph.css: %s parsed to zero custom properties; every "+
+				"comparison below would be vacuous", name)
+		}
+	}
+
+	for _, tc := range []struct {
+		copyName, copyOf string
+		copy, src        map[string]string
+	}{
+		{"the explicit-dark block", "the dark base :root", dark, base},
+		{"the explicit-light block", "the light query", light, lightQuery},
+	} {
+		t.Run(strings.ReplaceAll(strings.TrimPrefix(tc.copyName, "the "), " ", ""), func(t *testing.T) {
+			assertSameTokenSet(t, tc.copyName, tc.copy, tc.copyOf, tc.src)
+			for _, name := range sortedNames(tc.src) {
+				if got, ok := tc.copy[name]; ok && got != tc.src[name] {
+					t.Errorf("graph.css: %s sets %s to %q, but %s — the block it answers "+
+						"the reader's explicit choice with — says %q",
+						tc.copyName, name, got, tc.copyOf, tc.src[name])
+				}
+			}
+		})
+	}
+
+	t.Run("BothExplicitBlocksAreScreenScoped", func(t *testing.T) {
+		// Print has no appearance and no reader choice: a printed pane takes the
+		// light query above, exactly as style.css's printed page takes its :root.
+		// An unscoped html[data-theme="dark"] here would put the dark ramp on
+		// paper for every reader sitting on Dark.
+		for _, sel := range []string{`html[data-theme="dark"]`, `html[data-theme="light"]`} {
+			at := strings.Index(css, sel)
+			if at < 0 {
+				t.Fatalf("graph.css declares no %s block; the reader's theme control "+
+					"does not reach the facet ramp", sel)
+			}
+			before := css[:at]
+			lastScreen := strings.LastIndex(before, "@media screen")
+			lastPrint := strings.LastIndex(before, "@media print")
+			if lastScreen < 0 || lastPrint > lastScreen {
+				t.Errorf("graph.css: %s does not sit inside an `@media screen` block, "+
+					"so the ramp it carries can reach a printed page", sel)
+			}
+		}
+	})
+}
+
 // TestGraphCSSModeStructure pins graph.css's own conventions. graph.css keeps
 // the opposite base (dark-first) from style.css deliberately; what the two must
 // agree on is the print outcome.
+//
+// The counts below are about graph.css's OS-facing queries only, and they are
+// unchanged by the explicit-choice fix: the two
+// `@media screen{html[data-theme=…]}` blocks that fix added carry no
+// prefers-color-scheme term at all, so there is still exactly one light query
+// and still no dark one. What those blocks are held to lives in
+// TestGraphModeBlocksDeclareTheSameTokenSet above.
 func TestGraphCSSModeStructure(t *testing.T) {
 	raw := embeddedCSS(t, graphCSSTemplatePath)
 	css := stripComments(raw)
@@ -341,9 +601,13 @@ func TestGraphCSSModeStructure(t *testing.T) {
 				"or a printed graph pane keeps the dark ramp on white paper.", n, want)
 		}
 		assertLightQueriesIncludePrint(t, "graph.css", css, true)
-		// graph.css has no dark media query at all — dark is its unconditional
-		// base — so this call is vacuous BY DESIGN. It is made anyway so that a
-		// dark query added to graph.css later cannot arrive unscoped.
+		// graph.css has no dark media QUERY at all — dark is its unconditional
+		// base, and its explicit-Dark block is a data-theme selector inside a
+		// plain `@media screen`, not a prefers-color-scheme query — so this call
+		// is vacuous BY DESIGN. It is made anyway so that a dark query added to
+		// graph.css later cannot arrive unscoped. The screen-scoping of the two
+		// data-theme blocks is asserted in
+		// TestGraphModeBlocksDeclareTheSameTokenSet/BothExplicitBlocksAreScreenScoped.
 		assertDarkQueriesScreenScoped(t, "graph.css", css)
 	})
 
