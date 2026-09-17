@@ -114,11 +114,14 @@ func TestConformancePanelVisibleStaticAndRefreshesWhenServed(t *testing.T) {
 	if !evalBool(t, ctx, `document.querySelector('.claim-conformance').textContent.includes('blocked') && document.querySelector('.claim-conformance').textContent.includes('paused') && document.querySelector('.claim-conformance').textContent.includes('schema-version') && document.querySelector('.claim-conformance-check[data-check-id="schema-version"]').getAttribute('data-shape') === 'scalar'`) {
 		t.Fatal("static conformance panel does not show exact missing and extra members")
 	}
+	// Re-pinned lowercase 'expected'/'observed' per 06a §4.8/§6 (lowercase
+	// mono machine-layer keys); this test previously pinned the pre-06a
+	// capitalized "Expected"/"Observed" spelling.
 	if !evalBool(t, ctx, `(function () {
   var scalar = document.querySelector('.claim-conformance-check[data-check-id="schema-version"]');
   if (!scalar) { return false; }
   var lines = Array.from(scalar.querySelectorAll('.claim-conformance-line')).map(function (line) { return line.textContent.trim(); });
-  return lines.includes('Expected: 3') && lines.includes('Observed: 3') && !lines.some(function (line) { return line.startsWith('missing:') || line.startsWith('extra:') || line.startsWith('Missing:') || line.startsWith('Extra:'); });
+  return lines.includes('expected: 3') && lines.includes('observed: 3') && !lines.some(function (line) { return line.startsWith('missing:') || line.startsWith('extra:') || line.startsWith('Missing:') || line.startsWith('Extra:'); });
 })()`) {
 		t.Fatal("static scalar check does not show exact expected/observed values or leaked set-only differences")
 	}
