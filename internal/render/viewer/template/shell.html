@@ -28,6 +28,11 @@
       try { choice = localStorage.getItem(key) || 'system'; } catch (e) {}
       if (choice !== 'light' && choice !== 'dark') { choice = 'system'; }
       document.documentElement.setAttribute('data-theme', choice);
+      try {
+        if (localStorage.getItem('dossierx-focus') === 'on' && window.innerWidth >= 861) {
+          document.documentElement.setAttribute('data-focus', 'on');
+        }
+      } catch (e) {}
     })();
   </script>
 </head>
@@ -48,7 +53,8 @@
     <symbol id="dx-icon-message-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.992 16.342a2 2 0 0 1 .094 1.167l-1.065 3.29a1 1 0 0 0 1.236 1.168l3.413-.998a2 2 0 0 1 1.099.092 10 10 0 1 0-4.777-4.719"/></symbol>
     <symbol id="dx-icon-git-branch" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6a9 9 0 0 0-9 9V3"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/></symbol>
     <symbol id="dx-icon-triangle-alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
-    <symbol id="dx-icon-panel-left" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></symbol>
+    <symbol id="dx-icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="dx-icon-maximize" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M16 3h3a2 2 0 0 1 2 2v3"/><path d="M8 21H5a2 2 0 0 1-2-2v-3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
   </svg>
   <div class="layout">
     <button id="navToggle" class="nav-toggle" type="button" aria-controls="sidebar" aria-expanded="false"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-menu"/></svg> <span>Sections</span></button>
@@ -59,9 +65,6 @@
           <div class="logo"><span></span></div>
           <div><h1>{{.Title}}</h1>{{if .Eyebrow}}<div class="eyebrow">{{.Eyebrow}}</div>{{end}}</div>
         </div>
-        <button id="sidebarCollapseToggle" class="system-panel-toggle system-panel-toggle--sidebar" type="button" aria-controls="sidebar" aria-expanded="true" aria-label="Hide navigation" title="Hide navigation">
-          <svg class="dx-icon system-panel-toggle__chevron" aria-hidden="true"><use href="#dx-icon-panel-left"/></svg>
-        </button>
       </div>
       <nav id="nav">
 <!-- The graph trigger. It carries data-dxg-open as an ATTRIBUTE and
@@ -127,7 +130,10 @@
           <button type="button" data-theme-choice="light"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-sun"/></svg> Light</button>
           <button type="button" data-theme-choice="dark"><svg class="dx-icon" aria-hidden="true"><use href="#dx-icon-moon"/></svg> Dark</button>
         </div>
-{{if .GeneratedAt}}        <div class="sidebar-footer-stamp">Generated {{.GeneratedAt}}</div>{{end}}
+{{if .GeneratedAt}}        <div class="freshness-footer">
+          <p class="freshness-footer__line"><svg class="dx-icon freshness-footer__icon" aria-hidden="true"><use href="#dx-icon-clock"/></svg><span class="freshness-footer__phrase" data-generated-at="{{.GeneratedAt}}">Updated recently</span></p>
+          <p class="freshness-footer__caption">Claims changed since then are not in this view</p>
+        </div>{{end}}
       </div>
       <div id="sidebarResizer" class="system-sidebar-resizer" tabindex="0" role="separator" aria-label="Resize navigation drawer" aria-orientation="vertical" aria-valuemin="220" aria-valuemax="420" aria-valuenow="270" title="Drag to resize · Double-click to reset"></div>
     </aside>

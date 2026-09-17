@@ -137,10 +137,13 @@ type shellData struct {
 	ThemeCSS template.CSS
 
 	// GeneratedAt is the same render timestamp stamped into generatedHeader's
-	// leading HTML comment, formatted for human display in the sidebar
-	// footer so a reviewer can tell at a glance how fresh the page they're
-	// looking at is (the comment alone is invisible in the rendered page —
-	// only visible in "view source").
+	// leading HTML comment, emitted here as RFC3339 (a machine-readable
+	// instant, not a human sentence) into the freshness footer's
+	// data-generated-at attribute. reference-rules.md R10.4 requires the
+	// elapsed phrase a reviewer actually reads to be computed in the
+	// browser, never baked into the generated HTML; system-record.js's
+	// enhanceTimestamp is the sole consumer that turns this into "Updated
+	// N hours ago" / "Live".
 	GeneratedAt string
 
 	// ---- the claims graph pane's four injection sites ----
@@ -903,7 +906,7 @@ func buildShellStaticData(in shellInputs) shellData {
 		Eyebrow:                  eyebrow,
 		CSS:                      template.CSS(in.css),
 		ThemeCSS:                 themeOverrideCSS(in.theme),
-		GeneratedAt:              in.generatedAt.Format("2006-01-02 15:04 UTC"),
+		GeneratedAt:              in.generatedAt.UTC().Format(time.RFC3339),
 		GraphCSS:                 template.CSS(in.graphCSS),
 		GraphPayload:             in.graphPayload,
 		GraphCoreJS:              template.JS(in.graphCoreJS),

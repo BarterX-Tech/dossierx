@@ -165,39 +165,65 @@ func TestFacetClaimsCanCollapseAndExpandTogether(t *testing.T) {
 	}
 }
 
-func TestDesktopNavigationPanelsCanCollapseAndExpand(t *testing.T) {
+// TestFocusModeIsOneReversibleControl replaces
+// TestDesktopNavigationPanelsCanCollapseAndExpand. reference-rules.md
+// R11.1 ("one reversible state, not two independent toggles") forbids the
+// two per-rail collapse buttons this test used to assert — the sidebar's
+// #sidebarCollapseToggle and the facet TOC's .system-panel-toggle--toc are
+// both gone (docs/design/screens/03-reading-view-focus-mode.md §7.1,
+// §7.9, §9 open decision 9). The one control is .focus-toggle
+// (html[data-focus="on"]), rendered inside every module head.
+func TestFocusModeIsOneReversibleControl(t *testing.T) {
 	p := newProject(t)
 	ctx := browserContext(t)
 
 	runCDP(t, ctx,
 		chromedp.EmulateViewport(1440, 900),
 		chromedp.Navigate(p.renderStatic()),
-		chromedp.WaitVisible("#sidebarCollapseToggle", chromedp.ByQuery),
-		chromedp.WaitVisible(".system-panel-toggle--toc", chromedp.ByQuery),
+		chromedp.WaitVisible(".focus-toggle", chromedp.ByQuery),
 	)
 
-	runCDP(t, ctx, chromedp.Click("#sidebarCollapseToggle", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.body.classList.contains('system-sidebar-collapsed')`)
-	if !evalBool(t, ctx, `(function(){ var sidebar = document.getElementById('sidebar'); var toggle = document.getElementById('sidebarCollapseToggle'); return Math.round(sidebar.getBoundingClientRect().width) === 44 && toggle.getAttribute('aria-expanded') === 'false' && toggle.getAttribute('aria-label') === 'Show navigation'; })()`) {
-		t.Fatal("left navigation must collapse to a reachable 44px rail")
+	if !evalBool(t, ctx, `!document.getElementById('sidebarCollapseToggle') && !document.querySelector('.system-panel-toggle--toc') && document.querySelectorAll('.focus-toggle').length === 1`) {
+		t.Fatal("R11.1: focus must be the ONE control — both old per-rail toggles must be gone and exactly one .focus-toggle must exist")
+	}
+	if !evalBool(t, ctx, `document.querySelector('.focus-toggle').getAttribute('aria-pressed') === 'false'`) {
+		t.Fatal("focus must start off")
+	}
+	if !evalBool(t, ctx, `document.getElementById('sidebar').getBoundingClientRect().width >= 220 && !document.getElementById('systemFacetToc').hidden`) {
+		t.Fatal("both rails must be present before focus is turned on")
 	}
 
-	runCDP(t, ctx, chromedp.Click("#sidebarCollapseToggle", chromedp.ByQuery))
-	pollTrue(t, ctx, `!document.body.classList.contains('system-sidebar-collapsed')`)
-	if !evalBool(t, ctx, `document.getElementById('sidebar').getBoundingClientRect().width >= 220`) {
-		t.Fatal("left navigation must expand to its reading width")
+	runCDP(t, ctx, chromedp.Click(".focus-toggle", chromedp.ByQuery))
+	pollTrue(t, ctx, `document.documentElement.getAttribute('data-focus') === 'on'`)
+	if !evalBool(t, ctx, `document.querySelector('.focus-toggle').getAttribute('aria-pressed') === 'true'`) {
+		t.Fatal("the control must reflect its own state")
+	}
+	if !evalBool(t, ctx, `getComputedStyle(document.getElementById('sidebar')).display === 'none'`) {
+		t.Fatal("R11.1/R11.3: focus on must remove the left rail")
+	}
+	if !evalBool(t, ctx, `getComputedStyle(document.getElementById('systemFacetToc')).display === 'none'`) {
+		t.Fatal("R11.1/R11.3: focus on must remove the right rail")
+	}
+	if !evalBool(t, ctx, `Math.round(document.querySelector('.content-area').getBoundingClientRect().width) === 1140`) {
+		t.Fatal("R11.3: the freed width goes to the evidence — the page grows to exactly 1140px")
 	}
 
-	runCDP(t, ctx, chromedp.Click(".system-panel-toggle--toc", chromedp.ByQuery))
-	pollTrue(t, ctx, `Math.round(document.getElementById('systemFacetToc').getBoundingClientRect().width) === 44`)
-	if !evalBool(t, ctx, `(function(){ var toc = document.getElementById('systemFacetToc'); var toggle = toc.querySelector('.system-panel-toggle--toc'); return Math.round(toc.getBoundingClientRect().width) === 44 && toggle.getAttribute('aria-expanded') === 'false' && toggle.getAttribute('aria-label') === 'Show table of contents'; })()`) {
-		t.Fatal("right table of contents must collapse to a reachable 44px rail")
+	// R11.5: focus survives a reload via localStorage, never baked into the
+	// generated HTML.
+	runCDP(t, ctx, chromedp.Reload())
+	pollTrue(t, ctx, `document.documentElement.getAttribute('data-focus') === 'on'`)
+
+	runCDP(t, ctx, chromedp.Click(".focus-toggle", chromedp.ByQuery))
+	pollTrue(t, ctx, `!document.documentElement.hasAttribute('data-focus')`)
+	if !evalBool(t, ctx, `document.getElementById('sidebar').getBoundingClientRect().width >= 220 && getComputedStyle(document.getElementById('systemFacetToc')).display !== 'none'`) {
+		t.Fatal("clicking the control again must restore both rails")
 	}
 
-	runCDP(t, ctx, chromedp.Click(".system-panel-toggle--toc", chromedp.ByQuery))
-	pollTrue(t, ctx, `document.getElementById('systemFacetToc').getBoundingClientRect().width >= 220`)
-	if !evalBool(t, ctx, `document.getElementById('systemFacetToc').getBoundingClientRect().width >= 220`) {
-		t.Fatal("right table of contents must expand to its reading width")
+	// R11.1/03 §5: below 861px the control does not render and the mode is
+	// inert — mobile never had the rails focus removes.
+	runCDP(t, ctx, chromedp.EmulateViewport(390, 844))
+	if !evalBool(t, ctx, `getComputedStyle(document.querySelector('.focus-group')).display === 'none'`) {
+		t.Fatal("the focus control must not render below 861px")
 	}
 }
 
